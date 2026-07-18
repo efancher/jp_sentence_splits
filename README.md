@@ -53,7 +53,7 @@ npm run test:e2e       # Playwright happy path (WebKit)
 - **Component tests** cover import → book → analysis autosave, explicit reorder controls, and Practice reveal stages.
 - **Playwright** covers a concise WebKit happy path including reload persistence and backup export.
 
-Fixtures live in [`fixtures/`](fixtures/). Do **not** commit personal full Satori exports (for example `exported 2.csv`); those patterns are gitignored.
+Fixtures live in [`fixtures/`](fixtures/). Do **not** commit personal full Satori exports (for example `exported 4.csv`); those patterns are gitignored. If you place `exported 4.csv` at the repo root, `tests/personal-export.smoke.test.ts` runs local aggregate checks; CI skips it when the file is absent.
 
 ## Production build
 
