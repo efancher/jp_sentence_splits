@@ -7,9 +7,11 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 
+import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { getDb, setBookSentenceStatus } from '../db/repository';
 import type { BookSentence, StudyStatus } from '../domain/types';
+import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { hashString } from '../lib/ids';
 import { summarizeChunks } from '../lib/worksheet';
 
@@ -109,6 +111,8 @@ export function PracticePage() {
     [data?.analysis?.chunks],
   );
 
+  const { stop: stopSpeech } = useJapaneseSpeech();
+
   useEffect(() => {
     setReveal({
       chunks: false,
@@ -118,6 +122,9 @@ export function PracticePage() {
     });
     setAttempt('');
   }, [data?.sentence?.id]);
+
+  // Cancel playback when moving between sentences or leaving Practice.
+  useEffect(() => stopSpeech, [data?.sentence?.id, stopSpeech]);
 
   const query = searchParams.toString();
   const practicePath = (sentenceId: string) =>
@@ -290,7 +297,16 @@ export function PracticePage() {
           />
         </div>
 
-        <div className="jp jp-lg">{sentence.japanese}</div>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <div className="jp jp-lg" style={{ flex: 1 }}>
+            {sentence.japanese}
+          </div>
+          <SpeakButton
+            text={sentence.japanese}
+            itemId={`practice-${sentence.id}`}
+            label="Play Japanese sentence"
+          />
+        </div>
         {showVocabulary ? (
           <VocabChips items={sentence.targetVocabulary} />
         ) : null}

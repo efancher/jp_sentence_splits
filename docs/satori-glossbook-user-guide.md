@@ -72,6 +72,24 @@ Select matching results to add them to a book or export them as a worksheet.
 The non-whitespace source Japanese must remain unchanged. Autosave runs after a
 short delay and on blur; the manual Save button is a fallback.
 
+## Listen with device text-to-speech
+
+Speaker buttons appear beside the Japanese sentence on the Analyze and
+Practice screens, and beside each chunk in the Analyze editor.
+
+- Tap 🔊 to hear the sentence or chunk with the device's Japanese voice.
+- Tap the active 🔊 button (or **Stop audio**) to stop playback.
+- **Play by chunks** reads each chunk in order, highlighting the current one.
+- Playback always starts from a tap; nothing plays automatically.
+
+Configure the voice and speaking rate under **Settings → Text-to-speech**.
+Preferences persist on the device. Voices are provided by iOS/the browser —
+no internet TTS service is used, and no audio leaves the device. If the
+browser lists no Japanese voice, playback still works with the system
+default. Downloading higher-quality Japanese voices in iOS Settings
+(Accessibility → Spoken Content → Voices) can improve quality, though not
+every system voice is exposed to web apps.
+
 ## Practice
 
 Choose a session:

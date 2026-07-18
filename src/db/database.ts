@@ -11,6 +11,12 @@ import type {
   SentenceAnalysis,
 } from '../domain/types';
 
+export const DEFAULT_TTS_SETTINGS = {
+  rate: 0.9,
+  pitch: 1.0,
+  volume: 1.0,
+} as const;
+
 export const DEFAULT_SETTINGS: AppSettings = {
   id: 'settings',
   theme: 'system',
@@ -18,6 +24,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showReadingsInitially: false,
   defaultImportDestination: 'inbox',
   textDisplayMode: 'plain',
+  tts: { ...DEFAULT_TTS_SETTINGS },
 };
 
 export class GlossbookDatabase extends Dexie {
@@ -116,7 +123,9 @@ export function resetDbForTests(name?: string): GlossbookDatabase {
 
 export async function readSettings(db = getDb()): Promise<AppSettings> {
   const existing = await db.settings.get('settings');
-  return existing ?? DEFAULT_SETTINGS;
+  if (!existing) return DEFAULT_SETTINGS;
+  // Fill fields added after the record was written (e.g. tts) without a write.
+  return { ...DEFAULT_SETTINGS, ...existing };
 }
 
 /** May write — do not call from a Dexie liveQuery callback. */

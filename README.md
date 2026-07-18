@@ -22,6 +22,15 @@ Python reference behavior from the earlier Anki tooling lives under [`reference/
   to that import.
 - Select matching Search results to add them to a book or export a worksheet.
 
+## Japanese text-to-speech
+
+Speaker buttons on the Analyze and Practice screens read the sentence, an
+individual chunk, or all chunks in sequence using the device's Japanese
+system voices via the Web Speech API. Voice and speaking-rate preferences
+live under **Settings → Text-to-speech**. No cloud TTS service, API key, or
+backend is involved. See the
+[manual mobile test checklist](docs/satori-glossbook-tts-testing.md).
+
 ## Practice sessions
 
 Practice can be scoped to incomplete, needs-review, unstarted, all, or one
@@ -120,3 +129,4 @@ After the first successful load, the application shell and already-imported stud
 - [User guide](docs/satori-glossbook-user-guide.md)
 - [Design](docs/satori-glossbook-design.md)
 - [Backup data format](docs/satori-glossbook-data-format.md)
+- [TTS manual test checklist](docs/satori-glossbook-tts-testing.md)

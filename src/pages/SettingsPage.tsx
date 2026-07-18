@@ -2,8 +2,15 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { APP_NAME, APP_VERSION } from '../appConfig';
-import { readSettings } from '../db/database';
+import {
+  APP_NAME,
+  APP_VERSION,
+  TTS_RATE_PRESETS,
+  TTS_TEST_SENTENCE,
+} from '../appConfig';
+import { DEFAULT_TTS_SETTINGS, readSettings } from '../db/database';
+import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
+import { filterJapaneseVoices } from '../lib/speech';
 import {
   exportFullBackup,
   restoreBackup,
@@ -16,6 +23,7 @@ import { useTheme } from '../hooks/useTheme';
 export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
   const { theme, setTheme } = useTheme();
+  const speech = useJapaneseSpeech();
   const [backupPreview, setBackupPreview] = useState<string>('');
   const [backupErrors, setBackupErrors] = useState<string[]>([]);
   const [pendingBackup, setPendingBackup] = useState<ReturnType<
@@ -98,6 +106,99 @@ export function SettingsPage() {
             <option value="existing_book">Existing book</option>
           </select>
         </label>
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Text-to-speech</h3>
+        {!speech.supported ? (
+          <p className="muted" style={{ margin: 0 }}>
+            This browser does not support speech synthesis, so Japanese audio
+            playback is unavailable.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ margin: 0 }}>
+              Playback uses the Japanese voices installed on this device. No
+              internet service is involved.
+            </p>
+            <label>
+              Japanese voice
+              <select
+                value={settings.tts.voiceURI ?? ''}
+                onChange={(event) => {
+                  const uri = event.target.value;
+                  const voice = filterJapaneseVoices(speech.voices).find(
+                    (item) => item.voiceURI === uri,
+                  );
+                  void updateSettings({
+                    tts: {
+                      ...settings.tts,
+                      voiceURI: uri || undefined,
+                      preferredVoiceName: voice?.name,
+                    },
+                  });
+                }}
+              >
+                <option value="">Automatic (browser default)</option>
+                {filterJapaneseVoices(speech.voices).map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {voice.name}
+                    {voice.localService ? ' (on device)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!filterJapaneseVoices(speech.voices).length ? (
+              <p className="muted" style={{ margin: 0 }}>
+                No Japanese voices are listed yet. Playback still works: the
+                browser will pick a Japanese voice automatically.
+              </p>
+            ) : null}
+            <label>
+              Speaking rate
+              <select
+                value={String(settings.tts.rate)}
+                onChange={(event) =>
+                  void updateSettings({
+                    tts: {
+                      ...settings.tts,
+                      rate: Number.parseFloat(event.target.value),
+                    },
+                  })
+                }
+              >
+                {TTS_RATE_PRESETS.map((preset) => (
+                  <option key={preset.value} value={String(preset.value)}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="row">
+              <button
+                type="button"
+                onClick={() =>
+                  speech.speak(TTS_TEST_SENTENCE, { itemId: 'tts-test' })
+                }
+              >
+                Test voice
+              </button>
+              {speech.isSpeaking ? (
+                <button type="button" onClick={() => speech.stop()}>
+                  Stop
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  void updateSettings({ tts: { ...DEFAULT_TTS_SETTINGS } })
+                }
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="panel stack">

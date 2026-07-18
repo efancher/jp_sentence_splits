@@ -103,6 +103,11 @@ export function HelpPage() {
           characters must remain unchanged. Work autosaves locally, and a
           manual Save button remains available.
         </p>
+        <p>
+          Tap 🔊 to hear the sentence or a chunk using the device's Japanese
+          voice, or use <strong>Play by chunks</strong> to hear each chunk in
+          order. Configure the voice and speed in Settings.
+        </p>
       </section>
 
       <section id="practice" className="panel stack">

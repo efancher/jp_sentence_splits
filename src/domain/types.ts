@@ -126,6 +126,16 @@ export interface ImportBatch {
   warnings: string[];
 }
 
+export interface TtsSettings {
+  /** Stable identifier of the preferred voice, when still installed. */
+  voiceURI?: string;
+  /** Human-readable fallback used when the voiceURI is no longer available. */
+  preferredVoiceName?: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+}
+
 export interface AppSettings {
   id: 'settings';
   theme: ThemePreference;
@@ -134,6 +144,7 @@ export interface AppSettings {
   lastOpenedBookId?: string;
   defaultImportDestination: ImportDestination;
   textDisplayMode: TextDisplayMode;
+  tts: TtsSettings;
 }
 
 export interface InboxMembership {

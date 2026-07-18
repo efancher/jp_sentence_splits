@@ -418,6 +418,27 @@ a {
   padding: 0.75rem;
 }
 
+.speak-button {
+  min-width: var(--touch);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.speak-button.compact {
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+}
+
+.speak-button.speaking {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+}
+
+.chunk-card.speaking-chunk {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .chunk-card {
   border: 1px solid var(--border);
   border-radius: 12px;

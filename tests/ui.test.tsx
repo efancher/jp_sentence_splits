@@ -47,6 +47,11 @@ describe('UI flows', () => {
     });
     await user.click(analyzeButtons[0]!);
 
+    // jsdom has no speechSynthesis: speaker controls degrade to disabled.
+    expect(
+      await screen.findByRole('button', { name: 'Play Japanese sentence' }),
+    ).toBeDisabled();
+
     const chunkBox = await screen.findByLabelText(/Chunk spaced Japanese/i);
     fireEvent.change(chunkBox, {
       target: { value: 'ある小鳥の 夫婦が、 木に 巣を 作りました。' },

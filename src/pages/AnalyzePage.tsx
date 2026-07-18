@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
+import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
 import {
@@ -30,6 +31,7 @@ import {
   summarizeChunks,
 } from '../lib/worksheet';
 import { useAutosave } from '../hooks/useAutosave';
+import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 
 const CUSTOM_ROLE_VALUE = '__custom__';
 const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
@@ -84,6 +86,11 @@ export function AnalyzePage() {
   }, [data?.sentence?.id]);
 
   const summary = useMemo(() => summarizeChunks(chunks), [chunks]);
+  const speech = useJapaneseSpeech();
+  const { stop: stopSpeech } = speech;
+
+  // Cancel playback when navigating between sentences or leaving the editor.
+  useEffect(() => stopSpeech, [sentenceId, stopSpeech]);
 
   const { saveState, saveNow } = useAutosave(
     { chunks, notes },
@@ -194,6 +201,11 @@ export function AnalyzePage() {
           <a href={ichiMoeUrl(sentence.japanese)} target="_blank" rel="noreferrer">
             ichi.moe
           </a>
+          <SpeakButton
+            text={sentence.japanese}
+            itemId={`sentence-${sentence.id}`}
+            label="Play Japanese sentence"
+          />
           <span className={`status-pill ${saveState}`}>
             {saveState === 'saving'
               ? 'Saving…'
@@ -209,6 +221,12 @@ export function AnalyzePage() {
             Save
           </button>
         </div>
+        {!speech.supported ? (
+          <p className="muted" style={{ margin: 0 }}>
+            Audio playback is unavailable: this browser does not support
+            speech synthesis.
+          </p>
+        ) : null}
         <VocabChips items={sentence.targetVocabulary} />
         {showEnglish ? (
           <div className="panel" style={{ boxShadow: 'none' }}>
@@ -275,11 +293,49 @@ export function AnalyzePage() {
       </section>
 
       <section className="stack">
+        {chunks.length ? (
+          <div className="row">
+            <button
+              type="button"
+              disabled={!speech.supported}
+              onClick={() =>
+                speech.speakSequence(
+                  chunks.map((chunk) => ({
+                    itemId: `chunk-${chunk.id}`,
+                    text: chunk.japanese,
+                  })),
+                )
+              }
+            >
+              Play by chunks
+            </button>
+            {speech.isSpeaking ? (
+              <button type="button" onClick={() => speech.stop()}>
+                Stop audio
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {chunks.map((chunk, chunkIndex) => (
-          <article key={chunk.id} className="chunk-card">
+          <article
+            key={chunk.id}
+            className={`chunk-card${
+              speech.isSpeaking && speech.activeItemId === `chunk-${chunk.id}`
+                ? ' speaking-chunk'
+                : ''
+            }`}
+          >
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <strong className="jp">{chunk.japanese}</strong>
-              <span className="muted">#{chunkIndex + 1}</span>
+              <span className="row" style={{ gap: '0.4rem' }}>
+                <SpeakButton
+                  text={chunk.japanese}
+                  itemId={`chunk-${chunk.id}`}
+                  label={`Play Japanese chunk: ${chunk.japanese}`}
+                  compact
+                />
+                <span className="muted">#{chunkIndex + 1}</span>
+              </span>
             </div>
             <label>
               Role

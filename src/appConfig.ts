@@ -4,7 +4,7 @@
  */
 export const APP_NAME = 'Satori Glossbook';
 export const APP_SHORT_NAME = 'Glossbook';
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 export const APP_DESCRIPTION =
   'Offline analysis workspace for Japanese sentences from Satori Reader CSV exports.';
 
@@ -19,6 +19,18 @@ export const AUTOSAVE_DEBOUNCE_MS = 450;
 export const TOUCH_TARGET_MIN_PX = 44;
 
 export const ICHI_MOE_BASE = 'https://ichi.moe/cl/qr/';
+
+/** Speaking-rate presets for the device text-to-speech settings. */
+export const TTS_RATE_PRESETS = [
+  { value: 0.6, label: 'Very slow (0.6×)' },
+  { value: 0.75, label: 'Slow (0.75×)' },
+  { value: 0.9, label: 'Slightly slow (0.9×)' },
+  { value: 1.0, label: 'Normal (1.0×)' },
+  { value: 1.1, label: 'Slightly fast (1.1×)' },
+] as const;
+
+/** Sample sentence used by the Settings "Test voice" button. */
+export const TTS_TEST_SENTENCE = '暖かい春がやって来ました。';
 
 export const WORKSHEET_SEPARATORS = {
   chunk: ' ',

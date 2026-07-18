@@ -126,6 +126,14 @@ export const importBatchSchema = z.object({
   warnings: z.array(z.string()),
 });
 
+export const ttsSettingsSchema = z.object({
+  voiceURI: z.string().optional(),
+  preferredVoiceName: z.string().optional(),
+  rate: z.number(),
+  pitch: z.number(),
+  volume: z.number(),
+});
+
 export const settingsSchema = z.object({
   id: z.literal('settings'),
   theme: z.enum(['system', 'light', 'dark']),
@@ -134,6 +142,8 @@ export const settingsSchema = z.object({
   lastOpenedBookId: z.string().optional(),
   defaultImportDestination: z.enum(['inbox', 'new_book', 'existing_book']),
   textDisplayMode: z.enum(['plain', 'furigana', 'reading']),
+  // Additive in backup format v1: absent in older backups.
+  tts: ttsSettingsSchema.default({ rate: 0.9, pitch: 1.0, volume: 1.0 }),
 });
 
 export const inboxMembershipSchema = z.object({
