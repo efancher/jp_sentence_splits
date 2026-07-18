@@ -53,9 +53,14 @@ describe('UI flows', () => {
     });
     fireEvent.blur(chunkBox);
 
-    const roleInputs = await screen.findAllByLabelText('Role');
-    fireEvent.change(roleInputs[0]!, { target: { value: 'modifier/content' } });
-    fireEvent.blur(roleInputs[0]!);
+    const roleSelects = await screen.findAllByLabelText('Role');
+    await user.selectOptions(roleSelects[0]!, 'modifier/content');
+
+    // Custom roles remain possible through the dedicated option.
+    await user.selectOptions(roleSelects[1]!, '__custom__');
+    const customRole = await screen.findByLabelText('Custom role');
+    fireEvent.change(customRole, { target: { value: 'counter expression' } });
+    fireEvent.blur(customRole);
 
     const litInputs = await screen.findAllByLabelText(/Literal sticky English/i);
     fireEvent.change(litInputs[0]!, {
@@ -71,6 +76,7 @@ describe('UI flows', () => {
     await user.click(screen.getByRole('button', { name: 'Previous' }));
     await waitFor(() => {
       expect(screen.getByDisplayValue('modifier/content')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('counter expression')).toBeInTheDocument();
       expect(
         screen.getByDisplayValue("a-certain-little-bird's"),
       ).toBeInTheDocument();

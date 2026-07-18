@@ -26,23 +26,87 @@ export const WORKSHEET_SEPARATORS = {
   lit: ' · ',
 } as const;
 
-export const ROLE_PRESETS = [
-  'topic は',
-  'Aが',
-  'を-car',
-  'に-car',
-  'で-car',
-  'と-car',
-  'へ-car',
-  'の-car',
-  'も-car',
-  'から-car',
-  'まで-car',
-  'て-car',
-  'time',
-  'modifier/content',
-  'clause connector',
-  'engine',
-  'sentence ending',
-  'custom',
+/**
+ * Cure Dolly–style role vocabulary, grouped for the Analyze role dropdown.
+ * Includes every value the role heuristic can emit so suggestions always
+ * resolve to a preset; free-form roles remain possible via "Custom…".
+ */
+export const ROLE_PRESET_GROUPS = [
+  {
+    label: 'Core cars',
+    roles: [
+      'Aが',
+      'zero-が (∅ subject)',
+      'を-car',
+      'に-car',
+      'で-car',
+      'へ-car',
+      'と-car',
+      'から-car',
+      'まで-car',
+      'より-car',
+      'の-car',
+    ],
+  },
+  {
+    label: 'Topic & focus',
+    roles: [
+      'topic は',
+      'も-car',
+      'や-car',
+      'で-car + topic は',
+      'に-car + topic は',
+      'へ-car + topic は',
+      'と-car + topic は',
+    ],
+  },
+  {
+    label: 'Engines',
+    roles: [
+      'engine',
+      'engine: verb',
+      'engine: い-adjective',
+      'engine: だ/です (copula)',
+    ],
+  },
+  {
+    label: 'Connectors & clauses',
+    roles: [
+      'て-car',
+      'ので (because)',
+      'のに (although)',
+      'clause connector',
+      'relative clause',
+      'quotation と',
+      'nominalizer + topic は',
+      'nominalizer + Aが',
+      'nominalizer + を-car',
+    ],
+  },
+  {
+    label: 'More particles',
+    roles: [
+      'だけ-car',
+      'しか-car',
+      'ほど-car',
+      'など-car',
+      'とか-car',
+      'でも-car',
+      'ても-car',
+      'ては-car',
+      'のも-car',
+      'って-car',
+      'たら-car',
+      'たり-car',
+      'なら-car',
+    ],
+  },
+  {
+    label: 'Other',
+    roles: ['time', 'adverb', 'modifier/content', 'sentence ending'],
+  },
 ] as const;
+
+export const ROLE_PRESETS: readonly string[] = ROLE_PRESET_GROUPS.flatMap(
+  (group) => [...group.roles],
+);

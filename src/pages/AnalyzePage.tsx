@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { ROLE_PRESETS } from '../appConfig';
+import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
 import {
@@ -31,6 +31,9 @@ import {
 } from '../lib/worksheet';
 import { useAutosave } from '../hooks/useAutosave';
 
+const CUSTOM_ROLE_VALUE = '__custom__';
+const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
+
 export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
@@ -42,6 +45,11 @@ export function AnalyzePage() {
   const [notes, setNotes] = useState('');
   const [chunkError, setChunkError] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [customRoleIds, setCustomRoleIds] = useState<Set<string>>(new Set());
+
+  const isCustomRole = (chunk: AnalysisChunk): boolean =>
+    customRoleIds.has(chunk.id) ||
+    (chunk.role !== '' && !ROLE_PRESET_SET.has(chunk.role));
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -67,6 +75,7 @@ export function AnalyzePage() {
     setHydrated(false);
     const existing = data.analysis?.chunks ?? [];
     setChunks(existing);
+    setCustomRoleIds(new Set());
     setNotes(data.analysis?.notes ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
     setHydrated(true);
@@ -274,11 +283,26 @@ export function AnalyzePage() {
             </div>
             <label>
               Role
-              <input
-                list="role-presets"
-                value={chunk.role}
+              <select
+                value={
+                  isCustomRole(chunk) ? CUSTOM_ROLE_VALUE : chunk.role
+                }
                 onChange={(event) => {
                   const value = event.target.value;
+                  if (value === CUSTOM_ROLE_VALUE) {
+                    setCustomRoleIds((current) => {
+                      const next = new Set(current);
+                      next.add(chunk.id);
+                      return next;
+                    });
+                    return;
+                  }
+                  setCustomRoleIds((current) => {
+                    if (!current.has(chunk.id)) return current;
+                    const next = new Set(current);
+                    next.delete(chunk.id);
+                    return next;
+                  });
                   setChunks((current) =>
                     current.map((item) =>
                       item.id === chunk.id ? { ...item, role: value } : item,
@@ -286,8 +310,38 @@ export function AnalyzePage() {
                   );
                 }}
                 onBlur={() => void saveNow()}
-              />
+              >
+                <option value="">— choose role —</option>
+                {ROLE_PRESET_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.roles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                <option value={CUSTOM_ROLE_VALUE}>Custom…</option>
+              </select>
             </label>
+            {isCustomRole(chunk) ? (
+              <label>
+                Custom role
+                <input
+                  value={chunk.role}
+                  placeholder="e.g. counter expression"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setChunks((current) =>
+                      current.map((item) =>
+                        item.id === chunk.id ? { ...item, role: value } : item,
+                      ),
+                    );
+                  }}
+                  onBlur={() => void saveNow()}
+                />
+              </label>
+            ) : null}
             <label>
               Literal sticky English
               <textarea
@@ -359,11 +413,6 @@ export function AnalyzePage() {
             </div>
           </article>
         ))}
-        <datalist id="role-presets">
-          {ROLE_PRESETS.map((role) => (
-            <option key={role} value={role === 'custom' ? '' : role} />
-          ))}
-        </datalist>
       </section>
 
       <section className="panel stack">

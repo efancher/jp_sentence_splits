@@ -23,13 +23,15 @@ test('import, book, analyze, reload, backup', async ({ page }) => {
 
   const role = page.getByLabel('Role').first();
   await expect(role).toBeVisible();
-  await role.fill('modifier/content');
+  await role.selectOption('modifier/content');
   await page.getByLabel('Literal sticky English').first().fill("sticky-english");
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText(/Saved|Saving/)).toBeVisible();
 
   await page.reload();
-  await expect(page.locator('input[value="modifier/content"]')).toBeVisible();
+  await expect(
+    page.locator('select').filter({ has: page.locator('option[value="modifier/content"]') }).first(),
+  ).toHaveValue('modifier/content');
   await expect(page.locator('textarea').filter({ hasText: 'sticky-english' })).toBeVisible();
 
   await page.goto('/#/settings');
