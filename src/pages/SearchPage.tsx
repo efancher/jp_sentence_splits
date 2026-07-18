@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 
-import { getDb, searchAll } from '../db/repository';
+import {
+  addSentencesToBook,
+  createBook,
+  getDb,
+  searchAll,
+} from '../db/repository';
+import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 
 type FilterKey =
   | 'all'
@@ -19,6 +25,10 @@ type FilterKey =
 export function SearchPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [destinationBookId, setDestinationBookId] = useState('');
+  const [newBookTitle, setNewBookTitle] = useState('');
+  const [message, setMessage] = useState('');
   const results = useLiveQuery(() => searchAll(query), [query]);
   const meta = useLiveQuery(async () => {
     const db = getDb();
@@ -69,6 +79,21 @@ export function SearchPage() {
   }, [filter, meta, query, results]);
 
   const books = query ? results?.books ?? [] : [];
+  const activeBooks = (meta?.books ?? []).filter((book) => !book.archived);
+
+  async function addSelectedToBook() {
+    if (!selected.size) return;
+    let bookId = destinationBookId;
+    if (destinationBookId === 'new') {
+      const book = await createBook({ title: newBookTitle });
+      bookId = book.id;
+    }
+    if (!bookId) return;
+    await addSentencesToBook(bookId, [...selected], 'first_occurrence');
+    setMessage(`Added ${selected.size} result(s) to a book.`);
+    setSelected(new Set());
+    setNewBookTitle('');
+  }
 
   return (
     <div className="stack">
@@ -112,9 +137,110 @@ export function SearchPage() {
       ) : null}
 
       <section className="stack">
-        <h3 style={{ margin: 0 }}>Sentences</h3>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3 style={{ margin: 0 }}>Sentences</h3>
+          {filteredSentences.length ? (
+            <div className="row">
+              <button
+                type="button"
+                onClick={() =>
+                  setSelected(
+                    new Set(filteredSentences.map((sentence) => sentence.id)),
+                  )
+                }
+              >
+                Select all results
+              </button>
+              <button type="button" onClick={() => setSelected(new Set())}>
+                Clear
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {selected.size ? (
+          <div className="panel stack">
+            <strong>{selected.size} selected result(s)</strong>
+            <label>
+              Add to book
+              <select
+                value={destinationBookId}
+                onChange={(event) => setDestinationBookId(event.target.value)}
+              >
+                <option value="">Choose a book…</option>
+                <option value="new">Create a new book…</option>
+                {activeBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {destinationBookId === 'new' ? (
+              <label>
+                New book title
+                <input
+                  value={newBookTitle}
+                  onChange={(event) => setNewBookTitle(event.target.value)}
+                />
+              </label>
+            ) : null}
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                disabled={
+                  !destinationBookId ||
+                  (destinationBookId === 'new' && !newBookTitle.trim())
+                }
+                onClick={() => void addSelectedToBook()}
+              >
+                Add selected
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const selectedSentences = filteredSentences.filter(
+                    (sentence) => selected.has(sentence.id),
+                  );
+                  const analyses = new Map(
+                    (meta?.analyses ?? []).map((analysis) => [
+                      analysis.sentenceId,
+                      analysis,
+                    ]),
+                  );
+                  downloadText(
+                    'satori-glossbook-search-results.txt',
+                    formatWorksheetCollection(
+                      selectedSentences.map((sentence) => ({
+                        sentence,
+                        chunks: analyses.get(sentence.id)?.chunks ?? [],
+                      })),
+                    ),
+                    'text/plain',
+                  );
+                }}
+              >
+                Export selected
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {message ? <div className="status-pill complete">{message}</div> : null}
         {filteredSentences.map((sentence) => (
           <article key={sentence.id} className="list-card">
+            <label className="selection-control">
+              <input
+                type="checkbox"
+                checked={selected.has(sentence.id)}
+                onChange={(event) => {
+                  const next = new Set(selected);
+                  if (event.target.checked) next.add(sentence.id);
+                  else next.delete(sentence.id);
+                  setSelected(next);
+                }}
+              />
+              Select result
+            </label>
             <div className="jp">{sentence.japanese}</div>
             <div className="muted">{sentence.translation}</div>
             <div className="row">

@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { APP_NAME, APP_VERSION } from '../appConfig';
 import { readSettings } from '../db/database';
@@ -97,6 +98,17 @@ export function SettingsPage() {
             <option value="existing_book">Existing book</option>
           </select>
         </label>
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Help</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          Read the workflow guide for importing, organizing, analyzing,
+          practicing, and protecting your local data.
+        </p>
+        <Link to="/help">
+          <button type="button">Open user guide</button>
+        </Link>
       </section>
 
       <section className="panel stack">

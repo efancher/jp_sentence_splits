@@ -107,6 +107,7 @@ describe('UI flows', () => {
     expect(
       await screen.findByText(/CHUNK: \(hidden\)/),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText('Practice scope')).toHaveValue('incomplete');
     await user.click(screen.getByRole('button', { name: 'Reveal chunks' }));
     await user.click(screen.getByRole('button', { name: 'Reveal roles' }));
     await waitFor(() => {
@@ -118,6 +119,8 @@ describe('UI flows', () => {
       .find((node) => node?.textContent?.includes('ROLE:'));
     expect(practiceSummary).toBeTruthy();
     expect(within(practiceSummary!).getByText(/ROLE:/)).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Shuffle session'));
+    expect(screen.getByLabelText('Shuffle session')).toBeChecked();
   }, 30000);
 
   it('assigns selected Inbox sentences to a newly created book', async () => {
@@ -145,6 +148,38 @@ describe('UI flows', () => {
     await user.click(screen.getByRole('link', { name: 'Books' }));
     expect(
       await screen.findByText('Inbox Book', { selector: 'strong' }),
+    ).toBeInTheDocument();
+  }, 30000);
+
+  it('opens an import batch and performs a bulk Search action', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('link', { name: 'Import' }));
+    await user.upload(
+      await screen.findByLabelText(/CSV file/i),
+      fileFromCsv('little-birds.csv', littleBirds),
+    );
+    await screen.findByText(/Import preview/i);
+    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
+
+    await screen.findByRole('heading', { name: 'Inbox' });
+    await user.click(
+      await screen.findByRole('button', { name: 'View batch' }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: /little-birds/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Sentences in this batch')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Search' }));
+    const search = await screen.findByLabelText('Search');
+    await user.type(search, '小鳥');
+    await user.click(await screen.findByLabelText('Select result'));
+    await user.selectOptions(screen.getByLabelText('Add to book'), 'new');
+    await user.type(screen.getByLabelText('New book title'), 'Search Book');
+    await user.click(screen.getByRole('button', { name: 'Add selected' }));
+    expect(
+      await screen.findByText('Added 1 result(s) to a book.'),
     ).toBeInTheDocument();
   }, 30000);
 });

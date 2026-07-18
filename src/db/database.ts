@@ -58,6 +58,27 @@ export class GlossbookDatabase extends Dexie {
       .upgrade(async (tx) => {
         await migrateSettingsV2(tx);
       });
+
+    this.version(3)
+      .stores({
+        books: 'id, title, archived, updatedAt, lastOpenedAt',
+        sentences:
+          'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+        bookSentences:
+          'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+        analyses: 'sentenceId, status, updatedAt',
+        importBatches: 'id, importedAt, batchName',
+        inbox: 'sentenceId, importBatchId, addedAt',
+        settings: 'id',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<Book>('books')
+          .toCollection()
+          .modify((book) => {
+            book.chapters ??= [];
+          });
+      });
   }
 }
 

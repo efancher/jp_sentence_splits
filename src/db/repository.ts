@@ -4,6 +4,7 @@ import type {
   AnalysisChunk,
   AppSettings,
   Book,
+  BookChapter,
   BookSentence,
   ImportBatch,
   InitialOrderMode,
@@ -67,6 +68,7 @@ export async function createBook(input: {
     archived: false,
     createdAt: timestamp,
     updatedAt: timestamp,
+    chapters: [],
   };
   await db.books.put(book);
   return book;
@@ -111,6 +113,17 @@ export async function duplicateBookOrdering(bookId: string): Promise<Book> {
     sourceUrl: book.sourceUrl,
     notes: book.notes,
   });
+  const chapterIdMap = new Map(
+    (book.chapters ?? []).map((chapter) => [
+      chapter.id,
+      createId('chapter'),
+    ]),
+  );
+  copy.chapters = (book.chapters ?? []).map((chapter) => ({
+    ...chapter,
+    id: chapterIdMap.get(chapter.id)!,
+  }));
+  await db.books.put(copy);
   const timestamp = nowIso();
   await db.bookSentences.bulkPut(
     memberships.map((item) => ({
@@ -119,9 +132,116 @@ export async function duplicateBookOrdering(bookId: string): Promise<Book> {
       bookId: copy.id,
       addedAt: timestamp,
       lastStudiedAt: undefined,
+      chapterId: item.chapterId
+        ? chapterIdMap.get(item.chapterId)
+        : undefined,
     })),
   );
   return copy;
+}
+
+export async function createBookChapter(
+  bookId: string,
+  title: string,
+): Promise<BookChapter> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const chapters = book.chapters ?? [];
+  const chapter: BookChapter = {
+    id: createId('chapter'),
+    title: title.trim() || `Chapter ${chapters.length + 1}`,
+    position: chapters.length,
+  };
+  await db.books.put({
+    ...book,
+    chapters: [...chapters, chapter],
+    updatedAt: nowIso(),
+  });
+  return chapter;
+}
+
+export async function updateBookChapter(
+  bookId: string,
+  chapterId: string,
+  patch: { title?: string; position?: number },
+): Promise<void> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const chapters = [...(book.chapters ?? [])];
+  const currentIndex = chapters.findIndex((chapter) => chapter.id === chapterId);
+  if (currentIndex < 0) throw new Error('Chapter not found');
+  const current = chapters[currentIndex]!;
+  const requestedPosition = patch.position ?? current.position;
+  const targetPosition = Math.max(
+    0,
+    Math.min(chapters.length - 1, requestedPosition),
+  );
+  const updated = {
+    ...current,
+    title: patch.title?.trim() || current.title,
+  };
+  chapters.splice(currentIndex, 1);
+  chapters.splice(targetPosition, 0, updated);
+  await db.books.put({
+    ...book,
+    chapters: chapters.map((chapter, position) => ({ ...chapter, position })),
+    updatedAt: nowIso(),
+  });
+}
+
+export async function deleteBookChapter(
+  bookId: string,
+  chapterId: string,
+): Promise<void> {
+  const db = getDb();
+  await db.transaction('rw', db.books, db.bookSentences, async () => {
+    const book = await db.books.get(bookId);
+    if (!book) throw new Error('Book not found');
+    const chapters = (book.chapters ?? [])
+      .filter((chapter) => chapter.id !== chapterId)
+      .map((chapter, position) => ({ ...chapter, position }));
+    const memberships = await db.bookSentences
+      .where('bookId')
+      .equals(bookId)
+      .toArray();
+    await db.bookSentences.bulkPut(
+      memberships
+        .filter((item) => item.chapterId === chapterId)
+        .map((item) => ({ ...item, chapterId: undefined })),
+    );
+    await db.books.put({ ...book, chapters, updatedAt: nowIso() });
+  });
+}
+
+export async function assignBookSentencesToChapter(
+  bookId: string,
+  sentenceIds: string[],
+  chapterId?: string,
+): Promise<void> {
+  const db = getDb();
+  const selectedIds = new Set(sentenceIds);
+  await db.transaction('rw', db.books, db.bookSentences, async () => {
+    const book = await db.books.get(bookId);
+    if (!book) throw new Error('Book not found');
+    if (
+      chapterId &&
+      !(book.chapters ?? []).some((chapter) => chapter.id === chapterId)
+    ) {
+      throw new Error('Chapter not found');
+    }
+    const memberships = await db.bookSentences
+      .where('bookId')
+      .equals(bookId)
+      .toArray();
+    await db.bookSentences.bulkPut(
+      memberships
+        .filter((item) => selectedIds.has(item.sentenceId))
+        .map((item) => ({ ...item, chapterId })),
+    );
+    await db.books.put({ ...book, updatedAt: nowIso() });
+  });
 }
 
 export async function touchBookOpened(bookId: string): Promise<void> {
@@ -258,6 +378,7 @@ export async function transferBookSentences(options: {
         bookId: options.destinationBookId,
         position: destination.length + index,
         addedAt: timestamp,
+        chapterId: undefined,
       }));
     if (additions.length) {
       await db.bookSentences.bulkPut(additions);
@@ -509,6 +630,19 @@ export async function previewCsvFile(
   return parseSatoriCsvText(text, file.name, {
     existing,
     batchName,
+  });
+}
+
+export async function renameImportBatch(
+  batchId: string,
+  batchName: string,
+): Promise<void> {
+  const db = getDb();
+  const batch = await db.importBatches.get(batchId);
+  if (!batch) throw new Error('Import batch not found');
+  await db.importBatches.put({
+    ...batch,
+    batchName: batchName.trim() || batch.batchName,
   });
 }
 

@@ -25,6 +25,16 @@ const ImportPage = lazy(() =>
     default: module.ImportPage,
   })),
 );
+const HelpPage = lazy(() =>
+  import('./pages/HelpPage').then((module) => ({
+    default: module.HelpPage,
+  })),
+);
+const ImportBatchPage = lazy(() =>
+  import('./pages/ImportBatchPage').then((module) => ({
+    default: module.ImportBatchPage,
+  })),
+);
 const InboxPage = lazy(() =>
   import('./pages/InboxPage').then((module) => ({
     default: module.InboxPage,
@@ -58,7 +68,12 @@ export default function App() {
             <Route path="inbox" element={<InboxPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
+            <Route
+              path="import-batches/:batchId"
+              element={<ImportBatchPage />}
+            />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="help" element={<HelpPage />} />
             <Route path="books/:bookId" element={<BookDetailPage />} />
             <Route
               path="books/:bookId/analyze/:sentenceId"

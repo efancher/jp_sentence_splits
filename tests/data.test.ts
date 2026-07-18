@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import {
   addSentencesToBook,
+  assignBookSentencesToChapter,
   commitImport,
   createBook,
+  createBookChapter,
+  deleteBookChapter,
   exportFullBackup,
   getDb,
   moveBookSentence,
@@ -15,6 +18,7 @@ import {
   saveAnalysis,
   setBookSentenceStatus,
   transferBookSentences,
+  updateBookChapter,
 } from '../src/db/repository';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
@@ -154,5 +158,54 @@ describe('data layer', () => {
     expect(
       restored.find((item) => item.sentenceId === sentenceIds[0])?.status,
     ).toBe('needs_review');
+  });
+
+  it('creates, orders, assigns, and deletes book chapters without duplicating sentences', async () => {
+    const preview = parseSatoriCsvText(littleBirds, 'little-birds.csv');
+    const sentenceIds = preview.drafts.map((item) => item.proposedId);
+    await commitImport({
+      preview,
+      selectedIds: sentenceIds,
+      destination: 'inbox',
+    });
+    const book = await createBook({ title: 'Chaptered Book' });
+    await addSentencesToBook(book.id, sentenceIds);
+    const first = await createBookChapter(book.id, 'Lesson One');
+    const second = await createBookChapter(book.id, 'Lesson Two');
+    await assignBookSentencesToChapter(book.id, sentenceIds.slice(0, 2), first.id);
+
+    const db = getDb();
+    let memberships = await db.bookSentences
+      .where('bookId')
+      .equals(book.id)
+      .sortBy('position');
+    expect(
+      memberships.filter((item) => item.chapterId === first.id),
+    ).toHaveLength(2);
+
+    await updateBookChapter(book.id, second.id, { position: 0 });
+    let storedBook = await db.books.get(book.id);
+    expect(storedBook?.chapters.map((chapter) => chapter.title)).toEqual([
+      'Lesson Two',
+      'Lesson One',
+    ]);
+
+    const backup = await exportFullBackup();
+    expect(
+      backup.books.find((item) => item.id === book.id)?.chapters,
+    ).toHaveLength(2);
+    expect(
+      backup.bookSentences.some((item) => item.chapterId === first.id),
+    ).toBe(true);
+
+    await deleteBookChapter(book.id, first.id);
+    storedBook = await db.books.get(book.id);
+    expect(storedBook?.chapters).toHaveLength(1);
+    memberships = await db.bookSentences
+      .where('bookId')
+      .equals(book.id)
+      .toArray();
+    expect(memberships.some((item) => item.chapterId === first.id)).toBe(false);
+    expect(await db.sentences.count()).toBe(sentenceIds.length);
   });
 });

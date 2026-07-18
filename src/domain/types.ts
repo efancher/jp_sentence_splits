@@ -64,6 +64,13 @@ export interface Book {
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
+  chapters: BookChapter[];
+}
+
+export interface BookChapter {
+  id: string;
+  title: string;
+  position: number;
 }
 
 export interface BookSentence {
@@ -75,6 +82,7 @@ export interface BookSentence {
   addedAt: string;
   lastStudiedAt?: string;
   note?: string;
+  chapterId?: string;
 }
 
 export interface AnalysisChunk {

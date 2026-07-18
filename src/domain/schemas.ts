@@ -64,6 +64,15 @@ export const bookSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   lastOpenedAt: z.string().optional(),
+  chapters: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        position: z.number(),
+      }),
+    )
+    .default([]),
 });
 
 export const bookSentenceSchema = z.object({
@@ -75,6 +84,7 @@ export const bookSentenceSchema = z.object({
   addedAt: z.string(),
   lastStudiedAt: z.string().optional(),
   note: z.string().optional(),
+  chapterId: z.string().optional(),
 });
 
 export const analysisChunkSchema = z.object({

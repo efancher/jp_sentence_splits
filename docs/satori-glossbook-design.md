@@ -33,7 +33,7 @@ Core entities:
 | `Sentence` | Canonical imported Japanese sentence + vocab + source metadata |
 | `SentenceAnalysis` | User chunk/role/literal work, stored separately from source text |
 | `Book` | Named collection metadata |
-| `BookSentence` | Join table: membership, order, study status |
+| `BookSentence` | Join table: membership, order, study status, optional chapter |
 | `ImportBatch` | Import history / counts / warnings |
 | `InboxMembership` | Unassigned imported sentences |
 | `Settings` | Theme, reveal defaults, last book, etc. |
@@ -73,6 +73,10 @@ Invariant: concatenating chunk Japanese (ignoring inserted spaces) must equal th
 ## Book ordering
 
 `BookSentence.position` is the source of truth. Drag-and-drop and explicit Up/Down/Top/Bottom controls both rewrite positions transactionally. Automatic initial sorts (CSV occurrence, WhenCreated, JP/EN) are convenience only and do **not** claim to reconstruct Satori article order.
+
+Chapters are ordered metadata embedded in a book. `BookSentence.chapterId`
+assigns membership without changing the canonical sentence or analysis. Moving
+a sentence to another book clears the source book's chapter assignment.
 
 ## PWA constraints
 

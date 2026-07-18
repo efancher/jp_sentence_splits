@@ -7,7 +7,7 @@ Versioned JSON backup used by Settings → Backup & restore.
 ```json
 {
   "formatVersion": 1,
-  "appVersion": "0.2.0",
+  "appVersion": "0.3.0",
   "exportedAt": "2026-07-18T00:00:00.000Z",
   "checksum": "optional-fnv-style-hex",
   "counts": {
@@ -43,6 +43,7 @@ Versioned JSON backup used by Settings → Backup & restore.
 
 - `id`, `title`, optional `subtitle` / `sourceUrl` / `notes`
 - `archived`, `createdAt`, `updatedAt`, optional `lastOpenedAt`
+- `chapters[]`: `{ id, title, position }`
 
 ### Sentence
 
@@ -58,6 +59,10 @@ Versioned JSON backup used by Settings → Backup & restore.
 - Unique on `(bookId, sentenceId)`
 - `position`, `status` (`unstarted` | `in_progress` | `complete` | `needs_review`)
 - `addedAt`, optional `lastStudiedAt`, optional `note`
+- optional `chapterId` referencing a chapter embedded in that book
+
+`chapters` and `chapterId` are additive fields in backup format version 1.
+Older backups are accepted and receive an empty chapter list during validation.
 
 ### SentenceAnalysis
 

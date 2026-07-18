@@ -1,19 +1,58 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 
 import { VocabChips } from '../components/VocabChips';
-import {
-  findResumeSentence,
-  getDb,
-  setBookSentenceStatus,
-} from '../db/repository';
-import type { StudyStatus } from '../domain/types';
+import { getDb, setBookSentenceStatus } from '../db/repository';
+import type { BookSentence, StudyStatus } from '../domain/types';
+import { hashString } from '../lib/ids';
 import { summarizeChunks } from '../lib/worksheet';
+
+type PracticeScope = 'all' | 'incomplete' | 'needs_review' | 'unstarted';
+
+function filterMemberships(
+  memberships: BookSentence[],
+  scope: string,
+): BookSentence[] {
+  if (scope.startsWith('chapter:')) {
+    const chapterId = scope.slice('chapter:'.length);
+    return memberships.filter((item) => item.chapterId === chapterId);
+  }
+  switch (scope as PracticeScope) {
+    case 'needs_review':
+      return memberships.filter((item) => item.status === 'needs_review');
+    case 'unstarted':
+      return memberships.filter((item) => item.status === 'unstarted');
+    case 'incomplete':
+      return memberships.filter((item) => item.status !== 'complete');
+    case 'all':
+    default:
+      return memberships;
+  }
+}
+
+function sessionOrder(
+  memberships: BookSentence[],
+  shuffled: boolean,
+): BookSentence[] {
+  if (!shuffled) return memberships;
+  return [...memberships].sort(
+    (a, b) => Number.parseInt(hashString(a.sentenceId), 16) - Number.parseInt(hashString(b.sentenceId), 16),
+  );
+}
 
 export function PracticePage() {
   const { bookId = '', sentenceId: routeSentenceId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope = searchParams.get('scope') ?? 'incomplete';
+  const shuffled = searchParams.get('shuffle') === '1';
+  const [showVocabulary, setShowVocabulary] = useState(true);
   const [reveal, setReveal] = useState({
     chunks: false,
     roles: false,
@@ -25,50 +64,140 @@ export function PracticePage() {
   const data = useLiveQuery(async () => {
     const db = getDb();
     const book = await db.books.get(bookId);
-    const memberships = await db.bookSentences
+    const allMemberships = await db.bookSentences
       .where('bookId')
       .equals(bookId)
       .sortBy('position');
-    let sentenceId = routeSentenceId;
+    const scoped = filterMemberships(allMemberships, scope);
+    const memberships = sessionOrder(scoped, shuffled);
+    const sentenceId =
+      routeSentenceId &&
+      memberships.some((item) => item.sentenceId === routeSentenceId)
+        ? routeSentenceId
+        : memberships[0]?.sentenceId;
     if (!sentenceId) {
-      sentenceId = (await findResumeSentence(bookId)) ?? undefined;
+      return {
+        book,
+        allMemberships,
+        memberships,
+        sentence: null,
+        analysis: null,
+        index: -1,
+        membership: null,
+      };
     }
-    if (!sentenceId) return { book, memberships, sentence: null, analysis: null, index: -1, membership: null };
-    const index = memberships.findIndex((item) => item.sentenceId === sentenceId);
-    const sentence = await db.sentences.get(sentenceId);
-    const analysis = await db.analyses.get(sentenceId);
+    const index = memberships.findIndex(
+      (item) => item.sentenceId === sentenceId,
+    );
+    const [sentence, analysis] = await Promise.all([
+      db.sentences.get(sentenceId),
+      db.analyses.get(sentenceId),
+    ]);
     return {
       book,
+      allMemberships,
       memberships,
       sentence,
       analysis,
       index,
       membership: memberships[index] ?? null,
     };
-  }, [bookId, routeSentenceId]);
+  }, [bookId, routeSentenceId, scope, shuffled]);
 
   const summary = useMemo(
     () => summarizeChunks(data?.analysis?.chunks ?? []),
     [data?.analysis?.chunks],
   );
 
+  useEffect(() => {
+    setReveal({
+      chunks: false,
+      roles: false,
+      lit: false,
+      english: false,
+    });
+    setAttempt('');
+  }, [data?.sentence?.id]);
+
+  const query = searchParams.toString();
+  const practicePath = (sentenceId: string) =>
+    `/books/${bookId}/practice/${sentenceId}${query ? `?${query}` : ''}`;
+  const prev =
+    data && data.index > 0 ? data.memberships[data.index - 1] : null;
+  const next =
+    data && data.index >= 0 && data.index < data.memberships.length - 1
+      ? data.memberships[data.index + 1]
+      : null;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'ArrowLeft' && prev) {
+        navigate(practicePath(prev.sentenceId));
+      } else if (event.key === 'ArrowRight' && next) {
+        navigate(practicePath(next.sentenceId));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   if (!data?.book) return <p className="muted">Loading…</p>;
+
+  const completedInScope = data.memberships.filter(
+    (item) => item.status === 'complete',
+  ).length;
+  const scopeOptions = [
+    { value: 'incomplete', label: 'Incomplete' },
+    { value: 'needs_review', label: 'Needs review' },
+    { value: 'unstarted', label: 'Unstarted' },
+    { value: 'all', label: 'All sentences' },
+    ...(data.book.chapters ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((chapter) => ({
+        value: `chapter:${chapter.id}`,
+        label: `Chapter: ${chapter.title}`,
+      })),
+  ];
+
   if (!data.sentence) {
     return (
-      <div className="panel stack">
-        <p>No sentences in this book.</p>
-        <Link to={`/books/${bookId}`}>Back</Link>
+      <div className="empty-state">
+        <strong>No sentences match this practice session.</strong>
+        <span className="muted">
+          Choose another session scope or return to the book.
+        </span>
+        <select
+          value={scope}
+          aria-label="Practice scope"
+          onChange={(event) => {
+            setSearchParams({ scope: event.target.value });
+            navigate(`/books/${bookId}/practice?scope=${event.target.value}`);
+          }}
+        >
+          {scopeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <Link to={`/books/${bookId}`}>Back to book</Link>
       </div>
     );
   }
 
   const { book, sentence, memberships, index, membership } = data;
-  const prev = index > 0 ? memberships[index - 1] : null;
-  const next =
-    index >= 0 && index < memberships.length - 1 ? memberships[index + 1] : null;
 
-  async function mark(status: StudyStatus) {
+  async function mark(status: StudyStatus, advance = false) {
     await setBookSentenceStatus(bookId, sentence.id, status);
+    if (advance && next) navigate(practicePath(next.sentenceId));
   }
 
   return (
@@ -85,32 +214,14 @@ export function PracticePage() {
             <button
               type="button"
               disabled={!prev}
-              onClick={() => {
-                setReveal({
-                  chunks: false,
-                  roles: false,
-                  lit: false,
-                  english: false,
-                });
-                setAttempt('');
-                if (prev) navigate(`/books/${bookId}/practice/${prev.sentenceId}`);
-              }}
+              onClick={() => prev && navigate(practicePath(prev.sentenceId))}
             >
               Previous
             </button>
             <button
               type="button"
               disabled={!next}
-              onClick={() => {
-                setReveal({
-                  chunks: false,
-                  roles: false,
-                  lit: false,
-                  english: false,
-                });
-                setAttempt('');
-                if (next) navigate(`/books/${bookId}/practice/${next.sentenceId}`);
-              }}
+              onClick={() => next && navigate(practicePath(next.sentenceId))}
             >
               Next
             </button>
@@ -119,8 +230,70 @@ export function PracticePage() {
             </Link>
           </div>
         </div>
+
+        <div className="practice-session-controls">
+          <label>
+            Session
+            <select
+              value={scope}
+              aria-label="Practice scope"
+              onChange={(event) => {
+                const nextScope = event.target.value;
+                const params = new URLSearchParams(searchParams);
+                params.set('scope', nextScope);
+                setSearchParams(params);
+                navigate(`/books/${bookId}/practice?${params.toString()}`);
+              }}
+            >
+              {scopeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="selection-control">
+            <input
+              type="checkbox"
+              checked={shuffled}
+              onChange={(event) => {
+                const params = new URLSearchParams(searchParams);
+                if (event.target.checked) params.set('shuffle', '1');
+                else params.delete('shuffle');
+                setSearchParams(params);
+                navigate(`/books/${bookId}/practice?${params.toString()}`);
+              }}
+            />
+            Shuffle session
+          </label>
+          <label className="selection-control">
+            <input
+              type="checkbox"
+              checked={showVocabulary}
+              onChange={(event) => setShowVocabulary(event.target.checked)}
+            />
+            Show target vocabulary
+          </label>
+        </div>
+        <div className="muted">
+          Session progress: {completedInScope}/{memberships.length} complete
+        </div>
+        <div className="progress-bar" aria-hidden="true">
+          <span
+            style={{
+              width: `${
+                memberships.length
+                  ? Math.round((completedInScope / memberships.length) * 100)
+                  : 0
+              }%`,
+            }}
+          />
+        </div>
+
         <div className="jp jp-lg">{sentence.japanese}</div>
-        <VocabChips items={sentence.targetVocabulary} />
+        {showVocabulary ? (
+          <VocabChips items={sentence.targetVocabulary} />
+        ) : null}
         <label>
           Temporary attempt (not saved unless you copy into Analyze)
           <textarea
@@ -154,6 +327,32 @@ export function PracticePage() {
           >
             Reveal Satori English
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              setReveal({
+                chunks: true,
+                roles: true,
+                lit: true,
+                english: true,
+              })
+            }
+          >
+            Reveal all
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setReveal({
+                chunks: false,
+                roles: false,
+                lit: false,
+                english: false,
+              })
+            }
+          >
+            Hide all
+          </button>
         </div>
         <div className="summary-lines">
           {reveal.chunks ? `CHUNK: ${summary.chunk}` : 'CHUNK: (hidden)'}
@@ -176,16 +375,22 @@ export function PracticePage() {
           <button type="button" onClick={() => void mark('in_progress')}>
             In progress
           </button>
+          <button type="button" onClick={() => void mark('complete')}>
+            Complete
+          </button>
           <button
             type="button"
             className="primary"
-            onClick={() => void mark('complete')}
+            onClick={() => void mark('complete', true)}
           >
-            Complete
+            Complete & next
           </button>
-          <button type="button" onClick={() => void mark('needs_review')}>
-            Needs review
+          <button type="button" onClick={() => void mark('needs_review', true)}>
+            Needs review & next
           </button>
+        </div>
+        <div className="muted" style={{ fontSize: '0.85rem' }}>
+          Desktop shortcut: use ← and → to move through the session.
         </div>
       </section>
     </div>

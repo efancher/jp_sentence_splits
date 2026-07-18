@@ -21,6 +21,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
 import {
+  assignBookSentencesToChapter,
+  createBookChapter,
+  deleteBookChapter,
   deleteBook,
   duplicateBookOrdering,
   exportBookBackup,
@@ -33,6 +36,7 @@ import {
   touchBookOpened,
   transferBookSentences,
   updateBook,
+  updateBookChapter,
 } from '../db/repository';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import type { Book, Sentence } from '../domain/types';
@@ -104,6 +108,7 @@ function SortableRow({
   bookId,
   position,
   sentence,
+  chapterTitle,
   status,
   selected,
   editOrder,
@@ -114,6 +119,7 @@ function SortableRow({
   bookId: string;
   position: number;
   sentence: Sentence;
+  chapterTitle?: string;
   status: string;
   selected: boolean;
   editOrder: boolean;
@@ -158,6 +164,7 @@ function SortableRow({
         ) : null}
       </div>
       <div className="jp">{sentence.japanese}</div>
+      {chapterTitle ? <span className="chip">{chapterTitle}</span> : null}
       <div className="muted">{sentence.translation}</div>
       <VocabChips items={sentence.targetVocabulary} />
       {editOrder ? (
@@ -211,6 +218,8 @@ export function BookDetailPage() {
   const [editMetadata, setEditMetadata] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [destinationBookId, setDestinationBookId] = useState('');
+  const [chapterTitle, setChapterTitle] = useState('');
+  const [selectedChapterId, setSelectedChapterId] = useState('');
   const [snack, setSnack] = useState<{
     message: string;
     undo?: () => Promise<void>;
@@ -393,6 +402,41 @@ export function BookDetailPage() {
           <div className="panel stack">
             <strong>{selected.size} selected</strong>
             <label>
+              Chapter
+              <select
+                value={selectedChapterId}
+                onChange={(event) => setSelectedChapterId(event.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {(data.book.chapters ?? [])
+                  .slice()
+                  .sort((a, b) => a.position - b.position)
+                  .map((chapter) => (
+                    <option key={chapter.id} value={chapter.id}>
+                      {chapter.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={async () => {
+                await assignBookSentencesToChapter(
+                  bookId,
+                  [...selected],
+                  selectedChapterId || undefined,
+                );
+                setSnack({
+                  message: selectedChapterId
+                    ? `Assigned ${selected.size} sentence(s) to chapter.`
+                    : `Removed ${selected.size} sentence(s) from chapters.`,
+                });
+                setSelected(new Set());
+              }}
+            >
+              Apply chapter
+            </button>
+            <label>
               Another book
               <select
                 value={destinationBookId}
@@ -469,6 +513,107 @@ export function BookDetailPage() {
         />
       ) : null}
 
+      <section className="panel stack">
+        <div>
+          <h3 style={{ margin: 0 }}>Chapters</h3>
+          <p className="muted" style={{ margin: '0.25rem 0 0' }}>
+            Chapters label sections without duplicating or changing sentence
+            analysis.
+          </p>
+        </div>
+        <form
+          className="row"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!chapterTitle.trim()) return;
+            await createBookChapter(bookId, chapterTitle);
+            setChapterTitle('');
+          }}
+        >
+          <input
+            value={chapterTitle}
+            onChange={(event) => setChapterTitle(event.target.value)}
+            placeholder="New chapter title"
+            aria-label="New chapter title"
+          />
+          <button type="submit">Add chapter</button>
+        </form>
+        {(data.book.chapters ?? [])
+          .slice()
+          .sort((a, b) => a.position - b.position)
+          .map((chapter, chapterIndex, chapters) => {
+            const sentenceCount = data.rows.filter(
+              (row) => row.membership.chapterId === chapter.id,
+            ).length;
+            return (
+              <div key={chapter.id} className="chapter-row">
+                <div>
+                  <strong>{chapter.title}</strong>
+                  <div className="muted">
+                    {sentenceCount} sentence{sentenceCount === 1 ? '' : 's'}
+                  </div>
+                </div>
+                <div className="row">
+                  <button
+                    type="button"
+                    disabled={chapterIndex === 0}
+                    onClick={() =>
+                      void updateBookChapter(bookId, chapter.id, {
+                        position: chapterIndex - 1,
+                      })
+                    }
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    disabled={chapterIndex === chapters.length - 1}
+                    onClick={() =>
+                      void updateBookChapter(bookId, chapter.id, {
+                        position: chapterIndex + 1,
+                      })
+                    }
+                  >
+                    Down
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const title = window.prompt(
+                        'Rename chapter',
+                        chapter.title,
+                      );
+                      if (title?.trim()) {
+                        void updateBookChapter(bookId, chapter.id, { title });
+                      }
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete chapter “${chapter.title}”? Its sentences will become unassigned.`,
+                        )
+                      ) {
+                        void deleteBookChapter(bookId, chapter.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        {!data.book.chapters?.length ? (
+          <span className="muted">No chapters yet.</span>
+        ) : null}
+      </section>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -484,6 +629,9 @@ export function BookDetailPage() {
                   bookId={bookId}
                   position={row.membership.position}
                   sentence={row.sentence}
+                  chapterTitle={data.book.chapters?.find(
+                    (chapter) => chapter.id === row.membership.chapterId,
+                  )?.title}
                   status={row.analysis?.status ?? row.membership.status}
                   selected={selected.has(row.membership.sentenceId)}
                   editOrder={editOrder}

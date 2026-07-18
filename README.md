@@ -13,10 +13,21 @@ Python reference behavior from the earlier Anki tooling lives under [`reference/
 - In Inbox, select one or more sentences and assign them to a new or existing
   book.
 - In a book, select sentences to copy or move them to another book.
+- Create and order chapters, then assign selected book sentences to a chapter.
 - Use **Edit order** for drag-and-drop, Up/Down/Top/Bottom, or an exact
   destination position.
 - Use **Edit details** for a book title, subtitle/source title, source URL, and
   notes.
+- Open an import batch from Inbox to review and organize every sentence linked
+  to that import.
+- Select matching Search results to add them to a book or export a worksheet.
+
+## Practice sessions
+
+Practice can be scoped to incomplete, needs-review, unstarted, all, or one
+chapter. Sessions support deterministic shuffle, optional vocabulary,
+staged/all-at-once reveals, progress, Complete & Next, Needs Review & Next, and
+desktop arrow-key navigation.
 
 ## Local development
 
@@ -106,5 +117,6 @@ After the first successful load, the application shell and already-imported stud
 
 ## Documentation
 
+- [User guide](docs/satori-glossbook-user-guide.md)
 - [Design](docs/satori-glossbook-design.md)
 - [Backup data format](docs/satori-glossbook-data-format.md)

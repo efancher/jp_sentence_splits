@@ -177,9 +177,16 @@ export function InboxPage() {
               {batch.counts.uniqueSentences} sentences ·{' '}
               {batch.counts.newSentences} new
             </div>
-            <Link to="/import">
-              <button type="button">Import again</button>
-            </Link>
+            <div className="row">
+              <Link to={`/import-batches/${batch.id}`}>
+                <button type="button" className="primary">
+                  View batch
+                </button>
+              </Link>
+              <Link to="/import">
+                <button type="button">Import again</button>
+              </Link>
+            </div>
           </article>
         ))}
       </section>
