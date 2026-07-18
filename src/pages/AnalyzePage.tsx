@@ -326,7 +326,7 @@ export function AnalyzePage() {
             }`}
           >
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong className="jp">{chunk.japanese}</strong>
+              <strong className="jp jp-lg">{chunk.japanese}</strong>
               <span className="row" style={{ gap: '0.4rem' }}>
                 <SpeakButton
                   text={chunk.japanese}
