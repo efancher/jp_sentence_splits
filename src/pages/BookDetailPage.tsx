@@ -21,7 +21,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
 import {
-  addSentencesToBook,
   deleteBook,
   duplicateBookOrdering,
   exportBookBackup,
@@ -30,11 +29,75 @@ import {
   moveBookSentence,
   removeSentencesFromBook,
   reorderBookSentences,
+  restoreBookSentenceSnapshot,
   touchBookOpened,
+  transferBookSentences,
   updateBook,
 } from '../db/repository';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
-import type { Sentence } from '../domain/types';
+import type { Book, Sentence } from '../domain/types';
+
+function BookMetadataForm({
+  book,
+  onDone,
+}: {
+  book: Book;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = useState(book.title);
+  const [subtitle, setSubtitle] = useState(book.subtitle ?? '');
+  const [sourceUrl, setSourceUrl] = useState(book.sourceUrl ?? '');
+  const [notes, setNotes] = useState(book.notes ?? '');
+
+  return (
+    <form
+      className="panel stack"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        await updateBook(book.id, { title, subtitle, sourceUrl, notes });
+        onDone();
+      }}
+    >
+      <h3 style={{ margin: 0 }}>Book details</h3>
+      <label>
+        Title
+        <input value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label>
+        Subtitle or source title
+        <input
+          value={subtitle}
+          onChange={(event) => setSubtitle(event.target.value)}
+        />
+      </label>
+      <label>
+        Source URL
+        <input
+          type="url"
+          inputMode="url"
+          value={sourceUrl}
+          onChange={(event) => setSourceUrl(event.target.value)}
+          placeholder="https://…"
+        />
+      </label>
+      <label>
+        Notes
+        <textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+        />
+      </label>
+      <div className="row">
+        <button type="submit" className="primary">
+          Save details
+        </button>
+        <button type="button" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function SortableRow({
   id,
@@ -55,8 +118,14 @@ function SortableRow({
   selected: boolean;
   editOrder: boolean;
   onSelect: (checked: boolean) => void;
-  onMove: (action: 'up' | 'down' | 'top' | 'bottom') => void;
+  onMove: (action: 'up' | 'down' | 'top' | 'bottom' | number) => void;
 }) {
+  const [requestedPosition, setRequestedPosition] = useState(
+    String(position + 1),
+  );
+  useEffect(() => {
+    setRequestedPosition(String(position + 1));
+  }, [position]);
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id, disabled: !editOrder });
   const style = {
@@ -105,6 +174,22 @@ function SortableRow({
           <button type="button" onClick={() => onMove('bottom')}>
             Bottom
           </button>
+          <label className="position-control">
+            Position
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={requestedPosition}
+              onChange={(event) => setRequestedPosition(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => onMove(Number(requestedPosition))}
+          >
+            Move
+          </button>
         </div>
       ) : (
         <div className="row">
@@ -123,7 +208,9 @@ export function BookDetailPage() {
   const { bookId = '' } = useParams();
   const navigate = useNavigate();
   const [editOrder, setEditOrder] = useState(false);
+  const [editMetadata, setEditMetadata] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [destinationBookId, setDestinationBookId] = useState('');
   const [snack, setSnack] = useState<{
     message: string;
     undo?: () => Promise<void>;
@@ -148,8 +235,12 @@ export function BookDetailPage() {
     const analyses = await db.analyses.bulkGet(
       memberships.map((item) => item.sentenceId),
     );
+    const otherBooks = await db.books
+      .filter((item) => !item.archived && item.id !== bookId)
+      .toArray();
     return {
       book,
+      otherBooks,
       rows: memberships.map((membership, index) => ({
         membership,
         sentence: sentences[index],
@@ -206,6 +297,12 @@ export function BookDetailPage() {
         {data.book.subtitle ? (
           <div className="muted">{data.book.subtitle}</div>
         ) : null}
+        {data.book.sourceUrl ? (
+          <a href={data.book.sourceUrl} target="_blank" rel="noreferrer">
+            Open source
+          </a>
+        ) : null}
+        {data.book.notes ? <p style={{ margin: 0 }}>{data.book.notes}</p> : null}
         <div className="row">
           <button
             type="button"
@@ -222,15 +319,8 @@ export function BookDetailPage() {
           <Link to={`/books/${bookId}/practice`}>
             <button type="button">Practice</button>
           </Link>
-          <button
-            type="button"
-            onClick={async () => {
-              const title = window.prompt('Rename book', data.book.title);
-              if (!title) return;
-              await updateBook(bookId, { title });
-            }}
-          >
-            Rename
+          <button type="button" onClick={() => setEditMetadata(true)}>
+            Edit details
           </button>
           <button
             type="button"
@@ -300,29 +390,84 @@ export function BookDetailPage() {
           </button>
         </div>
         {selected.size ? (
-          <div className="row">
+          <div className="panel stack">
+            <strong>{selected.size} selected</strong>
+            <label>
+              Another book
+              <select
+                value={destinationBookId}
+                onChange={(event) => setDestinationBookId(event.target.value)}
+              >
+                <option value="">Choose a book…</option>
+                {data.otherBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="row">
+              <button
+                type="button"
+                disabled={!destinationBookId}
+                onClick={async () => {
+                  await transferBookSentences({
+                    sourceBookId: bookId,
+                    destinationBookId,
+                    sentenceIds: [...selected],
+                    mode: 'copy',
+                  });
+                  setSnack({ message: `Copied ${selected.size} sentence(s).` });
+                  setSelected(new Set());
+                }}
+              >
+                Copy to book
+              </button>
+              <button
+                type="button"
+                disabled={!destinationBookId}
+                onClick={async () => {
+                  await transferBookSentences({
+                    sourceBookId: bookId,
+                    destinationBookId,
+                    sentenceIds: [...selected],
+                    mode: 'move',
+                  });
+                  setSnack({ message: `Moved ${selected.size} sentence(s).` });
+                  setSelected(new Set());
+                }}
+              >
+                Move to book
+              </button>
             <button
               type="button"
               className="danger"
               onClick={async () => {
-                const previous = [...ids];
                 const removed = [...selected];
-                await removeSentencesFromBook(bookId, removed);
+                const snapshot = await removeSentencesFromBook(bookId, removed);
                 setSelected(new Set());
                 setSnack({
                   message: `Removed ${removed.length} sentence(s)`,
                   undo: async () => {
-                    await addSentencesToBook(bookId, removed, 'manual');
-                    await reorderBookSentences(bookId, previous);
+                    await restoreBookSentenceSnapshot(bookId, snapshot);
                   },
                 });
               }}
             >
               Remove selected from book
             </button>
+            </div>
           </div>
         ) : null}
       </section>
+
+      {editMetadata ? (
+        <BookMetadataForm
+          key={data.book.updatedAt}
+          book={data.book}
+          onDone={() => setEditMetadata(false)}
+        />
+      ) : null}
 
       <DndContext
         sensors={sensors}

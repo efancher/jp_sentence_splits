@@ -25,13 +25,14 @@ export function SearchPage() {
     return {
       inbox: await db.inbox.toArray(),
       bookSentences: await db.bookSentences.toArray(),
+      books: await db.books.toArray(),
       analyses: await db.analyses.toArray(),
       sentences: await db.sentences.toArray(),
     };
   }, []);
 
   const filteredSentences = useMemo(() => {
-    const sentences = results?.sentences ?? meta?.sentences ?? [];
+    const sentences = query ? (results?.sentences ?? []) : (meta?.sentences ?? []);
     const inboxIds = new Set((meta?.inbox ?? []).map((item) => item.sentenceId));
     const analysisById = new Map(
       (meta?.analyses ?? []).map((item) => [item.sentenceId, item]),
@@ -42,9 +43,6 @@ export function SearchPage() {
     }
 
     return sentences.filter((sentence) => {
-      if (query && !(results?.sentences ?? []).some((item) => item.id === sentence.id)) {
-        // When querying, prefer search results; when empty query show all with filters.
-      }
       switch (filter) {
         case 'unassigned':
           return inboxIds.has(sentence.id);
@@ -119,6 +117,33 @@ export function SearchPage() {
           <article key={sentence.id} className="list-card">
             <div className="jp">{sentence.japanese}</div>
             <div className="muted">{sentence.translation}</div>
+            <div className="row">
+              {(meta?.bookSentences ?? [])
+                .filter((item) => item.sentenceId === sentence.id)
+                .sort((a, b) => a.position - b.position)
+                .map((membership) => {
+                  const book = meta?.books.find(
+                    (item) => item.id === membership.bookId,
+                  );
+                  return (
+                    <Link
+                      key={membership.id}
+                      to={`/books/${membership.bookId}/analyze/${sentence.id}`}
+                    >
+                      <button type="button">
+                        Analyze in {book?.title ?? 'book'}
+                      </button>
+                    </Link>
+                  );
+                })}
+              {(meta?.inbox ?? []).some(
+                (item) => item.sentenceId === sentence.id,
+              ) ? (
+                <Link to="/inbox">
+                  <button type="button">Open in Inbox</button>
+                </Link>
+              ) : null}
+            </div>
           </article>
         ))}
         {!filteredSentences.length ? (

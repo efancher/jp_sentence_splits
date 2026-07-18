@@ -7,7 +7,7 @@ Versioned JSON backup used by Settings → Backup & restore.
 ```json
 {
   "formatVersion": 1,
-  "appVersion": "0.1.0",
+  "appVersion": "0.2.0",
   "exportedAt": "2026-07-18T00:00:00.000Z",
   "checksum": "optional-fnv-style-hex",
   "counts": {

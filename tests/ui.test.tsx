@@ -28,8 +28,8 @@ describe('UI flows', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('link', { name: 'Import' }));
-    const input = screen.getByLabelText(/CSV file/i);
+    await user.click(await screen.findByRole('link', { name: 'Import' }));
+    const input = await screen.findByLabelText(/CSV file/i);
     await user.upload(input, fileFromCsv('little-birds.csv', littleBirds));
 
     await screen.findByText(/Import preview/i);
@@ -80,9 +80,9 @@ describe('UI flows', () => {
   it('reorders with explicit buttons and reveals practice stages', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole('link', { name: 'Import' }));
+    await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
-      screen.getByLabelText(/CSV file/i),
+      await screen.findByLabelText(/CSV file/i),
       fileFromCsv('little-birds.csv', littleBirds),
     );
     await screen.findByText(/Import preview/i);
@@ -104,8 +104,9 @@ describe('UI flows', () => {
 
     await user.click(screen.getByRole('button', { name: 'Done ordering' }));
     await user.click(screen.getByRole('button', { name: 'Practice' }));
-    await screen.findByText(/Practice/i);
-    expect(screen.getByText(/CHUNK: \(hidden\)/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/CHUNK: \(hidden\)/),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Reveal chunks' }));
     await user.click(screen.getByRole('button', { name: 'Reveal roles' }));
     await waitFor(() => {
@@ -117,5 +118,33 @@ describe('UI flows', () => {
       .find((node) => node?.textContent?.includes('ROLE:'));
     expect(practiceSummary).toBeTruthy();
     expect(within(practiceSummary!).getByText(/ROLE:/)).toBeInTheDocument();
+  }, 30000);
+
+  it('assigns selected Inbox sentences to a newly created book', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('link', { name: 'Import' }));
+    await user.upload(
+      await screen.findByLabelText(/CSV file/i),
+      fileFromCsv('little-birds.csv', littleBirds),
+    );
+    await screen.findByText(/Import preview/i);
+    await user.click(screen.getByRole('button', { name: /Import .* selected/i }));
+
+    await screen.findByRole('heading', { name: 'Inbox' });
+    const sentenceCheckboxes = await screen.findAllByLabelText('Select sentence');
+    await user.click(sentenceCheckboxes[0]!);
+    await user.selectOptions(
+      screen.getByLabelText('Destination book'),
+      'new',
+    );
+    await user.type(screen.getByLabelText('New book title'), 'Inbox Book');
+    await user.click(screen.getByRole('button', { name: 'Add to book' }));
+
+    await screen.findByText('Added 1 sentence(s) to a book.');
+    await user.click(screen.getByRole('link', { name: 'Books' }));
+    expect(
+      await screen.findByText('Inbox Book', { selector: 'strong' }),
+    ).toBeInTheDocument();
   }, 30000);
 });

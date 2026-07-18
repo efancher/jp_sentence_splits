@@ -6,10 +6,15 @@ import {
   commitImport,
   createBook,
   exportFullBackup,
+  getDb,
+  moveBookSentence,
+  removeSentencesFromBook,
   reorderBookSentences,
+  restoreBookSentenceSnapshot,
   restoreBackup,
   saveAnalysis,
   setBookSentenceStatus,
+  transferBookSentences,
 } from '../src/db/repository';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
@@ -85,5 +90,69 @@ describe('data layer', () => {
       expect(again.books).toHaveLength(backup.books.length);
       expect(again.sentences).toHaveLength(backup.sentences.length);
     }
+  });
+
+  it('moves and copies memberships, supports exact positions, and restores removal metadata', async () => {
+    const preview = parseSatoriCsvText(littleBirds, 'little-birds.csv');
+    const sentenceIds = preview.drafts.map((item) => item.proposedId);
+    await commitImport({
+      preview,
+      selectedIds: sentenceIds,
+      destination: 'inbox',
+    });
+    const source = await createBook({ title: 'Source' });
+    const destination = await createBook({ title: 'Destination' });
+    await addSentencesToBook(source.id, sentenceIds);
+    await setBookSentenceStatus(source.id, sentenceIds[0]!, 'needs_review');
+
+    await moveBookSentence(source.id, sentenceIds[0]!, 3);
+    const db = getDb();
+    const reordered = await db.bookSentences
+      .where('bookId')
+      .equals(source.id)
+      .sortBy('position');
+    expect(reordered[2]?.sentenceId).toBe(sentenceIds[0]);
+
+    await transferBookSentences({
+      sourceBookId: source.id,
+      destinationBookId: destination.id,
+      sentenceIds: [sentenceIds[0]!],
+      mode: 'copy',
+    });
+    const copied = await db.bookSentences
+      .where('[bookId+sentenceId]')
+      .equals([destination.id, sentenceIds[0]!])
+      .first();
+    expect(copied?.status).toBe('needs_review');
+
+    await transferBookSentences({
+      sourceBookId: source.id,
+      destinationBookId: destination.id,
+      sentenceIds: [sentenceIds[1]!],
+      mode: 'move',
+    });
+    expect(
+      await db.bookSentences
+        .where('[bookId+sentenceId]')
+        .equals([source.id, sentenceIds[1]!])
+        .count(),
+    ).toBe(0);
+
+    const beforeRemoval = await db.bookSentences
+      .where('bookId')
+      .equals(source.id)
+      .sortBy('position');
+    const snapshot = await removeSentencesFromBook(source.id, [
+      sentenceIds[0]!,
+    ]);
+    await restoreBookSentenceSnapshot(source.id, snapshot);
+    const restored = await db.bookSentences
+      .where('bookId')
+      .equals(source.id)
+      .sortBy('position');
+    expect(restored).toEqual(beforeRemoval);
+    expect(
+      restored.find((item) => item.sentenceId === sentenceIds[0])?.status,
+    ).toBe('needs_review');
   });
 });

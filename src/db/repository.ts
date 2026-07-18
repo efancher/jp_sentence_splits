@@ -179,8 +179,12 @@ export async function addSentencesToBook(
 export async function removeSentencesFromBook(
   bookId: string,
   sentenceIds: string[],
-): Promise<void> {
+): Promise<BookSentence[]> {
   const db = getDb();
+  const snapshot = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .sortBy('position');
   await db.transaction('rw', db.bookSentences, db.books, async () => {
     for (const sentenceId of sentenceIds) {
       await db.bookSentences
@@ -199,6 +203,87 @@ export async function removeSentencesFromBook(
     if (book) {
       await db.books.put({ ...book, updatedAt: nowIso() });
     }
+  });
+  return snapshot;
+}
+
+export async function restoreBookSentenceSnapshot(
+  bookId: string,
+  snapshot: BookSentence[],
+): Promise<void> {
+  const db = getDb();
+  await db.transaction('rw', db.bookSentences, db.books, async () => {
+    await db.bookSentences.where('bookId').equals(bookId).delete();
+    await db.bookSentences.bulkPut(
+      snapshot.map((item, position) => ({ ...item, position })),
+    );
+    const book = await db.books.get(bookId);
+    if (book) {
+      await db.books.put({ ...book, updatedAt: nowIso() });
+    }
+  });
+}
+
+export async function transferBookSentences(options: {
+  sourceBookId: string;
+  destinationBookId: string;
+  sentenceIds: string[];
+  mode: 'copy' | 'move';
+}): Promise<void> {
+  const db = getDb();
+  if (options.sourceBookId === options.destinationBookId) return;
+  const selectedIds = new Set(options.sentenceIds);
+  const timestamp = nowIso();
+
+  await db.transaction('rw', db.bookSentences, db.books, async () => {
+    const [source, destination] = await Promise.all([
+      db.bookSentences
+        .where('bookId')
+        .equals(options.sourceBookId)
+        .sortBy('position'),
+      db.bookSentences
+        .where('bookId')
+        .equals(options.destinationBookId)
+        .sortBy('position'),
+    ]);
+    const destinationIds = new Set(destination.map((item) => item.sentenceId));
+    const selectedMemberships = source.filter((item) =>
+      selectedIds.has(item.sentenceId),
+    );
+    const additions = selectedMemberships
+      .filter((item) => !destinationIds.has(item.sentenceId))
+      .map((item, index) => ({
+        ...item,
+        id: createId('bs'),
+        bookId: options.destinationBookId,
+        position: destination.length + index,
+        addedAt: timestamp,
+      }));
+    if (additions.length) {
+      await db.bookSentences.bulkPut(additions);
+    }
+
+    if (options.mode === 'move') {
+      await db.bookSentences.bulkDelete(
+        selectedMemberships.map((item) => item.id),
+      );
+      const remaining = source.filter(
+        (item) => !selectedIds.has(item.sentenceId),
+      );
+      await db.bookSentences.bulkPut(
+        remaining.map((item, position) => ({ ...item, position })),
+      );
+    }
+
+    const touchedBooks = await db.books.bulkGet([
+      options.sourceBookId,
+      options.destinationBookId,
+    ]);
+    await db.books.bulkPut(
+      touchedBooks
+        .filter((book): book is Book => Boolean(book))
+        .map((book) => ({ ...book, updatedAt: timestamp })),
+    );
   });
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseInlineReadings } from '../src/lib/furigana';
+import { parseInlineReadings } from '../src/lib/parseInlineReadings';
 
 describe('parseInlineReadings', () => {
   it('parses simple kanji readings', () => {

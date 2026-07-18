@@ -6,6 +6,18 @@ This repository is the home of **Satori Glossbook** (name configurable in [`src/
 
 Python reference behavior from the earlier Anki tooling lives under [`reference/`](reference/) for algorithm ports and regression expectations.
 
+## Organizing sentences
+
+- During import, send selected sentences to Inbox, a new book, or an existing
+  book.
+- In Inbox, select one or more sentences and assign them to a new or existing
+  book.
+- In a book, select sentences to copy or move them to another book.
+- Use **Edit order** for drag-and-drop, Up/Down/Top/Bottom, or an exact
+  destination position.
+- Use **Edit details** for a book title, subtitle/source title, source URL, and
+  notes.
+
 ## Local development
 
 ```bash
@@ -91,7 +103,6 @@ After the first successful load, the application shell and already-imported stud
 - No automatic reconstruction of Satori article order
 - Heuristic chunking/roles are suggestions only
 - No AI translation or Anki sync in the MVP
-- Fonts from Google Fonts need a network on first load; system JP fonts are the offline fallback
 
 ## Documentation
 

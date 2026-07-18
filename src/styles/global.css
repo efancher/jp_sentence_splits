@@ -10,6 +10,7 @@ html,
 body,
 #root {
   min-height: 100%;
+  scroll-padding-bottom: calc(var(--nav-height) + 7rem);
 }
 
 body {
@@ -23,6 +24,7 @@ body {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
 }
 
 button,
@@ -31,6 +33,22 @@ textarea,
 select {
   font: inherit;
   color: inherit;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.25rem;
+  min-height: 1.25rem;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 1px;
+  scroll-margin-block: 18vh;
 }
 
 button {
@@ -140,7 +158,8 @@ a {
 .app-main {
   width: min(100%, var(--content-max));
   margin: 0 auto;
-  padding: 1rem max(1rem, env(safe-area-inset-right, 0px)) 2rem
+  padding: 1rem max(1rem, env(safe-area-inset-right, 0px))
+    max(2rem, env(safe-area-inset-bottom, 0px))
     max(1rem, env(safe-area-inset-left, 0px));
 }
 
@@ -262,6 +281,43 @@ a {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 }
 
+.selection-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.position-control {
+  display: grid;
+  grid-template-columns: auto minmax(4.25rem, 5rem);
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.position-control input {
+  min-width: 0;
+}
+
+.empty-state {
+  display: grid;
+  justify-items: start;
+  gap: 0.7rem;
+  padding: 1.2rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+
+.route-loading {
+  min-height: 50dvh;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
 .snackbar {
   position: fixed;
   left: 50%;
@@ -350,5 +406,15 @@ a {
     transform: translateX(-50%);
     width: min(100%, var(--content-max));
     border-radius: 18px 18px 0 0;
+  }
+}
+
+@media (max-height: 560px) {
+  .app-header {
+    position: static;
+  }
+
+  .app-main {
+    padding-bottom: calc(var(--nav-height) + 8rem);
   }
 }

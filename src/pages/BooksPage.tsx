@@ -94,7 +94,18 @@ export function BooksPage() {
           </article>
         ))}
         {!books?.length ? (
-          <p className="muted">No books yet. Import a CSV or create one above.</p>
+          <div className="empty-state">
+            <strong>Start with your Satori vocabulary export.</strong>
+            <span className="muted">
+              Importing finds every sentence context, merges duplicate JE/EJ
+              cards, and lets you create your first book.
+            </span>
+            <Link to="/import">
+              <button type="button" className="primary">
+                Import Satori CSV
+              </button>
+            </Link>
+          </div>
         ) : null}
       </section>
     </div>
