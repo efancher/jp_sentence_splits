@@ -1,0 +1,8 @@
+CardID,CardType,Expression,Expression-ReadingsOnly,Expression-ReadingsInline,English,PartsOfSpeech,WhenCreated,Context1,Context1-ReadingsOnly,Context1-ReadingsInline,Context1-Translation,Context2,Context2-Translation,Context3,Context3-Translation,UserNotes
+id-kotori-je,JE,小鳥,ことり,小鳥[ことり],little bird,n,2024-01-01T10:00:00Z,ある小鳥の夫婦が、木に巣を作りました。,あることりのふうふが、きにすをつくりました。,ある 小鳥[ことり]の 夫婦[ふうふ]が、 木[き]に 巣[す]を 作[つく]りました。,A certain little bird couple made a nest in a tree.,,,,
+id-kotori-ej,EJ,小鳥,ことり,小鳥[ことり],little bird,n,2024-01-01T10:00:00Z,ある小鳥の夫婦が、木に巣を作りました。,あることりのふうふが、きにすをつくりました。,ある 小鳥[ことり]の 夫婦[ふうふ]が、 木[き]に 巣[す]を 作[つく]りました。,A certain little bird couple made a nest in a tree.,,,,
+id-fuufu-je,JE,夫婦,ふうふ,夫婦[ふうふ],couple / husband and wife,n,2024-01-01T10:05:00Z,ある小鳥の夫婦が、木に巣を作りました。,あることりのふうふが、きにすをつくりました。,ある 小鳥[ことり]の 夫婦[ふうふ]が、 木[き]に 巣[す]を 作[つく]りました。,A certain little bird couple made a nest in a tree.,,,,
+id-su-je,JE,巣,す,巣[す],nest,n,2024-01-01T10:10:00Z,ある小鳥の夫婦が、木に巣を作りました。,あることりのふうふが、きにすをつくりました。,ある 小鳥[ことり]の 夫婦[ふうふ]が、 木[き]に 巣[す]を 作[つく]りました。,A certain little bird couple made a nest in a tree.,,,,
+id-tsukuru-je,JE,作る,つくる,作[つく]る,to make,v,2024-01-01T10:15:00Z,ある小鳥の夫婦が、木に巣を作りました。,あることりのふうふが、きにすをつくりました。,ある 小鳥[ことり]の 夫婦[ふうふ]が、 木[き]に 巣[す]を 作[つく]りました。,A certain little bird couple made a nest in a tree.,,,,
+id-haru-je,JE,暖かい,あたたかい,暖[あたた]かい,warm (air temperature),adj-i,2024-01-02T09:00:00Z,暖かい春がやって来ました。,あたたかいはるがやってきました。,暖[あたた]かい 春[はる]がやって 来[き]ました。,The warm spring came along.,もう一つの文です。,Another sentence.,,,
+id-empty-context,JE,空欄,くうらん,空欄[くうらん],blank,n,2024-01-03T09:00:00Z,,,,,,,,,
