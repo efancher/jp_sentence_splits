@@ -89,7 +89,9 @@ Select matching results to add them to a book or export them as a worksheet.
 3. Optionally apply heuristic chunks and role suggestions.
 4. Enter an editable role and Japanese-order literal English for each chunk.
 5. Review the generated CHUNK, ROLE, and LIT lines.
-6. Save or mark the sentence complete/needs review.
+6. Review local suggestions (missing roles/literals, heuristic role tips,
+   sticky-English habits).
+7. Save or mark the sentence complete/needs review.
 
 The non-whitespace source Japanese must remain unchanged. Autosave runs after a
 short delay and on blur; the manual Save button is a fallback.

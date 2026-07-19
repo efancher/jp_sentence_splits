@@ -100,8 +100,9 @@ export function HelpPage() {
             English.”
           </li>
           <li>
-            Check the CHUNK, ROLE, and LIT summaries, then mark the sentence
-            complete or needs review.
+            Check <strong>Review suggestions</strong> for local tips (missing
+            fields, role mismatches, sticky-English habits), then mark the
+            sentence complete or needs review.
           </li>
         </ol>
         <p>

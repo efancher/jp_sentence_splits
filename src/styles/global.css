@@ -439,6 +439,23 @@ a {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+.suggestion-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+  background: color-mix(in srgb, var(--bg-elevated) 85%, var(--bg-muted));
+}
+
+.suggestion-card.warning {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.suggestion-card.info {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
 .chunk-card {
   border: 1px solid var(--border);
   border-radius: 12px;

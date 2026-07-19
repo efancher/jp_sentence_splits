@@ -22,6 +22,10 @@ import {
   moveChunkBoundary,
   splitChunkAt,
 } from '../lib/analysisHelpers';
+import {
+  applySuggestion,
+  lintAnalysis,
+} from '../lib/analysisSuggestions';
 import { FuriganaText } from '../lib/furigana';
 import { ichiMoeUrl } from '../lib/ichiMoe';
 import {
@@ -50,6 +54,9 @@ export function AnalyzePage() {
   const [chunkError, setChunkError] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [customRoleIds, setCustomRoleIds] = useState<Set<string>>(new Set());
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<
+    Set<string>
+  >(new Set());
 
   const isCustomRole = (chunk: AnalysisChunk): boolean =>
     customRoleIds.has(chunk.id) ||
@@ -84,6 +91,7 @@ export function AnalyzePage() {
     const existing = data.analysis?.chunks ?? [];
     setChunks(existing);
     setCustomRoleIds(new Set());
+    setDismissedSuggestionIds(new Set());
     setNotes(data.analysis?.notes ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
     setHydrated(true);
@@ -92,6 +100,15 @@ export function AnalyzePage() {
   }, [data?.sentence?.id]);
 
   const summary = useMemo(() => summarizeChunks(chunks), [chunks]);
+  const openSuggestions = useMemo(() => {
+    if (!data?.sentence) return [];
+    return lintAnalysis(data.sentence.japanese, chunks).filter(
+      (item) => !dismissedSuggestionIds.has(item.id),
+    );
+  }, [chunks, data?.sentence, dismissedSuggestionIds]);
+  const openWarnings = openSuggestions.filter(
+    (item) => item.severity === 'warning',
+  );
   const speech = useJapaneseSpeech();
   const { stop: stopSpeech } = speech;
   const nativeAudio = useNativeAudio();
@@ -321,9 +338,17 @@ export function AnalyzePage() {
             type="button"
             onClick={() => {
               const nextChunks = applyHeuristicChunks(sentence.japanese, chunks);
+              const discarded = countDiscardedAnnotations(chunks, nextChunks);
+              if (discarded >= 2) {
+                const ok = window.confirm(
+                  `Applying the heuristic would discard annotations on ${discarded} chunks. Continue?`,
+                );
+                if (!ok) return;
+              }
               setChunks(nextChunks);
               setSpaced(nextChunks.map((chunk) => chunk.japanese).join(' '));
               setChunkError('');
+              setDismissedSuggestionIds(new Set());
             }}
           >
             Apply heuristic chunking
@@ -510,6 +535,118 @@ export function AnalyzePage() {
         ))}
       </section>
 
+      {chunks.length ? (
+        <section className="panel stack" aria-label="Review suggestions">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0 }}>
+              Review suggestions ({openSuggestions.length})
+            </h3>
+            {dismissedSuggestionIds.size ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setDismissedSuggestionIds(new Set())}
+              >
+                Restore dismissed
+              </button>
+            ) : null}
+          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            Local checks against Cure Dolly–style heuristics and sticky-English
+            habits. Suggestions never overwrite your gloss unless you apply
+            them.
+          </p>
+          {!openSuggestions.length ? (
+            <div className="status-pill complete">No open suggestions</div>
+          ) : (
+            <div className="stack">
+              {openSuggestions.map((suggestion) => (
+                <article
+                  key={suggestion.id}
+                  className={`suggestion-card ${suggestion.severity}`}
+                >
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <strong>
+                      {suggestion.severity === 'warning' ? 'Check' : 'Tip'}
+                    </strong>
+                    {typeof suggestion.chunkIndex === 'number' ? (
+                      <span className="muted">
+                        Chunk #{suggestion.chunkIndex + 1}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p style={{ margin: 0 }}>{suggestion.message}</p>
+                  <div className="row">
+                    {suggestion.action !== 'none' ? (
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => {
+                          if (suggestion.action === 'reapply_heuristic') {
+                            const nextChunks = applyHeuristicChunks(
+                              sentence.japanese,
+                              chunks,
+                            );
+                            const discarded = countDiscardedAnnotations(
+                              chunks,
+                              nextChunks,
+                            );
+                            if (discarded >= 2) {
+                              const ok = window.confirm(
+                                `Applying the heuristic would discard annotations on ${discarded} chunks. Continue?`,
+                              );
+                              if (!ok) return;
+                            }
+                            setChunks(nextChunks);
+                            setSpaced(
+                              nextChunks
+                                .map((chunk) => chunk.japanese)
+                                .join(' '),
+                            );
+                            setChunkError('');
+                            setDismissedSuggestionIds(new Set());
+                            return;
+                          }
+                          setChunks(
+                            applySuggestion(
+                              suggestion,
+                              sentence.japanese,
+                              chunks,
+                              applyHeuristicChunks,
+                            ),
+                          );
+                          setDismissedSuggestionIds((current) => {
+                            const next = new Set(current);
+                            next.add(suggestion.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        {suggestion.action === 'apply_role'
+                          ? `Use “${suggestion.suggestedRole}”`
+                          : 'Apply heuristic chunks'}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDismissedSuggestionIds((current) => {
+                          const next = new Set(current);
+                          next.add(suggestion.id);
+                          return next;
+                        })
+                      }
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Summary</h3>
         <div className="summary-lines">
@@ -536,6 +673,12 @@ export function AnalyzePage() {
             type="button"
             className="primary"
             onClick={async () => {
+              if (openWarnings.length) {
+                const ok = window.confirm(
+                  `${openWarnings.length} review warning(s) are still open. Mark complete anyway?`,
+                );
+                if (!ok) return;
+              }
               await saveNow();
               await setBookSentenceStatus(bookId, sentenceId, 'complete');
             }}
