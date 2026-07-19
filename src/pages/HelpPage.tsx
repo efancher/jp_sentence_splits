@@ -101,7 +101,7 @@ export function HelpPage() {
           </li>
           <li>
             Check <strong>Review suggestions</strong> for local tips (missing
-            fields, role mismatches, sticky-English habits), then mark the
+            fields, role mismatches, sticky-English alternatives), then mark the
             sentence complete or needs review.
           </li>
         </ol>

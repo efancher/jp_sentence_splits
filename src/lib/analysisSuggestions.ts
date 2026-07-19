@@ -1,9 +1,13 @@
-import type { AnalysisChunk } from '../domain/types';
+import type { AnalysisChunk, TargetVocabulary } from '../domain/types';
 import {
   chunkJapaneseSentence,
   chunksMatchSource,
   roleForChunk,
 } from './chunking';
+import {
+  stickyLiteralsDiffer,
+  suggestStickyEnglish,
+} from './stickyEnglish';
 
 export type SuggestionSeverity = 'info' | 'warning';
 
@@ -12,11 +16,16 @@ export type SuggestionKind =
   | 'missing_role'
   | 'missing_lit'
   | 'role_mismatch'
+  | 'lit_alternative'
   | 'lit_has_jp'
   | 'lit_fluentish'
   | 'chunk_vs_heuristic';
 
-export type SuggestionAction = 'apply_role' | 'reapply_heuristic' | 'none';
+export type SuggestionAction =
+  | 'apply_role'
+  | 'apply_lit'
+  | 'reapply_heuristic'
+  | 'none';
 
 export interface AnalysisSuggestion {
   id: string;
@@ -28,6 +37,13 @@ export interface AnalysisSuggestion {
   action: SuggestionAction;
   /** Role to apply when action is `apply_role`. */
   suggestedRole?: string;
+  /** Sticky English to apply when action is `apply_lit`. */
+  suggestedLiteral?: string;
+}
+
+export interface LintAnalysisOptions {
+  translation?: string;
+  vocabulary?: TargetVocabulary[];
 }
 
 const JP_IN_LITERAL = /[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9d]/;
@@ -45,7 +61,6 @@ function rolesCompatible(userRole: string, heuristicRole: string): boolean {
   const heuristic = normalizeRole(heuristicRole);
   if (!user || !heuristic) return !user && !heuristic;
   if (user === heuristic) return true;
-  // Treat more specific engine labels as compatible with plain "engine".
   if (heuristic === 'engine' && user.startsWith('engine')) return true;
   if (user === 'engine' && heuristic.startsWith('engine')) return true;
   return false;
@@ -69,6 +84,7 @@ function looksFluentish(literal: string): boolean {
 export function lintAnalysis(
   sourceJapanese: string,
   chunks: AnalysisChunk[],
+  options: LintAnalysisOptions = {},
 ): AnalysisSuggestion[] {
   const suggestions: AnalysisSuggestion[] = [];
   if (!chunks.length) return suggestions;
@@ -108,6 +124,11 @@ export function lintAnalysis(
       chunk.japanese,
       index === chunks.length - 1,
     );
+    const suggestedLiteral = suggestStickyEnglish(chunk.japanese, {
+      role: role || heuristicRole,
+      englishHint: options.translation,
+      vocabulary: options.vocabulary,
+    });
 
     if (!role) {
       suggestions.push({
@@ -138,10 +159,13 @@ export function lintAnalysis(
         id: `missing_lit:${chunk.id}`,
         kind: 'missing_lit',
         severity: 'warning',
-        message: `Chunk #${index + 1} is missing sticky English.`,
+        message: suggestedLiteral
+          ? `Chunk #${index + 1} is missing sticky English. Suggested: “${suggestedLiteral}”.`
+          : `Chunk #${index + 1} is missing sticky English.`,
         chunkId: chunk.id,
         chunkIndex: index,
-        action: 'none',
+        action: suggestedLiteral ? 'apply_lit' : 'none',
+        suggestedLiteral: suggestedLiteral || undefined,
       });
     } else {
       if (JP_IN_LITERAL.test(literal)) {
@@ -149,10 +173,13 @@ export function lintAnalysis(
           id: `lit_has_jp:${chunk.id}`,
           kind: 'lit_has_jp',
           severity: 'info',
-          message: `Chunk #${index + 1} sticky English still contains Japanese characters.`,
+          message: suggestedLiteral
+            ? `Chunk #${index + 1} sticky English still contains Japanese characters. Suggested: “${suggestedLiteral}”.`
+            : `Chunk #${index + 1} sticky English still contains Japanese characters.`,
           chunkId: chunk.id,
           chunkIndex: index,
-          action: 'none',
+          action: suggestedLiteral ? 'apply_lit' : 'none',
+          suggestedLiteral: suggestedLiteral || undefined,
         });
       }
       if (looksFluentish(literal)) {
@@ -160,10 +187,28 @@ export function lintAnalysis(
           id: `lit_fluentish:${chunk.id}`,
           kind: 'lit_fluentish',
           severity: 'info',
-          message: `Chunk #${index + 1} sticky English looks like fluent English. Prefer Japanese-order “sticky” wording.`,
+          message: suggestedLiteral
+            ? `Chunk #${index + 1} sticky English looks fluent. Suggested sticky form: “${suggestedLiteral}”.`
+            : `Chunk #${index + 1} sticky English looks like fluent English. Prefer Japanese-order “sticky” wording.`,
           chunkId: chunk.id,
           chunkIndex: index,
-          action: 'none',
+          action: suggestedLiteral ? 'apply_lit' : 'none',
+          suggestedLiteral: suggestedLiteral || undefined,
+        });
+      } else if (
+        suggestedLiteral &&
+        stickyLiteralsDiffer(literal, suggestedLiteral) &&
+        !JP_IN_LITERAL.test(suggestedLiteral)
+      ) {
+        suggestions.push({
+          id: `lit_alternative:${chunk.id}`,
+          kind: 'lit_alternative',
+          severity: 'info',
+          message: `Chunk #${index + 1} sticky English alternative: “${suggestedLiteral}”.`,
+          chunkId: chunk.id,
+          chunkIndex: index,
+          action: 'apply_lit',
+          suggestedLiteral,
         });
       }
     }
@@ -186,6 +231,15 @@ export function applySuggestion(
     if (!role) return chunks;
     return chunks.map((chunk) =>
       chunk.id === suggestion.chunkId ? { ...chunk, role } : chunk,
+    );
+  }
+  if (suggestion.action === 'apply_lit' && suggestion.chunkId) {
+    const literal = suggestion.suggestedLiteral?.trim();
+    if (!literal) return chunks;
+    return chunks.map((chunk) =>
+      chunk.id === suggestion.chunkId
+        ? { ...chunk, literalEnglish: literal }
+        : chunk,
     );
   }
   if (suggestion.action === 'reapply_heuristic') {

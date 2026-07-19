@@ -108,6 +108,76 @@ describe('lintAnalysis', () => {
     ).toBe(true);
   });
 
+  it('suggests sticky English for missing literals', () => {
+    const suggestions = lintAnalysis(
+      'そして、空は青い。',
+      [
+        chunk({ id: 'a', japanese: 'そして、', order: 0, role: 'clause connector' }),
+        chunk({
+          id: 'b',
+          japanese: '空は',
+          order: 1,
+          role: 'topic は',
+          literalEnglish: 'sky-as-for',
+        }),
+        chunk({
+          id: 'c',
+          japanese: '青い。',
+          order: 2,
+          role: 'engine',
+          literalEnglish: 'is-blue.',
+        }),
+      ],
+      { translation: 'And then, the sky is blue.' },
+    );
+    const missing = suggestions.find(
+      (item) => item.kind === 'missing_lit' && item.chunkId === 'a',
+    );
+    expect(missing?.suggestedLiteral).toBe('and-then,');
+    expect(missing?.action).toBe('apply_lit');
+  });
+
+  it('applies a suggested sticky literal without touching other chunks', () => {
+    const chunks = [
+      chunk({
+        id: 'a',
+        japanese: '空は',
+        order: 0,
+        role: 'topic は',
+        literalEnglish: 'The sky is',
+      }),
+      chunk({
+        id: 'b',
+        japanese: '青くて、木々の緑がきれいでした。',
+        order: 1,
+        role: 'engine',
+        literalEnglish: 'was pretty',
+      }),
+    ];
+    const suggestion = lintAnalysis(source, chunks, {
+      vocabulary: [
+        {
+          expression: '空',
+          reading: 'そら',
+          furigana: '',
+          english: 'sky',
+          partsOfSpeech: 'n',
+          sourceCardIds: [],
+          cardTypes: [],
+        },
+      ],
+    }).find((item) => item.action === 'apply_lit' && item.chunkId === 'a');
+    expect(suggestion?.suggestedLiteral).toBe('sky-as-for');
+    const next = applySuggestion(
+      suggestion!,
+      source,
+      chunks,
+      applyHeuristicChunks,
+    );
+    expect(next[0]?.literalEnglish).toBe('sky-as-for');
+    expect(next[1]?.literalEnglish).toBe('was pretty');
+  });
+
   it('applies a suggested role without touching other chunks', () => {
     const chunks = [
       chunk({

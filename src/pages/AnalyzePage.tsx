@@ -26,6 +26,7 @@ import {
   applySuggestion,
   lintAnalysis,
 } from '../lib/analysisSuggestions';
+import { suggestStickyEnglish } from '../lib/stickyEnglish';
 import { FuriganaText } from '../lib/furigana';
 import { ichiMoeUrl } from '../lib/ichiMoe';
 import {
@@ -102,9 +103,10 @@ export function AnalyzePage() {
   const summary = useMemo(() => summarizeChunks(chunks), [chunks]);
   const openSuggestions = useMemo(() => {
     if (!data?.sentence) return [];
-    return lintAnalysis(data.sentence.japanese, chunks).filter(
-      (item) => !dismissedSuggestionIds.has(item.id),
-    );
+    return lintAnalysis(data.sentence.japanese, chunks, {
+      translation: data.sentence.translation,
+      vocabulary: data.sentence.targetVocabulary,
+    }).filter((item) => !dismissedSuggestionIds.has(item.id));
   }, [chunks, data?.sentence, dismissedSuggestionIds]);
   const openWarnings = openSuggestions.filter(
     (item) => item.severity === 'warning',
@@ -479,6 +481,26 @@ export function AnalyzePage() {
                 onBlur={() => void saveNow()}
               />
             </label>
+            <button
+              type="button"
+              onClick={() => {
+                const suggested = suggestStickyEnglish(chunk.japanese, {
+                  role: chunk.role,
+                  englishHint: sentence.translation,
+                  vocabulary: sentence.targetVocabulary,
+                });
+                if (!suggested) return;
+                setChunks((current) =>
+                  current.map((item) =>
+                    item.id === chunk.id
+                      ? { ...item, literalEnglish: suggested }
+                      : item,
+                  ),
+                );
+              }}
+            >
+              Suggest sticky English
+            </button>
             <div className="row">
               <button
                 type="button"
@@ -624,7 +646,9 @@ export function AnalyzePage() {
                       >
                         {suggestion.action === 'apply_role'
                           ? `Use “${suggestion.suggestedRole}”`
-                          : 'Apply heuristic chunks'}
+                          : suggestion.action === 'apply_lit'
+                            ? `Use “${suggestion.suggestedLiteral}”`
+                            : 'Apply heuristic chunks'}
                       </button>
                     ) : null}
                     <button

@@ -88,9 +88,12 @@ Select matching results to add them to a book or export them as a worksheet.
 2. Add spaces to the editable Japanese copy to define chunk boundaries.
 3. Optionally apply heuristic chunks and role suggestions.
 4. Enter an editable role and Japanese-order literal English for each chunk.
+   Use **Suggest sticky English** for a local alternative built from
+   particles/engines, target vocabulary, and a small lexicon (not cloud
+   translation).
 5. Review the generated CHUNK, ROLE, and LIT lines.
-6. Review local suggestions (missing roles/literals, heuristic role tips,
-   sticky-English habits).
+6. Check **Review suggestions** for missing fields, role mismatches, and
+   sticky-English alternatives.
 7. Save or mark the sentence complete/needs review.
 
 The non-whitespace source Japanese must remain unchanged. Autosave runs after a
