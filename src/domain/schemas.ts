@@ -57,6 +57,7 @@ export const sentenceSchema = z.object({
 export const bookSchema = z.object({
   id: z.string(),
   title: z.string(),
+  sourceKey: z.string().optional(),
   subtitle: z.string().optional(),
   sourceUrl: z.string().optional(),
   notes: z.string().optional(),

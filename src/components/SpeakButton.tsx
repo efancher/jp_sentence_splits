@@ -1,4 +1,5 @@
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
+import { useNativeAudio } from '../hooks/useNativeAudio';
 
 interface SpeakButtonProps {
   /** Exact Japanese text to speak. */
@@ -8,6 +9,7 @@ interface SpeakButtonProps {
   /** Accessible name, e.g. "Play Japanese sentence". */
   label: string;
   compact?: boolean;
+  displayLabel?: string;
 }
 
 /**
@@ -15,8 +17,15 @@ interface SpeakButtonProps {
  * text is currently speaking stops it. Disabled when the browser lacks
  * speech synthesis support.
  */
-export function SpeakButton({ text, itemId, label, compact }: SpeakButtonProps) {
+export function SpeakButton({
+  text,
+  itemId,
+  label,
+  compact,
+  displayLabel,
+}: SpeakButtonProps) {
   const { supported, isSpeaking, activeItemId, speak, stop } = useJapaneseSpeech();
+  const nativeAudio = useNativeAudio();
   const active = isSpeaking && activeItemId === itemId;
 
   return (
@@ -33,11 +42,12 @@ export function SpeakButton({ text, itemId, label, compact }: SpeakButtonProps) 
         if (active) {
           stop();
         } else {
+          nativeAudio.stop();
           speak(text, { itemId });
         }
       }}
     >
-      {active ? '🔊 Speaking…' : '🔊'}
+      {active ? '🔊 Speaking…' : `🔊${displayLabel ? ` ${displayLabel}` : ''}`}
     </button>
   );
 }

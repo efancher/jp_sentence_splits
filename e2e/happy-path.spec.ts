@@ -7,7 +7,7 @@ test('import, book, analyze, reload, backup', async ({ page }) => {
   test.setTimeout(90_000);
 
   await page.goto('/#/import');
-  await page.setInputFiles('input[type="file"]', fixture);
+  await page.getByLabel('CSV file').setInputFiles(fixture);
   await expect(page.getByText('Import preview')).toBeVisible();
   await page.getByLabel('Place selected sentences').selectOption('new_book');
   await page.getByRole('button', { name: /Import .* selected/ }).click();

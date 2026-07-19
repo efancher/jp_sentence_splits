@@ -9,6 +9,28 @@
 After one successful online load, the application shell and existing study data
 are available offline.
 
+## Import a shadowing project ZIP
+
+1. Export the project from `shadowmine` as a `.shadowing.zip`.
+2. Open **Import → Shadowing project ZIP** and choose it from Files.
+3. Review the source, sentence count, native clip count, and storage size.
+4. Tap **Import complete project**.
+
+Glossbook creates a book named after the source, keeps the order from the
+package's `sentences.json` (which is video order), and imports Japanese,
+reading, English, creator/channel, source URL, transcript metadata, and each
+sentence's native audio clip.
+
+Reimporting a package with the same source ID refreshes that book and its
+clips. It does not duplicate the book, and it preserves manual analysis,
+study statuses, and existing manual ordering. New sentences are added. If the
+same normalized Japanese sentence occurs more than once in one video,
+Glossbook keeps all native clips but represents the text once in the book and
+shows a warning in the preview.
+
+On Analyze and Practice, **🎧 Native** plays the imported source clip. **🔊**
+remains available for device TTS, and chunk audio continues to use TTS.
+
 ## Import a Satori Reader CSV
 
 1. Export vocabulary from Satori Reader and save the CSV in Files.
@@ -121,6 +143,10 @@ Use **Settings → Backup & restore** regularly.
 
 Browser-local data does not automatically synchronize between an iPhone, iPad,
 and desktop. Use backups to move or protect work.
+
+Imported shadowing audio is not included in the lightweight JSON backup.
+Retain each original `.shadowing.zip`; reimporting it restores its native
+clips. **Replace all local data** also removes locally imported audio.
 
 ## Troubleshooting
 

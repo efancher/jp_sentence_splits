@@ -8,6 +8,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Sentence,
+  SentenceAudio,
   SentenceAnalysis,
 } from '../domain/types';
 
@@ -35,6 +36,7 @@ export class GlossbookDatabase extends Dexie {
   importBatches!: EntityTable<ImportBatch, 'id'>;
   inbox!: EntityTable<InboxMembership, 'sentenceId'>;
   settings!: EntityTable<AppSettings, 'id'>;
+  sentenceAudio!: EntityTable<SentenceAudio, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -86,6 +88,20 @@ export class GlossbookDatabase extends Dexie {
             book.chapters ??= [];
           });
       });
+
+    this.version(4).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+    });
   }
 }
 

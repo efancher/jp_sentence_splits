@@ -7,11 +7,13 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 
+import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { getDb, setBookSentenceStatus } from '../db/repository';
 import type { BookSentence, StudyStatus } from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
+import { useNativeAudio } from '../hooks/useNativeAudio';
 import { hashString } from '../lib/ids';
 import { summarizeChunks } from '../lib/worksheet';
 
@@ -95,6 +97,10 @@ export function PracticePage() {
       db.sentences.get(sentenceId),
       db.analyses.get(sentenceId),
     ]);
+    const sentenceAudio = await db.sentenceAudio
+      .where('sentenceId')
+      .equals(sentenceId)
+      .toArray();
     return {
       book,
       allMemberships,
@@ -103,6 +109,7 @@ export function PracticePage() {
       analysis,
       index,
       membership: memberships[index] ?? null,
+      sentenceAudio,
     };
   }, [bookId, routeSentenceId, scope, shuffled]);
 
@@ -112,6 +119,7 @@ export function PracticePage() {
   );
 
   const { stop: stopSpeech } = useJapaneseSpeech();
+  const { stop: stopNativeAudio } = useNativeAudio();
 
   useEffect(() => {
     setReveal({
@@ -124,7 +132,13 @@ export function PracticePage() {
   }, [data?.sentence?.id]);
 
   // Cancel playback when moving between sentences or leaving Practice.
-  useEffect(() => stopSpeech, [data?.sentence?.id, stopSpeech]);
+  useEffect(
+    () => () => {
+      stopSpeech();
+      stopNativeAudio();
+    },
+    [data?.sentence?.id, stopSpeech, stopNativeAudio],
+  );
 
   const query = searchParams.toString();
   const practicePath = (sentenceId: string) =>
@@ -201,6 +215,12 @@ export function PracticePage() {
   }
 
   const { book, sentence, memberships, index, membership } = data;
+  const matchingSourceId = book.sourceKey?.startsWith('shadowing:')
+    ? book.sourceKey.slice('shadowing:'.length)
+    : undefined;
+  const preferredNativeAudio =
+    data.sentenceAudio?.find((audio) => audio.sourceId === matchingSourceId) ??
+    data.sentenceAudio?.[0];
 
   async function mark(status: StudyStatus, advance = false) {
     await setBookSentenceStatus(bookId, sentence.id, status);
@@ -301,10 +321,14 @@ export function PracticePage() {
           <div className="jp jp-lg" style={{ flex: 1 }}>
             {sentence.japanese}
           </div>
+          {preferredNativeAudio ? (
+            <NativeAudioButton audio={preferredNativeAudio} />
+          ) : null}
           <SpeakButton
             text={sentence.japanese}
             itemId={`practice-${sentence.id}`}
-            label="Play Japanese sentence"
+            label="Play Japanese sentence with device TTS"
+            displayLabel="TTS"
           />
         </div>
         {showVocabulary ? (

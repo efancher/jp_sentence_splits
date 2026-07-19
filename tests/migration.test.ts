@@ -9,7 +9,8 @@ describe('Dexie schema migrations', () => {
     const name = `migrate-${createId('db')}`;
     const db = new GlossbookDatabase(name);
     await db.open();
-    expect(db.verno).toBeGreaterThanOrEqual(3);
+    expect(db.verno).toBeGreaterThanOrEqual(4);
+    expect(db.tables.some((table) => table.name === 'sentenceAudio')).toBe(true);
     const settings = await readSettings(db);
     expect(settings.id).toBe('settings');
     expect(settings.theme).toBe('system');

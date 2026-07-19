@@ -54,9 +54,27 @@ export interface Sentence {
   updatedAt: string;
 }
 
+/** Native/reference sentence audio imported from an external project. */
+export interface SentenceAudio {
+  id: string;
+  sentenceId: string;
+  sourceId: string;
+  sourceSentenceId: string;
+  sourceTitle: string;
+  sourceUrl?: string;
+  mimeType: string;
+  durationMs: number;
+  startMs: number;
+  endMs: number;
+  blob: Blob;
+  importedAt: string;
+}
+
 export interface Book {
   id: string;
   title: string;
+  /** Stable external-project identity, e.g. `shadowing:<source id>`. */
+  sourceKey?: string;
   subtitle?: string;
   sourceUrl?: string;
   notes?: string;

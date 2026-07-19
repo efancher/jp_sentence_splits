@@ -2,15 +2,18 @@
 
 ## Purpose
 
-Satori Glossbook turns a full Satori Reader vocabulary CSV into a mobile-first analysis workspace: import → dedupe → books → ordered study → chunk/role/literal analysis → worksheet/practice.
+Satori Glossbook turns Satori Reader vocabulary CSVs and shadowing project
+ZIPs into a mobile-first analysis workspace: import → dedupe → books → ordered
+study → chunk/role/literal analysis → worksheet/practice.
 
 It intentionally avoids SRS scheduling, Anki sync, accounts, and remote APIs.
 
 ## Architecture
 
 ```text
-CSV file (device)
-   → Papa Parse + Zod-validated domain merge
+CSV or .shadowing.zip (device)
+   → Papa Parse or selective ZIP extraction + Zod validation
+   → normalized sentence/source merge
    → Dexie / IndexedDB
    → React UI (hash router)
    → optional JSON backup / worksheet export
@@ -31,6 +34,7 @@ Core entities:
 | Entity | Role |
 | --- | --- |
 | `Sentence` | Canonical imported Japanese sentence + vocab + source metadata |
+| `SentenceAudio` | Native source clip linked to a sentence and external project occurrence |
 | `SentenceAnalysis` | User chunk/role/literal work, stored separately from source text |
 | `Book` | Named collection metadata |
 | `BookSentence` | Join table: membership, order, study status, optional chapter |
@@ -40,7 +44,10 @@ Core entities:
 
 ### Why analysis is separate from imported source text
 
-Reimports must be able to merge new vocabulary and fill missing readings/translations without wiping manual analysis. Keeping `SentenceAnalysis` keyed by `sentenceId` (stable normalized-Japanese id) preserves user work across CSV refreshes.
+Reimports must be able to merge new vocabulary and fill missing
+readings/translations without wiping manual analysis. Keeping
+`SentenceAnalysis` keyed by `sentenceId` (stable normalized-Japanese id)
+preserves user work across CSV and shadowing-project refreshes.
 
 ## Import and deduplication
 
@@ -56,6 +63,20 @@ Reimports must be able to merge new vocabulary and fill missing readings/transla
 6. Conflicts (different nonempty translations/readings) keep a preferred value and record alternatives
 
 Reimport is idempotent: no duplicate sentences, vocab associations, or book memberships; analysis/order/status remain.
+
+### Shadowing project packages
+
+The importer consumes the existing `japanese-shadowing-package` v1 contract:
+`manifest.json`, `source.json`, ordered `sentences.json`, and referenced
+`audio/*` clips. Metadata is extracted first; only referenced audio paths are
+decompressed. The package source ID becomes `Book.sourceKey`, allowing a
+later export of the same project to refresh the existing book and stable audio
+records.
+
+Sentence array order supplies initial video order. Native audio is a
+one-to-many table because the same normalized sentence can occur in multiple
+projects—or more than once in one video. Audio is excluded from JSON backup;
+the package ZIP remains its restorable source.
 
 ## Analysis representation
 
@@ -82,7 +103,7 @@ a sentence to another book clears the source book's chapter assignment.
 
 - Static hosting only
 - Offline shell via service worker after first load
-- Do not cache user CSV uploads as app assets
+- Do not cache user CSV/ZIP uploads as app assets
 - Safe-area insets and 44px touch targets for iOS
 - Input font-size ≥ 16px to avoid focus zoom
 
@@ -92,6 +113,6 @@ Possible later additions:
 
 - Authenticated sync (e.g. Supabase) with conflict-aware merge using `updatedAt` + sentence normalized keys
 - Optional AI chunk/literal suggestions that write into analysis drafts, never silent overwrite
-- Anki export / worksheet import / chapters / audio / PDF
+- Anki export / worksheet import / printable PDF
 
 The current schema already separates source sentences from analyses and uses stable ids to make a future sync layer feasible without rewriting the MVP model.

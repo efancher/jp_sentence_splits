@@ -7,7 +7,7 @@ Versioned JSON backup used by Settings → Backup & restore.
 ```json
 {
   "formatVersion": 1,
-  "appVersion": "0.3.0",
+  "appVersion": "0.5.0",
   "exportedAt": "2026-07-18T00:00:00.000Z",
   "checksum": "optional-fnv-style-hex",
   "counts": {
@@ -41,7 +41,7 @@ Versioned JSON backup used by Settings → Backup & restore.
 
 ### Book
 
-- `id`, `title`, optional `subtitle` / `sourceUrl` / `notes`
+- `id`, `title`, optional `sourceKey` / `subtitle` / `sourceUrl` / `notes`
 - `archived`, `createdAt`, `updatedAt`, optional `lastOpenedAt`
 - `chapters[]`: `{ id, title, position }`
 
@@ -62,6 +62,16 @@ Versioned JSON backup used by Settings → Backup & restore.
 - optional `chapterId` referencing a chapter embedded in that book
 
 `chapters` and `chapterId` are additive fields in backup format version 1.
+`sourceKey` is also additive and links a book to an imported external project
+(for example `shadowing:<source-id>`).
+
+### Imported sentence audio
+
+Native/reference audio imported from `.shadowing.zip` packages is stored in a
+separate IndexedDB `sentenceAudio` table. It is intentionally not serialized
+into this JSON format because binary clips can make mobile backups very large.
+Keep and reimport the original project ZIP to restore clips. A Replace restore
+clears imported audio to avoid leaving orphaned records.
 Older backups are accepted and receive an empty chapter list during validation.
 
 ### SentenceAnalysis

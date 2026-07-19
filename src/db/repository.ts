@@ -9,6 +9,7 @@ import type {
   ImportBatch,
   InitialOrderMode,
   Sentence,
+  SentenceAudio,
   SentenceAnalysis,
   StudyStatus,
 } from '../domain/types';
@@ -17,8 +18,12 @@ import {
   parseSatoriCsvText,
   type ImportPreview,
 } from '../lib/csvImport';
-import { createId, sentenceIdFromNormalizedKey } from '../lib/ids';
+import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { nowIso } from '../lib/normalize';
+import {
+  parseShadowingPackage,
+  type ShadowingImportPreview,
+} from '../lib/shadowingImport';
 import { buildBackupPayload, type BackupBundle } from '../lib/backup';
 import { ensureSettings, getDb } from './database';
 
@@ -53,6 +58,7 @@ function sortSentences(
 
 export async function createBook(input: {
   title: string;
+  sourceKey?: string;
   subtitle?: string;
   sourceUrl?: string;
   notes?: string;
@@ -62,6 +68,7 @@ export async function createBook(input: {
   const book: Book = {
     id: createId('book'),
     title: input.title.trim() || 'Untitled book',
+    sourceKey: input.sourceKey,
     subtitle: input.subtitle?.trim() || undefined,
     sourceUrl: input.sourceUrl?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
@@ -76,7 +83,12 @@ export async function createBook(input: {
 
 export async function updateBook(
   bookId: string,
-  patch: Partial<Pick<Book, 'title' | 'subtitle' | 'sourceUrl' | 'notes' | 'archived'>>,
+  patch: Partial<
+    Pick<
+      Book,
+      'title' | 'sourceKey' | 'subtitle' | 'sourceUrl' | 'notes' | 'archived'
+    >
+  >,
 ): Promise<Book> {
   const db = getDb();
   const existing = await db.books.get(bookId);
@@ -633,6 +645,103 @@ export async function previewCsvFile(
   });
 }
 
+export async function previewShadowingPackageFile(
+  file: File,
+): Promise<ShadowingImportPreview> {
+  const existing = await getDb().sentences.toArray();
+  return parseShadowingPackage(file, existing);
+}
+
+/**
+ * Import an entire shadowing project into one source-linked book.
+ *
+ * Reimporting the same source refreshes sentence metadata/audio and adds newly
+ * mined sentences to the existing book. Existing analysis, study status, and
+ * manual book ordering are preserved.
+ */
+export async function commitShadowingPackageImport(
+  preview: ShadowingImportPreview,
+): Promise<{ batchId: string; bookId: string; refreshed: boolean }> {
+  const db = getDb();
+  const sourceKey = `shadowing:${preview.source.id}`;
+  const existingBook = await db.books
+    .where('sourceKey')
+    .equals(sourceKey)
+    .first();
+  const selectedIds = preview.drafts.map((item) => item.proposedId);
+
+  const result = await commitImport({
+    preview,
+    selectedIds,
+    destination: existingBook ? 'existing_book' : 'new_book',
+    bookId: existingBook?.id,
+    newBookTitle: preview.source.title,
+    orderMode: 'first_occurrence',
+  });
+  if (!result.bookId) throw new Error('Shadowing import did not create a book.');
+
+  await updateBook(result.bookId, {
+    sourceKey,
+    title: preview.source.title,
+    subtitle: preview.source.channel,
+    sourceUrl: preview.source.url,
+    notes: [
+      'Imported from a japanese-shadowing-package v1 project.',
+      `Source project ID: ${preview.source.id}`,
+      `Package generator: ${preview.manifest.generator.name} ${preview.manifest.generator.version}`,
+    ].join('\n'),
+  });
+
+  const sentenceByKey = new Map(
+    (await db.sentences.toArray()).map((sentence) => [
+      sentence.normalizedKey,
+      sentence,
+    ]),
+  );
+  const importedAt = nowIso();
+  const audioRecords = preview.audioDrafts
+    .map((audio): SentenceAudio | null => {
+      const sentence = sentenceByKey.get(audio.normalizedKey);
+      if (!sentence) return null;
+      return {
+        id: `audio_${hashString(
+          `${preview.source.id}:${audio.sourceSentenceId}`,
+        )}`,
+        sentenceId: sentence.id,
+        sourceId: preview.source.id,
+        sourceSentenceId: audio.sourceSentenceId,
+        sourceTitle: preview.source.title,
+        sourceUrl: preview.source.url,
+        mimeType: audio.mimeType,
+        durationMs: audio.durationMs,
+        startMs: audio.startMs,
+        endMs: audio.endMs,
+        blob: audio.blob,
+        importedAt,
+      };
+    })
+    .filter((audio): audio is SentenceAudio => Boolean(audio));
+  await db.transaction('rw', db.sentenceAudio, async () => {
+    const existingAudio = await db.sentenceAudio
+      .where('sourceId')
+      .equals(preview.source.id)
+      .toArray();
+    const nextIds = new Set(audioRecords.map((audio) => audio.id));
+    await db.sentenceAudio.bulkDelete(
+      existingAudio
+        .filter((audio) => !nextIds.has(audio.id))
+        .map((audio) => audio.id),
+    );
+    await db.sentenceAudio.bulkPut(audioRecords);
+  });
+
+  return {
+    batchId: result.batchId,
+    bookId: result.bookId,
+    refreshed: Boolean(existingBook),
+  };
+}
+
 export async function renameImportBatch(
   batchId: string,
   batchName: string,
@@ -691,6 +800,7 @@ export async function restoreBackup(
     db.importBatches,
     db.inbox,
     db.settings,
+    db.sentenceAudio,
   ] as const;
 
   if (mode === 'replace') {
@@ -702,6 +812,7 @@ export async function restoreBackup(
         db.analyses.clear(),
         db.importBatches.clear(),
         db.inbox.clear(),
+        db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
       await db.sentences.bulkPut(payload.sentences);

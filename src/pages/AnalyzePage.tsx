@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
+import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
@@ -32,6 +33,7 @@ import {
 } from '../lib/worksheet';
 import { useAutosave } from '../hooks/useAutosave';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
+import { useNativeAudio } from '../hooks/useNativeAudio';
 
 const CUSTOM_ROLE_VALUE = '__custom__';
 const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
@@ -63,7 +65,11 @@ export function AnalyzePage() {
     const index = memberships.findIndex((item) => item.sentenceId === sentenceId);
     const sentence = await db.sentences.get(sentenceId);
     const analysis = await db.analyses.get(sentenceId);
-    return { book, memberships, index, sentence, analysis };
+    const sentenceAudio = await db.sentenceAudio
+      .where('sentenceId')
+      .equals(sentenceId)
+      .toArray();
+    return { book, memberships, index, sentence, analysis, sentenceAudio };
   }, [bookId, sentenceId]);
 
   useEffect(() => {
@@ -88,9 +94,17 @@ export function AnalyzePage() {
   const summary = useMemo(() => summarizeChunks(chunks), [chunks]);
   const speech = useJapaneseSpeech();
   const { stop: stopSpeech } = speech;
+  const nativeAudio = useNativeAudio();
+  const { stop: stopNativeAudio } = nativeAudio;
 
   // Cancel playback when navigating between sentences or leaving the editor.
-  useEffect(() => stopSpeech, [sentenceId, stopSpeech]);
+  useEffect(
+    () => () => {
+      stopSpeech();
+      stopNativeAudio();
+    },
+    [sentenceId, stopSpeech, stopNativeAudio],
+  );
 
   const { saveState, saveNow } = useAutosave(
     { chunks, notes },
@@ -105,6 +119,14 @@ export function AnalyzePage() {
   }
 
   const { sentence, memberships, index, book } = data;
+  const matchingSourceId = book.sourceKey?.startsWith('shadowing:')
+    ? book.sourceKey.slice('shadowing:'.length)
+    : undefined;
+  const orderedAudio = [...(data.sentenceAudio ?? [])].sort((a, b) => {
+    if (a.sourceId === matchingSourceId) return -1;
+    if (b.sourceId === matchingSourceId) return 1;
+    return a.startMs - b.startMs;
+  });
   const prev = index > 0 ? memberships[index - 1] : null;
   const next =
     index >= 0 && index < memberships.length - 1 ? memberships[index + 1] : null;
@@ -201,10 +223,22 @@ export function AnalyzePage() {
           <a href={ichiMoeUrl(sentence.japanese)} target="_blank" rel="noreferrer">
             ichi.moe
           </a>
+          {orderedAudio.map((audio, audioIndex) => (
+            <NativeAudioButton
+              key={audio.id}
+              audio={audio}
+              displayLabel={
+                orderedAudio.length > 1
+                  ? `Native ${audioIndex + 1}`
+                  : undefined
+              }
+            />
+          ))}
           <SpeakButton
             text={sentence.japanese}
             itemId={`sentence-${sentence.id}`}
-            label="Play Japanese sentence"
+            label="Play Japanese sentence with device TTS"
+            displayLabel="TTS"
           />
           <span className={`status-pill ${saveState}`}>
             {saveState === 'saving'
@@ -223,8 +257,13 @@ export function AnalyzePage() {
         </div>
         {!speech.supported ? (
           <p className="muted" style={{ margin: 0 }}>
-            Audio playback is unavailable: this browser does not support
-            speech synthesis.
+            Device TTS is unavailable: this browser does not support speech
+            synthesis. Imported native recordings can still play.
+          </p>
+        ) : null}
+        {nativeAudio.error ? (
+          <p style={{ margin: 0, color: 'var(--danger)' }} role="alert">
+            {nativeAudio.error}
           </p>
         ) : null}
         <VocabChips items={sentence.targetVocabulary} />

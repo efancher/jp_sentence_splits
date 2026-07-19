@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { strToU8, zipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import App from '../src/App';
@@ -15,6 +16,51 @@ const littleBirds = readFileSync(
 
 function fileFromCsv(name: string, contents: string): File {
   return new File([contents], name, { type: 'text/csv' });
+}
+
+function shadowingZip(): File {
+  const audioPath = 'audio/sentence-001.m4a';
+  const files = {
+    'manifest.json': strToU8(
+      JSON.stringify({
+        format: 'japanese-shadowing-package',
+        version: 1,
+        createdAt: '2026-07-19T00:00:00Z',
+        generator: { name: 'shadowmine', version: '0.1.0' },
+      }),
+    ),
+    'source.json': strToU8(
+      JSON.stringify({
+        id: 'ui-shadow-source',
+        type: 'youtube',
+        title: 'Shadowing UI Project',
+        channel: 'Test Channel',
+        url: 'https://example.com/video',
+      }),
+    ),
+    'sentences.json': strToU8(
+      JSON.stringify([
+        {
+          id: 'ui-shadow-sentence',
+          japanese: '春が来ました。',
+          english: 'Spring came.',
+          startMs: 0,
+          endMs: 1_500,
+          tags: [],
+          transcriptStatus: 'verified',
+          audio: {
+            path: audioPath,
+            mimeType: 'audio/mp4',
+            durationMs: 1_500,
+          },
+        },
+      ]),
+    ),
+    [audioPath]: new Uint8Array([1, 2, 3]),
+  };
+  return new File([zipSync(files)], 'ui.shadowing.zip', {
+    type: 'application/zip',
+  });
 }
 
 describe('UI flows', () => {
@@ -49,7 +95,9 @@ describe('UI flows', () => {
 
     // jsdom has no speechSynthesis: speaker controls degrade to disabled.
     expect(
-      await screen.findByRole('button', { name: 'Play Japanese sentence' }),
+      await screen.findByRole('button', {
+        name: 'Play Japanese sentence with device TTS',
+      }),
     ).toBeDisabled();
 
     const chunkBox = await screen.findByLabelText(/Chunk spaced Japanese/i);
@@ -191,6 +239,32 @@ describe('UI flows', () => {
     await user.click(screen.getByRole('button', { name: 'Add selected' }));
     expect(
       await screen.findByText('Added 1 result(s) to a book.'),
+    ).toBeInTheDocument();
+  }, 30000);
+
+  it('imports a complete shadowing ZIP into an ordered book with native audio', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('link', { name: 'Import' }));
+    await user.upload(
+      await screen.findByLabelText('Shadowing project ZIP'),
+      shadowingZip(),
+    );
+    expect(
+      await screen.findByText('Shadowing UI Project', { selector: 'strong' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 native audio clip/)).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Import complete project' }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Shadowing UI Project' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(
+      await screen.findByRole('button', {
+        name: /Play native sentence recording from Shadowing UI Project/,
+      }),
     ).toBeInTheDocument();
   }, 30000);
 });

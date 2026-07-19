@@ -4,7 +4,7 @@
  */
 export const APP_NAME = 'Satori Glossbook';
 export const APP_SHORT_NAME = 'Glossbook';
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 export const APP_DESCRIPTION =
   'Offline analysis workspace for Japanese sentences from Satori Reader CSV exports.';
 

@@ -28,6 +28,12 @@ export function HelpPage() {
 
       <section id="getting-started" className="panel stack">
         <h3>Getting started</h3>
+        <p>
+          For a shadowing project, choose its <code>.shadowing.zip</code> on
+          the Import page. Glossbook creates or refreshes one ordered book and
+          imports each native sentence clip. No changes to the project are
+          required.
+        </p>
         <ol>
           <li>
             Export your vocabulary from Satori Reader and save the CSV in

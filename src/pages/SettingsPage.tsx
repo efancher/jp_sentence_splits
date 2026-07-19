@@ -8,7 +8,11 @@ import {
   TTS_RATE_PRESETS,
   TTS_TEST_SENTENCE,
 } from '../appConfig';
-import { DEFAULT_TTS_SETTINGS, readSettings } from '../db/database';
+import {
+  DEFAULT_TTS_SETTINGS,
+  getDb,
+  readSettings,
+} from '../db/database';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { filterJapaneseVoices } from '../lib/speech';
 import {
@@ -20,8 +24,17 @@ import { parseBackupJson } from '../lib/backup';
 import { downloadText } from '../lib/worksheet';
 import { useTheme } from '../hooks/useTheme';
 
+const BYTES_PER_MEBIBYTE = 1024 * 1024;
+
 export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
+  const nativeAudioSummary = useLiveQuery(async () => {
+    const records = await getDb().sentenceAudio.toArray();
+    return {
+      count: records.length,
+      bytes: records.reduce((total, record) => total + record.blob.size, 0),
+    };
+  }, []);
   const { theme, setTheme } = useTheme();
   const speech = useJapaneseSpeech();
   const [backupPreview, setBackupPreview] = useState<string>('');
@@ -218,6 +231,15 @@ export function SettingsPage() {
           Browser-local data does not sync between iPhone and iPad automatically.
           Export a backup to move work between devices.
         </p>
+        {nativeAudioSummary?.count ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {nativeAudioSummary.count} imported native clip(s) use about{' '}
+            {(nativeAudioSummary.bytes / BYTES_PER_MEBIBYTE).toFixed(1)} MB.
+            Clips
+            are not included in JSON backups; retain and reimport their
+            shadowing project ZIPs.
+          </p>
+        ) : null}
         <button
           type="button"
           className="primary"
