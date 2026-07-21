@@ -138,6 +138,11 @@ export function AnalyzePage() {
   }
 
   const { sentence, memberships, index, book } = data;
+  const membership = index >= 0 ? memberships[index] : null;
+  const chapterTitle = membership?.chapterId
+    ? book.chapters?.find((chapter) => chapter.id === membership.chapterId)
+        ?.title
+    : undefined;
   const matchingSourceId = book.sourceKey?.startsWith('shadowing:')
     ? book.sourceKey.slice('shadowing:'.length)
     : undefined;
@@ -189,6 +194,11 @@ export function AnalyzePage() {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">{book.title}</div>
+            {chapterTitle ? (
+              <div className="muted" style={{ fontSize: '0.9rem' }}>
+                {chapterTitle}
+              </div>
+            ) : null}
             <strong>
               {index + 1} of {memberships.length}
             </strong>
