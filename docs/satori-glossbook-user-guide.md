@@ -38,11 +38,13 @@ remains available for device TTS, and chunk audio continues to use TTS.
 3. Review totals, warnings, conflicts, and the unique sentence list.
 4. Select the sentences to import.
 5. Send them to Inbox, a new book, or an existing book.
+6. When importing into a book, optionally assign them to an existing chapter or
+   create a new chapter in the same step (handy for one Satori article export).
 
 Glossbook examines Context1, Context2, and Context3. JE/EJ duplicates and
 multiple target words for one sentence are merged. Reimporting is idempotent:
-manual analyses, study statuses, chapter assignments, and book order are
-preserved.
+manual analyses, study statuses, and book order are preserved. Importing into a
+chapter also assigns any selected sentences that were already in that book.
 
 ## Organize sentences
 

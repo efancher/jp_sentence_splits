@@ -16,6 +16,8 @@ import type { ShadowingImportPreview } from '../lib/shadowingImport';
 
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
 
+type ChapterDestination = 'none' | 'existing' | 'new';
+
 function formatAudioSize(bytes: number): string {
   return `${(bytes / BYTES_PER_MEBIBYTE).toFixed(1)} MB`;
 }
@@ -34,6 +36,10 @@ export function ImportPage() {
     useState<ImportDestination>('inbox');
   const [bookId, setBookId] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
+  const [chapterDestination, setChapterDestination] =
+    useState<ChapterDestination>('none');
+  const [chapterId, setChapterId] = useState('');
+  const [newChapterTitle, setNewChapterTitle] = useState('');
   const [orderMode, setOrderMode] =
     useState<InitialOrderMode>('first_occurrence');
   const [busy, setBusy] = useState(false);
@@ -42,6 +48,22 @@ export function ImportPage() {
   const [shadowingError, setShadowingError] = useState('');
 
   const selectedIds = useMemo(() => [...selected], [selected]);
+  const selectedBook = useMemo(
+    () => (books ?? []).find((book) => book.id === bookId),
+    [books, bookId],
+  );
+  const bookChapters = useMemo(
+    () =>
+      [...(selectedBook?.chapters ?? [])].sort(
+        (a, b) => a.position - b.position,
+      ),
+    [selectedBook],
+  );
+
+  function resetChapterDestination() {
+    setChapterDestination('none');
+    setChapterId('');
+  }
 
   async function handleFile(file: File | null) {
     if (!file) return;
@@ -52,6 +74,7 @@ export function ImportPage() {
       setPreview(next);
       setSelected(new Set(next.drafts.map((item) => item.proposedId)));
       setNewBookTitle(next.batchName);
+      setNewChapterTitle(next.batchName);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse CSV');
     } finally {
@@ -76,6 +99,16 @@ export function ImportPage() {
       setShadowingBusy(false);
     }
   }
+
+  const chapterReady =
+    chapterDestination === 'none' ||
+    (chapterDestination === 'existing' && Boolean(chapterId)) ||
+    (chapterDestination === 'new' && Boolean(newChapterTitle.trim()));
+  const canImport =
+    selectedIds.length > 0 &&
+    (destination === 'inbox' ||
+      (destination === 'new_book' && chapterReady) ||
+      (destination === 'existing_book' && Boolean(bookId) && chapterReady));
 
   return (
     <div className="stack">
@@ -244,9 +277,12 @@ export function ImportPage() {
               Place selected sentences
               <select
                 value={destination}
-                onChange={(event) =>
-                  setDestination(event.target.value as ImportDestination)
-                }
+                onChange={(event) => {
+                  const next = event.target.value as ImportDestination;
+                  setDestination(next);
+                  resetChapterDestination();
+                  if (next !== 'existing_book') setBookId('');
+                }}
               >
                 <option value="inbox">Leave in Inbox</option>
                 <option value="new_book">Create a new book</option>
@@ -267,7 +303,10 @@ export function ImportPage() {
                 Book
                 <select
                   value={bookId}
-                  onChange={(event) => setBookId(event.target.value)}
+                  onChange={(event) => {
+                    setBookId(event.target.value);
+                    resetChapterDestination();
+                  }}
                 >
                   <option value="">Select…</option>
                   {(books ?? []).map((book) => (
@@ -277,6 +316,68 @@ export function ImportPage() {
                   ))}
                 </select>
               </label>
+            ) : null}
+            {destination !== 'inbox' ? (
+              <>
+                <label>
+                  Chapter
+                  <select
+                    value={chapterDestination}
+                    onChange={(event) => {
+                      const next = event.target.value as ChapterDestination;
+                      setChapterDestination(next);
+                      if (next !== 'existing') setChapterId('');
+                      if (
+                        next === 'new' &&
+                        !newChapterTitle.trim() &&
+                        preview
+                      ) {
+                        setNewChapterTitle(
+                          preview.batchName || newBookTitle || 'Chapter',
+                        );
+                      }
+                    }}
+                  >
+                    <option value="none">No chapter</option>
+                    {destination === 'existing_book' ? (
+                      <option
+                        value="existing"
+                        disabled={!bookId || bookChapters.length === 0}
+                      >
+                        Existing chapter
+                      </option>
+                    ) : null}
+                    <option value="new">Create new chapter</option>
+                  </select>
+                </label>
+                {chapterDestination === 'existing' ? (
+                  <label>
+                    Existing chapter
+                    <select
+                      value={chapterId}
+                      onChange={(event) => setChapterId(event.target.value)}
+                    >
+                      <option value="">Select…</option>
+                      {bookChapters.map((chapter) => (
+                        <option key={chapter.id} value={chapter.id}>
+                          {chapter.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {chapterDestination === 'new' ? (
+                  <label>
+                    New chapter title
+                    <input
+                      value={newChapterTitle}
+                      onChange={(event) =>
+                        setNewChapterTitle(event.target.value)
+                      }
+                    />
+                  </label>
+                ) : null}
+              </>
             ) : null}
             {destination !== 'inbox' ? (
               <label>
@@ -299,14 +400,14 @@ export function ImportPage() {
             <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
               Automatic ordering does not reconstruct original Satori article
               order.
+              {destination !== 'inbox' && chapterDestination !== 'none'
+                ? ' Selected sentences are assigned to the chapter, including any that were already in the book.'
+                : null}
             </p>
             <button
               type="button"
               className="primary"
-              disabled={
-                !selectedIds.length ||
-                (destination === 'existing_book' && !bookId)
-              }
+              disabled={!canImport}
               onClick={async () => {
                 setBusy(true);
                 try {
@@ -317,6 +418,14 @@ export function ImportPage() {
                     bookId: bookId || undefined,
                     newBookTitle,
                     orderMode,
+                    chapterId:
+                      chapterDestination === 'existing'
+                        ? chapterId || undefined
+                        : undefined,
+                    newChapterTitle:
+                      chapterDestination === 'new'
+                        ? newChapterTitle.trim()
+                        : undefined,
                   });
                   if (result.bookId) navigate(`/books/${result.bookId}`);
                   else navigate('/inbox');

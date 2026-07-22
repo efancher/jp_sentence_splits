@@ -208,4 +208,75 @@ describe('data layer', () => {
     expect(memberships.some((item) => item.chapterId === first.id)).toBe(false);
     expect(await db.sentences.count()).toBe(sentenceIds.length);
   });
+
+  it('imports selected sentences into a new or existing chapter', async () => {
+    const preview = parseSatoriCsvText(littleBirds, 'little-birds.csv');
+    const sentenceIds = preview.drafts.map((item) => item.proposedId);
+    const book = await createBook({ title: 'Satori Series' });
+    const existing = await createBookChapter(book.id, 'Earlier Lesson');
+
+    const intoExisting = await commitImport({
+      preview,
+      selectedIds: sentenceIds.slice(0, 2),
+      destination: 'existing_book',
+      bookId: book.id,
+      chapterId: existing.id,
+    });
+    expect(intoExisting.chapterId).toBe(existing.id);
+
+    const intoNew = await commitImport({
+      preview,
+      selectedIds: sentenceIds.slice(2),
+      destination: 'existing_book',
+      bookId: book.id,
+      newChapterTitle: 'Imported Lesson',
+    });
+    expect(intoNew.chapterId).toBeTruthy();
+
+    const db = getDb();
+    const storedBook = await db.books.get(book.id);
+    expect(storedBook?.chapters.map((chapter) => chapter.title)).toEqual([
+      'Earlier Lesson',
+      'Imported Lesson',
+    ]);
+    const memberships = await db.bookSentences
+      .where('bookId')
+      .equals(book.id)
+      .toArray();
+    expect(
+      memberships.filter((item) => item.chapterId === existing.id),
+    ).toHaveLength(2);
+    expect(
+      memberships.filter((item) => item.chapterId === intoNew.chapterId),
+    ).toHaveLength(sentenceIds.length - 2);
+  });
+
+  it('creates a book chapter during new-book import and assigns already-membered sentences', async () => {
+    const preview = parseSatoriCsvText(littleBirds, 'little-birds.csv');
+    const sentenceIds = preview.drafts.map((item) => item.proposedId);
+    await commitImport({
+      preview,
+      selectedIds: sentenceIds.slice(0, 1),
+      destination: 'new_book',
+      newBookTitle: 'Starter',
+    });
+    const book = (await getDb().books.toArray())[0]!;
+
+    const result = await commitImport({
+      preview,
+      selectedIds: sentenceIds,
+      destination: 'existing_book',
+      bookId: book.id,
+      newChapterTitle: 'Full Export',
+    });
+
+    const memberships = await getDb()
+      .bookSentences.where('bookId')
+      .equals(book.id)
+      .toArray();
+    expect(memberships).toHaveLength(sentenceIds.length);
+    expect(
+      memberships.every((item) => item.chapterId === result.chapterId),
+    ).toBe(true);
+  });
 });

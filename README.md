@@ -28,7 +28,7 @@ backups; retain the original ZIP for audio restoration.
 ## Organizing sentences
 
 - During import, send selected sentences to Inbox, a new book, or an existing
-  book.
+  book — and optionally into an existing or newly created chapter.
 - In Inbox, select one or more sentences and assign them to a new or existing
   book.
 - In a book, select sentences to copy or move them to another book.

@@ -531,7 +531,11 @@ export async function commitImport(options: {
   bookId?: string;
   newBookTitle?: string;
   orderMode?: InitialOrderMode;
-}): Promise<{ batchId: string; bookId?: string }> {
+  /** Assign imported sentences to this existing chapter on the target book. */
+  chapterId?: string;
+  /** Create a chapter with this title on the target book, then assign. */
+  newChapterTitle?: string;
+}): Promise<{ batchId: string; bookId?: string; chapterId?: string }> {
   const db = getDb();
   const batchId = createId('batch');
   const timestamp = nowIso();
@@ -611,6 +615,7 @@ export async function commitImport(options: {
   );
 
   let bookId = options.bookId;
+  const sentenceIds = selected.map((item) => item.proposedId);
   if (options.destination === 'new_book') {
     const book = await createBook({
       title: options.newBookTitle || options.preview.batchName,
@@ -618,18 +623,28 @@ export async function commitImport(options: {
     bookId = book.id;
     await addSentencesToBook(
       book.id,
-      selected.map((item) => item.proposedId),
+      sentenceIds,
       options.orderMode ?? 'first_occurrence',
     );
   } else if (options.destination === 'existing_book' && bookId) {
     await addSentencesToBook(
       bookId,
-      selected.map((item) => item.proposedId),
+      sentenceIds,
       options.orderMode ?? 'first_occurrence',
     );
   }
 
-  return { batchId, bookId };
+  let chapterId = options.chapterId;
+  const newChapterTitle = options.newChapterTitle?.trim();
+  if (bookId && newChapterTitle) {
+    const chapter = await createBookChapter(bookId, newChapterTitle);
+    chapterId = chapter.id;
+  }
+  if (bookId && chapterId) {
+    await assignBookSentencesToChapter(bookId, sentenceIds, chapterId);
+  }
+
+  return { batchId, bookId, chapterId };
 }
 
 export async function previewCsvFile(

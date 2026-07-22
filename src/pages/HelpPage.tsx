@@ -45,13 +45,15 @@ export function HelpPage() {
           </li>
           <li>
             Select all or some sentences and send them to Inbox, a new book, or
-            an existing book.
+            an existing book. For a book destination, you can also put them in
+            an existing chapter or create a new chapter during import.
           </li>
         </ol>
         <p>
           Reimporting the same or a later full export is safe: matching
           sentences and target vocabulary are merged while your analysis,
-          status, and book order remain intact.
+          status, and book order remain intact. Choosing a chapter also assigns
+          selected sentences that were already in that book.
         </p>
       </section>
 
