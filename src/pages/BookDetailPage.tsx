@@ -222,7 +222,10 @@ export function BookDetailPage() {
   const [showPasteOrder, setShowPasteOrder] = useState(false);
   const [pasteOrderText, setPasteOrderText] = useState('');
   const [pasteOrderPreview, setPasteOrderPreview] = useState<
-    (PasteOrderResult & { matchedJapanese: string[] }) | null
+    (PasteOrderResult & {
+      matchedJapanese: string[];
+      unmatchedJapanese: string[];
+    }) | null
   >(null);
   const [pasteOrderError, setPasteOrderError] = useState('');
   const [editMetadata, setEditMetadata] = useState(false);
@@ -585,7 +588,33 @@ export function BookDetailPage() {
                   …and{' '}
                   {pasteOrderPreview.matchedJapanese.length -
                     PASTE_ORDER_PREVIEW_SAMPLE}{' '}
-                  more
+                  more matched
+                </div>
+              ) : null}
+              {pasteOrderPreview.unmatchedJapanese.length ? (
+                <div className="stack">
+                  <strong>Unmatched (kept at end)</strong>
+                  <ul
+                    className="muted"
+                    style={{ margin: 0, paddingLeft: '1.2rem' }}
+                  >
+                    {pasteOrderPreview.unmatchedJapanese
+                      .slice(0, PASTE_ORDER_PREVIEW_SAMPLE)
+                      .map((japanese, index) => (
+                        <li key={`u-${index}-${japanese}`} className="jp">
+                          {japanese}
+                        </li>
+                      ))}
+                  </ul>
+                  {pasteOrderPreview.unmatchedJapanese.length >
+                  PASTE_ORDER_PREVIEW_SAMPLE ? (
+                    <div className="muted">
+                      …and{' '}
+                      {pasteOrderPreview.unmatchedJapanese.length -
+                        PASTE_ORDER_PREVIEW_SAMPLE}{' '}
+                      more unmatched
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

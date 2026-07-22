@@ -37,7 +37,41 @@ describe('orderBookSentencesFromPaste', () => {
     expect(result.orderedIds).toEqual(['title', 's1', 's2', 's3', 'extra']);
   });
 
-  it('treats spacing differences as the same via normalizeSentenceKey', () => {
+  it('matches full-width and ASCII digits via NFKC paste normalization', () => {
+    const paste =
+      'ある日、１羽のひなが巣の端に立ちました。他の２羽のひなたちは、巣からその様子を見ていました。';
+    const result = orderBookSentencesFromPaste(paste, [
+      {
+        id: 'later',
+        japanese: '他の2羽のひなたちは、巣からその様子を見ていました。',
+      },
+      {
+        id: 'earlier',
+        japanese: 'ある日、1羽のひなが巣の端に立ちました。',
+      },
+    ]);
+    expect(result.matchedIds).toEqual(['earlier', 'later']);
+    expect(result.unmatchedIds).toEqual([]);
+  });
+
+  it('orders episode-two sentences after episode-one when both are in the paste', () => {
+    const episodeOne =
+      '暖かい春がやって来ました。ある小鳥の夫婦が、木に巣を作りました。';
+    const dayOne = 'ある日、１羽のひなが巣の端に立ちました。';
+    const others = '他の２羽のひなたちは、巣からその様子を見ていました。';
+    const paste = `春、第一話
+${episodeOne}
+春、第二話
+${dayOne}${others}`;
+    const result = orderBookSentencesFromPaste(paste, [
+      { id: 'others', japanese: others },
+      { id: 'day', japanese: 'ある日、1羽のひなが巣の端に立ちました。' },
+      { id: 'spring', japanese: '暖かい春がやって来ました。' },
+    ]);
+    expect(result.orderedIds).toEqual(['spring', 'day', 'others']);
+  });
+
+  it('treats spacing differences as the same via paste match normalization', () => {
     const result = orderBookSentencesFromPaste(
       `${S1}\n${S2}`,
       [

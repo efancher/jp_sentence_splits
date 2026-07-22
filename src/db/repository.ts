@@ -458,6 +458,7 @@ export async function previewBookOrderFromPaste(
 ): Promise<
   PasteOrderResult & {
     matchedJapanese: string[];
+    unmatchedJapanese: string[];
   }
 > {
   const db = getDb();
@@ -482,6 +483,7 @@ export async function previewBookOrderFromPaste(
   return {
     ...result,
     matchedJapanese: result.matchedIds.map((id) => byId.get(id) ?? ''),
+    unmatchedJapanese: result.unmatchedIds.map((id) => byId.get(id) ?? ''),
   };
 }
 

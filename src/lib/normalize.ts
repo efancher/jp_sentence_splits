@@ -40,6 +40,17 @@ export function normalizeSentenceKey(japanese: string): string {
   return text.replace(/\s+/g, '');
 }
 
+/**
+ * Looser key for matching pasted article text to stored sentences.
+ * Uses NFKC so full-width digits (１) match ASCII (1) and similar
+ * compatibility characters align. Do not use for sentence identity —
+ * that remains {@link normalizeSentenceKey}.
+ */
+export function normalizeForPasteMatch(japanese: string): string {
+  const text = stripMarkup(japanese).normalize('NFKC');
+  return text.replace(/\s+/g, '');
+}
+
 export function displayJapanese(japanese: string): string {
   return stripMarkup(japanese).normalize('NFC').trim();
 }

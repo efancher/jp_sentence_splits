@@ -1,4 +1,4 @@
-import { normalizeSentenceKey } from './normalize';
+import { normalizeForPasteMatch } from './normalize';
 
 export type PasteOrderSentence = {
   id: string;
@@ -16,14 +16,17 @@ export type PasteOrderResult = {
  * inside pasted article text. Unmatched sentences keep prior relative order
  * after all matches.
  *
- * When multiple memberships share the same normalized key, only the first in
- * the given list claims that paste occurrence; later duplicates stay unmatched.
+ * Matching uses {@link normalizeForPasteMatch} (NFKC) so full-width digits and
+ * similar compatibility forms align with ASCII forms in Satori page pastes.
+ *
+ * When multiple memberships share the same match key, only the first in the
+ * given list claims that paste occurrence; later duplicates stay unmatched.
  */
 export function orderBookSentencesFromPaste(
   paste: string,
   sentences: PasteOrderSentence[],
 ): PasteOrderResult {
-  const normalizedPaste = normalizeSentenceKey(paste);
+  const normalizedPaste = normalizeForPasteMatch(paste);
   if (!normalizedPaste || !sentences.length) {
     const ids = sentences.map((sentence) => sentence.id);
     return { orderedIds: ids, matchedIds: [], unmatchedIds: ids };
@@ -34,7 +37,7 @@ export function orderBookSentencesFromPaste(
   const unmatchedIds: string[] = [];
 
   sentences.forEach((sentence, prior) => {
-    const key = normalizeSentenceKey(sentence.japanese);
+    const key = normalizeForPasteMatch(sentence.japanese);
     if (!key) {
       unmatchedIds.push(sentence.id);
       return;
