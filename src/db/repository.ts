@@ -25,6 +25,10 @@ import {
   type ShadowingImportPreview,
 } from '../lib/shadowingImport';
 import { buildBackupPayload, type BackupBundle } from '../lib/backup';
+import {
+  orderBookSentencesFromPaste,
+  type PasteOrderResult,
+} from '../lib/pasteOrder';
 import { ensureSettings, getDb } from './database';
 
 function sortSentences(
@@ -446,6 +450,50 @@ export async function reorderBookSentences(
       await db.books.put({ ...book, updatedAt: nowIso() });
     }
   });
+}
+
+export async function previewBookOrderFromPaste(
+  bookId: string,
+  paste: string,
+): Promise<
+  PasteOrderResult & {
+    matchedJapanese: string[];
+  }
+> {
+  const db = getDb();
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .sortBy('position');
+  const sentences = await db.sentences.bulkGet(
+    memberships.map((item) => item.sentenceId),
+  );
+  const orderedInput = memberships.map((membership, index) => {
+    const sentence = sentences[index];
+    return {
+      id: membership.sentenceId,
+      japanese: sentence?.japanese ?? '',
+    };
+  });
+  const result = orderBookSentencesFromPaste(paste, orderedInput);
+  const byId = new Map(
+    orderedInput.map((sentence) => [sentence.id, sentence.japanese]),
+  );
+  return {
+    ...result,
+    matchedJapanese: result.matchedIds.map((id) => byId.get(id) ?? ''),
+  };
+}
+
+export async function reorderBookFromPaste(
+  bookId: string,
+  paste: string,
+): Promise<PasteOrderResult> {
+  const preview = await previewBookOrderFromPaste(bookId, paste);
+  if (preview.matchedIds.length) {
+    await reorderBookSentences(bookId, preview.orderedIds);
+  }
+  return preview;
 }
 
 export async function moveBookSentence(

@@ -69,6 +69,9 @@ Inside a book:
 - use **Edit details** for title, source title, URL, and notes;
 - use **Edit order** for drag-and-drop, directional controls, or an exact
   position;
+- use **Order from paste** to paste Satori chapter-page text and reorder
+  matching sentences by first appearance (episode-title lines count as
+  sentences when already in the book; unmatched stay at the end);
 - select sentences to copy or move them to another book;
 - create chapters and assign selected sentences to one;
 - reorder, rename, or delete chapters.
@@ -89,17 +92,21 @@ Select matching results to add them to a book or export them as a worksheet.
 1. Open **Analyze** from a book or Search.
 2. Add spaces to the editable Japanese copy to define chunk boundaries.
 3. Optionally apply heuristic chunks and role suggestions.
-4. Enter an editable role and Japanese-order literal English for each chunk.
+4. Optionally check **Add zero-が (∅) subject** when the が subject is
+   invisible. That inserts an editable practice chunk (default `∅が`) that is
+   not part of the source sentence; move it with **Move up** / **Move down**.
+5. Enter an editable role and Japanese-order literal English for each chunk.
    Use **Suggest sticky English** for a local alternative built from
    particles/engines, target vocabulary, and a small lexicon (not cloud
    translation).
-5. Review the generated CHUNK, ROLE, and LIT lines.
-6. Check **Review suggestions** for missing fields, role mismatches, and
+6. Review the generated CHUNK, ROLE, and LIT lines.
+7. Check **Review suggestions** for missing fields, role mismatches, and
    sticky-English alternatives.
-7. Save or mark the sentence complete/needs review.
+8. Save or mark the sentence complete/needs review.
 
-The non-whitespace source Japanese must remain unchanged. Autosave runs after a
-short delay and on blur; the manual Save button is a fallback.
+The non-whitespace source Japanese must remain unchanged (zero-が chunks are
+excluded from that check). Autosave runs after a short delay and on blur; the
+manual Save button is a fallback.
 
 ## Listen with device text-to-speech
 

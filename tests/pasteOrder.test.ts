@@ -1,0 +1,131 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { orderBookSentencesFromPaste } from '../src/lib/pasteOrder';
+import {
+  createBook,
+  getDb,
+  previewBookOrderFromPaste,
+  reorderBookFromPaste,
+} from '../src/db/repository';
+import { resetDbForTests } from '../src/db/database';
+import { createId } from '../src/lib/ids';
+import { normalizeSentenceKey } from '../src/lib/normalize';
+
+const TITLE = '春、第二話';
+const S1 = 'ある日、１羽のひなが巣の端に立ちました。';
+const S2 = 'そして、羽を大きく広げると、思い切って巣から飛び出しました。';
+const S3 = 'ひなは必死に羽ばたいて、なんとか飛ぶことができました。';
+const EXTRA = 'この文は貼り付けにありません。';
+
+const ARTICLE = `${TITLE}
+${S1}${S2}${S3}
+他の２羽のひなたちは、巣からその様子を見ていました。`;
+
+describe('orderBookSentencesFromPaste', () => {
+  it('orders matched sentences by first appearance and appends unmatched', () => {
+    const sentences = [
+      { id: 'extra', japanese: EXTRA },
+      { id: 's3', japanese: S3 },
+      { id: 's1', japanese: S1 },
+      { id: 'title', japanese: TITLE },
+      { id: 's2', japanese: S2 },
+    ];
+
+    const result = orderBookSentencesFromPaste(ARTICLE, sentences);
+    expect(result.matchedIds).toEqual(['title', 's1', 's2', 's3']);
+    expect(result.unmatchedIds).toEqual(['extra']);
+    expect(result.orderedIds).toEqual(['title', 's1', 's2', 's3', 'extra']);
+  });
+
+  it('treats spacing differences as the same via normalizeSentenceKey', () => {
+    const result = orderBookSentencesFromPaste(
+      `${S1}\n${S2}`,
+      [
+        { id: 'a', japanese: ` ${S2} ` },
+        { id: 'b', japanese: S1 },
+      ],
+    );
+    expect(result.orderedIds).toEqual(['b', 'a']);
+  });
+
+  it('keeps only the first membership when normalized keys collide', () => {
+    const result = orderBookSentencesFromPaste(S1, [
+      { id: 'first', japanese: S1 },
+      { id: 'dup', japanese: S1 },
+    ]);
+    expect(result.matchedIds).toEqual(['first']);
+    expect(result.unmatchedIds).toEqual(['dup']);
+  });
+
+  it('returns prior order when paste is empty', () => {
+    const sentences = [
+      { id: 'a', japanese: S1 },
+      { id: 'b', japanese: S2 },
+    ];
+    expect(orderBookSentencesFromPaste('   ', sentences).orderedIds).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+});
+
+describe('reorderBookFromPaste', () => {
+  beforeEach(() => {
+    resetDbForTests(`paste-order-${createId('db')}`);
+  });
+
+  it('persists paste order for book memberships', async () => {
+    const book = await createBook({ title: 'Hina' });
+    const db = getDb();
+    const rows = [
+      { id: 'sent_extra', japanese: EXTRA },
+      { id: 'sent_s2', japanese: S2 },
+      { id: 'sent_title', japanese: TITLE },
+      { id: 'sent_s1', japanese: S1 },
+    ];
+    const timestamp = new Date().toISOString();
+    await db.sentences.bulkPut(
+      rows.map((row, index) => ({
+        id: row.id,
+        japanese: row.japanese,
+        readingOnly: '',
+        inlineReading: '',
+        translation: '',
+        normalizedKey: normalizeSentenceKey(row.japanese),
+        targetVocabulary: [],
+        sourceReferences: [],
+        importBatchIds: [],
+        conflicts: [],
+        firstOccurrenceIndex: index,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })),
+    );
+    await db.bookSentences.bulkPut(
+      rows.map((row, position) => ({
+        id: createId('bs'),
+        bookId: book.id,
+        sentenceId: row.id,
+        position,
+        status: 'unstarted' as const,
+        addedAt: timestamp,
+      })),
+    );
+
+    const preview = await previewBookOrderFromPaste(book.id, ARTICLE);
+    expect(preview.matchedIds[0]).toBe('sent_title');
+    expect(preview.matchedJapanese[0]).toBe(TITLE);
+
+    await reorderBookFromPaste(book.id, ARTICLE);
+    const memberships = await db.bookSentences
+      .where('bookId')
+      .equals(book.id)
+      .sortBy('position');
+    expect(memberships.map((item) => item.sentenceId)).toEqual([
+      'sent_title',
+      'sent_s1',
+      'sent_s2',
+      'sent_extra',
+    ]);
+  });
+});

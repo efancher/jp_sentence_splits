@@ -35,6 +35,8 @@ backups; retain the original ZIP for audio restoration.
 - Create and order chapters, then assign selected book sentences to a chapter.
 - Use **Edit order** for drag-and-drop, Up/Down/Top/Bottom, or an exact
   destination position.
+- Use **Order from paste** to reorder a book from pasted Satori chapter text
+  (matched sentences by appearance; unmatched keep relative order at the end).
 - Use **Edit details** for a book title, subtitle/source title, source URL, and
   notes.
 - Open an import batch from Inbox to review and organize every sentence linked

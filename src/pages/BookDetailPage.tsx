@@ -30,6 +30,7 @@ import {
   findResumeSentence,
   getDb,
   moveBookSentence,
+  previewBookOrderFromPaste,
   removeSentencesFromBook,
   reorderBookSentences,
   restoreBookSentenceSnapshot,
@@ -40,6 +41,9 @@ import {
 } from '../db/repository';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import type { Book, Sentence } from '../domain/types';
+import type { PasteOrderResult } from '../lib/pasteOrder';
+
+const PASTE_ORDER_PREVIEW_SAMPLE = 8;
 
 function BookMetadataForm({
   book,
@@ -215,6 +219,12 @@ export function BookDetailPage() {
   const { bookId = '' } = useParams();
   const navigate = useNavigate();
   const [editOrder, setEditOrder] = useState(false);
+  const [showPasteOrder, setShowPasteOrder] = useState(false);
+  const [pasteOrderText, setPasteOrderText] = useState('');
+  const [pasteOrderPreview, setPasteOrderPreview] = useState<
+    (PasteOrderResult & { matchedJapanese: string[] }) | null
+  >(null);
+  const [pasteOrderError, setPasteOrderError] = useState('');
   const [editMetadata, setEditMetadata] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [destinationBookId, setDestinationBookId] = useState('');
@@ -295,13 +305,25 @@ export function BookDetailPage() {
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>{data.book.title}</h2>
-          <button
-            type="button"
-            className={editOrder ? 'primary' : undefined}
-            onClick={() => setEditOrder((value) => !value)}
-          >
-            {editOrder ? 'Done ordering' : 'Edit order'}
-          </button>
+          <div className="row">
+            <button
+              type="button"
+              className={editOrder ? 'primary' : undefined}
+              onClick={() => setEditOrder((value) => !value)}
+            >
+              {editOrder ? 'Done ordering' : 'Edit order'}
+            </button>
+            <button
+              type="button"
+              className={showPasteOrder ? 'primary' : undefined}
+              onClick={() => {
+                setShowPasteOrder((value) => !value);
+                setPasteOrderError('');
+              }}
+            >
+              {showPasteOrder ? 'Hide paste order' : 'Order from paste'}
+            </button>
+          </div>
         </div>
         {data.book.subtitle ? (
           <div className="muted">{data.book.subtitle}</div>
@@ -511,6 +533,129 @@ export function BookDetailPage() {
           book={data.book}
           onDone={() => setEditMetadata(false)}
         />
+      ) : null}
+
+      {showPasteOrder ? (
+        <section className="panel stack">
+          <h3 style={{ margin: 0 }}>Order from paste</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Paste article text from a Satori chapter page. Matching book
+            sentences are reordered by first appearance; episode titles count as
+            sentences when they are already in the book. Unmatched sentences
+            keep their relative order at the end.
+          </p>
+          <label>
+            Pasted text
+            <textarea
+              rows={10}
+              value={pasteOrderText}
+              onChange={(event) => {
+                setPasteOrderText(event.target.value);
+                setPasteOrderPreview(null);
+                setPasteOrderError('');
+              }}
+              placeholder="春、第二話&#10;ある日、…"
+            />
+          </label>
+          {pasteOrderError ? (
+            <div style={{ color: 'var(--danger)' }}>{pasteOrderError}</div>
+          ) : null}
+          {pasteOrderPreview ? (
+            <div className="stack">
+              <div className="muted">
+                {pasteOrderPreview.matchedIds.length} matched ·{' '}
+                {pasteOrderPreview.unmatchedIds.length} unmatched
+              </div>
+              {pasteOrderPreview.matchedIds.length ? (
+                <ol style={{ margin: 0, paddingLeft: '1.2rem' }}>
+                  {pasteOrderPreview.matchedJapanese
+                    .slice(0, PASTE_ORDER_PREVIEW_SAMPLE)
+                    .map((japanese, index) => (
+                      <li key={`${index}-${japanese}`} className="jp">
+                        {japanese}
+                      </li>
+                    ))}
+                </ol>
+              ) : (
+                <div className="muted">No book sentences found in the paste.</div>
+              )}
+              {pasteOrderPreview.matchedJapanese.length >
+              PASTE_ORDER_PREVIEW_SAMPLE ? (
+                <div className="muted">
+                  …and{' '}
+                  {pasteOrderPreview.matchedJapanese.length -
+                    PASTE_ORDER_PREVIEW_SAMPLE}{' '}
+                  more
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="row">
+            <button
+              type="button"
+              disabled={!pasteOrderText.trim()}
+              onClick={async () => {
+                setPasteOrderError('');
+                try {
+                  setPasteOrderPreview(
+                    await previewBookOrderFromPaste(bookId, pasteOrderText),
+                  );
+                } catch (err) {
+                  setPasteOrderError(
+                    err instanceof Error
+                      ? err.message
+                      : 'Failed to preview paste order',
+                  );
+                }
+              }}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={
+                !pasteOrderText.trim() ||
+                !(pasteOrderPreview?.matchedIds.length ?? 0)
+              }
+              onClick={async () => {
+                if (!pasteOrderPreview?.matchedIds.length) return;
+                setPasteOrderError('');
+                try {
+                  const previous = [...ids];
+                  await reorderBookSentences(
+                    bookId,
+                    pasteOrderPreview.orderedIds,
+                  );
+                  setSnack({
+                    message: `Reordered ${pasteOrderPreview.matchedIds.length} sentence(s) from paste`,
+                    undo: async () => {
+                      await reorderBookSentences(bookId, previous);
+                    },
+                  });
+                } catch (err) {
+                  setPasteOrderError(
+                    err instanceof Error
+                      ? err.message
+                      : 'Failed to apply paste order',
+                  );
+                }
+              }}
+            >
+              Apply order
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPasteOrder(false);
+                setPasteOrderPreview(null);
+                setPasteOrderError('');
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </section>
       ) : null}
 
       <section className="panel stack">

@@ -70,7 +70,9 @@ export function HelpPage() {
           </li>
           <li>
             Use <strong>Edit order</strong> for drag-and-drop, directional
-            controls, or an exact position.
+            controls, or an exact position. Use <strong>Order from paste</strong>{' '}
+            to paste Satori chapter-page text and reorder matching sentences by
+            first appearance (unmatched stay at the end).
           </li>
           <li>
             Open an import batch from Inbox to revisit every sentence linked to
@@ -99,7 +101,9 @@ export function HelpPage() {
           </li>
           <li>
             Give each chunk a role and your own Japanese-order literal “sticky
-            English.”
+            English.” For an invisible が subject, check{' '}
+            <strong>Add zero-が (∅) subject</strong> to insert a practice chunk
+            you can edit and reorder without changing the source sentence.
           </li>
           <li>
             Check <strong>Review suggestions</strong> for local tips (missing
@@ -109,8 +113,8 @@ export function HelpPage() {
         </ol>
         <p>
           Glossbook protects the source sentence: the non-whitespace Japanese
-          characters must remain unchanged. Work autosaves locally, and a
-          manual Save button remains available.
+          characters must remain unchanged (zero-が chunks are excluded). Work
+          autosaves locally, and a manual Save button remains available.
         </p>
         <p>
           Tap 🔊 to hear the sentence or a chunk using the device's Japanese
