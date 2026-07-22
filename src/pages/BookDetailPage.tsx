@@ -32,6 +32,7 @@ import {
   moveBookSentence,
   previewBookOrderFromPaste,
   removeSentencesFromBook,
+  reorderBookFromPaste,
   reorderBookSentences,
   restoreBookSentenceSnapshot,
   touchBookOpened,
@@ -545,7 +546,8 @@ export function BookDetailPage() {
             Paste article text from a Satori chapter page. Matching book
             sentences are reordered by first appearance; episode titles count as
             sentences when they are already in the book. Unmatched sentences
-            keep their relative order at the end.
+            keep their relative order at the end. After Apply, scroll the list:
+            episode titles like 春、第一話 should move near the top when present.
           </p>
           <label>
             Pasted text
@@ -643,21 +645,24 @@ export function BookDetailPage() {
             <button
               type="button"
               className="primary"
-              disabled={
-                !pasteOrderText.trim() ||
-                !(pasteOrderPreview?.matchedIds.length ?? 0)
-              }
+              disabled={!pasteOrderText.trim()}
               onClick={async () => {
-                if (!pasteOrderPreview?.matchedIds.length) return;
                 setPasteOrderError('');
                 try {
                   const previous = [...ids];
-                  await reorderBookSentences(
+                  const result = await reorderBookFromPaste(
                     bookId,
-                    pasteOrderPreview.orderedIds,
+                    pasteOrderText,
                   );
+                  setPasteOrderPreview(result);
+                  if (!result.matchedIds.length) {
+                    setPasteOrderError(
+                      'No book sentences matched the pasted text.',
+                    );
+                    return;
+                  }
                   setSnack({
-                    message: `Reordered ${pasteOrderPreview.matchedIds.length} sentence(s) from paste`,
+                    message: `Reordered ${result.matchedIds.length} matched · ${result.unmatchedIds.length} unmatched at end`,
                     undo: async () => {
                       await reorderBookSentences(bookId, previous);
                     },

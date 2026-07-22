@@ -437,13 +437,23 @@ export async function reorderBookSentences(
     const bySentence = new Map(
       memberships.map((item) => [item.sentenceId, item]),
     );
-    const updates = orderedSentenceIds
-      .map((sentenceId, index) => {
-        const item = bySentence.get(sentenceId);
-        if (!item) return null;
-        return { ...item, position: index };
-      })
-      .filter((item): item is BookSentence => Boolean(item));
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const sentenceId of orderedSentenceIds) {
+      if (!bySentence.has(sentenceId) || seen.has(sentenceId)) continue;
+      seen.add(sentenceId);
+      ordered.push(sentenceId);
+    }
+    // Keep any memberships missing from the payload at the end (prior relative order).
+    const leftovers = memberships
+      .filter((item) => !seen.has(item.sentenceId))
+      .sort((a, b) => a.position - b.position)
+      .map((item) => item.sentenceId);
+    const fullOrder = [...ordered, ...leftovers];
+    const updates = fullOrder.map((sentenceId, index) => ({
+      ...bySentence.get(sentenceId)!,
+      position: index,
+    }));
     await db.bookSentences.bulkPut(updates);
     const book = await db.books.get(bookId);
     if (book) {
