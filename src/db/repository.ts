@@ -500,7 +500,12 @@ export async function previewBookOrderFromPaste(
 export async function reorderBookFromPaste(
   bookId: string,
   paste: string,
-): Promise<PasteOrderResult> {
+): Promise<
+  PasteOrderResult & {
+    matchedJapanese: string[];
+    unmatchedJapanese: string[];
+  }
+> {
   const preview = await previewBookOrderFromPaste(bookId, paste);
   if (preview.matchedIds.length) {
     await reorderBookSentences(bookId, preview.orderedIds);
