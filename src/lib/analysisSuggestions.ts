@@ -4,6 +4,7 @@ import {
   chunksMatchSource,
   roleForChunk,
 } from './chunking';
+import { isZeroGaChunk, surfaceJapaneseParts } from './analysisHelpers';
 import {
   stickyLiteralsDiffer,
   suggestStickyEnglish,
@@ -89,7 +90,7 @@ export function lintAnalysis(
   const suggestions: AnalysisSuggestion[] = [];
   if (!chunks.length) return suggestions;
 
-  const japaneseParts = chunks.map((chunk) => chunk.japanese);
+  const japaneseParts = surfaceJapaneseParts(chunks);
   if (!chunksMatchSource(japaneseParts, sourceJapanese)) {
     suggestions.push({
       id: 'integrity',
@@ -120,10 +121,9 @@ export function lintAnalysis(
   chunks.forEach((chunk, index) => {
     const role = chunk.role.trim();
     const literal = chunk.literalEnglish.trim();
-    const heuristicRole = roleForChunk(
-      chunk.japanese,
-      index === chunks.length - 1,
-    );
+    const heuristicRole = isZeroGaChunk(chunk)
+      ? 'zero-が (∅ subject)'
+      : roleForChunk(chunk.japanese, index === chunks.length - 1);
     const suggestedLiteral = suggestStickyEnglish(chunk.japanese, {
       role: role || heuristicRole,
       englishHint: options.translation,

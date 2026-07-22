@@ -14,13 +14,20 @@ import {
 } from '../db/repository';
 import type { AnalysisChunk, TextDisplayMode } from '../domain/types';
 import {
+  addZeroGaSubject,
   applyHeuristicChunks,
   applySpacedChunks,
+  chunkHasSpeakableJapanese,
   countDiscardedAnnotations,
+  hasZeroGaSubject,
   initialSpacedText,
+  isZeroGaChunk,
   mergeChunkWithNeighbor,
+  moveChunk,
   moveChunkBoundary,
+  removeZeroGaSubject,
   splitChunkAt,
+  surfaceJapaneseParts,
 } from '../lib/analysisHelpers';
 import {
   applySuggestion,
@@ -358,7 +365,7 @@ export function AnalyzePage() {
                 if (!ok) return;
               }
               setChunks(nextChunks);
-              setSpaced(nextChunks.map((chunk) => chunk.japanese).join(' '));
+              setSpaced(surfaceJapaneseParts(nextChunks).join(' '));
               setChunkError('');
               setDismissedSuggestionIds(new Set());
             }}
@@ -366,6 +373,23 @@ export function AnalyzePage() {
             Apply heuristic chunking
           </button>
         </div>
+        <label className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={hasZeroGaSubject(chunks)}
+            onChange={(event) => {
+              setChunks(
+                event.target.checked
+                  ? addZeroGaSubject(chunks)
+                  : removeZeroGaSubject(chunks),
+              );
+            }}
+          />
+          <span>
+            Add zero-が (∅) subject — not part of the source sentence; use for
+            invisible noga practice
+          </span>
+        </label>
       </section>
 
       <section className="stack">
@@ -376,10 +400,14 @@ export function AnalyzePage() {
               disabled={!speech.supported}
               onClick={() =>
                 speech.speakSequence(
-                  chunks.map((chunk) => ({
-                    itemId: `chunk-${chunk.id}`,
-                    text: chunk.japanese,
-                  })),
+                  chunks
+                    .filter((chunk) =>
+                      chunkHasSpeakableJapanese(chunk.japanese),
+                    )
+                    .map((chunk) => ({
+                      itemId: `chunk-${chunk.id}`,
+                      text: chunk.japanese,
+                    })),
                 )
               }
             >
@@ -392,7 +420,9 @@ export function AnalyzePage() {
             ) : null}
           </div>
         ) : null}
-        {chunks.map((chunk, chunkIndex) => (
+        {chunks.map((chunk, chunkIndex) => {
+          const zeroGa = isZeroGaChunk(chunk);
+          return (
           <article
             key={chunk.id}
             className={`chunk-card${
@@ -402,17 +432,43 @@ export function AnalyzePage() {
             }`}
           >
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong className="jp jp-lg">{chunk.japanese}</strong>
+              {zeroGa ? (
+                <label style={{ flex: 1 }}>
+                  <span className="muted">Zero-が Japanese (editable)</span>
+                  <input
+                    className="jp jp-lg"
+                    value={chunk.japanese}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setChunks((current) =>
+                        current.map((item) =>
+                          item.id === chunk.id
+                            ? { ...item, japanese: value }
+                            : item,
+                        ),
+                      );
+                    }}
+                    onBlur={() => void saveNow()}
+                  />
+                </label>
+              ) : (
+                <strong className="jp jp-lg">{chunk.japanese}</strong>
+              )}
               <span className="row" style={{ gap: '0.4rem' }}>
-                <SpeakButton
-                  text={chunk.japanese}
-                  itemId={`chunk-${chunk.id}`}
-                  label={`Play Japanese chunk: ${chunk.japanese}`}
-                  compact
-                />
+                {chunkHasSpeakableJapanese(chunk.japanese) ? (
+                  <SpeakButton
+                    text={chunk.japanese}
+                    itemId={`chunk-${chunk.id}`}
+                    label={`Play Japanese chunk: ${chunk.japanese}`}
+                    compact
+                  />
+                ) : null}
                 <span className="muted">#{chunkIndex + 1}</span>
               </span>
             </div>
+            {zeroGa ? (
+              <div className="status-pill">zero-が · not in source</div>
+            ) : null}
             <label>
               Role
               <select
@@ -514,57 +570,83 @@ export function AnalyzePage() {
             <div className="row">
               <button
                 type="button"
-                onClick={() => {
-                  const offset = Math.floor(chunk.japanese.length / 2);
-                  setChunks(splitChunkAt(chunks, chunk.id, offset));
-                }}
+                disabled={chunkIndex === 0}
+                onClick={() => setChunks(moveChunk(chunks, chunk.id, 'up'))}
               >
-                Split
+                Move up
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  setChunks(mergeChunkWithNeighbor(chunks, chunk.id, 'previous'))
-                }
+                disabled={chunkIndex >= chunks.length - 1}
+                onClick={() => setChunks(moveChunk(chunks, chunk.id, 'down'))}
               >
-                Merge prev
+                Move down
               </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setChunks(mergeChunkWithNeighbor(chunks, chunk.id, 'next'))
-                }
-              >
-                Merge next
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setChunks(
-                    moveChunkBoundary(chunks, chunk.id, 'left', sentence.japanese),
-                  )
-                }
-              >
-                Boundary ←
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setChunks(
-                    moveChunkBoundary(
-                      chunks,
-                      chunk.id,
-                      'right',
-                      sentence.japanese,
-                    ),
-                  )
-                }
-              >
-                Boundary →
-              </button>
+              {!zeroGa ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const offset = Math.floor(chunk.japanese.length / 2);
+                      setChunks(splitChunkAt(chunks, chunk.id, offset));
+                    }}
+                  >
+                    Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChunks(
+                        mergeChunkWithNeighbor(chunks, chunk.id, 'previous'),
+                      )
+                    }
+                  >
+                    Merge prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChunks(mergeChunkWithNeighbor(chunks, chunk.id, 'next'))
+                    }
+                  >
+                    Merge next
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChunks(
+                        moveChunkBoundary(
+                          chunks,
+                          chunk.id,
+                          'left',
+                          sentence.japanese,
+                        ),
+                      )
+                    }
+                  >
+                    Boundary ←
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChunks(
+                        moveChunkBoundary(
+                          chunks,
+                          chunk.id,
+                          'right',
+                          sentence.japanese,
+                        ),
+                      )
+                    }
+                  >
+                    Boundary →
+                  </button>
+                </>
+              ) : null}
             </div>
           </article>
-        ))}
+          );
+        })}
       </section>
 
       {chunks.length ? (

@@ -95,6 +95,7 @@ export const analysisChunkSchema = z.object({
   role: z.string(),
   literalEnglish: z.string(),
   notes: z.string().optional(),
+  kind: z.enum(['surface', 'zero_ga']).optional(),
 });
 
 export const sentenceAnalysisSchema = z.object({

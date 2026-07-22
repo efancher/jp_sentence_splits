@@ -110,6 +110,11 @@ export interface AnalysisChunk {
   role: string;
   literalEnglish: string;
   notes?: string;
+  /**
+   * `zero_ga` = invisible ∅が subject (not part of source Japanese).
+   * Omitted or `surface` = normal chunk from the sentence text.
+   */
+  kind?: 'surface' | 'zero_ga';
 }
 
 export interface SentenceAnalysis {
