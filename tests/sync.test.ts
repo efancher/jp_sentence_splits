@@ -17,6 +17,7 @@ import {
   resolveConflictLocally,
   updateSyncMeta,
 } from '../src/sync/queue';
+import { applyBulkConflictResolution } from '../src/sync/resolveConflict';
 import { trackLocalMutation } from '../src/sync/track';
 import { hasLocalStudyData, needsMigrationPrompt } from '../src/sync/migration';
 import { sentenceAudioToReferenceMeta } from '../src/sync/mappers';
@@ -206,19 +207,100 @@ describe('sync queue and local-first mutations', () => {
     expect(await pendingCount()).toBe(2);
   });
 
-  it('same-record divergent edits create a preserved conflict', async () => {
+  it('bulk keep_remote clears all open conflicts', async () => {
     await addConflict({
       entity: 'analyses',
-      recordId: 'sent_same',
-      localPayload: { notes: 'device A' },
-      remotePayload: { notes: 'device B' },
-      localVersion: 5,
-      remoteVersion: 5,
+      recordId: 'sent_bulk_a',
+      localPayload: {
+        sentenceId: 'sent_bulk_a',
+        chunks: [],
+        notes: '',
+        status: 'in_progress',
+        formatVersion: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      remotePayload: {
+        sentence_id: 'sent_bulk_a',
+        chunks: [],
+        notes: 'cloud',
+        status: 'in_progress',
+        format_version: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 3,
+      },
+      localVersion: 2,
+      remoteVersion: 3,
+    });
+    await addConflict({
+      entity: 'analyses',
+      recordId: 'sent_bulk_b',
+      localPayload: {
+        sentenceId: 'sent_bulk_b',
+        chunks: [],
+        notes: '',
+        status: 'in_progress',
+        formatVersion: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      remotePayload: {
+        sentence_id: 'sent_bulk_b',
+        chunks: [],
+        notes: 'cloud-b',
+        status: 'in_progress',
+        format_version: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 4,
+      },
+      localVersion: 3,
+      remoteVersion: 4,
+    });
+    expect(await listOpenConflicts()).toHaveLength(2);
+    const open = await listOpenConflicts();
+    const resolved = await applyBulkConflictResolution(open, 'keep_remote');
+    expect(resolved).toBe(2);
+    expect(await listOpenConflicts()).toHaveLength(0);
+  });
+
+  it('bulk keep_local queues upserts for each conflict', async () => {
+    await addConflict({
+      entity: 'analyses',
+      recordId: 'sent_bulk_local',
+      localPayload: {
+        sentenceId: 'sent_bulk_local',
+        chunks: [],
+        notes: 'device',
+        status: 'in_progress',
+        formatVersion: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      remotePayload: {
+        sentence_id: 'sent_bulk_local',
+        chunks: [],
+        notes: 'cloud',
+        status: 'in_progress',
+        format_version: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 2,
+      },
+      localVersion: 1,
+      remoteVersion: 2,
     });
     const open = await listOpenConflicts();
-    expect(open).toHaveLength(1);
-    expect((open[0]?.localPayload as { notes: string }).notes).toBe('device A');
-    expect((open[0]?.remotePayload as { notes: string }).notes).toBe('device B');
+    await applyBulkConflictResolution(open, 'keep_local');
+    expect(await listOpenConflicts()).toHaveLength(0);
+    const pending = await listPendingMutations();
+    expect(
+      pending.some(
+        (item) =>
+          item.recordId === 'sent_bulk_local' && item.operation === 'upsert',
+      ),
+    ).toBe(true);
   });
 });
 

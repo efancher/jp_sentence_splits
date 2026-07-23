@@ -29,6 +29,7 @@
 - [ ] Soft-delete on one device removes on the other after pull
 - [ ] Different records on two devices merge cleanly
 - [ ] Same record conflict shows Keep local / Keep remote / Duplicate
+- [ ] Bulk Keep all local / Keep all remote resolves every open conflict after confirm
 
 ## Sharing
 

@@ -197,7 +197,7 @@ audio sync separately.
 | 401 on Auth | Wrong URL/key, expired session | Check `.env`, sign out/in |
 | 403 / empty rows | RLS denied | Confirm `owner_id`, membership, policies applied |
 | Redirect loop / stuck | Redirect URL not allow-listed | Add exact Pages/local URLs including hash paths |
-| Sync error badge | Network or version conflict | Sync now; open Conflicts in Settings |
+| Sync error badge | Network or version conflict | Sync now; Settings → Conflicts (bulk Keep all local / remote, or per record) |
 | Storage upload fails | MIME/size or path owner mismatch | Use allowed MIME; path must start with your user id |
 | “Supabase is not configured” | Missing env at build/dev | Set `VITE_*` and restart / rebuild |
 
