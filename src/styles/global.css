@@ -471,6 +471,99 @@ strong.jp {
   gap: 0.55rem;
 }
 
+.chunk-puzzle-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.15rem 0;
+  overflow-x: auto;
+  padding: 0.15rem 0 0.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chunk-puzzle-piece {
+  --tab: 10px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+  max-width: 14rem;
+  margin-right: calc(var(--tab) * -0.35);
+  padding: 0.45rem 0.7rem 0.45rem 0.85rem;
+  background: var(--clause-tint, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent));
+  clip-path: polygon(
+    0% 0%,
+    calc(100% - var(--tab)) 0%,
+    calc(100% - var(--tab)) 32%,
+    100% 50%,
+    calc(100% - var(--tab)) 68%,
+    calc(100% - var(--tab)) 100%,
+    0% 100%,
+    0% 68%,
+    var(--tab) 50%,
+    0% 32%
+  );
+}
+
+.chunk-puzzle-piece-first {
+  clip-path: polygon(
+    0% 0%,
+    calc(100% - var(--tab)) 0%,
+    calc(100% - var(--tab)) 32%,
+    100% 50%,
+    calc(100% - var(--tab)) 68%,
+    calc(100% - var(--tab)) 100%,
+    0% 100%
+  );
+  padding-left: 0.7rem;
+}
+
+.chunk-puzzle-piece-last {
+  clip-path: polygon(
+    0% 0%,
+    100% 0%,
+    100% 100%,
+    0% 100%,
+    0% 68%,
+    var(--tab) 50%,
+    0% 32%
+  );
+  margin-right: 0;
+  padding-right: 0.7rem;
+}
+
+.chunk-puzzle-piece-first.chunk-puzzle-piece-last {
+  clip-path: none;
+  border-radius: 10px;
+  margin-right: 0;
+}
+
+.chunk-puzzle-piece-engine {
+  z-index: 2;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  font-weight: 600;
+}
+
+.chunk-puzzle-piece-speaking {
+  z-index: 3;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.chunk-puzzle-japanese {
+  font-size: 1.05rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.chunk-puzzle-role {
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
 .update-banner {
   position: sticky;
   top: var(--header-height);

@@ -125,6 +125,11 @@ export function HelpPage() {
           voice, or use <strong>Play by chunks</strong> to hear each chunk in
           order. Configure the voice and speed in Settings.
         </p>
+        <p>
+          When chunks exist, a <strong>puzzle strip</strong> shows interlocking
+          pieces with soft <strong>clause bands</strong> (heuristic from roles —
+          engines and clause connectors — not a full parse).
+        </p>
       </section>
 
       <section id="roles" className="panel stack">

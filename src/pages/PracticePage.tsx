@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
+import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { getDb, setBookSentenceStatus } from '../db/repository';
@@ -394,6 +395,12 @@ export function PracticePage() {
             Hide all
           </button>
         </div>
+        {reveal.chunks && data.analysis?.chunks?.length ? (
+          <ChunkPuzzleStrip
+            chunks={data.analysis.chunks}
+            revealRoles={reveal.roles}
+          />
+        ) : null}
         <div className="summary-lines">
           {reveal.chunks ? `CHUNK: ${summary.chunk}` : 'CHUNK: (hidden)'}
           {'\n'}

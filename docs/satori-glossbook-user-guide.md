@@ -109,6 +109,11 @@ The non-whitespace source Japanese must remain unchanged (zero-が chunks are
 excluded from that check). Autosave runs after a short delay and on blur; the
 manual Save button is a fallback.
 
+When chunks exist, Analyze (and Practice after **Reveal chunks**) shows a
+**puzzle strip**: interlocking pieces with soft clause bands inferred from
+roles (new clause at connectors or after an engine). This is a study aid, not a
+full syntactic parse.
+
 ### Chunk roles
 
 Analyze’s role dropdown uses Cure Dolly–style labels (Aが, を-car, engine,

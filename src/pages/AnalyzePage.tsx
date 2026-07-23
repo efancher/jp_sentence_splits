@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
+import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
@@ -467,31 +468,40 @@ export function AnalyzePage() {
 
       <section className="stack">
         {chunks.length ? (
-          <div className="row">
-            <button
-              type="button"
-              disabled={!speech.supported}
-              onClick={() =>
-                speech.speakSequence(
-                  chunks
-                    .filter((chunk) =>
-                      chunkHasSpeakableJapanese(chunk.japanese),
-                    )
-                    .map((chunk) => ({
-                      itemId: `chunk-${chunk.id}`,
-                      text: chunk.japanese,
-                    })),
-                )
+          <>
+            <ChunkPuzzleStrip
+              chunks={chunks}
+              activeItemId={
+                speech.isSpeaking ? speech.activeItemId : null
               }
-            >
-              Play by chunks
-            </button>
-            {speech.isSpeaking ? (
-              <button type="button" onClick={() => speech.stop()}>
-                Stop audio
+              revealRoles
+            />
+            <div className="row">
+              <button
+                type="button"
+                disabled={!speech.supported}
+                onClick={() =>
+                  speech.speakSequence(
+                    chunks
+                      .filter((chunk) =>
+                        chunkHasSpeakableJapanese(chunk.japanese),
+                      )
+                      .map((chunk) => ({
+                        itemId: `chunk-${chunk.id}`,
+                        text: chunk.japanese,
+                      })),
+                  )
+                }
+              >
+                Play by chunks
               </button>
-            ) : null}
-          </div>
+              {speech.isSpeaking ? (
+                <button type="button" onClick={() => speech.stop()}>
+                  Stop audio
+                </button>
+              ) : null}
+            </div>
+          </>
         ) : null}
         {chunks.map((chunk, chunkIndex) => {
           const zeroGa = isZeroGaChunk(chunk);

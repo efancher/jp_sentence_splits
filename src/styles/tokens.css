@@ -21,6 +21,10 @@
   --success: #1f6b3a;
   --chip: #dce9e5;
   --shadow: 0 10px 30px rgba(28, 27, 25, 0.08);
+  --clause-band-0: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  --clause-band-1: color-mix(in srgb, var(--bg-muted) 70%, var(--bg-elevated));
+  --clause-band-2: color-mix(in srgb, var(--success) 10%, var(--bg-elevated));
+  --clause-band-3: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
   --nav-height: calc(64px + env(safe-area-inset-bottom, 0px));
   --header-height: calc(56px + env(safe-area-inset-top, 0px));
   --radius: 14px;
