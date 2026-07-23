@@ -7,6 +7,7 @@ import type {
   BookChapter,
   BookSentence,
   ImportBatch,
+  InboxMembership,
   InitialOrderMode,
   Sentence,
   SentenceAudio,
@@ -30,6 +31,7 @@ import {
   type PasteOrderResult,
 } from '../lib/pasteOrder';
 import { ensureSettings, getDb } from './database';
+import { notifySync, notifySyncMany } from './syncNotify';
 
 function sortSentences(
   sentences: Sentence[],
@@ -82,6 +84,7 @@ export async function createBook(input: {
     chapters: [],
   };
   await db.books.put(book);
+  notifySync('books', book.id, book);
   return book;
 }
 
@@ -104,15 +107,34 @@ export async function updateBook(
     updatedAt: nowIso(),
   };
   await db.books.put(updated);
+  notifySync('books', updated.id, updated);
   return updated;
 }
 
 export async function deleteBook(bookId: string): Promise<void> {
   const db = getDb();
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .toArray();
   await db.transaction('rw', db.books, db.bookSentences, async () => {
     await db.bookSentences.where('bookId').equals(bookId).delete();
     await db.books.delete(bookId);
   });
+  notifySyncMany([
+    ...memberships.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: { id: item.id },
+      operation: 'delete' as const,
+    })),
+    {
+      entity: 'books',
+      recordId: bookId,
+      payload: { id: bookId },
+      operation: 'delete',
+    },
+  ]);
 }
 
 export async function duplicateBookOrdering(bookId: string): Promise<Book> {
@@ -141,16 +163,23 @@ export async function duplicateBookOrdering(bookId: string): Promise<Book> {
   }));
   await db.books.put(copy);
   const timestamp = nowIso();
-  await db.bookSentences.bulkPut(
-    memberships.map((item) => ({
-      ...item,
-      id: createId('bs'),
-      bookId: copy.id,
-      addedAt: timestamp,
-      lastStudiedAt: undefined,
-      chapterId: item.chapterId
-        ? chapterIdMap.get(item.chapterId)
-        : undefined,
+  const copies = memberships.map((item) => ({
+    ...item,
+    id: createId('bs'),
+    bookId: copy.id,
+    addedAt: timestamp,
+    lastStudiedAt: undefined,
+    chapterId: item.chapterId
+      ? chapterIdMap.get(item.chapterId)
+      : undefined,
+  }));
+  await db.bookSentences.bulkPut(copies);
+  notifySync('books', copy.id, copy);
+  notifySyncMany(
+    copies.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
     })),
   );
   return copy;
@@ -174,6 +203,8 @@ export async function createBookChapter(
     chapters: [...chapters, chapter],
     updatedAt: nowIso(),
   });
+  const updated = await db.books.get(bookId);
+  if (updated) notifySync('books', updated.id, updated);
   return chapter;
 }
 
@@ -205,6 +236,8 @@ export async function updateBookChapter(
     chapters: chapters.map((chapter, position) => ({ ...chapter, position })),
     updatedAt: nowIso(),
   });
+  const updatedBook = await getDb().books.get(bookId);
+  if (updatedBook) notifySync('books', updatedBook.id, updatedBook);
 }
 
 export async function deleteBookChapter(
@@ -229,6 +262,19 @@ export async function deleteBookChapter(
     );
     await db.books.put({ ...book, chapters, updatedAt: nowIso() });
   });
+  const updated = await getDb().books.get(bookId);
+  if (updated) notifySync('books', updated.id, updated);
+  const cleared = await getDb()
+    .bookSentences.where('bookId')
+    .equals(bookId)
+    .toArray();
+  notifySyncMany(
+    cleared.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+  );
 }
 
 export async function assignBookSentencesToChapter(
@@ -258,6 +304,19 @@ export async function assignBookSentencesToChapter(
     );
     await db.books.put({ ...book, updatedAt: nowIso() });
   });
+  const updatedMemberships = await getDb()
+    .bookSentences.where('bookId')
+    .equals(bookId)
+    .toArray();
+  notifySyncMany(
+    updatedMemberships
+      .filter((item) => selectedIds.has(item.sentenceId))
+      .map((item) => ({
+        entity: 'book_sentences' as const,
+        recordId: item.id,
+        payload: item,
+      })),
+  );
 }
 
 export async function touchBookOpened(bookId: string): Promise<void> {
@@ -295,21 +354,34 @@ export async function addSentencesToBook(
     -1,
   );
   const timestamp = nowIso();
-  await db.bookSentences.bulkPut(
-    ordered.map((sentence, index) => ({
-      id: createId('bs'),
-      bookId,
-      sentenceId: sentence.id,
-      position: maxPosition + 1 + index,
-      status: 'unstarted' as StudyStatus,
-      addedAt: timestamp,
-    })),
-  );
+  const additions = ordered.map((sentence, index) => ({
+    id: createId('bs'),
+    bookId,
+    sentenceId: sentence.id,
+    position: maxPosition + 1 + index,
+    status: 'unstarted' as StudyStatus,
+    addedAt: timestamp,
+  }));
+  await db.bookSentences.bulkPut(additions);
   await db.inbox.bulkDelete(toAddIds);
   const book = await db.books.get(bookId);
   if (book) {
     await db.books.put({ ...book, updatedAt: timestamp });
+    notifySync('books', book.id, { ...book, updatedAt: timestamp });
   }
+  notifySyncMany([
+    ...additions.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+    ...toAddIds.map((id) => ({
+      entity: 'inbox' as const,
+      recordId: id,
+      payload: { sentenceId: id },
+      operation: 'delete' as const,
+    })),
+  ]);
 }
 
 export async function removeSentencesFromBook(
@@ -340,6 +412,24 @@ export async function removeSentencesFromBook(
       await db.books.put({ ...book, updatedAt: nowIso() });
     }
   });
+  const removed = snapshot.filter((item) => sentenceIds.includes(item.sentenceId));
+  const remaining = await getDb()
+    .bookSentences.where('bookId')
+    .equals(bookId)
+    .toArray();
+  notifySyncMany([
+    ...removed.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: { id: item.id },
+      operation: 'delete' as const,
+    })),
+    ...remaining.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+  ]);
   return snapshot;
 }
 
@@ -460,6 +550,17 @@ export async function reorderBookSentences(
       await db.books.put({ ...book, updatedAt: nowIso() });
     }
   });
+  const memberships = await getDb()
+    .bookSentences.where('bookId')
+    .equals(bookId)
+    .toArray();
+  notifySyncMany(
+    memberships.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+  );
 }
 
 export async function previewBookOrderFromPaste(
@@ -555,6 +656,8 @@ export async function setBookSentenceStatus(
     status,
     lastStudiedAt: nowIso(),
   });
+  const updated = await db.bookSentences.get(item.id);
+  if (updated) notifySync('book_sentences', updated.id, updated);
 }
 
 export async function saveAnalysis(
@@ -586,6 +689,7 @@ export async function saveAnalysis(
     updatedAt: timestamp,
   };
   await db.analyses.put(analysis);
+  notifySync('analyses', analysis.sentenceId, analysis);
   return analysis;
 }
 
@@ -709,6 +813,32 @@ export async function commitImport(options: {
     await assignBookSentencesToChapter(bookId, sentenceIds, chapterId);
   }
 
+  // Enqueue imported sentences + batch for sync (memberships handled by addSentencesToBook).
+  const storedSentences = await getDb().sentences.bulkGet(sentenceIds);
+  notifySyncMany(
+    storedSentences
+      .filter((s): s is Sentence => Boolean(s))
+      .map((sentence) => ({
+        entity: 'sentences' as const,
+        recordId: sentence.id,
+        payload: sentence,
+      })),
+  );
+  const batch = await getDb().importBatches.get(batchId);
+  if (batch) notifySync('import_batches', batch.id, batch);
+  if (options.destination === 'inbox') {
+    const inboxRows = await getDb().inbox.bulkGet(sentenceIds);
+    notifySyncMany(
+      inboxRows
+        .filter((row): row is InboxMembership => Boolean(row))
+        .map((row) => ({
+          entity: 'inbox' as const,
+          recordId: row.sentenceId,
+          payload: row,
+        })),
+    );
+  }
+
   return { batchId, bookId, chapterId };
 }
 
@@ -815,6 +945,30 @@ export async function commitShadowingPackageImport(
     await db.sentenceAudio.bulkPut(audioRecords);
   });
 
+  // Optionally enqueue reference-audio metadata when cloud audio sync is on.
+  void (async () => {
+    try {
+      const { ensureSyncMeta } = await import('../sync/queue');
+      const { getSupabase } = await import('../sync/supabaseClient');
+      const { uploadReferenceAudio } = await import('../sync/audioSync');
+      const meta = await ensureSyncMeta();
+      if (!meta.syncReferenceAudio) return;
+      const supabase = getSupabase();
+      const userId = (await supabase?.auth.getSession())?.data.session?.user
+        ?.id;
+      if (!userId || !result.bookId) return;
+      for (const audio of audioRecords) {
+        await uploadReferenceAudio({
+          audio,
+          bookId: result.bookId,
+          ownerId: userId,
+        });
+      }
+    } catch {
+      // Local import must succeed even if optional audio upload fails.
+    }
+  })();
+
   return {
     batchId: result.batchId,
     bookId: result.bookId,
@@ -833,6 +987,8 @@ export async function renameImportBatch(
     ...batch,
     batchName: batchName.trim() || batch.batchName,
   });
+  const updated = await db.importBatches.get(batchId);
+  if (updated) notifySync('import_batches', updated.id, updated);
 }
 
 export async function exportFullBackup(): Promise<BackupPayload> {

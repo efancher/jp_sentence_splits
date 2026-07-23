@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
+import { MigrationModal } from '../components/MigrationModal';
+import { SyncStatusBadge } from '../components/SyncStatusBadge';
 
 const NAV = [
   { to: '/', label: 'Books', end: true },
@@ -22,13 +24,15 @@ export function AppShell() {
         <div>
           <h1>{APP_NAME}</h1>
           <div className="muted" style={{ fontSize: '0.8rem' }}>
-            {APP_SHORT_NAME} · offline study workspace
+            {APP_SHORT_NAME} · offline-first study workspace
           </div>
         </div>
+        <SyncStatusBadge />
       </header>
       <main className="app-main">
         <Outlet />
       </main>
+      <MigrationModal />
       {!hideNav && (
         <nav className="bottom-nav" aria-label="Primary">
           {NAV.map((item) => (

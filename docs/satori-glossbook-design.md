@@ -6,7 +6,8 @@ Satori Glossbook turns Satori Reader vocabulary CSVs and shadowing project
 ZIPs into a mobile-first analysis workspace: import → dedupe → books → ordered
 study → chunk/role/literal analysis → worksheet/practice.
 
-It intentionally avoids SRS scheduling, Anki sync, accounts, and remote APIs.
+It intentionally avoids SRS scheduling and Anki sync. Accounts and cloud sync
+are optional via Supabase; IndexedDB remains the primary working store.
 
 ## Architecture
 
@@ -23,9 +24,8 @@ CSV or .shadowing.zip (device)
 - **Dexie** for versioned IndexedDB persistence
 - **Hash router** for GitHub Pages compatibility
 - **vite-plugin-pwa** for installability and offline app shell
-- No backend, no analytics, no translation APIs at runtime
-
-Application identity (name, version, deploy base) is centralized in `src/appConfig.ts`.
+- Optional Supabase Auth/DB/Storage for cross-device sync (no custom server)
+- Application identity (name, version, deploy base) is centralized in `src/appConfig.ts`.
 
 ## Data model
 
@@ -107,12 +107,23 @@ a sentence to another book clears the source book's chapter assignment.
 - Safe-area insets and 44px touch targets for iOS
 - Input font-size ≥ 16px to avoid focus zoom
 
-## Future sync strategy (not MVP)
+## Cloud sync (optional)
 
-Possible later additions:
+When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set:
 
-- Authenticated sync (e.g. Supabase) with conflict-aware merge using `updatedAt` + sentence normalized keys
+```text
+UI → repository (Dexie) → sync queue → Supabase (Auth / DB / Storage)
+```
+
+- Mutations write IndexedDB first, then enqueue for push.
+- Pull uses monotonic `sync_events` (not client clocks).
+- Conflicts are preserved per record with Keep local / Keep remote / Duplicate.
+- Sharing uses `book_members` + optional Edge Function invites.
+- Reference audio Storage sync is opt-in; JSON backups still omit blobs.
+
+See [supabase-setup.md](supabase-setup.md).
+
+## Future additions
+
 - Optional AI chunk/literal suggestions that write into analysis drafts, never silent overwrite
 - Anki export / worksheet import / printable PDF
-
-The current schema already separates source sentences from analyses and uses stable ids to make a future sync layer feasible without rewriting the MVP model.

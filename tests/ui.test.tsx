@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import App from '../src/App';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { createId } from '../src/lib/ids';
+import { withAppProviders } from '../src/test/providers';
 
 const littleBirds = readFileSync(
   resolve(import.meta.dirname, '../fixtures/little-birds.csv'),
@@ -72,7 +73,7 @@ describe('UI flows', () => {
 
   it('imports a fixture, creates a book, edits analysis, and autosaves', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(withAppProviders(<App />));
 
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     const input = await screen.findByLabelText(/CSV file/i);
@@ -138,7 +139,7 @@ describe('UI flows', () => {
 
   it('reorders with explicit buttons and reveals practice stages', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(withAppProviders(<App />));
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -184,7 +185,7 @@ describe('UI flows', () => {
 
   it('assigns selected Inbox sentences to a newly created book', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(withAppProviders(<App />));
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -212,7 +213,7 @@ describe('UI flows', () => {
 
   it('opens an import batch and performs a bulk Search action', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(withAppProviders(<App />));
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -244,7 +245,7 @@ describe('UI flows', () => {
 
   it('imports a complete shadowing ZIP into an ordered book with native audio', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    render(withAppProviders(<App />));
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText('Shadowing project ZIP'),

@@ -11,6 +11,12 @@ import type {
   SentenceAudio,
   SentenceAnalysis,
 } from '../domain/types';
+import type {
+  SyncConflict,
+  SyncMetaState,
+  SyncQueueItem,
+  SyncRecordMeta,
+} from '../sync/types';
 
 export const DEFAULT_TTS_SETTINGS = {
   rate: 0.9,
@@ -37,6 +43,10 @@ export class GlossbookDatabase extends Dexie {
   inbox!: EntityTable<InboxMembership, 'sentenceId'>;
   settings!: EntityTable<AppSettings, 'id'>;
   sentenceAudio!: EntityTable<SentenceAudio, 'id'>;
+  syncMeta!: EntityTable<SyncMetaState, 'id'>;
+  syncQueue!: EntityTable<SyncQueueItem, 'id'>;
+  syncRecordMeta!: EntityTable<SyncRecordMeta, 'key'>;
+  syncConflicts!: EntityTable<SyncConflict, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -101,6 +111,24 @@ export class GlossbookDatabase extends Dexie {
       settings: 'id',
       sentenceAudio:
         'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+    });
+
+    this.version(5).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
     });
   }
 }

@@ -20,6 +20,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
+import { BookSharingPanel } from '../components/BookSharingPanel';
 import {
   assignBookSentencesToChapter,
   createBookChapter,
@@ -338,6 +339,9 @@ export function BookDetailPage() {
           </a>
         ) : null}
         {data.book.notes ? <p style={{ margin: 0 }}>{data.book.notes}</p> : null}
+        <section className="panel stack">
+          <BookSharingPanel bookId={bookId} />
+        </section>
         <div className="row">
           <button
             type="button"

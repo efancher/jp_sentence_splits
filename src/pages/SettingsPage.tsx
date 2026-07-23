@@ -8,6 +8,7 @@ import {
   TTS_RATE_PRESETS,
   TTS_TEST_SENTENCE,
 } from '../appConfig';
+import { AuthAndSyncSettings } from '../components/AuthAndSyncSettings';
 import {
   DEFAULT_TTS_SETTINGS,
   getDb,
@@ -23,11 +24,13 @@ import {
 import { parseBackupJson } from '../lib/backup';
 import { downloadText } from '../lib/worksheet';
 import { useTheme } from '../hooks/useTheme';
-
+import { clearDownloadedAudioCache } from '../sync/audioSync';
+import { useSync } from '../sync/SyncProvider';
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
 
 export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
+  const sync = useSync();
   const nativeAudioSummary = useLiveQuery(async () => {
     const records = await getDb().sentenceAudio.toArray();
     return {
@@ -51,7 +54,8 @@ export function SettingsPage() {
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Settings</h2>
         <p className="muted" style={{ margin: 0 }}>
-          {APP_NAME} v{APP_VERSION}. Study data stays in this browser.
+          {APP_NAME} v{APP_VERSION}. Study data stays in this browser first;
+          optional Supabase sync keeps devices aligned when configured.
         </p>
         <label>
           Theme
@@ -120,6 +124,8 @@ export function SettingsPage() {
           </select>
         </label>
       </section>
+
+      <AuthAndSyncSettings />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Text-to-speech</h3>
@@ -226,10 +232,87 @@ export function SettingsPage() {
       </section>
 
       <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Storage</h3>
+        {nativeAudioSummary?.count ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {nativeAudioSummary.count} imported native clip(s) use about{' '}
+            {(nativeAudioSummary.bytes / BYTES_PER_MEBIBYTE).toFixed(1)} MB
+            locally.
+          </p>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>
+            No native audio clips cached on this device.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={async () => {
+            const confirmed = window.confirm(
+              'Clear downloaded/imported reference audio from this device?',
+            );
+            if (!confirmed) return;
+            const count = await clearDownloadedAudioCache();
+            setMessage(`Cleared ${count} audio clip(s) from this device.`);
+          }}
+        >
+          Clear audio cache
+        </button>
+        <button
+          type="button"
+          className="danger"
+          onClick={async () => {
+            const confirmed = window.confirm(
+              'Remove ALL local study data from this device? A backup downloads first.',
+            );
+            if (!confirmed) return;
+            const payload = await exportFullBackup();
+            downloadText(
+              `satori-glossbook-before-clear-${payload.exportedAt.slice(0, 10)}.json`,
+              JSON.stringify(payload, null, 2),
+              'application/json',
+            );
+            const db = getDb();
+            await db.transaction(
+              'rw',
+              [
+                db.books,
+                db.sentences,
+                db.bookSentences,
+                db.analyses,
+                db.importBatches,
+                db.inbox,
+                db.sentenceAudio,
+                db.syncQueue,
+                db.syncRecordMeta,
+                db.syncConflicts,
+              ],
+              async () => {
+                await db.books.clear();
+                await db.sentences.clear();
+                await db.bookSentences.clear();
+                await db.analyses.clear();
+                await db.importBatches.clear();
+                await db.inbox.clear();
+                await db.sentenceAudio.clear();
+                await db.syncQueue.clear();
+                await db.syncRecordMeta.clear();
+                await db.syncConflicts.clear();
+              },
+            );
+            setMessage('Local study data cleared. Backup downloaded.');
+            await sync.syncNow();
+          }}
+        >
+          Remove local data from this device
+        </button>
+      </section>
+
+      <section className="panel stack">
         <h3 style={{ margin: 0 }}>Backup & restore</h3>
         <p className="muted" style={{ margin: 0 }}>
-          Browser-local data does not sync between iPhone and iPad automatically.
-          Export a backup to move work between devices.
+          JSON backups are independent of Supabase. Export regularly. With sync
+          enabled, devices share cloud data; backups remain the portable
+          safety net.
         </p>
         {nativeAudioSummary?.count ? (
           <p className="muted" style={{ margin: 0 }}>

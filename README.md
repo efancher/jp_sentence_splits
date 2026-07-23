@@ -4,7 +4,7 @@ Offline-capable progressive web app for analyzing Japanese sentences imported
 from **Satori Reader** vocabulary CSV exports and
 **japanese-shadowing-package** project ZIPs.
 
-This repository is the home of **Satori Glossbook** (name configurable in [`src/appConfig.ts`](src/appConfig.ts)). It is an analysis workspace, not a spaced-repetition system. Study data stays in your browser unless you explicitly export a backup.
+This repository is the home of **Satori Glossbook** (name configurable in [`src/appConfig.ts`](src/appConfig.ts)). It is an analysis workspace, not a spaced-repetition system. Study data lives in IndexedDB first; optional Supabase auth/sync keeps devices aligned when configured.
 
 Python reference behavior from the earlier Anki tooling lives under [`reference/`](reference/) for algorithm ports and regression expectations.
 
@@ -59,12 +59,29 @@ chapter. Sessions support deterministic shuffle, optional vocabulary,
 staged/all-at-once reveals, progress, Complete & Next, Needs Review & Next, and
 desktop arrow-key navigation.
 
-## Local development
+## Optional cloud sync (Supabase)
+
+The app is **local-first**: IndexedDB (Dexie) is the working store. When you
+configure Supabase, signed-in devices can sync books, sentences, analyses, and
+related metadata incrementally. Reference audio uploads are opt-in. User
+recordings (if added later) stay local by default.
 
 ```bash
-npm install
-npm run dev
+cp .env.example .env
+# set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 ```
+
+Full walkthrough: [Supabase setup guide](docs/supabase-setup.md).
+
+Related docs:
+
+- [Security review](docs/supabase-security-review.md)
+- [Manual sync test checklist](docs/supabase-manual-test-checklist.md)
+- SQL migration: [`supabase/migrations/`](supabase/migrations/)
+
+For GitHub Pages, add the same `VITE_SUPABASE_*` values as repository Actions
+secrets so production builds include the public client config. Configure Auth
+redirect URLs for both localhost and your Pages URL (including `#/settings`).
 
 Useful commands:
 
@@ -132,7 +149,7 @@ Hash routing is used so nested routes do not 404 on refresh under project Pages.
 
 ### Backup and restore
 
-Use **Settings → Backup & restore** to export/import versioned JSON. Prefer exporting before replacing local data. Browser-local data does **not** automatically synchronize between an iPhone and an iPad.
+Use **Settings → Backup & restore** to export/import versioned JSON. Prefer exporting before replacing local data. With Supabase configured and signed in, devices share cloud data; JSON backups remain an independent safety net.
 
 ### Offline behavior
 
@@ -140,10 +157,12 @@ After the first successful load, the application shell and already-imported stud
 
 ## Current limitations
 
-- No cloud sync / accounts
+- Cloud sync requires a Supabase project and is optional (app works local-only without env vars)
 - No automatic reconstruction of Satori article order
 - Heuristic chunking/roles are suggestions only
 - No AI translation or Anki sync in the MVP
+- Conflict resolution is per synced record (analysis includes all chunks as one unit)
+- Reference audio Storage sync is opt-in and does not include hypothetical user recordings
 
 ## Documentation
 
@@ -151,3 +170,6 @@ After the first successful load, the application shell and already-imported stud
 - [Design](docs/satori-glossbook-design.md)
 - [Backup data format](docs/satori-glossbook-data-format.md)
 - [TTS manual test checklist](docs/satori-glossbook-tts-testing.md)
+- [Supabase setup](docs/supabase-setup.md)
+- [Supabase security review](docs/supabase-security-review.md)
+- [Supabase manual test checklist](docs/supabase-manual-test-checklist.md)
