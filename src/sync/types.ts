@@ -38,7 +38,17 @@ export interface SyncRecordMeta {
   key: string;
   entity: SyncEntity;
   recordId: string;
+  /**
+   * Local generation counter (bumps on every local edit).
+   * Not used for optimistic-lock checks against the cloud.
+   */
   version: number;
+  /**
+   * Last cloud version this device successfully synced (push or pull).
+   * Push optimistic locks use this value. Falls back to `version` for
+   * records written before this field existed.
+   */
+  syncedVersion?: number;
   deletedAt?: string;
   updatedAt: string;
 }

@@ -67,6 +67,7 @@ export async function applyConflictResolution(
       entity: conflict.entity,
       recordId: conflict.recordId,
       version: conflict.remoteVersion,
+      syncedVersion: conflict.remoteVersion,
       updatedAt: new Date().toISOString(),
     });
     await enqueueMutation({
@@ -75,6 +76,7 @@ export async function applyConflictResolution(
       operation: 'upsert',
       expectedVersion: conflict.remoteVersion,
       payload: conflict.localPayload,
+      replaceExpectedVersion: true,
     });
   } else if (resolution === 'keep_remote') {
     await applyPayload(conflict.entity, conflict.remotePayload, true);
@@ -82,6 +84,7 @@ export async function applyConflictResolution(
       entity: conflict.entity,
       recordId: conflict.recordId,
       version: conflict.remoteVersion,
+      syncedVersion: conflict.remoteVersion,
       updatedAt: new Date().toISOString(),
     });
   } else if (

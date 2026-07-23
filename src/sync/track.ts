@@ -4,6 +4,7 @@ import {
   getRecordMeta,
   putRecordMeta,
   ensureSyncMeta,
+  syncedVersionOf,
 } from './queue';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import type { SyncEntity, SyncOperationType } from './types';
@@ -42,12 +43,15 @@ export async function trackLocalMutation(input: {
   payload: unknown;
 }): Promise<void> {
   const existing = await getRecordMeta(input.entity, input.recordId);
+  const syncedVersion = syncedVersionOf(existing);
   const nextVersion = (existing?.version ?? 0) + 1;
   const now = new Date().toISOString();
   await putRecordMeta({
     entity: input.entity,
     recordId: input.recordId,
     version: nextVersion,
+    // Keep the last acknowledged cloud version for optimistic locks.
+    syncedVersion: syncedVersion ?? 0,
     updatedAt: now,
     deletedAt: input.operation === 'delete' ? now : undefined,
   });
@@ -71,7 +75,8 @@ export async function trackLocalMutation(input: {
     entity: input.entity,
     recordId: input.recordId,
     operation: input.operation,
-    expectedVersion: existing?.version ?? null,
+    // Lock against last synced cloud version, not the bumped local counter.
+    expectedVersion: syncedVersion,
     payload: input.payload,
   });
   requestSyncSoon();

@@ -8,6 +8,7 @@ import {
   addConflict,
   updateSyncMeta,
   getRecordMeta,
+  hasOpenConflict,
 } from './queue';
 import {
   idColumnForEntity,
@@ -82,6 +83,20 @@ async function pushMutations(): Promise<void> {
   }
 }
 
+async function acknowledgeSyncedVersion(
+  entity: SyncEntity,
+  recordId: string,
+  version: number,
+): Promise<void> {
+  await putRecordMeta({
+    entity,
+    recordId,
+    version,
+    syncedVersion: version,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase not configured');
@@ -105,24 +120,28 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     ) {
       throw new Error('version_conflict');
     }
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from(table)
       .update({
         deleted_at: new Date().toISOString(),
         last_modified_by: userId,
       })
       .eq(idCol, item.recordId)
-      .eq('version', existing.version);
+      .eq('version', existing.version)
+      .select('version');
     if (error) throw new Error(error.message);
-    const meta = await getRecordMeta(item.entity, item.recordId);
-    if (meta) {
-      await putRecordMeta({
-        ...meta,
-        version: meta.version + 1,
-        deletedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+    if (!deleted?.length) {
+      throw new Error('version_conflict');
     }
+    const nextVersion = Number(existing.version) + 1;
+    await putRecordMeta({
+      entity: item.entity,
+      recordId: item.recordId,
+      version: nextVersion,
+      syncedVersion: nextVersion,
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
     return;
   }
 
@@ -140,6 +159,14 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   if (!existing) {
     const { error } = await supabase.from(table).insert(row);
     if (error) throw new Error(error.message);
+    const writtenVersion = Number(
+      (row as { version?: number }).version ?? localVersion,
+    );
+    await acknowledgeSyncedVersion(
+      item.entity,
+      item.recordId,
+      writtenVersion,
+    );
     return;
   }
 
@@ -150,19 +177,19 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     throw new Error('version_conflict');
   }
 
-  const { error } = await supabase
+  const nextVersion = Number(existing.version) + 1;
+  const { data: updated, error } = await supabase
     .from(table)
-    .update({ ...row, version: Number(existing.version) + 1 })
+    .update({ ...row, version: nextVersion })
     .eq(idCol, item.recordId)
-    .eq('version', existing.version);
+    .eq('version', existing.version)
+    .select('version');
   if (error) throw new Error(error.message);
+  if (!updated?.length) {
+    throw new Error('version_conflict');
+  }
 
-  await putRecordMeta({
-    entity: item.entity,
-    recordId: item.recordId,
-    version: Number(existing.version) + 1,
-    updatedAt: new Date().toISOString(),
-  });
+  await acknowledgeSyncedVersion(item.entity, item.recordId, nextVersion);
 }
 
 async function handlePushConflict(
@@ -178,13 +205,24 @@ async function handlePushConflict(
     .eq(idCol, item.recordId)
     .maybeSingle();
   if (!remote) return;
+  const remoteVersion = Number(remote.version ?? 0);
+  const localMeta = await getRecordMeta(item.entity, item.recordId);
+  // Align optimistic-lock base to cloud so Keep local / later edits can push.
+  await putRecordMeta({
+    entity: item.entity,
+    recordId: item.recordId,
+    version: localMeta?.version ?? remoteVersion,
+    syncedVersion: remoteVersion,
+    updatedAt: new Date().toISOString(),
+    deletedAt: localMeta?.deletedAt,
+  });
   await addConflict({
     entity: item.entity,
     recordId: item.recordId,
     localPayload: item.payload,
     remotePayload: remote,
     localVersion: item.expectedVersion ?? 0,
-    remoteVersion: Number(remote.version ?? 0),
+    remoteVersion,
   });
   syncLog('warn', 'Conflict recorded', 'CONFLICT', {
     entity: item.entity,
@@ -231,7 +269,8 @@ async function pullChanges(): Promise<void> {
   }
 }
 
-async function applyRemoteEvent(
+/** Apply a remote sync_events row. Exported for unit tests. */
+export async function applyRemoteEvent(
   entity: SyncEntity,
   recordId: string,
   op: string,
@@ -243,6 +282,11 @@ async function applyRemoteEvent(
   );
   if (hasLocalPending) {
     // Leave for push/conflict handling.
+    return;
+  }
+
+  if (await hasOpenConflict(entity, recordId)) {
+    // Keep local data until the user resolves Keep local / Keep remote.
     return;
   }
 
@@ -303,6 +347,7 @@ async function applyRemoteDelete(
     entity,
     recordId,
     version,
+    syncedVersion: version,
     updatedAt: new Date().toISOString(),
     deletedAt: new Date().toISOString(),
   });
@@ -362,6 +407,7 @@ async function applyRemoteUpsert(
     entity,
     recordId,
     version,
+    syncedVersion: version,
     updatedAt: String(remote.updated_at ?? new Date().toISOString()),
   });
 }
@@ -408,6 +454,7 @@ async function trackAndEnqueue(
     entity,
     recordId,
     version: 1,
+    syncedVersion: 0,
     updatedAt: new Date().toISOString(),
   });
   const { enqueueMutation } = await import('./queue');
@@ -506,10 +553,12 @@ async function pullFullTable(
       table === 'analyses' || table === 'inbox'
         ? String((row as { sentence_id: string }).sentence_id)
         : String((row as { id: string }).id);
+    const version = Number((row as { version: number }).version ?? 1);
     await putRecordMeta({
       entity: table,
       recordId,
-      version: Number((row as { version: number }).version ?? 1),
+      version,
+      syncedVersion: version,
       updatedAt: String(
         (row as { updated_at: string }).updated_at ?? new Date().toISOString(),
       ),

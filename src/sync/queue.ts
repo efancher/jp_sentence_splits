@@ -71,6 +71,12 @@ export async function enqueueMutation(input: {
   operation: SyncOperationType;
   expectedVersion: number | null;
   payload: unknown;
+  /**
+   * When coalescing over an existing queue row, replace its expectedVersion.
+   * Default false: keep the original base so multi-edit offline bursts still
+   * lock against the last synced cloud version (not a drifted local counter).
+   */
+  replaceExpectedVersion?: boolean;
 }): Promise<SyncQueueItem> {
   const db = getDb();
   // Coalesce: replace any pending item for the same entity+record.
@@ -78,12 +84,16 @@ export async function enqueueMutation(input: {
     .where('[entity+recordId]')
     .equals([input.entity, input.recordId])
     .first();
+  const expectedVersion =
+    existing && !input.replaceExpectedVersion
+      ? existing.expectedVersion
+      : input.expectedVersion;
   const item: SyncQueueItem = {
     id: existing?.id ?? createId('opq'),
     entity: input.entity,
     recordId: input.recordId,
     operation: input.operation,
-    expectedVersion: input.expectedVersion,
+    expectedVersion,
     payload: input.payload,
     localTimestamp: new Date().toISOString(),
     retryCount: existing?.retryCount ?? 0,
@@ -91,6 +101,23 @@ export async function enqueueMutation(input: {
   };
   await db.syncQueue.put(item);
   return item;
+}
+
+/** Last cloud version this device acknowledged for optimistic locking. */
+export function syncedVersionOf(
+  meta: SyncRecordMeta | undefined,
+): number | null {
+  if (!meta) return null;
+  if (typeof meta.syncedVersion === 'number') return meta.syncedVersion;
+  return meta.version;
+}
+
+export async function hasOpenConflict(
+  entity: SyncEntity,
+  recordId: string,
+): Promise<boolean> {
+  const open = await listOpenConflicts();
+  return open.some((c) => c.entity === entity && c.recordId === recordId);
 }
 
 export async function listPendingMutations(): Promise<SyncQueueItem[]> {

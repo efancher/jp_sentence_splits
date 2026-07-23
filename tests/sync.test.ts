@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resetDbForTests } from '../src/db/database';
+import { getDb, resetDbForTests } from '../src/db/database';
 import { createBook, saveAnalysis } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import {
@@ -59,6 +59,93 @@ describe('sync queue and local-first mutations', () => {
     expect(recordMeta?.version).toBeGreaterThanOrEqual(1);
   });
 
+  it('coalesce preserves the original expectedVersion across edits', async () => {
+    await enqueueMutation({
+      entity: 'analyses',
+      recordId: 'sent_coalesce',
+      operation: 'upsert',
+      expectedVersion: 7,
+      payload: { sentenceId: 'sent_coalesce', notes: 'first' },
+    });
+    await enqueueMutation({
+      entity: 'analyses',
+      recordId: 'sent_coalesce',
+      operation: 'upsert',
+      expectedVersion: 8,
+      payload: { sentenceId: 'sent_coalesce', notes: 'second' },
+    });
+    const pending = await listPendingMutations();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.expectedVersion).toBe(7);
+    expect((pending[0]?.payload as { notes: string }).notes).toBe('second');
+  });
+
+  it('replaceExpectedVersion allows keep-local to reset the lock base', async () => {
+    await enqueueMutation({
+      entity: 'analyses',
+      recordId: 'sent_replace',
+      operation: 'upsert',
+      expectedVersion: 33,
+      payload: { notes: 'stale' },
+    });
+    await enqueueMutation({
+      entity: 'analyses',
+      recordId: 'sent_replace',
+      operation: 'upsert',
+      expectedVersion: 7,
+      payload: { notes: 'resolved' },
+      replaceExpectedVersion: true,
+    });
+    const pending = await listPendingMutations();
+    expect(pending[0]?.expectedVersion).toBe(7);
+  });
+
+  it('does not apply remote events while an open conflict exists', async () => {
+    const { applyRemoteEvent } = await import('../src/sync/engine');
+    await putRecordMeta({
+      entity: 'analyses',
+      recordId: 'sent_guard',
+      version: 7,
+      syncedVersion: 7,
+      updatedAt: new Date().toISOString(),
+    });
+    await getDb().analyses.put({
+      sentenceId: 'sent_guard',
+      chunks: [
+        {
+          id: 'c1',
+          order: 0,
+          japanese: 'local',
+          role: 'engine',
+          literalEnglish: 'local',
+        },
+      ],
+      notes: 'keep-me',
+      status: 'in_progress',
+      formatVersion: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await addConflict({
+      entity: 'analyses',
+      recordId: 'sent_guard',
+      localPayload: { notes: 'local' },
+      remotePayload: {
+        sentence_id: 'sent_guard',
+        notes: 'remote',
+        chunks: [],
+        version: 8,
+      },
+      localVersion: 7,
+      remoteVersion: 8,
+    });
+
+    await applyRemoteEvent('analyses', 'sent_guard', 'upsert', 8);
+
+    const analysis = await getDb().analyses.get('sent_guard');
+    expect(analysis?.notes).toBe('keep-me');
+  });
+
   it('enqueues, retries, and removes queue items', async () => {
     const item = await enqueueMutation({
       entity: 'books',
@@ -105,6 +192,7 @@ describe('sync queue and local-first mutations', () => {
     });
     const pending = await listPendingMutations();
     expect(pending).toHaveLength(1);
+    expect(pending[0]?.expectedVersion).toBe(0);
     expect((pending[0]?.payload as { notes: string }).notes).toBe('second');
   });
 
