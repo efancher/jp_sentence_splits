@@ -2,8 +2,10 @@
   color-scheme: light dark;
   --font-sans: 'IBM Plex Sans', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
     'Noto Sans JP', 'Segoe UI', sans-serif;
-  --font-jp: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', 'IBM Plex Sans',
-    serif;
+  /* Gothic/sans for Japanese body text: Mincho bold fills in counters and is
+     harder to read on screen (chunk cards, practice, lists). */
+  --font-jp: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic',
+    'YuGothic', 'Noto Sans JP', 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --bg: #f3f1ec;

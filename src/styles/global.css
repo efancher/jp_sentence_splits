@@ -109,6 +109,12 @@ a {
   font-feature-settings: 'palt';
 }
 
+/* Prefer semibold over heavy bold — Japanese gothic stays clearer. */
+.jp strong,
+strong.jp {
+  font-weight: 600;
+}
+
 .jp-lg {
   font-size: clamp(1.55rem, 4.5vw, 2.1rem);
 }
