@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { previewHeuristicChunks } from '../src/lib/analysisHelpers';
 import {
   chunkJapaneseSentence,
   roleForChunk,
@@ -69,5 +70,24 @@ describe('chunkJapaneseSentence regressions', () => {
     );
     expect(roles.some((role) => role.includes('topic'))).toBe(true);
     expect(roles.some((role) => role === 'engine')).toBe(true);
+  });
+
+  it('treats 思い切って as て-car, not quotative って-car', () => {
+    expect(roleForChunk('思い切って', false)).toBe('て-car');
+    expect(roleForChunk('思って', false)).toBe('て-car');
+    expect(roleForChunk('「えい！」って', false)).toBe('って-car');
+    expect(roleForChunk('だって', false)).toBe('って-car');
+  });
+});
+
+describe('previewHeuristicChunks', () => {
+  it('returns spaced parts and roles without mutating caller state', () => {
+    const preview = previewHeuristicChunks(
+      '空は青くて、木々の緑がきれいでした。',
+    );
+    expect(preview.parts.length).toBeGreaterThan(1);
+    expect(preview.roles).toHaveLength(preview.parts.length);
+    expect(preview.spaced.split(/\s+/)).toEqual(preview.parts);
+    expect(preview.roles.some((role) => role === 'engine')).toBe(true);
   });
 });

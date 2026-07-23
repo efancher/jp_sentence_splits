@@ -25,6 +25,7 @@ import {
   mergeChunkWithNeighbor,
   moveChunk,
   moveChunkBoundary,
+  previewHeuristicChunks,
   removeZeroGaSubject,
   splitChunkAt,
   surfaceJapaneseParts,
@@ -33,6 +34,7 @@ import {
   applySuggestion,
   lintAnalysis,
 } from '../lib/analysisSuggestions';
+import { RoleGuideContent } from '../lib/roleGuide';
 import { suggestStickyEnglish } from '../lib/stickyEnglish';
 import { FuriganaText } from '../lib/furigana';
 import { ichiMoeUrl } from '../lib/ichiMoe';
@@ -65,6 +67,11 @@ export function AnalyzePage() {
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<
     Set<string>
   >(new Set());
+  const [heuristicPreview, setHeuristicPreview] = useState<{
+    parts: string[];
+    roles: string[];
+    spaced: string;
+  } | null>(null);
 
   const isCustomRole = (chunk: AnalysisChunk): boolean =>
     customRoleIds.has(chunk.id) ||
@@ -100,6 +107,7 @@ export function AnalyzePage() {
     setChunks(existing);
     setCustomRoleIds(new Set());
     setDismissedSuggestionIds(new Set());
+    setHeuristicPreview(null);
     setNotes(data.analysis?.notes ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
     setHydrated(true);
@@ -193,6 +201,22 @@ export function AnalyzePage() {
     setChunkError('');
     setSpaced(nextSpaced);
     setChunks(result.chunks);
+  }
+
+  function applyHeuristicNow() {
+    const nextChunks = applyHeuristicChunks(sentence.japanese, chunks);
+    const discarded = countDiscardedAnnotations(chunks, nextChunks);
+    if (discarded >= 2) {
+      const ok = window.confirm(
+        `Applying the heuristic would discard annotations on ${discarded} chunks. Continue?`,
+      );
+      if (!ok) return;
+    }
+    setChunks(nextChunks);
+    setSpaced(surfaceJapaneseParts(nextChunks).join(' '));
+    setChunkError('');
+    setDismissedSuggestionIds(new Set());
+    setHeuristicPreview(null);
   }
 
   return (
@@ -349,6 +373,7 @@ export function AnalyzePage() {
               setSpaced(sentence.japanese);
               setChunks([]);
               setChunkError('');
+              setHeuristicPreview(null);
             }}
           >
             Reset to original sentence
@@ -356,23 +381,62 @@ export function AnalyzePage() {
           <button
             type="button"
             onClick={() => {
-              const nextChunks = applyHeuristicChunks(sentence.japanese, chunks);
-              const discarded = countDiscardedAnnotations(chunks, nextChunks);
-              if (discarded >= 2) {
-                const ok = window.confirm(
-                  `Applying the heuristic would discard annotations on ${discarded} chunks. Continue?`,
-                );
-                if (!ok) return;
-              }
-              setChunks(nextChunks);
-              setSpaced(surfaceJapaneseParts(nextChunks).join(' '));
+              setHeuristicPreview(previewHeuristicChunks(sentence.japanese));
               setChunkError('');
-              setDismissedSuggestionIds(new Set());
             }}
           >
+            Preview heuristic
+          </button>
+          <button type="button" onClick={() => applyHeuristicNow()}>
             Apply heuristic chunking
           </button>
         </div>
+        {heuristicPreview ? (
+          <div className="panel stack" style={{ boxShadow: 'none' }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <strong>
+                Heuristic preview ({heuristicPreview.parts.length} chunks)
+              </strong>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setHeuristicPreview(null)}
+              >
+                Hide
+              </button>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Suggested boundaries and roles only — your current chunks are
+              unchanged until you apply.
+            </p>
+            <div className="jp" style={{ fontSize: '1.05rem' }}>
+              {heuristicPreview.spaced}
+            </div>
+            <ol style={{ margin: 0, paddingLeft: '1.2rem' }}>
+              {heuristicPreview.parts.map((part, index) => (
+                <li key={`${index}-${part}`}>
+                  <span className="jp">{part}</span>
+                  <span className="muted">
+                    {' '}
+                    · {heuristicPreview.roles[index] || '—'}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => applyHeuristicNow()}
+              >
+                Apply this heuristic
+              </button>
+              <button type="button" onClick={() => setHeuristicPreview(null)}>
+                Keep my chunks
+              </button>
+            </div>
+          </div>
+        ) : null}
         <label className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
           <input
             type="checkbox"
@@ -390,6 +454,15 @@ export function AnalyzePage() {
             invisible noga practice
           </span>
         </label>
+        <details>
+          <summary>Role guide (Cure Dolly–style)</summary>
+          <p className="muted" style={{ margin: '0.5rem 0' }}>
+            Short meanings for the role dropdown. Prefer{' '}
+            <strong>clause connector</strong> for そして / しかし — not て-car
+            (that is for verb て-form links).
+          </p>
+          <RoleGuideContent compact />
+        </details>
       </section>
 
       <section className="stack">

@@ -153,6 +153,7 @@ export const PARTICLE_ROLE: Record<string, string> = {
   のは: 'nominalizer + topic は',
   のが: 'nominalizer + Aが',
   のを: 'nominalizer + を-car',
+  って: 'って-car',
 };
 
 function particleAt(text: string, index: number): string | null {
@@ -323,19 +324,40 @@ export function splitTrailingEngine(chunk: string): [string, string] {
 }
 
 function normalizeTeFormParticle(
+  originalChunk: string,
   bare: string,
   stem: string,
   particle: string,
 ): [string, string] {
   if (particle === 'で' && bare.endsWith('んで')) return [bare.slice(0, -2), 'んで'];
   if (particle === 'で' && bare.endsWith('いで')) return [bare.slice(0, -2), 'いで'];
+  // 思って / 思い切って: trailing って is usually て-form + sokuon, not quotative って.
+  if (particle === 'って') {
+    if (isQuotativeOrTopicTte(originalChunk, bare, stem)) {
+      return [stem, 'って'];
+    }
+    // Keep っ on the stem; role the final て as て-car.
+    return [bare.slice(0, -1), 'て'];
+  }
   return [stem, particle];
+}
+
+/** Quotative/topic って (「…」って, bare って, だって…) vs verb て-form (切って). */
+function isQuotativeOrTopicTte(
+  originalChunk: string,
+  bare: string,
+  stem: string,
+): boolean {
+  if (/[「『」』]/.test(originalChunk)) return true;
+  if (!stem || bare === 'って') return true;
+  if (/だって$/.test(bare) || /ですって$/.test(bare)) return true;
+  return false;
 }
 
 export function roleForChunk(chunk: string, isFinal: boolean): string {
   const bare = chunk.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
   let [stem, particle] = splitTrailingParticle(bare);
-  [stem, particle] = normalizeTeFormParticle(bare, stem, particle);
+  [stem, particle] = normalizeTeFormParticle(chunk, bare, stem, particle);
   if (particle) {
     return PARTICLE_ROLE[particle] ?? `${particle}-car`;
   }

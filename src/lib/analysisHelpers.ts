@@ -131,6 +131,20 @@ export function applyHeuristicChunks(
   return preserveZeroGaChunks(previous, surface);
 }
 
+/** Dry-run of the Cure Dolly chunker + role suggestions (no IDs / no apply). */
+export function previewHeuristicChunks(japanese: string): {
+  parts: string[];
+  roles: string[];
+  spaced: string;
+} {
+  const parts = chunkJapaneseSentence(japanese);
+  return {
+    parts,
+    roles: suggestRoles(parts),
+    spaced: chunksToSpacedText(parts),
+  };
+}
+
 export function applySpacedChunks(
   spaced: string,
   sourceJapanese: string,

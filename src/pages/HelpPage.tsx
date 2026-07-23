@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 
+import { RoleGuideContent } from '../lib/roleGuide';
+
 export function HelpPage() {
   return (
     <article className="help-guide stack">
@@ -22,6 +24,7 @@ export function HelpPage() {
         <a href="#getting-started">Getting started</a>
         <a href="#organizing">Books and chapters</a>
         <a href="#analyzing">Analyzing sentences</a>
+        <a href="#roles">Chunk roles</a>
         <a href="#practice">Practice sessions</a>
         <a href="#backup">Offline data and backups</a>
       </nav>
@@ -96,8 +99,9 @@ export function HelpPage() {
             Open a sentence with <strong>Analyze</strong>.
           </li>
           <li>
-            Insert spaces in the Japanese copy to define chunks, or apply the
-            optional heuristic as a starting point.
+            Insert spaces in the Japanese copy to define chunks, or use{' '}
+            <strong>Preview heuristic</strong> /{' '}
+            <strong>Apply heuristic chunking</strong> as a starting point.
           </li>
           <li>
             Give each chunk a role and your own Japanese-order literal “sticky
@@ -121,6 +125,15 @@ export function HelpPage() {
           voice, or use <strong>Play by chunks</strong> to hear each chunk in
           order. Configure the voice and speed in Settings.
         </p>
+      </section>
+
+      <section id="roles" className="panel stack">
+        <h3>Chunk roles</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          Cure Dolly–style labels for the Analyze role dropdown. The same guide
+          is also available under <strong>Role guide</strong> while analyzing.
+        </p>
+        <RoleGuideContent />
       </section>
 
       <section id="practice" className="panel stack">

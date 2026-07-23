@@ -91,7 +91,8 @@ Select matching results to add them to a book or export them as a worksheet.
 
 1. Open **Analyze** from a book or Search.
 2. Add spaces to the editable Japanese copy to define chunk boundaries.
-3. Optionally apply heuristic chunks and role suggestions.
+3. Optionally **Preview heuristic** to see suggested chunk boundaries and roles
+   without changing your work, or **Apply heuristic chunking** to use them.
 4. Optionally check **Add zero-が (∅) subject** when the が subject is
    invisible. That inserts an editable practice chunk (default `∅が`) that is
    not part of the source sentence; move it with **Move up** / **Move down**.
@@ -107,6 +108,14 @@ Select matching results to add them to a book or export them as a worksheet.
 The non-whitespace source Japanese must remain unchanged (zero-が chunks are
 excluded from that check). Autosave runs after a short delay and on blur; the
 manual Save button is a fallback.
+
+### Chunk roles
+
+Analyze’s role dropdown uses Cure Dolly–style labels (Aが, を-car, engine,
+clause connector, …). Open **Role guide** on the Analyze page, or **Help →
+Chunk roles**, for a one-line meaning of each preset. Example: **clause
+connector** fits そして / しかし; **て-car** is for verb て-form links, not the
+word そして.
 
 ## Listen with device text-to-speech
 
