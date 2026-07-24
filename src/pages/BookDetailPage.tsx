@@ -36,6 +36,7 @@ import {
   reorderBookFromPaste,
   reorderBookSentences,
   restoreBookSentenceSnapshot,
+  setBookCollapsedChapterIds,
   touchBookOpened,
   transferBookSentences,
   updateBook,
@@ -217,6 +218,9 @@ function SortableRow({
   );
 }
 
+/** Sentinel key for sentences that belong to no chapter/episode. */
+const UNASSIGNED_CHAPTER_KEY = '__unassigned__';
+
 export function BookDetailPage() {
   const { bookId = '' } = useParams();
   const navigate = useNavigate();
@@ -285,8 +289,20 @@ export function BookDetailPage() {
     [data],
   );
 
+  const collapsedChapters = useMemo(
+    () => new Set(data?.book?.collapsedChapterIds ?? []),
+    [data?.book?.collapsedChapterIds],
+  );
+
   if (!data) return <p className="muted">Loading book…</p>;
   if (!data.book) return <p>Book not found.</p>;
+
+  function toggleChapterCollapsed(chapterKey: string) {
+    const next = new Set(collapsedChapters);
+    if (next.has(chapterKey)) next.delete(chapterKey);
+    else next.add(chapterKey);
+    void setBookCollapsedChapterIds(bookId, [...next]);
+  }
 
   async function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -357,6 +373,9 @@ export function BookDetailPage() {
           </button>
           <Link to={`/books/${bookId}/practice`}>
             <button type="button">Practice</button>
+          </Link>
+          <Link to={`/books/${bookId}/build`}>
+            <button type="button">Build</button>
           </Link>
           <button type="button" onClick={() => setEditMetadata(true)}>
             Edit details
@@ -728,15 +747,25 @@ export function BookDetailPage() {
             const sentenceCount = data.rows.filter(
               (row) => row.membership.chapterId === chapter.id,
             ).length;
+            const collapsed = collapsedChapters.has(chapter.id);
             return (
               <div key={chapter.id} className="chapter-row">
                 <div>
                   <strong>{chapter.title}</strong>
                   <div className="muted">
                     {sentenceCount} sentence{sentenceCount === 1 ? '' : 's'}
+                    {collapsed ? ' · hidden' : ''}
                   </div>
                 </div>
                 <div className="row">
+                  <button
+                    type="button"
+                    className={collapsed ? 'primary' : undefined}
+                    aria-pressed={collapsed}
+                    onClick={() => toggleChapterCollapsed(chapter.id)}
+                  >
+                    {collapsed ? 'Show' : 'Hide'}
+                  </button>
                   <button
                     type="button"
                     disabled={chapterIndex === 0}
@@ -792,6 +821,44 @@ export function BookDetailPage() {
               </div>
             );
           })}
+        {(() => {
+          const unassignedCount = data.rows.filter(
+            (row) => !row.membership.chapterId,
+          ).length;
+          if (!unassignedCount) return null;
+          const collapsed = collapsedChapters.has(UNASSIGNED_CHAPTER_KEY);
+          return (
+            <div className="chapter-row">
+              <div>
+                <strong>Unassigned</strong>
+                <div className="muted">
+                  {unassignedCount} sentence{unassignedCount === 1 ? '' : 's'}
+                  {collapsed ? ' · hidden' : ''}
+                </div>
+              </div>
+              <div className="row">
+                <button
+                  type="button"
+                  className={collapsed ? 'primary' : undefined}
+                  aria-pressed={collapsed}
+                  onClick={() =>
+                    toggleChapterCollapsed(UNASSIGNED_CHAPTER_KEY)
+                  }
+                >
+                  {collapsed ? 'Show' : 'Hide'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+        {collapsedChapters.size > 0 ? (
+          <button
+            type="button"
+            onClick={() => void setBookCollapsedChapterIds(bookId, [])}
+          >
+            Show all sentences
+          </button>
+        ) : null}
         {!data.book.chapters?.length ? (
           <span className="muted">No chapters yet.</span>
         ) : null}
@@ -805,7 +872,10 @@ export function BookDetailPage() {
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <div className="stack">
             {data.rows.map((row) =>
-              row.sentence ? (
+              row.sentence &&
+              !collapsedChapters.has(
+                row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY,
+              ) ? (
                 <SortableRow
                   key={row.membership.sentenceId}
                   id={row.membership.sentenceId}

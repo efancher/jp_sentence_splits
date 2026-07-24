@@ -82,6 +82,7 @@ export async function createBook(input: {
     createdAt: timestamp,
     updatedAt: timestamp,
     chapters: [],
+    collapsedChapterIds: [],
   };
   await db.books.put(book);
   notifySync('books', book.id, book);
@@ -260,7 +261,14 @@ export async function deleteBookChapter(
         .filter((item) => item.chapterId === chapterId)
         .map((item) => ({ ...item, chapterId: undefined })),
     );
-    await db.books.put({ ...book, chapters, updatedAt: nowIso() });
+    await db.books.put({
+      ...book,
+      chapters,
+      collapsedChapterIds: (book.collapsedChapterIds ?? []).filter(
+        (id) => id !== chapterId,
+      ),
+      updatedAt: nowIso(),
+    });
   });
   const updated = await getDb().books.get(bookId);
   if (updated) notifySync('books', updated.id, updated);
@@ -275,6 +283,24 @@ export async function deleteBookChapter(
       payload: item,
     })),
   );
+}
+
+/** Persist which chapter/episode sections are folded on the book list. */
+export async function setBookCollapsedChapterIds(
+  bookId: string,
+  collapsedChapterIds: readonly string[],
+): Promise<void> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const unique = [...new Set(collapsedChapterIds)];
+  await db.books.put({
+    ...book,
+    collapsedChapterIds: unique,
+    updatedAt: nowIso(),
+  });
+  const updated = await db.books.get(bookId);
+  if (updated) notifySync('books', updated.id, updated);
 }
 
 export async function assignBookSentencesToChapter(

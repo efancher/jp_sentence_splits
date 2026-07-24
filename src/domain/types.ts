@@ -83,6 +83,8 @@ export interface Book {
   updatedAt: string;
   lastOpenedAt?: string;
   chapters: BookChapter[];
+  /** Chapter ids (plus optional `__unassigned__`) currently hidden on the book list. */
+  collapsedChapterIds: string[];
 }
 
 export interface BookChapter {

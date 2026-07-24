@@ -90,6 +90,9 @@ export function BooksPage() {
               <Link to={`/books/${book.id}/practice`}>
                 <button type="button">Resume / Practice</button>
               </Link>
+              <Link to={`/books/${book.id}/build`}>
+                <button type="button">Build</button>
+              </Link>
             </div>
           </article>
         ))}

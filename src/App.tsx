@@ -45,6 +45,11 @@ const PracticePage = lazy(() =>
     default: module.PracticePage,
   })),
 );
+const BuildPage = lazy(() =>
+  import('./pages/BuildPage').then((module) => ({
+    default: module.BuildPage,
+  })),
+);
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((module) => ({
     default: module.SearchPage,
@@ -83,6 +88,11 @@ export default function App() {
             <Route
               path="books/:bookId/practice/:sentenceId"
               element={<PracticePage />}
+            />
+            <Route path="books/:bookId/build" element={<BuildPage />} />
+            <Route
+              path="books/:bookId/build/:sentenceId"
+              element={<BuildPage />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

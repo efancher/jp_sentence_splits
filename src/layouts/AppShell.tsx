@@ -16,7 +16,8 @@ export function AppShell() {
   const location = useLocation();
   const hideNav =
     location.pathname.includes('/analyze') ||
-    location.pathname.includes('/practice');
+    location.pathname.includes('/practice') ||
+    location.pathname.includes('/build');
 
   return (
     <div className="app-shell">

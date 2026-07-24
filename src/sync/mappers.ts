@@ -69,6 +69,7 @@ export function bookToRemote(book: Book, ownerId: string, version: number) {
     notes: book.notes ?? null,
     archived: book.archived,
     chapters: book.chapters ?? [],
+    collapsed_chapter_ids: book.collapsedChapterIds ?? [],
     last_opened_at: book.lastOpenedAt ?? null,
     created_at: book.createdAt,
     updated_at: book.updatedAt,
@@ -90,6 +91,9 @@ export function remoteToBook(row: Record<string, unknown>): Book {
     updatedAt: String(row.updated_at),
     lastOpenedAt: (row.last_opened_at as string | null) ?? undefined,
     chapters: Array.isArray(row.chapters) ? (row.chapters as Book['chapters']) : [],
+    collapsedChapterIds: Array.isArray(row.collapsed_chapter_ids)
+      ? (row.collapsed_chapter_ids as string[])
+      : [],
   };
 }
 

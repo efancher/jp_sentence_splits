@@ -471,86 +471,103 @@ strong.jp {
   gap: 0.55rem;
 }
 
+.chunk-puzzle-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .chunk-puzzle-strip {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   gap: 0.15rem 0;
   overflow-x: auto;
-  padding: 0.15rem 0 0.35rem;
+  padding: 0.2rem 0 0.35rem;
   -webkit-overflow-scrolling: touch;
 }
 
 .chunk-puzzle-piece {
-  --tab: 10px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 4.75rem;
+  max-width: 14rem;
+  margin-right: -6px;
+  padding: 0.55rem 0.95rem 0.55rem 0.85rem;
+  background: transparent;
+  isolation: isolate;
+}
+
+.chunk-puzzle-chrome {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.chunk-puzzle-chrome-fill {
+  fill: var(--clause-tint, var(--bg-elevated));
+}
+
+.chunk-puzzle-chrome-stroke {
+  stroke: color-mix(in srgb, var(--border) 80%, var(--accent));
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.chunk-puzzle-body {
   position: relative;
   z-index: 1;
   display: grid;
   gap: 0.2rem;
-  min-width: 4.5rem;
-  max-width: 14rem;
-  margin-right: calc(var(--tab) * -0.35);
-  padding: 0.45rem 0.7rem 0.45rem 0.85rem;
-  background: var(--clause-tint, var(--bg-elevated));
-  border: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent));
-  clip-path: polygon(
-    0% 0%,
-    calc(100% - var(--tab)) 0%,
-    calc(100% - var(--tab)) 32%,
-    100% 50%,
-    calc(100% - var(--tab)) 68%,
-    calc(100% - var(--tab)) 100%,
-    0% 100%,
-    0% 68%,
-    var(--tab) 50%,
-    0% 32%
-  );
+  align-content: center;
 }
 
-.chunk-puzzle-piece-first {
-  clip-path: polygon(
-    0% 0%,
-    calc(100% - var(--tab)) 0%,
-    calc(100% - var(--tab)) 32%,
-    100% 50%,
-    calc(100% - var(--tab)) 68%,
-    calc(100% - var(--tab)) 100%,
-    0% 100%
-  );
-  padding-left: 0.7rem;
+.chunk-puzzle-shape-engine-anchor {
+  z-index: 2;
+  min-width: 5.5rem;
+  margin-right: 0.1rem;
+  font-weight: 600;
 }
 
-.chunk-puzzle-piece-last {
-  clip-path: polygon(
-    0% 0%,
-    100% 0%,
-    100% 100%,
-    0% 100%,
-    0% 68%,
-    var(--tab) 50%,
-    0% 32%
-  );
-  margin-right: 0;
-  padding-right: 0.7rem;
+.chunk-puzzle-shape-engine-anchor .chunk-puzzle-chrome-stroke {
+  stroke: var(--accent);
+  stroke-width: 1.5;
 }
 
-.chunk-puzzle-piece-first.chunk-puzzle-piece-last {
-  clip-path: none;
-  border-radius: 10px;
-  margin-right: 0;
+.chunk-puzzle-piece-clause-final.chunk-puzzle-shape-engine-anchor
+  .chunk-puzzle-chrome-stroke {
+  stroke-width: 2;
 }
 
 .chunk-puzzle-piece-engine {
   z-index: 2;
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
   font-weight: 600;
 }
 
 .chunk-puzzle-piece-speaking {
   z-index: 3;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.chunk-puzzle-piece-speaking .chunk-puzzle-chrome-stroke {
+  stroke: var(--accent);
+  stroke-width: 2.25;
+}
+
+.chunk-puzzle-fit-good .chunk-puzzle-chrome-stroke {
+  stroke: color-mix(in srgb, var(--success) 70%, var(--border));
+}
+
+.chunk-puzzle-fit-odd .chunk-puzzle-chrome-stroke {
+  stroke: color-mix(in srgb, var(--warning) 75%, var(--border));
+}
+
+.chunk-puzzle-fit-good.chunk-puzzle-piece-speaking .chunk-puzzle-chrome-stroke,
+.chunk-puzzle-fit-odd.chunk-puzzle-piece-speaking .chunk-puzzle-chrome-stroke {
+  stroke: var(--accent);
 }
 
 .chunk-puzzle-japanese {
@@ -562,6 +579,40 @@ strong.jp {
 .chunk-puzzle-role {
   font-size: 0.7rem;
   line-height: 1.3;
+}
+
+.chunk-puzzle-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  padding: 0.15rem 0 0.1rem;
+}
+
+.chunk-puzzle-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.chunk-puzzle-legend-mini {
+  width: 1.55rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+}
+
+.chunk-puzzle-legend-mini-fill {
+  fill: color-mix(in srgb, var(--accent) 18%, var(--bg-muted));
+  stroke: color-mix(in srgb, var(--border) 70%, var(--accent));
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.chunk-puzzle-legend-note {
+  font-size: 0.68rem;
+  flex-basis: 100%;
 }
 
 .update-banner {
@@ -687,4 +738,77 @@ button.sync-retry {
   font-size: 0.75rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.build-prompt-text {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.45;
+}
+
+.build-bank,
+.build-assembly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: stretch;
+  min-height: 2.75rem;
+  padding: 0.55rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 80%, var(--accent));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-muted) 55%, transparent);
+}
+
+.build-tile {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 4.25rem;
+  max-width: 11rem;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.build-tile-shaped {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.build-tile-placed {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.build-tile-index {
+  font-size: 0.65rem;
+}
+
+.build-tile-primary {
+  font-size: 0.95rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.build-tile-secondary {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.build-check {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.build-check.ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-elevated));
+}
+
+.build-check.warn {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
 }

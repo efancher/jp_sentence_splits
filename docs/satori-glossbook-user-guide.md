@@ -110,9 +110,10 @@ excluded from that check). Autosave runs after a short delay and on blur; the
 manual Save button is a fallback.
 
 When chunks exist, Analyze (and Practice after **Reveal chunks**) shows a
-**puzzle strip**: interlocking pieces with soft clause bands inferred from
-roles (new clause at connectors or after an engine). This is a study aid, not a
-full syntactic parse.
+**puzzle strip**: SVG role-shaped pieces with neighbor-mating edges (particle
+sockets, flat-right engine anchors, て-bridges, endings), soft clause bands, and
+heuristic green/amber “fit” hints. Analyze also shows a compact shape key. Hover
+a piece for the gloss. This is a study aid, not a full syntactic parse.
 
 ### Chunk roles
 
@@ -153,6 +154,19 @@ Choose a session:
 Practice supports deterministic shuffle, optional vocabulary, scratch notes,
 staged reveals, reveal/hide all, progress, and status-and-advance actions.
 Desktop users can navigate with the left and right arrow keys.
+
+## Build
+
+**Build** inverts Analyze/Practice: you get the English prompt and assemble
+Japanese from shuffled chunk tiles. Sessions only include sentences that already
+have analysis chunks.
+
+1. Open **Build** from a book (or **Build this** from Analyze).
+2. Tap bank tiles into your assembly (tap a placed tile to return it).
+3. Raise hints step by step: vocabulary → slot count → sticky English → roles /
+   shapes → Japanese on tiles.
+4. **Check** scores chunk order against your saved analysis; **Reveal answer**
+   shows the puzzle strip.
 
 ## Export
 

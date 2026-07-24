@@ -59,6 +59,14 @@ chapter. Sessions support deterministic shuffle, optional vocabulary,
 staged/all-at-once reveals, progress, Complete & Next, Needs Review & Next, and
 desktop arrow-key navigation.
 
+## Build mode
+
+**Build** inverts the glossbook: English prompt first, then assemble Japanese
+from shuffled chunk tiles using your Analyze chunks as the answer key. Layered
+hints escalate from vocabulary → sticky English → roles/shapes → Japanese.
+Open from a book, or **Build this** on Analyze. Only sentences with saved chunks
+appear in the session.
+
 ## Optional cloud sync (Supabase)
 
 The app is **local-first**: IndexedDB (Dexie) is the working store. When you

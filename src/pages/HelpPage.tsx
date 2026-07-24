@@ -26,6 +26,7 @@ export function HelpPage() {
         <a href="#analyzing">Analyzing sentences</a>
         <a href="#roles">Chunk roles</a>
         <a href="#practice">Practice sessions</a>
+        <a href="#build">Build mode</a>
         <a href="#backup">Offline data and backups</a>
       </nav>
 
@@ -126,9 +127,12 @@ export function HelpPage() {
           order. Configure the voice and speed in Settings.
         </p>
         <p>
-          When chunks exist, a <strong>puzzle strip</strong> shows interlocking
-          pieces with soft <strong>clause bands</strong> (heuristic from roles —
-          engines and clause connectors — not a full parse).
+          When chunks exist, a <strong>puzzle strip</strong> shows role-shaped
+          SVG pieces (を sockets, に/で slots, flat-right{' '}
+          <strong>engine anchors</strong>, て-bridges) with soft{' '}
+          <strong>clause bands</strong>. Neighbor edges nest, and soft green /
+          amber outlines hint at likely vs unusual order (heuristic only). Analyze
+          includes a small shape key. Hover a piece for a gloss.
         </p>
       </section>
 
@@ -153,6 +157,27 @@ export function HelpPage() {
           <strong>Needs review &amp; next</strong> update status while moving
           through the session. On a desktop, use the left and right arrow keys.
         </p>
+      </section>
+
+      <section id="build" className="panel stack">
+        <h3>Build mode</h3>
+        <p>
+          Invert the glossbook: you see the English prompt and assemble the
+          Japanese from shuffled chunk tiles using your saved analysis as the
+          answer key. Only sentences with chunks appear in the session.
+        </p>
+        <ol>
+          <li>Start from a book → <strong>Build</strong>.</li>
+          <li>Read the English; tap tiles from the bank into your assembly.</li>
+          <li>
+            Use <strong>More hint</strong> for vocabulary, slot count, sticky
+            English, roles/shapes, then Japanese on tiles.
+          </li>
+          <li>
+            <strong>Check</strong> compares your order to Analyze. Reveal shows
+            the puzzle strip answer.
+          </li>
+        </ol>
       </section>
 
       <section id="backup" className="panel stack">

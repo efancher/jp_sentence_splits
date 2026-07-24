@@ -475,6 +475,7 @@ export function AnalyzePage() {
                 speech.isSpeaking ? speech.activeItemId : null
               }
               revealRoles
+              showLegend
             />
             <div className="row">
               <button
@@ -925,6 +926,9 @@ export function AnalyzePage() {
           </button>
           <Link to={`/books/${bookId}/practice/${sentenceId}`}>
             <button type="button">Practice this</button>
+          </Link>
+          <Link to={`/books/${bookId}/build/${sentenceId}`}>
+            <button type="button">Build this</button>
           </Link>
         </div>
       </section>

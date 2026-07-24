@@ -74,6 +74,7 @@ export const bookSchema = z.object({
       }),
     )
     .default([]),
+  collapsedChapterIds: z.array(z.string()).default([]),
 });
 
 export const bookSentenceSchema = z.object({
