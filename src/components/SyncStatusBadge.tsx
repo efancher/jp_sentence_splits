@@ -12,6 +12,14 @@ const LABELS: Record<SyncStatus, string> = {
   conflict: 'Conflicts',
 };
 
+function formatRetryCountdown(seconds: number): string {
+  if (seconds <= 0) return 'soon';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
 export function SyncStatusBadge() {
   const sync = useSync();
   const label = LABELS[sync.status];
@@ -19,21 +27,37 @@ export function SyncStatusBadge() {
     sync.lastError && sync.lastError.length > 80
       ? `${sync.lastError.slice(0, 77)}…`
       : sync.lastError;
-  const detail =
-    sync.status === 'pending'
-      ? `${sync.pending}`
-      : sync.status === 'conflict'
-        ? `${sync.conflicts}`
-        : sync.status === 'error'
-          ? sync.pending > 0
-            ? `${sync.pending} · ${errorSnippet ?? 'see Settings'}`
-            : (errorSnippet ?? null)
-          : sync.lastSyncAt
-            ? new Date(sync.lastSyncAt).toLocaleString()
-            : null;
+  const retryLabel =
+    sync.retryInSeconds != null
+      ? `retry ${formatRetryCountdown(sync.retryInSeconds)}`
+      : null;
+
+  let detail: string | null = null;
+  if (sync.status === 'pending') {
+    detail = [String(sync.pending), retryLabel].filter(Boolean).join(' · ');
+  } else if (sync.status === 'conflict') {
+    detail = String(sync.conflicts);
+  } else if (sync.status === 'error') {
+    const parts = [
+      sync.pending > 0 ? String(sync.pending) : null,
+      retryLabel,
+      errorSnippet,
+    ].filter(Boolean);
+    detail = parts.length ? parts.join(' · ') : null;
+  } else if (sync.status === 'syncing') {
+    detail = sync.pending > 0 ? String(sync.pending) : null;
+  } else if (sync.lastSyncAt) {
+    detail = new Date(sync.lastSyncAt).toLocaleString();
+  }
+
+  const titleParts = [
+    sync.lastError,
+    retryLabel ? `Next auto-retry in ${formatRetryCountdown(sync.retryInSeconds!)}` : null,
+    label,
+  ].filter(Boolean);
 
   return (
-    <div className="sync-status-badge" title={sync.lastError ?? label}>
+    <div className="sync-status-badge" title={titleParts.join(' — ')}>
       <span className={`sync-dot sync-dot-${sync.status}`} aria-hidden />
       <span>{label}</span>
       {detail ? <span className="muted sync-detail">{detail}</span> : null}

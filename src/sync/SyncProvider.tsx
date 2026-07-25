@@ -26,6 +26,9 @@ import { setSyncRequestHandler } from './track';
 import type { SyncStatus } from './types';
 
 const SYNC_DEBOUNCE_MS = 800;
+/** How long to wait before automatically retrying a stuck pending/error queue. */
+const AUTO_RETRY_MS = 30_000;
+const COUNTDOWN_TICK_MS = 1_000;
 
 interface SyncContextValue {
   status: SyncStatus;
@@ -34,6 +37,8 @@ interface SyncContextValue {
   lastSyncAt?: string;
   lastError?: string;
   online: boolean;
+  /** Seconds until the next automatic sync retry, when one is scheduled. */
+  retryInSeconds: number | null;
   syncNow: () => Promise<void>;
   syncReferenceAudio: boolean;
   wifiOnlyAudioDownload: boolean;
@@ -65,6 +70,11 @@ function deriveStatus(input: {
   return 'synced';
 }
 
+function secondsUntil(deadlineMs: number | null, nowMs: number): number | null {
+  if (deadlineMs == null) return null;
+  return Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000));
+}
+
 export function SyncProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const [online, setOnline] = useState(
@@ -72,7 +82,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   );
   const [syncing, setSyncing] = useState(false);
   const [migrationOpen, setMigrationOpen] = useState(false);
+  const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const meta = useLiveQuery(() => readSyncMeta(), []);
   const pending = useLiveQuery(() => pendingCount(), []) ?? 0;
@@ -82,22 +95,32 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     void ensureSyncMeta();
   }, []);
 
+  const clearAutoRetry = useCallback(() => {
+    if (autoRetryRef.current) {
+      clearTimeout(autoRetryRef.current);
+      autoRetryRef.current = null;
+    }
+    setNextRetryAt(null);
+  }, []);
+
   const syncNow = useCallback(async () => {
     if (!auth.user || !online) return;
+    clearAutoRetry();
     setSyncing(true);
     try {
       await runSyncCycle();
     } finally {
       setSyncing(false);
     }
-  }, [auth.user, online]);
+  }, [auth.user, online, clearAutoRetry]);
 
   const scheduleSync = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    clearAutoRetry();
     debounceRef.current = setTimeout(() => {
       void syncNow();
     }, SYNC_DEBOUNCE_MS);
-  }, [syncNow]);
+  }, [syncNow, clearAutoRetry]);
 
   useEffect(() => {
     setSyncRequestHandler(scheduleSync);
@@ -109,14 +132,17 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       setOnline(true);
       void syncNow();
     };
-    const onOffline = () => setOnline(false);
+    const onOffline = () => {
+      setOnline(false);
+      clearAutoRetry();
+    };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [syncNow]);
+  }, [syncNow, clearAutoRetry]);
 
   useEffect(() => {
     if (!auth.user) return;
@@ -129,6 +155,54 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       await syncNow();
     })();
   }, [auth.user, syncNow]);
+
+  const needsAutoRetry =
+    Boolean(auth.user) &&
+    online &&
+    !syncing &&
+    conflicts === 0 &&
+    (pending > 0 || Boolean(meta?.lastError));
+
+  // Schedule a visible countdown + automatic retry while work remains queued.
+  useEffect(() => {
+    if (!needsAutoRetry) {
+      clearAutoRetry();
+      return;
+    }
+    if (autoRetryRef.current != null) return;
+
+    const deadline = Date.now() + AUTO_RETRY_MS;
+    setNextRetryAt(deadline);
+    autoRetryRef.current = setTimeout(() => {
+      autoRetryRef.current = null;
+      setNextRetryAt(null);
+      void syncNow();
+    }, AUTO_RETRY_MS);
+
+    return () => {
+      // Only tear down on unmount; live retries are cleared via clearAutoRetry.
+    };
+  }, [needsAutoRetry, syncNow, clearAutoRetry]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (autoRetryRef.current) {
+        clearTimeout(autoRetryRef.current);
+        autoRetryRef.current = null;
+      }
+    };
+  }, []);
+
+  // Tick the countdown display once per second while a retry is pending.
+  useEffect(() => {
+    if (nextRetryAt == null) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), COUNTDOWN_TICK_MS);
+    return () => clearInterval(id);
+  }, [nextRetryAt]);
+
+  const retryInSeconds = secondsUntil(nextRetryAt, nowMs);
 
   const status = deriveStatus({
     configured: auth.configured,
@@ -175,6 +249,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       lastSyncAt: meta?.lastSyncAt,
       lastError: meta?.lastError,
       online,
+      retryInSeconds,
       syncNow,
       syncReferenceAudio: meta?.syncReferenceAudio ?? false,
       wifiOnlyAudioDownload: meta?.wifiOnlyAudioDownload ?? true,
@@ -193,6 +268,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       meta?.syncReferenceAudio,
       meta?.wifiOnlyAudioDownload,
       online,
+      retryInSeconds,
       syncNow,
       setSyncReferenceAudio,
       setWifiOnlyAudioDownload,

@@ -684,7 +684,7 @@ strong.jp {
   flex-wrap: wrap;
   justify-content: flex-end;
   font-size: 0.75rem;
-  max-width: 12rem;
+  max-width: 16rem;
 }
 
 .sync-dot {
