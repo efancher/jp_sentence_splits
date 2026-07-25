@@ -21,6 +21,40 @@ export interface TargetVocabulary {
   cardTypes: string[];
 }
 
+/** Morphology / import-derived vocabulary suggestion for the picker. */
+export interface VocabularySuggestion {
+  id: string;
+  surface: string;
+  start: number;
+  end: number;
+  expression: string;
+  reading: string;
+  pos: string;
+  english?: string;
+  source: 'morphology' | 'satori' | 'manual';
+  /** True when this suggestion should start checked in the picker. */
+  selectedByDefault: boolean;
+}
+
+export type VocabularyReviewStatus = 'unreviewed' | 'confirmed';
+
+/**
+ * Authoritative vocabulary choice for Anki mining.
+ * `surface`/`start`/`end` locate the exact span in the sentence Japanese.
+ */
+export interface VocabularySelection {
+  id: string;
+  surface: string;
+  start: number;
+  end: number;
+  expression: string;
+  reading: string;
+  english?: string;
+  pos?: string;
+  source: 'suggestion' | 'combined' | 'manual';
+  suggestionIds?: string[];
+}
+
 export interface SourceReference {
   cardId: string;
   cardType: string;
@@ -44,6 +78,11 @@ export interface Sentence {
   inlineReading: string;
   translation: string;
   targetVocabulary: TargetVocabulary[];
+  /**
+   * Clickable morphology / import suggestions for vocabulary review.
+   * Separate from Satori `targetVocabulary` chips and Cure Dolly chunks.
+   */
+  vocabularySuggestions: VocabularySuggestion[];
   sourceReferences: SourceReference[];
   conflicts: SourceConflict[];
   earliestCreatedAt?: string;
@@ -125,6 +164,9 @@ export interface SentenceAnalysis {
   notes: string;
   status: AnalysisStatus;
   formatVersion: number;
+  /** Vocabulary picker confirmation — independent of Cure Dolly chunk status. */
+  vocabularyReviewStatus: VocabularyReviewStatus;
+  vocabularySelections: VocabularySelection[];
   createdAt: string;
   updatedAt: string;
 }

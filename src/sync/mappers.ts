@@ -111,6 +111,7 @@ export function sentenceToRemote(
     inline_reading: sentence.inlineReading,
     translation: sentence.translation,
     target_vocabulary: sentence.targetVocabulary,
+    vocabulary_suggestions: sentence.vocabularySuggestions ?? [],
     source_references: sentence.sourceReferences,
     conflicts: sentence.conflicts,
     earliest_created_at: sentence.earliestCreatedAt ?? null,
@@ -133,6 +134,8 @@ export function remoteToSentence(row: Record<string, unknown>): Sentence {
     inlineReading: String(row.inline_reading ?? ''),
     translation: String(row.translation ?? ''),
     targetVocabulary: (row.target_vocabulary as Sentence['targetVocabulary']) ?? [],
+    vocabularySuggestions:
+      (row.vocabulary_suggestions as Sentence['vocabularySuggestions']) ?? [],
     sourceReferences: (row.source_references as Sentence['sourceReferences']) ?? [],
     conflicts: (row.conflicts as Sentence['conflicts']) ?? [],
     earliestCreatedAt: (row.earliest_created_at as string | null) ?? undefined,
@@ -193,6 +196,8 @@ export function analysisToRemote(
     notes: analysis.notes,
     status: analysis.status,
     format_version: analysis.formatVersion,
+    vocabulary_review_status: analysis.vocabularyReviewStatus ?? 'unreviewed',
+    vocabulary_selections: analysis.vocabularySelections ?? [],
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
     deleted_at: null,
@@ -207,6 +212,12 @@ export function remoteToAnalysis(row: Record<string, unknown>): SentenceAnalysis
     notes: String(row.notes ?? ''),
     status: row.status as SentenceAnalysis['status'],
     formatVersion: Number(row.format_version ?? 1),
+    vocabularyReviewStatus:
+      (row.vocabulary_review_status as SentenceAnalysis['vocabularyReviewStatus']) ??
+      'unreviewed',
+    vocabularySelections:
+      (row.vocabulary_selections as SentenceAnalysis['vocabularySelections']) ??
+      [],
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

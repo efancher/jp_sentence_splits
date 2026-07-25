@@ -7,13 +7,22 @@ import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
+import { VocabularyPicker } from '../components/VocabularyPicker';
 import { readSettings } from '../db/database';
 import {
   getDb,
   saveAnalysis,
   setBookSentenceStatus,
 } from '../db/repository';
-import type { AnalysisChunk, TextDisplayMode } from '../domain/types';
+import type {
+  AnalysisChunk,
+  TextDisplayMode,
+  VocabularyReviewStatus,
+  VocabularySelection,
+} from '../domain/types';
+import {
+  defaultSelectionsFromSuggestions,
+} from '../lib/vocabularySuggestions';
 import {
   addZeroGaSubject,
   applyHeuristicChunks,
@@ -62,6 +71,11 @@ export function AnalyzePage() {
   const [spaced, setSpaced] = useState('');
   const [chunks, setChunks] = useState<AnalysisChunk[]>([]);
   const [notes, setNotes] = useState('');
+  const [vocabularySelections, setVocabularySelections] = useState<
+    VocabularySelection[]
+  >([]);
+  const [vocabularyReviewStatus, setVocabularyReviewStatus] =
+    useState<VocabularyReviewStatus>('unreviewed');
   const [chunkError, setChunkError] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [customRoleIds, setCustomRoleIds] = useState<Set<string>>(new Set());
@@ -111,6 +125,18 @@ export function AnalyzePage() {
     setHeuristicPreview(null);
     setNotes(data.analysis?.notes ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
+    const suggestions = data.sentence.vocabularySuggestions ?? [];
+    const savedSelections = data.analysis?.vocabularySelections ?? [];
+    const savedStatus = data.analysis?.vocabularyReviewStatus ?? 'unreviewed';
+    if (savedStatus === 'confirmed' || savedSelections.length) {
+      setVocabularySelections(savedSelections);
+      setVocabularyReviewStatus(savedStatus);
+    } else {
+      setVocabularySelections(
+        defaultSelectionsFromSuggestions(suggestions, data.sentence.japanese),
+      );
+      setVocabularyReviewStatus('unreviewed');
+    }
     setHydrated(true);
     // Re-hydrate only when navigating to a different sentence.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,9 +168,17 @@ export function AnalyzePage() {
   );
 
   const { saveState, saveNow } = useAutosave(
-    { chunks, notes },
+    {
+      chunks,
+      notes,
+      vocabularySelections,
+      vocabularyReviewStatus,
+    },
     async (value) => {
-      await saveAnalysis(sentenceId, value.chunks, value.notes);
+      await saveAnalysis(sentenceId, value.chunks, value.notes, {
+        reviewStatus: value.vocabularyReviewStatus,
+        selections: value.vocabularySelections,
+      });
     },
     { enabled: hydrated },
   );
@@ -335,6 +369,31 @@ export function AnalyzePage() {
           </div>
         ) : null}
       </section>
+
+      <VocabularyPicker
+        japanese={sentence.japanese}
+        suggestions={sentence.vocabularySuggestions ?? []}
+        selections={vocabularySelections}
+        reviewStatus={vocabularyReviewStatus}
+        hasNext={Boolean(next)}
+        onChange={({ selections, reviewStatus }) => {
+          setVocabularySelections(selections);
+          setVocabularyReviewStatus(reviewStatus);
+        }}
+        onConfirmAndNext={(payload) => {
+          setVocabularySelections(payload.selections);
+          setVocabularyReviewStatus(payload.reviewStatus);
+          void (async () => {
+            await saveAnalysis(sentenceId, chunks, notes, {
+              reviewStatus: payload.reviewStatus,
+              selections: payload.selections,
+            });
+            if (next) {
+              navigate(`/books/${bookId}/analyze/${next.sentenceId}`);
+            }
+          })();
+        }}
+      />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Chunk entry</h3>

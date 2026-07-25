@@ -21,6 +21,34 @@ export const targetVocabularySchema = z.object({
   cardTypes: z.array(z.string()),
 });
 
+export const vocabularySuggestionSchema = z.object({
+  id: z.string(),
+  surface: z.string().min(1),
+  start: z.number().int().nonnegative(),
+  end: z.number().int().positive(),
+  expression: z.string().min(1),
+  reading: z.string(),
+  pos: z.string(),
+  english: z.string().optional(),
+  source: z.enum(['morphology', 'satori', 'manual']),
+  selectedByDefault: z.boolean(),
+});
+
+export const vocabularySelectionSchema = z.object({
+  id: z.string(),
+  surface: z.string().min(1),
+  start: z.number().int().nonnegative(),
+  end: z.number().int().positive(),
+  expression: z.string().min(1),
+  reading: z.string(),
+  english: z.string().optional(),
+  pos: z.string().optional(),
+  source: z.enum(['suggestion', 'combined', 'manual']),
+  suggestionIds: z.array(z.string()).optional(),
+});
+
+export const vocabularyReviewStatusSchema = z.enum(['unreviewed', 'confirmed']);
+
 export const sourceReferenceSchema = z.object({
   cardId: z.string(),
   cardType: z.string(),
@@ -44,6 +72,7 @@ export const sentenceSchema = z.object({
   inlineReading: z.string(),
   translation: z.string(),
   targetVocabulary: z.array(targetVocabularySchema),
+  vocabularySuggestions: z.array(vocabularySuggestionSchema).default([]),
   sourceReferences: z.array(sourceReferenceSchema),
   conflicts: z.array(sourceConflictSchema),
   earliestCreatedAt: z.string().optional(),
@@ -105,6 +134,8 @@ export const sentenceAnalysisSchema = z.object({
   notes: z.string(),
   status: analysisStatusSchema,
   formatVersion: z.number().default(ANALYSIS_FORMAT_VERSION),
+  vocabularyReviewStatus: vocabularyReviewStatusSchema.default('unreviewed'),
+  vocabularySelections: z.array(vocabularySelectionSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

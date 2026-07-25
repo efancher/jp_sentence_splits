@@ -16,9 +16,9 @@ import {
   displayJapanese,
   normalizeSentenceKey,
 } from './normalize';
+import { suggestionsFromTokens } from './vocabularySuggestions';
 
 const SHADOWING_PACKAGE_FORMAT = 'japanese-shadowing-package';
-const SHADOWING_PACKAGE_VERSION = 1;
 const PREVIEW_IMPORT_BATCH_ID = 'preview';
 const MAX_METADATA_FILE_BYTES = 5 * 1024 * 1024;
 const REQUIRED_METADATA_PATHS = [
@@ -29,7 +29,7 @@ const REQUIRED_METADATA_PATHS = [
 
 const manifestSchema = z.object({
   format: z.literal(SHADOWING_PACKAGE_FORMAT),
-  version: z.literal(SHADOWING_PACKAGE_VERSION),
+  version: z.union([z.literal(1), z.literal(2)]),
   createdAt: z.string(),
   generator: z.object({
     name: z.string(),
@@ -54,6 +54,15 @@ const sourceSchema = z.object({
   durationMs: z.number().nonnegative().optional(),
 });
 
+const packageTokenSchema = z.object({
+  surface: z.string().min(1),
+  start: z.number().int().nonnegative(),
+  end: z.number().int().positive(),
+  lemma: z.string().min(1),
+  reading: z.string().optional(),
+  pos: z.string().optional(),
+});
+
 const packageSentenceSchema = z.object({
   id: z.string().min(1),
   japanese: z.string().min(1),
@@ -74,6 +83,7 @@ const packageSentenceSchema = z.object({
     'manually-corrected',
     'verified',
   ]),
+  tokens: z.array(packageTokenSchema).optional(),
   audio: z.object({
     path: z.string().min(1),
     mimeType: z.string().min(1),
@@ -250,6 +260,10 @@ function buildDrafts(
         inlineReading: '',
         translation: sentence.english?.trim() ?? '',
         targetVocabulary: [],
+        vocabularySuggestions: suggestionsFromTokens(
+          japanese,
+          sentence.tokens ?? [],
+        ),
         sourceReferences: [ref],
         conflicts: [],
         firstOccurrenceIndex: index,
@@ -276,6 +290,12 @@ function buildDrafts(
     current.readingOnly ||= sentence.reading?.trim() ?? '';
     current.conflicts = conflicts;
     current.sourceReferences.push(ref);
+    if (sentence.tokens?.length) {
+      current.vocabularySuggestions = suggestionsFromTokens(
+        japanese,
+        sentence.tokens,
+      );
+    }
 
     const meta = orderMeta.get(normalizedKey);
     if (meta && sentence.startMs < meta.startMs) {

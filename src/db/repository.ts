@@ -13,6 +13,8 @@ import type {
   SentenceAudio,
   SentenceAnalysis,
   StudyStatus,
+  VocabularyReviewStatus,
+  VocabularySelection,
 } from '../domain/types';
 import {
   mergeSentenceOnReimport,
@@ -30,6 +32,10 @@ import {
   orderBookSentencesFromPaste,
   type PasteOrderResult,
 } from '../lib/pasteOrder';
+import {
+  buildMiningPackage,
+  type MiningExportResult,
+} from '../lib/miningExport';
 import { ensureSettings, getDb } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
 
@@ -690,6 +696,10 @@ export async function saveAnalysis(
   sentenceId: string,
   chunks: AnalysisChunk[],
   notes = '',
+  vocabulary?: {
+    reviewStatus?: VocabularyReviewStatus;
+    selections?: VocabularySelection[];
+  },
 ): Promise<SentenceAnalysis> {
   const db = getDb();
   const timestamp = nowIso();
@@ -711,6 +721,12 @@ export async function saveAnalysis(
     notes,
     status,
     formatVersion: ANALYSIS_FORMAT_VERSION,
+    vocabularyReviewStatus:
+      vocabulary?.reviewStatus ??
+      existing?.vocabularyReviewStatus ??
+      'unreviewed',
+    vocabularySelections:
+      vocabulary?.selections ?? existing?.vocabularySelections ?? [],
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -756,6 +772,7 @@ export async function commitImport(options: {
           const sentence: Sentence = {
             id: item.proposedId || sentenceIdFromNormalizedKey(item.draft.normalizedKey),
             ...item.draft,
+            vocabularySuggestions: item.draft.vocabularySuggestions ?? [],
             sourceReferences: item.draft.sourceReferences.map((ref) => ({
               ...ref,
               importBatchId: batchId,
@@ -922,7 +939,7 @@ export async function commitShadowingPackageImport(
     subtitle: preview.source.channel,
     sourceUrl: preview.source.url,
     notes: [
-      'Imported from a japanese-shadowing-package v1 project.',
+      'Imported from a japanese-shadowing-package project.',
       `Source project ID: ${preview.source.id}`,
       `Package generator: ${preview.manifest.generator.name} ${preview.manifest.generator.version}`,
     ].join('\n'),
@@ -1193,6 +1210,33 @@ export async function getBookProgress(bookId: string): Promise<{
     complete,
     percent: total ? Math.round((complete / total) * 100) : 0,
   };
+}
+
+export async function exportBookMiningPackage(
+  bookId: string,
+): Promise<MiningExportResult> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found.');
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .sortBy('position');
+  const sentenceIds = memberships.map((item) => item.sentenceId);
+  const sentences = (await db.sentences.bulkGet(sentenceIds)).filter(
+    (item): item is Sentence => Boolean(item),
+  );
+  const analyses = (await db.analyses.bulkGet(sentenceIds)).filter(
+    (item): item is SentenceAnalysis => Boolean(item),
+  );
+  const audio = (
+    await Promise.all(
+      sentenceIds.map((sentenceId) =>
+        db.sentenceAudio.where('sentenceId').equals(sentenceId).toArray(),
+      ),
+    )
+  ).flat();
+  return buildMiningPackage({ book, sentences, analyses, audio });
 }
 
 export async function findResumeSentence(

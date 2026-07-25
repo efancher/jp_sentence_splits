@@ -28,6 +28,7 @@ import {
   deleteBook,
   duplicateBookOrdering,
   exportBookBackup,
+  exportBookMiningPackage,
   findResumeSentence,
   getDb,
   moveBookSentence,
@@ -43,6 +44,7 @@ import {
   updateBookChapter,
 } from '../db/repository';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
+import { downloadBlob } from '../lib/miningExport';
 import type { Book, Sentence } from '../domain/types';
 import type { PasteOrderResult } from '../lib/pasteOrder';
 
@@ -431,6 +433,24 @@ export function BookDetailPage() {
             }}
           >
             Export worksheet
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const result = await exportBookMiningPackage(bookId);
+                downloadBlob(result.blob, result.filename);
+                window.alert(
+                  `Exported ${result.sentenceCount} confirmed sentence(s) with ${result.selectionCount} vocabulary selection(s). Skipped ${result.skippedUnconfirmed} unconfirmed.`,
+                );
+              } catch (error) {
+                window.alert(
+                  error instanceof Error ? error.message : String(error),
+                );
+              }
+            }}
+          >
+            Export Anki mining package
           </button>
           <button
             type="button"

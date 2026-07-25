@@ -6,6 +6,7 @@ import type {
   SourceConflict,
   SourceReference,
   TargetVocabulary,
+  VocabularySuggestion,
 } from '../domain/types';
 import { sentenceIdFromNormalizedKey } from './ids';
 import {
@@ -13,6 +14,7 @@ import {
   normalizeExpressionKey,
   normalizeSentenceKey,
 } from './normalize';
+import { mergeVocabularySuggestions } from './vocabularySuggestions';
 
 const CONTEXT_NUMBERS = [1, 2, 3] as const;
 
@@ -46,6 +48,7 @@ export interface ExistingSentenceLookup {
   inlineReading: string;
   translation: string;
   targetVocabulary: TargetVocabulary[];
+  vocabularySuggestions?: VocabularySuggestion[];
   sourceReferences: SourceReference[];
   conflicts: SourceConflict[];
   earliestCreatedAt?: string;
@@ -262,6 +265,7 @@ export function parseSatoriCsvText(
           inlineReading,
           translation,
           targetVocabulary: vocab ? [vocab] : [],
+          vocabularySuggestions: [],
           sourceReferences: [sourceRef],
           conflicts: [],
           earliestCreatedAt: whenCreated,
@@ -501,6 +505,10 @@ export function mergeSentenceOnReimport(
     inlineReading,
     translation,
     targetVocabulary,
+    vocabularySuggestions: mergeVocabularySuggestions(
+      existing.vocabularySuggestions ?? [],
+      draft.vocabularySuggestions ?? [],
+    ),
     sourceReferences,
     conflicts,
     earliestCreatedAt: times.earliest ?? existing.earliestCreatedAt,
