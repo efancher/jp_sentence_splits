@@ -16,17 +16,20 @@ are available offline.
 3. Review the source, sentence count, native clip count, and storage size.
 4. Tap **Import complete project**.
 
-Glossbook creates a book named after the source, keeps the order from the
-package's `sentences.json` (which is video order), and imports Japanese,
-reading, English, creator/channel, source URL, transcript metadata, and each
-sentence's native audio clip.
+Glossbook creates a book named after the source and imports Japanese, reading,
+English, creator/channel, source URL, transcript metadata, and each sentence's
+native audio clip. Sentences are ordered by clip start time (video/extraction
+order), so the book always matches the timeline.
 
 Reimporting a package with the same source ID refreshes that book and its
-clips. It does not duplicate the book, and it preserves manual analysis,
-study statuses, and existing manual ordering. New sentences are added. If the
-same normalized Japanese sentence occurs more than once in one video,
-Glossbook keeps all native clips but represents the text once in the book and
-shows a warning in the preview.
+clips. It does not duplicate the book, and it preserves manual analysis and
+study statuses. New sentences are added. Because the extraction order is
+authoritative, reimporting also restores the book to video order — any manual
+reordering of shadowing sentences is replaced on the next refresh (Satori CSV
+imports still respect the Import "Initial order" dropdown). If the same
+normalized Japanese sentence occurs more than once in one video, Glossbook
+keeps all native clips but represents the text once in the book and shows a
+warning in the preview.
 
 On Analyze and Practice, **🎧 Native** plays the imported source clip. **🔊**
 remains available for device TTS, and chunk audio continues to use TTS.

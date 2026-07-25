@@ -5,6 +5,7 @@ import { resetDbForTests } from '../src/db/database';
 import {
   commitShadowingPackageImport,
   getDb,
+  reorderBookSentences,
   saveAnalysis,
   setBookSentenceStatus,
 } from '../src/db/repository';
@@ -19,17 +20,24 @@ interface PackageOptions {
   format?: string;
   includeAudio?: boolean;
   firstEnglish?: string;
+  // When true, the sentences.json array lists the later clip first so timeline
+  // ordering (by startMs) must reorder it ahead of the array sequence.
+  outOfOrderTimeline?: boolean;
 }
 
 function shadowingPackageFile(options: PackageOptions = {}): File {
+  const firstStartMs = options.outOfOrderTimeline ? 6_000 : 1_250;
+  const firstEndMs = options.outOfOrderTimeline ? 7_500 : 3_500;
+  const secondStartMs = options.outOfOrderTimeline ? 1_250 : 3_500;
+  const secondEndMs = options.outOfOrderTimeline ? 3_500 : 5_100;
   const sentences = [
     {
       id: FIRST_SENTENCE_ID,
       japanese: '暖かい春がやって来ました。',
       reading: 'あたたかいはるがやってきました。',
       english: options.firstEnglish ?? 'Warm spring has arrived.',
-      startMs: 1_250,
-      endMs: 3_500,
+      startMs: firstStartMs,
+      endMs: firstEndMs,
       tags: ['spring'],
       transcriptStatus: 'manually-corrected',
       audio: {
@@ -42,8 +50,8 @@ function shadowingPackageFile(options: PackageOptions = {}): File {
       id: SECOND_SENTENCE_ID,
       japanese: '桜も咲いています。',
       english: 'The cherry blossoms are blooming too.',
-      startMs: 3_500,
-      endMs: 5_100,
+      startMs: secondStartMs,
+      endMs: secondEndMs,
       tags: [],
       transcriptStatus: 'verified',
       audio: {
@@ -202,6 +210,88 @@ describe('shadowing project import', () => {
       (await db.bookSentences.get(membership.id))?.status,
     ).toBe('needs_review');
     expect((await db.analyses.get(membership.sentenceId))?.notes).toBe(
+      'Keep this analysis',
+    );
+  });
+
+  it('orders drafts by clip start time even when the array is out of order', async () => {
+    const preview = await parseShadowingPackage(
+      shadowingPackageFile({ outOfOrderTimeline: true }),
+    );
+
+    expect(preview.drafts.map((item) => item.draft.japanese)).toEqual([
+      '桜も咲いています。',
+      '暖かい春がやって来ました。',
+    ]);
+  });
+
+  it('restores package order on reimport after a manual reorder', async () => {
+    const firstPreview = await parseShadowingPackage(shadowingPackageFile());
+    const first = await commitShadowingPackageImport(firstPreview);
+    const db = getDb();
+
+    const original = await db.bookSentences
+      .where('bookId')
+      .equals(first.bookId)
+      .sortBy('position');
+    const firstMembership = original[0]!;
+
+    // Simulate the user manually reordering the book, then giving one sentence
+    // study status + analysis that must survive the reimport.
+    await reorderBookSentences(
+      first.bookId,
+      [...original].reverse().map((item) => item.sentenceId),
+    );
+    await setBookSentenceStatus(
+      first.bookId,
+      firstMembership.sentenceId,
+      'needs_review',
+    );
+    await saveAnalysis(
+      firstMembership.sentenceId,
+      [
+        {
+          id: 'chunk-1',
+          order: 0,
+          japanese: '暖かい春がやって来ました。',
+          role: 'engine',
+          literalEnglish: 'warm spring arrived',
+        },
+      ],
+      'Keep this analysis',
+    );
+
+    const reversed = await db.bookSentences
+      .where('bookId')
+      .equals(first.bookId)
+      .sortBy('position');
+    expect(reversed.map((item) => item.sentenceId)).toEqual(
+      [...original].reverse().map((item) => item.sentenceId),
+    );
+
+    const existing = await db.sentences.toArray();
+    const secondPreview = await parseShadowingPackage(
+      shadowingPackageFile(),
+      existing,
+    );
+    const second = await commitShadowingPackageImport(secondPreview);
+
+    expect(second.refreshed).toBe(true);
+    const restored = await db.bookSentences
+      .where('bookId')
+      .equals(second.bookId)
+      .sortBy('position');
+    const restoredSentences = await db.sentences.bulkGet(
+      restored.map((item) => item.sentenceId),
+    );
+    expect(restoredSentences.map((sentence) => sentence?.japanese)).toEqual([
+      '暖かい春がやって来ました。',
+      '桜も咲いています。',
+    ]);
+    expect(
+      (await db.bookSentences.get(firstMembership.id))?.status,
+    ).toBe('needs_review');
+    expect((await db.analyses.get(firstMembership.sentenceId))?.notes).toBe(
       'Keep this analysis',
     );
   });

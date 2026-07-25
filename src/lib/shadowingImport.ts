@@ -231,7 +231,9 @@ function buildDrafts(
   repeatedOccurrenceCount: number;
 } {
   const byKey = new Map<string, ParsedSentenceDraft>();
-  const order: string[] = [];
+  // Timeline ordering: earliest clip start wins, with array index as a stable
+  // tiebreaker so equal timestamps keep the package's original sequence.
+  const orderMeta = new Map<string, { startMs: number; index: number }>();
   let repeatedOccurrenceCount = 0;
 
   sentences.forEach((sentence, index) => {
@@ -252,7 +254,7 @@ function buildDrafts(
         conflicts: [],
         firstOccurrenceIndex: index,
       });
-      order.push(normalizedKey);
+      orderMeta.set(normalizedKey, { startMs: sentence.startMs, index });
       return;
     }
 
@@ -274,10 +276,30 @@ function buildDrafts(
     current.readingOnly ||= sentence.reading?.trim() ?? '';
     current.conflicts = conflicts;
     current.sourceReferences.push(ref);
+
+    const meta = orderMeta.get(normalizedKey);
+    if (meta && sentence.startMs < meta.startMs) {
+      meta.startMs = sentence.startMs;
+    }
+  });
+
+  const orderedKeys = [...byKey.keys()].sort((a, b) => {
+    const metaA = orderMeta.get(a)!;
+    const metaB = orderMeta.get(b)!;
+    if (metaA.startMs !== metaB.startMs) return metaA.startMs - metaB.startMs;
+    return metaA.index - metaB.index;
+  });
+
+  // Reassign firstOccurrenceIndex to the timeline rank so downstream ordering
+  // (first_occurrence) and the book reorder agree on package/video order.
+  const drafts = orderedKeys.map((key, rank) => {
+    const draft = byKey.get(key)!;
+    draft.firstOccurrenceIndex = rank;
+    return draft;
   });
 
   return {
-    drafts: order.map((key) => byKey.get(key)!),
+    drafts,
     repeatedOccurrenceCount,
   };
 }

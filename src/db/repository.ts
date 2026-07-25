@@ -928,6 +928,12 @@ export async function commitShadowingPackageImport(
     ].join('\n'),
   });
 
+  // The shadowing package's video/extraction order is authoritative. Rewrite
+  // membership positions to match it on every import, including reimports where
+  // the book was previously reordered by hand. Analysis, status, chapters, and
+  // notes are untouched because only bookSentences.position changes.
+  await reorderBookSentences(result.bookId, selectedIds);
+
   const sentenceByKey = new Map(
     (await db.sentences.toArray()).map((sentence) => [
       sentence.normalizedKey,
