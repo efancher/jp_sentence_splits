@@ -33,11 +33,14 @@ export async function runSyncCycle(): Promise<void> {
   if (syncInFlight) return syncInFlight;
   syncInFlight = (async () => {
     try {
-      await pushMutations();
+      // Per-item push failures must surface as lastError. Previously they were
+      // retried quietly while the cycle still cleared lastError, so the badge
+      // stayed on "Pending N" forever (e.g. after a missing SQL migration).
+      const pushFailure = await pushMutations();
       await pullChanges();
       await updateSyncMeta({
         lastSyncAt: new Date().toISOString(),
-        lastError: undefined,
+        lastError: pushFailure,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -50,17 +53,21 @@ export async function runSyncCycle(): Promise<void> {
   return syncInFlight;
 }
 
-async function pushMutations(): Promise<void> {
+/** Returns a short failure summary when any queue item could not be pushed. */
+async function pushMutations(): Promise<string | undefined> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return undefined;
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const userId = session?.user?.id;
-  if (!userId) return;
+  if (!userId) return undefined;
 
   const pending = await listPendingMutations();
   syncLog('debug', `Pushing ${pending.length} mutations`);
+
+  let failureCount = 0;
+  let firstFailure: string | undefined;
 
   for (const item of pending) {
     try {
@@ -79,8 +86,14 @@ async function pushMutations(): Promise<void> {
         message,
       });
       await bumpQueueRetry(item.id, message);
+      failureCount += 1;
+      firstFailure ??= `${item.entity}: ${message}`;
     }
   }
+
+  if (!failureCount || !firstFailure) return undefined;
+  if (failureCount === 1) return firstFailure;
+  return `${firstFailure} (+${failureCount - 1} more)`;
 }
 
 async function acknowledgeSyncedVersion(

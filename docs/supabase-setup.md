@@ -52,9 +52,16 @@ Restart `npm run dev` after changes. Without these vars the app stays
 ## 6. Run SQL migrations
 
 1. Open SQL Editor in the Supabase Dashboard.
-2. Paste the full contents of
-   [`supabase/migrations/20260722000000_sync_schema.sql`](../supabase/migrations/20260722000000_sync_schema.sql).
-3. Run it once.
+2. Paste and run each migration **in order**, once per file:
+   - [`supabase/migrations/20260722000000_sync_schema.sql`](../supabase/migrations/20260722000000_sync_schema.sql) (initial schema)
+   - [`supabase/migrations/20260725000000_book_collapsed_chapters.sql`](../supabase/migrations/20260725000000_book_collapsed_chapters.sql) (foldable chapters)
+   - [`supabase/migrations/20260725120000_vocabulary_review.sql`](../supabase/migrations/20260725120000_vocabulary_review.sql) (vocabulary review / Anki mining)
+3. Additive migrations use `if not exists` / defaults, so re-running them is safe.
+
+If sync shows a stuck pending count that never clears after **Sync now**, the usual
+cause is a missing column from a newer migration (PostgREST rejects the push and
+the queue item is retried). Hover the sync badge or check **Settings → Copy
+diagnostics** for the real error, then run any pending SQL above and sync again.
 
 Or with Supabase CLI (optional):
 

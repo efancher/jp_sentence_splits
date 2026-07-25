@@ -15,14 +15,22 @@ const LABELS: Record<SyncStatus, string> = {
 export function SyncStatusBadge() {
   const sync = useSync();
   const label = LABELS[sync.status];
+  const errorSnippet =
+    sync.lastError && sync.lastError.length > 80
+      ? `${sync.lastError.slice(0, 77)}…`
+      : sync.lastError;
   const detail =
     sync.status === 'pending'
       ? `${sync.pending}`
       : sync.status === 'conflict'
         ? `${sync.conflicts}`
-        : sync.lastSyncAt
-          ? new Date(sync.lastSyncAt).toLocaleString()
-          : null;
+        : sync.status === 'error'
+          ? sync.pending > 0
+            ? `${sync.pending} · ${errorSnippet ?? 'see Settings'}`
+            : (errorSnippet ?? null)
+          : sync.lastSyncAt
+            ? new Date(sync.lastSyncAt).toLocaleString()
+            : null;
 
   return (
     <div className="sync-status-badge" title={sync.lastError ?? label}>
