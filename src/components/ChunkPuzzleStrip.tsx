@@ -2,9 +2,13 @@ import type { CSSProperties } from 'react';
 
 import { assignClauseIndices, isEngineRole } from '../lib/clauseBands';
 import {
+  buildLeftEdgePath,
   buildPuzzlePiecePath,
+  buildRightEdgePath,
+  PUZZLE_EDGE_WIDTH,
   PUZZLE_PATH_HEIGHT,
   PUZZLE_PATH_WIDTH,
+  PUZZLE_TAB_DEPTH,
 } from '../lib/puzzlePiecePath';
 import {
   adjacentPuzzleFit,
@@ -38,18 +42,20 @@ type ChunkPuzzleStripProps = {
 
 const CLAUSE_TINT_COUNT = 4;
 
-function PieceChrome({
-  leftEdge,
-  rightEdge,
+function EdgeChrome({
+  side,
+  edge,
 }: {
-  leftEdge: PuzzleEdge;
-  rightEdge: PuzzleEdge;
+  side: 'left' | 'right';
+  edge: PuzzleEdge;
 }) {
-  const d = buildPuzzlePiecePath(leftEdge, rightEdge);
+  const d = side === 'left' ? buildLeftEdgePath(edge) : buildRightEdgePath(edge);
   return (
     <svg
-      className="chunk-puzzle-chrome"
-      viewBox={`0 0 ${PUZZLE_PATH_WIDTH} ${PUZZLE_PATH_HEIGHT}`}
+      className={`chunk-puzzle-edge chunk-puzzle-edge-${side}`}
+      width={PUZZLE_EDGE_WIDTH}
+      height="100%"
+      viewBox={`0 0 ${PUZZLE_EDGE_WIDTH} ${PUZZLE_PATH_HEIGHT}`}
       preserveAspectRatio="none"
       aria-hidden
     >
@@ -109,6 +115,10 @@ export function ChunkPuzzleStrip({
             index > 0
               ? adjacentPuzzleFit(chunks[index - 1]!.role, chunk.role)
               : 'neutral';
+          const overlap =
+            index < chunks.length - 1 && rightEdge !== 'flat'
+              ? PUZZLE_TAB_DEPTH
+              : 0;
 
           return (
             <div
@@ -138,10 +148,15 @@ export function ChunkPuzzleStrip({
               style={
                 {
                   '--clause-tint': `var(--clause-band-${clause % CLAUSE_TINT_COUNT})`,
+                  marginRight: overlap ? `-${overlap}px` : undefined,
                 } as CSSProperties
               }
             >
-              <PieceChrome leftEdge={leftEdge} rightEdge={rightEdge} />
+              <div className="chunk-puzzle-shell" aria-hidden>
+                <EdgeChrome side="left" edge={leftEdge} />
+                <div className="chunk-puzzle-mid" />
+                <EdgeChrome side="right" edge={rightEdge} />
+              </div>
               <div className="chunk-puzzle-body">
                 <div className="jp chunk-puzzle-japanese">{chunk.japanese}</div>
                 {revealRoles ? (

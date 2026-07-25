@@ -487,25 +487,37 @@ strong.jp {
 }
 
 .chunk-puzzle-piece {
+  --puzzle-edge: 14px;
   position: relative;
   z-index: 1;
   display: grid;
   min-width: 4.75rem;
   max-width: 14rem;
-  margin-right: -6px;
-  padding: 0.55rem 0.95rem 0.55rem 0.85rem;
   background: transparent;
   isolation: isolate;
 }
 
-.chunk-puzzle-chrome {
+.chunk-puzzle-shell {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
   z-index: 0;
-  overflow: visible;
+  display: grid;
+  grid-template-columns: var(--puzzle-edge) minmax(0, 1fr) var(--puzzle-edge);
   pointer-events: none;
+  overflow: visible;
+}
+
+.chunk-puzzle-edge {
+  display: block;
+  width: var(--puzzle-edge);
+  height: 100%;
+  overflow: visible;
+}
+
+.chunk-puzzle-mid {
+  background: var(--clause-tint, var(--bg-elevated));
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent));
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent));
 }
 
 .chunk-puzzle-chrome-fill {
@@ -524,12 +536,13 @@ strong.jp {
   display: grid;
   gap: 0.2rem;
   align-content: center;
+  padding: 0.55rem 0.35rem;
+  min-height: 2.75rem;
 }
 
 .chunk-puzzle-shape-engine-anchor {
   z-index: 2;
   min-width: 5.5rem;
-  margin-right: 0.1rem;
   font-weight: 600;
 }
 
@@ -563,6 +576,14 @@ strong.jp {
 
 .chunk-puzzle-fit-odd .chunk-puzzle-chrome-stroke {
   stroke: color-mix(in srgb, var(--warning) 75%, var(--border));
+}
+
+.chunk-puzzle-fit-good .chunk-puzzle-mid {
+  border-color: color-mix(in srgb, var(--success) 70%, var(--border));
+}
+
+.chunk-puzzle-fit-odd .chunk-puzzle-mid {
+  border-color: color-mix(in srgb, var(--warning) 75%, var(--border));
 }
 
 .chunk-puzzle-fit-good.chunk-puzzle-piece-speaking .chunk-puzzle-chrome-stroke,

@@ -1,102 +1,195 @@
 import type { PuzzleEdge } from './puzzleShapes';
 
-/** viewBox size for piece chrome + legend miniatures. */
-export const PUZZLE_PATH_WIDTH = 100;
+/** Fixed edge-strip width in SVG units (paired 1:1 with CSS px). */
+export const PUZZLE_EDGE_WIDTH = 14;
 export const PUZZLE_PATH_HEIGHT = 56;
-const TAB = 10;
+/** Tab/socket depth; adjacent pieces overlap by this many CSS px. */
+export const PUZZLE_TAB_DEPTH = 10;
+/** Legend miniature width. */
+export const PUZZLE_PATH_WIDTH = 100;
 
 /**
- * Trace an edge from top (y=0) to bottom (y=H).
- * Left side: sockets dent inward (+x). Right side: tabs push outward.
+ * Vertical edge profile from y=0 → y=H along spine `baseX`.
+ * Bump moves toward `baseX + direction * depth` (tabs and sockets share geometry).
  */
-function edgePoints(
+function profileDown(
   edge: PuzzleEdge,
-  side: 'left' | 'right',
   height: number,
+  baseX: number,
+  direction: 1 | -1,
 ): string {
-  const x0 = side === 'left' ? 0 : PUZZLE_PATH_WIDTH;
-  const inward = side === 'left' ? 1 : -1;
   const mid = height / 2;
+  if (edge === 'flat') return `L ${baseX} ${height}`;
+
+  const bump = direction * PUZZLE_TAB_DEPTH;
 
   switch (edge) {
-    case 'flat':
-      return `L ${x0} ${height}`;
-
-    case 'round': {
-      const d = TAB * inward;
+    case 'round':
       return [
-        `L ${x0} ${mid - 14}`,
-        `C ${x0} ${mid - 8}, ${x0 + d} ${mid - 6}, ${x0 + d} ${mid}`,
-        `C ${x0 + d} ${mid + 6}, ${x0} ${mid + 8}, ${x0} ${mid + 14}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} ${mid - 14}`,
+        `C ${baseX} ${mid - 7}, ${baseX + bump} ${mid - 5}, ${baseX + bump} ${mid}`,
+        `C ${baseX + bump} ${mid + 5}, ${baseX} ${mid + 7}, ${baseX} ${mid + 14}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
-    }
-
     case 'deep-u': {
-      // を-style deep hollow / tall tab
-      const d = 12 * inward;
-      const y1 = mid - 16;
-      const y2 = mid + 16;
+      const y1 = mid - 15;
+      const y2 = mid + 15;
       return [
-        `L ${x0} ${y1}`,
-        `L ${x0 + d} ${y1}`,
-        `C ${x0 + d + 2 * inward} ${y1}, ${x0 + d + 2 * inward} ${y2}, ${x0 + d} ${y2}`,
-        `L ${x0} ${y2}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} ${y1}`,
+        `L ${baseX + bump} ${y1}`,
+        `L ${baseX + bump} ${y2}`,
+        `L ${baseX} ${y2}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
     }
-
-    case 'key-pin': {
-      // に/で triangular key
-      const d = 11 * inward;
+    case 'key-pin':
       return [
-        `L ${x0} ${mid - 12}`,
-        `L ${x0 + d} ${mid}`,
-        `L ${x0} ${mid + 12}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} ${mid - 13}`,
+        `L ${baseX + bump} ${mid}`,
+        `L ${baseX} ${mid + 13}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
-    }
-
-    case 'bump': {
-      const d = 11 * inward;
+    case 'bump':
       return [
-        `L ${x0} ${mid - 14}`,
-        `Q ${x0 + d} ${mid}, ${x0} ${mid + 14}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} ${mid - 14}`,
+        `Q ${baseX + bump} ${mid}, ${baseX} ${mid + 14}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
-    }
-
     case 'wide-bay': {
-      const d = 8 * inward;
+      const inset = bump * 0.85;
       return [
-        `L ${x0} ${mid - 18}`,
-        `L ${x0 + d} ${mid - 14}`,
-        `L ${x0 + d} ${mid + 14}`,
-        `L ${x0} ${mid + 18}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} ${mid - 17}`,
+        `L ${baseX + inset} ${mid - 12}`,
+        `L ${baseX + inset} ${mid + 12}`,
+        `L ${baseX} ${mid + 17}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
     }
-
     case 'bridge': {
-      // て-bridge: step notch top and bottom
-      const d = 8 * inward;
+      const step = bump * 0.75;
       return [
-        `L ${x0} 10`,
-        `L ${x0 + d} 10`,
-        `L ${x0 + d} ${height - 10}`,
-        `L ${x0} ${height - 10}`,
-        `L ${x0} ${height}`,
+        `L ${baseX} 12`,
+        `L ${baseX + step} 12`,
+        `L ${baseX + step} ${height - 12}`,
+        `L ${baseX} ${height - 12}`,
+        `L ${baseX} ${height}`,
       ].join(' ');
     }
-
     default:
-      return `L ${x0} ${height}`;
+      return `L ${baseX} ${height}`;
+  }
+}
+
+/** Same profile, traced y=H → y=0. */
+function profileUp(
+  edge: PuzzleEdge,
+  height: number,
+  baseX: number,
+  direction: 1 | -1,
+): string {
+  const mid = height / 2;
+  if (edge === 'flat') return `L ${baseX} 0`;
+
+  const bump = direction * PUZZLE_TAB_DEPTH;
+
+  switch (edge) {
+    case 'round':
+      return [
+        `L ${baseX} ${mid + 14}`,
+        `C ${baseX} ${mid + 7}, ${baseX + bump} ${mid + 5}, ${baseX + bump} ${mid}`,
+        `C ${baseX + bump} ${mid - 5}, ${baseX} ${mid - 7}, ${baseX} ${mid - 14}`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    case 'deep-u': {
+      const y1 = mid - 15;
+      const y2 = mid + 15;
+      return [
+        `L ${baseX} ${y2}`,
+        `L ${baseX + bump} ${y2}`,
+        `L ${baseX + bump} ${y1}`,
+        `L ${baseX} ${y1}`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    }
+    case 'key-pin':
+      return [
+        `L ${baseX} ${mid + 13}`,
+        `L ${baseX + bump} ${mid}`,
+        `L ${baseX} ${mid - 13}`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    case 'bump':
+      return [
+        `L ${baseX} ${mid + 14}`,
+        `Q ${baseX + bump} ${mid}, ${baseX} ${mid - 14}`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    case 'wide-bay': {
+      const inset = bump * 0.85;
+      return [
+        `L ${baseX} ${mid + 17}`,
+        `L ${baseX + inset} ${mid + 12}`,
+        `L ${baseX + inset} ${mid - 12}`,
+        `L ${baseX} ${mid - 17}`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    }
+    case 'bridge': {
+      const step = bump * 0.75;
+      return [
+        `L ${baseX} ${height - 12}`,
+        `L ${baseX + step} ${height - 12}`,
+        `L ${baseX + step} 12`,
+        `L ${baseX} 12`,
+        `L ${baseX} 0`,
+      ].join(' ');
+    }
+    default:
+      return `L ${baseX} 0`;
   }
 }
 
 /**
- * Closed SVG path for a puzzle piece with neighbor-aware edges.
- * Coordinates: viewBox 0 0 100 56.
+ * Left edge strip path.
+ * Socket opens at x=0 (receives previous tab); flat join to mid at x=W.
+ */
+export function buildLeftEdgePath(edge: PuzzleEdge): string {
+  const w = PUZZLE_EDGE_WIDTH;
+  const h = PUZZLE_PATH_HEIGHT;
+  return [
+    `M 0 0`,
+    profileDown(edge, h, 0, 1),
+    `L ${w} ${h}`,
+    `L ${w} 0`,
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * Right edge strip path.
+ * Flat join to mid at x=0; tab tip at x=W (plugs into next socket under overlap).
+ */
+export function buildRightEdgePath(edge: PuzzleEdge): string {
+  const w = PUZZLE_EDGE_WIDTH;
+  const h = PUZZLE_PATH_HEIGHT;
+  if (edge === 'flat') {
+    return `M 0 0 L 0 ${h} L ${w} ${h} L ${w} 0 Z`;
+  }
+  // Tab face sits at (W - TAB); tip reaches W so a -TAB px overlap nests into
+  // the next piece's left socket (cavity from 0 → TAB).
+  const base = w - PUZZLE_TAB_DEPTH;
+  return [
+    `M 0 0`,
+    `L 0 ${h}`,
+    `L ${base} ${h}`,
+    profileUp(edge, h, base, 1),
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * Full miniature path for the legend (left socket + right tab).
+ * Prefer {@link buildLeftEdgePath}/{@link buildRightEdgePath} for real pieces.
  */
 export function buildPuzzlePiecePath(
   leftEdge: PuzzleEdge,
@@ -104,109 +197,15 @@ export function buildPuzzlePiecePath(
 ): string {
   const w = PUZZLE_PATH_WIDTH;
   const h = PUZZLE_PATH_HEIGHT;
-  const leftX = 0;
-  const rightX = w;
-
-  // Top edge left → right, then right edge top→bottom, bottom right→left, left bottom→top.
-  // Easier: start top-left, go down left edge, across bottom, up right edge (reversed), across top.
-  // Build left top→bottom, bottom to right, right bottom→top via reverse, top close.
-
-  const leftDown = edgePoints(leftEdge, 'left', h);
-
-  // Start top-left, down the left edge, across the bottom, up the right edge, close.
+  const rightBase = rightEdge === 'flat' ? w : w - PUZZLE_TAB_DEPTH;
   return [
-    `M ${leftX} 0`,
-    leftDown,
-    `L ${rightX} ${h}`,
-    reverseRightEdge(rightEdge, h),
-    `L ${leftX} 0`,
+    `M 0 0`,
+    profileDown(leftEdge, h, 0, 1),
+    `L ${rightBase} ${h}`,
+    profileUp(rightEdge, h, rightBase, 1),
     'Z',
   ].join(' ');
 }
 
-/** Trace right edge from bottom (y=H) to top (y=0). */
-function reverseRightEdge(edge: PuzzleEdge, height: number): string {
-  const x0 = PUZZLE_PATH_WIDTH;
-  const inward = -1;
-  const mid = height / 2;
-
-  switch (edge) {
-    case 'flat':
-      return `L ${x0} 0`;
-
-    case 'round': {
-      const d = TAB * inward;
-      return [
-        `L ${x0} ${mid + 14}`,
-        `C ${x0} ${mid + 8}, ${x0 + d} ${mid + 6}, ${x0 + d} ${mid}`,
-        `C ${x0 + d} ${mid - 6}, ${x0} ${mid - 8}, ${x0} ${mid - 14}`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    case 'deep-u': {
-      const d = 12 * inward;
-      const y1 = mid - 16;
-      const y2 = mid + 16;
-      return [
-        `L ${x0} ${y2}`,
-        `L ${x0 + d} ${y2}`,
-        `C ${x0 + d + 2 * inward} ${y2}, ${x0 + d + 2 * inward} ${y1}, ${x0 + d} ${y1}`,
-        `L ${x0} ${y1}`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    case 'key-pin': {
-      const d = 11 * inward;
-      return [
-        `L ${x0} ${mid + 12}`,
-        `L ${x0 + d} ${mid}`,
-        `L ${x0} ${mid - 12}`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    case 'bump': {
-      const d = 11 * inward;
-      return [
-        `L ${x0} ${mid + 14}`,
-        `Q ${x0 + d} ${mid}, ${x0} ${mid - 14}`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    case 'wide-bay': {
-      const d = 8 * inward;
-      return [
-        `L ${x0} ${mid + 18}`,
-        `L ${x0 + d} ${mid + 14}`,
-        `L ${x0 + d} ${mid - 14}`,
-        `L ${x0} ${mid - 18}`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    case 'bridge': {
-      const d = 8 * inward;
-      return [
-        `L ${x0} ${height - 10}`,
-        `L ${x0 + d} ${height - 10}`,
-        `L ${x0 + d} 10`,
-        `L ${x0} 10`,
-        `L ${x0} 0`,
-      ].join(' ');
-    }
-
-    default:
-      return `L ${x0} 0`;
-  }
-}
-
-/** Miniature path for legend chips (same edges as a solo piece of that family). */
-export function buildLegendPath(
-  leftEdge: PuzzleEdge,
-  rightEdge: PuzzleEdge,
-): string {
-  return buildPuzzlePiecePath(leftEdge, rightEdge);
-}
+/** @deprecated Alias kept for older imports. */
+export const buildLegendPath = buildPuzzlePiecePath;

@@ -176,17 +176,13 @@ export function intrinsicLeftEdge(family: PuzzleShapeFamily): PuzzleEdge {
 
 /**
  * Neighbor-aware left edge: mate to the previous piece’s right tab
- * (same profile id — rendered mirrored as a socket).
+ * (same profile id — rendered as a socket on the left strip).
  */
 export function resolveLeftEdge(
   family: PuzzleShapeFamily,
   previousRight: PuzzleEdge | null,
 ): PuzzleEdge {
   if (previousRight == null) return intrinsicLeftEdge(family);
-  // Flat→flat is fine; otherwise inherit the neighbor’s profile so tabs nest.
-  if (previousRight === 'flat' && family === 'engine-anchor') {
-    return intrinsicLeftEdge(family);
-  }
   return previousRight;
 }
 
@@ -200,9 +196,16 @@ const GOOD_PAIRS = new Set<string>([
   'ni-de-slot>engine-anchor',
   'ga-subject>engine-anchor',
   'topic-band>engine-anchor',
+  'topic-band>te-bridge',
   'other-car>engine-anchor',
+  'other-car>ga-subject',
   'te-bridge>engine-anchor',
   'te-bridge>te-bridge',
+  'te-bridge>other-car',
+  'te-bridge>ga-subject',
+  'te-bridge>noun-flat',
+  'te-bridge>connector',
+  'te-bridge>topic-band',
   'engine-anchor>ending-cap',
   'engine-anchor>connector',
   'connector>noun-flat',

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPuzzlePiecePath } from '../src/lib/puzzlePiecePath';
+import {
+  buildLeftEdgePath,
+  buildPuzzlePiecePath,
+  buildRightEdgePath,
+} from '../src/lib/puzzlePiecePath';
 import {
   adjacentPuzzleFit,
   puzzleShapeFamily,
@@ -54,6 +58,7 @@ describe('neighbor edges and fit', () => {
     expect(prevRight).toBe('deep-u');
     expect(resolveLeftEdge('engine-anchor', prevRight)).toBe('deep-u');
     expect(resolveLeftEdge('wo-socket', null)).toBe('deep-u');
+    expect(resolveLeftEdge('engine-anchor', 'flat')).toBe('flat');
   });
 
   it('marks common car→engine joints as good and odd inversions', () => {
@@ -64,10 +69,26 @@ describe('neighbor edges and fit', () => {
     expect(adjacentPuzzleFit('を-car', 'を-car')).toBe('odd');
   });
 
-  it('builds a closed SVG path for piece chrome', () => {
+  it('treats 空は → 青くて → の → が → engine as fitting joints', () => {
+    expect(adjacentPuzzleFit('topic は', 'て-car')).toBe('good');
+    expect(adjacentPuzzleFit('て-car', 'の-car')).toBe('good');
+    expect(adjacentPuzzleFit('の-car', 'Aが')).toBe('good');
+    expect(adjacentPuzzleFit('Aが', 'engine')).toBe('good');
+  });
+
+  it('builds interlocking left socket and right tab strips', () => {
+    const left = buildLeftEdgePath('wide-bay');
+    const right = buildRightEdgePath('wide-bay');
+    expect(left.startsWith('M ')).toBe(true);
+    expect(left.endsWith('Z')).toBe(true);
+    expect(right.startsWith('M ')).toBe(true);
+    expect(right.endsWith('Z')).toBe(true);
+  });
+
+  it('builds a closed SVG path for legend chrome', () => {
     const path = buildPuzzlePiecePath('deep-u', 'flat');
     expect(path.startsWith('M ')).toBe(true);
-    expect(path.includes(' Z') || path.endsWith('Z')).toBe(true);
+    expect(path.endsWith('Z')).toBe(true);
     expect(path.length).toBeGreaterThan(40);
   });
 });
