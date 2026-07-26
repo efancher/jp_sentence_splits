@@ -424,17 +424,36 @@ strong.jp {
   background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: 12px;
+  min-height: 3.5rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.vocab-morph-strip.is-drop-target {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-muted));
 }
 
 .vocab-morph-piece {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  gap: 0.1rem;
   min-width: 2.4rem;
+  min-height: var(--touch);
+  padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
-  overflow: hidden;
+  color: inherit;
+  cursor: grab;
+  line-height: 1.2;
+  touch-action: none;
+}
+
+.vocab-morph-piece:active {
+  cursor: grabbing;
 }
 
 .vocab-morph-piece.is-content {
@@ -451,24 +470,8 @@ strong.jp {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
-.vocab-morph-piece.is-marked {
-  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: 1px;
-}
-
-.vocab-morph-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  min-height: var(--touch);
-  padding: 0.35rem 0.45rem 0.25rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  line-height: 1.2;
+.vocab-morph-piece.is-dragging {
+  opacity: 0.35;
 }
 
 .vocab-morph-surface {
@@ -485,28 +488,112 @@ strong.jp {
   white-space: nowrap;
 }
 
-.vocab-morph-mark {
-  min-height: 1.7rem;
-  padding: 0.15rem 0.35rem;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-  font-size: 0.68rem;
-  cursor: pointer;
-}
-
-.vocab-morph-mark.is-active {
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
-  font-weight: 600;
-}
-
 .vocab-morph-gap {
   display: inline-flex;
   align-items: center;
   padding: 0.35rem 0.2rem;
   color: color-mix(in srgb, var(--text) 55%, transparent);
   font-size: 1.05rem;
+}
+
+.vocab-remove-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  font-size: 0.82rem;
+  text-align: center;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.vocab-remove-zone.is-active {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.vocab-remove-zone.is-drop-over {
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+}
+
+.vocab-selected-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  min-height: 6rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.vocab-selected-tray.is-drop-target {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.vocab-selected-tray.is-drop-over {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+
+.vocab-tray-hint {
+  font-size: 0.72rem;
+}
+
+.vocab-selected-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.55rem 0.65rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.vocab-selected-card.is-drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.vocab-selected-card.is-drop-invalid {
+  opacity: 0.55;
+}
+
+.vocab-selected-card.is-drop-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+}
+
+.vocab-selected-drag {
+  min-width: var(--touch);
+  min-height: var(--touch);
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.vocab-selected-drag:active {
+  cursor: grabbing;
+}
+
+.vocab-drag-overlay {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 18%, transparent);
+  cursor: grabbing;
+  pointer-events: none;
 }
 
 .summary-lines {

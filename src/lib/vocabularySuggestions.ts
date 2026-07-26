@@ -151,6 +151,87 @@ export function combineSuggestions(
   };
 }
 
+/** True when a selection already covers this suggestion's span. */
+export function selectionCoversSuggestion(
+  selection: VocabularySelection,
+  suggestion: VocabularySuggestion,
+): boolean {
+  if (selection.suggestionIds?.includes(suggestion.id)) return true;
+  return (
+    selection.start <= suggestion.start && selection.end >= suggestion.end
+  );
+}
+
+/**
+ * True when the suggestion can be merged into the selection: already covered,
+ * or immediately adjacent on either side (no gap).
+ */
+export function canMergeSuggestionIntoSelection(
+  suggestion: VocabularySuggestion,
+  selection: VocabularySelection,
+  japanese: string,
+): boolean {
+  if (!validateSpan(japanese, suggestion.start, suggestion.end, suggestion.surface)) {
+    return false;
+  }
+  if (!validateSpan(japanese, selection.start, selection.end, selection.surface)) {
+    return false;
+  }
+  if (selectionCoversSuggestion(selection, suggestion)) return true;
+  return (
+    suggestion.end === selection.start || suggestion.start === selection.end
+  );
+}
+
+/**
+ * Merge a morphology suggestion into an existing selection when adjacent.
+ * Returns null when the spans are not mergeable. Preserves the selection id.
+ */
+export function mergeSuggestionIntoSelection(
+  suggestion: VocabularySuggestion,
+  selection: VocabularySelection,
+  japanese: string,
+): VocabularySelection | null {
+  if (!canMergeSuggestionIntoSelection(suggestion, selection, japanese)) {
+    return null;
+  }
+  if (selectionCoversSuggestion(selection, suggestion)) {
+    return selection;
+  }
+
+  const start = Math.min(selection.start, suggestion.start);
+  const end = Math.max(selection.end, suggestion.end);
+  const surface = japanese.slice(start, end);
+  if (!validateSpan(japanese, start, end, surface)) return null;
+
+  const suggestionBefore = suggestion.end === selection.start;
+  const expression = suggestionBefore
+    ? `${suggestion.expression}${selection.expression}`
+    : `${selection.expression}${suggestion.expression}`;
+  const reading = suggestionBefore
+    ? `${suggestion.reading}${selection.reading}`
+    : `${selection.reading}${suggestion.reading}`;
+  const posParts = suggestionBefore
+    ? [suggestion.pos, selection.pos]
+    : [selection.pos, suggestion.pos];
+  const suggestionIds = [
+    ...(selection.suggestionIds ?? []),
+    suggestion.id,
+  ].filter((id, index, all) => all.indexOf(id) === index);
+
+  return {
+    ...selection,
+    surface,
+    start,
+    end,
+    expression,
+    reading,
+    pos: posParts.filter(Boolean).join('+'),
+    source: 'combined',
+    suggestionIds,
+  };
+}
+
 /**
  * Build an in-order morph strip over the full sentence: morphology tokens plus
  * any uncovered character gaps (so the strip always reads as the Japanese).

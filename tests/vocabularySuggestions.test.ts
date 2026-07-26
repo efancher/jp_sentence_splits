@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildMorphStrip,
+  canMergeSuggestionIntoSelection,
   combineSuggestions,
   defaultSelectionsFromSuggestions,
   isContentPos,
+  mergeSuggestionIntoSelection,
+  selectionFromSuggestion,
   suggestionsFromTokens,
   validateSpan,
 } from '../src/lib/vocabularySuggestions';
@@ -49,6 +52,15 @@ describe('vocabularySuggestions', () => {
     expect(strip[1]).toMatchObject({ kind: 'gap', start: 2, end: 3 });
   });
 
+  it('rejects combining non-adjacent tokens', () => {
+    const japanese = 'あの先輩';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'あの', start: 0, end: 2, lemma: 'あの', reading: 'あの', pos: '感動詞' },
+      { surface: '先輩', start: 2, end: 4, lemma: '先輩', reading: 'せんぱい', pos: '名詞' },
+    ]);
+    expect(combineSuggestions(suggestions.slice(0, 1), japanese)).toBeNull();
+  });
+
   it('combines adjacent tokens for やって来る', () => {
     const japanese = 'やって来ました。';
     const suggestions = suggestionsFromTokens(japanese, [
@@ -65,6 +77,56 @@ describe('vocabularySuggestions', () => {
     expect(validateSpan(japanese, combined!.start, combined!.end, combined!.surface)).toBe(
       true,
     );
+  });
+
+  it('merges an adjacent suggestion into a selection', () => {
+    const japanese = 'やって来ました。';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'やっ', start: 0, end: 2, lemma: 'やる', reading: 'やっ', pos: '動詞' },
+      { surface: 'て', start: 2, end: 3, lemma: 'て', reading: 'て', pos: '助詞' },
+      { surface: '来', start: 3, end: 4, lemma: '来る', reading: 'き', pos: '動詞' },
+      { surface: 'まし', start: 4, end: 6, lemma: 'ます', reading: 'まし', pos: '助動詞' },
+    ]);
+    const te = selectionFromSuggestion(suggestions[1]!);
+    expect(canMergeSuggestionIntoSelection(suggestions[0]!, te, japanese)).toBe(
+      true,
+    );
+    expect(canMergeSuggestionIntoSelection(suggestions[2]!, te, japanese)).toBe(
+      true,
+    );
+    expect(canMergeSuggestionIntoSelection(suggestions[3]!, te, japanese)).toBe(
+      false,
+    );
+
+    const withYatte = mergeSuggestionIntoSelection(suggestions[0]!, te, japanese);
+    expect(withYatte).not.toBeNull();
+    expect(withYatte!.id).toBe(te.id);
+    expect(withYatte!.surface).toBe('やって');
+    expect(withYatte!.expression).toBe('やるて');
+    expect(withYatte!.source).toBe('combined');
+
+    const withKur = mergeSuggestionIntoSelection(
+      suggestions[2]!,
+      withYatte!,
+      japanese,
+    );
+    expect(withKur!.surface).toBe('やって来');
+    expect(withKur!.expression).toBe('やるて来る');
+  });
+
+  it('treats already-covered merge as a no-op', () => {
+    const japanese = 'やって';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'やっ', start: 0, end: 2, lemma: 'やる', reading: 'やっ', pos: '動詞' },
+      { surface: 'て', start: 2, end: 3, lemma: 'て', reading: 'て', pos: '助詞' },
+    ]);
+    const combined = combineSuggestions(suggestions, japanese)!;
+    const again = mergeSuggestionIntoSelection(
+      suggestions[0]!,
+      combined,
+      japanese,
+    );
+    expect(again).toBe(combined);
   });
 
   it('rejects invalid spans', () => {
