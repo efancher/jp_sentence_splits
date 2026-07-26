@@ -151,6 +151,45 @@ export function combineSuggestions(
   };
 }
 
+/**
+ * Build an in-order morph strip over the full sentence: morphology tokens plus
+ * any uncovered character gaps (so the strip always reads as the Japanese).
+ */
+export type MorphStripPiece =
+  | { kind: 'token'; suggestion: VocabularySuggestion }
+  | { kind: 'gap'; start: number; end: number; surface: string };
+
+export function buildMorphStrip(
+  japanese: string,
+  suggestions: VocabularySuggestion[],
+): MorphStripPiece[] {
+  const ordered = [...suggestions].sort((a, b) => a.start - b.start);
+  const pieces: MorphStripPiece[] = [];
+  let cursor = 0;
+  for (const suggestion of ordered) {
+    if (suggestion.start < cursor) continue;
+    if (suggestion.start > cursor) {
+      pieces.push({
+        kind: 'gap',
+        start: cursor,
+        end: suggestion.start,
+        surface: japanese.slice(cursor, suggestion.start),
+      });
+    }
+    pieces.push({ kind: 'token', suggestion });
+    cursor = suggestion.end;
+  }
+  if (cursor < japanese.length) {
+    pieces.push({
+      kind: 'gap',
+      start: cursor,
+      end: japanese.length,
+      surface: japanese.slice(cursor),
+    });
+  }
+  return pieces;
+}
+
 export function mergeVocabularySuggestions(
   existing: VocabularySuggestion[],
   incoming: VocabularySuggestion[],

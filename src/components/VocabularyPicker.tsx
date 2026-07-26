@@ -7,8 +7,10 @@ import type {
 } from '../domain/types';
 import { createId } from '../lib/ids';
 import {
+  buildMorphStrip,
   combineSuggestions,
   defaultSelectionsFromSuggestions,
+  isContentPos,
   selectionFromSuggestion,
   validateSpan,
 } from '../lib/vocabularySuggestions';
@@ -56,6 +58,11 @@ export function VocabularyPicker({
     [suggestions],
   );
 
+  const strip = useMemo(
+    () => buildMorphStrip(japanese, orderedSuggestions),
+    [japanese, orderedSuggestions],
+  );
+
   function setSelections(
     next: VocabularySelection[],
     status: VocabularyReviewStatus = 'unreviewed',
@@ -93,7 +100,7 @@ export function VocabularyPicker({
     const combined = combineSuggestions(chosen, japanese);
     if (!combined) {
       window.alert(
-        'Select two or more adjacent tokens to combine into one vocabulary item.',
+        'Mark two or more adjacent pieces (in sentence order) to combine into one vocabulary item.',
       );
       return;
     }
@@ -111,7 +118,7 @@ export function VocabularyPicker({
 
   function addManualFromCombine() {
     if (combineIds.size === 0) {
-      window.alert('Select one or more tokens first, then add as vocabulary.');
+      window.alert('Mark one or more pieces first, then add as vocabulary.');
       return;
     }
     const chosen = orderedSuggestions.filter((item) => combineIds.has(item.id));
@@ -184,46 +191,94 @@ export function VocabularyPicker({
         </span>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Suggestions start selected. Uncheck false matches, combine adjacent
-        tokens for compounds such as やって来る, then edit the dictionary form.
-        Only confirmed sentences are exported to Anki.
+        The sentence is pre-chunked by morphology (like ichi.moe). Each block is
+        one piece — tap to include or exclude it for Anki. Use{' '}
+        <strong>Mark</strong> on adjacent pieces, then Combine, for compounds
+        such as やって来る. Only confirmed sentences are exported.
       </p>
 
-      <div className="row" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
-        {orderedSuggestions.map((suggestion) => {
+      <div
+        className="vocab-morph-strip"
+        role="group"
+        aria-label="Morphology chunks in sentence order"
+      >
+        {strip.map((piece) => {
+          if (piece.kind === 'gap') {
+            return (
+              <span
+                key={`gap-${piece.start}-${piece.end}`}
+                className="vocab-morph-gap jp"
+                title="Uncovered text"
+              >
+                {piece.surface}
+              </span>
+            );
+          }
+
+          const { suggestion } = piece;
           const selected = isSuggestionSelected(suggestion);
           const combining = combineIds.has(suggestion.id);
+          const content = isContentPos(suggestion.pos);
+          const lemmaDiffers =
+            suggestion.expression.trim() !== suggestion.surface.trim();
+          const classes = [
+            'vocab-morph-piece',
+            selected ? 'is-selected' : '',
+            combining ? 'is-marked' : '',
+            content ? 'is-content' : 'is-function',
+          ]
+            .filter(Boolean)
+            .join(' ');
+
           return (
-            <div key={suggestion.id} className="row" style={{ gap: '0.25rem' }}>
+            <div key={suggestion.id} className={classes}>
               <button
                 type="button"
-                className={selected ? 'chip' : 'chip ghost'}
+                className="vocab-morph-main"
                 aria-pressed={selected}
-                title={`${suggestion.expression} · ${suggestion.pos || 'no POS'}`}
+                title={[
+                  suggestion.expression,
+                  suggestion.reading,
+                  suggestion.pos || 'no POS',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
                 onClick={() => toggleSuggestion(suggestion)}
               >
-                <span className="jp">{suggestion.surface}</span>
-                {suggestion.expression !== suggestion.surface ? (
-                  <span className="muted">→ {suggestion.expression}</span>
+                <span className="vocab-morph-surface jp">{suggestion.surface}</span>
+                {suggestion.reading ? (
+                  <span className="vocab-morph-reading muted">
+                    {suggestion.reading}
+                  </span>
+                ) : null}
+                {lemmaDiffers ? (
+                  <span className="vocab-morph-lemma muted">
+                    → {suggestion.expression}
+                  </span>
                 ) : null}
               </button>
               <button
                 type="button"
-                className={combining ? '' : 'ghost'}
+                className={
+                  combining
+                    ? 'vocab-morph-mark is-active'
+                    : 'vocab-morph-mark ghost'
+                }
                 aria-pressed={combining}
                 aria-label={`Mark ${suggestion.surface} for combining`}
+                title="Mark for combine"
                 onClick={() => toggleCombine(suggestion.id)}
               >
-                +
+                Mark
               </button>
             </div>
           );
         })}
       </div>
 
-      <div className="row">
+      <div className="row" style={{ flexWrap: 'wrap' }}>
         <button type="button" onClick={combineSelected}>
-          Combine marked tokens
+          Combine marked
         </button>
         <button type="button" className="ghost" onClick={addManualFromCombine}>
           Add marked
@@ -255,6 +310,7 @@ export function VocabularyPicker({
 
       {selections.length ? (
         <div className="stack" style={{ gap: '0.65rem' }}>
+          <h4 style={{ margin: 0 }}>Selected for Anki</h4>
           {selections.map((item) => {
             const open = editingId === item.id;
             const spanOk =

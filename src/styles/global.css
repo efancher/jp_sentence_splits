@@ -414,6 +414,101 @@ strong.jp {
   padding-top: 0.75rem;
 }
 
+/* Ichi.moe-like morphology strip for Anki vocabulary review. */
+.vocab-morph-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.vocab-morph-piece {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 2.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.vocab-morph-piece.is-content {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.vocab-morph-piece.is-function {
+  opacity: 0.88;
+}
+
+.vocab-morph-piece.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+
+.vocab-morph-piece.is-marked {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.vocab-morph-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-height: var(--touch);
+  padding: 0.35rem 0.45rem 0.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.vocab-morph-surface {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.vocab-morph-reading,
+.vocab-morph-lemma {
+  font-size: 0.68rem;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vocab-morph-mark {
+  min-height: 1.7rem;
+  padding: 0.15rem 0.35rem;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.vocab-morph-mark.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+  font-weight: 600;
+}
+
+.vocab-morph-gap {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.2rem;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  font-size: 1.05rem;
+}
+
 .summary-lines {
   font-family: var(--font-mono);
   font-size: 0.82rem;

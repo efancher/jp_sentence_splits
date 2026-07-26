@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildMorphStrip,
   combineSuggestions,
   defaultSelectionsFromSuggestions,
   isContentPos,
@@ -31,6 +32,21 @@ describe('vocabularySuggestions', () => {
     expect(isContentPos('助詞/格助詞')).toBe(false);
     const defaults = defaultSelectionsFromSuggestions(suggestions, japanese);
     expect(defaults.map((item) => item.expression)).toEqual(['世話', 'する']);
+  });
+
+  it('builds a contiguous morph strip with gaps filled', () => {
+    const japanese = 'あの、先輩';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'あの', start: 0, end: 2, lemma: 'あの', reading: 'あの', pos: '感動詞' },
+      { surface: '先輩', start: 3, end: 5, lemma: '先輩', reading: 'せんぱい', pos: '名詞' },
+    ]);
+    const strip = buildMorphStrip(japanese, suggestions);
+    expect(
+      strip.map((piece) =>
+        piece.kind === 'token' ? piece.suggestion.surface : piece.surface,
+      ),
+    ).toEqual(['あの', '、', '先輩']);
+    expect(strip[1]).toMatchObject({ kind: 'gap', start: 2, end: 3 });
   });
 
   it('combines adjacent tokens for やって来る', () => {
