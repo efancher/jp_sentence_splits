@@ -145,7 +145,6 @@ function DraggableMorphPiece({
       type="button"
       className={classes}
       style={style}
-      aria-pressed={selected}
       title={[
         selected ? 'Selected for Anki' : 'Not selected',
         'Drag into the tray or onto a selected card to combine',
@@ -158,6 +157,7 @@ function DraggableMorphPiece({
       onClick={onToggle}
       {...listeners}
       {...attributes}
+      aria-pressed={selected}
     >
       <MorphChipContent
         surface={suggestion.surface}
