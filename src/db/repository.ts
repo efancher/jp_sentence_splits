@@ -36,6 +36,10 @@ import {
   buildMiningPackage,
   type MiningExportResult,
 } from '../lib/miningExport';
+import {
+  curatedVocabForSourceKey,
+  selectionsFromCuratedPicks,
+} from '../lib/curatedVocabulary';
 import { ensureSettings, getDb } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
 
@@ -1237,6 +1241,81 @@ export async function exportBookMiningPackage(
     )
   ).flat();
   return buildMiningPackage({ book, sentences, analyses, audio });
+}
+
+/**
+ * Apply offline curated vocabulary picks for a known immersion book.
+ * Overwrites unreviewed analyses; skips sentences already confirmed unless
+ * `overwriteConfirmed` is true.
+ */
+export async function applyCuratedVocabularyForBook(
+  bookId: string,
+  options: { overwriteConfirmed?: boolean } = {},
+): Promise<{
+  updated: number;
+  confirmed: number;
+  skippedConfirmed: number;
+  missingPicks: number;
+  unresolvedPicks: number;
+}> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found.');
+  const curated = curatedVocabForSourceKey(book.sourceKey);
+  if (!curated) {
+    throw new Error('No curated vocabulary pack is available for this book.');
+  }
+
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .sortBy('position');
+  let updated = 0;
+  let confirmed = 0;
+  let skippedConfirmed = 0;
+  let missingPicks = 0;
+  let unresolvedPicks = 0;
+
+  for (const membership of memberships) {
+    const sentence = await db.sentences.get(membership.sentenceId);
+    if (!sentence) continue;
+    const existing = await db.analyses.get(sentence.id);
+    if (
+      existing?.vocabularyReviewStatus === 'confirmed' &&
+      !options.overwriteConfirmed
+    ) {
+      skippedConfirmed += 1;
+      continue;
+    }
+
+    const picks = curated.picksByJapanese[sentence.japanese];
+    if (!picks) {
+      missingPicks += 1;
+      continue;
+    }
+
+    const selections = selectionsFromCuratedPicks(
+      sentence.japanese,
+      picks,
+      sentence.vocabularySuggestions ?? [],
+    );
+    unresolvedPicks += Math.max(0, picks.length - selections.length);
+
+    await saveAnalysis(sentence.id, existing?.chunks ?? [], existing?.notes ?? '', {
+      reviewStatus: selections.length ? 'confirmed' : 'unreviewed',
+      selections,
+    });
+    updated += 1;
+    if (selections.length) confirmed += 1;
+  }
+
+  return {
+    updated,
+    confirmed,
+    skippedConfirmed,
+    missingPicks,
+    unresolvedPicks,
+  };
 }
 
 export async function findResumeSentence(

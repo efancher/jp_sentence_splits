@@ -29,6 +29,7 @@ import {
   duplicateBookOrdering,
   exportBookBackup,
   exportBookMiningPackage,
+  applyCuratedVocabularyForBook,
   findResumeSentence,
   getDb,
   moveBookSentence,
@@ -43,6 +44,7 @@ import {
   updateBook,
   updateBookChapter,
 } from '../db/repository';
+import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
 import type { Book, Sentence } from '../domain/types';
@@ -452,6 +454,29 @@ export function BookDetailPage() {
           >
             Export Anki mining package
           </button>
+          {curatedVocabForSourceKey(data.book.sourceKey) ? (
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = window.confirm(
+                  'Apply curated Anki vocabulary picks for this immersion book?\n\nThis overwrites unreviewed vocabulary selections. Already-confirmed sentences are left alone.',
+                );
+                if (!ok) return;
+                try {
+                  const result = await applyCuratedVocabularyForBook(bookId);
+                  window.alert(
+                    `Updated ${result.updated} sentence(s); ${result.confirmed} confirmed with picks. Skipped ${result.skippedConfirmed} already confirmed. Missing pack rows: ${result.missingPicks}. Unresolved picks: ${result.unresolvedPicks}.`,
+                  );
+                } catch (error) {
+                  window.alert(
+                    error instanceof Error ? error.message : String(error),
+                  );
+                }
+              }}
+            >
+              Apply curated vocab picks
+            </button>
+          ) : null}
           <button
             type="button"
             className="danger"
