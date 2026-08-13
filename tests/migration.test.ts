@@ -18,6 +18,84 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v6 with the unified study model tables', async () => {
+    const name = `migrate-v6-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(6);
+    for (const table of [
+      'sources',
+      'vocabularyItems',
+      'sentenceVocabulary',
+      'kanji',
+      'vocabularyKanji',
+      'studyItems',
+      'reviews',
+    ]) {
+      expect(db.tables.some((t) => t.name === table)).toBe(true);
+    }
+
+    const now = new Date().toISOString();
+    await db.kanji.put({
+      id: 'kanji-1',
+      character: '生',
+      meanings: ['life', 'birth'],
+      onyomi: ['セイ', 'ショウ'],
+      kunyomi: ['い.きる', 'う.まれる'],
+      nanori: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyItems.put({
+      id: 'vocab-1',
+      expression: '先生',
+      reading: 'せんせい',
+      meaning: 'teacher',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyKanji.put({
+      id: 'vk-1',
+      vocabularyItemId: 'vocab-1',
+      kanjiId: 'kanji-1',
+      positionInWord: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.put({
+      id: 'si-1',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-1',
+      activityType: 'vocab_in_context',
+      fsrsState: {
+        due: now,
+        stability: 0,
+        difficulty: 0,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        reps: 0,
+        lapses: 0,
+        state: 'new',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.reviews.put({
+      id: 'rev-1',
+      studyItemId: 'si-1',
+      timestamp: now,
+      rating: 'good',
+    });
+
+    const link = await db.vocabularyKanji.get('vk-1');
+    expect(link?.kanjiId).toBe('kanji-1');
+    const review = await db.reviews.get('rev-1');
+    expect(review?.rating).toBe('good');
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

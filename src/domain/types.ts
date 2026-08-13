@@ -226,3 +226,141 @@ export type ParsedSentenceDraft = Omit<
 > & {
   importBatchIds?: string[];
 };
+
+// ---------------------------------------------------------------------------
+// Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive.
+// None of the types above are changed by this section.
+// ---------------------------------------------------------------------------
+
+export type SourceType = 'satori' | 'youtube' | 'podcast' | 'manual' | 'other';
+
+/** A place content came from — promotes Book.sourceKey/sourceUrl into a real entity. */
+export interface Source {
+  id: string;
+  title: string;
+  type: SourceType;
+  creator?: string;
+  url?: string;
+  /** e.g. shadowmine's videoId — stable identity for dedup on re-import. */
+  externalId?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A normalized word. Unique on (expression, reading) — deliberately *not*
+ * unique on expression alone, since homophones (e.g. 週間/習慣) must stay
+ * distinct (mirrors Anki's lemma_key and JMDict's own indexing).
+ */
+export interface VocabularyItem {
+  id: string;
+  expression: string;
+  reading: string;
+  meaning: string;
+  partOfSpeech?: string;
+  notes?: string;
+  /** Stable id from an ingestion source (e.g. `wk:{subjectId}`, `jmdict:{entryId}`) for idempotent re-import. */
+  externalId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Links a sentence (optionally a specific chunk) to a canonical VocabularyItem. */
+export interface SentenceVocabulary {
+  id: string;
+  sentenceId: string;
+  vocabularyItemId: string;
+  chunkId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A single kanji character and its possible readings. */
+export interface Kanji {
+  id: string;
+  character: string;
+  meanings: string[];
+  onyomi: string[];
+  kunyomi: string[];
+  nanori: string[];
+  notes?: string;
+  externalId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Which kanji appear in a vocabulary item's expression, and where — the
+ * structure needed to eventually target "the reading of this word in
+ * context" rather than an unordered list of a kanji's possible readings.
+ */
+export interface VocabularyKanji {
+  id: string;
+  vocabularyItemId: string;
+  kanjiId: string;
+  positionInWord: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StudySubjectType = 'sentence' | 'vocabularyItem' | 'chunk';
+
+/**
+ * activityType is intentionally a plain string, not a closed union — new
+ * activity types (comprehension, listening, reading, vocab_in_context,
+ * cloze, build, shadowing, ...) are additive, never a schema change.
+ */
+export type StudyActivityType = string;
+
+/** Opaque to everything except the scheduler — shaped to match ts-fsrs's Card. */
+export interface FsrsState {
+  due: string;
+  stability: number;
+  difficulty: number;
+  elapsedDays: number;
+  scheduledDays: number;
+  reps: number;
+  lapses: number;
+  state: 'new' | 'learning' | 'review' | 'relearning';
+  lastReview?: string;
+}
+
+export interface StudyItem {
+  id: string;
+  subjectType: StudySubjectType;
+  subjectId: string;
+  activityType: StudyActivityType;
+  fsrsState: FsrsState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** FSRS's 4-point review-rating scale. */
+export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
+
+/**
+ * Deliberately open-ended (§13): the schema must not prevent recording a
+ * classification, but nothing populates this automatically yet.
+ */
+export type ErrorClassification =
+  | 'incorrect_reading'
+  | 'incorrect_meaning'
+  | 'kanji_reading_interference'
+  | 'vocabulary_confusion'
+  | 'pronunciation_difficulty'
+  | 'listening_failure'
+  | 'grammar_misunderstanding'
+  | { userDefined: string };
+
+/** Append-only — never updated after insert. Sync-conflict-free by construction. */
+export interface Review {
+  id: string;
+  studyItemId: string;
+  timestamp: string;
+  rating: ReviewRating;
+  responseRaw?: string;
+  expectedAnswer?: string;
+  elapsedMs?: number;
+  errorClassification?: ErrorClassification;
+}

@@ -209,3 +209,123 @@ export const backupSchema = z.object({
 });
 
 export type BackupPayload = z.infer<typeof backupSchema>;
+
+// ---------------------------------------------------------------------------
+// Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive.
+// Not yet part of backupSchema — added once these tables carry real data.
+// ---------------------------------------------------------------------------
+
+export const sourceTypeSchema = z.enum(['satori', 'youtube', 'podcast', 'manual', 'other']);
+
+export const sourceSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  type: sourceTypeSchema,
+  creator: z.string().optional(),
+  url: z.string().optional(),
+  externalId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const vocabularyItemSchema = z.object({
+  id: z.string(),
+  expression: z.string().min(1),
+  reading: z.string(),
+  meaning: z.string(),
+  partOfSpeech: z.string().optional(),
+  notes: z.string().optional(),
+  externalId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const sentenceVocabularySchema = z.object({
+  id: z.string(),
+  sentenceId: z.string(),
+  vocabularyItemId: z.string(),
+  chunkId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const kanjiSchema = z.object({
+  id: z.string(),
+  // Not .length(1): that counts UTF-16 code units, which rejects legitimate
+  // astral-plane kanji (e.g. 𠮟, U+20B9F, a real jinmeiyō character) that
+  // JS represents as a surrogate pair. Iterate by code point instead, to
+  // match Postgres's char_length() semantics used by the matching
+  // kanji_character_single_char check constraint.
+  character: z.string().refine((value) => [...value].length === 1, {
+    message: 'character must be exactly one Unicode code point',
+  }),
+  meanings: z.array(z.string()),
+  onyomi: z.array(z.string()),
+  kunyomi: z.array(z.string()),
+  nanori: z.array(z.string()),
+  notes: z.string().optional(),
+  externalId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const vocabularyKanjiSchema = z.object({
+  id: z.string(),
+  vocabularyItemId: z.string(),
+  kanjiId: z.string(),
+  positionInWord: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const studySubjectTypeSchema = z.enum(['sentence', 'vocabularyItem', 'chunk']);
+
+export const fsrsStateSchema = z.object({
+  due: z.string(),
+  stability: z.number(),
+  difficulty: z.number(),
+  elapsedDays: z.number(),
+  scheduledDays: z.number(),
+  reps: z.number().int().nonnegative(),
+  lapses: z.number().int().nonnegative(),
+  state: z.enum(['new', 'learning', 'review', 'relearning']),
+  lastReview: z.string().optional(),
+});
+
+export const studyItemSchema = z.object({
+  id: z.string(),
+  subjectType: studySubjectTypeSchema,
+  subjectId: z.string(),
+  // Intentionally a bare string, not the closed union above — see StudyActivityType.
+  activityType: z.string().min(1),
+  fsrsState: fsrsStateSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const reviewRatingSchema = z.enum(['again', 'hard', 'good', 'easy']);
+
+export const errorClassificationSchema = z.union([
+  z.enum([
+    'incorrect_reading',
+    'incorrect_meaning',
+    'kanji_reading_interference',
+    'vocabulary_confusion',
+    'pronunciation_difficulty',
+    'listening_failure',
+    'grammar_misunderstanding',
+  ]),
+  z.object({ userDefined: z.string() }),
+]);
+
+export const reviewSchema = z.object({
+  id: z.string(),
+  studyItemId: z.string(),
+  timestamp: z.string(),
+  rating: reviewRatingSchema,
+  responseRaw: z.string().optional(),
+  expectedAnswer: z.string().optional(),
+  elapsedMs: z.number().nonnegative().optional(),
+  errorClassification: errorClassificationSchema.optional(),
+});

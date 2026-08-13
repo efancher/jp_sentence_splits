@@ -7,9 +7,16 @@ import type {
   BookSentence,
   ImportBatch,
   InboxMembership,
+  Kanji,
+  Review,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
+  SentenceVocabulary,
+  Source,
+  StudyItem,
+  VocabularyItem,
+  VocabularyKanji,
 } from '../domain/types';
 import type {
   SyncConflict,
@@ -47,6 +54,16 @@ export class GlossbookDatabase extends Dexie {
   syncQueue!: EntityTable<SyncQueueItem, 'id'>;
   syncRecordMeta!: EntityTable<SyncRecordMeta, 'key'>;
   syncConflicts!: EntityTable<SyncConflict, 'id'>;
+  // Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive,
+  // not yet written to by any UI. Sync-engine wiring (mappers.ts,
+  // SyncEntity) deferred until a writer exists (Phase 2+).
+  sources!: EntityTable<Source, 'id'>;
+  vocabularyItems!: EntityTable<VocabularyItem, 'id'>;
+  sentenceVocabulary!: EntityTable<SentenceVocabulary, 'id'>;
+  kanji!: EntityTable<Kanji, 'id'>;
+  vocabularyKanji!: EntityTable<VocabularyKanji, 'id'>;
+  studyItems!: EntityTable<StudyItem, 'id'>;
+  reviews!: EntityTable<Review, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -129,6 +146,37 @@ export class GlossbookDatabase extends Dexie {
       syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
       syncRecordMeta: 'key, entity, recordId, updatedAt',
       syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+    });
+
+    // Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8/§15 Phase 1).
+    // Purely additive — every store above is unchanged.
+    this.version(6).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
     });
   }
 }

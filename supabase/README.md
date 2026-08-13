@@ -3,6 +3,7 @@
 | Path | Purpose |
 | --- | --- |
 | `migrations/20260722000000_sync_schema.sql` | Tables, triggers, RLS, Storage bucket |
+| `migrations/20260813000000_unified_study_model.sql` | Sources, vocabulary/kanji relationships, study items, reviews |
 | `functions/invite-book-member/` | Edge Function for email invites |
 | `tests/rls_expectations.md` | Multi-user RLS verification outline |
 
