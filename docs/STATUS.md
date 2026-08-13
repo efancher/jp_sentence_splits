@@ -54,6 +54,59 @@ missing `createdAt`/`updatedAt` that the SQL tables already have — added.
   tables — no UI writes to them yet, so there's nothing to sync.
 - `backupSchema`/`buildBackupPayload` extension to cover the new tables.
 
-## Phase 2 onward: not started
+## Phase 2 — Existing data migration: in progress
+
+Scoped down from the original line item after discussion: JMDict is **not**
+bulk-uploaded to Supabase. Inspecting `src/lib/vocabularySuggestions.ts`
+confirmed nothing anywhere writes a confirmed suggestion into the new
+normalized `vocabulary_items` table yet — that's genuinely Phase 5 work
+("Build the UI for confirming `vocabularySuggestions`/spans into real
+`sentence_vocabulary`/`vocabulary_kanji` links"), not Phase 2. So today's
+JMDict piece is a local lookup tool only, for Phase 5 to consume later.
+
+Added:
+- `scripts/lib/wanikani.ts`, `scripts/import-wanikani-kanji.ts` — bulk
+  imports/upserts the full non-hidden WaniKani kanji catalog into Supabase
+  `kanji`. Idempotent on `character` (existing row ids are looked up and
+  reused before upsert, so re-running doesn't churn primary keys that
+  `vocabulary_kanji` will eventually FK to). Auth: signs in as the real user
+  via the anon client (`SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD`),
+  same RLS path as the browser — no service-role key introduced.
+- `scripts/lib/jmdict.ts`, `scripts/lookup-jmdict.ts` — downloads/caches the
+  pinned jmdict-simplified release (`scripts/.cache/`, gitignored, ~110 MB),
+  builds an (expression, reading) → gloss/POS/common lookup index correctly
+  handling `kana[].appliesToKanji` so homophones like 週間/習慣 stay
+  distinct. Local only — verified end-to-end against the real release
+  (`npm run jmdict:lookup -- 先生` → correct gloss).
+- `tsx`/`dotenv` added as devDependencies (first Node-side/non-Vite TS
+  tooling in this repo); `scripts/` added to `tsconfig.node.json` so it's
+  covered by `npm run typecheck`.
+- `tests/wanikaniKanji.test.ts`, `tests/jmdict.test.ts` — pure
+  parse/transform logic against fixtures, no network calls.
+
+**Verified**: `npm run check` green (typecheck + vitest, including the two
+new test files); `jmdict:lookup` run live against the real JMDict release.
+
+**Code-reviewed** (medium-effort pass) before commit; three real findings, all
+fixed: (1) the kanji upsert targeted `owner_id,character` for `ON CONFLICT`,
+but `kanji_owner_character_uidx` is a partial index (`where deleted_at is
+null`) — Postgres can't use a partial index as an arbiter without the
+conflict clause repeating its predicate, which PostgREST's upsert has no way
+to express, so every batch would have failed with error 42P10 on first live
+run. Fixed by targeting `id` instead (the real, non-partial primary key),
+relying on the existing character→id lookup to keep that a character-keyed
+upsert in effect. (2) `readingsByType()` decided the primary-vs-all-readings
+fallback globally across all three reading types combined, so a kanji with a
+primary kunyomi but no primary onyomi would silently lose its onyomi
+readings — fixed to decide the fallback per type. (3) The WK-catalog fetch
+and the existing-rows Supabase fetch were unnecessarily sequential; changed
+to `Promise.all`.
+
+**Not yet done**: `import:wanikani-kanji` has not been run against the live
+Supabase project — needs the user's real `WANIKANI_API_TOKEN` and Supabase
+login in `.env` (see `.env.example`). Run it and check the printed
+created/updated counts before marking this phase fully done.
+
+## Phase 3 onward: not started
 
 See `docs/ROADMAP.md`.

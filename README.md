@@ -102,6 +102,33 @@ npm run preview        # serve the production build
 npm run test:e2e       # Playwright happy path (WebKit)
 ```
 
+## Content ingestion scripts
+
+Native, ongoing content ingestion for the unified study model
+(`docs/UNIFIED_APP_ARCHITECTURE.md` §9) — Node-side, run with `tsx`, not
+part of the browser bundle.
+
+```bash
+cp .env.example .env
+# set WANIKANI_API_TOKEN, SCRIPT_SUPABASE_EMAIL, SCRIPT_SUPABASE_PASSWORD
+# (in addition to the VITE_SUPABASE_* vars used for cloud sync)
+
+npm run import:wanikani-kanji   # bulk-upserts the WK kanji catalog into Supabase `kanji`
+npm run jmdict:lookup -- 先生    # local JMDict gloss lookup, no network after first run
+```
+
+`import:wanikani-kanji` is idempotent (upserts on `character`, preserving
+existing row ids across re-runs) and writes to the live Supabase project —
+review the printed created/updated counts after running it.
+
+`jmdict:lookup` downloads and caches the JMDict release under
+`scripts/.cache/` (gitignored, ~110 MB) on first run, then answers from the
+cache. It's a local lookup tool only — nothing from JMDict is uploaded to
+Supabase. `vocabulary_items` is meant to hold only words the user has
+actually confirmed via the suggestion-confirmation UI (not yet built, see
+`docs/ROADMAP.md` Phase 5); this script exists so that UI has a working
+gloss/reading lookup to build against.
+
 ## Tests
 
 - **Unit tests** cover CSV import/dedupe, chunking regressions, furigana parsing, Dexie data operations, and backup round-trips.
