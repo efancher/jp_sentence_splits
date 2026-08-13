@@ -24,10 +24,9 @@ Added, purely additively (nothing existing was touched):
   `vocabularyKanji`, `studyItems`, `reviews`).
 - `supabase/migrations/20260813000000_unified_study_model.sql` — matching
   Postgres tables, RLS (owner-only), and the existing
-  `set_updated_at`/`bump_version`/`append_sync_event` triggers. **Not yet
-  applied to the live Supabase project** — needs `supabase db push` (or
-  Dashboard SQL Editor paste) before any code depends on these tables
-  existing remotely.
+  `set_updated_at`/`bump_version`/`append_sync_event` triggers. **Applied to
+  the live Supabase project** (2026-08-13, via Dashboard SQL Editor paste;
+  ran clean, no errors).
 - `supabase/tests/rls_expectations.md`, `supabase/README.md` — updated to
   document the new tables.
 - `tests/migration.test.ts` — new test opens at schema v6 and round-trips a
@@ -54,7 +53,6 @@ missing `createdAt`/`updatedAt` that the SQL tables already have — added.
 - Sync engine wiring (`src/sync/mappers.ts`, `SyncEntity`) for the new
   tables — no UI writes to them yet, so there's nothing to sync.
 - `backupSchema`/`buildBackupPayload` extension to cover the new tables.
-- Applying the migration to the live Supabase project.
 
 ## Phase 2 onward: not started
 
