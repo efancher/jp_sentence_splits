@@ -115,9 +115,59 @@ was wrapped in quotes. Worth adding a quoting note to `.env.example` if
 this trips up anyone else.
 
 WaniKani-kanji half of Phase 2 is now fully done. JMDict→`vocabulary_items`
-remains deferred to Phase 5 as described above. One-time
-`anki_headless`-mediated Satori/Shadowing sentence import (the other Phase 2
-sub-task) not started.
+remains deferred to Phase 5 as described above.
+
+### One-time Anki sentence import: built, not yet run against production
+
+Added:
+- `~/projects/anki/scripts/export_immersion_notes_for_glossbook.py` —
+  read-only export of `WK Satori Immersion`/`WK Shadowing Immersion`/`WK
+  Shadowing Candidate` note fields via `anki_headless` (never calls `push`).
+  **Ran against a real synced collection** during development (501 notes:
+  234 Satori, 236 Shadowing, 31 Candidate) to validate field-mapping
+  assumptions before writing the TS side — this surfaced a real bug before
+  it shipped (see below).
+- `scripts/lib/ankiImport.ts`, `scripts/import-anki-sentences.ts` — maps
+  notes into `Sentence`/`vocabulary_items`/`sentence_vocabulary`/inbox.
+  Dry-run by default; `--apply` required to write. Idempotent: sentences
+  dedup by normalized Japanese text (merging `sourceReferences`/
+  `targetVocabulary`, not duplicating), vocabulary items dedup by
+  `normalizeExpressionKey(expression, reading)` (NFC-normalized, matching
+  the same key `csvImport.ts` already uses — not a raw string join).
+  Confirmed with the user: lands in the **inbox** (same default as other
+  importers), all three note types included.
+- `tests/ankiImport.test.ts` — 16 tests against fixtures, no real Anki/
+  Supabase needed.
+
+**Real-data finding that changed the design**: `Glossary` is not a gloss
+field. Verified against the live export: for Satori/Shadowing Immersion
+it's a real JMDict POS tag (`adj-i`, `v5k; vi`); for Shadowing Immersion
+specifically every single note had the literal value `auto-caption`; for
+Shadowing Candidate it's always a `POS: <label>` placeholder (`POS:
+unknown`, `POS: colloquial-compound`) from the candidate pipeline, never an
+English gloss. The original plan's fallback chain (`WkMeaning || Glossary
+|| HintGlossary`) would have written this junk into `vocabulary_items.meaning`
+for every Shadowing/Candidate word. Fixed: `meaning` only ever comes from
+`WkMeaning`/`HintGlossary`; `Glossary` is used for `partOfSpeech` only, and
+only when it isn't one of the known junk patterns.
+
+**Code-reviewed** (medium-effort pass) before commit; two real findings, both
+fixed: (1) merging a re-imported sentence into an existing one overwrote
+`firstOccurrenceIndex` with this run's note index instead of preserving the
+original — would have silently reshuffled first-occurrence-sorted lists
+for any sentence also touched by this import; the existing CSV importer's
+own reimport path (`mergeSentenceOnReimport`) already establishes the
+correct behavior (preserve it), so this now matches. (2) `Expression`/
+`Reading`/`Furigana` were only `.trim()`'d instead of going through the
+same `displayJapanese` normalization as `Sentence`/`Translation`, and the
+vocabulary dedup key was a raw string join instead of the codebase's own
+`normalizeExpressionKey` — both fixed, closing a path to duplicate/garbled
+`vocabulary_items` rows for non-NFC or HTML-entity-bearing fields.
+
+**Verified**: `npm run check` green (155 passed). **Not yet run against the
+live Supabase project** — needs the user to run
+`scripts/anki_sync_pull` + the Python export on their real account, then
+`npm run import:anki-sentences` (dry-run, then `--apply`).
 
 ## Phase 3 onward: not started
 

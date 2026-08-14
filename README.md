@@ -129,6 +129,33 @@ actually confirmed via the suggestion-confirmation UI (not yet built, see
 `docs/ROADMAP.md` Phase 5); this script exists so that UI has a working
 gloss/reading lookup to build against.
 
+### One-time Anki sentence import
+
+A one-time, one-directional pull of already-mined `WK Satori Immersion` /
+`WK Shadowing Immersion` / `WK Shadowing Candidate` notes out of a real
+AnkiWeb account, landed in the inbox for manual review/organizing — see
+`docs/UNIFIED_APP_ARCHITECTURE.md` §11. Two steps, two repos:
+
+```bash
+# 1. In ~/projects/anki (read-only against the synced Anki collection):
+scripts/anki_sync_pull
+.venv-headless/bin/python3 scripts/export_immersion_notes_for_glossbook.py
+# writes out/glossbook_import_export.json (gitignored — real note content,
+# never commit it)
+
+# 2. Here, dry-run first:
+npm run import:anki-sentences -- ~/projects/anki/out/glossbook_import_export.json
+# review the printed counts, then:
+npm run import:anki-sentences -- ~/projects/anki/out/glossbook_import_export.json --apply
+```
+
+Idempotent and re-runnable: sentences are deduplicated by normalized
+Japanese text (merging `sourceReferences`/`targetVocabulary` rather than
+duplicating), vocabulary items by `(expression, reading)`, so re-running
+`--apply` against unchanged input reports zero new/changed. Nothing is
+written back to Anki, and review history is not migrated (deliberate,
+documented gaps — see `docs/UNIFIED_APP_ARCHITECTURE.md` §9/§11).
+
 ## Tests
 
 - **Unit tests** cover CSV import/dedupe, chunking regressions, furigana parsing, Dexie data operations, and backup round-trips.
