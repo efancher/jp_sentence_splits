@@ -180,7 +180,7 @@ Phase 2 is now **fully done**: both sub-tasks (WaniKani kanji catalog,
 one-time Anki sentence import) are live. JMDict→`vocabulary_items` bulk
 import remains out of scope by design, deferred to Phase 5.
 
-## Phase 3 — Unified shadowing: core loop done, live overlay/analysis deferred
+## Phase 3 — Unified shadowing: core loop done and verified, live overlay/analysis deferred
 
 Scoped down after discussion: this pass ports only the record → save → compare
 → rate loop from `~/projects/shadowing/web`. The live waveform-while-recording
@@ -239,6 +239,11 @@ browser (`npm run dev`, grant mic permission) is still needed** before
 considering this phase's UI fully proven — automated coverage above verifies
 the logic and component wiring, not real `MediaRecorder`/`getUserMedia`
 behavior end-to-end.
+
+**Manually verified (2026-08-14)**: user tested record and the various
+playback options (alternate, dual-ear) in a real browser on their Mac —
+passed. Phase 3's core loop is now fully done and confirmed, not just
+logic-tested.
 
 ## Phase 3 remaining / Phase 4 onward: not started
 
