@@ -117,7 +117,7 @@ this trips up anyone else.
 WaniKani-kanji half of Phase 2 is now fully done. JMDict→`vocabulary_items`
 remains deferred to Phase 5 as described above.
 
-### One-time Anki sentence import: built, not yet run against production
+### One-time Anki sentence import: done
 
 Added:
 - `~/projects/anki/scripts/export_immersion_notes_for_glossbook.py` —
@@ -164,10 +164,21 @@ vocabulary dedup key was a raw string join instead of the codebase's own
 `normalizeExpressionKey` — both fixed, closing a path to duplicate/garbled
 `vocabulary_items` rows for non-NFC or HTML-entity-bearing fields.
 
-**Verified**: `npm run check` green (155 passed). **Not yet run against the
-live Supabase project** — needs the user to run
-`scripts/anki_sync_pull` + the Python export on their real account, then
-`npm run import:anki-sentences` (dry-run, then `--apply`).
+**Verified**: `npm run check` green (155 passed).
+
+**Run against the live Supabase project** (2026-08-14): 501 notes read (234
+Satori, 236 Shadowing, 31 Candidate), 0 skipped. Result: 16 new sentences,
+142 merged into sentences that already existed from prior CSV imports (this
+codebase's two Satori-import paths overlap, as expected), 332 new
+vocabulary items, 500 new sentence links (500/501 notes had a usable
+`Expression`), 158 new inbox entries. Ran dry-run again immediately after
+to confirm idempotency — reported `0 new sentences / 0 new vocabulary
+items / 0 new sentence links / 0 new inbox entries`, all 158 sentences
+correctly reported as already-touched merges.
+
+Phase 2 is now **fully done**: both sub-tasks (WaniKani kanji catalog,
+one-time Anki sentence import) are live. JMDict→`vocabulary_items` bulk
+import remains out of scope by design, deferred to Phase 5.
 
 ## Phase 3 onward: not started
 
