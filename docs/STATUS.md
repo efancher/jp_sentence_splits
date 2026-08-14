@@ -102,10 +102,22 @@ readings — fixed to decide the fallback per type. (3) The WK-catalog fetch
 and the existing-rows Supabase fetch were unnecessarily sequential; changed
 to `Promise.all`.
 
-**Not yet done**: `import:wanikani-kanji` has not been run against the live
-Supabase project — needs the user's real `WANIKANI_API_TOKEN` and Supabase
-login in `.env` (see `.env.example`). Run it and check the printed
-created/updated counts before marking this phase fully done.
+**Run against the live Supabase project** (2026-08-14): 2101 non-hidden
+kanji subjects imported. Ran twice to confirm idempotency — second run
+found all 2101 existing rows and reported `0 created, 2101 updated`, no
+duplicates, no primary-key churn.
+
+Hit one setup snag worth noting for next time: the account password in
+`SCRIPT_SUPABASE_PASSWORD` contained a `#`, which an unquoted `.env` value
+truncates as a comment (standard `.env` parsing, not a bug in the script) —
+sign-in failed with a generic "Invalid login credentials" until the value
+was wrapped in quotes. Worth adding a quoting note to `.env.example` if
+this trips up anyone else.
+
+WaniKani-kanji half of Phase 2 is now fully done. JMDict→`vocabulary_items`
+remains deferred to Phase 5 as described above. One-time
+`anki_headless`-mediated Satori/Shadowing sentence import (the other Phase 2
+sub-task) not started.
 
 ## Phase 3 onward: not started
 
