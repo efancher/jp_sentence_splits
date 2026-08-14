@@ -256,6 +256,9 @@ export function PracticePage() {
             <Link to={`/books/${bookId}/analyze/${sentence.id}`}>
               <button type="button">Analyze</button>
             </Link>
+            <Link to={`/books/${bookId}/shadow/${sentence.id}`}>
+              <button type="button">Shadow</button>
+            </Link>
           </div>
         </div>
 

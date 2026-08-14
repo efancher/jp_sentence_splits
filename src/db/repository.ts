@@ -3,6 +3,8 @@ import type { BackupPayload } from '../domain/schemas';
 import type {
   AnalysisChunk,
   AppSettings,
+  Attempt,
+  AttemptRating,
   Book,
   BookChapter,
   BookSentence,
@@ -1331,6 +1333,57 @@ export async function findResumeSentence(
       (item) => item.status === 'needs_review' || item.status === 'in_progress',
     ) ?? memberships.find((item) => item.status === 'unstarted');
   return target?.sentenceId ?? memberships[0]?.sentenceId ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Shadowing attempts (docs/UNIFIED_APP_ARCHITECTURE.md §12, Phase 3) —
+// local-only, no sync wiring by design (§18). Do not call
+// notifySync/notifySyncMany here.
+// ---------------------------------------------------------------------------
+
+export async function saveAttempt(input: {
+  sentenceId: string;
+  blob: Blob;
+  mimeType: string;
+  durationMs: number;
+  notes?: string;
+}): Promise<Attempt> {
+  const db = getDb();
+  const attempt: Attempt = {
+    id: createId('attempt'),
+    sentenceId: input.sentenceId,
+    mimeType: input.mimeType,
+    durationMs: input.durationMs,
+    blob: input.blob,
+    notes: input.notes,
+    createdAt: nowIso(),
+  };
+  await db.attempts.add(attempt);
+  return attempt;
+}
+
+export async function listAttemptsForSentence(
+  sentenceId: string,
+): Promise<Attempt[]> {
+  const db = getDb();
+  const attempts = await db.attempts.where('sentenceId').equals(sentenceId).toArray();
+  return attempts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function deleteAttempt(attemptId: string): Promise<void> {
+  const db = getDb();
+  await db.attempts.delete(attemptId);
+}
+
+export async function rateAttempt(
+  attemptId: string,
+  rating: AttemptRating,
+): Promise<Attempt> {
+  const db = getDb();
+  await db.attempts.update(attemptId, { manualRating: rating });
+  const attempt = await db.attempts.get(attemptId);
+  if (!attempt) throw new Error('Attempt not found');
+  return attempt;
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

@@ -55,6 +55,11 @@ const SearchPage = lazy(() =>
     default: module.SearchPage,
   })),
 );
+const ShadowPage = lazy(() =>
+  import('./pages/ShadowPage').then((module) => ({
+    default: module.ShadowPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({
     default: module.SettingsPage,
@@ -93,6 +98,10 @@ export default function App() {
             <Route
               path="books/:bookId/build/:sentenceId"
               element={<BuildPage />}
+            />
+            <Route
+              path="books/:bookId/shadow/:sentenceId"
+              element={<ShadowPage />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

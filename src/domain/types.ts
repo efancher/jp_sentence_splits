@@ -109,6 +109,27 @@ export interface SentenceAudio {
   importedAt: string;
 }
 
+/** Manual A/B comparison rating against a sentence's reference audio. */
+export type AttemptRating = 'better' | 'same' | 'worse' | 'unsure';
+
+/**
+ * A user's recorded shadowing attempt at a sentence
+ * (docs/UNIFIED_APP_ARCHITECTURE.md §12, Phase 3). Local-only by design — no
+ * sync wiring (§18). Blob stored inline, matching SentenceAudio's pattern
+ * rather than a separate asset table, since each attempt's blob is 1:1 and
+ * never reused.
+ */
+export interface Attempt {
+  id: string;
+  sentenceId: string;
+  mimeType: string;
+  durationMs: number;
+  blob: Blob;
+  notes?: string;
+  manualRating?: AttemptRating;
+  createdAt: string;
+}
+
 export interface Book {
   id: string;
   title: string;

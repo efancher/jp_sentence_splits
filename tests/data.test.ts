@@ -7,15 +7,19 @@ import {
   commitImport,
   createBook,
   createBookChapter,
+  deleteAttempt,
   deleteBookChapter,
   exportFullBackup,
   getDb,
+  listAttemptsForSentence,
   moveBookSentence,
+  rateAttempt,
   removeSentencesFromBook,
   reorderBookSentences,
   restoreBookSentenceSnapshot,
   restoreBackup,
   saveAnalysis,
+  saveAttempt,
   setBookSentenceStatus,
   transferBookSentences,
   updateBookChapter,
@@ -278,5 +282,95 @@ describe('data layer', () => {
     expect(
       memberships.every((item) => item.chapterId === result.chapterId),
     ).toBe(true);
+  });
+});
+
+describe('shadowing attempts', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-attempts-${createId('db')}`);
+  });
+
+  function makeBlob(bytes = 'audio-bytes'): Blob {
+    return new Blob([bytes], { type: 'audio/webm' });
+  }
+
+  it('saves an attempt with expected defaults', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_500,
+    });
+    expect(attempt.id).toMatch(/^attempt_/);
+    expect(attempt.sentenceId).toBe('sent-1');
+    expect(attempt.manualRating).toBeUndefined();
+    expect(await getDb().attempts.get(attempt.id)).toMatchObject({
+      sentenceId: 'sent-1',
+      durationMs: 1_500,
+    });
+  });
+
+  it('lists attempts for a sentence newest-first, excluding other sentences', async () => {
+    const first = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob('one'),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    const second = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob('two'),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    await saveAttempt({
+      sentenceId: 'sent-2',
+      blob: makeBlob('other'),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+
+    const attempts = await listAttemptsForSentence('sent-1');
+    expect(attempts.map((item) => item.id)).toEqual([second.id, first.id]);
+  });
+
+  it('deletes an attempt', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    await deleteAttempt(attempt.id);
+    expect(await getDb().attempts.get(attempt.id)).toBeUndefined();
+  });
+
+  it('rates an attempt and rejects an unknown id', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    const rated = await rateAttempt(attempt.id, 'better');
+    expect(rated.manualRating).toBe('better');
+
+    await expect(rateAttempt('missing-id', 'worse')).rejects.toThrow(
+      'Attempt not found',
+    );
+  });
+
+  it('never enqueues sync metadata for attempt writes (local-only by design)', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    await rateAttempt(attempt.id, 'same');
+    await deleteAttempt(attempt.id);
+
+    expect(await getDb().syncRecordMeta.count()).toBe(0);
+    expect(await getDb().syncQueue.count()).toBe(0);
   });
 });

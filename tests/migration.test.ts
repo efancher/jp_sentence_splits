@@ -96,6 +96,35 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v7 with the attempts table', async () => {
+    const name = `migrate-v7-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(7);
+    expect(db.tables.some((t) => t.name === 'attempts')).toBe(true);
+
+    const now = new Date().toISOString();
+    await db.attempts.put({
+      id: 'attempt-1',
+      sentenceId: 'sent-1',
+      mimeType: 'audio/webm',
+      durationMs: 2500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/webm' }),
+      createdAt: now,
+    });
+
+    const attempt = await db.attempts.get('attempt-1');
+    expect(attempt?.sentenceId).toBe('sent-1');
+    // fake-indexeddb/jsdom does not structured-clone Blob internals, but the
+    // record and MIME metadata still prove the blob was stored (see the same
+    // caveat in tests/shadowingImport.test.ts).
+    expect(attempt?.mimeType).toBe('audio/webm');
+    expect(attempt?.blob).toBeTruthy();
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

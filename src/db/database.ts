@@ -3,6 +3,7 @@ import Dexie, { type EntityTable, type Transaction } from 'dexie';
 import { DB_NAME } from '../appConfig';
 import type {
   AppSettings,
+  Attempt,
   Book,
   BookSentence,
   ImportBatch,
@@ -64,6 +65,9 @@ export class GlossbookDatabase extends Dexie {
   vocabularyKanji!: EntityTable<VocabularyKanji, 'id'>;
   studyItems!: EntityTable<StudyItem, 'id'>;
   reviews!: EntityTable<Review, 'id'>;
+  // Shadowing practice core loop (docs/UNIFIED_APP_ARCHITECTURE.md §12,
+  // Phase 3) — local-only, no sync wiring.
+  attempts!: EntityTable<Attempt, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -177,6 +181,38 @@ export class GlossbookDatabase extends Dexie {
       studyItems:
         'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
       reviews: 'id, studyItemId, timestamp',
+    });
+
+    // Shadowing practice core loop (docs/UNIFIED_APP_ARCHITECTURE.md §12,
+    // Phase 3). Local-only user recordings — no sync wiring (§18).
+    this.version(7).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
+      attempts: 'id, sentenceId, createdAt, manualRating',
     });
   }
 }

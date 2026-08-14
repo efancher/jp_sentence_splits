@@ -180,6 +180,66 @@ Phase 2 is now **fully done**: both sub-tasks (WaniKani kanji catalog,
 one-time Anki sentence import) are live. JMDict→`vocabulary_items` bulk
 import remains out of scope by design, deferred to Phase 5.
 
-## Phase 3 onward: not started
+## Phase 3 — Unified shadowing: core loop done, live overlay/analysis deferred
+
+Scoped down after discussion: this pass ports only the record → save → compare
+→ rate loop from `~/projects/shadowing/web`. The live waveform-while-recording
+overlay and offline pitch/waveform comparison view (`analysis/pitch.ts`,
+`analysis/japanese.ts`, `ShadowReferencePlayer`, `AnalysisPanel`-equivalent)
+are explicitly deferred to a follow-up pass, to be ported together with their
+consumer once the core loop is in daily use.
+
+Added:
+- `src/lib/recording.ts` — ported `RecordingService`, `PlaybackCoordinator`
+  (`alternate`/`dualEar` only — `playSequence` dropped, unused),
+  `micConstraintsForRecording`, `playDualEar` from
+  `shadowing/web/src/services/recording.ts`. Zero source-repo imports in the
+  original, so this is a near-verbatim copy. Not ported: `calibrateMicrophone`,
+  `playReferenceForShadowing`, `ShadowReferencePlayer`, `stopShadowReference`
+  (all live-overlay-specific).
+- `src/lib/shadowing.ts`, `src/hooks/useShadowing.ts` — new
+  `ShadowingController`, modeled on `nativeAudio.ts`'s external-store pattern
+  as a sibling, not a reuse (materially different state: recording progress,
+  comparison mode). Auto-stops recording at `MAX_RECORDING_DURATION_MS`.
+- `src/domain/types.ts` — `Attempt`, `AttemptRating`. Blob stored inline,
+  matching `SentenceAudio`'s existing pattern (no separate asset table,
+  since each attempt's blob is 1:1 and never reused). No Zod schema and not
+  part of `backupSchema` — same precedent as `SentenceAudio` (blobs aren't
+  JSON-serializable for backup/export).
+- `src/db/database.ts` — Dexie schema v7, one new store (`attempts`).
+- `src/db/repository.ts` — `saveAttempt`/`listAttemptsForSentence`/
+  `deleteAttempt`/`rateAttempt`. Local-only by design (§18) — none of these
+  call `notifySync`/`notifySyncMany`; no Supabase migration or Storage bucket
+  added in this pass.
+- `src/pages/ShadowPage.tsx` — new `books/:bookId/shadow/:sentenceId` route,
+  linked from a "Shadow" button next to "Analyze" on `PracticePage`. Record →
+  stop → preview → save/discard; past-attempts list with Alternate/Dual-ear
+  comparison playback against the sentence's reference audio, 4-way manual
+  rating, delete (with confirm). Works without reference audio too (record/
+  save only, comparison playback disabled).
+- Tests: `tests/recording.test.ts` (ported the 3 existing shadowing/web tests
+  plus new coverage — `start`/`stop` happy path, both `stop()` error paths,
+  `cancel()`, `alternate()` happy path + cancellation, `dualEar()` happy path
+  — closing the architecture doc's Phase 3 gate that shadowing/web itself
+  lacked this coverage), `tests/shadowing.test.ts` (controller state machine,
+  fake-timer-driven auto-stop, comparison state), `tests/data.test.ts`
+  (attempt CRUD, plus a regression guard asserting `syncRecordMeta`/
+  `syncQueue` stay empty), `tests/migration.test.ts` (v7 round-trip),
+  `tests/shadowPage.test.tsx` (RTL: renders reference clip + record control +
+  attempt list, delete with/without confirmation).
+
+**Verified**: `npm run check` green (182 tests, 2 pre-existing skips), `npm run
+build` green (`ShadowPage` code-splits into its own chunk). Attempted an
+automated real-browser smoke test (Playwright + Chromium with
+`--use-fake-device-for-media-stream` to simulate a mic) to exercise record →
+save → alternate → dual-ear → rate → delete end-to-end; blocked by missing
+system shared libraries (`libnspr4.so` etc.) that require root to install,
+which wasn't available in this environment. **Manual verification in a real
+browser (`npm run dev`, grant mic permission) is still needed** before
+considering this phase's UI fully proven — automated coverage above verifies
+the logic and component wiring, not real `MediaRecorder`/`getUserMedia`
+behavior end-to-end.
+
+## Phase 3 remaining / Phase 4 onward: not started
 
 See `docs/ROADMAP.md`.
