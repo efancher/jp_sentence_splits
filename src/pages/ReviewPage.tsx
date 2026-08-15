@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { NativeAudioButton } from '../components/NativeAudioButton';
 import { VocabChips } from '../components/VocabChips';
 import {
   ensureStudyItem,
@@ -12,7 +13,14 @@ import {
   recordReview,
   type VocabularyTargetCandidate,
 } from '../db/repository';
-import type { ReviewRating, Sentence, StudyActivityType, StudyItem, VocabularyItem } from '../domain/types';
+import type {
+  ReviewRating,
+  Sentence,
+  SentenceAudio,
+  StudyActivityType,
+  StudyItem,
+  VocabularyItem,
+} from '../domain/types';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -40,11 +48,20 @@ const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
   'cloze',
 ];
 
+/**
+ * Audio comprehension (Phase 7.4, docs/STATUS.md) — sentence-subject, like
+ * `comprehension`/`reading_in_context`, but only eligible for sentences
+ * that have at least one `SentenceAudio` row; the Japanese text stays
+ * hidden until reveal, audio plays first.
+ */
+const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
   reading_retrieval: 'Reading retrieval',
   cloze: 'Cloze',
+  listening: 'Listening',
 };
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -59,6 +76,8 @@ interface QueueCard {
   sentence: Sentence;
   /** Set only for vocabulary-item-subject cards (e.g. reading_retrieval). */
   target?: { vocabularyItem: VocabularyItem; surfaceForm: string };
+  /** Set only for audio-comprehension cards (listening). */
+  audio?: SentenceAudio;
 }
 
 /** A (subject, activityType) pair with no study_item yet — needs seeding. */
@@ -68,12 +87,17 @@ type PendingSeed =
       kind: 'vocabulary';
       candidate: VocabularyTargetCandidate;
       activityType: StudyActivityType;
+    }
+  | {
+      kind: 'listening';
+      sentence: Sentence;
+      audio: SentenceAudio;
+      activityType: StudyActivityType;
     };
 
 function pendingSeedKey(seed: PendingSeed): string {
-  return seed.kind === 'sentence'
-    ? seed.sentence.id
-    : seed.candidate.vocabularyItem.id;
+  if (seed.kind === 'vocabulary') return seed.candidate.vocabularyItem.id;
+  return seed.sentence.id;
 }
 
 /** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
@@ -144,12 +168,37 @@ export function ReviewPage() {
         vocabularyItemIdSet.has(item.subjectId),
     );
 
+    // Audio comprehension is only eligible for sentences that have at
+    // least one reference recording — first one found per sentence wins
+    // (no book-specific source preference, unlike PracticePage's audio
+    // picker; scoped down deliberately, see docs/STATUS.md).
+    const audioRows = await db.sentenceAudio
+      .where('sentenceId')
+      .anyOf(sentenceIds)
+      .toArray();
+    const audioBySentenceId = new Map<string, SentenceAudio>();
+    for (const row of audioRows) {
+      if (!audioBySentenceId.has(row.sentenceId)) {
+        audioBySentenceId.set(row.sentenceId, row);
+      }
+    }
+    const existingAudioItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(AUDIO_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) => item.subjectType === 'sentence' && audioBySentenceId.has(item.subjectId),
+    );
+
     return {
       book,
       sentences,
       existingSentenceItems,
       vocabularyTargetCandidates,
       existingVocabularyItems,
+      audioBySentenceId,
+      existingAudioItems,
     };
   }, [bookId]);
 
@@ -170,12 +219,15 @@ export function ReviewPage() {
         ]),
       );
 
-      const [dueSentenceItems, dueVocabularyItems] = await Promise.all([
+      const [dueSentenceItems, dueVocabularyItems, dueAudioItems] = await Promise.all([
         getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
           subjectIds: scope.sentences.map((item) => item.id),
         }),
         getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
           subjectIds: [...byVocabularyItemId.keys()],
+        }),
+        getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
+          subjectIds: [...scope.audioBySentenceId.keys()],
         }),
       ]);
 
@@ -202,8 +254,16 @@ export function ReviewPage() {
         })
         .filter((card): card is QueueCard => card !== null);
 
-      const due = [...dueSentenceCards, ...dueVocabularyCards].sort((a, b) =>
-        a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due),
+      const dueAudioCards = dueAudioItems
+        .map((studyItem): QueueCard | null => {
+          const sentence = bySentenceId.get(studyItem.subjectId);
+          const audio = scope.audioBySentenceId.get(studyItem.subjectId);
+          return sentence && audio ? { studyItem, sentence, audio } : null;
+        })
+        .filter((card): card is QueueCard => card !== null);
+
+      const due = [...dueSentenceCards, ...dueVocabularyCards, ...dueAudioCards].sort(
+        (a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due),
       );
 
       // Any (subject, activityType) pair with no study_item yet needs
@@ -238,6 +298,20 @@ export function ReviewPage() {
           }
         }
       }
+      const existingAudioKeys = new Set(
+        scope.existingAudioItems.map(
+          (item) => `${item.subjectId}:${item.activityType}`,
+        ),
+      );
+      for (const [sentenceId, audio] of scope.audioBySentenceId) {
+        const sentence = bySentenceId.get(sentenceId);
+        if (!sentence) continue;
+        for (const activityType of AUDIO_ACTIVITY_TYPES) {
+          if (!existingAudioKeys.has(`${sentenceId}:${activityType}`)) {
+            pendingSeeds.push({ kind: 'listening', sentence, audio, activityType });
+          }
+        }
+      }
 
       if (cancelled) return;
       setQueue(due);
@@ -262,13 +336,15 @@ export function ReviewPage() {
     void (async () => {
       const cards = await Promise.all(
         batch.map(async (item): Promise<QueueCard> => {
-          if (item.kind === 'sentence') {
+          if (item.kind === 'sentence' || item.kind === 'listening') {
             const studyItem = await ensureStudyItem(
               'sentence',
               item.sentence.id,
               item.activityType,
             );
-            return { studyItem, sentence: item.sentence };
+            return item.kind === 'listening'
+              ? { studyItem, sentence: item.sentence, audio: item.audio }
+              : { studyItem, sentence: item.sentence };
           }
           const studyItem = await ensureVocabularyStudyItem(
             item.candidate.vocabularyItem.id,
@@ -319,6 +395,7 @@ export function ReviewPage() {
   const nextDue = [
     ...(scope?.existingSentenceItems ?? []),
     ...(scope?.existingVocabularyItems ?? []),
+    ...(scope?.existingAudioItems ?? []),
   ]
     .filter((item) => item.fsrsState.due > new Date().toISOString())
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due))[0]?.fsrsState.due;
@@ -365,6 +442,13 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
                 surfaceForm={current.target.surfaceForm}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
+              />
+            ) : current.audio ? (
+              <AudioComprehensionCard
+                sentence={current.sentence}
+                audio={current.audio}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
               />
@@ -446,6 +530,41 @@ function VocabularyTargetCard({
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Audio comprehension (Phase 7.4, docs brief §5D): audio plays first with
+ * the Japanese text hidden; reveal shows the sentence, translation, and
+ * vocabulary together, same as the plain comprehension flow. The audio
+ * button stays available (and replayable) both before and after reveal.
+ */
+function AudioComprehensionCard({
+  sentence,
+  audio,
+  revealed,
+  onReveal,
+}: {
+  sentence: Sentence;
+  audio: SentenceAudio;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  return (
+    <>
+      <NativeAudioButton audio={audio} displayLabel="Play audio" />
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal
+        </button>
+      ) : (
+        <>
+          <div className="jp jp-lg">{sentence.japanese}</div>
+          <div>{sentence.translation || '(no translation)'}</div>
+          <VocabChips items={sentence.targetVocabulary} />
         </>
       )}
     </>

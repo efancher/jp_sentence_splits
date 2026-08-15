@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.3).
+Last updated: 2026-08-16 (Phase 7.4).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1115,6 +1115,75 @@ behavior changed beyond the deliberate reading_retrieval-test extension.
 No schema/migration changes in this phase — cloze reuses
 `SentenceVocabulary.surfaceForm` and the existing `vocabulary_items` fields
 as-is.
+
+**Not yet manually verified in a real browser** — same caveat as every
+prior UI-facing phase.
+
+## Phase 7.4 — Audio comprehension review experience: done
+
+Narrowed further from the original "Phase 7.4 — audio comprehension,
+mnemonic gating, assistance tracking" bundle down to audio comprehension
+alone, continuing the one-experience-per-pass discipline established in
+7.2/7.3. Mnemonic gating and assistance tracking move to a follow-up
+(7.5) — assistance tracking specifically needs a real optional-help
+affordance to attach to, and audio replay-after-reveal is a natural first
+one, but that's still future work, not this pass.
+
+Added:
+- `src/pages/ReviewPage.tsx` — new `AUDIO_ACTIVITY_TYPES = ['listening']`,
+  a third independently-seeded activity-type category alongside the
+  existing unconditional sentence types (`comprehension`,
+  `reading_in_context`) and the vocabulary-target types
+  (`reading_retrieval`, `cloze`). Unlike those, `listening` is
+  sentence-subject but *conditionally* eligible — only for sentences with
+  at least one `SentenceAudio` row, mirroring how vocabulary-target types
+  are conditional on a `surfaceForm`-bearing link. `PendingSeed` gained a
+  third `kind: 'listening'` variant; the due-queue fetch now does three
+  parallel `getDueStudyItems` calls (sentence/vocabulary/audio) merged and
+  sorted together, same pattern as 7.2/7.3 established for two.
+  `QueueCard` gained an optional `audio?: SentenceAudio` field. New
+  `AudioComprehensionCard`: plays the reference audio via the existing
+  `NativeAudioButton` (`src/components/NativeAudioButton.tsx`, already
+  built for `PracticePage`/`ShadowPage`, no changes needed) with the
+  Japanese text, translation, and vocab chips all hidden until reveal —
+  the audio button itself stays visible/replayable both before and after
+  reveal, matching the brief's §5D flow (play → self-check → reveal →
+  replay allowed → normal analysis).
+- Audio-per-sentence lookup is a direct `db.sentenceAudio.where('sentenceId').anyOf(...)`
+  query inside `ReviewPage`'s own `scope`, not a new repository function —
+  matches the existing precedent of `PracticePage` querying
+  `sentenceAudio` directly rather than through a wrapper. Picks the first
+  available recording per sentence; **does not** replicate `PracticePage`'s
+  book-sourceKey audio-preference matching (deliberately scoped down — flag
+  if this turns out to matter in practice, since `/review`'s global mode
+  has no single book to prefer against anyway).
+- Tests: `tests/reviewPage.test.tsx` — two new tests: a sentence with
+  `SentenceAudio` seeds and renders a listening card (Japanese hidden
+  pre-reveal, shown + rated after), and a sentence with no `SentenceAudio`
+  never gets one (study item count stays at the baseline two).
+
+**Deliberately not done yet** (moved to Phase 7.5): mnemonic
+(`VocabularyItem.notes`) maturity-gating on the vocabulary-target cards
+using `computeMaturityLevel` (Phase 7.1); any assistance-flag recording;
+`comprehension`/`reading_in_context` differentiation (still the same open
+Phase-4 gap).
+
+**Worth flagging for whoever picks up Phase 7.8 (session planner)**: this
+phase is the third independently-seeded/due-fetched activity-type category
+hand-duplicated in `ReviewPage.tsx` (unconditional-sentence /
+vocabulary-target / conditional-sentence-with-audio). Still tractable at
+three, but a fourth would be a good trigger to generalize this into a real
+"activity descriptor" abstraction (eligibility predicate + seed function +
+render function per activity type) rather than continuing to copy the
+pattern by hand — noted here rather than pre-building an abstraction this
+phase doesn't need yet.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 247
+tests passed (up from 245), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+No schema/migration changes — `listening` reuses the existing
+`SentenceAudio` table and `NativeAudioButton` component as-is.
 
 **Not yet manually verified in a real browser** — same caveat as every
 prior UI-facing phase.

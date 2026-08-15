@@ -248,6 +248,89 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    const notDueYet = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const farFutureFsrsState = {
+      due: notDueYet,
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 0,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    // Keep the two unconditional sentence-subject activity types out of the
+    // queue so only the audio-eligible listening card seeds/renders here.
+    for (const activityType of ['comprehension', 'reading_in_context']) {
+      await db.studyItems.add({
+        id: `si-${activityType}`,
+        subjectType: 'sentence',
+        subjectId: 'sent-1',
+        activityType,
+        fsrsState: farFutureFsrsState,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await db.sentenceAudio.add({
+      id: 'audio-1',
+      sentenceId: 'sent-1',
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByRole('button', { name: /Play native sentence recording/ });
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+
+    await waitFor(async () => {
+      const seeded = await db.studyItems
+        .where('subjectId')
+        .equals('sent-1')
+        .and((item) => item.activityType === 'listening')
+        .toArray();
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0]?.subjectType).toBe('sentence');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    expect(screen.getByText('I read a book.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+  });
+
+  it('does not seed a listening card for a sentence with no reference audio', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    await waitFor(async () => {
+      expect(await db.studyItems.count()).toBe(2); // comprehension + reading_in_context only
+    });
+    expect(screen.queryByRole('button', { name: /Play native sentence recording/ })).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when there is nothing to review', async () => {
     const db = getDb();
     const now = new Date().toISOString();
