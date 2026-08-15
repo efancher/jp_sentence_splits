@@ -599,3 +599,26 @@ failures both times — including the exact sentence that prompted this
 おないどし). Dry-run only — **not yet run with `--apply`**, and the GitHub
 Actions workflow itself hasn't been triggered yet (blocked on the user
 adding the two new repo secrets).
+
+## Phase 6 — Anki interoperability cleanup: verified, `anki` archived
+
+Scoped down from ROADMAP.md's original wording before acting: "archive
+it" was a Phase 0 planning assumption. Session memory flagged that `anki`
+was — as of that memory's last update — still being described as actively
+used/extended day-to-day independent of this migration; surfaced that
+conflict to the user directly rather than archiving on the ROADMAP text
+alone. User confirmed: go ahead and archive, they're done using `anki`
+independently now that Glossbook covers their needs.
+
+Verification before archiving: `anki`'s git log has no commits since
+2026-08-14 (`fedad55`/`8ea7164` — the same day the one-time export/import
+tooling was built and run), and the last real content-development commit
+(`dfca1e8`, "Enrich Shadowing candidates with JMDict...") predates that,
+2026-08-06 — no Anki-side activity since the migration landed. Combined
+with Phase 2's already-documented clean run (501 notes read, 0 skipped,
+idempotency-verified re-running dry), there's nothing further to pull.
+Anki review history remains a deliberate, accepted gap (confirmed by the
+user in Phase 0, not migrated by design).
+
+Archived `efancher/anki` on GitHub (`gh repo archive`) — read-only from
+here on, not deleted, reversible via GitHub settings if ever needed.
