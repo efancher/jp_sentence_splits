@@ -165,6 +165,58 @@ Idempotent: only sentences with an empty `vocabularySuggestions` array are
 selected, so a successful `--apply` run leaves nothing for the next run to
 find.
 
+### Backfilling vocabulary meanings from JMDict
+
+`vocabulary_items.meaning` often starts blank — every item created by the
+suggestions backfill above, or by confirming vocabulary before it has a
+hand-typed meaning, has nothing until the user fills it in. This script
+looks up each blank-meaning item in JMDict (reusing `scripts/lib/jmdict.ts`
+unmodified — the same local lookup tool `npm run jmdict:lookup` already
+uses) and fills in the gloss, and the part of speech too if that's also
+blank. Pure TypeScript, no Python/`shadowing` checkout needed.
+
+Trigger from GitHub Actions (Actions tab → "Backfill vocabulary meanings" →
+"Run workflow", checkbox for dry run vs. write) or locally:
+
+```bash
+npm run backfill:vocabulary-meanings
+# review the printed matches, then:
+npm run backfill:vocabulary-meanings -- --apply
+```
+
+Idempotent: only items with a blank meaning are selected, so items with no
+JMDict match stay blank and get retried harmlessly next run rather than
+being wrongly treated as done.
+
+### Backfilling confirmed-but-never-materialized vocabulary links
+
+Vocabulary confirmed via `VocabularyPicker` only materializes into real
+`vocabulary_items`/`sentence_vocabulary`/`kanji`/`vocabulary_kanji` rows
+from the confirm button going forward (added along with the browsing pages
+at `/vocabulary`/`/kanji/:character`) — any sentence confirmed before that
+still has its picks sitting only in `analyses.vocabulary_selections`,
+never turned into real rows. This script finds sentences that are
+confirmed but have zero `sentence_vocabulary` links and materializes them,
+mirroring the live confirm flow's exact get-or-create logic. Deliberately
+narrow: a sentence that already has any link is left untouched entirely —
+this never reconciles or overwrites, only fills the specific gap. Pure
+TypeScript, no Python needed.
+
+Trigger from GitHub Actions (Actions tab → "Backfill confirmed vocabulary
+links" → "Run workflow") or locally:
+
+```bash
+npm run backfill:confirmed-vocabulary-links
+# review the printed counts, then:
+npm run backfill:confirmed-vocabulary-links -- --apply
+```
+
+Idempotent: only never-materialized confirmed sentences are selected. A
+failed `--apply` run (e.g. a live confirm racing this backfill for the same
+word, mid-batch) is safe to just re-run — see the script's own top comment
+for the full reasoning on why this known race isn't solved with locking,
+just documented.
+
 ### One-time Anki sentence import
 
 A one-time, one-directional pull of already-mined `WK Satori Immersion` /

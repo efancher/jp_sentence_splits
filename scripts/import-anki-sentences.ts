@@ -19,52 +19,8 @@ import { normalizeExpressionKey, nowIso } from '../src/lib/normalize';
 import { importBatchToRemote, inboxToRemote, sentenceToRemote } from '../src/sync/mappers';
 
 import { sentenceDraftFromNote, vocabularyItemFromNote, type AnkiNoteExport } from './lib/ankiImport';
+import { fetchAll, upsertBatched, withoutVersionAndTimestamps } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
-
-type SupabaseClient = Awaited<ReturnType<typeof createScriptSupabaseClient>>;
-
-const SELECT_PAGE_SIZE = 1000;
-const WRITE_BATCH_SIZE = 500;
-
-// Never send version/created_at/updated_at on an upsert payload — the DB
-// owns them (column defaults on insert, set_updated_at/bump_version
-// triggers on update) as long as they're simply absent from the payload.
-// Sending an explicit version resets the optimistic-concurrency counter
-// instead of bumping it on update (see import-wanikani-kanji.ts's
-// onConflict comment for the same underlying trigger behavior).
-function withoutVersionAndTimestamps<T extends Record<string, unknown>>(
-  row: T,
-): Omit<T, 'version' | 'created_at' | 'updated_at'> {
-  const rest: Record<string, unknown> = { ...row };
-  delete rest.version;
-  delete rest.created_at;
-  delete rest.updated_at;
-  return rest as Omit<T, 'version' | 'created_at' | 'updated_at'>;
-}
-
-async function fetchAll<T>(
-  supabase: SupabaseClient,
-  table: string,
-  columns: string,
-  ownerId: string,
-  mapRow: (row: Record<string, unknown>) => T,
-): Promise<T[]> {
-  const out: T[] = [];
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(columns)
-      .eq('owner_id', ownerId)
-      .is('deleted_at', null)
-      .range(from, from + SELECT_PAGE_SIZE - 1);
-    if (error) throw new Error(`Failed to fetch existing ${table}: ${error.message}`);
-    for (const row of data ?? []) out.push(mapRow(row as unknown as Record<string, unknown>));
-    if (!data || data.length < SELECT_PAGE_SIZE) break;
-    from += SELECT_PAGE_SIZE;
-  }
-  return out;
-}
 
 function mergeSourceReferences(existing: SourceReference[], incoming: SourceReference): SourceReference[] {
   const byCardId = new Map(existing.map((ref) => [ref.cardId, ref]));
@@ -159,7 +115,14 @@ async function main() {
       sentenceId: String(row.sentence_id),
       vocabularyItemId: String(row.vocabulary_item_id),
     })),
-    fetchAll(supabase, 'inbox', 'sentence_id', user.id, (row) => String(row.sentence_id)),
+    fetchAll(
+      supabase,
+      'inbox',
+      'sentence_id',
+      user.id,
+      (row) => String(row.sentence_id),
+      'sentence_id', // inbox has no `id` column — primary key is (owner_id, sentence_id)
+    ),
   ]);
 
   const sentencesByKey = new Map(existingSentences.map((s) => [s.normalizedKey, s]));
@@ -282,14 +245,6 @@ async function main() {
     return;
   }
 
-  async function upsertBatched(table: string, rows: Record<string, unknown>[], onConflict: string) {
-    for (let i = 0; i < rows.length; i += WRITE_BATCH_SIZE) {
-      const batch = rows.slice(i, i + WRITE_BATCH_SIZE);
-      const { error } = await supabase.from(table).upsert(batch, { onConflict });
-      if (error) throw new Error(`Upsert into ${table} failed on batch starting at ${i}: ${error.message}`);
-    }
-  }
-
   const sentenceRows = [...workingSentences.values()].map((working) => {
     const sentence: Sentence = sentenceSchema.parse({
       id: working.id,
@@ -347,10 +302,11 @@ async function main() {
     addedAt: now,
   }));
 
-  await upsertBatched('sentences', sentenceRows, 'id');
-  await upsertBatched('vocabulary_items', vocabRows, 'id');
-  await upsertBatched('sentence_vocabulary', linkRows, 'id');
+  await upsertBatched(supabase, 'sentences', sentenceRows, 'id');
+  await upsertBatched(supabase, 'vocabulary_items', vocabRows, 'id');
+  await upsertBatched(supabase, 'sentence_vocabulary', linkRows, 'id');
   await upsertBatched(
+    supabase,
     'inbox',
     inboxRows.map((row) => withoutVersionAndTimestamps(inboxToRemote(row, user.id, 1))),
     'owner_id,sentence_id',

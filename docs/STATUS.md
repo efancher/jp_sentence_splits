@@ -622,3 +622,84 @@ user in Phase 0, not migrated by design).
 
 Archived `efancher/anki` on GitHub (`gh repo archive`) — read-only from
 here on, not deleted, reversible via GitHub settings if ever needed.
+
+## Phase 5 part 2: JMDict meaning backfill + retroactive materialization — done
+
+Both gaps deferred at Phase 5 shipping time, tackled now per user request.
+
+Added:
+- `scripts/backfill-vocabulary-meanings.ts` — reuses `scripts/lib/jmdict.ts`
+  unmodified (the existing local-only `npm run jmdict:lookup` tool) and is
+  the first thing that actually writes JMDict results to Supabase: fills
+  `vocabulary_items.meaning` (and `part_of_speech` if also blank) for items
+  with no meaning yet. Pure TypeScript, no Python needed.
+- `scripts/backfill-confirmed-vocabulary-links.ts` — retroactively
+  materializes `vocabulary_items`/`sentence_vocabulary`/`kanji`/
+  `vocabulary_kanji` for sentences confirmed via `VocabularyPicker` before
+  Phase 5 shipped (materialization only fires from the confirm button going
+  forward). Deliberately narrow: only sentences with zero existing
+  `sentence_vocabulary` links — never reconciles or overwrites an
+  already-materialized sentence. Mirrors `import-anki-sentences.ts`'s
+  get-or-create shape for `vocabulary_items`, and Phase 5's own
+  `ensureVocabularyItem` kanji-breakdown logic, reimplemented against
+  Supabase directly (Node script, not the browser's Dexie).
+- `scripts/lib/scriptHelpers.ts` (new) — `fetchAll`/`withoutVersionAndTimestamps`/
+  `upsertBatched`/`parseApplyFlag`/`requireAuthedUser`, extracted out of
+  `import-anki-sentences.ts` (which now imports them instead of defining
+  its own copies) so this is the third script sharing one implementation,
+  not a third copy.
+- Two new `workflow_dispatch`-only GitHub Actions workflows (same rationale
+  as the suggestions-backfill workflow: manual, logged, no SSH, no
+  scheduled/unattended runs), neither needing the `shadowing` cross-repo
+  checkout — both scripts are pure TypeScript.
+- `README.md` — new sections for both, next to the existing backfill docs.
+
+**Code-reviewed** (multi-angle pass) before commit; real findings, fixed:
+(1) `fetchAll`'s `.range()` pagination had no `.order()`, so page
+boundaries weren't guaranteed stable under concurrent writes (a row could
+shift between an already-fetched page and the next, getting silently
+skipped) — fixed by ordering on each table's real primary key, which
+turned up a second, more serious near-miss while fixing it: `analyses` and
+`inbox` have **no `id` column at all** (their primary keys are
+`sentence_id`/`(owner_id, sentence_id)` respectively) — hardcoding
+`.order('id')` would have broken both call sites outright; `fetchAll` now
+takes the order column as a parameter (default `'id'`), with `inbox`'s and
+`analyses`' call sites passing `'sentence_id'` explicitly. (2)
+`vocabulary_kanji` links were only ever created for a vocabulary item
+classified "new" in that run — a prior run crashing between the
+`vocabulary_items` and `vocabulary_kanji` writes (network drop, process
+killed) would leave that item permanently unlinked, since it's no longer
+"new" on a later run; fixed by reconciling kanji links against a fetched
+`vocabulary_kanji` snapshot for *every* item touched each run, not just
+new ones. (3) `fetchBlankMeaningItems` and `upsertBatched` duplicated logic
+`scriptHelpers.ts` was created in this very diff to share — both now reuse
+the shared versions. (4) Minor efficiency: JMDict loading now runs
+concurrently with the Supabase fetch (independent operations); the
+`kanji`/`vocabulary_items` upserts (no ordering constraint between them,
+only children depend on both) now run concurrently too.
+
+**Known, accepted limitation, not fixed**: the confirmed-links backfill's
+read snapshot isn't a single atomic transaction, so a live confirm for the
+same word landing mid-run can independently mint a duplicate
+`vocabulary_items` row, surfacing as a unique-constraint error on that
+batch. This mirrors `import-anki-sentences.ts`'s existing, already-shipped
+pattern (not a new risk introduced here) — deliberately not solved with
+locking/retry machinery, since the workflow is manual/occasional (never
+scheduled) and a failed run is safely re-runnable. Documented in the
+script's own top comment. Similarly left as-is: the backfill's
+`normalizeExpressionKey`-based dedup differs from the live browser path's
+exact-string dedup — matches `import-anki-sentences.ts`'s existing
+convention (arguably more correct, not less, since it catches NFC/
+whitespace variants the live path's raw index misses) rather than a
+regression.
+
+**Verified**: `npm run typecheck`/`vitest run` green (221 tests, 2
+pre-existing skips). Both scripts dry-run against production, twice each
+(before and after the code-review fixes, identical results both times):
+meanings backfill found 31 blank-meaning items, matched 10 real JMDict
+glosses (バイト → "part-time job", マジ → "serious", etc.), 21 had no match
+(mostly proper nouns, expected). Confirmed-links backfill found 71
+confirmed sentences total, only 1 not yet materialized — the rest were
+already correctly materialized by today's own Phase 5 live testing.
+Neither has been run with `--apply` yet, and neither GitHub Actions
+workflow has been triggered.
