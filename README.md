@@ -188,6 +188,28 @@ Idempotent: only items with a blank meaning are selected, so items with no
 JMDict match stay blank and get retried harmlessly next run rather than
 being wrongly treated as done.
 
+### Backfilling JMDict glosses onto vocabulary suggestions
+
+Complementary to the meanings backfill above, but earlier in the pipeline:
+`VocabularySuggestion.english` (the word chips shown in `VocabularyPicker`
+before you've confirmed anything) is never filled by the fugashi tokenizer
+— only surface/reading/part of speech. `selectionFromSuggestion`
+(`src/lib/vocabularySuggestions.ts`) already copies `suggestion.english`
+into the picker's "Meaning (optional)" field the moment you tap a word, so
+this script is the only missing piece — no UI changes needed. Only
+content-word suggestions (`selectedByDefault: true`) get a lookup;
+particles/punctuation are skipped.
+
+```bash
+npm run backfill:vocabulary-suggestion-glosses
+# review the printed matches, then:
+npm run backfill:vocabulary-suggestion-glosses -- --apply
+```
+
+Same GitHub Actions trigger pattern as the other backfills ("Backfill
+vocabulary suggestion glosses" workflow). Idempotent the same way as the
+meanings backfill: unmatched suggestions stay blank and retry harmlessly.
+
 ### Backfilling confirmed-but-never-materialized vocabulary links
 
 Vocabulary confirmed via `VocabularyPicker` only materializes into real

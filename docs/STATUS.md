@@ -801,3 +801,43 @@ assertion elsewhere take longer to fail.
 **Verified empirically**: 35 consecutive full-suite runs, 0 failures
 (previously ~35% failure rate reproduced over the same sample size before
 these fixes).
+
+### New tool: backfill JMDict glosses onto vocabulary suggestions
+
+Found manually testing Phase 5: a CSV-imported lyrics book (GLIM SPANKY -
+「怒りをくれよ」, no translation column in the source) has no sentence
+translation and no Anki-sourced `target_vocabulary` — expected, not a bug
+(confirmed `sentence.translation` has no edit UI anywhere in the app). But
+its `vocabularySuggestions` (from today's tokenize backfill) never carried
+an English gloss — fugashi only produces surface/reading/POS.
+
+Turned out the domain model already anticipated this:
+`VocabularySuggestion.english` (`src/lib/vocabularySuggestions.ts`) is an
+existing, previously-always-empty optional field, and
+`selectionFromSuggestion` already copies it into the resulting
+`VocabularySelection.english` the moment a user taps a suggestion — which
+is exactly what pre-fills `VocabularyPicker`'s "Meaning (optional)" field
+and, downstream, `ensureVocabularyItem`'s initial meaning on confirm. That
+whole pipeline already existed; the only missing piece was actually
+populating `.english`. **No UI changes needed.**
+
+Added `scripts/backfill-vocabulary-suggestion-glosses.ts` — mirrors
+`backfill-vocabulary-meanings.ts` closely (same JMDict reuse, same
+scriptHelpers reuse) but operates on `sentences.vocabulary_suggestions`
+(a jsonb array) instead of `vocabulary_items.meaning` (a scalar). Scoped to
+`selectedByDefault: true` (content-word) suggestions only — particles/
+punctuation are skipped, matching this codebase's own existing definition
+of "worth studying." Complementary to (not a replacement for) the meanings
+backfill: that one fixes already-confirmed items retroactively; this one
+improves the picker's UX for future confirms by pre-filling the gloss
+before the word is even tapped. `.github/workflows/backfill-vocabulary-
+suggestion-glosses.yml`, same `workflow_dispatch`-only pattern as the other
+three backfills.
+
+**Code-reviewed**: no findings.
+
+**Verified**: `npm run check` green. Dry-run against production found the
+exact motivating case (鈍感→"thickheaded", ほら→"look!", 調子→"tune",
+乗る→"to get on" — all four content words from the GLIM SPANKY sentence
+that started this) plus 200 sentences total, 773 suggestions matched, 235
+had no JMDict match (retried harmlessly next run).
