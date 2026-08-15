@@ -37,9 +37,18 @@ function isRealPosTag(glossary: string): boolean {
   return glossary.length > 0 && !JUNK_GLOSSARY_VALUES.has(glossary) && !glossary.startsWith('POS: ');
 }
 
-/** WkMeaning is the word's real English meaning when present; HintGlossary is its JMDict-hit fallback for candidates. Glossary is never a gloss (see above). */
+/**
+ * WkMeaning is the word's real English meaning when present; HintGlossary
+ * is its JMDict-hit fallback for candidates. Glossary is never a gloss (see
+ * above). Anki fields are stored as HTML, so this needs the same
+ * entity-decoding displayJapanese already applies to Expression/Reading/
+ * Translation — WkMeaning/HintGlossary were the one field left raw, which
+ * left apostrophes as literal `&#x27;` in stored meanings (found live,
+ * fixed here; scripts/fix-html-entity-meanings.ts corrects already-imported
+ * rows).
+ */
 export function vocabularyMeaning(fields: Record<string, string>): string {
-  return (fields.WkMeaning || fields.HintGlossary || '').trim();
+  return displayJapanese(fields.WkMeaning || fields.HintGlossary || '');
 }
 
 export function vocabularyPartOfSpeech(fields: Record<string, string>): string | undefined {

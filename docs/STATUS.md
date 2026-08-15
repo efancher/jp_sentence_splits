@@ -701,5 +701,38 @@ glosses (バイト → "part-time job", マジ → "serious", etc.), 21 had no m
 (mostly proper nouns, expected). Confirmed-links backfill found 71
 confirmed sentences total, only 1 not yet materialized — the rest were
 already correctly materialized by today's own Phase 5 live testing.
-Neither has been run with `--apply` yet, and neither GitHub Actions
-workflow has been triggered.
+
+**Run for real (2026-08-15)**, both via GitHub Actions `--apply` (user
+triggered): meanings backfill updated 10 items; confirmed-links backfill
+materialized the 1 pending sentence. No errors, matched the dry-run counts
+exactly.
+
+### Follow-up fix: HTML-entity-encoded vocabulary meanings
+
+Found live by the user immediately after the meanings backfill, browsing
+`/vocabulary`: でしょ's meaning rendered as `don&#x27;t you agree?...`
+instead of `don't you agree?...`. Root cause predates today entirely —
+`scripts/lib/ankiImport.ts`'s `vocabularyMeaning()` (reads Anki's
+`WkMeaning`/`HintGlossary` fields, which Anki stores as HTML) never
+decoded HTML entities, unlike every other free-text field in that file
+(`Expression`/`Reading`/`Translation`), which already went through
+`displayJapanese` (`src/lib/normalize.ts`, entity-decoding + tag-stripping
+already built and tested). Not caused by today's JMDict backfill — verified
+でしょ wasn't even among the 10 items that backfill touched.
+
+Fixed `vocabularyMeaning()` to use `displayJapanese` like every other field
+in that file. Checked production directly before deciding scope: 6 of 334
+`vocabulary_items.meaning` rows affected; `sentences.target_vocabulary[].english`
+is populated by the same function (so equally exposed to the bug in
+principle) but checking all 206 sentences / 571 targetVocabulary entries
+found 0 actually-affected rows — nothing to correct there, not because a
+different code path protected it.
+
+Added `scripts/fix-html-entity-meanings.ts` — one-time correction, not a
+recurring backfill (no GitHub Actions workflow; the bug is fixed at the
+source, this only corrects historical data). Dry-run/`--apply`, same
+conventions as the other scripts. Added a regression test to
+`tests/ankiImport.test.ts` for entity decoding.
+
+**Verified**: dry-run and real `--apply` run against production, found and
+fixed exactly the 6 known-affected rows, 0 errors.

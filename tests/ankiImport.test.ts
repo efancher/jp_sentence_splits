@@ -44,6 +44,12 @@ describe('vocabularyMeaning', () => {
   it('is empty when neither is present', () => {
     expect(vocabularyMeaning({})).toBe('');
   });
+
+  it('decodes HTML entities from Anki\'s HTML-stored fields', () => {
+    expect(
+      vocabularyMeaning({ WkMeaning: 'to make up one&#x27;s mind; to take a momentous decision' }),
+    ).toBe("to make up one's mind; to take a momentous decision");
+  });
 });
 
 describe('vocabularyPartOfSpeech', () => {

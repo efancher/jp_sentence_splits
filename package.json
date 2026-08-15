@@ -20,7 +20,8 @@
     "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
     "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts",
     "backfill:vocabulary-meanings": "tsx scripts/backfill-vocabulary-meanings.ts",
-    "backfill:confirmed-vocabulary-links": "tsx scripts/backfill-confirmed-vocabulary-links.ts"
+    "backfill:confirmed-vocabulary-links": "tsx scripts/backfill-confirmed-vocabulary-links.ts",
+    "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
