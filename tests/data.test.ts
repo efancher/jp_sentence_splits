@@ -11,14 +11,18 @@ import {
   deleteBookChapter,
   ensureKanji,
   ensureStudyItem,
+  ensureVocabularyConfusion,
   ensureVocabularyItem,
+  ensureVocabularyStudyItem,
   exportFullBackup,
   getDb,
   getDueStudyItems,
   listAttemptsForSentence,
   materializeVocabularySelections,
   moveBookSentence,
+  pickContextSentenceForVocabularyItem,
   rateAttempt,
+  recordConfusionObservation,
   recordReview,
   removeSentencesFromBook,
   reorderBookSentences,
@@ -30,7 +34,7 @@ import {
   transferBookSentences,
   updateBookChapter,
 } from '../src/db/repository';
-import type { VocabularySelection } from '../src/domain/types';
+import type { Sentence, VocabularySelection } from '../src/domain/types';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
 import { createId } from '../src/lib/ids';
@@ -606,5 +610,126 @@ describe('vocabulary/kanji materialization (Phase 5)', () => {
     expect(keys).toContain('sentence_vocabulary');
     expect(keys).toContain('kanji');
     expect(keys).toContain('vocabulary_kanji');
+  });
+});
+
+function stubSentence(id: string, overrides: Partial<Sentence> = {}): Sentence {
+  const now = new Date().toISOString();
+  return {
+    id,
+    normalizedKey: id,
+    japanese: `${id}-japanese`,
+    readingOnly: '',
+    inlineReading: '',
+    translation: '',
+    targetVocabulary: [],
+    vocabularySuggestions: [],
+    sourceReferences: [],
+    conflicts: [],
+    firstOccurrenceIndex: 0,
+    importBatchIds: [],
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+describe('evidence-model foundation (Phase 7.1)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-evidence-${createId('db')}`);
+  });
+
+  it('ensureVocabularyStudyItem creates a vocabularyItem-subject study item, distinct from a sentence one', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const wordLevel = await ensureVocabularyStudyItem(vocabItem.id, 'reading');
+    expect(wordLevel.subjectType).toBe('vocabularyItem');
+    expect(wordLevel.subjectId).toBe(vocabItem.id);
+
+    const sentenceLevel = await ensureStudyItem('sentence', 'sent-1', 'reading');
+    expect(sentenceLevel.id).not.toBe(wordLevel.id);
+  });
+
+  it('ensureVocabularyStudyItem is idempotent for the same vocabulary item/activity pair', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const first = await ensureVocabularyStudyItem(vocabItem.id, 'reading');
+    const second = await ensureVocabularyStudyItem(vocabItem.id, 'reading');
+    expect(second.id).toBe(first.id);
+  });
+
+  it('pickContextSentenceForVocabularyItem returns the most recently linked sentence', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
+    await getDb().sentenceVocabulary.bulkPut([
+      {
+        id: 'link-old',
+        sentenceId: 'sent-old',
+        vocabularyItemId: vocabItem.id,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'link-new',
+        sentenceId: 'sent-new',
+        vocabularyItemId: vocabItem.id,
+        createdAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+
+    const picked = await pickContextSentenceForVocabularyItem(vocabItem.id);
+    expect(picked?.id).toBe('sent-new');
+  });
+
+  it('pickContextSentenceForVocabularyItem returns undefined with no links', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    expect(await pickContextSentenceForVocabularyItem(vocabItem.id)).toBeUndefined();
+  });
+
+  it('ensureVocabularyConfusion creates a canonicalized, deduped pair', async () => {
+    const arawasu = await ensureVocabularyItem('表す', 'あらわす');
+    const arawareru = await ensureVocabularyItem('表れる', 'あらわれる');
+
+    const forward = await ensureVocabularyConfusion(
+      arawasu.id,
+      arawareru.id,
+      'transitivity',
+    );
+    const backward = await ensureVocabularyConfusion(
+      arawareru.id,
+      arawasu.id,
+      'transitivity',
+    );
+
+    expect(backward.id).toBe(forward.id);
+    expect(await getDb().vocabularyConfusions.count()).toBe(1);
+    // Canonicalized regardless of call order.
+    const [expectedA, expectedB] =
+      arawasu.id < arawareru.id ? [arawasu.id, arawareru.id] : [arawareru.id, arawasu.id];
+    expect(forward.itemAId).toBe(expectedA);
+    expect(forward.itemBId).toBe(expectedB);
+  });
+
+  it('recordConfusionObservation increments the count and bumps lastObservedAt', async () => {
+    const a = await ensureVocabularyItem('開く', 'あく');
+    const b = await ensureVocabularyItem('開ける', 'あける');
+
+    const first = await recordConfusionObservation(a.id, b.id, 'transitivity');
+    expect(first.observedCount).toBe(1);
+
+    const second = await recordConfusionObservation(b.id, a.id, 'transitivity');
+    expect(second.id).toBe(first.id);
+    expect(second.observedCount).toBe(2);
+    expect(await getDb().vocabularyConfusions.count()).toBe(1);
+  });
+
+  it('recordConfusionObservation enqueues sync metadata', async () => {
+    const a = await ensureVocabularyItem('開く', 'あく');
+    const b = await ensureVocabularyItem('開ける', 'あける');
+    await recordConfusionObservation(a.id, b.id, 'transitivity');
+
+    await vi.waitFor(async () => {
+      const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
+      expect(keys).toContain('vocabulary_confusions');
+    });
   });
 });

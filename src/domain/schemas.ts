@@ -227,6 +227,18 @@ export const errorClassificationSchema = z.union([
   z.object({ userDefined: z.string() }),
 ]);
 
+export const reviewAssistanceSchema = z.enum([
+  'furigana_shown',
+  'translation_shown',
+  'mnemonic_shown',
+  'audio_replayed',
+  'chunks_shown',
+  'hint_shown',
+  'multiple_choice',
+]);
+
+export const reviewSourceSchema = z.enum(['scheduled_review', 'natural_encounter']);
+
 export const reviewSchema = z.object({
   id: z.string(),
   studyItemId: z.string(),
@@ -236,6 +248,31 @@ export const reviewSchema = z.object({
   expectedAnswer: z.string().optional(),
   elapsedMs: z.number().nonnegative().optional(),
   errorClassification: errorClassificationSchema.optional(),
+  assistance: z.array(reviewAssistanceSchema).optional(),
+  source: reviewSourceSchema.optional(),
+  contextSentenceId: z.string().optional(),
+});
+
+export const vocabularyConfusionTypeSchema = z.enum([
+  'reading',
+  'kanji',
+  'meaning',
+  'transitivity',
+  'synonym',
+  'grammar',
+  'other',
+]);
+
+export const vocabularyConfusionSchema = z.object({
+  id: z.string(),
+  itemAId: z.string(),
+  itemBId: z.string(),
+  confusionType: vocabularyConfusionTypeSchema,
+  observedCount: z.number().int().nonnegative(),
+  lastObservedAt: z.string(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 // Moved ahead of backupSchema (which now references them) — const bindings

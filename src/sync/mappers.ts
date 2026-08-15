@@ -10,6 +10,7 @@ import type {
   SentenceAudio,
   SentenceVocabulary,
   StudyItem,
+  VocabularyConfusion,
   VocabularyItem,
   VocabularyKanji,
 } from '../domain/types';
@@ -28,7 +29,8 @@ export type LocalSyncPayload =
   | VocabularyItem
   | SentenceVocabulary
   | Kanji
-  | VocabularyKanji;
+  | VocabularyKanji
+  | VocabularyConfusion;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -383,6 +385,9 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     expected_answer: review.expectedAnswer ?? null,
     elapsed_ms: review.elapsedMs ?? null,
     error_classification: review.errorClassification ?? null,
+    assistance: review.assistance ?? null,
+    source: review.source ?? null,
+    context_sentence_id: review.contextSentenceId ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -402,6 +407,10 @@ export function remoteToReview(row: Record<string, unknown>): Review {
     errorClassification:
       (row.error_classification as Review['errorClassification'] | null) ??
       undefined,
+    assistance: (row.assistance as Review['assistance'] | null) ?? undefined,
+    source: (row.source as Review['source'] | null) ?? undefined,
+    contextSentenceId:
+      (row.context_sentence_id as string | null) ?? undefined,
   };
 }
 
@@ -537,6 +546,43 @@ export function remoteToVocabularyKanji(
   };
 }
 
+export function vocabularyConfusionToRemote(
+  confusion: VocabularyConfusion,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: confusion.id,
+    owner_id: ownerId,
+    item_a_id: confusion.itemAId,
+    item_b_id: confusion.itemBId,
+    confusion_type: confusion.confusionType,
+    observed_count: confusion.observedCount,
+    last_observed_at: confusion.lastObservedAt,
+    notes: confusion.notes ?? null,
+    created_at: confusion.createdAt,
+    updated_at: confusion.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToVocabularyConfusion(
+  row: Record<string, unknown>,
+): VocabularyConfusion {
+  return {
+    id: String(row.id),
+    itemAId: String(row.item_a_id),
+    itemBId: String(row.item_b_id),
+    confusionType: row.confusion_type as VocabularyConfusion['confusionType'],
+    observedCount: Number(row.observed_count),
+    lastObservedAt: String(row.last_observed_at),
+    notes: (row.notes as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -579,6 +625,12 @@ export function toRemoteRow(
     case 'vocabulary_kanji':
       return vocabularyKanjiToRemote(
         payload as VocabularyKanji,
+        ownerId,
+        version,
+      );
+    case 'vocabulary_confusions':
+      return vocabularyConfusionToRemote(
+        payload as VocabularyConfusion,
         ownerId,
         version,
       );

@@ -12,7 +12,8 @@ export type SyncEntity =
   | 'vocabulary_items'
   | 'sentence_vocabulary'
   | 'kanji'
-  | 'vocabulary_kanji';
+  | 'vocabulary_kanji'
+  | 'vocabulary_confusions';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

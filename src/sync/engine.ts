@@ -23,6 +23,7 @@ import {
   remoteToSentence,
   remoteToSentenceVocabulary,
   remoteToStudyItem,
+  remoteToVocabularyConfusion,
   remoteToVocabularyItem,
   remoteToVocabularyKanji,
   toRemoteRow,
@@ -398,8 +399,8 @@ async function applyRemoteEventsBatch(
 
   // Grouping by entity (rather than fetching in original event order) is
   // safe for our fixed, type-level dependency graph (kanji/vocabulary_items
-  // before sentence_vocabulary/vocabulary_kanji, study_items before
-  // reviews, etc.): as long as an entity's *first* occurrence in the page
+  // before sentence_vocabulary/vocabulary_kanji/vocabulary_confusions,
+  // study_items before reviews, etc.): as long as an entity's *first* occurrence in the page
   // follows real event order (it does — Map preserves insertion order, and
   // events are processed in ascending id order), every parent-entity event
   // in the page is applied before any child-entity event, which is at least
@@ -478,6 +479,9 @@ async function applyRemoteDelete(
     case 'vocabulary_kanji':
       await db.vocabularyKanji.delete(recordId);
       break;
+    case 'vocabulary_confusions':
+      await db.vocabularyConfusions.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -552,6 +556,9 @@ async function applyRemoteUpsert(
     case 'vocabulary_kanji':
       await db.vocabularyKanji.put(remoteToVocabularyKanji(remote));
       break;
+    case 'vocabulary_confusions':
+      await db.vocabularyConfusions.put(remoteToVocabularyConfusion(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -581,6 +588,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const vocabularyItems = await db.vocabularyItems.toArray();
   const sentenceVocabulary = await db.sentenceVocabulary.toArray();
   const vocabularyKanji = await db.vocabularyKanji.toArray();
+  const vocabularyConfusions = await db.vocabularyConfusions.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -617,6 +625,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const link of vocabularyKanji) {
     await trackAndEnqueue('vocabulary_kanji', link.id, link);
+  }
+  for (const confusion of vocabularyConfusions) {
+    await trackAndEnqueue('vocabulary_confusions', confusion.id, confusion);
   }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
@@ -666,6 +677,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.vocabularyItems,
       db.sentenceVocabulary,
       db.vocabularyKanji,
+      db.vocabularyConfusions,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -683,6 +695,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.vocabularyItems.clear();
       await db.sentenceVocabulary.clear();
       await db.vocabularyKanji.clear();
+      await db.vocabularyConfusions.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -727,6 +740,11 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   await pullFullTable('vocabulary_kanji', userId, async (rows) => {
     await db.vocabularyKanji.bulkPut(
       rows.map((r) => remoteToVocabularyKanji(r)),
+    );
+  });
+  await pullFullTable('vocabulary_confusions', userId, async (rows) => {
+    await db.vocabularyConfusions.bulkPut(
+      rows.map((r) => remoteToVocabularyConfusion(r)),
     );
   });
 

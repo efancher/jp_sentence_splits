@@ -376,6 +376,27 @@ export type ErrorClassification =
   | 'grammar_misunderstanding'
   | { userDefined: string };
 
+/**
+ * What help the learner used to reach this answer (docs, brief §17). A
+ * correct-with-help answer is weaker evidence than unaided retrieval, but is
+ * never penalized — this is purely informational for the scheduler/planner.
+ */
+export type ReviewAssistance =
+  | 'furigana_shown'
+  | 'translation_shown'
+  | 'mnemonic_shown'
+  | 'audio_replayed'
+  | 'chunks_shown'
+  | 'hint_shown'
+  | 'multiple_choice';
+
+/**
+ * Where this evidence came from (brief §9/§16). Absent/undefined means
+ * `scheduled_review` (the only kind recorded today) — kept optional rather
+ * than defaulted so existing Review rows need no migration.
+ */
+export type ReviewSource = 'scheduled_review' | 'natural_encounter';
+
 /** Append-only — never updated after insert. Sync-conflict-free by construction. */
 export interface Review {
   id: string;
@@ -386,4 +407,41 @@ export interface Review {
   expectedAnswer?: string;
   elapsedMs?: number;
   errorClassification?: ErrorClassification;
+  assistance?: ReviewAssistance[];
+  source?: ReviewSource;
+  /**
+   * The sentence this evidence actually came from — may differ from the
+   * study item's originally-seeded sentence, e.g. a natural encounter with a
+   * vocabulary item in a different sentence than the one that first
+   * generated its study item.
+   */
+  contextSentenceId?: string;
+}
+
+/**
+ * A learner-observed confusion between two vocabulary items (docs brief
+ * §10), e.g. 表す vs 表れる, transitive/intransitive pairs, similar kanji.
+ * Undirected: itemAId/itemBId are canonicalized so a pair is never stored
+ * twice in both directions. Not auto-populated in this phase — created
+ * manually or by a future one-time seeding script (see docs/STATUS.md).
+ */
+export type VocabularyConfusionType =
+  | 'reading'
+  | 'kanji'
+  | 'meaning'
+  | 'transitivity'
+  | 'synonym'
+  | 'grammar'
+  | 'other';
+
+export interface VocabularyConfusion {
+  id: string;
+  itemAId: string;
+  itemBId: string;
+  confusionType: VocabularyConfusionType;
+  observedCount: number;
+  lastObservedAt: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }

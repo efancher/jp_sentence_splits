@@ -23,6 +23,8 @@ import type {
   StudyItem,
   StudyStatus,
   StudySubjectType,
+  VocabularyConfusion,
+  VocabularyConfusionType,
   VocabularyItem,
   VocabularyKanji,
   VocabularyReviewStatus,
@@ -1744,6 +1746,126 @@ export async function materializeVocabularySelections(
       payload: link,
     })),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Evidence-model foundation (Phase 7.1, docs/STATUS.md). Additive only — no
+// existing review flow is touched. StudyItem.subjectType already supports
+// 'vocabularyItem' (Phase 1); these helpers are the first callers of that
+// capability, so word-level (not just sentence-level) FSRS state becomes
+// usable by a future review UI without any further schema change.
+// ---------------------------------------------------------------------------
+
+/** Get-or-create a vocabulary-item-level study item for a given dimension (activityType). */
+export async function ensureVocabularyStudyItem(
+  vocabularyItemId: string,
+  activityType: StudyActivityType,
+): Promise<StudyItem> {
+  return ensureStudyItem('vocabularyItem', vocabularyItemId, activityType);
+}
+
+/**
+ * Pick a sentence to display when reviewing a vocabulary item directly —
+ * the most recently linked sentence that still exists. Returns undefined if
+ * the vocabulary item has no surviving sentence link (shouldn't normally
+ * happen, since links are only removed when a confirm deselects a word, not
+ * when the word itself is deleted).
+ */
+export async function pickContextSentenceForVocabularyItem(
+  vocabularyItemId: string,
+): Promise<Sentence | undefined> {
+  const db = getDb();
+  const links = await db.sentenceVocabulary
+    .where('vocabularyItemId')
+    .equals(vocabularyItemId)
+    .toArray();
+  if (links.length === 0) return undefined;
+  const sorted = [...links].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt),
+  );
+  for (const link of sorted) {
+    const sentence = await db.sentences.get(link.sentenceId);
+    if (sentence) return sentence;
+  }
+  return undefined;
+}
+
+/** Canonical (unordered) pair ordering so A↔B is never stored twice. */
+function canonicalConfusionPair(
+  itemAId: string,
+  itemBId: string,
+): [string, string] {
+  return itemAId < itemBId ? [itemAId, itemBId] : [itemBId, itemAId];
+}
+
+/**
+ * Get-or-create a confusion pair. Never overwrites an existing row's
+ * confusionType — mirrors ensureVocabularyItem/ensureKanji's "never
+ * overwrite once created" convention. Use recordConfusionObservation to
+ * bump the count on repeated observations.
+ */
+export async function ensureVocabularyConfusion(
+  itemAId: string,
+  itemBId: string,
+  confusionType: VocabularyConfusionType,
+): Promise<VocabularyConfusion> {
+  const [a, b] = canonicalConfusionPair(itemAId, itemBId);
+  const db = getDb();
+  const existing = await db.vocabularyConfusions
+    .where('[itemAId+itemBId]')
+    .equals([a, b])
+    .first();
+  if (existing) return existing;
+
+  const timestamp = nowIso();
+  const confusion: VocabularyConfusion = {
+    id: createId('vocab_confusion'),
+    itemAId: a,
+    itemBId: b,
+    confusionType,
+    observedCount: 1,
+    lastObservedAt: timestamp,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.vocabularyConfusions.put(confusion);
+  notifySync('vocabulary_confusions', confusion.id, confusion);
+  return confusion;
+}
+
+/** Record another observation of an already-known (or new) confusion pair. */
+export async function recordConfusionObservation(
+  itemAId: string,
+  itemBId: string,
+  confusionType: VocabularyConfusionType,
+): Promise<VocabularyConfusion> {
+  const [a, b] = canonicalConfusionPair(itemAId, itemBId);
+  const db = getDb();
+  const existing = await db.vocabularyConfusions
+    .where('[itemAId+itemBId]')
+    .equals([a, b])
+    .first();
+  const timestamp = nowIso();
+  const updated: VocabularyConfusion = existing
+    ? {
+        ...existing,
+        observedCount: existing.observedCount + 1,
+        lastObservedAt: timestamp,
+        updatedAt: timestamp,
+      }
+    : {
+        id: createId('vocab_confusion'),
+        itemAId: a,
+        itemBId: b,
+        confusionType,
+        observedCount: 1,
+        lastObservedAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+  await db.vocabularyConfusions.put(updated);
+  notifySync('vocabulary_confusions', updated.id, updated);
+  return updated;
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

@@ -32,16 +32,22 @@ manual or via the SQL outline above against a staging project.
 ## Unified study model tables (owner-only, no sharing)
 
 `sources`, `vocabulary_items`, `sentence_vocabulary`, `kanji`,
-`vocabulary_kanji`, `study_items`, `reviews` — simpler than the book-shared
-tables above, since none of them support sharing yet.
+`vocabulary_kanji`, `study_items`, `reviews`, `vocabulary_confusions` —
+simpler than the book-shared tables above, since none of them support
+sharing yet.
 
-`sentence_vocabulary`/`vocabulary_kanji`/`reviews` additionally check that
-*referenced* rows (`vocabulary_item_id`, `kanji_id`, `study_item_id`,
-`sentence_id`) belong to the same owner (`sync_private.owns_vocabulary_item`/
-`owns_kanji`/`owns_study_item`/`sentence_editable`) — `owner_id = auth.uid()`
-on the row being written is not sufficient by itself, since it doesn't
-prevent a caller from pointing their own row at someone else's referenced
-record.
+`sentence_vocabulary`/`vocabulary_kanji`/`reviews`/`vocabulary_confusions`
+additionally check that *referenced* rows (`vocabulary_item_id`, `kanji_id`,
+`study_item_id`, `sentence_id`, `item_a_id`/`item_b_id`) belong to the same
+owner (`sync_private.owns_vocabulary_item`/`owns_kanji`/`owns_study_item`/
+`sentence_editable`) — `owner_id = auth.uid()` on the row being written is
+not sufficient by itself, since it doesn't prevent a caller from pointing
+their own row at someone else's referenced record.
+
+`vocabulary_confusions` additionally enforces `item_a_id < item_b_id` at the
+database layer (a check constraint, not just application-level
+canonicalization), so a pair can never be stored in both directions even if
+a caller sends them unordered.
 
 ```sql
 -- As owner: insert a vocabulary_items row succeeds

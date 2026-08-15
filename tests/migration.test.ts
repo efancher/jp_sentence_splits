@@ -126,6 +126,44 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v8 with the vocabularyConfusions table', async () => {
+    const name = `migrate-v8-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(8);
+    expect(db.tables.some((t) => t.name === 'vocabularyConfusions')).toBe(true);
+
+    const now = new Date().toISOString();
+    await db.vocabularyConfusions.put({
+      id: 'confusion-1',
+      itemAId: 'vocab-a',
+      itemBId: 'vocab-b',
+      confusionType: 'transitivity',
+      observedCount: 1,
+      lastObservedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.reviews.put({
+      id: 'rev-2',
+      studyItemId: 'si-1',
+      timestamp: now,
+      rating: 'again',
+      assistance: ['furigana_shown'],
+      source: 'natural_encounter',
+      contextSentenceId: 'sent-9',
+    });
+
+    const confusion = await db.vocabularyConfusions.get('confusion-1');
+    expect(confusion?.confusionType).toBe('transitivity');
+    const review = await db.reviews.get('rev-2');
+    expect(review?.source).toBe('natural_encounter');
+    expect(review?.assistance).toEqual(['furigana_shown']);
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

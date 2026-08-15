@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-15 (Phase 5).
+Last updated: 2026-08-15 (Phase 7.1).
 
 ## Phase 0 — Repository analysis: done
 
@@ -841,3 +841,129 @@ exact motivating case (鈍感→"thickheaded", ほら→"look!", 調子→"tune"
 乗る→"to get on" — all four content words from the GLIM SPANKY sentence
 that started this) plus 200 sentences total, 773 suggestions matched, 235
 had no JMDict match (retried harmlessly next run).
+
+## Phase 7.1 — Evidence-model foundation: done
+
+Sub-phasing of the "Phase 7 — Adaptive learning" roadmap line, following a
+detailed comparison of the user's Japanese-review-system design brief
+against this codebase (see the plan discussion; not itself checked in as a
+doc). Key finding from that inspection: most of the brief's requested
+architecture — sentence-centric learning, shared/deduped vocabulary
+entities, an append-only evidence log separate from derived state,
+extensible per-dimension study items (`StudyItem.subjectType` already
+includes `'vocabularyItem'`, `activityType` is already a free string) —
+already exists from Phases 1–5. This pass is purely additive schema +
+repository primitives for the two pieces that didn't exist at all yet
+(assistance/natural-encounter evidence tracking, confusion/interference
+pairs), with **no UI changes** — `ReviewPage.tsx`'s two live activity types
+keep working exactly as before.
+
+Added:
+- `Review`: three new optional fields — `assistance?: ReviewAssistance[]`
+  (furigana_shown/translation_shown/mnemonic_shown/audio_replayed/
+  chunks_shown/hint_shown/multiple_choice), `source?: 'scheduled_review' |
+  'natural_encounter'` (absent = scheduled, the only kind recorded today),
+  `contextSentenceId?: string` (the sentence the evidence actually came
+  from, which may differ from a study item's originally-seeded sentence).
+  Nothing populates these yet — schema-first, matching how
+  `errorClassification` was left unpopulated when it was added in Phase 4.
+- New table **`vocabulary_confusions`** (`src/domain/types.ts`) — an
+  undirected pair of vocabulary items the learner tends to confuse
+  (`itemAId`/`itemBId`, canonicalized `itemAId < itemBId` so a pair can
+  never be stored twice in both directions — enforced both in
+  `src/db/repository.ts` and as a Postgres check constraint),
+  `confusionType` (reading/kanji/meaning/transitivity/synonym/grammar/
+  other), `observedCount`, `lastObservedAt`, optional `notes`.
+- `src/db/repository.ts` — `ensureVocabularyConfusion`/
+  `recordConfusionObservation` (get-or-create / increment, mirroring
+  `ensureVocabularyItem`/`ensureKanji`'s shape exactly, including their
+  same known, accepted, unlocked read-then-write race under concurrent
+  calls); `ensureVocabularyStudyItem` (thin wrapper making
+  `StudyItem.subjectType: 'vocabularyItem'` actually usable — the
+  capability existed since Phase 1 but had no caller); and
+  `pickContextSentenceForVocabularyItem` (most-recently-linked sentence for
+  a vocabulary item, via `sentence_vocabulary` — needed by any future
+  vocabulary-level review UI, useful and testable standalone today).
+- `src/lib/maturity.ts` — `computeContextDiversity`/`computeMaturityLevel`,
+  pure functions (no Dexie coupling) implementing the brief's
+  fragile → established → generalized → mature ladder. Diversity counting
+  is scoped to what the schema can actually answer today: a sentence's
+  "source" is the sourceKey (or id) of any `Book` containing it, since
+  `Sentence` has no direct link to the `sources` table yet (that table
+  still has no writer — a pre-existing, documented gap from Phase 1, not
+  something this pass changes). Thresholds are a starting heuristic
+  (documented in the file), not derived from a model — matches the brief's
+  explicit warning against over-engineered precision here.
+- Dexie schema v8 (`vocabularyConfusions` store, indexed on
+  `[itemAId+itemBId]`) and a matching Postgres migration
+  (`supabase/migrations/20260815000000_review_evidence_foundation.sql`):
+  the `vocabulary_confusions` table (RLS via the existing
+  `sync_private.owns_vocabulary_item` helper on both `item_a_id`/
+  `item_b_id`, same cross-reference-ownership pattern as
+  `sentence_vocabulary`/`vocabulary_kanji`) plus three new nullable columns
+  on `reviews`. `context_sentence_id` uses `on delete set null` (not
+  cascade), so a sentence deletion never removes review evidence.
+- Sync wiring for `vocabulary_confusions` (`src/sync/mappers.ts`,
+  `SyncEntity` in `src/sync/types.ts`, push/pull/first-login-upload/
+  replace-with-cloud in `src/sync/engine.ts`) — mirrors exactly how
+  `study_items`/`reviews` got wired in Phase 4. `reviews`' three new fields
+  needed no new sync-entity wiring, just extending the existing
+  `reviewToRemote`/`remoteToReview` mappers.
+- Tests: `tests/migration.test.ts` (schema v8 round-trip, both the new
+  table and the new `reviews` fields), `tests/maturity.test.ts` (pure
+  function coverage for both the diversity counter and the maturity
+  ladder), and a new `describe` block in `tests/data.test.ts` covering
+  `ensureVocabularyStudyItem`, `pickContextSentenceForVocabularyItem`, and
+  confusion-pair canonicalization/increment/sync-enqueue.
+
+**Deliberately not done yet** (this is schema + repository primitives only,
+per the user's explicit "don't implement everything simultaneously"
+instruction):
+- No review-experience UI differentiation, no session planner, no
+  confusion-detection heuristics (manual/future data only — same
+  "don't overbuild automatic classification yet" precedent as Phase 4's
+  `errorClassification`), no conjugation/transformation engine, no
+  natural-encounter capture UI, no debug/inspector view. `ReviewPage.tsx`
+  is untouched.
+- `vocabulary_confusions` is not added to `backupSchema`/
+  `buildBackupPayload`/`src/lib/backup.ts` — no UI writes to it yet, same
+  reasoning Phase 1 used to defer `sources`' backup coverage until it had a
+  real writer. Add it alongside whatever UI first writes confusion rows
+  (planned for Phase 7.3).
+- `docs/UNIFIED_APP_ARCHITECTURE.md` §15's phase list is not renumbered;
+  this and the following sub-phases (7.2–7.6, see `docs/ROADMAP.md`) are
+  tracked as a detailed sub-phasing of its existing "Phase 7 — Adaptive
+  learning" line rather than a rewrite of that document.
+
+**Confirmed during the comparison that informed this phase** (inspecting
+the archived `~/projects/anki` repo, since the brief specifically asked
+whether its confusable/leech/verb-pair/mnemonic/conjugation data should be
+reused rather than re-derived): `kanji_contrast_groups.json` (17 curated
+kanji-confusion groups) and `wk_decks.py`'s `find_verb_pairs()` (a
+suffix-swap algorithm, e.g. `("れる","す")`, that pairs transitive/
+intransitive verbs by reading — a direct algorithmic fit for seeding
+`vocabulary_confusions` rows of type `transitivity`, planned for Phase 7.3)
+are real, reusable, not-yet-ported assets. `wk_decks.py::conjugate_vocab_form()`
+(86 tested fixture rows, godan/ichidan/suru/irregular/i-adjective/
+na-adjective, most common forms except volitional/たい) is a mature engine
+worth porting for Phase 7.5's sentence transformations. None of this has
+been ported into this repo yet — confirmed by grep, not assumed.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 240
+tests passed (up from 221), 2 pre-existing skips (unrelated), 0 existing
+test modified. `npm run build` green.
+
+**Not yet applied to the live Supabase project** — the migration file
+exists but has not been pasted into the Dashboard SQL editor yet (unlike
+every prior migration in this repo's history, which was applied
+immediately after landing). Do this the same way Phase 1's migration was
+applied before starting Phase 7.2, so local Dexie and remote Postgres don't
+drift once anything actually starts writing `vocabulary_confusions` or the
+new `reviews` columns.
+
+**Note found while working, unrelated to this phase**: the working tree
+already had uncommitted changes before this session started —
+`scripts/refresh-unreviewed-vocabulary-selections.ts`, a matching
+`.github/workflows/` file, and a `package.json` script entry — not created
+by this pass and not touched by it. Left as-is (not staged, not reverted);
+flagged here so it isn't mistaken for part of Phase 7.1 or silently lost.
