@@ -293,6 +293,16 @@ export interface SentenceVocabulary {
   sentenceId: string;
   vocabularyItemId: string;
   chunkId?: string;
+  /**
+   * The exact conjugated/inflected text as it appeared in this sentence
+   * (e.g. 表れていた for the dictionary form 表れる) — copied from
+   * VocabularySelection.surface at materialization time. Used to highlight/
+   * mask this specific occurrence in review UI (Phase 7.2). Undefined for
+   * links created before this field existed or outside the picker (e.g. the
+   * one-time Anki import) — those are simply not eligible as reading-
+   * retrieval targets.
+   */
+  surfaceForm?: string;
   createdAt: string;
   updatedAt: string;
 }

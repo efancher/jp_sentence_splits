@@ -1692,6 +1692,10 @@ export async function materializeVocabularySelections(
 ): Promise<void> {
   const db = getDb();
   const itemIds = new Set<string>();
+  // First selection's surface wins per item id — matters when duplicate
+  // selections (same expression/reading, different spans) collapse onto one
+  // vocabulary item (see the "collapses duplicate selections" test).
+  const surfaceByItemId = new Map<string, string>();
   for (const selection of selections) {
     const expression = selection.expression.trim();
     if (!expression) continue;
@@ -1700,6 +1704,9 @@ export async function materializeVocabularySelections(
       partOfSpeech: selection.pos,
     });
     itemIds.add(item.id);
+    if (!surfaceByItemId.has(item.id)) {
+      surfaceByItemId.set(item.id, selection.surface);
+    }
   }
 
   const existingLinks = await db.sentenceVocabulary
@@ -1720,6 +1727,7 @@ export async function materializeVocabularySelections(
       id: createId('sentence_vocab'),
       sentenceId,
       vocabularyItemId: itemId,
+      surfaceForm: surfaceByItemId.get(itemId),
       createdAt: timestamp,
       updatedAt: timestamp,
     }));
@@ -1766,14 +1774,15 @@ export async function ensureVocabularyStudyItem(
 
 /**
  * Pick a sentence to display when reviewing a vocabulary item directly —
- * the most recently linked sentence that still exists. Returns undefined if
- * the vocabulary item has no surviving sentence link (shouldn't normally
- * happen, since links are only removed when a confirm deselects a word, not
- * when the word itself is deleted).
+ * the most recently linked sentence that still exists — along with that
+ * specific link's `surfaceForm` (Phase 7.2), if it has one. Returns
+ * undefined if the vocabulary item has no surviving sentence link
+ * (shouldn't normally happen, since links are only removed when a confirm
+ * deselects a word, not when the word itself is deleted).
  */
 export async function pickContextSentenceForVocabularyItem(
   vocabularyItemId: string,
-): Promise<Sentence | undefined> {
+): Promise<{ sentence: Sentence; surfaceForm?: string } | undefined> {
   const db = getDb();
   const links = await db.sentenceVocabulary
     .where('vocabularyItemId')
@@ -1785,9 +1794,56 @@ export async function pickContextSentenceForVocabularyItem(
   );
   for (const link of sorted) {
     const sentence = await db.sentences.get(link.sentenceId);
-    if (sentence) return sentence;
+    if (sentence) return { sentence, surfaceForm: link.surfaceForm };
   }
   return undefined;
+}
+
+export interface ReadingRetrievalCandidate {
+  vocabularyItem: VocabularyItem;
+  sentence: Sentence;
+  surfaceForm: string;
+}
+
+/**
+ * Vocabulary items, restricted to `sentenceIds`, that have a
+ * `surfaceForm`-bearing link and are therefore eligible reading-retrieval
+ * targets (Phase 7.2) — one candidate per distinct vocabulary item (first
+ * qualifying link found), not one per sentence×word pair, so seeding stays
+ * bounded by vocabulary size, not sentence count.
+ */
+export async function getReadingRetrievalCandidates(
+  sentenceIds: string[],
+): Promise<ReadingRetrievalCandidate[]> {
+  if (sentenceIds.length === 0) return [];
+  const db = getDb();
+  const links = await db.sentenceVocabulary
+    .where('sentenceId')
+    .anyOf(sentenceIds)
+    .toArray();
+  const bestLinkByItemId = new Map<string, SentenceVocabulary>();
+  for (const link of links) {
+    if (!link.surfaceForm) continue;
+    if (!bestLinkByItemId.has(link.vocabularyItemId)) {
+      bestLinkByItemId.set(link.vocabularyItemId, link);
+    }
+  }
+  if (bestLinkByItemId.size === 0) return [];
+
+  const entries = [...bestLinkByItemId.entries()];
+  const [vocabularyItems, sentences] = await Promise.all([
+    db.vocabularyItems.bulkGet(entries.map(([itemId]) => itemId)),
+    db.sentences.bulkGet(entries.map(([, link]) => link.sentenceId)),
+  ]);
+
+  const candidates: ReadingRetrievalCandidate[] = [];
+  entries.forEach(([, link], index) => {
+    const vocabularyItem = vocabularyItems[index];
+    const sentence = sentences[index];
+    if (!vocabularyItem || !sentence || !link.surfaceForm) return;
+    candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm });
+  });
+  return candidates;
 }
 
 /** Canonical (unordered) pair ordering so A↔B is never stored twice. */

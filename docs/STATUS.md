@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-15 (Phase 7.1).
+Last updated: 2026-08-15 (Phase 7.2).
 
 ## Phase 0 — Repository analysis: done
 
@@ -929,7 +929,7 @@ instruction):
   `buildBackupPayload`/`src/lib/backup.ts` — no UI writes to it yet, same
   reasoning Phase 1 used to defer `sources`' backup coverage until it had a
   real writer. Add it alongside whatever UI first writes confusion rows
-  (planned for Phase 7.3).
+  (planned for Phase 7.4).
 - `docs/UNIFIED_APP_ARCHITECTURE.md` §15's phase list is not renumbered;
   this and the following sub-phases (7.2–7.6, see `docs/ROADMAP.md`) are
   tracked as a detailed sub-phasing of its existing "Phase 7 — Adaptive
@@ -942,24 +942,19 @@ reused rather than re-derived): `kanji_contrast_groups.json` (17 curated
 kanji-confusion groups) and `wk_decks.py`'s `find_verb_pairs()` (a
 suffix-swap algorithm, e.g. `("れる","す")`, that pairs transitive/
 intransitive verbs by reading — a direct algorithmic fit for seeding
-`vocabulary_confusions` rows of type `transitivity`, planned for Phase 7.3)
+`vocabulary_confusions` rows of type `transitivity`, planned for Phase 7.4)
 are real, reusable, not-yet-ported assets. `wk_decks.py::conjugate_vocab_form()`
 (86 tested fixture rows, godan/ichidan/suru/irregular/i-adjective/
 na-adjective, most common forms except volitional/たい) is a mature engine
-worth porting for Phase 7.5's sentence transformations. None of this has
+worth porting for Phase 7.6's sentence transformations. None of this has
 been ported into this repo yet — confirmed by grep, not assumed.
 
 **Verified**: `npm run check` (typecheck + full vitest suite) green — 240
 tests passed (up from 221), 2 pre-existing skips (unrelated), 0 existing
 test modified. `npm run build` green.
 
-**Not yet applied to the live Supabase project** — the migration file
-exists but has not been pasted into the Dashboard SQL editor yet (unlike
-every prior migration in this repo's history, which was applied
-immediately after landing). Do this the same way Phase 1's migration was
-applied before starting Phase 7.2, so local Dexie and remote Postgres don't
-drift once anything actually starts writing `vocabulary_confusions` or the
-new `reviews` columns.
+**Applied to the live Supabase project (2026-08-15)**, via Dashboard SQL
+editor paste, same as every prior migration in this repo's history.
 
 **Note found while working, unrelated to this phase**: the working tree
 already had uncommitted changes before this session started —
@@ -967,3 +962,104 @@ already had uncommitted changes before this session started —
 `.github/workflows/` file, and a `package.json` script entry — not created
 by this pass and not touched by it. Left as-is (not staged, not reverted);
 flagged here so it isn't mistaken for part of Phase 7.1 or silently lost.
+
+## Phase 7.2 — Reading retrieval review experience: done
+
+First real differentiated review experience (docs brief §5B/§6), and the
+first real consumer of Phase 7.1's `vocabularyItem`-subject study items.
+Scoped to exactly one new experience (not cloze/audio/production too),
+matching the user's own stated priority order (reading retrieval ranked
+directly after contextual comprehension) and the explicit "don't do it all
+at once" instruction.
+
+**Prerequisite data gap found while planning**: highlighting a specific
+vocabulary occurrence in a displayed sentence needs its exact conjugated
+surface text (e.g. a sentence contains 表れていた, not the dictionary form
+表れる) — `sentence_vocabulary` didn't store this, only `sentenceId`/
+`vocabularyItemId`/`chunkId?`. `VocabularySelection.surface`
+(`src/lib/vocabularySuggestions.ts`) already computed and validated exactly
+this (`validateSpan` guarantees `japanese.slice(start,end) === surface` at
+confirm time) — it was just discarded when `materializeVocabularySelections`
+wrote the `SentenceVocabulary` row.
+
+Added:
+- `SentenceVocabulary.surfaceForm?: string` (`src/domain/types.ts`,
+  `schemas.ts`) — additive field, no Dexie version bump needed (unindexed
+  field on an existing store, same precedent as `FsrsState.learningSteps`
+  in Phase 4). Postgres: nullable `sentence_vocabulary.surface_form text`
+  (`supabase/migrations/20260816000000_sentence_vocabulary_surface_form.sql`).
+  `src/sync/mappers.ts`'s existing `sentenceVocabularyToRemote`/
+  `remoteToSentenceVocabulary` extended for it — no new `SyncEntity`, the
+  table was already wired since Phase 5.
+- `src/db/repository.ts` — `materializeVocabularySelections` now passes
+  `selection.surface` through to newly-created `SentenceVocabulary` rows
+  (first selection's surface wins if duplicates collapse onto one
+  vocabulary item). Existing links are not backfilled/updated — no
+  backfill script in this pass, same "don't backfill until there's a
+  proven need" call as Phase 5's original scoping; links created before
+  this change (or via the one-time Anki import, which doesn't go through
+  the picker) simply aren't reading-retrieval-eligible yet.
+- `pickContextSentenceForVocabularyItem` (Phase 7.1) changed return shape
+  from `Sentence | undefined` to `{ sentence: Sentence; surfaceForm?:
+  string } | undefined` — the one real consumer (this phase) needs the
+  specific link's surface form for the sentence it picked, not just the
+  sentence; updated its existing test.
+- New `getReadingRetrievalCandidates(sentenceIds)` — vocabulary items
+  (restricted to sentences in scope) with a `surfaceForm`-bearing link, one
+  candidate per distinct vocabulary item (first qualifying link), not one
+  per sentence×word pair — this is what seeds/backs the new activity type,
+  and what keeps it naturally bounded by vocabulary size rather than
+  sentence count.
+- `src/pages/ReviewPage.tsx` — added `'reading_retrieval'` as a second,
+  vocabulary-item-subject activity type alongside the two existing
+  sentence-subject ones (`comprehension`, `reading_in_context`). Required
+  generalizing what was previously sentence-subject-only logic throughout
+  the page: `QueueCard` gained an optional `target: { vocabularyItem,
+  surfaceForm }`; the pending-seed pool is now a discriminated union
+  (`kind: 'sentence' | 'vocabulary'`) so the lazy per-batch seeding effect
+  can seed either kind; the due-queue fetch calls `getDueStudyItems` twice
+  (sentence-subject types over sentence ids, `reading_retrieval` over
+  vocabulary-item ids) and merges/sorts the results together by
+  `fsrsState.due`, so both kinds interleave in one queue exactly like the
+  brief's "one unified session, not six mandatory cards" principle (§14).
+  Render: a new `ReadingRetrievalCard` shows the sentence with the target
+  `surfaceForm` substring highlighted (`<mark>`, exact match — `surfaceForm`
+  is captured directly from that sentence's text, so `indexOf` is
+  guaranteed to find it) and the reading hidden; "Reveal reading" shows the
+  vocabulary item's reading + meaning; then the existing 4-way self-rate,
+  shared across both card types.
+- Tests: `tests/data.test.ts` — updated `pickContextSentenceForVocabularyItem`
+  test for the new return shape, new coverage for `materializeVocabularySelections`
+  surface capture and `getReadingRetrievalCandidates` (surfaceForm-present
+  vs. absent, one-per-vocabulary-item dedup, empty input). `tests/reviewPage.test.tsx`
+  — new end-to-end test seeding a reading_retrieval study item, rendering
+  the highlighted card, revealing, rating, and confirming the review was
+  recorded — alongside the five pre-existing tests, all still passing
+  unmodified.
+
+**Deliberately not done yet** (per the phased plan, moved to Phase 7.3):
+contextual cloze, audio comprehension, mnemonic maturity-gating,
+`comprehension`/`reading_in_context` differentiation (still the same open
+gap from Phase 4), any assistance-flag recording (no optional-help
+affordance exists yet for any card type — the reveal step in every review
+type so far *is* the exercise, not optional help beyond it), review
+planner. No typed input for reading retrieval either — reveal + self-rate,
+matching the brief's "keep reviews fast" preference and the existing two
+activity types' pattern; typed retrieval is a production-ladder concern
+(brief §12), not reading retrieval.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 245
+tests passed (up from 240), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet applied to the live Supabase project** — `supabase/migrations/20260816000000_sentence_vocabulary_surface_form.sql`
+exists but hasn't been pasted into the Dashboard SQL editor yet. Apply it
+the same way as every prior migration before relying on this feature
+against production data.
+
+**Not yet manually verified in a real browser** — this pass covered
+logic/component tests only, same caveat Phase 3/4/5 initially shipped
+with. Manual check: confirm vocabulary on a sentence via the picker
+(produces a `surfaceForm`-bearing link), then visit `/review` and confirm a
+reading-retrieval card appears for that word with the correct substring
+highlighted and the correct reading on reveal.

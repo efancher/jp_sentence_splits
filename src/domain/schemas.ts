@@ -296,6 +296,7 @@ export const sentenceVocabularySchema = z.object({
   sentenceId: z.string(),
   vocabularyItemId: z.string(),
   chunkId: z.string().optional(),
+  surfaceForm: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

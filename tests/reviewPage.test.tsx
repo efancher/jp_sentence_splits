@@ -161,6 +161,81 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('renders a reading_retrieval card that highlights the target surface form and reveals its reading (Phase 7.2)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    const notDueYet = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const farFutureFsrsState = {
+      due: notDueYet,
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 0,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    // Keep the two sentence-subject activity types out of the queue so only
+    // the new reading_retrieval card seeds/renders in this test.
+    for (const activityType of ['comprehension', 'reading_in_context']) {
+      await db.studyItems.add({
+        id: `si-${activityType}`,
+        subjectType: 'sentence',
+        subjectId: 'sent-1',
+        activityType,
+        fsrsState: farFutureFsrsState,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    expect(screen.getByText('読みます')).toBeInTheDocument();
+    expect(screen.queryByText('よむ')).not.toBeInTheDocument();
+
+    await waitFor(async () => {
+      const seeded = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-1')
+        .toArray();
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0]?.activityType).toBe('reading_retrieval');
+      expect(seeded[0]?.subjectType).toBe('vocabularyItem');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reveal reading' }));
+    expect(screen.getByText('よむ')).toBeInTheDocument();
+    expect(screen.getByText('to read')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+  });
+
   it('shows an empty state when there is nothing to review', async () => {
     const db = getDb();
     const now = new Date().toISOString();

@@ -3,23 +3,43 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { VocabChips } from '../components/VocabChips';
-import { ensureStudyItem, getDb, getDueStudyItems, recordReview } from '../db/repository';
-import type { ReviewRating, Sentence, StudyActivityType, StudyItem } from '../domain/types';
+import {
+  ensureStudyItem,
+  ensureVocabularyStudyItem,
+  getDb,
+  getDueStudyItems,
+  getReadingRetrievalCandidates,
+  recordReview,
+  type ReadingRetrievalCandidate,
+} from '../db/repository';
+import type { ReviewRating, Sentence, StudyActivityType, StudyItem, VocabularyItem } from '../domain/types';
 
 /**
- * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two activity
- * types sharing one interaction (see JP, reveal EN + vocab, self-rate) —
- * real differentiation between them (e.g. showing surrounding chapter
- * context for reading_in_context) is deliberately deferred, see STATUS.md.
+ * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
+ * sentence-subject activity types sharing one interaction (see JP, reveal
+ * EN + vocab, self-rate) — real differentiation between them (e.g. showing
+ * surrounding chapter context for reading_in_context) is deliberately
+ * deferred, see STATUS.md.
  */
-const REVIEW_ACTIVITY_TYPES: StudyActivityType[] = [
+const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
   'comprehension',
   'reading_in_context',
 ];
 
+/**
+ * Phase 7.2 (docs/STATUS.md): the first vocabulary-item-subject activity
+ * type — shows the sentence with the target word's exact surface form
+ * highlighted, reading hidden until reveal. Only vocabulary items with a
+ * surfaceForm-bearing sentence_vocabulary link are eligible (see
+ * getReadingRetrievalCandidates) — vocabulary confirmed before this field
+ * existed, or imported outside the picker, isn't a candidate yet.
+ */
+const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = ['reading_retrieval'];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
+  reading_retrieval: 'Reading retrieval',
 };
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -32,12 +52,37 @@ const RATINGS: { value: ReviewRating; label: string }[] = [
 interface QueueCard {
   studyItem: StudyItem;
   sentence: Sentence;
+  /** Set only for vocabulary-item-subject cards (e.g. reading_retrieval). */
+  target?: { vocabularyItem: VocabularyItem; surfaceForm: string };
 }
 
-/** A (sentence, activityType) pair with no study_item yet — needs seeding. */
-interface PendingSeed {
-  sentence: Sentence;
-  activityType: StudyActivityType;
+/** A (subject, activityType) pair with no study_item yet — needs seeding. */
+type PendingSeed =
+  | { kind: 'sentence'; sentence: Sentence; activityType: StudyActivityType }
+  | {
+      kind: 'vocabulary';
+      candidate: ReadingRetrievalCandidate;
+      activityType: StudyActivityType;
+    };
+
+function pendingSeedKey(seed: PendingSeed): string {
+  return seed.kind === 'sentence'
+    ? seed.sentence.id
+    : seed.candidate.vocabularyItem.id;
+}
+
+/** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
+function splitOnSurfaceForm(
+  japanese: string,
+  surfaceForm: string,
+): [string, string, string] {
+  const index = japanese.indexOf(surfaceForm);
+  if (index === -1) return [japanese, '', ''];
+  return [
+    japanese.slice(0, index),
+    surfaceForm,
+    japanese.slice(index + surfaceForm.length),
+  ];
 }
 
 export function ReviewPage() {
@@ -68,13 +113,39 @@ export function ReviewPage() {
         (a, b) => a.firstOccurrenceIndex - b.firstOccurrenceIndex,
       );
     }
-    const sentenceIds = new Set(sentences.map((item) => item.id));
-    const existingItems = (
-      await db.studyItems.where('activityType').anyOf(REVIEW_ACTIVITY_TYPES).toArray()
+    const sentenceIds = sentences.map((item) => item.id);
+    const sentenceIdSet = new Set(sentenceIds);
+    const existingSentenceItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(SENTENCE_ACTIVITY_TYPES)
+        .toArray()
     ).filter(
-      (item) => item.subjectType === 'sentence' && sentenceIds.has(item.subjectId),
+      (item) => item.subjectType === 'sentence' && sentenceIdSet.has(item.subjectId),
     );
-    return { book, sentences, existingItems };
+
+    const readingRetrievalCandidates = await getReadingRetrievalCandidates(sentenceIds);
+    const vocabularyItemIdSet = new Set(
+      readingRetrievalCandidates.map((candidate) => candidate.vocabularyItem.id),
+    );
+    const existingVocabularyItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(VOCABULARY_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'vocabularyItem' &&
+        vocabularyItemIdSet.has(item.subjectId),
+    );
+
+    return {
+      book,
+      sentences,
+      existingSentenceItems,
+      readingRetrievalCandidates,
+      existingVocabularyItems,
+    };
   }, [bookId]);
 
   // Build the session queue once, the first time scope data arrives —
@@ -87,27 +158,78 @@ export function ReviewPage() {
     let cancelled = false;
     void (async () => {
       const bySentenceId = new Map(scope.sentences.map((item) => [item.id, item]));
-      const dueItems = await getDueStudyItems(REVIEW_ACTIVITY_TYPES, {
-        subjectIds: scope.sentences.map((item) => item.id),
-      });
-      const due = dueItems
-        .map((studyItem) => {
+      const byVocabularyItemId = new Map(
+        scope.readingRetrievalCandidates.map((candidate) => [
+          candidate.vocabularyItem.id,
+          candidate,
+        ]),
+      );
+
+      const [dueSentenceItems, dueVocabularyItems] = await Promise.all([
+        getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
+          subjectIds: scope.sentences.map((item) => item.id),
+        }),
+        getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
+          subjectIds: [...byVocabularyItemId.keys()],
+        }),
+      ]);
+
+      const dueSentenceCards = dueSentenceItems
+        .map((studyItem): QueueCard | null => {
           const sentence = bySentenceId.get(studyItem.subjectId);
           return sentence ? { studyItem, sentence } : null;
         })
-        .filter((card): card is QueueCard => Boolean(card));
+        .filter((card): card is QueueCard => card !== null);
 
-      // Any (sentence, activityType) pair with no study_item yet needs
-      // seeding — tracked per-pair (not per-sentence) so a sentence left
-      // with only some activity types seeded still gets the rest.
-      const existingKeys = new Set(
-        scope.existingItems.map((item) => `${item.subjectId}:${item.activityType}`),
+      const dueVocabularyCards = dueVocabularyItems
+        .map((studyItem): QueueCard | null => {
+          const candidate = byVocabularyItemId.get(studyItem.subjectId);
+          return candidate
+            ? {
+                studyItem,
+                sentence: candidate.sentence,
+                target: {
+                  vocabularyItem: candidate.vocabularyItem,
+                  surfaceForm: candidate.surfaceForm,
+                },
+              }
+            : null;
+        })
+        .filter((card): card is QueueCard => card !== null);
+
+      const due = [...dueSentenceCards, ...dueVocabularyCards].sort((a, b) =>
+        a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due),
+      );
+
+      // Any (subject, activityType) pair with no study_item yet needs
+      // seeding — tracked per-pair (not per-subject) so a subject left with
+      // only some activity types seeded still gets the rest.
+      const existingSentenceKeys = new Set(
+        scope.existingSentenceItems.map(
+          (item) => `${item.subjectId}:${item.activityType}`,
+        ),
       );
       const pendingSeeds: PendingSeed[] = [];
       for (const sentence of scope.sentences) {
-        for (const activityType of REVIEW_ACTIVITY_TYPES) {
-          if (!existingKeys.has(`${sentence.id}:${activityType}`)) {
-            pendingSeeds.push({ sentence, activityType });
+        for (const activityType of SENTENCE_ACTIVITY_TYPES) {
+          if (!existingSentenceKeys.has(`${sentence.id}:${activityType}`)) {
+            pendingSeeds.push({ kind: 'sentence', sentence, activityType });
+          }
+        }
+      }
+      const existingVocabularyKeys = new Set(
+        scope.existingVocabularyItems.map(
+          (item) => `${item.subjectId}:${item.activityType}`,
+        ),
+      );
+      for (const candidate of scope.readingRetrievalCandidates) {
+        for (const activityType of VOCABULARY_ACTIVITY_TYPES) {
+          if (
+            !existingVocabularyKeys.has(
+              `${candidate.vocabularyItem.id}:${activityType}`,
+            )
+          ) {
+            pendingSeeds.push({ kind: 'vocabulary', candidate, activityType });
           }
         }
       }
@@ -122,26 +244,47 @@ export function ReviewPage() {
     };
   }, [scope, initialized]);
 
-  // Lazily seed study_items for the next never-reviewed sentence once the
+  // Lazily seed study_items for the next never-reviewed subject once the
   // due queue runs dry (confirmed with the user — no batch seeding step).
   useEffect(() => {
     if (!initialized || queue.length > 0 || pool.length === 0 || seeding) return;
-    const sentenceId = pool[0]!.sentence.id;
-    const batch = pool.filter((item) => item.sentence.id === sentenceId);
+    const first = pool[0]!;
+    const batchKey = pendingSeedKey(first);
+    const batch = pool.filter(
+      (item) => item.kind === first.kind && pendingSeedKey(item) === batchKey,
+    );
     setSeeding(true);
     void (async () => {
-      const items = await Promise.all(
-        batch.map((item) =>
-          ensureStudyItem('sentence', item.sentence.id, item.activityType),
+      const cards = await Promise.all(
+        batch.map(async (item): Promise<QueueCard> => {
+          if (item.kind === 'sentence') {
+            const studyItem = await ensureStudyItem(
+              'sentence',
+              item.sentence.id,
+              item.activityType,
+            );
+            return { studyItem, sentence: item.sentence };
+          }
+          const studyItem = await ensureVocabularyStudyItem(
+            item.candidate.vocabularyItem.id,
+            item.activityType,
+          );
+          return {
+            studyItem,
+            sentence: item.candidate.sentence,
+            target: {
+              vocabularyItem: item.candidate.vocabularyItem,
+              surfaceForm: item.candidate.surfaceForm,
+            },
+          };
+        }),
+      );
+      setPool((current) =>
+        current.filter(
+          (item) => !(item.kind === first.kind && pendingSeedKey(item) === batchKey),
         ),
       );
-      setPool((current) => current.filter((item) => item.sentence.id !== sentenceId));
-      setQueue(
-        items.map((studyItem, index) => ({
-          studyItem,
-          sentence: batch[index]!.sentence,
-        })),
-      );
+      setQueue(cards);
       setSeeding(false);
     })();
   }, [initialized, queue.length, pool, seeding]);
@@ -166,7 +309,12 @@ export function ReviewPage() {
   if (bookId && scope === undefined) return <p className="muted">Loading…</p>;
   if (!initialized) return <p className="muted">Loading…</p>;
 
-  const nextDue = scope?.existingItems
+  const totalScopedSubjects =
+    (scope?.sentences.length ?? 0) + (scope?.readingRetrievalCandidates.length ?? 0);
+  const nextDue = [
+    ...(scope?.existingSentenceItems ?? []),
+    ...(scope?.existingVocabularyItems ?? []),
+  ]
     .filter((item) => item.fsrsState.due > new Date().toISOString())
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due))[0]?.fsrsState.due;
 
@@ -186,7 +334,7 @@ export function ReviewPage() {
           ) : null}
         </div>
 
-        {scope && scope.sentences.length === 0 ? (
+        {scope && totalScopedSubjects === 0 ? (
           <p className="muted">No sentences to review here yet.</p>
         ) : seeding ? (
           <p className="muted">Loading next card…</p>
@@ -206,32 +354,83 @@ export function ReviewPage() {
                 current.studyItem.activityType}{' '}
               · {queue.length} due
             </div>
-            <div className="jp jp-lg">{current.sentence.japanese}</div>
-            {!revealed ? (
-              <button type="button" onClick={() => setRevealed(true)}>
-                Reveal
-              </button>
+            {current.target ? (
+              <ReadingRetrievalCard
+                sentence={current.sentence}
+                vocabularyItem={current.target.vocabularyItem}
+                surfaceForm={current.target.surfaceForm}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
+              />
             ) : (
               <>
-                <div>{current.sentence.translation || '(no translation)'}</div>
-                <VocabChips items={current.sentence.targetVocabulary} />
-                <div className="row">
-                  {RATINGS.map((rating) => (
-                    <button
-                      key={rating.value}
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => void handleRate(rating.value)}
-                    >
-                      {rating.label}
-                    </button>
-                  ))}
-                </div>
+                <div className="jp jp-lg">{current.sentence.japanese}</div>
+                {!revealed ? (
+                  <button type="button" onClick={() => setRevealed(true)}>
+                    Reveal
+                  </button>
+                ) : (
+                  <>
+                    <div>{current.sentence.translation || '(no translation)'}</div>
+                    <VocabChips items={current.sentence.targetVocabulary} />
+                  </>
+                )}
               </>
             )}
+            {revealed ? (
+              <div className="row">
+                {RATINGS.map((rating) => (
+                  <button
+                    key={rating.value}
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => void handleRate(rating.value)}
+                  >
+                    {rating.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </>
         )}
       </section>
     </div>
+  );
+}
+
+function ReadingRetrievalCard({
+  sentence,
+  vocabularyItem,
+  surfaceForm,
+  revealed,
+  onReveal,
+}: {
+  sentence: Sentence;
+  vocabularyItem: VocabularyItem;
+  surfaceForm: string;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  return (
+    <>
+      <div className="jp jp-lg">
+        {before}
+        <mark>{target || surfaceForm}</mark>
+        {after}
+      </div>
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal reading
+        </button>
+      ) : (
+        <>
+          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
+          {vocabularyItem.meaning ? (
+            <div className="muted">{vocabularyItem.meaning}</div>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }

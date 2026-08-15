@@ -17,6 +17,7 @@ import {
   exportFullBackup,
   getDb,
   getDueStudyItems,
+  getReadingRetrievalCandidates,
   listAttemptsForSentence,
   materializeVocabularySelections,
   moveBookSentence,
@@ -571,6 +572,23 @@ describe('vocabulary/kanji materialization (Phase 5)', () => {
     expect(item?.expression).toBe('大学');
   });
 
+  it('materializeVocabularySelections captures the surface span onto the link (Phase 7.2)', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({
+        surface: '表れていた',
+        start: 5,
+        end: 10,
+        expression: '表れる',
+        reading: 'あらわれる',
+      }),
+    ]);
+    const links = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .toArray();
+    expect(links[0]?.surfaceForm).toBe('表れていた');
+  });
+
   it('re-confirming removes stale links but keeps the underlying vocabulary item', async () => {
     await materializeVocabularySelections('sent-1', [
       selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
@@ -656,7 +674,7 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     expect(second.id).toBe(first.id);
   });
 
-  it('pickContextSentenceForVocabularyItem returns the most recently linked sentence', async () => {
+  it('pickContextSentenceForVocabularyItem returns the most recently linked sentence and its surfaceForm', async () => {
     const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
     await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
     await getDb().sentenceVocabulary.bulkPut([
@@ -664,6 +682,7 @@ describe('evidence-model foundation (Phase 7.1)', () => {
         id: 'link-old',
         sentenceId: 'sent-old',
         vocabularyItemId: vocabItem.id,
+        surfaceForm: '表した',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
@@ -671,13 +690,15 @@ describe('evidence-model foundation (Phase 7.1)', () => {
         id: 'link-new',
         sentenceId: 'sent-new',
         vocabularyItemId: vocabItem.id,
+        surfaceForm: '表します',
         createdAt: '2026-02-01T00:00:00.000Z',
         updatedAt: '2026-02-01T00:00:00.000Z',
       },
     ]);
 
     const picked = await pickContextSentenceForVocabularyItem(vocabItem.id);
-    expect(picked?.id).toBe('sent-new');
+    expect(picked?.sentence.id).toBe('sent-new');
+    expect(picked?.surfaceForm).toBe('表します');
   });
 
   it('pickContextSentenceForVocabularyItem returns undefined with no links', async () => {
@@ -731,5 +752,44 @@ describe('evidence-model foundation (Phase 7.1)', () => {
       const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
       expect(keys).toContain('vocabulary_confusions');
     });
+  });
+
+  it('getReadingRetrievalCandidates only returns links with a surfaceForm', async () => {
+    await getDb().sentences.add(stubSentence('sent-1'));
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    // No surfaceForm — e.g. an Anki-imported link, created directly, not via the picker.
+    const noSurface = await ensureVocabularyItem('猫', 'ねこ');
+    await getDb().sentences.add(stubSentence('sent-2'));
+    await getDb().sentenceVocabulary.add({
+      id: 'link-no-surface',
+      sentenceId: 'sent-2',
+      vocabularyItemId: noSurface.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const candidates = await getReadingRetrievalCandidates(['sent-1', 'sent-2']);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.vocabularyItem.expression).toBe('大学');
+    expect(candidates[0]?.surfaceForm).toBe('大学');
+  });
+
+  it('getReadingRetrievalCandidates returns one candidate per vocabulary item, not per sentence', async () => {
+    await getDb().sentences.bulkAdd([stubSentence('sent-1'), stubSentence('sent-2')]);
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    await materializeVocabularySelections('sent-2', [
+      selection({ surface: '大学に', start: 0, end: 3, expression: '大学', reading: 'だいがく' }),
+    ]);
+
+    const candidates = await getReadingRetrievalCandidates(['sent-1', 'sent-2']);
+    expect(candidates).toHaveLength(1);
+  });
+
+  it('getReadingRetrievalCandidates returns an empty array for no sentence ids', async () => {
+    expect(await getReadingRetrievalCandidates([])).toEqual([]);
   });
 });
