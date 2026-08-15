@@ -12,15 +12,19 @@ import type {
   ImportBatch,
   InboxMembership,
   InitialOrderMode,
+  Kanji,
   Review,
   ReviewRating,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
+  SentenceVocabulary,
   StudyActivityType,
   StudyItem,
   StudyStatus,
   StudySubjectType,
+  VocabularyItem,
+  VocabularyKanji,
   VocabularyReviewStatus,
   VocabularySelection,
 } from '../domain/types';
@@ -30,6 +34,7 @@ import {
   type ImportPreview,
 } from '../lib/csvImport';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
+import { isHanCharacter } from '../lib/kanji';
 import { nowIso } from '../lib/normalize';
 import { createInitialFsrsState, scheduleReview } from '../lib/scheduling';
 import {
@@ -1065,6 +1070,10 @@ export async function exportFullBackup(): Promise<BackupPayload> {
     inbox: await db.inbox.toArray(),
     studyItems: await db.studyItems.toArray(),
     reviews: await db.reviews.toArray(),
+    vocabularyItems: await db.vocabularyItems.toArray(),
+    sentenceVocabulary: await db.sentenceVocabulary.toArray(),
+    kanji: await db.kanji.toArray(),
+    vocabularyKanji: await db.vocabularyKanji.toArray(),
     settings,
   };
   return buildBackupPayload(bundle);
@@ -1080,6 +1089,20 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
     (item) => item.subjectType === 'sentence' && sentenceIds.has(item.subjectId),
   );
   const studyItemIds = new Set(studyItems.map((item) => item.id));
+  const sentenceVocabulary = full.sentenceVocabulary.filter((item) =>
+    sentenceIds.has(item.sentenceId),
+  );
+  const vocabularyItemIds = new Set(
+    sentenceVocabulary.map((item) => item.vocabularyItemId),
+  );
+  const vocabularyItems = full.vocabularyItems.filter((item) =>
+    vocabularyItemIds.has(item.id),
+  );
+  const vocabularyKanji = full.vocabularyKanji.filter((item) =>
+    vocabularyItemIds.has(item.vocabularyItemId),
+  );
+  const kanjiIds = new Set(vocabularyKanji.map((item) => item.kanjiId));
+  const kanji = full.kanji.filter((item) => kanjiIds.has(item.id));
   return buildBackupPayload({
     books: [book],
     sentences: full.sentences.filter((item) => sentenceIds.has(item.id)),
@@ -1089,6 +1112,10 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
     inbox: [],
     studyItems,
     reviews: full.reviews.filter((item) => studyItemIds.has(item.studyItemId)),
+    vocabularyItems,
+    sentenceVocabulary,
+    kanji,
+    vocabularyKanji,
     settings: full.settings,
   });
 }
@@ -1107,6 +1134,10 @@ export async function restoreBackup(
     db.inbox,
     db.studyItems,
     db.reviews,
+    db.vocabularyItems,
+    db.sentenceVocabulary,
+    db.kanji,
+    db.vocabularyKanji,
     db.settings,
     db.sentenceAudio,
   ] as const;
@@ -1122,6 +1153,10 @@ export async function restoreBackup(
         db.inbox.clear(),
         db.studyItems.clear(),
         db.reviews.clear(),
+        db.vocabularyItems.clear(),
+        db.sentenceVocabulary.clear(),
+        db.kanji.clear(),
+        db.vocabularyKanji.clear(),
         db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
@@ -1132,6 +1167,10 @@ export async function restoreBackup(
       await db.inbox.bulkPut(payload.inbox);
       await db.studyItems.bulkPut(payload.studyItems);
       await db.reviews.bulkPut(payload.reviews);
+      await db.kanji.bulkPut(payload.kanji);
+      await db.vocabularyItems.bulkPut(payload.vocabularyItems);
+      await db.sentenceVocabulary.bulkPut(payload.sentenceVocabulary);
+      await db.vocabularyKanji.bulkPut(payload.vocabularyKanji);
       await db.settings.put(payload.settings);
     });
     return;
@@ -1191,6 +1230,26 @@ export async function restoreBackup(
       for (const review of payload.reviews) {
         const existing = await db.reviews.get(review.id);
         if (!existing) await db.reviews.put(review);
+      }
+      for (const kanjiRow of payload.kanji) {
+        const existing = await db.kanji.get(kanjiRow.id);
+        if (!existing || kanjiRow.updatedAt >= existing.updatedAt) {
+          await db.kanji.put(kanjiRow);
+        }
+      }
+      for (const item of payload.vocabularyItems) {
+        const existing = await db.vocabularyItems.get(item.id);
+        if (!existing || item.updatedAt >= existing.updatedAt) {
+          await db.vocabularyItems.put(item);
+        }
+      }
+      for (const link of payload.sentenceVocabulary) {
+        const existing = await db.sentenceVocabulary.get(link.id);
+        if (!existing) await db.sentenceVocabulary.put(link);
+      }
+      for (const link of payload.vocabularyKanji) {
+        const existing = await db.vocabularyKanji.get(link.id);
+        if (!existing) await db.vocabularyKanji.put(link);
       }
       const settings = await ensureSettings(db);
       await db.settings.put({ ...settings, ...payload.settings, id: 'settings' });
@@ -1511,6 +1570,180 @@ export async function recordReview(input: {
     { entity: 'reviews', recordId: review.id, payload: review },
   ]);
   return { review, studyItem: updatedStudyItem };
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary/kanji relationships (docs/UNIFIED_APP_ARCHITECTURE.md §8, Phase 5).
+// VocabularyItem/Kanji are get-or-create, deduped on (expression, reading) and
+// character respectively, and never overwritten once created — mirrors
+// ensureStudyItem above. SentenceVocabulary links are wholesale-replaced per
+// sentence on every confirm, since VocabularySelection[] is itself an
+// authoritative snapshot (of the sentence's current picks), not an
+// incremental diff.
+// ---------------------------------------------------------------------------
+
+export async function ensureKanji(character: string): Promise<Kanji> {
+  const db = getDb();
+  const existing = await db.kanji.where('character').equals(character).first();
+  if (existing) return existing;
+  const timestamp = nowIso();
+  const kanji: Kanji = {
+    id: createId('kanji'),
+    character,
+    meanings: [],
+    onyomi: [],
+    kunyomi: [],
+    nanori: [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.kanji.put(kanji);
+  notifySync('kanji', kanji.id, kanji);
+  return kanji;
+}
+
+export async function ensureVocabularyItem(
+  expression: string,
+  reading: string,
+  fields: {
+    meaning?: string;
+    partOfSpeech?: string;
+    notes?: string;
+    externalId?: string;
+  } = {},
+): Promise<VocabularyItem> {
+  const db = getDb();
+  const existing = await db.vocabularyItems
+    .where('[expression+reading]')
+    .equals([expression, reading])
+    .first();
+  if (existing) return existing;
+
+  const timestamp = nowIso();
+  const item: VocabularyItem = {
+    id: createId('vocab_item'),
+    expression,
+    reading,
+    meaning: fields.meaning ?? '',
+    partOfSpeech: fields.partOfSpeech,
+    notes: fields.notes,
+    externalId: fields.externalId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  // Kanji rows are get-or-create (shared across every vocabulary item), so
+  // resolve them one at a time, in word order, before the item/links commit —
+  // matches every occurrence's true position, including repeated kanji
+  // (e.g. 主 twice in 民主主義).
+  const characters = Array.from(expression);
+  const kanjiLinks: VocabularyKanji[] = [];
+  for (let position = 0; position < characters.length; position += 1) {
+    const character = characters[position];
+    if (!isHanCharacter(character)) continue;
+    const kanji = await ensureKanji(character);
+    kanjiLinks.push({
+      id: createId('vocab_kanji'),
+      vocabularyItemId: item.id,
+      kanjiId: kanji.id,
+      positionInWord: position,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+
+  await db.transaction(
+    'rw',
+    db.vocabularyItems,
+    db.vocabularyKanji,
+    async () => {
+      await db.vocabularyItems.put(item);
+      for (const link of kanjiLinks) {
+        await db.vocabularyKanji.put(link);
+      }
+    },
+  );
+
+  notifySyncMany([
+    { entity: 'vocabulary_items', recordId: item.id, payload: item },
+    ...kanjiLinks.map((link) => ({
+      entity: 'vocabulary_kanji' as const,
+      recordId: link.id,
+      payload: link,
+    })),
+  ]);
+
+  return item;
+}
+
+/**
+ * Materialize a sentence's confirmed VocabularyPicker selections into real
+ * VocabularyItem/SentenceVocabulary rows. Called once, from the confirm
+ * action — not on every autosave tick. Wholesale-replaces this sentence's
+ * links (add newly-selected, remove deselected); never deletes the
+ * VocabularyItem/Kanji rows themselves, since other sentences may reference
+ * them.
+ */
+export async function materializeVocabularySelections(
+  sentenceId: string,
+  selections: VocabularySelection[],
+): Promise<void> {
+  const db = getDb();
+  const itemIds = new Set<string>();
+  for (const selection of selections) {
+    const expression = selection.expression.trim();
+    if (!expression) continue;
+    const item = await ensureVocabularyItem(expression, selection.reading.trim(), {
+      meaning: selection.english,
+      partOfSpeech: selection.pos,
+    });
+    itemIds.add(item.id);
+  }
+
+  const existingLinks = await db.sentenceVocabulary
+    .where('sentenceId')
+    .equals(sentenceId)
+    .toArray();
+  const existingItemIds = new Set(
+    existingLinks.map((link) => link.vocabularyItemId),
+  );
+
+  const toDelete = existingLinks.filter(
+    (link) => !itemIds.has(link.vocabularyItemId),
+  );
+  const timestamp = nowIso();
+  const toCreate: SentenceVocabulary[] = [...itemIds]
+    .filter((itemId) => !existingItemIds.has(itemId))
+    .map((itemId) => ({
+      id: createId('sentence_vocab'),
+      sentenceId,
+      vocabularyItemId: itemId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }));
+
+  await db.transaction('rw', db.sentenceVocabulary, async () => {
+    for (const link of toDelete) {
+      await db.sentenceVocabulary.delete(link.id);
+    }
+    for (const link of toCreate) {
+      await db.sentenceVocabulary.put(link);
+    }
+  });
+
+  notifySyncMany([
+    ...toDelete.map((link) => ({
+      entity: 'sentence_vocabulary' as const,
+      recordId: link.id,
+      payload: link,
+      operation: 'delete' as const,
+    })),
+    ...toCreate.map((link) => ({
+      entity: 'sentence_vocabulary' as const,
+      recordId: link.id,
+      payload: link,
+    })),
+  ]);
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

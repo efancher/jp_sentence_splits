@@ -9,11 +9,14 @@ import {
   createBookChapter,
   deleteAttempt,
   deleteBookChapter,
+  ensureKanji,
   ensureStudyItem,
+  ensureVocabularyItem,
   exportFullBackup,
   getDb,
   getDueStudyItems,
   listAttemptsForSentence,
+  materializeVocabularySelections,
   moveBookSentence,
   rateAttempt,
   recordReview,
@@ -27,6 +30,7 @@ import {
   transferBookSentences,
   updateBookChapter,
 } from '../src/db/repository';
+import type { VocabularySelection } from '../src/domain/types';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
 import { createId } from '../src/lib/ids';
@@ -465,5 +469,142 @@ describe('FSRS review (study_items/reviews)', () => {
     const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
     expect(keys).toContain('study_items');
     expect(keys).toContain('reviews');
+  });
+});
+
+function selection(
+  overrides: Partial<VocabularySelection> &
+    Pick<VocabularySelection, 'surface' | 'start' | 'end' | 'expression'>,
+): VocabularySelection {
+  return {
+    id: createId('vsel'),
+    reading: '',
+    source: 'manual',
+    ...overrides,
+  };
+}
+
+describe('vocabulary/kanji materialization (Phase 5)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-vocab-${createId('db')}`);
+  });
+
+  it('ensureVocabularyItem creates a new item and dedups on (expression, reading)', async () => {
+    const first = await ensureVocabularyItem('大学', 'だいがく', { meaning: 'university' });
+    const second = await ensureVocabularyItem('大学', 'だいがく', { meaning: 'ignored' });
+    expect(second.id).toBe(first.id);
+    expect(second.meaning).toBe('university');
+    expect(await getDb().vocabularyItems.count()).toBe(1);
+  });
+
+  it('treats homophones (same expression, different reading) as distinct items', async () => {
+    const shukan = await ensureVocabularyItem('週間', 'しゅうかん');
+    const shuukan = await ensureVocabularyItem('習慣', 'しゅうかん');
+    expect(shukan.id).not.toBe(shuukan.id);
+    expect(await getDb().vocabularyItems.count()).toBe(2);
+  });
+
+  it('creates kanji rows and vocabulary_kanji links at the correct positions', async () => {
+    const item = await ensureVocabularyItem('大学', 'だいがく');
+    const links = await getDb()
+      .vocabularyKanji.where('vocabularyItemId')
+      .equals(item.id)
+      .toArray();
+    expect(links).toHaveLength(2);
+    const byPosition = new Map(links.map((link) => [link.positionInWord, link]));
+    const dai = await getDb().kanji.get(byPosition.get(0)!.kanjiId);
+    const gaku = await getDb().kanji.get(byPosition.get(1)!.kanjiId);
+    expect(dai?.character).toBe('大');
+    expect(gaku?.character).toBe('学');
+  });
+
+  it('reuses an existing kanji row across vocabulary items instead of duplicating it', async () => {
+    await ensureVocabularyItem('大学', 'だいがく');
+    await ensureVocabularyItem('大きい', 'おおきい');
+    expect(await getDb().kanji.count()).toBe(2); // 大, 学
+  });
+
+  it('links a repeated kanji at each of its true positions in the word', async () => {
+    const item = await ensureVocabularyItem('民主主義', 'みんしゅしゅぎ');
+    const links = await getDb()
+      .vocabularyKanji.where('vocabularyItemId')
+      .equals(item.id)
+      .toArray();
+    expect(links.map((link) => link.positionInWord).sort()).toEqual([0, 1, 2, 3]);
+    const shu = await getDb().kanji.where('character').equals('主').first();
+    const shuLinks = links.filter((link) => link.kanjiId === shu?.id);
+    expect(shuLinks.map((link) => link.positionInWord).sort()).toEqual([1, 2]);
+  });
+
+  it('handles astral-plane kanji (surrogate pairs) as a single character', async () => {
+    const item = await ensureVocabularyItem('𠮟る', 'しかる');
+    const links = await getDb()
+      .vocabularyKanji.where('vocabularyItemId')
+      .equals(item.id)
+      .toArray();
+    expect(links).toHaveLength(1);
+    const kanji = await getDb().kanji.get(links[0]!.kanjiId);
+    expect(kanji?.character).toBe('𠮟');
+  });
+
+  it('ensureKanji is idempotent by character', async () => {
+    const first = await ensureKanji('水');
+    const second = await ensureKanji('水');
+    expect(second.id).toBe(first.id);
+    expect(await getDb().kanji.count()).toBe(1);
+  });
+
+  it('materializeVocabularySelections links confirmed selections to the sentence', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    const links = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .toArray();
+    expect(links).toHaveLength(1);
+    const item = await getDb().vocabularyItems.get(links[0]!.vocabularyItemId);
+    expect(item?.expression).toBe('大学');
+  });
+
+  it('re-confirming removes stale links but keeps the underlying vocabulary item', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    await materializeVocabularySelections('sent-1', []);
+
+    const links = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .toArray();
+    expect(links).toHaveLength(0);
+    expect(await getDb().vocabularyItems.count()).toBe(1);
+  });
+
+  it('collapses duplicate selections resolving to the same item into one link', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+      selection({ surface: '大学', start: 3, end: 5, expression: '大学', reading: 'だいがく' }),
+    ]);
+    const links = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .toArray();
+    expect(links).toHaveLength(1);
+  });
+
+  it('enqueues sync metadata for all four vocabulary/kanji tables', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+
+    await vi.waitFor(async () => {
+      expect(await getDb().syncRecordMeta.count()).toBeGreaterThan(0);
+    });
+    const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
+    expect(keys).toContain('vocabulary_items');
+    expect(keys).toContain('sentence_vocabulary');
+    expect(keys).toContain('kanji');
+    expect(keys).toContain('vocabulary_kanji');
   });
 });

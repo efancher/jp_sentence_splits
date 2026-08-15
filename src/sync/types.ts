@@ -8,7 +8,11 @@ export type SyncEntity =
   | 'inbox'
   | 'reference_audio'
   | 'study_items'
-  | 'reviews';
+  | 'reviews'
+  | 'vocabulary_items'
+  | 'sentence_vocabulary'
+  | 'kanji'
+  | 'vocabulary_kanji';
 
 export type SyncOperationType = 'upsert' | 'delete';
 
@@ -92,4 +96,8 @@ export const SYNCABLE_ENTITIES: readonly SyncEntity[] = [
   'reference_audio',
   'study_items',
   'reviews',
+  'vocabulary_items',
+  'sentence_vocabulary',
+  'kanji',
+  'vocabulary_kanji',
 ] as const;

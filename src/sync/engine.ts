@@ -17,10 +17,14 @@ import {
   remoteToBookSentence,
   remoteToImportBatch,
   remoteToInbox,
+  remoteToKanji,
   remoteToReferenceAudio,
   remoteToReview,
   remoteToSentence,
+  remoteToSentenceVocabulary,
   remoteToStudyItem,
+  remoteToVocabularyItem,
+  remoteToVocabularyKanji,
   toRemoteRow,
 } from './mappers';
 import { getSupabase } from './supabaseClient';
@@ -363,6 +367,18 @@ async function applyRemoteDelete(
     case 'reviews':
       await db.reviews.delete(recordId);
       break;
+    case 'vocabulary_items':
+      await db.vocabularyItems.delete(recordId);
+      break;
+    case 'sentence_vocabulary':
+      await db.sentenceVocabulary.delete(recordId);
+      break;
+    case 'kanji':
+      await db.kanji.delete(recordId);
+      break;
+    case 'vocabulary_kanji':
+      await db.vocabularyKanji.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -425,6 +441,18 @@ async function applyRemoteUpsert(
     case 'reviews':
       await db.reviews.put(remoteToReview(remote));
       break;
+    case 'vocabulary_items':
+      await db.vocabularyItems.put(remoteToVocabularyItem(remote));
+      break;
+    case 'sentence_vocabulary':
+      await db.sentenceVocabulary.put(remoteToSentenceVocabulary(remote));
+      break;
+    case 'kanji':
+      await db.kanji.put(remoteToKanji(remote));
+      break;
+    case 'vocabulary_kanji':
+      await db.vocabularyKanji.put(remoteToVocabularyKanji(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -450,6 +478,10 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const inbox = await db.inbox.toArray();
   const studyItems = await db.studyItems.toArray();
   const reviews = await db.reviews.toArray();
+  const kanjiRows = await db.kanji.toArray();
+  const vocabularyItems = await db.vocabularyItems.toArray();
+  const sentenceVocabulary = await db.sentenceVocabulary.toArray();
+  const vocabularyKanji = await db.vocabularyKanji.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -474,6 +506,18 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const review of reviews) {
     await trackAndEnqueue('reviews', review.id, review);
+  }
+  for (const kanjiRow of kanjiRows) {
+    await trackAndEnqueue('kanji', kanjiRow.id, kanjiRow);
+  }
+  for (const item of vocabularyItems) {
+    await trackAndEnqueue('vocabulary_items', item.id, item);
+  }
+  for (const link of sentenceVocabulary) {
+    await trackAndEnqueue('sentence_vocabulary', link.id, link);
+  }
+  for (const link of vocabularyKanji) {
+    await trackAndEnqueue('vocabulary_kanji', link.id, link);
   }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
@@ -519,6 +563,10 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.inbox,
       db.studyItems,
       db.reviews,
+      db.kanji,
+      db.vocabularyItems,
+      db.sentenceVocabulary,
+      db.vocabularyKanji,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -532,6 +580,10 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.inbox.clear();
       await db.studyItems.clear();
       await db.reviews.clear();
+      await db.kanji.clear();
+      await db.vocabularyItems.clear();
+      await db.sentenceVocabulary.clear();
+      await db.vocabularyKanji.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -561,6 +613,22 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('reviews', userId, async (rows) => {
     await db.reviews.bulkPut(rows.map((r) => remoteToReview(r)));
+  });
+  await pullFullTable('kanji', userId, async (rows) => {
+    await db.kanji.bulkPut(rows.map((r) => remoteToKanji(r)));
+  });
+  await pullFullTable('vocabulary_items', userId, async (rows) => {
+    await db.vocabularyItems.bulkPut(rows.map((r) => remoteToVocabularyItem(r)));
+  });
+  await pullFullTable('sentence_vocabulary', userId, async (rows) => {
+    await db.sentenceVocabulary.bulkPut(
+      rows.map((r) => remoteToSentenceVocabulary(r)),
+    );
+  });
+  await pullFullTable('vocabulary_kanji', userId, async (rows) => {
+    await db.vocabularyKanji.bulkPut(
+      rows.map((r) => remoteToVocabularyKanji(r)),
+    );
   });
 
   const { data: maxEvent } = await supabase

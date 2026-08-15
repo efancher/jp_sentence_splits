@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-15.
+Last updated: 2026-08-15 (Phase 5).
 
 ## Phase 0 — Repository analysis: done
 
@@ -349,6 +349,112 @@ green, `ReviewPage` code-splits into its own chunk. **Not yet manually
 verified in a real browser** — this pass covered logic/component tests
 only, following the same caveat Phase 3 initially shipped with.
 
-## Phase 4 remaining / Phase 5 onward: not started
+## Phase 4 remaining: not started
 
 See `docs/ROADMAP.md`.
+
+## Phase 5 — Vocabulary/kanji relationships: materialization + browsing UI done
+
+Scoped with the user before starting: this pass covers both wiring the
+existing `VocabularyPicker` confirm action to real normalized rows *and*
+the first browsing UI ("this kanji occurs in these words"), rather than
+splitting them across two passes. Two follow-up items were explicitly
+deferred to "Phase 5 part 2" (confirmed with the user, not an oversight):
+JMDict-based meaning backfill, and retroactive materialization for
+sentences confirmed before this feature shipped (see below).
+
+Added:
+- `src/db/repository.ts` — `ensureVocabularyItem`/`ensureKanji` (get-or-
+  create, deduped on `[expression+reading]`/`character` respectively,
+  mirroring `ensureStudyItem`'s existing shape; never overwrite an existing
+  row) and `materializeVocabularySelections` (wholesale-replaces a
+  sentence's `sentenceVocabulary` links on every confirm — adds newly
+  selected, removes deselected; never deletes `VocabularyItem`/`Kanji` rows
+  themselves since other sentences may reference them). Kanji breakdown
+  (`VocabularyKanji` rows, one per Han character in the expression,
+  `positionInWord` = code-point index) is computed once, only when a
+  `VocabularyItem` is first created — detection via `src/lib/kanji.ts`'s
+  `isHanCharacter` (`\p{Script=Han}`, code-point safe for astral-plane
+  kanji like 𠮟), shared with the browsing pages.
+- `src/pages/AnalyzePage.tsx` — the existing `onConfirmAndNext` handler
+  (previously only wrote the `SentenceAnalysis.vocabularySelections` blob)
+  now also calls `materializeVocabularySelections` after `saveAnalysis`.
+  Autosave/`onChange` are unchanged — materialization only fires on
+  explicit confirm, not on every keystroke-level edit.
+- Sync wiring (`src/sync/types.ts`, `src/sync/mappers.ts`,
+  `src/sync/engine.ts`) for all four tables — first real UI writes, so
+  first real sync wiring, mirroring the `study_items`/`reviews` pattern
+  exactly (`applyRemoteDelete`/`applyRemoteUpsert`, `uploadAllLocalData`,
+  `replaceLocalWithCloud`). Enqueue/pull order: `kanji`/`vocabularyItems`
+  (either order) before `sentenceVocabulary`/`vocabularyKanji` (both
+  depend on the parents) — the one dependency-ordering mechanism this
+  codebase has (call order, no dependency graph), same as `study_items`
+  before `reviews`.
+- `backupSchema`/`buildBackupPayload`/`exportFullBackup`/`exportBookBackup`/
+  `restoreBackup` extended to cover the four tables (Phase 1 deferred this
+  "until these tables carry real data" — they now do). Unlike
+  `studyItems`/`reviews` (Phase 4, not defaulted), these four fields use
+  `.default([])`/`.default(0)` in `backupSchema` so a backup exported
+  before this change (missing these keys entirely) still restores
+  correctly instead of failing `safeParse` — caught in code review; noting
+  here since `studyItems`/`reviews` still have this exact gap, unfixed,
+  from Phase 4 (a pre-existing pattern, not touched in this pass).
+- `src/pages/VocabularyListPage.tsx` (`/vocabulary`) — searchable list of
+  every confirmed `VocabularyItem` (expression/reading/meaning/POS);
+  kanji characters in the expression render as links to `/kanji/:character`.
+  `src/pages/KanjiDetailPage.tsx` (`/kanji/:character`) — meanings/
+  onyomi/kunyomi/nanori for the kanji, plus every word containing it
+  (deduped by `vocabularyItemId`, since a word can use the same kanji more
+  than once — e.g. 主 twice in 民主主義 — caught in code review). Both
+  follow `ReviewPage`'s pattern (component-local state + `useLiveQuery` +
+  direct repository/Dexie reads), lazy-loaded route + `AppShell` nav entry
+  ("Words") like every other page.
+- Ships "this kanji occurs in these words" only, not "this *reading* of
+  this kanji occurs in these words" — deliberately scoped down (would need
+  aligning a word's reading substring to onyomi/kunyomi per kanji, real
+  NLP work not justified yet).
+
+**Deliberately not done yet** (documented, confirmed with the user, not
+forgotten — "Phase 5 part 2"):
+- JMDict-based meaning backfill for `VocabularyItem`s with a blank
+  `meaning` (`scripts/lookup-jmdict.ts` already exists as a local lookup
+  tool; turning it into a backfill script against production is separate,
+  independently-schedulable work).
+- Retroactive materialization for sentences whose `vocabularySelections`
+  were confirmed *before* this feature shipped — materialization only
+  fires from the confirm button going forward, so those sentences won't
+  automatically produce `VocabularyItem`/`sentenceVocabulary` rows unless
+  re-confirmed.
+
+**Code-reviewed** (medium-effort pass) before commit; two real findings,
+both fixed: (1) `KanjiDetailPage`'s word list wasn't deduped by
+`vocabularyItemId`, so a word with a repeated kanji (e.g. 民主主義 on the
+主 detail page) rendered as duplicate cards — fixed, with a regression
+test. (2) `src/lib/kanji.ts` exported an unused `kanjiCharactersOf` helper
+that nothing called — removed, keeping only `isHanCharacter`.
+
+**Known, pre-existing-pattern risk, not introduced by this pass**:
+`ensureVocabularyItem`/`ensureKanji` do a read-then-write dedup check with
+no locking across the `await` boundary, so two concurrent calls for the
+same `(expression, reading)`/character (e.g. a rapid double-click on
+"Confirm and next") could each pass the "not found" check and create a
+duplicate row. This mirrors `ensureStudyItem`'s identical, already-shipped
+race (Phase 4) — flagged for awareness, not fixed here, since fixing it
+would mean introducing a new locking pattern this codebase doesn't use
+anywhere else.
+
+**Verified**: `npm run check` (typecheck + vitest) green — 219 tests
+passed, 2 pre-existing skips (unrelated). `npm run build` green;
+`VocabularyListPage`/`KanjiDetailPage` code-split into their own chunks.
+**Not yet manually verified in a real browser** — this pass covered
+logic/component tests only, same caveat as Phase 3/4 initially shipped
+with.
+
+**Important for manual verification**: the WaniKani kanji catalog (2101
+rows) and the one-time Anki vocabulary import (332 items, 500 links)
+already live in Supabase from Phase 2, written before this sync wiring
+existed. Their `sync_events` rows predate a syncing user's cursor, so the
+normal incremental pull will **not** retroactively deliver them — trigger
+the existing "replace local with cloud" settings action once to pull that
+historical data down locally before judging whether `/vocabulary`/
+`/kanji/:character` look populated.

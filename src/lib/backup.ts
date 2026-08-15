@@ -6,10 +6,14 @@ import type {
   BookSentence,
   ImportBatch,
   InboxMembership,
+  Kanji,
   Review,
   Sentence,
   SentenceAnalysis,
+  SentenceVocabulary,
   StudyItem,
+  VocabularyItem,
+  VocabularyKanji,
 } from '../domain/types';
 import { hashString } from './ids';
 
@@ -22,6 +26,10 @@ export interface BackupBundle {
   inbox: InboxMembership[];
   studyItems: StudyItem[];
   reviews: Review[];
+  vocabularyItems: VocabularyItem[];
+  sentenceVocabulary: SentenceVocabulary[];
+  kanji: Kanji[];
+  vocabularyKanji: VocabularyKanji[];
   settings: AppSettings;
 }
 
@@ -39,6 +47,10 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
       inbox: bundle.inbox.length,
       studyItems: bundle.studyItems.length,
       reviews: bundle.reviews.length,
+      vocabularyItems: bundle.vocabularyItems.length,
+      sentenceVocabulary: bundle.sentenceVocabulary.length,
+      kanji: bundle.kanji.length,
+      vocabularyKanji: bundle.vocabularyKanji.length,
     },
     books: bundle.books,
     sentences: bundle.sentences,
@@ -48,6 +60,10 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
     inbox: bundle.inbox,
     studyItems: bundle.studyItems,
     reviews: bundle.reviews,
+    vocabularyItems: bundle.vocabularyItems,
+    sentenceVocabulary: bundle.sentenceVocabulary,
+    kanji: bundle.kanji,
+    vocabularyKanji: bundle.vocabularyKanji,
     settings: bundle.settings,
   };
   const checksum = hashString(
@@ -111,6 +127,20 @@ export function filterBackupForBook(
   const reviews = payload.reviews.filter((item) =>
     studyItemIds.has(item.studyItemId),
   );
+  const sentenceVocabulary = payload.sentenceVocabulary.filter((item) =>
+    sentenceIds.has(item.sentenceId),
+  );
+  const vocabularyItemIds = new Set(
+    sentenceVocabulary.map((item) => item.vocabularyItemId),
+  );
+  const vocabularyItems = payload.vocabularyItems.filter((item) =>
+    vocabularyItemIds.has(item.id),
+  );
+  const vocabularyKanji = payload.vocabularyKanji.filter((item) =>
+    vocabularyItemIds.has(item.vocabularyItemId),
+  );
+  const kanjiIds = new Set(vocabularyKanji.map((item) => item.kanjiId));
+  const kanji = payload.kanji.filter((item) => kanjiIds.has(item.id));
   const bundle = buildBackupPayload({
     books: [book],
     sentences,
@@ -122,6 +152,10 @@ export function filterBackupForBook(
     inbox: [],
     studyItems,
     reviews,
+    vocabularyItems,
+    sentenceVocabulary,
+    kanji,
+    vocabularyKanji,
     settings: payload.settings,
   });
   return bundle;

@@ -238,55 +238,10 @@ export const reviewSchema = z.object({
   errorClassification: errorClassificationSchema.optional(),
 });
 
-export const backupSchema = z.object({
-  formatVersion: z.literal(BACKUP_FORMAT_VERSION),
-  appVersion: z.string(),
-  exportedAt: z.string(),
-  checksum: z.string().optional(),
-  counts: z.object({
-    books: z.number(),
-    sentences: z.number(),
-    bookSentences: z.number(),
-    analyses: z.number(),
-    importBatches: z.number(),
-    inbox: z.number(),
-    studyItems: z.number(),
-    reviews: z.number(),
-  }),
-  books: z.array(bookSchema),
-  sentences: z.array(sentenceSchema),
-  bookSentences: z.array(bookSentenceSchema),
-  analyses: z.array(sentenceAnalysisSchema),
-  importBatches: z.array(importBatchSchema),
-  inbox: z.array(inboxMembershipSchema),
-  studyItems: z.array(studyItemSchema),
-  reviews: z.array(reviewSchema),
-  settings: settingsSchema,
-});
-
-export type BackupPayload = z.infer<typeof backupSchema>;
-
-// ---------------------------------------------------------------------------
-// Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive.
-// studyItems/reviews are part of backupSchema (Phase 4 gives them real UI
-// writes); sources/vocabularyItems/sentenceVocabulary/kanji/vocabularyKanji
-// remain excluded until something writes to them.
-// ---------------------------------------------------------------------------
-
-export const sourceTypeSchema = z.enum(['satori', 'youtube', 'podcast', 'manual', 'other']);
-
-export const sourceSchema = z.object({
-  id: z.string(),
-  title: z.string().min(1),
-  type: sourceTypeSchema,
-  creator: z.string().optional(),
-  url: z.string().optional(),
-  externalId: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
+// Moved ahead of backupSchema (which now references them) — const bindings
+// can't be forward-referenced across a module's top-level evaluation order,
+// same reason fsrsStateSchema/studyItemSchema/reviewSchema were reordered in
+// Phase 4.
 export const vocabularyItemSchema = z.object({
   id: z.string(),
   expression: z.string().min(1),
@@ -336,3 +291,66 @@ export const vocabularyKanjiSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+export const backupSchema = z.object({
+  formatVersion: z.literal(BACKUP_FORMAT_VERSION),
+  appVersion: z.string(),
+  exportedAt: z.string(),
+  checksum: z.string().optional(),
+  counts: z.object({
+    books: z.number(),
+    sentences: z.number(),
+    bookSentences: z.number(),
+    analyses: z.number(),
+    importBatches: z.number(),
+    inbox: z.number(),
+    studyItems: z.number(),
+    reviews: z.number(),
+    // .default(0)/.default([]) below (unlike studyItems/reviews above, which
+    // aren't defaulted): backups exported before this change won't have
+    // these keys at all, and without a default, restoring one would fail
+    // safeParse outright instead of just importing zero rows for these
+    // tables.
+    vocabularyItems: z.number().default(0),
+    sentenceVocabulary: z.number().default(0),
+    kanji: z.number().default(0),
+    vocabularyKanji: z.number().default(0),
+  }),
+  books: z.array(bookSchema),
+  sentences: z.array(sentenceSchema),
+  bookSentences: z.array(bookSentenceSchema),
+  analyses: z.array(sentenceAnalysisSchema),
+  importBatches: z.array(importBatchSchema),
+  inbox: z.array(inboxMembershipSchema),
+  studyItems: z.array(studyItemSchema),
+  reviews: z.array(reviewSchema),
+  vocabularyItems: z.array(vocabularyItemSchema).default([]),
+  sentenceVocabulary: z.array(sentenceVocabularySchema).default([]),
+  kanji: z.array(kanjiSchema).default([]),
+  vocabularyKanji: z.array(vocabularyKanjiSchema).default([]),
+  settings: settingsSchema,
+});
+
+export type BackupPayload = z.infer<typeof backupSchema>;
+
+// ---------------------------------------------------------------------------
+// Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive.
+// studyItems/reviews (Phase 4) and vocabularyItems/sentenceVocabulary/kanji/
+// vocabularyKanji (Phase 5) are part of backupSchema now that they carry real
+// UI-written data. sources remains excluded — still nothing writes to it.
+// ---------------------------------------------------------------------------
+
+export const sourceTypeSchema = z.enum(['satori', 'youtube', 'podcast', 'manual', 'other']);
+
+export const sourceSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  type: sourceTypeSchema,
+  creator: z.string().optional(),
+  url: z.string().optional(),
+  externalId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+

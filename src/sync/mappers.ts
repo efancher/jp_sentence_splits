@@ -3,11 +3,15 @@ import type {
   BookSentence,
   ImportBatch,
   InboxMembership,
+  Kanji,
   Review,
   Sentence,
   SentenceAnalysis,
   SentenceAudio,
+  SentenceVocabulary,
   StudyItem,
+  VocabularyItem,
+  VocabularyKanji,
 } from '../domain/types';
 import type { SyncEntity } from './types';
 
@@ -20,7 +24,11 @@ export type LocalSyncPayload =
   | InboxMembership
   | ReferenceAudioLocal
   | StudyItem
-  | Review;
+  | Review
+  | VocabularyItem
+  | SentenceVocabulary
+  | Kanji
+  | VocabularyKanji;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -397,6 +405,138 @@ export function remoteToReview(row: Record<string, unknown>): Review {
   };
 }
 
+export function vocabularyItemToRemote(
+  item: VocabularyItem,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: item.id,
+    owner_id: ownerId,
+    expression: item.expression,
+    reading: item.reading,
+    meaning: item.meaning,
+    part_of_speech: item.partOfSpeech ?? null,
+    notes: item.notes ?? null,
+    external_id: item.externalId ?? null,
+    created_at: item.createdAt,
+    updated_at: item.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToVocabularyItem(
+  row: Record<string, unknown>,
+): VocabularyItem {
+  return {
+    id: String(row.id),
+    expression: String(row.expression),
+    reading: String(row.reading),
+    meaning: String(row.meaning),
+    partOfSpeech: (row.part_of_speech as string | null) ?? undefined,
+    notes: (row.notes as string | null) ?? undefined,
+    externalId: (row.external_id as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function sentenceVocabularyToRemote(
+  link: SentenceVocabulary,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: link.id,
+    owner_id: ownerId,
+    sentence_id: link.sentenceId,
+    vocabulary_item_id: link.vocabularyItemId,
+    chunk_id: link.chunkId ?? null,
+    created_at: link.createdAt,
+    updated_at: link.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSentenceVocabulary(
+  row: Record<string, unknown>,
+): SentenceVocabulary {
+  return {
+    id: String(row.id),
+    sentenceId: String(row.sentence_id),
+    vocabularyItemId: String(row.vocabulary_item_id),
+    chunkId: (row.chunk_id as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function kanjiToRemote(kanji: Kanji, ownerId: string, version: number) {
+  return {
+    id: kanji.id,
+    owner_id: ownerId,
+    character: kanji.character,
+    meanings: kanji.meanings,
+    onyomi: kanji.onyomi,
+    kunyomi: kanji.kunyomi,
+    nanori: kanji.nanori,
+    notes: kanji.notes ?? null,
+    external_id: kanji.externalId ?? null,
+    created_at: kanji.createdAt,
+    updated_at: kanji.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToKanji(row: Record<string, unknown>): Kanji {
+  return {
+    id: String(row.id),
+    character: String(row.character),
+    meanings: (row.meanings as string[] | null) ?? [],
+    onyomi: (row.onyomi as string[] | null) ?? [],
+    kunyomi: (row.kunyomi as string[] | null) ?? [],
+    nanori: (row.nanori as string[] | null) ?? [],
+    notes: (row.notes as string | null) ?? undefined,
+    externalId: (row.external_id as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function vocabularyKanjiToRemote(
+  link: VocabularyKanji,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: link.id,
+    owner_id: ownerId,
+    vocabulary_item_id: link.vocabularyItemId,
+    kanji_id: link.kanjiId,
+    position_in_word: link.positionInWord,
+    created_at: link.createdAt,
+    updated_at: link.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToVocabularyKanji(
+  row: Record<string, unknown>,
+): VocabularyKanji {
+  return {
+    id: String(row.id),
+    vocabularyItemId: String(row.vocabulary_item_id),
+    kanjiId: String(row.kanji_id),
+    positionInWord: Number(row.position_in_word),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -426,6 +566,22 @@ export function toRemoteRow(
       return studyItemToRemote(payload as StudyItem, ownerId, version);
     case 'reviews':
       return reviewToRemote(payload as Review, ownerId, version);
+    case 'vocabulary_items':
+      return vocabularyItemToRemote(payload as VocabularyItem, ownerId, version);
+    case 'sentence_vocabulary':
+      return sentenceVocabularyToRemote(
+        payload as SentenceVocabulary,
+        ownerId,
+        version,
+      );
+    case 'kanji':
+      return kanjiToRemote(payload as Kanji, ownerId, version);
+    case 'vocabulary_kanji':
+      return vocabularyKanjiToRemote(
+        payload as VocabularyKanji,
+        ownerId,
+        version,
+      );
   }
 }
 

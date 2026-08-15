@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDb, resetDbForTests } from '../src/db/database';
-import { createBook, saveAnalysis } from '../src/db/repository';
+import {
+  createBook,
+  ensureKanji,
+  ensureVocabularyItem,
+  materializeVocabularySelections,
+  saveAnalysis,
+} from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import {
   addConflict,
@@ -406,5 +412,81 @@ describe('sync mappers', () => {
     const local = remoteToBook(remote);
     expect(local.title).toBe('Mapper book');
     expect(local.notes).toBe('n');
+  });
+
+  it('round-trips a vocabulary item through remote shape', async () => {
+    const { vocabularyItemToRemote, remoteToVocabularyItem } = await import(
+      '../src/sync/mappers'
+    );
+    const item = await ensureVocabularyItem('大学', 'だいがく', {
+      meaning: 'university',
+      partOfSpeech: 'noun',
+    });
+    const remote = vocabularyItemToRemote(item, 'user-1', 2);
+    expect(remote.owner_id).toBe('user-1');
+    expect(remote.expression).toBe('大学');
+    const local = remoteToVocabularyItem(remote);
+    expect(local.expression).toBe('大学');
+    expect(local.reading).toBe('だいがく');
+    expect(local.meaning).toBe('university');
+    expect(local.partOfSpeech).toBe('noun');
+  });
+
+  it('round-trips a kanji through remote shape', async () => {
+    const { kanjiToRemote, remoteToKanji } = await import('../src/sync/mappers');
+    const kanji = await ensureKanji('大');
+    const remote = kanjiToRemote(
+      { ...kanji, meanings: ['big'], onyomi: ['ダイ'], kunyomi: ['おお'] },
+      'user-1',
+      1,
+    );
+    const local = remoteToKanji(remote);
+    expect(local.character).toBe('大');
+    expect(local.meanings).toEqual(['big']);
+    expect(local.onyomi).toEqual(['ダイ']);
+    expect(local.kunyomi).toEqual(['おお']);
+  });
+
+  it('round-trips a sentence_vocabulary link through remote shape', async () => {
+    const { sentenceVocabularyToRemote, remoteToSentenceVocabulary } =
+      await import('../src/sync/mappers');
+    await materializeVocabularySelections('sent-1', [
+      {
+        id: 'vsel-1',
+        surface: '大学',
+        start: 0,
+        end: 2,
+        expression: '大学',
+        reading: 'だいがく',
+        source: 'manual',
+      },
+    ]);
+    const link = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .first();
+    const remote = sentenceVocabularyToRemote(link!, 'user-1', 1);
+    expect(remote.sentence_id).toBe('sent-1');
+    const local = remoteToSentenceVocabulary(remote);
+    expect(local.sentenceId).toBe('sent-1');
+    expect(local.vocabularyItemId).toBe(link!.vocabularyItemId);
+  });
+
+  it('round-trips a vocabulary_kanji link through remote shape', async () => {
+    const { vocabularyKanjiToRemote, remoteToVocabularyKanji } = await import(
+      '../src/sync/mappers'
+    );
+    const item = await ensureVocabularyItem('大学', 'だいがく');
+    const link = await getDb()
+      .vocabularyKanji.where('vocabularyItemId')
+      .equals(item.id)
+      .first();
+    const remote = vocabularyKanjiToRemote(link!, 'user-1', 1);
+    expect(remote.vocabulary_item_id).toBe(item.id);
+    expect(remote.position_in_word).toBe(link!.positionInWord);
+    const local = remoteToVocabularyKanji(remote);
+    expect(local.vocabularyItemId).toBe(item.id);
+    expect(local.kanjiId).toBe(link!.kanjiId);
+    expect(local.positionInWord).toBe(link!.positionInWord);
   });
 });

@@ -11,6 +11,7 @@ import { VocabularyPicker } from '../components/VocabularyPicker';
 import { readSettings } from '../db/database';
 import {
   getDb,
+  materializeVocabularySelections,
   saveAnalysis,
   setBookSentenceStatus,
 } from '../db/repository';
@@ -388,6 +389,7 @@ export function AnalyzePage() {
               reviewStatus: payload.reviewStatus,
               selections: payload.selections,
             });
+            await materializeVocabularySelections(sentenceId, payload.selections);
             if (next) {
               navigate(`/books/${bookId}/analyze/${next.sentenceId}`);
             }

@@ -65,6 +65,16 @@ const ShadowPage = lazy(() =>
     default: module.ShadowPage,
   })),
 );
+const VocabularyListPage = lazy(() =>
+  import('./pages/VocabularyListPage').then((module) => ({
+    default: module.VocabularyListPage,
+  })),
+);
+const KanjiDetailPage = lazy(() =>
+  import('./pages/KanjiDetailPage').then((module) => ({
+    default: module.KanjiDetailPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({
     default: module.SettingsPage,
@@ -84,6 +94,8 @@ export default function App() {
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="review" element={<ReviewPage />} />
+            <Route path="vocabulary" element={<VocabularyListPage />} />
+            <Route path="kanji/:character" element={<KanjiDetailPage />} />
             <Route
               path="import-batches/:batchId"
               element={<ImportBatchPage />}
