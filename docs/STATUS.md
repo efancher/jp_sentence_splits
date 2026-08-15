@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.4).
+Last updated: 2026-08-16 (Phase 7.5).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1184,6 +1184,84 @@ test behavior changed. `npm run build` green.
 
 No schema/migration changes — `listening` reuses the existing
 `SentenceAudio` table and `NativeAudioButton` component as-is.
+
+**Not yet manually verified in a real browser** — same caveat as every
+prior UI-facing phase.
+
+## Phase 7.5 — Mnemonic gating & assistance tracking: done
+
+The last piece of the original "Phase 7.4" bundle, now that 7.4 shipped a
+real optional-help affordance (audio replay) for assistance to attach to.
+Two related but separable changes, shipped together since both are small
+refinements to already-existing cards rather than new review experiences.
+
+Added:
+- `src/db/repository.ts` — `computeVocabularyContextDiversity(vocabularyItemId)`:
+  the Dexie-querying half of maturity computation (fetches
+  `sentence_vocabulary` → distinct sentence ids → `book_sentences` →
+  distinct book ids → `books`, builds the `sourceKeysBySentenceId` map
+  `src/lib/maturity.ts`'s pure `computeContextDiversity` needs), kept
+  separate from that pure ladder logic per Phase 7.1's original design.
+- `src/pages/ReviewPage.tsx` — on a vocabulary-target card
+  (`reading_retrieval`/`cloze`), a new effect computes the word's maturity
+  (`computeVocabularyContextDiversity` + `computeMaturityLevel`, using the
+  *current card's own* `fsrsState` for the "long-interval success"
+  evidence, not an aggregate across dimensions — per-dimension memory
+  strength decides its own scaffolding, matching brief §4's philosophy).
+  If `fragile`, `VocabularyItem.notes` (the mnemonic) auto-shows; otherwise
+  it's still available behind a "Show mnemonic" button. Wrapped in
+  try/catch (a soft, best-effort UI enhancement — if the query fails
+  because the page unmounted mid-query, there's nothing to recover, and an
+  uncaught rejection there was actually causing test-suite noise, caught
+  and fixed during this pass, see below).
+- `recordReview` (`src/db/repository.ts`) gained an optional `assistance?:
+  ReviewAssistance[]` parameter, now actually populated — the first writer
+  of the field Phase 7.1 reserved on `Review`.
+- `src/components/NativeAudioButton.tsx` — new optional `onPlay?: () =>
+  void` prop, called each time playback actually starts (not on stop).
+  Additive, backward-compatible — `PracticePage`/`ShadowPage` (its other
+  callers) are unaffected since they don't pass it.
+- `ReviewPage`'s new `assistanceUsed` state (a `Set<ReviewAssistance>`,
+  reset per card) accumulates flags from two sources so far: opening the
+  mnemonic (`mnemonic_shown`) and replaying audio on a listening card
+  after the first play (`audio_replayed` — the *first* play is the
+  exercise itself, not assistance, tracked via a `playCountRef` in the new
+  `AudioComprehensionCard` replay handler). Passed to `recordReview` on
+  rate; omitted (not an empty array) when nothing was used, so the vast
+  majority of reviews stay exactly as compact as before.
+- Tests: `tests/data.test.ts` — `computeVocabularyContextDiversity`
+  coverage (no links, single-source, two-distinct-sources). `tests/reviewPage.test.tsx`
+  — mnemonic auto-show (fragile) vs. button-gated (multi-source,
+  non-fragile) with `mnemonic_shown` assistance recorded on open; audio
+  replay recording `audio_replayed` only on a genuine second play, not the
+  first (using a `MockAudio` fake, mirroring `tests/nativeAudio.test.ts`'s
+  own pattern, since real jsdom `HTMLMediaElement` playback isn't
+  reliable) — plus a new shared `nativeAudioController.stop()` reset in
+  this test file's `afterEach`, needed once a test actually started real
+  (mocked) playback: the controller is a module-level singleton, and a
+  "still playing" state was leaking from one test into the next.
+
+**Real bug found and fixed during this pass, not present before it**: the
+mnemonic-maturity effect's async IIFE had no error handling — in the test
+suite, unmounting the page mid-query (between tests) turned a routine
+`DatabaseClosedError` into an unhandled promise rejection. Fixed with a
+try/catch around the query (documented above); flagging here since it's
+exactly the class of async-effect-vs-teardown race the Phase 6
+test-flakiness fix already dealt with once for a different effect — this
+is a second, independent instance, not a regression of that fix.
+
+**Deliberately not done yet**: `comprehension`/`reading_in_context`
+differentiation (still the same open Phase-4 gap); no other assistance
+flags (`furigana_shown`, `translation_shown`, `chunks_shown`,
+`hint_shown`, `multiple_choice` all remain schema-reserved, unpopulated —
+no card has an affordance for them yet).
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 254
+tests passed (up from 247), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+No schema/migration changes — reuses `Review.assistance` (reserved since
+Phase 7.1) and `VocabularyItem.notes` (existing field) as-is.
 
 **Not yet manually verified in a real browser** — same caveat as every
 prior UI-facing phase.

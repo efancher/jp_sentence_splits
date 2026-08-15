@@ -5,11 +5,14 @@ import { useNativeAudio } from '../hooks/useNativeAudio';
 interface NativeAudioButtonProps {
   audio: SentenceAudio;
   displayLabel?: string;
+  /** Called each time playback actually starts (not on stop) — e.g. for assistance tracking. */
+  onPlay?: () => void;
 }
 
 export function NativeAudioButton({
   audio,
   displayLabel = 'Native',
+  onPlay,
 }: NativeAudioButtonProps) {
   const native = useNativeAudio();
   const speech = useJapaneseSpeech();
@@ -31,6 +34,7 @@ export function NativeAudioButton({
           return;
         }
         speech.stop();
+        onPlay?.();
         void native.play(audio);
       }}
     >

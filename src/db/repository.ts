@@ -14,6 +14,7 @@ import type {
   InitialOrderMode,
   Kanji,
   Review,
+  ReviewAssistance,
   ReviewRating,
   Sentence,
   SentenceAudio,
@@ -37,6 +38,7 @@ import {
 } from '../lib/csvImport';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { isHanCharacter } from '../lib/kanji';
+import { computeContextDiversity, type ContextDiversity } from '../lib/maturity';
 import { nowIso } from '../lib/normalize';
 import { createInitialFsrsState, scheduleReview } from '../lib/scheduling';
 import {
@@ -1538,6 +1540,7 @@ export async function recordReview(input: {
   expectedAnswer?: string;
   elapsedMs?: number;
   errorClassification?: ErrorClassification;
+  assistance?: ReviewAssistance[];
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -1558,6 +1561,7 @@ export async function recordReview(input: {
     expectedAnswer: input.expectedAnswer,
     elapsedMs: input.elapsedMs,
     errorClassification: input.errorClassification,
+    assistance: input.assistance,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -1848,6 +1852,47 @@ export async function getVocabularyTargetCandidates(
     candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm });
   });
   return candidates;
+}
+
+/**
+ * Fetches the data `computeContextDiversity` (src/lib/maturity.ts) needs
+ * for one vocabulary item and calls it — the Dexie-querying half of
+ * maturity computation, kept separate from the pure ladder logic itself
+ * (Phase 7.1). A sentence's "source" is the sourceKey (or id, as a
+ * stand-in) of any Book containing it via `book_sentences`, since Sentence
+ * has no direct link to the `sources` table yet.
+ */
+export async function computeVocabularyContextDiversity(
+  vocabularyItemId: string,
+): Promise<ContextDiversity> {
+  const db = getDb();
+  const links = await db.sentenceVocabulary
+    .where('vocabularyItemId')
+    .equals(vocabularyItemId)
+    .toArray();
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  if (sentenceIds.length === 0) return computeContextDiversity(new Map());
+
+  const memberships = await db.bookSentences
+    .where('sentenceId')
+    .anyOf(sentenceIds)
+    .toArray();
+  const bookIds = [...new Set(memberships.map((item) => item.bookId))];
+  const books = await db.books.bulkGet(bookIds);
+  const sourceKeyByBookId = new Map<string, string>();
+  books.forEach((book, index) => {
+    if (book) sourceKeyByBookId.set(bookIds[index]!, book.sourceKey ?? book.id);
+  });
+
+  const sourceKeysBySentenceId = new Map<string, string[]>();
+  for (const sentenceId of sentenceIds) {
+    const keys = memberships
+      .filter((item) => item.sentenceId === sentenceId)
+      .map((item) => sourceKeyByBookId.get(item.bookId))
+      .filter((key): key is string => Boolean(key));
+    sourceKeysBySentenceId.set(sentenceId, keys);
+  }
+  return computeContextDiversity(sourceKeysBySentenceId);
 }
 
 /** Canonical (unordered) pair ordering so A↔B is never stored twice. */

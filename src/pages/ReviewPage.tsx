@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { VocabChips } from '../components/VocabChips';
 import {
+  computeVocabularyContextDiversity,
   ensureStudyItem,
   ensureVocabularyStudyItem,
   getDb,
@@ -14,6 +15,7 @@ import {
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import type {
+  ReviewAssistance,
   ReviewRating,
   Sentence,
   SentenceAudio,
@@ -21,6 +23,7 @@ import type {
   StudyItem,
   VocabularyItem,
 } from '../domain/types';
+import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -122,6 +125,10 @@ export function ReviewPage() {
   const [revealed, setRevealed] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [mnemonicVisible, setMnemonicVisible] = useState(false);
+  const [assistanceUsed, setAssistanceUsed] = useState<Set<ReviewAssistance>>(
+    () => new Set(),
+  );
 
   const scope = useLiveQuery(async () => {
     const db = getDb();
@@ -374,13 +381,54 @@ export function ReviewPage() {
 
   useEffect(() => {
     setRevealed(false);
+    setMnemonicVisible(false);
+    setAssistanceUsed(new Set());
   }, [current?.studyItem.id]);
+
+  // Mnemonic scaffolding (Phase 7.5, brief §7/§6): shown unprompted only
+  // for a vocabulary-target card whose own dimension is still fragile
+  // (few contexts, no long-interval success yet) — otherwise it's still
+  // available, just behind a button, not auto-shown. Computed from live
+  // data each time the card changes rather than cached on the card, since
+  // maturity can change between reviews.
+  useEffect(() => {
+    const target = current?.target;
+    const fsrsState = current?.studyItem.fsrsState;
+    if (!target || !fsrsState) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const diversity = await computeVocabularyContextDiversity(target.vocabularyItem.id);
+        const level = computeMaturityLevel(diversity, {
+          hasLongIntervalSuccess:
+            fsrsState.state === 'review' &&
+            fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS,
+        });
+        if (!cancelled && level === 'fragile') setMnemonicVisible(true);
+      } catch {
+        // Best-effort UI enhancement (e.g. the db closed mid-query because
+        // the page unmounted) — nothing to recover, mnemonic just stays
+        // gated behind its button instead of auto-showing.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [current?.studyItem.id, current?.target]);
+
+  function markAssistance(kind: ReviewAssistance) {
+    setAssistanceUsed((current) => (current.has(kind) ? current : new Set(current).add(kind)));
+  }
 
   async function handleRate(rating: ReviewRating) {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
-      await recordReview({ studyItemId: current.studyItem.id, rating });
+      await recordReview({
+        studyItemId: current.studyItem.id,
+        rating,
+        assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
+      });
       setQueue((q) => q.slice(1));
     } finally {
       setSubmitting(false);
@@ -444,6 +492,11 @@ export function ReviewPage() {
                 surfaceForm={current.target.surfaceForm}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+                mnemonicVisible={mnemonicVisible}
+                onShowMnemonic={() => {
+                  setMnemonicVisible(true);
+                  markAssistance('mnemonic_shown');
+                }}
               />
             ) : current.audio ? (
               <AudioComprehensionCard
@@ -451,6 +504,7 @@ export function ReviewPage() {
                 audio={current.audio}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+                onReplay={() => markAssistance('audio_replayed')}
               />
             ) : (
               <>
@@ -503,6 +557,8 @@ function VocabularyTargetCard({
   surfaceForm,
   revealed,
   onReveal,
+  mnemonicVisible,
+  onShowMnemonic,
 }: {
   activityType: StudyActivityType;
   sentence: Sentence;
@@ -510,6 +566,8 @@ function VocabularyTargetCard({
   surfaceForm: string;
   revealed: boolean;
   onReveal: () => void;
+  mnemonicVisible: boolean;
+  onShowMnemonic: () => void;
 }) {
   const isCloze = activityType === 'cloze';
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
@@ -520,6 +578,15 @@ function VocabularyTargetCard({
         <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
         {after}
       </div>
+      {!revealed && vocabularyItem.notes ? (
+        mnemonicVisible ? (
+          <div className="muted">💡 {vocabularyItem.notes}</div>
+        ) : (
+          <button type="button" onClick={onShowMnemonic}>
+            Show mnemonic
+          </button>
+        )
+      ) : null}
       {!revealed ? (
         <button type="button" onClick={onReveal}>
           {isCloze ? 'Reveal word' : 'Reveal reading'}
@@ -547,15 +614,26 @@ function AudioComprehensionCard({
   audio,
   revealed,
   onReveal,
+  onReplay,
 }: {
   sentence: Sentence;
   audio: SentenceAudio;
   revealed: boolean;
   onReveal: () => void;
+  /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
+  onReplay: () => void;
 }) {
+  const playCountRef = useRef(0);
   return (
     <>
-      <NativeAudioButton audio={audio} displayLabel="Play audio" />
+      <NativeAudioButton
+        audio={audio}
+        displayLabel="Play audio"
+        onPlay={() => {
+          playCountRef.current += 1;
+          if (playCountRef.current > 1) onReplay();
+        }}
+      />
       {!revealed ? (
         <button type="button" onClick={onReveal}>
           Reveal

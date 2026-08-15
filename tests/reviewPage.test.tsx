@@ -1,13 +1,33 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
+import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
+
+// Minimal fake <audio> so listening-card tests can drive playback/`onended`
+// deterministically — mirrors tests/nativeAudio.test.ts's own MockAudio,
+// since real jsdom HTMLMediaElement playback isn't reliable.
+class MockAudio {
+  static instances: MockAudio[] = [];
+  src: string;
+  onended: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  play = vi.fn(async () => undefined);
+  pause = vi.fn();
+  removeAttribute = vi.fn();
+  load = vi.fn();
+
+  constructor(src: string) {
+    this.src = src;
+    MockAudio.instances.push(this);
+  }
+}
 
 async function seedBookWithSentence() {
   const db = getDb();
@@ -45,6 +65,39 @@ async function seedBookWithSentence() {
   });
 }
 
+/**
+ * Seeds far-future comprehension/reading_in_context study items for
+ * `sentenceId` so those two unconditional activity types never occupy the
+ * queue — used by tests that want to isolate a conditional card type
+ * (vocabulary-target or listening) instead.
+ */
+async function suppressUnconditionalSentenceActivityTypes(sentenceId: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const farFutureFsrsState = {
+    due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    stability: 1,
+    difficulty: 1,
+    elapsedDays: 0,
+    scheduledDays: 0,
+    learningSteps: 0,
+    reps: 1,
+    lapses: 0,
+    state: 'review' as const,
+  };
+  for (const activityType of ['comprehension', 'reading_in_context']) {
+    await db.studyItems.add({
+      id: `si-${sentenceId}-${activityType}`,
+      subjectType: 'sentence',
+      subjectId: sentenceId,
+      activityType,
+      fsrsState: farFutureFsrsState,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 function renderReviewPage(path: string, routePath: string) {
   return render(
     withAppProviders(
@@ -62,6 +115,12 @@ describe('ReviewPage', () => {
     resetDbForTests(`review-page-${createId('db')}`);
     await ensureSettings();
   });
+
+  // nativeAudioController is a module-level singleton, shared across every
+  // test in this file — reset it so a still-"playing" state from one
+  // listening-card test can't leak into the next and make its audio button
+  // render as already-active.
+  afterEach(() => nativeAudioController.stop());
 
   it('lazily seeds a study item and shows the sentence behind a reveal', async () => {
     await seedBookWithSentence();
@@ -165,31 +224,9 @@ describe('ReviewPage', () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
-    const notDueYet = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const farFutureFsrsState = {
-      due: notDueYet,
-      stability: 1,
-      difficulty: 1,
-      elapsedDays: 0,
-      scheduledDays: 0,
-      learningSteps: 0,
-      reps: 1,
-      lapses: 0,
-      state: 'review' as const,
-    };
     // Keep the two sentence-subject activity types out of the queue so only
     // the two vocabulary-subject cards seed/render in this test.
-    for (const activityType of ['comprehension', 'reading_in_context']) {
-      await db.studyItems.add({
-        id: `si-${activityType}`,
-        subjectType: 'sentence',
-        subjectId: 'sent-1',
-        activityType,
-        fsrsState: farFutureFsrsState,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
 
     await db.vocabularyItems.add({
       id: 'vocab-1',
@@ -248,35 +285,116 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('auto-shows the mnemonic for a fragile (single-context) vocabulary item (Phase 7.5)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      notes: 'Sounds like "yomu" — think "you, move (your eyes)".',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    // Async maturity check (computeVocabularyContextDiversity) — retry
+    // until it resolves and flips mnemonicVisible, rather than asserting
+    // on the very first render.
+    await screen.findByText('💡 Sounds like "yomu" — think "you, move (your eyes)".');
+    expect(
+      screen.queryByRole('button', { name: 'Show mnemonic' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('gates the mnemonic behind a button for a non-fragile (multi-source) vocabulary item, and records mnemonic_shown when opened (Phase 7.5)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      notes: 'Sounds like "yomu".',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // A second source (a different book) linking the same vocabulary item —
+    // pushes context diversity to "generalized", so the mnemonic no longer
+    // auto-shows. No sentences row needed for sent-2: diversity computation
+    // only reads sentence_vocabulary + book_sentences + books.
+    await db.books.add({
+      id: 'book-2',
+      title: 'Another Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-2',
+      bookId: 'book-2',
+      sentenceId: 'sent-2',
+      position: 0,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-2',
+      sentenceId: 'sent-2',
+      vocabularyItemId: 'vocab-1',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    expect(screen.queryByText('💡 Sounds like "yomu".')).not.toBeInTheDocument();
+    const showButton = await screen.findByRole('button', { name: 'Show mnemonic' });
+
+    await user.click(showButton);
+    expect(screen.getByText('💡 Sounds like "yomu".')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal reading' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const review = (await db.reviews.toArray())[0];
+      expect(review?.assistance).toEqual(['mnemonic_shown']);
+    });
+  });
+
   it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
-    const notDueYet = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const farFutureFsrsState = {
-      due: notDueYet,
-      stability: 1,
-      difficulty: 1,
-      elapsedDays: 0,
-      scheduledDays: 0,
-      learningSteps: 0,
-      reps: 1,
-      lapses: 0,
-      state: 'review' as const,
-    };
     // Keep the two unconditional sentence-subject activity types out of the
     // queue so only the audio-eligible listening card seeds/renders here.
-    for (const activityType of ['comprehension', 'reading_in_context']) {
-      await db.studyItems.add({
-        id: `si-${activityType}`,
-        subjectType: 'sentence',
-        subjectId: 'sent-1',
-        activityType,
-        fsrsState: farFutureFsrsState,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
 
     await db.sentenceAudio.add({
       id: 'audio-1',
@@ -317,6 +435,94 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(1);
     });
+  });
+
+  it('records audio_replayed assistance only on a genuine replay, not the first play (Phase 7.5)', async () => {
+    vi.stubGlobal('Audio', MockAudio);
+    MockAudio.instances = [];
+    try {
+      await seedBookWithSentence();
+      const db = getDb();
+      const now = new Date().toISOString();
+      await suppressUnconditionalSentenceActivityTypes('sent-1');
+      await db.sentenceAudio.add({
+        id: 'audio-1',
+        sentenceId: 'sent-1',
+        sourceId: 'source-1',
+        sourceSentenceId: 'src-sent-1',
+        sourceTitle: 'Test Source',
+        mimeType: 'audio/mp3',
+        durationMs: 1500,
+        startMs: 0,
+        endMs: 1500,
+        blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+        importedAt: now,
+      });
+
+      const user = userEvent.setup();
+      renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+      const playButtonName = /Play native sentence recording/;
+      await user.click(await screen.findByRole('button', { name: playButtonName }));
+      expect(MockAudio.instances).toHaveLength(1);
+
+      // Simulate playback finishing, then play again — a genuine replay.
+      act(() => {
+        MockAudio.instances[0]!.onended?.();
+      });
+      await user.click(await screen.findByRole('button', { name: playButtonName }));
+      expect(MockAudio.instances).toHaveLength(2);
+
+      await user.click(screen.getByRole('button', { name: 'Reveal' }));
+      await user.click(screen.getByRole('button', { name: 'Good' }));
+
+      await waitFor(async () => {
+        const review = (await db.reviews.toArray())[0];
+        expect(review?.assistance).toEqual(['audio_replayed']);
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not record audio_replayed assistance for just one play', async () => {
+    vi.stubGlobal('Audio', MockAudio);
+    MockAudio.instances = [];
+    try {
+      await seedBookWithSentence();
+      const db = getDb();
+      const now = new Date().toISOString();
+      await suppressUnconditionalSentenceActivityTypes('sent-1');
+      await db.sentenceAudio.add({
+        id: 'audio-1',
+        sentenceId: 'sent-1',
+        sourceId: 'source-1',
+        sourceSentenceId: 'src-sent-1',
+        sourceTitle: 'Test Source',
+        mimeType: 'audio/mp3',
+        durationMs: 1500,
+        startMs: 0,
+        endMs: 1500,
+        blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+        importedAt: now,
+      });
+
+      const user = userEvent.setup();
+      renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+      await user.click(
+        await screen.findByRole('button', { name: /Play native sentence recording/ }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Reveal' }));
+      await user.click(screen.getByRole('button', { name: 'Good' }));
+
+      await waitFor(async () => {
+        const review = (await db.reviews.toArray())[0];
+        expect(review?.assistance).toBeUndefined();
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not seed a listening card for a sentence with no reference audio', async () => {

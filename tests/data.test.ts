@@ -14,6 +14,7 @@ import {
   ensureVocabularyConfusion,
   ensureVocabularyItem,
   ensureVocabularyStudyItem,
+  computeVocabularyContextDiversity,
   exportFullBackup,
   getDb,
   getDueStudyItems,
@@ -793,3 +794,91 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     expect(await getVocabularyTargetCandidates([])).toEqual([]);
   });
 });
+
+describe('computeVocabularyContextDiversity (Phase 7.5)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-diversity-${createId('db')}`);
+  });
+
+  it('returns zero counts for a vocabulary item with no sentence links', async () => {
+    const item = await ensureVocabularyItem('読む', 'よむ');
+    expect(await computeVocabularyContextDiversity(item.id)).toEqual({
+      distinctSentenceCount: 0,
+      distinctSourceCount: 0,
+    });
+  });
+
+  it('counts one sentence/one source for a single book, single sentence link', async () => {
+    const item = await ensureVocabularyItem('読む', 'よむ');
+    const book = await createBook({ title: 'Book A' });
+    await getDb().sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: item.id,
+      createdAt: nowIsoForTest(),
+      updatedAt: nowIsoForTest(),
+    });
+    await getDb().bookSentences.add({
+      id: 'bs-1',
+      bookId: book.id,
+      sentenceId: 'sent-1',
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIsoForTest(),
+    });
+
+    expect(await computeVocabularyContextDiversity(item.id)).toEqual({
+      distinctSentenceCount: 1,
+      distinctSourceCount: 1,
+    });
+  });
+
+  it('counts two distinct sources when the same word occurs in sentences from two different books', async () => {
+    const item = await ensureVocabularyItem('読む', 'よむ');
+    const bookA = await createBook({ title: 'Book A' });
+    const bookB = await createBook({ title: 'Book B' });
+    await getDb().sentenceVocabulary.bulkAdd([
+      {
+        id: 'sv-1',
+        sentenceId: 'sent-1',
+        vocabularyItemId: item.id,
+        createdAt: nowIsoForTest(),
+        updatedAt: nowIsoForTest(),
+      },
+      {
+        id: 'sv-2',
+        sentenceId: 'sent-2',
+        vocabularyItemId: item.id,
+        createdAt: nowIsoForTest(),
+        updatedAt: nowIsoForTest(),
+      },
+    ]);
+    await getDb().bookSentences.bulkAdd([
+      {
+        id: 'bs-1',
+        bookId: bookA.id,
+        sentenceId: 'sent-1',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+      {
+        id: 'bs-2',
+        bookId: bookB.id,
+        sentenceId: 'sent-2',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+    ]);
+
+    expect(await computeVocabularyContextDiversity(item.id)).toEqual({
+      distinctSentenceCount: 2,
+      distinctSourceCount: 2,
+    });
+  });
+});
+
+function nowIsoForTest(): string {
+  return new Date().toISOString();
+}
