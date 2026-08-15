@@ -274,18 +274,67 @@ async function pullChanges(): Promise<void> {
     if (error) throw new Error(error.message);
     if (!events?.length) break;
 
-    for (const event of events) {
-      await applyRemoteEvent(
-        event.entity as SyncEntity,
-        String(event.record_id),
-        String(event.op),
-        Number(event.version),
-      );
-      cursor = Number(event.id);
-    }
+    await applyRemoteEventsBatch(events);
+    cursor = Number(events[events.length - 1]!.id);
+
     await updateSyncMeta({ lastPullEventId: cursor });
     keepGoing = events.length === PULL_PAGE_SIZE;
   }
+}
+
+/**
+ * Local-only checks deciding whether a remote sync_events row is worth
+ * fetching at all — split out of applyRemoteEvent so pullChanges can run
+ * these (cheap Dexie reads) before doing any network fetch, and batch the
+ * fetch for everything that survives. `pending` can be pre-fetched once per
+ * page instead of once per event. Exported for unit tests.
+ */
+export async function shouldApplyRemoteEvent(
+  entity: SyncEntity,
+  recordId: string,
+  op: string,
+  version: number,
+  pending?: SyncQueueItem[],
+): Promise<boolean> {
+  const pendingItems = pending ?? (await listPendingMutations());
+  const hasLocalPending = pendingItems.some(
+    (p) => p.entity === entity && p.recordId === recordId,
+  );
+  if (hasLocalPending) {
+    // Leave for push/conflict handling.
+    return false;
+  }
+
+  if (await hasOpenConflict(entity, recordId)) {
+    // Keep local data until the user resolves Keep local / Keep remote.
+    return false;
+  }
+
+  const localMeta = await getRecordMeta(entity, recordId);
+  if (localMeta && localMeta.version >= version && op !== 'delete') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Decide delete vs. upsert for an already-fetched (possibly absent) remote
+ * row. Shared by applyRemoteEvent's single-row fetch and
+ * applyRemoteEventsBatch's batched fetch, so the two paths can't silently
+ * diverge on this decision.
+ */
+async function applyFetchedRemote(
+  entity: SyncEntity,
+  recordId: string,
+  version: number,
+  remote: Record<string, unknown> | null | undefined,
+): Promise<void> {
+  if (!remote || remote.deleted_at) {
+    await applyRemoteDelete(entity, recordId, version);
+    return;
+  }
+  await applyRemoteUpsert(entity, remote, version);
 }
 
 /** Apply a remote sync_events row. Exported for unit tests. */
@@ -295,24 +344,7 @@ export async function applyRemoteEvent(
   op: string,
   version: number,
 ): Promise<void> {
-  const pending = await listPendingMutations();
-  const hasLocalPending = pending.some(
-    (p) => p.entity === entity && p.recordId === recordId,
-  );
-  if (hasLocalPending) {
-    // Leave for push/conflict handling.
-    return;
-  }
-
-  if (await hasOpenConflict(entity, recordId)) {
-    // Keep local data until the user resolves Keep local / Keep remote.
-    return;
-  }
-
-  const localMeta = await getRecordMeta(entity, recordId);
-  if (localMeta && localMeta.version >= version && op !== 'delete') {
-    return;
-  }
+  if (!(await shouldApplyRemoteEvent(entity, recordId, op, version))) return;
 
   const supabase = getSupabase();
   if (!supabase) return;
@@ -324,12 +356,79 @@ export async function applyRemoteEvent(
     .maybeSingle();
   if (error) throw new Error(error.message);
 
-  if (!remote || remote.deleted_at) {
-    await applyRemoteDelete(entity, recordId, version);
-    return;
+  await applyFetchedRemote(entity, recordId, version, remote as Record<string, unknown> | null);
+}
+
+/**
+ * Apply a whole page of sync_events rows, batching the remote fetch by
+ * entity (one `.in(idCol, recordIds)` query per entity present in the page)
+ * instead of one query per row. A large one-time backlog (e.g. a bulk
+ * catalog import) can be thousands of rows; fetching each individually is
+ * thousands of sequential round-trips, slow enough on a mobile connection to
+ * look permanently stuck. Preserves applyRemoteEvent's per-event skip
+ * checks and local-write order — see comment below on why grouping by
+ * entity is safe for cross-entity (parent/child) dependencies.
+ */
+async function applyRemoteEventsBatch(
+  events: Array<{
+    id: number | string;
+    entity: string;
+    record_id: unknown;
+    op: string;
+    version: unknown;
+  }>,
+): Promise<void> {
+  const pending = await listPendingMutations();
+
+  type PendingFetch = { entity: SyncEntity; recordId: string; version: number };
+  const toFetch: PendingFetch[] = [];
+  for (const event of events) {
+    const entity = event.entity as SyncEntity;
+    const recordId = String(event.record_id);
+    const op = String(event.op);
+    const version = Number(event.version);
+    if (await shouldApplyRemoteEvent(entity, recordId, op, version, pending)) {
+      toFetch.push({ entity, recordId, version });
+    }
+  }
+  if (!toFetch.length) return;
+
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  // Grouping by entity (rather than fetching in original event order) is
+  // safe for our fixed, type-level dependency graph (kanji/vocabulary_items
+  // before sentence_vocabulary/vocabulary_kanji, study_items before
+  // reviews, etc.): as long as an entity's *first* occurrence in the page
+  // follows real event order (it does — Map preserves insertion order, and
+  // events are processed in ascending id order), every parent-entity event
+  // in the page is applied before any child-entity event, which is at least
+  // as strict as strict chronological order and never looser.
+  const byEntity = new Map<SyncEntity, PendingFetch[]>();
+  for (const item of toFetch) {
+    const list = byEntity.get(item.entity);
+    if (list) list.push(item);
+    else byEntity.set(item.entity, [item]);
   }
 
-  await applyRemoteUpsert(entity, remote as Record<string, unknown>, version);
+  for (const [entity, items] of byEntity) {
+    const idCol = idColumnForEntity(entity);
+    const recordIds = [...new Set(items.map((item) => item.recordId))];
+    const { data: rows, error } = await supabase
+      .from(entity)
+      .select('*')
+      .in(idCol, recordIds);
+    if (error) throw new Error(error.message);
+    const byRecordId = new Map(
+      (rows ?? []).map((row) => [
+        String((row as Record<string, unknown>)[idCol]),
+        row as Record<string, unknown>,
+      ]),
+    );
+    for (const item of items) {
+      await applyFetchedRemote(item.entity, item.recordId, item.version, byRecordId.get(item.recordId));
+    }
+  }
 }
 
 async function applyRemoteDelete(

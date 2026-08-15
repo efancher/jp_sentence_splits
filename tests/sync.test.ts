@@ -152,6 +152,38 @@ describe('sync queue and local-first mutations', () => {
     expect(analysis?.notes).toBe('keep-me');
   });
 
+  it('shouldApplyRemoteEvent skips a record with a still-pending local mutation', async () => {
+    const { shouldApplyRemoteEvent } = await import('../src/sync/engine');
+    await enqueueMutation({
+      entity: 'kanji',
+      recordId: 'kanji_1',
+      operation: 'upsert',
+      expectedVersion: null,
+      payload: { id: 'kanji_1', character: '大' },
+    });
+
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_1', 'upsert', 1)).toBe(false);
+    expect(
+      await shouldApplyRemoteEvent('kanji', 'kanji_other', 'upsert', 1),
+    ).toBe(true);
+  });
+
+  it('shouldApplyRemoteEvent skips a version the local record already has, but not a newer one', async () => {
+    const { shouldApplyRemoteEvent } = await import('../src/sync/engine');
+    await putRecordMeta({
+      entity: 'kanji',
+      recordId: 'kanji_2',
+      version: 5,
+      syncedVersion: 5,
+      updatedAt: new Date().toISOString(),
+    });
+
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'upsert', 5)).toBe(false);
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'upsert', 6)).toBe(true);
+    // A delete always applies regardless of the local version.
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'delete', 5)).toBe(true);
+  });
+
   it('enqueues, retries, and removes queue items', async () => {
     const item = await enqueueMutation({
       entity: 'books',

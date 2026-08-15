@@ -452,9 +452,83 @@ with.
 
 **Important for manual verification**: the WaniKani kanji catalog (2101
 rows) and the one-time Anki vocabulary import (332 items, 500 links)
-already live in Supabase from Phase 2, written before this sync wiring
-existed. Their `sync_events` rows predate a syncing user's cursor, so the
-normal incremental pull will **not** retroactively deliver them — trigger
-the existing "replace local with cloud" settings action once to pull that
-historical data down locally before judging whether `/vocabulary`/
-`/kanji/:character` look populated.
+already live in Supabase from Phase 2. For a device whose sync cursor
+(`lastPullEventId`, local/per-device) is still behind those imports'
+`sync_events` rows (true for any device that hasn't completed a full sync
+cycle since before 2026-08-14), the ordinary incremental pull now delivers
+them correctly — see the pull-performance fix below. A device that *did*
+complete a full sync cycle between 2026-08-14 and this fix landing would
+have silently skipped writing that data locally (its cursor already
+advanced past those `kanji`/`vocabulary_items`/etc. events on code that
+didn't recognize those entities yet) and has no current way to force a
+re-pull — there's no general "replace local with cloud" settings action
+(only a one-time migration-choice modal, gated on `migrationChoice` being
+unset, which won't reappear for an already-migrated account/device). Not
+building a manual resync action now — flagged as a possible follow-up if
+this residual gap actually affects a real device.
+
+### Post-deploy fix: pull hung indefinitely on a large sync_events backlog
+
+Found live, right after this phase's initial deploy: a user's phone
+(iOS Safari PWA, last successful sync 2026-08-01, so its cursor predated
+the 2026-08-14 WaniKani/Anki imports — ~2,900 backlogged `sync_events`
+rows) got stuck at `status: "syncing"` indefinitely, with a stale
+`lastError: "Transaction aborted"` left over from an earlier, different
+failure. Diagnosis: `pendingCount: 0` and a `"Pushing 0 mutations"` log
+line confirmed push had succeeded; nothing further logged after that,
+meaning `pullChanges` was the stuck step.
+
+Root cause: `pullChanges`/`applyRemoteEvent` fetched each changed remote
+row individually (`supabase.from(entity).select('*').eq(idCol,
+recordId).maybeSingle()`) — one network round-trip per `sync_events` row.
+A ~2,900-row backlog is ~2,900 sequential round-trips; slow enough on a
+mobile connection to look permanently stuck, and iOS aggressively
+suspends a backgrounded PWA's JS execution (screen lock, app-switch),
+plausibly freezing the loop mid-page indefinitely. Pre-existing gap, not
+introduced by this phase — just never exercised at this scale before
+(the two one-time production imports are what created a backlog this
+large for a stale device).
+
+Fix (`src/sync/engine.ts`): split the per-event skip checks (pending-
+local-mutation / open-conflict / already-applied-version — all cheap
+local Dexie reads) from the remote fetch. `pullChanges` now calls a new
+`applyRemoteEventsBatch`, which runs the skip checks for a whole page
+first, then groups the events that survive by entity and does one
+`.in(idCol, recordIds)` query per entity present in the page — collapsing
+up to 100 round-trips per page into a handful. `applyRemoteEvent` (the
+single-event path, kept for its existing test and as a public API) and
+the batched path now share one `applyFetchedRemote` decision function
+(delete-vs-upsert), so they can't silently diverge — a real duplication
+risk caught in code review before this fix, along with an unused `op`
+field being threaded through the batch for no reason (both fixed).
+
+Grouping by entity (rather than strict event-id order) is safe for this
+schema's fixed, type-level dependency graph (kanji/vocabulary_items
+before sentence_vocabulary/vocabulary_kanji, study_items before reviews):
+an entity's first occurrence in a page still follows real event order, so
+every parent-entity event in a page is applied before any child-entity
+event — at least as strict as strict chronological order, never looser.
+
+**Test coverage note**: this codebase has no Supabase-mocking test
+harness anywhere (`pullChanges`/`pushMutations`/`applyRemoteEvent` early-
+return in the test environment since `getSupabase()` returns null without
+env vars) — the existing conflict-guard test for `applyRemoteEvent`
+already relied on that early-return rather than truly exercising the
+network path. Added direct tests for the extracted `shouldApplyRemoteEvent`
+decision function (now exported) instead — pending-mutation skip, already-
+applied-version skip, delete-always-applies — since the local-only
+decision logic is unit-testable without mocking Supabase, but the actual
+batched-fetch/network path is not, matching this file's existing
+(unwritten) testing boundary rather than introducing a new mocking
+pattern for this one fix.
+
+**Verified**: `npm run check`/`npm run build` green. CI's initial deploy
+for this phase failed on the pre-existing flaky `shadowPage.test.tsx`
+delete-attempt test (documented in Phase 3/4 notes); a second, previously
+undocumented flaky test (`ui.test.tsx`, a timing-based `waitFor`) also
+surfaced across several `npm run check` runs today — both pass reliably
+standalone, fail intermittently under the full suite, consistent with
+test-isolation/ordering flakiness rather than a real regression (confirmed
+by rerunning; CI's rerun of the same commit passed and deployed cleanly).
+Worth a dedicated pass on full-suite test isolation at some point — not
+done here, out of scope for this fix.
