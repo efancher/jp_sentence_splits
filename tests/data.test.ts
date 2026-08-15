@@ -17,7 +17,7 @@ import {
   exportFullBackup,
   getDb,
   getDueStudyItems,
-  getReadingRetrievalCandidates,
+  getVocabularyTargetCandidates,
   listAttemptsForSentence,
   materializeVocabularySelections,
   moveBookSentence,
@@ -754,7 +754,7 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     });
   });
 
-  it('getReadingRetrievalCandidates only returns links with a surfaceForm', async () => {
+  it('getVocabularyTargetCandidates only returns links with a surfaceForm', async () => {
     await getDb().sentences.add(stubSentence('sent-1'));
     await materializeVocabularySelections('sent-1', [
       selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
@@ -770,13 +770,13 @@ describe('evidence-model foundation (Phase 7.1)', () => {
       updatedAt: new Date().toISOString(),
     });
 
-    const candidates = await getReadingRetrievalCandidates(['sent-1', 'sent-2']);
+    const candidates = await getVocabularyTargetCandidates(['sent-1', 'sent-2']);
     expect(candidates).toHaveLength(1);
     expect(candidates[0]?.vocabularyItem.expression).toBe('大学');
     expect(candidates[0]?.surfaceForm).toBe('大学');
   });
 
-  it('getReadingRetrievalCandidates returns one candidate per vocabulary item, not per sentence', async () => {
+  it('getVocabularyTargetCandidates returns one candidate per vocabulary item, not per sentence', async () => {
     await getDb().sentences.bulkAdd([stubSentence('sent-1'), stubSentence('sent-2')]);
     await materializeVocabularySelections('sent-1', [
       selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
@@ -785,11 +785,11 @@ describe('evidence-model foundation (Phase 7.1)', () => {
       selection({ surface: '大学に', start: 0, end: 3, expression: '大学', reading: 'だいがく' }),
     ]);
 
-    const candidates = await getReadingRetrievalCandidates(['sent-1', 'sent-2']);
+    const candidates = await getVocabularyTargetCandidates(['sent-1', 'sent-2']);
     expect(candidates).toHaveLength(1);
   });
 
-  it('getReadingRetrievalCandidates returns an empty array for no sentence ids', async () => {
-    expect(await getReadingRetrievalCandidates([])).toEqual([]);
+  it('getVocabularyTargetCandidates returns an empty array for no sentence ids', async () => {
+    expect(await getVocabularyTargetCandidates([])).toEqual([]);
   });
 });

@@ -8,9 +8,9 @@ import {
   ensureVocabularyStudyItem,
   getDb,
   getDueStudyItems,
-  getReadingRetrievalCandidates,
+  getVocabularyTargetCandidates,
   recordReview,
-  type ReadingRetrievalCandidate,
+  type VocabularyTargetCandidate,
 } from '../db/repository';
 import type { ReviewRating, Sentence, StudyActivityType, StudyItem, VocabularyItem } from '../domain/types';
 
@@ -27,19 +27,24 @@ const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
 ];
 
 /**
- * Phase 7.2 (docs/STATUS.md): the first vocabulary-item-subject activity
- * type — shows the sentence with the target word's exact surface form
- * highlighted, reading hidden until reveal. Only vocabulary items with a
- * surfaceForm-bearing sentence_vocabulary link are eligible (see
- * getReadingRetrievalCandidates) — vocabulary confirmed before this field
- * existed, or imported outside the picker, isn't a candidate yet.
+ * Vocabulary-item-subject activity types (Phase 7.2/7.3, docs/STATUS.md) —
+ * both target a specific occurrence of a word in one of its sentences, and
+ * so share one eligibility condition and candidate source (see
+ * getVocabularyTargetCandidates): a surfaceForm-bearing sentence_vocabulary
+ * link. Vocabulary confirmed before that field existed, or imported outside
+ * the picker, isn't a candidate for either yet. `reading_retrieval` shows
+ * the word (hides the reading); `cloze` hides the word entirely.
  */
-const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = ['reading_retrieval'];
+const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
+  'reading_retrieval',
+  'cloze',
+];
 
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
   reading_retrieval: 'Reading retrieval',
+  cloze: 'Cloze',
 };
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -61,7 +66,7 @@ type PendingSeed =
   | { kind: 'sentence'; sentence: Sentence; activityType: StudyActivityType }
   | {
       kind: 'vocabulary';
-      candidate: ReadingRetrievalCandidate;
+      candidate: VocabularyTargetCandidate;
       activityType: StudyActivityType;
     };
 
@@ -124,9 +129,9 @@ export function ReviewPage() {
       (item) => item.subjectType === 'sentence' && sentenceIdSet.has(item.subjectId),
     );
 
-    const readingRetrievalCandidates = await getReadingRetrievalCandidates(sentenceIds);
+    const vocabularyTargetCandidates = await getVocabularyTargetCandidates(sentenceIds);
     const vocabularyItemIdSet = new Set(
-      readingRetrievalCandidates.map((candidate) => candidate.vocabularyItem.id),
+      vocabularyTargetCandidates.map((candidate) => candidate.vocabularyItem.id),
     );
     const existingVocabularyItems = (
       await db.studyItems
@@ -143,7 +148,7 @@ export function ReviewPage() {
       book,
       sentences,
       existingSentenceItems,
-      readingRetrievalCandidates,
+      vocabularyTargetCandidates,
       existingVocabularyItems,
     };
   }, [bookId]);
@@ -159,7 +164,7 @@ export function ReviewPage() {
     void (async () => {
       const bySentenceId = new Map(scope.sentences.map((item) => [item.id, item]));
       const byVocabularyItemId = new Map(
-        scope.readingRetrievalCandidates.map((candidate) => [
+        scope.vocabularyTargetCandidates.map((candidate) => [
           candidate.vocabularyItem.id,
           candidate,
         ]),
@@ -222,7 +227,7 @@ export function ReviewPage() {
           (item) => `${item.subjectId}:${item.activityType}`,
         ),
       );
-      for (const candidate of scope.readingRetrievalCandidates) {
+      for (const candidate of scope.vocabularyTargetCandidates) {
         for (const activityType of VOCABULARY_ACTIVITY_TYPES) {
           if (
             !existingVocabularyKeys.has(
@@ -310,7 +315,7 @@ export function ReviewPage() {
   if (!initialized) return <p className="muted">Loading…</p>;
 
   const totalScopedSubjects =
-    (scope?.sentences.length ?? 0) + (scope?.readingRetrievalCandidates.length ?? 0);
+    (scope?.sentences.length ?? 0) + (scope?.vocabularyTargetCandidates.length ?? 0);
   const nextDue = [
     ...(scope?.existingSentenceItems ?? []),
     ...(scope?.existingVocabularyItems ?? []),
@@ -355,7 +360,8 @@ export function ReviewPage() {
               · {queue.length} due
             </div>
             {current.target ? (
-              <ReadingRetrievalCard
+              <VocabularyTargetCard
+                activityType={current.studyItem.activityType}
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
                 surfaceForm={current.target.surfaceForm}
@@ -398,30 +404,41 @@ export function ReviewPage() {
   );
 }
 
-function ReadingRetrievalCard({
+/**
+ * Renders both vocabulary-item-subject card types (Phase 7.2/7.3): they
+ * share the highlighted-sentence layout and only differ in what's hidden
+ * before reveal. `reading_retrieval` shows the target word, hides its
+ * reading. `cloze` hides the target word itself (a blank), and reveals it
+ * alongside the reading — a step harder, since there's no visible word to
+ * anchor recall against.
+ */
+function VocabularyTargetCard({
+  activityType,
   sentence,
   vocabularyItem,
   surfaceForm,
   revealed,
   onReveal,
 }: {
+  activityType: StudyActivityType;
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
   revealed: boolean;
   onReveal: () => void;
 }) {
+  const isCloze = activityType === 'cloze';
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   return (
     <>
       <div className="jp jp-lg">
         {before}
-        <mark>{target || surfaceForm}</mark>
+        <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
         {after}
       </div>
       {!revealed ? (
         <button type="button" onClick={onReveal}>
-          Reveal reading
+          {isCloze ? 'Reveal word' : 'Reveal reading'}
         </button>
       ) : (
         <>

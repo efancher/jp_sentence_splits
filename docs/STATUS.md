@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-15 (Phase 7.2).
+Last updated: 2026-08-16 (Phase 7.3).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1061,3 +1061,60 @@ with. Manual check: confirm vocabulary on a sentence via the picker
 (produces a `surfaceForm`-bearing link), then visit `/review` and confirm a
 reading-retrieval card appears for that word with the correct substring
 highlighted and the correct reading on reveal.
+
+## Phase 7.3 — Contextual cloze review experience: done
+
+Scoped to exactly one new experience (not cloze + audio comprehension +
+mnemonic gating all at once, which the original phase list bundled) —
+matches how Phase 7.2 was itself narrowed from a four-experience bundle
+down to one, and the user's own "don't do it all at once" instruction.
+Chosen first of the three because it reuses Phase 7.2's infrastructure
+almost directly: cloze needs exactly the same eligibility condition as
+reading retrieval (a `surfaceForm`-bearing vocabulary link), just renders
+the target differently (blanked, not highlighted-with-hidden-reading).
+
+Added:
+- `src/db/repository.ts` — renamed `getReadingRetrievalCandidates`/
+  `ReadingRetrievalCandidate` to `getVocabularyTargetCandidates`/
+  `VocabularyTargetCandidate`, since the function now backs two activity
+  types, not one; behavior unchanged, only the name (and its tests) needed
+  updating — same kind of iterate-on-a-signature-once-a-second-consumer-
+  exists precedent as `pickContextSentenceForVocabularyItem`'s Phase 7.2
+  change.
+- `src/pages/ReviewPage.tsx` — `VOCABULARY_ACTIVITY_TYPES` now includes
+  `'cloze'` alongside `'reading_retrieval'`; both are seeded per eligible
+  vocabulary item (so a word gets two independent, independently-FSRS-
+  scheduled study items, one per dimension) — mirrors the existing
+  precedent of `comprehension`/`reading_in_context` both being seeded for
+  every sentence, not a new pattern. Render: `ReadingRetrievalCard` was
+  generalized into `VocabularyTargetCard(activityType, ...)`, shared by
+  both card types — `reading_retrieval` shows the target word highlighted
+  and hides the reading; `cloze` blanks the target word entirely (`_____`)
+  and reveals both the word and its reading together, a harder recall step
+  since there's no visible word to anchor against.
+- Tests: `tests/data.test.ts` renamed along with the function (no behavior
+  changes to verify beyond the rename). `tests/reviewPage.test.tsx` — the
+  Phase 7.2 test was extended (not duplicated) to also drive the cloze card
+  through blank → reveal → rate for the same target word, confirming both
+  study items seed independently and both reviews get recorded.
+
+**Deliberately not done yet** (moved to Phase 7.4): audio comprehension,
+mnemonic maturity-gating, `comprehension`/`reading_in_context`
+differentiation (still the same open Phase-4 gap), any assistance-flag
+recording (still no optional-help affordance on any card type — cloze's
+reveal step is the exercise itself, not optional help), review planner. No
+typed input for cloze either, same "keep reviews fast" rationale as reading
+retrieval.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 245
+tests passed (same total as Phase 7.2 — one existing test extended, not a
+new file added), 2 pre-existing skips (unrelated), 0 existing test
+behavior changed beyond the deliberate reading_retrieval-test extension.
+`npm run build` green.
+
+No schema/migration changes in this phase — cloze reuses
+`SentenceVocabulary.surfaceForm` and the existing `vocabulary_items` fields
+as-is.
+
+**Not yet manually verified in a real browser** — same caveat as every
+prior UI-facing phase.

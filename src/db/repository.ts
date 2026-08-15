@@ -1799,7 +1799,7 @@ export async function pickContextSentenceForVocabularyItem(
   return undefined;
 }
 
-export interface ReadingRetrievalCandidate {
+export interface VocabularyTargetCandidate {
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
@@ -1807,14 +1807,18 @@ export interface ReadingRetrievalCandidate {
 
 /**
  * Vocabulary items, restricted to `sentenceIds`, that have a
- * `surfaceForm`-bearing link and are therefore eligible reading-retrieval
- * targets (Phase 7.2) — one candidate per distinct vocabulary item (first
- * qualifying link found), not one per sentence×word pair, so seeding stays
- * bounded by vocabulary size, not sentence count.
+ * `surfaceForm`-bearing link and are therefore eligible targets for any
+ * review experience that highlights or blanks a specific occurrence of a
+ * word in its sentence — reading retrieval (Phase 7.2) and cloze (Phase
+ * 7.3) both consume this, since they share the same eligibility condition
+ * and only differ in how the target is rendered. One candidate per
+ * distinct vocabulary item (first qualifying link found), not one per
+ * sentence×word pair, so seeding stays bounded by vocabulary size, not
+ * sentence count.
  */
-export async function getReadingRetrievalCandidates(
+export async function getVocabularyTargetCandidates(
   sentenceIds: string[],
-): Promise<ReadingRetrievalCandidate[]> {
+): Promise<VocabularyTargetCandidate[]> {
   if (sentenceIds.length === 0) return [];
   const db = getDb();
   const links = await db.sentenceVocabulary
@@ -1836,7 +1840,7 @@ export async function getReadingRetrievalCandidates(
     db.sentences.bulkGet(entries.map(([, link]) => link.sentenceId)),
   ]);
 
-  const candidates: ReadingRetrievalCandidate[] = [];
+  const candidates: VocabularyTargetCandidate[] = [];
   entries.forEach(([, link], index) => {
     const vocabularyItem = vocabularyItems[index];
     const sentence = sentences[index];

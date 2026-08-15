@@ -161,7 +161,7 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('renders a reading_retrieval card that highlights the target surface form and reveals its reading (Phase 7.2)', async () => {
+  it('renders reading_retrieval and cloze cards for the same target word, each seeded once (Phase 7.2/7.3)', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
@@ -178,7 +178,7 @@ describe('ReviewPage', () => {
       state: 'review' as const,
     };
     // Keep the two sentence-subject activity types out of the queue so only
-    // the new reading_retrieval card seeds/renders in this test.
+    // the two vocabulary-subject cards seed/render in this test.
     for (const activityType of ['comprehension', 'reading_in_context']) {
       await db.studyItems.add({
         id: `si-${activityType}`,
@@ -211,6 +211,7 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
+    // reading_retrieval card first — shows the word, hides the reading.
     await screen.findByText('Reveal reading');
     expect(screen.getByText('読みます')).toBeInTheDocument();
     expect(screen.queryByText('よむ')).not.toBeInTheDocument();
@@ -220,19 +221,30 @@ describe('ReviewPage', () => {
         .where('subjectId')
         .equals('vocab-1')
         .toArray();
-      expect(seeded).toHaveLength(1);
-      expect(seeded[0]?.activityType).toBe('reading_retrieval');
-      expect(seeded[0]?.subjectType).toBe('vocabularyItem');
+      expect(seeded.map((item) => item.activityType).sort()).toEqual([
+        'cloze',
+        'reading_retrieval',
+      ]);
+      expect(seeded.every((item) => item.subjectType === 'vocabularyItem')).toBe(true);
     });
 
     await user.click(screen.getByRole('button', { name: 'Reveal reading' }));
     expect(screen.getByText('よむ')).toBeInTheDocument();
     expect(screen.getByText('to read')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
 
+    // cloze card next — the word itself is blanked until reveal.
+    await screen.findByText('Reveal word');
+    expect(screen.queryByText('読みます')).not.toBeInTheDocument();
+    expect(screen.getByText('_____')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal word' }));
+    expect(screen.getByText('読みます')).toBeInTheDocument();
+    expect(screen.getByText('よむ')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
     await waitFor(async () => {
-      expect(await db.reviews.count()).toBe(1);
+      expect(await db.reviews.count()).toBe(2);
     });
   });
 
