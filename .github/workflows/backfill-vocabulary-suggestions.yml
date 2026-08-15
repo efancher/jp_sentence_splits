@@ -1,0 +1,62 @@
+name: Backfill vocabulary suggestions
+
+# Manual-only, on purpose (docs/STATUS.md has the full rationale): this
+# writes to production Supabase using a real account password stored as a
+# secret, so every run is an explicit, logged human action from the Actions
+# tab or `gh workflow run` — never a push/schedule trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write changes (unchecked = dry run, prints what would change)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout jp_sentence_splits
+        uses: actions/checkout@v4
+        with:
+          path: jp_sentence_splits
+
+      - name: Checkout shadowing (for its fugashi/UniDic tokenizer)
+        uses: actions/checkout@v4
+        with:
+          repository: efancher/shadowing
+          path: shadowing
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: jp_sentence_splits/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install shadowmine (tokenizer engine)
+        run: pip install -e shadowing/cli
+
+      - name: Install jp_sentence_splits dependencies
+        run: npm ci
+        working-directory: jp_sentence_splits
+
+      - name: Run backfill
+        working-directory: jp_sentence_splits
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SCRIPT_SUPABASE_EMAIL: ${{ secrets.SCRIPT_SUPABASE_EMAIL }}
+          SCRIPT_SUPABASE_PASSWORD: ${{ secrets.SCRIPT_SUPABASE_PASSWORD }}
+        run: |
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            npm run backfill:vocabulary-suggestions -- --apply
+          else
+            npm run backfill:vocabulary-suggestions
+          fi

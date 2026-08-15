@@ -532,3 +532,70 @@ test-isolation/ordering flakiness rather than a real regression (confirmed
 by rerunning; CI's rerun of the same commit passed and deployed cleanly).
 Worth a dedicated pass on full-suite test isolation at some point — not
 done here, out of scope for this fix.
+
+### New tool: backfill vocabulary suggestions for CSV-imported sentences
+
+Prompted by live testing: a CSV-imported book ("Easy Japanese Drama: After
+Work") renders a fully flat, chip-less `VocabularyPicker` — CSV imports
+never populate `vocabularySuggestions` (`src/lib/csvImport.ts:268` sets it
+to `[]`); only Shadowmine `.zip` package imports run a tokenizer
+(`src/lib/shadowingImport.ts`). The real tokenizer (fugashi/UniDic) is
+Python-only, in the separate `shadowing` repo — no in-app fix was possible
+without either a new client-side JS tokenizer (rejected: different engine
+than Shadowmine, several MB added to a ~1MB-precache PWA) or reusing the
+trusted engine via a script (chosen).
+
+Added:
+- `scripts/tokenize_sentences.py` — thin bridge, JSON-in/JSON-out, calling
+  `shadowmine.morphology.tokenize_japanese` (imported from a `shadowing`
+  checkout, not copied — avoids a second, drifting tokenizer
+  implementation). Owns no Supabase/selection logic.
+- `scripts/backfill-vocabulary-suggestions.ts` — matches
+  `import-wanikani-kanji.ts`/`import-anki-sentences.ts`'s conventions
+  exactly (`createScriptSupabaseClient`, dry-run by default, `--apply` to
+  write, printed counts). Reuses the existing, tested
+  `suggestionsFromTokens()` for the `selectedByDefault`/POS-prefix decision
+  — Python does only what JS can't. Idempotent by construction: only
+  sentences with an empty `vocabularySuggestions` array are selected.
+- `.github/workflows/backfill-vocabulary-suggestions.yml` —
+  `workflow_dispatch`-only (checkbox input for `--apply` vs. dry run), no
+  `push`/`schedule` trigger. Checks out both `jp_sentence_splits` and the
+  public `efancher/shadowing` repo (plain checkout, no PAT needed) to reuse
+  its tokenizer. Scoped with the user before building: explicitly not a
+  cron/scheduled job (secrets in an unattended job, silent failures), but
+  also not a "SSH into a machine" workflow — Actions `workflow_dispatch`
+  (a button in the GitHub UI, or `gh workflow run`, from any browser) hits
+  both constraints.
+- `README.md` — new section: GitHub Actions path (preferred, no local
+  setup) plus a local venv alternative (mirrors the `anki` repo's
+  `.venv-headless` pattern). Also fixed a stale line claiming the
+  suggestion-confirmation UI wasn't built yet (it has been, since Phase 5).
+
+**Requires manual, one-time setup before the Actions path works**: the
+user needs to add `SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD` as
+repo secrets (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` already exist,
+used by `deploy.yml`) — not done by this change, since it requires the
+user's actual credential values; flagged explicitly rather than assumed.
+
+**Code-reviewed** before commit; three real findings, two fixed: (1)
+`TOKENIZE_SCRIPT_PATH` used `.pathname` instead of `fileURLToPath()` —
+would leave percent-encoding (e.g. `%20`) in place for a repo checked out
+under a path with spaces, breaking the subprocess call; fixed. (2) Python's
+`tokenize_japanese` reports Unicode code-point offsets, but
+`validateSpan()`/`.slice()` on the TS side operate on UTF-16 code units —
+diverge for any sentence with an astral-plane character (e.g. 𠮟) before a
+token, silently dropping every suggestion after it; fixed with a
+`codePointToUtf16Offsets` conversion applied before
+`suggestionsFromTokens()`. (3) This STATUS.md entry itself, added in
+response to the review flagging that a materially new operational
+capability wasn't documented.
+
+**Verified**: `npm run typecheck` clean. Ran the full pipeline for real,
+twice (before and after the two fixes above), via a local venv (`pip
+install -e ../shadowing/cli`) against production: found 173 sentences with
+empty `vocabularySuggestions`, tokenized and schema-validated all 173, 0
+failures both times — including the exact sentence that prompted this
+("同い年" now tokenizes as its own content-word token, lemma 同い年, reading
+おないどし). Dry-run only — **not yet run with `--apply`**, and the GitHub
+Actions workflow itself hasn't been triggered yet (blocked on the user
+adding the two new repo secrets).

@@ -17,7 +17,8 @@
     "ci": "npm run check && npm run build:pages",
     "import:wanikani-kanji": "tsx scripts/import-wanikani-kanji.ts",
     "jmdict:lookup": "tsx scripts/lookup-jmdict.ts",
-    "import:anki-sentences": "tsx scripts/import-anki-sentences.ts"
+    "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
+    "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

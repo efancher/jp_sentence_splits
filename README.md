@@ -124,10 +124,46 @@ review the printed created/updated counts after running it.
 `jmdict:lookup` downloads and caches the JMDict release under
 `scripts/.cache/` (gitignored, ~110 MB) on first run, then answers from the
 cache. It's a local lookup tool only — nothing from JMDict is uploaded to
-Supabase. `vocabulary_items` is meant to hold only words the user has
-actually confirmed via the suggestion-confirmation UI (not yet built, see
-`docs/ROADMAP.md` Phase 5); this script exists so that UI has a working
-gloss/reading lookup to build against.
+Supabase. `vocabulary_items` holds only words the user has actually
+confirmed via the `VocabularyPicker` suggestion-confirmation UI (Analyze
+page, see `docs/ROADMAP.md` Phase 5); this script exists so that UI has a
+working gloss/reading lookup to build against.
+
+### Backfilling vocabulary suggestions for CSV-imported sentences
+
+`VocabularyPicker`'s tappable word-chips come from `vocabularySuggestions`,
+which only Shadowmine `.zip` package imports populate — CSV imports leave
+it empty, so those sentences render a flat, chip-less picker (the "Add
+blank" button still works, just one word at a time). This script backfills
+real suggestions using the same fugashi/UniDic engine Shadowmine uses
+(`shadowmine.morphology.tokenize_japanese`, from the sibling `shadowing`
+repo), then reuses this repo's own `suggestionsFromTokens()` for the
+selection-default/expression/reading logic — no separate/duplicated
+tokenizer logic.
+
+**Preferred: trigger from GitHub Actions, no local setup needed.** Actions
+tab → "Backfill vocabulary suggestions" → "Run workflow" (leave "Write
+changes" unchecked for a dry run first; check it to actually write). Runs
+entirely on GitHub's runners — no SSH, no local Python environment. One-time
+setup: add `SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD` as repo
+secrets (Settings → Secrets and variables → Actions) — `VITE_SUPABASE_URL`/
+`VITE_SUPABASE_ANON_KEY` already exist there for the Pages deploy.
+
+**Local alternative**, if you'd rather run it by hand (mirrors the `anki`
+repo's `.venv-headless` pattern):
+
+```bash
+python3 -m venv .venv-tokenize
+.venv-tokenize/bin/pip install -e ../shadowing/cli   # pulls in fugashi/unidic-lite/jaconv too
+
+TOKENIZE_PYTHON_BIN=.venv-tokenize/bin/python3 npm run backfill:vocabulary-suggestions
+# review the printed per-sentence suggestion counts, then:
+TOKENIZE_PYTHON_BIN=.venv-tokenize/bin/python3 npm run backfill:vocabulary-suggestions -- --apply
+```
+
+Idempotent: only sentences with an empty `vocabularySuggestions` array are
+selected, so a successful `--apply` run leaves nothing for the next run to
+find.
 
 ### One-time Anki sentence import
 

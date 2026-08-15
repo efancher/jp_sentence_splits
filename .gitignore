@@ -45,6 +45,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+.venv-tokenize/
 
 # Downloaded/cached JMDict release for scripts/lib/jmdict.ts — large,
 # regenerable, never uploaded anywhere.
