@@ -1052,10 +1052,8 @@ activity types' pattern; typed retrieval is a production-ladder concern
 tests passed (up from 240), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
-**Not yet applied to the live Supabase project** — `supabase/migrations/20260816000000_sentence_vocabulary_surface_form.sql`
-exists but hasn't been pasted into the Dashboard SQL editor yet. Apply it
-the same way as every prior migration before relying on this feature
-against production data.
+**Applied to the live Supabase project (2026-08-16)**, via Dashboard SQL
+editor paste, same as every prior migration.
 
 **Not yet manually verified in a real browser** — this pass covered
 logic/component tests only, same caveat Phase 3/4/5 initially shipped
