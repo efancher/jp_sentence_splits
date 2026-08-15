@@ -45,6 +45,11 @@ const PracticePage = lazy(() =>
     default: module.PracticePage,
   })),
 );
+const ReviewPage = lazy(() =>
+  import('./pages/ReviewPage').then((module) => ({
+    default: module.ReviewPage,
+  })),
+);
 const BuildPage = lazy(() =>
   import('./pages/BuildPage').then((module) => ({
     default: module.BuildPage,
@@ -78,6 +83,7 @@ export default function App() {
             <Route path="inbox" element={<InboxPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="review" element={<ReviewPage />} />
             <Route
               path="import-batches/:batchId"
               element={<ImportBatchPage />}
@@ -94,6 +100,7 @@ export default function App() {
               path="books/:bookId/practice/:sentenceId"
               element={<PracticePage />}
             />
+            <Route path="books/:bookId/review" element={<ReviewPage />} />
             <Route path="books/:bookId/build" element={<BuildPage />} />
             <Route
               path="books/:bookId/build/:sentenceId"

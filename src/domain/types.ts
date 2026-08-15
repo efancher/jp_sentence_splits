@@ -341,6 +341,8 @@ export interface FsrsState {
   difficulty: number;
   elapsedDays: number;
   scheduledDays: number;
+  /** ts-fsrs 6's within-day (re)learning step counter. */
+  learningSteps: number;
   reps: number;
   lapses: number;
   state: 'new' | 'learning' | 'review' | 'relearning';

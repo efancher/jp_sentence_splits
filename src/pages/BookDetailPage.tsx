@@ -381,6 +381,9 @@ export function BookDetailPage() {
           <Link to={`/books/${bookId}/build`}>
             <button type="button">Build</button>
           </Link>
+          <Link to={`/books/${bookId}/review`}>
+            <button type="button">Review</button>
+          </Link>
           <button type="button" onClick={() => setEditMetadata(true)}>
             Edit details
           </button>

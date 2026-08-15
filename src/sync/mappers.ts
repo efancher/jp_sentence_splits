@@ -3,9 +3,11 @@ import type {
   BookSentence,
   ImportBatch,
   InboxMembership,
+  Review,
   Sentence,
   SentenceAnalysis,
   SentenceAudio,
+  StudyItem,
 } from '../domain/types';
 import type { SyncEntity } from './types';
 
@@ -16,7 +18,9 @@ export type LocalSyncPayload =
   | SentenceAnalysis
   | ImportBatch
   | InboxMembership
-  | ReferenceAudioLocal;
+  | ReferenceAudioLocal
+  | StudyItem
+  | Review;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -329,6 +333,70 @@ export function remoteToReferenceAudio(
   };
 }
 
+export function studyItemToRemote(
+  item: StudyItem,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: item.id,
+    owner_id: ownerId,
+    subject_type: item.subjectType,
+    subject_id: item.subjectId,
+    activity_type: item.activityType,
+    fsrs_state: item.fsrsState,
+    created_at: item.createdAt,
+    updated_at: item.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToStudyItem(row: Record<string, unknown>): StudyItem {
+  return {
+    id: String(row.id),
+    subjectType: row.subject_type as StudyItem['subjectType'],
+    subjectId: String(row.subject_id),
+    activityType: String(row.activity_type),
+    fsrsState: row.fsrs_state as StudyItem['fsrsState'],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function reviewToRemote(review: Review, ownerId: string, version: number) {
+  return {
+    id: review.id,
+    owner_id: ownerId,
+    study_item_id: review.studyItemId,
+    timestamp: review.timestamp,
+    rating: review.rating,
+    response_raw: review.responseRaw ?? null,
+    expected_answer: review.expectedAnswer ?? null,
+    elapsed_ms: review.elapsedMs ?? null,
+    error_classification: review.errorClassification ?? null,
+    created_at: review.timestamp,
+    updated_at: review.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToReview(row: Record<string, unknown>): Review {
+  return {
+    id: String(row.id),
+    studyItemId: String(row.study_item_id),
+    timestamp: String(row.timestamp),
+    rating: row.rating as Review['rating'],
+    responseRaw: (row.response_raw as string | null) ?? undefined,
+    expectedAnswer: (row.expected_answer as string | null) ?? undefined,
+    elapsedMs: (row.elapsed_ms as number | null) ?? undefined,
+    errorClassification:
+      (row.error_classification as Review['errorClassification'] | null) ??
+      undefined,
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -354,6 +422,10 @@ export function toRemoteRow(
         ownerId,
         version,
       );
+    case 'study_items':
+      return studyItemToRemote(payload as StudyItem, ownerId, version);
+    case 'reviews':
+      return reviewToRemote(payload as Review, ownerId, version);
   }
 }
 

@@ -6,7 +6,9 @@ export type SyncEntity =
   | 'analyses'
   | 'import_batches'
   | 'inbox'
-  | 'reference_audio';
+  | 'reference_audio'
+  | 'study_items'
+  | 'reviews';
 
 export type SyncOperationType = 'upsert' | 'delete';
 
@@ -88,4 +90,6 @@ export const SYNCABLE_ENTITIES: readonly SyncEntity[] = [
   'import_batches',
   'inbox',
   'reference_audio',
+  'study_items',
+  'reviews',
 ] as const;

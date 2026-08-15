@@ -6,8 +6,10 @@ import type {
   BookSentence,
   ImportBatch,
   InboxMembership,
+  Review,
   Sentence,
   SentenceAnalysis,
+  StudyItem,
 } from '../domain/types';
 import { hashString } from './ids';
 
@@ -18,6 +20,8 @@ export interface BackupBundle {
   analyses: SentenceAnalysis[];
   importBatches: ImportBatch[];
   inbox: InboxMembership[];
+  studyItems: StudyItem[];
+  reviews: Review[];
   settings: AppSettings;
 }
 
@@ -33,6 +37,8 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
       analyses: bundle.analyses.length,
       importBatches: bundle.importBatches.length,
       inbox: bundle.inbox.length,
+      studyItems: bundle.studyItems.length,
+      reviews: bundle.reviews.length,
     },
     books: bundle.books,
     sentences: bundle.sentences,
@@ -40,6 +46,8 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
     analyses: bundle.analyses,
     importBatches: bundle.importBatches,
     inbox: bundle.inbox,
+    studyItems: bundle.studyItems,
+    reviews: bundle.reviews,
     settings: bundle.settings,
   };
   const checksum = hashString(
@@ -96,6 +104,13 @@ export function filterBackupForBook(
   const importBatchIds = new Set(
     sentences.flatMap((item) => item.importBatchIds),
   );
+  const studyItems = payload.studyItems.filter(
+    (item) => item.subjectType === 'sentence' && sentenceIds.has(item.subjectId),
+  );
+  const studyItemIds = new Set(studyItems.map((item) => item.id));
+  const reviews = payload.reviews.filter((item) =>
+    studyItemIds.has(item.studyItemId),
+  );
   const bundle = buildBackupPayload({
     books: [book],
     sentences,
@@ -105,6 +120,8 @@ export function filterBackupForBook(
       importBatchIds.has(item.id),
     ),
     inbox: [],
+    studyItems,
+    reviews,
     settings: payload.settings,
   });
   return bundle;

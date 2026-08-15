@@ -8,13 +8,19 @@ import type {
   Book,
   BookChapter,
   BookSentence,
+  ErrorClassification,
   ImportBatch,
   InboxMembership,
   InitialOrderMode,
+  Review,
+  ReviewRating,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
+  StudyActivityType,
+  StudyItem,
   StudyStatus,
+  StudySubjectType,
   VocabularyReviewStatus,
   VocabularySelection,
 } from '../domain/types';
@@ -25,6 +31,7 @@ import {
 } from '../lib/csvImport';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { nowIso } from '../lib/normalize';
+import { createInitialFsrsState, scheduleReview } from '../lib/scheduling';
 import {
   parseShadowingPackage,
   type ShadowingImportPreview,
@@ -1056,6 +1063,8 @@ export async function exportFullBackup(): Promise<BackupPayload> {
     analyses: await db.analyses.toArray(),
     importBatches: await db.importBatches.toArray(),
     inbox: await db.inbox.toArray(),
+    studyItems: await db.studyItems.toArray(),
+    reviews: await db.reviews.toArray(),
     settings,
   };
   return buildBackupPayload(bundle);
@@ -1067,6 +1076,10 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
   if (!book) throw new Error('Book not found');
   const memberships = full.bookSentences.filter((item) => item.bookId === bookId);
   const sentenceIds = new Set(memberships.map((item) => item.sentenceId));
+  const studyItems = full.studyItems.filter(
+    (item) => item.subjectType === 'sentence' && sentenceIds.has(item.subjectId),
+  );
+  const studyItemIds = new Set(studyItems.map((item) => item.id));
   return buildBackupPayload({
     books: [book],
     sentences: full.sentences.filter((item) => sentenceIds.has(item.id)),
@@ -1074,6 +1087,8 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
     analyses: full.analyses.filter((item) => sentenceIds.has(item.sentenceId)),
     importBatches: full.importBatches,
     inbox: [],
+    studyItems,
+    reviews: full.reviews.filter((item) => studyItemIds.has(item.studyItemId)),
     settings: full.settings,
   });
 }
@@ -1090,6 +1105,8 @@ export async function restoreBackup(
     db.analyses,
     db.importBatches,
     db.inbox,
+    db.studyItems,
+    db.reviews,
     db.settings,
     db.sentenceAudio,
   ] as const;
@@ -1103,6 +1120,8 @@ export async function restoreBackup(
         db.analyses.clear(),
         db.importBatches.clear(),
         db.inbox.clear(),
+        db.studyItems.clear(),
+        db.reviews.clear(),
         db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
@@ -1111,6 +1130,8 @@ export async function restoreBackup(
       await db.analyses.bulkPut(payload.analyses);
       await db.importBatches.bulkPut(payload.importBatches);
       await db.inbox.bulkPut(payload.inbox);
+      await db.studyItems.bulkPut(payload.studyItems);
+      await db.reviews.bulkPut(payload.reviews);
       await db.settings.put(payload.settings);
     });
     return;
@@ -1160,6 +1181,16 @@ export async function restoreBackup(
       for (const item of payload.inbox) {
         const existing = await db.inbox.get(item.sentenceId);
         if (!existing) await db.inbox.put(item);
+      }
+      for (const studyItem of payload.studyItems) {
+        const existing = await db.studyItems.get(studyItem.id);
+        if (!existing || studyItem.updatedAt >= existing.updatedAt) {
+          await db.studyItems.put(studyItem);
+        }
+      }
+      for (const review of payload.reviews) {
+        const existing = await db.reviews.get(review.id);
+        if (!existing) await db.reviews.put(review);
       }
       const settings = await ensureSettings(db);
       await db.settings.put({ ...settings, ...payload.settings, id: 'settings' });
@@ -1384,6 +1415,102 @@ export async function rateAttempt(
   const attempt = await db.attempts.get(attemptId);
   if (!attempt) throw new Error('Attempt not found');
   return attempt;
+}
+
+// ---------------------------------------------------------------------------
+// FSRS-scheduled review (docs/UNIFIED_APP_ARCHITECTURE.md §10, Phase 4).
+// study_items are created lazily the first time a subject is encountered in
+// a review session (confirmed with the user — no batch seeding step).
+// reviews are append-only; studyItems.fsrsState is the only thing ever
+// updated after insert.
+// ---------------------------------------------------------------------------
+
+export async function ensureStudyItem(
+  subjectType: StudySubjectType,
+  subjectId: string,
+  activityType: StudyActivityType,
+): Promise<StudyItem> {
+  const db = getDb();
+  const existing = await db.studyItems
+    .where('[subjectType+subjectId+activityType]')
+    .equals([subjectType, subjectId, activityType])
+    .first();
+  if (existing) return existing;
+  const timestamp = nowIso();
+  const studyItem: StudyItem = {
+    id: createId('study_item'),
+    subjectType,
+    subjectId,
+    activityType,
+    fsrsState: createInitialFsrsState(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.studyItems.put(studyItem);
+  notifySync('study_items', studyItem.id, studyItem);
+  return studyItem;
+}
+
+export async function getDueStudyItems(
+  activityTypes: StudyActivityType[],
+  options: { subjectIds?: string[]; now?: Date; limit?: number } = {},
+): Promise<StudyItem[]> {
+  const db = getDb();
+  const nowIsoValue = (options.now ?? new Date()).toISOString();
+  const subjectIdSet = options.subjectIds ? new Set(options.subjectIds) : null;
+  const candidates = await db.studyItems
+    .where('activityType')
+    .anyOf(activityTypes)
+    .toArray();
+  const due = candidates
+    .filter((item) => item.fsrsState.due <= nowIsoValue)
+    .filter((item) => !subjectIdSet || subjectIdSet.has(item.subjectId))
+    .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due));
+  return options.limit ? due.slice(0, options.limit) : due;
+}
+
+export async function recordReview(input: {
+  studyItemId: string;
+  rating: ReviewRating;
+  now?: Date;
+  responseRaw?: string;
+  expectedAnswer?: string;
+  elapsedMs?: number;
+  errorClassification?: ErrorClassification;
+}): Promise<{ review: Review; studyItem: StudyItem }> {
+  const db = getDb();
+  const studyItem = await db.studyItems.get(input.studyItemId);
+  if (!studyItem) throw new Error('Study item not found');
+  const now = input.now ?? new Date();
+  const { fsrsState } = scheduleReview(studyItem.fsrsState, input.rating, now);
+  const updatedStudyItem: StudyItem = {
+    ...studyItem,
+    fsrsState,
+    updatedAt: now.toISOString(),
+  };
+  const review: Review = {
+    id: createId('review'),
+    studyItemId: studyItem.id,
+    timestamp: now.toISOString(),
+    rating: input.rating,
+    responseRaw: input.responseRaw,
+    expectedAnswer: input.expectedAnswer,
+    elapsedMs: input.elapsedMs,
+    errorClassification: input.errorClassification,
+  };
+  await db.transaction('rw', db.studyItems, db.reviews, async () => {
+    await db.studyItems.put(updatedStudyItem);
+    await db.reviews.put(review);
+  });
+  notifySyncMany([
+    {
+      entity: 'study_items',
+      recordId: updatedStudyItem.id,
+      payload: updatedStudyItem,
+    },
+    { entity: 'reviews', recordId: review.id, payload: review },
+  ]);
+  return { review, studyItem: updatedStudyItem };
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

@@ -18,7 +18,9 @@ import {
   remoteToImportBatch,
   remoteToInbox,
   remoteToReferenceAudio,
+  remoteToReview,
   remoteToSentence,
+  remoteToStudyItem,
   toRemoteRow,
 } from './mappers';
 import { getSupabase } from './supabaseClient';
@@ -355,6 +357,12 @@ async function applyRemoteDelete(
     case 'reference_audio':
       await db.sentenceAudio.delete(recordId);
       break;
+    case 'study_items':
+      await db.studyItems.delete(recordId);
+      break;
+    case 'reviews':
+      await db.reviews.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -411,6 +419,12 @@ async function applyRemoteUpsert(
       }
       break;
     }
+    case 'study_items':
+      await db.studyItems.put(remoteToStudyItem(remote));
+      break;
+    case 'reviews':
+      await db.reviews.put(remoteToReview(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -434,6 +448,8 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const analyses = await db.analyses.toArray();
   const batches = await db.importBatches.toArray();
   const inbox = await db.inbox.toArray();
+  const studyItems = await db.studyItems.toArray();
+  const reviews = await db.reviews.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -452,6 +468,12 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const item of inbox) {
     await trackAndEnqueue('inbox', item.sentenceId, item);
+  }
+  for (const studyItem of studyItems) {
+    await trackAndEnqueue('study_items', studyItem.id, studyItem);
+  }
+  for (const review of reviews) {
+    await trackAndEnqueue('reviews', review.id, review);
   }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
@@ -495,6 +517,8 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.analyses,
       db.importBatches,
       db.inbox,
+      db.studyItems,
+      db.reviews,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -506,6 +530,8 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.analyses.clear();
       await db.importBatches.clear();
       await db.inbox.clear();
+      await db.studyItems.clear();
+      await db.reviews.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -529,6 +555,12 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('inbox', userId, async (rows) => {
     await db.inbox.bulkPut(rows.map((r) => remoteToInbox(r)));
+  });
+  await pullFullTable('study_items', userId, async (rows) => {
+    await db.studyItems.bulkPut(rows.map((r) => remoteToStudyItem(r)));
+  });
+  await pullFullTable('reviews', userId, async (rows) => {
+    await db.reviews.bulkPut(rows.map((r) => remoteToReview(r)));
   });
 
   const { data: maxEvent } = await supabase

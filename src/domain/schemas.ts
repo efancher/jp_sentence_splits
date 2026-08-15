@@ -186,6 +186,58 @@ export const inboxMembershipSchema = z.object({
   addedAt: z.string(),
 });
 
+export const studySubjectTypeSchema = z.enum(['sentence', 'vocabularyItem', 'chunk']);
+
+export const fsrsStateSchema = z.object({
+  due: z.string(),
+  stability: z.number(),
+  difficulty: z.number(),
+  elapsedDays: z.number(),
+  scheduledDays: z.number(),
+  learningSteps: z.number().int().nonnegative(),
+  reps: z.number().int().nonnegative(),
+  lapses: z.number().int().nonnegative(),
+  state: z.enum(['new', 'learning', 'review', 'relearning']),
+  lastReview: z.string().optional(),
+});
+
+export const studyItemSchema = z.object({
+  id: z.string(),
+  subjectType: studySubjectTypeSchema,
+  subjectId: z.string(),
+  // Intentionally a bare string, not a closed union — see StudyActivityType.
+  activityType: z.string().min(1),
+  fsrsState: fsrsStateSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const reviewRatingSchema = z.enum(['again', 'hard', 'good', 'easy']);
+
+export const errorClassificationSchema = z.union([
+  z.enum([
+    'incorrect_reading',
+    'incorrect_meaning',
+    'kanji_reading_interference',
+    'vocabulary_confusion',
+    'pronunciation_difficulty',
+    'listening_failure',
+    'grammar_misunderstanding',
+  ]),
+  z.object({ userDefined: z.string() }),
+]);
+
+export const reviewSchema = z.object({
+  id: z.string(),
+  studyItemId: z.string(),
+  timestamp: z.string(),
+  rating: reviewRatingSchema,
+  responseRaw: z.string().optional(),
+  expectedAnswer: z.string().optional(),
+  elapsedMs: z.number().nonnegative().optional(),
+  errorClassification: errorClassificationSchema.optional(),
+});
+
 export const backupSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
   appVersion: z.string(),
@@ -198,6 +250,8 @@ export const backupSchema = z.object({
     analyses: z.number(),
     importBatches: z.number(),
     inbox: z.number(),
+    studyItems: z.number(),
+    reviews: z.number(),
   }),
   books: z.array(bookSchema),
   sentences: z.array(sentenceSchema),
@@ -205,6 +259,8 @@ export const backupSchema = z.object({
   analyses: z.array(sentenceAnalysisSchema),
   importBatches: z.array(importBatchSchema),
   inbox: z.array(inboxMembershipSchema),
+  studyItems: z.array(studyItemSchema),
+  reviews: z.array(reviewSchema),
   settings: settingsSchema,
 });
 
@@ -212,7 +268,9 @@ export type BackupPayload = z.infer<typeof backupSchema>;
 
 // ---------------------------------------------------------------------------
 // Unified study model (docs/UNIFIED_APP_ARCHITECTURE.md §8) — additive.
-// Not yet part of backupSchema — added once these tables carry real data.
+// studyItems/reviews are part of backupSchema (Phase 4 gives them real UI
+// writes); sources/vocabularyItems/sentenceVocabulary/kanji/vocabularyKanji
+// remain excluded until something writes to them.
 // ---------------------------------------------------------------------------
 
 export const sourceTypeSchema = z.enum(['satori', 'youtube', 'podcast', 'manual', 'other']);
@@ -277,55 +335,4 @@ export const vocabularyKanjiSchema = z.object({
   positionInWord: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
-
-export const studySubjectTypeSchema = z.enum(['sentence', 'vocabularyItem', 'chunk']);
-
-export const fsrsStateSchema = z.object({
-  due: z.string(),
-  stability: z.number(),
-  difficulty: z.number(),
-  elapsedDays: z.number(),
-  scheduledDays: z.number(),
-  reps: z.number().int().nonnegative(),
-  lapses: z.number().int().nonnegative(),
-  state: z.enum(['new', 'learning', 'review', 'relearning']),
-  lastReview: z.string().optional(),
-});
-
-export const studyItemSchema = z.object({
-  id: z.string(),
-  subjectType: studySubjectTypeSchema,
-  subjectId: z.string(),
-  // Intentionally a bare string, not the closed union above — see StudyActivityType.
-  activityType: z.string().min(1),
-  fsrsState: fsrsStateSchema,
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-export const reviewRatingSchema = z.enum(['again', 'hard', 'good', 'easy']);
-
-export const errorClassificationSchema = z.union([
-  z.enum([
-    'incorrect_reading',
-    'incorrect_meaning',
-    'kanji_reading_interference',
-    'vocabulary_confusion',
-    'pronunciation_difficulty',
-    'listening_failure',
-    'grammar_misunderstanding',
-  ]),
-  z.object({ userDefined: z.string() }),
-]);
-
-export const reviewSchema = z.object({
-  id: z.string(),
-  studyItemId: z.string(),
-  timestamp: z.string(),
-  rating: reviewRatingSchema,
-  responseRaw: z.string().optional(),
-  expectedAnswer: z.string().optional(),
-  elapsedMs: z.number().nonnegative().optional(),
-  errorClassification: errorClassificationSchema.optional(),
 });

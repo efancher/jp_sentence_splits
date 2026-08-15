@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
 import {
@@ -9,11 +9,14 @@ import {
   createBookChapter,
   deleteAttempt,
   deleteBookChapter,
+  ensureStudyItem,
   exportFullBackup,
   getDb,
+  getDueStudyItems,
   listAttemptsForSentence,
   moveBookSentence,
   rateAttempt,
+  recordReview,
   removeSentencesFromBook,
   reorderBookSentences,
   restoreBookSentenceSnapshot,
@@ -372,5 +375,95 @@ describe('shadowing attempts', () => {
 
     expect(await getDb().syncRecordMeta.count()).toBe(0);
     expect(await getDb().syncQueue.count()).toBe(0);
+  });
+});
+
+describe('FSRS review (study_items/reviews)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-review-${createId('db')}`);
+  });
+
+  it('ensureStudyItem creates a new, due-now card the first time a subject is seen', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    expect(item.subjectType).toBe('sentence');
+    expect(item.subjectId).toBe('sent-1');
+    expect(item.activityType).toBe('comprehension');
+    expect(item.fsrsState.state).toBe('new');
+    expect(item.fsrsState.reps).toBe(0);
+  });
+
+  it('ensureStudyItem is idempotent for the same subject/activity pair', async () => {
+    const first = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const second = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    expect(second.id).toBe(first.id);
+    expect(await getDb().studyItems.count()).toBe(1);
+  });
+
+  it('ensureStudyItem treats different activity types as distinct study items', async () => {
+    const comprehension = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const reading = await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    expect(comprehension.id).not.toBe(reading.id);
+    expect(await getDb().studyItems.count()).toBe(2);
+  });
+
+  it('getDueStudyItems only returns items due now, filtered by activity type and subject', async () => {
+    const due = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const other = await ensureStudyItem('sentence', 'sent-2', 'comprehension');
+    const notDue = await ensureStudyItem('sentence', 'sent-3', 'comprehension');
+    await getDb().studyItems.update(notDue.id, {
+      fsrsState: {
+        ...notDue.fsrsState,
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+
+    const results = await getDueStudyItems(['comprehension'], {
+      subjectIds: [due.subjectId, other.subjectId, notDue.subjectId],
+    });
+    expect(results.map((item) => item.id).sort()).toEqual(
+      [due.id, other.id].sort(),
+    );
+  });
+
+  it('getDueStudyItems excludes other activity types even when due', async () => {
+    await ensureStudyItem('sentence', 'sent-1', 'shadowing');
+    const results = await getDueStudyItems(['comprehension', 'reading_in_context']);
+    expect(results).toEqual([]);
+  });
+
+  it('recordReview appends a Review and advances the study item past "new"', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const { review, studyItem } = await recordReview({
+      studyItemId: item.id,
+      rating: 'good',
+    });
+    expect(review.studyItemId).toBe(item.id);
+    expect(review.rating).toBe('good');
+    expect(studyItem.fsrsState.state).not.toBe('new');
+    expect(studyItem.fsrsState.reps).toBe(1);
+    expect(new Date(studyItem.fsrsState.due).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
+    expect(await getDb().reviews.count()).toBe(1);
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.reps).toBe(1);
+  });
+
+  it('recordReview rejects an unknown study item id', async () => {
+    await expect(
+      recordReview({ studyItemId: 'missing-id', rating: 'good' }),
+    ).rejects.toThrow('Study item not found');
+  });
+
+  it('enqueues sync metadata for study_items/reviews writes, unlike local-only attempts', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await recordReview({ studyItemId: item.id, rating: 'good' });
+
+    await vi.waitFor(async () => {
+      expect(await getDb().syncRecordMeta.count()).toBeGreaterThan(0);
+    });
+    const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
+    expect(keys).toContain('study_items');
+    expect(keys).toContain('reviews');
   });
 });

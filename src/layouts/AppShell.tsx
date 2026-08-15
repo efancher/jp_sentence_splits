@@ -7,6 +7,7 @@ import { SyncStatusBadge } from '../components/SyncStatusBadge';
 const NAV = [
   { to: '/', label: 'Books', end: true },
   { to: '/inbox', label: 'Inbox' },
+  { to: '/review', label: 'Review' },
   { to: '/search', label: 'Search' },
   { to: '/import', label: 'Import' },
   { to: '/settings', label: 'Settings' },
@@ -17,7 +18,8 @@ export function AppShell() {
   const hideNav =
     location.pathname.includes('/analyze') ||
     location.pathname.includes('/practice') ||
-    location.pathname.includes('/build');
+    location.pathname.includes('/build') ||
+    location.pathname.includes('/review');
 
   return (
     <div className="app-shell">
