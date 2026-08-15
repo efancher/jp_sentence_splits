@@ -335,7 +335,14 @@ export interface VocabularyKanji {
   updatedAt: string;
 }
 
-export type StudySubjectType = 'sentence' | 'vocabularyItem' | 'chunk';
+/**
+ * `vocabularyConfusion` added Phase 7.6 (docs/STATUS.md) — reserved ahead
+ * of its first real consumer (Phase 7.7's contrastive review), same
+ * precedent as `vocabularyItem` being reserved in Phase 1 before Phase 7.2
+ * became its first consumer. subjectId for that type is a
+ * VocabularyConfusion.id.
+ */
+export type StudySubjectType = 'sentence' | 'vocabularyItem' | 'chunk' | 'vocabularyConfusion';
 
 /**
  * activityType is intentionally a plain string, not a closed union — new

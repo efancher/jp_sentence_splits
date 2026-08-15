@@ -69,6 +69,26 @@ export async function upsertBatched(
   }
 }
 
+// Plain insert, not upsert — for tables where the natural dedup key is only
+// a *partial* unique index (e.g. `where deleted_at is null`), which
+// PostgREST's upsert can't target as an ON CONFLICT arbiter (the same
+// 42P10 class of error already hit and fixed for the kanji importer, see
+// docs/STATUS.md Phase 2). Callers must pre-fetch existing rows and filter
+// out already-present keys themselves before calling this.
+export async function insertBatched(
+  supabase: SupabaseClient,
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += WRITE_BATCH_SIZE) {
+    const batch = rows.slice(i, i + WRITE_BATCH_SIZE);
+    const { error } = await supabase.from(table).insert(batch);
+    if (error) {
+      throw new Error(`Insert into ${table} failed on batch starting at ${i}: ${error.message}`);
+    }
+  }
+}
+
 export function parseApplyFlag(argv: string[]): boolean {
   return argv.includes('--apply');
 }

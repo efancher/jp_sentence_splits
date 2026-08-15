@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.5).
+Last updated: 2026-08-16 (Phase 7.6).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1265,3 +1265,96 @@ Phase 7.1) and `VocabularyItem.notes` (existing field) as-is.
 
 **Not yet manually verified in a real browser** — same caveat as every
 prior UI-facing phase.
+
+## Phase 7.6 — Interference detection foundation: done
+
+Split further from the roadmap's original bundled "interference/contrastive
+review" phase, same discipline as every prior split this effort has used:
+this pass is data/schema only (mirrors Phase 7.1's own "foundation first,
+no UI" shape) — the contrastive review *experience* itself moves to Phase
+7.7, once real confusion data actually exists to review against.
+
+**Algorithm port**: `anki/wk_decks.py` (archived repo, still readable
+locally at `~/projects/anki`) lines 599–619 (`PAIR_RULES`,
+`CURATED_READING_PAIRS`) and 2596–2610/5731 (`is_probably_verb`,
+`candidate_pair_from_reading`, `find_verb_pairs`) — a suffix-swap table
+(e.g. `("れる","す")`, matching 表れる/表す) plus 8 curated exceptions
+(あく/あける, etc.), applied to vocabulary sharing a derived reading pair.
+
+Added:
+- `scripts/lib/verbPairs.ts` — pure port (`isProbablyVerb`,
+  `candidatePairFromReading`, `findVerbPairs`), no Supabase/IO, mirroring
+  `scripts/lib/wanikani.ts`/`scripts/lib/jmdict.ts`'s existing "pure lib
+  module, thin script wrapper" convention. `tests/verbPairs.test.ts` (13
+  tests) covers it directly, independent of any database.
+- `scripts/backfill-verb-pair-confusions.ts` — same shape as
+  `scripts/backfill-vocabulary-meanings.ts` (dry-run default, `--apply` to
+  write, `createScriptSupabaseClient`/`fetchAll`/`parseApplyFlag`/
+  `requireAuthedUser`). Fetches all `vocabulary_items`, runs
+  `findVerbPairs`, canonicalizes each pair's ids the same way
+  `ensureVocabularyConfusion` does, fetches existing `vocabulary_confusions`
+  pairs to dedupe against, and **inserts** (not upserts —
+  `vocabulary_confusions_pair_uidx` is a partial unique index, the same
+  `ON CONFLICT` limitation already hit and fixed for the kanji importer in
+  Phase 2) only genuinely new pairs, `confusionType: 'transitivity'`.
+- `scripts/lib/scriptHelpers.ts` — new `insertBatched`, an insert-only
+  sibling to the existing `upsertBatched`, for tables like this one where
+  the natural key is only a partial unique index.
+- `package.json` (`backfill:verb-pair-confusions`),
+  `.github/workflows/backfill-verb-pair-confusions.yml`
+  (`workflow_dispatch`-only, same template as the other four backfill
+  workflows), `README.md` — new section, same conventions as every other
+  backfill script.
+- `StudySubjectType` (`src/domain/types.ts`, `studySubjectTypeSchema` in
+  `schemas.ts`) extended with `'vocabularyConfusion'` — reserved ahead of
+  its first real consumer (Phase 7.7), same precedent as `'vocabularyItem'`
+  being reserved in Phase 1 before Phase 7.2 became its first consumer.
+  New migration (`supabase/migrations/20260816010000_study_item_vocabulary_confusion_subject.sql`)
+  drops and re-adds `study_items`' `subject_type` check constraint to widen
+  it — the only real schema change this phase needed; Dexie itself needs
+  no version bump, since `studyItems.subjectType` isn't constrained at the
+  Dexie layer, only Postgres enforces the enum. No code elsewhere had an
+  exhaustive switch over `StudySubjectType` that this would break (checked
+  by grep — every existing usage is an `=== 'sentence'`/`'vocabularyItem'`
+  filter, not an exhaustiveness check).
+
+**Real subtlety caught while writing the tests, not a bug in the original
+Python** — worth flagging since it shaped the test suite: `is_probably_verb`
+requires *either* a る-ending expression *or* an English "to ..." gloss in
+the meaning; a reading alone matching a `PAIR_RULES` suffix (e.g. 大学's
+だいがく ending in く, or だいがく-shaped readings generally) does **not**
+make something a verb — `candidatePairFromReading` is a pure suffix
+transform with no verb-awareness of its own, and relies entirely on
+`findVerbPairs`'s upstream `isProbablyVerb` filter to avoid false positives
+like pairing a noun. First test drafts got this wrong (used vocabulary
+items with empty/no English meaning that don't end in る, so they were
+silently filtered out before ever reaching the pairing logic) — fixed by
+giving every non-る-ending test verb an English gloss containing a
+recognized marker (`"to open (intransitive)"`, etc.), matching what a real
+JMDict-sourced `meaning` field would actually contain.
+
+**Deliberately not done yet** (moved to Phase 7.7): no contrastive review
+UI, no manual confusion-entry UI, no automatic confusion detection from
+review failures (`errorClassification` stays unpopulated, same
+"don't overbuild automatic classification" call as every prior phase).
+`ReviewPage.tsx` is untouched.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 267
+tests passed (up from 254), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet applied to the live Supabase project** — the new migration
+(`20260816010000_study_item_vocabulary_confusion_subject.sql`) hasn't been
+pasted into the Dashboard SQL editor yet. Apply it the same way as every
+prior migration before running the backfill script against production
+(the script itself doesn't depend on the migration — it only reads/writes
+`vocabulary_items`/`vocabulary_confusions` — but the migration should land
+first to keep production schema and this repo's migration history in
+sync).
+
+**Backfill script not yet run against production** — needs
+`SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD` (already configured as
+repo secrets per Phase 2/5's setup) and should be run dry-run first via
+GitHub Actions ("Backfill verb-pair confusions" → "Run workflow", leave
+"apply" unchecked) to inspect the candidate pairs before ever running with
+`--apply`.

@@ -186,7 +186,12 @@ export const inboxMembershipSchema = z.object({
   addedAt: z.string(),
 });
 
-export const studySubjectTypeSchema = z.enum(['sentence', 'vocabularyItem', 'chunk']);
+export const studySubjectTypeSchema = z.enum([
+  'sentence',
+  'vocabularyItem',
+  'chunk',
+  'vocabularyConfusion',
+]);
 
 export const fsrsStateSchema = z.object({
   due: z.string(),

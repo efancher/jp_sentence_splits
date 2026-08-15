@@ -22,6 +22,7 @@
     "backfill:vocabulary-meanings": "tsx scripts/backfill-vocabulary-meanings.ts",
     "backfill:vocabulary-suggestion-glosses": "tsx scripts/backfill-vocabulary-suggestion-glosses.ts",
     "backfill:confirmed-vocabulary-links": "tsx scripts/backfill-confirmed-vocabulary-links.ts",
+    "backfill:verb-pair-confusions": "tsx scripts/backfill-verb-pair-confusions.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts"
   },
   "dependencies": {

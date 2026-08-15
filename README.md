@@ -239,6 +239,30 @@ word, mid-batch) is safe to just re-run — see the script's own top comment
 for the full reasoning on why this known race isn't solved with locking,
 just documented.
 
+### Backfilling verb-pair confusions
+
+Seeds `vocabulary_confusions` rows (interference/confusion tracking, Phase
+7.6 — see `docs/STATUS.md`) by porting the archived `anki` repo's
+transitive/intransitive verb-pairing algorithm (`scripts/lib/verbPairs.ts`
+— a suffix-swap table plus a handful of curated exceptions) over
+already-imported `vocabulary_items`, e.g. pairing 表れる/表す as a genuine
+confusion pair. Pure TypeScript, no Python needed.
+
+Trigger from GitHub Actions (Actions tab → "Backfill verb-pair confusions"
+→ "Run workflow") or locally:
+
+```bash
+npm run backfill:verb-pair-confusions
+# review the printed candidate pairs, then:
+npm run backfill:verb-pair-confusions -- --apply
+```
+
+Idempotent: existing `vocabulary_confusions` pairs are fetched first and
+only genuinely new pairs are inserted (a plain insert, not upsert — the
+pair's uniqueness constraint is a partial index PostgREST can't target as
+an `ON CONFLICT` arbiter, the same limitation already hit for the kanji
+importer).
+
 ### One-time Anki sentence import
 
 A one-time, one-directional pull of already-mined `WK Satori Immersion` /
