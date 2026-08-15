@@ -736,3 +736,68 @@ conventions as the other scripts. Added a regression test to
 
 **Verified**: dry-run and real `--apply` run against production, found and
 fixed exactly the 6 known-affected rows, 0 errors.
+
+### Test-suite flakiness fix
+
+Three different tests (`shadowPage.test.tsx` ×2, `ui.test.tsx`) had each
+failed CI at least once earlier today, always passing standalone — noted
+as a known issue, then investigated properly at the user's request.
+Reproduced locally at a ~35% full-suite failure rate (vs. 0% standalone or
+in small subsets), enough to iterate on directly rather than guess.
+
+Two distinct, unrelated root causes found and fixed:
+
+1. **Deterministic Blob corruption** (`shadowPage.test.tsx`, the more
+   severe one — a hard `TypeError`, not a timeout). `fake-indexeddb`
+   clones every value on insertion via the *global* `structuredClone()`
+   (its own `cloneValueForInsertion` source), which is Node's
+   implementation — but jsdom ships its own distinct `Blob` class, and
+   verified directly (`structuredClone(new Blob(['x'])) instanceof Blob`
+   → `false`, deterministically, no test framework involved) that Node's
+   `structuredClone` doesn't recognize it, silently degrading the clone to
+   a plain object. Any Blob field read back after a Dexie round-trip in
+   this test environment loses its prototype — never happens in a real
+   browser. `shadowPage.test.tsx` already knew about this (its own
+   comment) and worked around it with a per-test
+   `Object.defineProperty`-in-`beforeEach`/`delete`-in-`afterEach` mock of
+   `URL.createObjectURL`/`revokeObjectURL` — but that pattern raced
+   against the global setup file's own `afterEach` across nested hook
+   ordering, explaining the intermittency. Replaced with a permanent,
+   global patch in `src/test/setup.ts`: delegate to the real
+   implementation for genuine Blobs, fall back to a stable fake URL
+   otherwise. Removed the now-redundant per-file mock/unmock.
+2. **A real race in `tests/ui.test.tsx`** (a `waitFor` timeout, not a hard
+   error — but raising the timeout alone didn't fix it, confirming it
+   wasn't purely a CPU-margin issue). The test clicked Next then
+   immediately Previous with no wait in between; navigating to sentence B
+   loads its chunks/notes into state, which is itself a `value` change for
+   `useAutosave`, scheduling a debounced (redundant, self-)save — clicking
+   Previous immediately left that timer still pending while navigating
+   back to sentence A. Fixed in the test only (not production autosave/
+   navigation code, which wasn't touched, given the mechanism wasn't
+   proven with full certainty): wait for the post-Next autosave cycle to
+   settle before clicking Previous.
+
+Also, while investigating: found and fixed a real (if minor, previously
+undiscovered) resource-leak bug in the global `afterEach`
+(`src/test/setup.ts`) — it created and deleted an unrelated, freshly
+random-named throwaway database instead of closing the one the test
+actually used, which left the real one open until the *next* test's
+`beforeEach` implicitly closed it. Fixed to close+delete the actual
+just-used db directly; added `hasDbInstanceForTests()`/
+`clearDbInstanceForTests()` to `src/db/database.ts` so this also skips
+entirely for tests that never touch the db (most of `tests/tts.test.ts`,
+etc.) and leaves a valid fresh instance behind for any test that calls
+`getDb()` without its own `resetDbForTests()`.
+
+**Code-reviewed** (two passes) before commit; real findings, both
+addressed: the settle-tick before closing the db is a heuristic, not a
+guarantee (documented as such, not oversold); `asyncUtilTimeout` was
+dialed back from an initial 5000ms to 3000ms, since the real fix for the
+worst offender was closing the actual race in the test, not just waiting
+longer — a large global timeout mostly just makes a genuinely broken
+assertion elsewhere take longer to fail.
+
+**Verified empirically**: 35 consecutive full-suite runs, 0 failures
+(previously ~35% failure rate reproduced over the same sample size before
+these fixes).

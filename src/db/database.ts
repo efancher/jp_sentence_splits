@@ -240,6 +240,11 @@ export function getDb(): GlossbookDatabase {
   return dbInstance;
 }
 
+/** Test helper: true once a test has actually called getDb()/resetDbForTests(). */
+export function hasDbInstanceForTests(): boolean {
+  return dbInstance !== null;
+}
+
 /** Test helper: replace the singleton with a fresh in-memory-named DB. */
 export function resetDbForTests(name?: string): GlossbookDatabase {
   if (dbInstance) {
@@ -247,6 +252,11 @@ export function resetDbForTests(name?: string): GlossbookDatabase {
   }
   dbInstance = new GlossbookDatabase(name ?? `${DB_NAME}-test-${Date.now()}`);
   return dbInstance;
+}
+
+/** Test helper: null out the singleton so the next getDb() creates fresh. */
+export function clearDbInstanceForTests(): void {
+  dbInstance = null;
 }
 
 export async function readSettings(db = getDb()): Promise<AppSettings> {

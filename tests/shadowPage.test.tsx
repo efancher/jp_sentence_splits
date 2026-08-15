@@ -86,29 +86,11 @@ describe('ShadowPage', () => {
     resetDbForTests(`shadow-page-${createId('db')}`);
     await ensureSettings();
     await seed();
-    // fake-indexeddb/jsdom does not structured-clone Blob internals (same
-    // caveat as tests/shadowingImport.test.ts / tests/migration.test.ts), so
-    // the round-tripped `blob` field isn't a real Blob — patch just the two
-    // object-URL methods (not the whole URL global, which withAppProviders'
-    // Supabase client construction still needs) so the page's effects don't
-    // throw on it.
-    Object.defineProperty(URL, 'createObjectURL', {
-      value: vi.fn(() => 'blob:mock'),
-      configurable: true,
-      writable: true,
-    });
-    Object.defineProperty(URL, 'revokeObjectURL', {
-      value: vi.fn(),
-      configurable: true,
-      writable: true,
-    });
+    // Blob-round-trip-through-Dexie compat (fake-indexeddb/jsdom Blob
+    // mismatch) is handled globally now — see src/test/setup.ts.
   });
 
   afterEach(() => {
-    // @ts-expect-error -- jsdom doesn't define these, so undo the patch.
-    delete URL.createObjectURL;
-    // @ts-expect-error -- jsdom doesn't define these, so undo the patch.
-    delete URL.revokeObjectURL;
     vi.restoreAllMocks();
   });
 

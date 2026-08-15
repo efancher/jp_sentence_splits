@@ -127,6 +127,17 @@ describe('UI flows', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
+    // Loading sentence B's chunks/notes into state is itself a `value`
+    // change for the autosave hook, scheduling its own (redundant,
+    // self-)save — clicking Previous immediately after, with no wait,
+    // left that debounced timer still pending while navigating back to
+    // sentence A. Likely source of this test's flakiness under the full
+    // suite (intermittent stale display values after navigating back);
+    // letting the cycle settle here (its own "Saved" status) removes the
+    // race regardless of the exact mechanism.
+    await waitFor(() => {
+      expect(screen.getByText(/Saved|Saving/i)).toBeInTheDocument();
+    });
     await user.click(screen.getByRole('button', { name: 'Previous' }));
     await waitFor(() => {
       expect(screen.getByDisplayValue('modifier/content')).toBeInTheDocument();
