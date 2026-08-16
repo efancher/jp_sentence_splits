@@ -233,6 +233,63 @@ export function mergeSuggestionIntoSelection(
 }
 
 /**
+ * True when two selections are adjacent (no gap, no overlap) and can be
+ * merged into one, e.g. two already-selected cards dropped onto each other.
+ */
+export function canMergeSelections(
+  a: VocabularySelection,
+  b: VocabularySelection,
+  japanese: string,
+): boolean {
+  if (a.id === b.id) return false;
+  if (!validateSpan(japanese, a.start, a.end, a.surface)) return false;
+  if (!validateSpan(japanese, b.start, b.end, b.surface)) return false;
+  return a.end === b.start || a.start === b.end;
+}
+
+/**
+ * Merge two adjacent selections into one. Preserves `target`'s id so the
+ * merged card keeps its identity (e.g. stays open for editing).
+ */
+export function mergeSelections(
+  dragged: VocabularySelection,
+  target: VocabularySelection,
+  japanese: string,
+): VocabularySelection | null {
+  if (!canMergeSelections(dragged, target, japanese)) return null;
+  const draggedBefore = dragged.end === target.start;
+  const start = Math.min(dragged.start, target.start);
+  const end = Math.max(dragged.end, target.end);
+  const surface = japanese.slice(start, end);
+  if (!validateSpan(japanese, start, end, surface)) return null;
+  const expression = draggedBefore
+    ? `${dragged.expression}${target.expression}`
+    : `${target.expression}${dragged.expression}`;
+  const reading = draggedBefore
+    ? `${dragged.reading}${target.reading}`
+    : `${target.reading}${dragged.reading}`;
+  const posParts = draggedBefore
+    ? [dragged.pos, target.pos]
+    : [target.pos, dragged.pos];
+  const suggestionIds = [
+    ...(target.suggestionIds ?? []),
+    ...(dragged.suggestionIds ?? []),
+  ].filter((id, index, all) => all.indexOf(id) === index);
+
+  return {
+    ...target,
+    surface,
+    start,
+    end,
+    expression,
+    reading,
+    pos: posParts.filter(Boolean).join('+'),
+    source: 'combined',
+    suggestionIds,
+  };
+}
+
+/**
  * Build an in-order morph strip over the full sentence: morphology tokens plus
  * any uncovered character gaps (so the strip always reads as the Japanese).
  */

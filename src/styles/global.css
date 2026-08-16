@@ -484,6 +484,20 @@ strong.jp {
   opacity: 0.35;
 }
 
+.vocab-morph-piece.is-drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.vocab-morph-piece.is-drop-invalid {
+  opacity: 0.55;
+}
+
+.vocab-morph-piece.is-drop-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+}
+
 .vocab-morph-surface {
   font-size: 1.15rem;
   font-weight: 600;

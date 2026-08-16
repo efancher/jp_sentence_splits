@@ -26,9 +26,12 @@ import type {
 import { createId } from '../lib/ids';
 import {
   buildMorphStrip,
+  canMergeSelections,
   canMergeSuggestionIntoSelection,
+  combineSuggestions,
   defaultSelectionsFromSuggestions,
   isContentPos,
+  mergeSelections,
   mergeSuggestionIntoSelection,
   selectionCoversSuggestion,
   selectionFromSuggestion,
@@ -59,6 +62,10 @@ function sugId(id: string): string {
   return `sug:${id}`;
 }
 
+function sugDropId(id: string): string {
+  return `sugdrop:${id}`;
+}
+
 function selDropId(id: string): string {
   return `sel:${id}`;
 }
@@ -69,6 +76,10 @@ function selDragId(id: string): string {
 
 function parseSugId(id: string): string | null {
   return id.startsWith('sug:') ? id.slice(4) : null;
+}
+
+function parseSugDropId(id: string): string | null {
+  return id.startsWith('sugdrop:') ? id.slice(8) : null;
 }
 
 function parseSelDropId(id: string): string | null {
@@ -111,18 +122,24 @@ function DraggableMorphPiece({
   suggestion,
   selected,
   dragging,
+  dropState,
   onToggle,
 }: {
   suggestion: VocabularySuggestion;
   selected: boolean;
   dragging: boolean;
+  dropState: 'valid' | 'invalid' | null;
   onToggle: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } =
     useDraggable({
       id: sugId(suggestion.id),
       data: { type: 'suggestion', suggestion },
     });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: sugDropId(suggestion.id),
+    data: { type: 'suggestion', suggestion },
+  });
   const content = isContentPos(suggestion.pos);
   const style: CSSProperties = transform
     ? {
@@ -135,19 +152,25 @@ function DraggableMorphPiece({
     selected ? 'is-selected' : '',
     content ? 'is-content' : 'is-function',
     isDragging ? 'is-dragging' : '',
+    dropState === 'valid' ? 'is-drop-target' : '',
+    dropState === 'invalid' ? 'is-drop-invalid' : '',
+    isOver && dropState === 'valid' ? 'is-drop-over' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
   return (
     <button
-      ref={setNodeRef}
+      ref={(node) => {
+        setDragRef(node);
+        setDropRef(node);
+      }}
       type="button"
       className={classes}
       style={style}
       title={[
         selected ? 'Selected for Anki' : 'Not selected',
-        'Drag into the tray or onto a selected card to combine',
+        'Drag onto an adjacent piece or selected card to combine',
         suggestion.expression,
         suggestion.reading,
         suggestion.pos || 'no POS',
@@ -462,6 +485,95 @@ export function VocabularyPicker({
     );
   }
 
+  function selectionCovering(
+    suggestion: VocabularySuggestion,
+  ): VocabularySelection | null {
+    return (
+      selections.find((item) => selectionCoversSuggestion(item, suggestion)) ??
+      null
+    );
+  }
+
+  /** Replace whatever the merge consumed with the merged result, keeping its id. */
+  function applyMergedSelection(
+    keepId: string,
+    merged: VocabularySelection,
+  ): VocabularySelection[] {
+    const next = selections
+      .filter(
+        (item) =>
+          item.id === keepId ||
+          item.end <= merged.start ||
+          item.start >= merged.end,
+      )
+      .map((item) => (item.id === keepId ? merged : item));
+    if (!next.some((item) => item.id === merged.id)) {
+      next.push(merged);
+    }
+    return next;
+  }
+
+  function canMergeStripPieces(
+    a: VocabularySuggestion,
+    b: VocabularySuggestion,
+  ): boolean {
+    if (a.id === b.id) return false;
+    const selA = selectionCovering(a);
+    const selB = selectionCovering(b);
+    if (selA && selB) {
+      return selA.id !== selB.id && canMergeSelections(selA, selB, japanese);
+    }
+    if (selA) {
+      return (
+        !selectionCoversSuggestion(selA, b) &&
+        canMergeSuggestionIntoSelection(b, selA, japanese)
+      );
+    }
+    if (selB) {
+      return (
+        !selectionCoversSuggestion(selB, a) &&
+        canMergeSuggestionIntoSelection(a, selB, japanese)
+      );
+    }
+    return combineSuggestions([a, b], japanese) != null;
+  }
+
+  function mergeStripPieces(
+    dragged: VocabularySuggestion,
+    target: VocabularySuggestion,
+  ) {
+    const selDragged = selectionCovering(dragged);
+    const selTarget = selectionCovering(target);
+    if (selDragged && selTarget) {
+      if (selDragged.id === selTarget.id) return;
+      const merged = mergeSelections(selDragged, selTarget, japanese);
+      if (!merged) return;
+      setSelections(applyMergedSelection(selTarget.id, merged));
+      setEditingId(merged.id);
+      return;
+    }
+    if (selTarget) {
+      if (selectionCoversSuggestion(selTarget, dragged)) return;
+      const merged = mergeSuggestionIntoSelection(dragged, selTarget, japanese);
+      if (!merged) return;
+      setSelections(applyMergedSelection(selTarget.id, merged));
+      setEditingId(merged.id);
+      return;
+    }
+    if (selDragged) {
+      if (selectionCoversSuggestion(selDragged, target)) return;
+      const merged = mergeSuggestionIntoSelection(target, selDragged, japanese);
+      if (!merged) return;
+      setSelections(applyMergedSelection(selDragged.id, merged));
+      setEditingId(merged.id);
+      return;
+    }
+    const merged = combineSuggestions([dragged, target], japanese);
+    if (!merged) return;
+    setSelections([...selections, merged]);
+    setEditingId(merged.id);
+  }
+
   function toggleSuggestion(suggestion: VocabularySuggestion) {
     if (isSuggestionSelected(suggestion)) {
       setSelections(
@@ -554,25 +666,50 @@ export function VocabularyPicker({
           japanese,
         );
         if (!merged) return;
-        const next = selections
-          .filter(
-            (item) =>
-              item.id === target.id ||
-              item.end <= merged.start ||
-              item.start >= merged.end,
-          )
-          .map((item) => (item.id === target.id ? merged : item));
-        if (!next.some((item) => item.id === merged.id)) {
-          next.push(merged);
-        }
-        setSelections(next);
+        setSelections(applyMergedSelection(target.id, merged));
         setEditingId(merged.id);
+        return;
+      }
+
+      const targetSugId = parseSugDropId(overId);
+      if (targetSugId && targetSugId !== draggedSugId) {
+        const target = suggestionById.get(targetSugId);
+        if (!target) return;
+        if (!canMergeStripPieces(suggestion, target)) {
+          window.alert(
+            `"${suggestion.surface}" is not adjacent to "${target.surface}". Drop it on a neighboring piece to combine.`,
+          );
+          return;
+        }
+        mergeStripPieces(suggestion, target);
       }
       return;
     }
 
     if (draggedSelId) {
-      if (overId === TRASH_ID || overId === STRIP_ID) {
+      const targetSelId = parseSelDropId(overId);
+      if (targetSelId && targetSelId !== draggedSelId) {
+        const dragged = selectionById.get(draggedSelId);
+        const target = selectionById.get(targetSelId);
+        if (!dragged || !target) return;
+        if (!canMergeSelections(dragged, target, japanese)) {
+          window.alert(
+            `"${dragged.surface}" is not adjacent to "${target.surface}". Drop it on a neighboring card to combine.`,
+          );
+          return;
+        }
+        const merged = mergeSelections(dragged, target, japanese);
+        if (!merged) return;
+        setSelections(applyMergedSelection(target.id, merged));
+        setEditingId(merged.id);
+        return;
+      }
+
+      if (
+        overId === TRASH_ID ||
+        overId === STRIP_ID ||
+        parseSugDropId(overId)
+      ) {
         removeSelection(draggedSelId);
       }
     }
@@ -581,13 +718,31 @@ export function VocabularyPicker({
   function cardDropState(
     selection: VocabularySelection,
   ): 'valid' | 'invalid' | null {
+    if (activeSuggestion) {
+      if (selectionCoversSuggestion(selection, activeSuggestion)) return null;
+      return canMergeSuggestionIntoSelection(
+        activeSuggestion,
+        selection,
+        japanese,
+      )
+        ? 'valid'
+        : 'invalid';
+    }
+    if (activeSelection) {
+      if (activeSelection.id === selection.id) return null;
+      return canMergeSelections(activeSelection, selection, japanese)
+        ? 'valid'
+        : 'invalid';
+    }
+    return null;
+  }
+
+  function morphDropState(
+    suggestion: VocabularySuggestion,
+  ): 'valid' | 'invalid' | null {
     if (!activeSuggestion) return null;
-    if (selectionCoversSuggestion(selection, activeSuggestion)) return null;
-    return canMergeSuggestionIntoSelection(
-      activeSuggestion,
-      selection,
-      japanese,
-    )
+    if (activeSuggestion.id === suggestion.id) return null;
+    return canMergeStripPieces(activeSuggestion, suggestion)
       ? 'valid'
       : 'invalid';
   }
@@ -614,10 +769,10 @@ export function VocabularyPicker({
         </span>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Drag a piece into the tray to select it, or onto an adjacent selected
-        card to combine (e.g. やっ onto て → やって). Tap still toggles
-        selection. On phones, press-and-hold briefly, then drag. Content words
-        start selected.
+        Drag a piece into the tray to select it, or drag it onto an adjacent
+        piece or selected card to combine (e.g. やっ onto て → やって). Tap
+        still toggles selection. On phones, press-and-hold briefly, then drag.
+        Content words start selected.
       </p>
 
       <DndContext
@@ -647,6 +802,7 @@ export function VocabularyPicker({
                 suggestion={suggestion}
                 selected={isSuggestionSelected(suggestion)}
                 dragging={activeDragId === sugId(suggestion.id)}
+                dropState={morphDropState(suggestion)}
                 onToggle={() => toggleSuggestion(suggestion)}
               />
             );
