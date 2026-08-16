@@ -112,6 +112,23 @@ The non-whitespace source Japanese must remain unchanged (zero-が chunks are
 excluded from that check). Autosave runs after a short delay and on blur; the
 manual Save button is a fallback.
 
+### Confirm vocabulary
+
+Below the chunk editor, Analyze shows a **Vocabulary** panel with morphology
+suggestions pulled from the sentence (content words start pre-selected). Drag
+a piece into the tray to select it, or onto an adjacent selected piece to
+combine them (e.g. やっ onto て → やって); tap also toggles selection.
+
+Tap **Confirm vocabulary** (or **Confirm vocabulary and next**, which advances
+to the next sentence) to save your picks. This is the *only* thing that turns
+a suggestion into real, reviewable vocabulary — it creates (or reuses) a
+`vocabulary_item` for each confirmed word, links it to this sentence with the
+exact inflected form you saw here, and is what makes that word eligible for
+every vocabulary-based review card (see **Review** below). Sentences whose
+vocabulary was imported some other way (e.g. from a Satori CSV or shadowing
+package) don't get this link automatically — confirming here is what
+activates review for them.
+
 When chunks exist, Analyze (and Practice after **Reveal chunks**) shows a
 **puzzle strip**: SVG role-shaped pieces with neighbor-mating edges (particle
 sockets, flat-right engine anchors, て-bridges, endings), soft clause bands, and
@@ -158,6 +175,14 @@ Practice supports deterministic shuffle, optional vocabulary, scratch notes,
 staged reveals, reveal/hide all, progress, and status-and-advance actions.
 Desktop users can navigate with the left and right arrow keys.
 
+If a sentence has confirmed vocabulary (see **Confirm vocabulary** above), a
+**"Recognized these without hints?"** panel appears below the vocab chips.
+Rate a word there if you recognized it while just reading — unlike Review,
+nothing is hidden here, so it's a self-report, not a test. This still counts
+as real evidence for that word's schedule (tagged as a natural encounter,
+visible on its **Why?** page — see **Review** below), letting words you
+already know well progress even between formal review sessions.
+
 ## Build
 
 **Build** inverts Analyze/Practice: you get the English prompt and assemble
@@ -171,23 +196,98 @@ have analysis chunks.
 4. **Check** scores chunk order against your saved analysis; **Reveal answer**
    shows the puzzle strip.
 
+## Review
+
+**Review** is spaced repetition (FSRS): a self-paced queue you rate
+**Again** / **Hard** / **Good** / **Easy**, which schedules the next time
+each card comes back. Open it from the nav (all books) or **Review** inside
+a book (that book only).
+
+### Card types
+
+Every sentence automatically gets two baseline cards (**Comprehension**,
+**Reading in context**) — read it, reveal the translation, rate yourself.
+A sentence with reference audio also gets a **Listening** card (audio
+plays first, Japanese stays hidden until reveal).
+
+The rest only appear for a word once you've **confirmed** it in Analyze
+(see **Confirm vocabulary** above) — this is the single most common reason
+a card type seems to be "missing":
+
+- **Reading retrieval** — the word is shown, its reading is hidden.
+- **Cloze** — the word itself is blanked out.
+- **Reading production** — type the reading instead of just revealing it.
+- **Sentence transformation** — type a specific conjugated form (only for
+  words with a recognized part of speech; shown as "Conjugate to: ...").
+- **Contrastive pair** — two confusable words shown together (e.g.
+  transitive/intransitive pairs like 付く/付ける), so you have to
+  distinguish them rather than recall either alone. Rare by design — it
+  only exists for a handful of curated pairs.
+
+Cards from every eligible category are mixed into one session rather than
+shown one whole category at a time, and a limited number of brand-new
+(never-before-seen) cards are introduced per sitting so a big book doesn't
+front-load an overwhelming batch — both configurable in **Settings**.
+
+### Why a card is there — and when one stops appearing
+
+Every card has a **Why?** link showing its full scheduling state (interval,
+stability, reps, due date), maturity, and complete review history —
+including anything logged from Practice's natural-encounter panel.
+
+Once a card's interval grows past a threshold (**Settings → "Graduate
+after this many days between reviews"**, default 180), it stops being
+quizzed — the scheduler's own signal that you've retained it long-term.
+Set that to `0` to turn graduation off entirely; a graduated card's
+**Why?** page still shows everything, it just won't come up again unless
+you raise or disable the threshold.
+
+### Settings
+
+- **New cards per review session** — caps how many never-before-seen
+  words/sentences get introduced per sitting. Already-due reviews are
+  never capped by this.
+- **Graduate after this many days between reviews** — see above.
+
+### How to get more out of Review
+
+The fastest way to unlock more card variety is simply **confirming
+vocabulary** in Analyze as you go — every confirmed word becomes eligible
+for reading retrieval/cloze/reading production/sentence transformation
+immediately, and pairs it happens to share a curated confusion with become
+eligible for contrastive review too. If Review still looks thin after a
+lot of confirming, check whether your confirmed words have a part of
+speech recorded (visible on `/vocabulary`) — words without one are
+recognized but never get a sentence-transformation card, since there's
+nothing to conjugate them with.
+
 ## Export
 
 Sentence and book worksheets can be copied, shared, or downloaded. Worksheet
 text includes Japanese, saved chunks, roles, literal English, Satori English,
 and an ichi.moe link.
 
+## Sync across devices
+
+**Settings → Account & sync**: sign in (or create an account) to sync study
+data to the cloud and share it across an iPhone, iPad, and desktop
+automatically. **Sync now** forces an immediate sync; the status line shows
+pending changes and the last successful sync time. Reference audio syncs
+separately (a toggle, since it's larger) — imported shadowing audio does
+not sync regardless.
+
+Without signing in, data stays entirely local to that browser/device.
+
 ## Backup and restore
 
-Use **Settings → Backup & restore** regularly.
+Use **Settings → Backup & restore** regularly — independent of sync, and
+still the only way to move data to a device you don't want to sign in on,
+or to protect against a sync-side mistake.
 
 - **Export all data** downloads a versioned JSON backup.
 - **Merge** combines validated backup data with existing local data.
 - **Replace all local data** clears local records only after validation and
   explicit confirmation.
-
-Browser-local data does not automatically synchronize between an iPhone, iPad,
-and desktop. Use backups to move or protect work.
 
 Imported shadowing audio is not included in the lightweight JSON backup.
 Retain each original `.shadowing.zip`; reimporting it restores its native
@@ -195,9 +295,14 @@ clips. **Replace all local data** also removes locally imported audio.
 
 ## Troubleshooting
 
-- **New release not visible:** accept the update banner, then reopen the app.
+- **New release not visible:** accept the update banner, then reopen the app
+  (a hard refresh works too if the banner hasn't shown up yet).
 - **Old Home Screen icon:** remove and add the Home Screen app again.
-- **Missing data on another device:** restore a backup; devices do not sync.
+- **Missing data on another device:** sign in and sync on both, or restore a
+  backup — without signing in, devices don't share data.
 - **No sentences in a Practice scope:** select All or a different status.
+- **Review only ever shows plain sentences, never vocabulary-based cards:**
+  confirm some vocabulary in Analyze first — see **Confirm vocabulary** and
+  **How to get more out of Review** above.
 - **Import warning:** open the batch or import preview; conflicts retain both
   preferred and alternative source values.

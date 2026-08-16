@@ -595,7 +595,7 @@ export function VocabularyPicker({
   if (!suggestions.length && !selections.length) {
     return (
       <section className="panel stack">
-        <h3 style={{ margin: 0 }}>Vocabulary for Anki</h3>
+        <h3 style={{ margin: 0 }}>Vocabulary</h3>
         <p className="muted" style={{ margin: 0 }}>
           No morphology suggestions on this sentence. Re-export the video
           package with Shadowmine v2 (Fugashi tokens), or add words manually
@@ -608,7 +608,7 @@ export function VocabularyPicker({
   return (
     <section className="panel stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h3 style={{ margin: 0 }}>Vocabulary for Anki</h3>
+        <h3 style={{ margin: 0 }}>Vocabulary</h3>
         <span className={`status-pill ${reviewStatus}`}>
           {reviewStatus === 'confirmed' ? 'Confirmed' : 'Unreviewed'}
         </span>

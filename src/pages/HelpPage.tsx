@@ -27,7 +27,8 @@ export function HelpPage() {
         <a href="#roles">Chunk roles</a>
         <a href="#practice">Practice sessions</a>
         <a href="#build">Build mode</a>
-        <a href="#backup">Offline data and backups</a>
+        <a href="#review">Review (spaced repetition)</a>
+        <a href="#sync">Sync and backups</a>
       </nav>
 
       <section id="getting-started" className="panel stack">
@@ -134,6 +135,16 @@ export function HelpPage() {
           amber outlines hint at likely vs unusual order (heuristic only). Analyze
           includes a small shape key. Hover a piece for a gloss.
         </p>
+        <p>
+          Below the chunk editor, a <strong>Vocabulary</strong> panel shows
+          morphology suggestions for the sentence. Drag a piece into the tray
+          to select it (or onto an adjacent selected piece to combine them,
+          e.g. やっ onto て → やって), then tap{' '}
+          <strong>Confirm vocabulary</strong>. This is what makes a word
+          reviewable — see <a href="#review">Review</a> below; a sentence's
+          words aren't eligible for vocabulary-based review cards until
+          they've been confirmed here at least once.
+        </p>
       </section>
 
       <section id="roles" className="panel stack">
@@ -156,6 +167,14 @@ export function HelpPage() {
           <strong>Complete &amp; next</strong> and{' '}
           <strong>Needs review &amp; next</strong> update status while moving
           through the session. On a desktop, use the left and right arrow keys.
+        </p>
+        <p>
+          If a sentence has confirmed vocabulary, a{' '}
+          <strong>&ldquo;Recognized these without hints?&rdquo;</strong> panel
+          appears below the vocab chips — rate a word there if you knew it
+          while just reading. Nothing is hidden, so it's a self-report, not a
+          test, but it still counts as real evidence toward that word's
+          Review schedule.
         </p>
       </section>
 
@@ -180,19 +199,88 @@ export function HelpPage() {
         </ol>
       </section>
 
-      <section id="backup" className="panel stack">
-        <h3>Offline data, updates, and backups</h3>
+      <section id="review" className="panel stack">
+        <h3>Review (spaced repetition)</h3>
+        <p>
+          Open <Link to="/review">Review</Link> from the nav (every book) or{' '}
+          <strong>Review</strong> inside a book (that book only). Rate each
+          card <strong>Again</strong> / <strong>Hard</strong> /{' '}
+          <strong>Good</strong> / <strong>Easy</strong> — this schedules when
+          it comes back, using the FSRS spaced-repetition algorithm.
+        </p>
+        <p>
+          Every sentence gets two baseline cards automatically —{' '}
+          <strong>Comprehension</strong> and <strong>Reading in context</strong>{' '}
+          (read, reveal translation, rate). One with reference audio also gets
+          a <strong>Listening</strong> card (audio plays first, Japanese
+          stays hidden until reveal).
+        </p>
+        <p>
+          The rest only appear for a word once you've{' '}
+          <strong>confirmed</strong> it in Analyze (see above) — by far the
+          most common reason a card type seems to be missing:
+        </p>
         <ul>
           <li>
-            Imported study data stays in this browser's IndexedDB and is usable
-            offline after the application has loaded successfully.
+            <strong>Reading retrieval</strong> — word shown, reading hidden.
           </li>
           <li>
-            iPhone, iPad, and desktop data do not synchronize automatically.
+            <strong>Cloze</strong> — the word itself is blanked out.
           </li>
           <li>
-            Export a JSON backup regularly from Settings, especially before
-            clearing browser data or replacing a device.
+            <strong>Reading production</strong> — type the reading instead of
+            just revealing it.
+          </li>
+          <li>
+            <strong>Sentence transformation</strong> — type a specific
+            conjugated form (only for words with a recognized part of
+            speech).
+          </li>
+          <li>
+            <strong>Contrastive pair</strong> — two confusable words shown
+            together (e.g. 付く/付ける) so you have to distinguish them, not
+            just recall one. Rare by design — only a handful of curated
+            pairs.
+          </li>
+        </ul>
+        <p>
+          Every card has a <strong>Why?</strong> link showing its full
+          scheduling state, maturity, and complete review history (including
+          anything logged from Practice's natural-encounter panel). Once a
+          card's interval passes a threshold (
+          <strong>Settings → &ldquo;Graduate after this many days between
+          reviews&rdquo;</strong>, default 180 days), it stops being
+          quizzed — set that to 0 to disable graduation entirely.{' '}
+          <strong>Settings → &ldquo;New cards per review session&rdquo;</strong>{' '}
+          caps how many brand-new cards get introduced per sitting;
+          already-due reviews are never capped by it.
+        </p>
+        <p className="muted">
+          Fastest way to get more out of Review: keep confirming vocabulary
+          in Analyze as you go. If it still looks thin, check whether your
+          confirmed words have a part of speech recorded (visible on{' '}
+          <Link to="/vocabulary">Words</Link>) — words without one are
+          recognized but never get a sentence-transformation card.
+        </p>
+      </section>
+
+      <section id="sync" className="panel stack">
+        <h3>Sync and backups</h3>
+        <ul>
+          <li>
+            Imported study data stays in this browser's IndexedDB and is
+            usable offline after the application has loaded successfully.
+          </li>
+          <li>
+            Sign in under <strong>Settings → Account &amp; sync</strong> to
+            sync data across an iPhone, iPad, and desktop automatically.
+            Without signing in, each device's data stays local to it.
+          </li>
+          <li>
+            Export a JSON backup regularly from Settings regardless — it's
+            independent of sync, and the only way to protect against a
+            sync-side mistake or move data to a device you don't want to
+            sign in on.
           </li>
           <li>
             Merge adds data safely; Replace All should only be used after
