@@ -60,6 +60,10 @@ export function useShadowing() {
     () => shadowingController.getShadowMediaTime(),
     [],
   );
+  const getShadowSampleRate = useCallback(
+    () => shadowingController.getShadowSampleRate(),
+    [],
+  );
   return {
     ...snapshot,
     startRecording,
@@ -70,5 +74,6 @@ export function useShadowing() {
     stopComparison,
     getShadowAnalyser,
     getShadowMediaTime,
+    getShadowSampleRate,
   };
 }

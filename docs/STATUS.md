@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8.3 done).
+Last updated: 2026-08-16 (Phase 8.4a done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2130,6 +2130,66 @@ but the absence of any construction/playback errors across the whole
 graph is strong indirect evidence, consistent with how this class of
 check has been done throughout Phase 8.
 
+### 8.4a — Pitch-detection DSP + live pitch-contour overlay: done, verified
+
+First half of the original Phase 8's item 4 ("pitch/waveform comparison
+analysis"), split out because it's genuinely two different pieces:
+real-time pitch tracking for the *live* shadow waveform (8.3's explicitly
+deferred half) vs. a *post-hoc* comparison panel for saved attempts
+(8.4b, still to come). Doing the DSP port once and using it for both is
+the point of this split, not a scope cut.
+
+**New `src/lib/pitch.ts`** — full port of `analysis/pitch.ts`'s YIN
+pitch-detection algorithm (`estimateFramePitch`, `extractPitch`,
+`hzToRelativeSemitones`). **No source-repo test fixtures exist for this
+module** (unlike Phase 7.9b's conjugation-engine port, which validated
+against the source's own 86-row fixture set) — checked first per
+STATUS.md's own advice, found none. Validated instead against synthetic
+pure-tone signals of known frequency (`tests/pitch.test.ts`): detects
+220Hz/400Hz sine tones within ~5Hz, correctly reports silence and pure
+noise as unvoiced, `extractPitch` tracks a steady tone with >80% voiced
+ratio and a correct median, and correctly detects an octave jump between
+two halves of a synthetic clip. This is a stronger correctness bar than
+"looks right in the browser" for DSP code, given there was nothing to
+diff against.
+
+**`src/lib/waveform.ts`** gained the pitch-bucket functions skipped in
+8.3 (`emptyLivePitchBuckets`, `pitchFramesToBucketSemitones`,
+`pitchBucketsToPolyline`) plus the display-range constants. Unit-tested
+directly (`tests/waveform.test.ts`).
+
+**`LiveShadowWaveform.tsx`** now renders the second SVG panel from the
+original component — a live pitch contour (gold) against the reference
+contour (decoded once via `extractPitch` when the reference blob loads),
+speaker-normalized to relative semitones off the reference's own median
+Hz, sampled every other animation frame off the same shared analyser the
+amplitude waveform already used (no new AudioContext). Needed threading
+`ShadowingController`/`useShadowing`'s existing `getShadowAnalyser`/
+`getShadowMediaTime` pair with a new `getShadowSampleRate` (the
+underlying `ShadowReferencePlayer.getSampleRate()` existed since 8.3 but
+wasn't exposed through the controller yet — an oversight from that
+phase, fixed here).
+
+New unit tests: `tests/pitch.test.ts` (10 tests, synthetic-tone
+validation as above), `tests/waveform.test.ts` gained 6 more for the
+pitch-bucket functions, `tests/shadowing.test.ts`'s shadow-player getter
+test extended to cover `getShadowSampleRate`. `npm run check` — 433
+passed, 2 skipped (pre-existing), 0 failed.
+
+**Manually verified in a real browser** (chromium, fake mic device, same
+approach as 8.3) — seeded a real 220Hz synthetic-tone WAV as the
+reference clip (not silence, so there'd be something for `extractPitch`
+to actually detect) and confirmed: the pitch-overlay section renders
+with a "ref median ~220 Hz" label, and the reference contour polyline has
+184 real points (matching genuine per-frame pitch detection across the
+clip, not a placeholder). The live contour only picked up 1 point from
+the fake mic device's synthetic signal over a 1.5s recording — plausible
+given Chromium's fake-device audio isn't a clean periodic tone at
+speech-relevant levels, and not checked further since real voice input
+isn't reproducible in this harness; the important thing verified is that
+the whole live-estimation pipeline (analyser sampling → YIN → semitone
+conversion → bucket → polyline) ran end-to-end with zero console errors.
+
 ### Background (planning done 2026-08-16, before 8.1 started)
 
 The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
@@ -2254,8 +2314,12 @@ before building if this judgment turns out wrong):
 
 This was planning only at the time it was written, done at the user's
 request so a fresh session could pick it up without re-deriving the
-comparison above — see the "8.1", "8.2", and "8.3" entries earlier in
-this Phase 8 section for what's actually been built so far. Next up:
-8.4, pitch/waveform comparison analysis (`AnalysisPanel` + the full
-`analysis/{pitch,waveform,audio}` DSP port, including the pitch-contour
-half of the live waveform that 8.3 deliberately deferred).
+comparison above — see the "8.1" through "8.4a" entries earlier in this
+Phase 8 section for what's actually been built so far. Next up: 8.4b,
+the post-hoc `AnalysisPanel` (reference-vs-saved-attempt comparison:
+alignment modes, duration ratio, timing observations) — the pitch DSP it
+needs already landed in 8.4a, so this is mostly the alignment helpers
+(`energyEnvelope`/`detectOnsetSeconds`/`crossCorrelateOffset`,
+`analysis/japanese.ts`'s `confidenceFromSignal`/`buildTimingObservations`)
+plus the panel component and wiring it into `ShadowPage.tsx`'s attempt
+list, honoring 8.2's target-range sub-range if one is set.

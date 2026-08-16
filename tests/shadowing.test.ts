@@ -10,6 +10,7 @@ const FakeShadowReferencePlayer = vi.hoisted(() => {
     stop = vi.fn();
     getAnalyser = vi.fn(() => undefined);
     currentTime = vi.fn(() => 0);
+    getSampleRate = vi.fn(() => 48_000);
 
     constructor() {
       FakeShadowReferencePlayer.instances.push(this);
@@ -223,11 +224,12 @@ describe('ShadowingController shadow mode', () => {
     });
   });
 
-  it('exposes the shadow player analyser and media time', () => {
+  it('exposes the shadow player analyser, media time, and sample rate', () => {
     const controller = new ShadowingController();
     const player = FakeShadowReferencePlayer.instances[0];
     expect(controller.getShadowAnalyser()).toBe(player?.getAnalyser());
     expect(controller.getShadowMediaTime()).toBe(0);
+    expect(controller.getShadowSampleRate()).toBe(48_000);
   });
 });
 

@@ -1,17 +1,20 @@
 /**
- * Ported (amplitude-only subset) from
- * ~/projects/shadowing/web/src/{analysis/audio.ts,analysis/waveform.ts,services/media.ts}
- * for Phase 8.3's live shadow waveform. The pitch-contour half of the
- * original `analysis/waveform.ts` (pitchFramesToBucketSemitones,
- * pitchBucketsToPolyline, emptyLivePitchBuckets) and all of
- * `analysis/pitch.ts` are deliberately not ported yet — that's Phase 8.4's
- * DSP port (pitch/waveform comparison analysis), sequenced after this.
+ * Ported from
+ * ~/projects/shadowing/web/src/{analysis/audio.ts,analysis/waveform.ts,services/media.ts}.
+ * Amplitude-only subset landed in Phase 8.3; the pitch-bucket functions
+ * (pitchFramesToBucketSemitones, pitchBucketsToPolyline,
+ * emptyLivePitchBuckets) and alignment helpers (energyEnvelope,
+ * detectOnsetSeconds, crossCorrelateOffset) were added in Phase 8.4a/8.4b.
  */
 
 export const ANALYSIS_SAMPLE_RATE = 16_000;
 export const LIVE_WAVEFORM_BUCKETS = 240;
 /** Live mic envelopes tend to read quieter than decoded reference peaks. */
 export const LIVE_MIC_AMPLITUDE_GAIN = 2;
+/** YIN frame size for live pitch (matches offline extractPitch). */
+export const LIVE_PITCH_FRAME_SAMPLES = 1024;
+export const LIVE_PITCH_DISPLAY_MIN_SEMITONES = -8;
+export const LIVE_PITCH_DISPLAY_MAX_SEMITONES = 8;
 /**
  * Approximate headphone/AirPods output delay so the live pen tracks what
  * you hear, not the earlier media clock.
@@ -134,6 +137,54 @@ export function peaksToPolyline(
     const x = (index / Math.max(1, peaks.length - 1)) * width;
     const yMax = mid - peak.max * mid;
     points.push(`${x},${yMax}`);
+  }
+  return points.join(' ');
+}
+
+export function emptyLivePitchBuckets(buckets: number): Array<number | null> {
+  return Array.from({ length: buckets }, () => null);
+}
+
+export function pitchFramesToBucketSemitones(
+  frames: Array<{ timeSeconds: number; voiced: boolean; relativeSemitones: number | null }>,
+  durationSeconds: number,
+  buckets: number,
+): Array<number | null> {
+  const sums = new Float64Array(buckets);
+  const counts = new Uint16Array(buckets);
+  const safeDuration = Math.max(0.001, durationSeconds);
+  for (const frame of frames) {
+    if (!frame.voiced || frame.relativeSemitones === null) continue;
+    const index = Math.min(
+      buckets - 1,
+      Math.max(0, Math.floor((frame.timeSeconds / safeDuration) * buckets)),
+    );
+    sums[index] += frame.relativeSemitones;
+    counts[index] += 1;
+  }
+  return Array.from({ length: buckets }, (_, index) =>
+    (counts[index] ?? 0) > 0 ? sums[index]! / counts[index]! : null,
+  );
+}
+
+export function pitchBucketsToPolyline(
+  values: Array<number | null>,
+  width: number,
+  height: number,
+  min: number,
+  max: number,
+  upToIndex?: number,
+): string {
+  if (values.length === 0) return '';
+  const span = Math.max(0.001, max - min);
+  const last = Math.min(values.length - 1, upToIndex ?? values.length - 1);
+  const points: string[] = [];
+  for (let index = 0; index <= last; index += 1) {
+    const value = values[index];
+    if (value === null || value === undefined) continue;
+    const x = (index / Math.max(1, values.length - 1)) * width;
+    const y = height - ((value - min) / span) * (height - 12) - 6;
+    points.push(`${x},${y}`);
   }
   return points.join(' ');
 }

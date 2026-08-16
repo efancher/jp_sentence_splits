@@ -171,6 +171,10 @@ export class ShadowingController {
     return this.shadowPlayer.currentTime();
   }
 
+  getShadowSampleRate(): number {
+    return this.shadowPlayer.getSampleRate();
+  }
+
   private clearTimer(): void {
     if (this.timer !== undefined) {
       clearInterval(this.timer);

@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   computePeaks,
   emptyLivePeaks,
+  emptyLivePitchBuckets,
   mergeLivePeak,
   peaksToPolyline,
+  pitchBucketsToPolyline,
+  pitchFramesToBucketSemitones,
 } from '../src/lib/waveform';
 
 describe('computePeaks', () => {
@@ -78,5 +81,45 @@ describe('peaksToPolyline', () => {
     ];
     const line = peaksToPolyline(peaks, 100, 50, 0);
     expect(line).toBe('0,0');
+  });
+});
+
+describe('emptyLivePitchBuckets', () => {
+  it('creates null-filled buckets of the given length', () => {
+    expect(emptyLivePitchBuckets(3)).toEqual([null, null, null]);
+  });
+});
+
+describe('pitchFramesToBucketSemitones', () => {
+  it('averages voiced frames into their time bucket', () => {
+    const frames = [
+      { timeSeconds: 0, voiced: true, relativeSemitones: 2 },
+      { timeSeconds: 0.1, voiced: true, relativeSemitones: 4 },
+      { timeSeconds: 0.9, voiced: true, relativeSemitones: -1 },
+    ];
+    const buckets = pitchFramesToBucketSemitones(frames, 1, 2);
+    expect(buckets[0]).toBeCloseTo(3); // (2 + 4) / 2
+    expect(buckets[1]).toBeCloseTo(-1);
+  });
+
+  it('ignores unvoiced or null-semitone frames', () => {
+    const frames = [
+      { timeSeconds: 0, voiced: false, relativeSemitones: 5 },
+      { timeSeconds: 0.2, voiced: true, relativeSemitones: null },
+    ];
+    const buckets = pitchFramesToBucketSemitones(frames, 1, 2);
+    expect(buckets).toEqual([null, null]);
+  });
+});
+
+describe('pitchBucketsToPolyline', () => {
+  it('maps values to y within [min, max], skipping nulls', () => {
+    const line = pitchBucketsToPolyline([0, null, -8, 8], 100, 100, -8, 8);
+    const points = line.split(' ');
+    expect(points).toHaveLength(3); // the null bucket is skipped
+  });
+
+  it('returns empty string for no values', () => {
+    expect(pitchBucketsToPolyline([], 100, 100, -8, 8)).toBe('');
   });
 });

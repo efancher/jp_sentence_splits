@@ -392,6 +392,7 @@ export function ShadowPage() {
             active={isRecording && shadowing.shadowActive}
             getMediaTime={shadowing.getShadowMediaTime}
             analyser={shadowing.getShadowAnalyser()}
+            sampleRate={shadowing.getShadowSampleRate()}
           />
         ) : null}
 
