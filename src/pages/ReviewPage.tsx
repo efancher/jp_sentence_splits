@@ -521,21 +521,43 @@ export function ReviewPage() {
 
       // Any (subject, activityType) pair with no study_item yet needs
       // seeding — tracked per-pair (not per-subject) so a subject left with
-      // only some activity types seeded still gets the rest.
-      const pendingSeeds: PendingSeed[] = [];
-      for (const descriptor of descriptors) {
+      // only some activity types seeded still gets the rest. Built per
+      // descriptor first, then interleaved round-robin across descriptors
+      // (Phase 7.10, docs/STATUS.md) rather than concatenated — a
+      // real-data check found a book with 206 sentences and ~50 eligible
+      // vocabulary items would've required clicking through ~400 sentence
+      // cards before a single vocabulary-based card ever seeded, since the
+      // seeding effect below always takes pool[0]. Interleaving means a
+      // mix of card types shows up from early in the session instead,
+      // matching the "one unified session, not six mandatory cards"
+      // principle Phase 7.2 already established for the due-queue merge —
+      // this is the same principle applied to lazy seeding. Batching by
+      // (descriptorKey, subjectId) below is a filter over the whole pool,
+      // not a positional slice, so a candidate's several activity types
+      // (e.g. a word's reading_retrieval/cloze/reading_production) still
+      // seed together as one batch even when scattered non-adjacently.
+      const pendingSeedsByDescriptor: PendingSeed[][] = descriptors.map((descriptor) => {
         const existingKeys = new Set(
           descriptor.existingItems.map(
             (item) => `${item.subjectId}:${item.activityType}`,
           ),
         );
+        const seeds: PendingSeed[] = [];
         for (const candidate of descriptor.candidates) {
           const subjectId = descriptor.subjectId(candidate);
           for (const activityType of descriptor.activityTypes) {
             if (!existingKeys.has(`${subjectId}:${activityType}`)) {
-              pendingSeeds.push({ descriptorKey: descriptor.key, candidate, activityType, subjectId });
+              seeds.push({ descriptorKey: descriptor.key, candidate, activityType, subjectId });
             }
           }
+        }
+        return seeds;
+      });
+      const pendingSeeds: PendingSeed[] = [];
+      const maxPendingSeeds = Math.max(0, ...pendingSeedsByDescriptor.map((seeds) => seeds.length));
+      for (let index = 0; index < maxPendingSeeds; index += 1) {
+        for (const seeds of pendingSeedsByDescriptor) {
+          if (seeds[index]) pendingSeeds.push(seeds[index]!);
         }
       }
 

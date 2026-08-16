@@ -1816,3 +1816,48 @@ Idempotent and re-runnable (only null-`surface_form` links are selected),
 so running it again later after more of the Anki-imported vocabulary gets
 a `partOfSpeech` tag (via `backfill:vocabulary-meanings`) will pick up
 more conjugation-based matches than this first pass could.
+
+## Real-data gap #2: sentence-major pending-seed order buried vocabulary cards
+
+Even after the surface_form backfill, the user still only saw plain
+sentences in Review. Second root cause, found by checking production
+directly: their book has **206 sentences**; only 14 `study_items` existed
+so far (7 sentences' worth), **0** of them `vocabularyItem`-subject.
+
+The bug: `ReviewPage.tsx`'s pending-seed pool was built category-major —
+every sentence's pendingSeeds first, *then* every vocabulary item's, then
+listening/confusion/transformation — and the lazy-seeding effect only ever
+seeds `pool[0]`'s batch once the queue empties. With 206 sentences, that
+meant clicking through roughly 400 sentence-subject cards before the pool
+array ever reached a single vocabulary-based entry — technically correct,
+practically invisible. Same underlying mechanism the Phase 7.2 due-queue
+merge already solved for *due* cards (interleaving all categories by
+`fsrsState.due` instead of listing them separately, "one unified session,
+not six mandatory cards") — this was the same problem in the *pending-seed*
+half of the queue, never fixed there.
+
+Fix (`src/pages/ReviewPage.tsx`): the pending-seed list is now built per
+descriptor first (unchanged logic), then merged round-robin across
+descriptors instead of concatenated — one entry from each non-empty
+descriptor's list per round, cycling until all are drained. Seeding-batch
+selection was already a `pool.filter(...)` over the *whole* pool by
+`(descriptorKey, subjectId)`, not a positional slice, so a candidate's
+several activity types (e.g. a word's reading_retrieval/cloze/
+reading_production) still seed together as one batch even when their
+entries end up scattered non-adjacently by the interleave — no change
+needed there.
+
+New test (`tests/reviewPage.test.tsx`): three sentences plus one
+vocabulary item linked only to the first sentence — confirms the
+vocabulary item's three cards seed as the *second* batch (right after the
+first sentence's own two cards), not after all three sentences are
+exhausted. All 19 pre-existing tests in that file still pass unchanged
+(they seed too few subjects, or explicitly suppress the categories they
+don't want, for the interleave to change their observed order).
+
+**Verified**: `npm run check` green — 384 tests passed (up from 383), 2
+pre-existing skips, `npm run build` green. **Not yet re-verified against
+the user's real production data** — worth confirming vocabulary-based
+cards actually now appear within a reasonable number of clicks in a real
+review session, now that both the data gap and the ordering bug are
+fixed.

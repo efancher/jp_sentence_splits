@@ -977,4 +977,98 @@ describe('ReviewPage', () => {
     // sent-2/sent-3 never got seeded.
     expect(await db.studyItems.count()).toBe(2);
   });
+
+  it('interleaves new-subject seeding across categories instead of draining sentences first (Phase 7.10)', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.books.add({
+      id: 'book-1',
+      title: 'Test Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    // Three plain sentences, none related to the vocabulary item below.
+    for (const [id, japanese] of [
+      ['sent-1', '本を読みます。'],
+      ['sent-2', '猫がいます。'],
+      ['sent-3', '水を飲みます。'],
+    ] as const) {
+      await db.sentences.add({
+        id,
+        normalizedKey: id,
+        japanese,
+        readingOnly: '',
+        inlineReading: '',
+        translation: `(${id})`,
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.bookSentences.add({
+        id: `bs-${id}`,
+        bookId: 'book-1',
+        sentenceId: id,
+        position: 0,
+        status: 'unstarted',
+        addedAt: now,
+      });
+    }
+    // A vocabulary item linked to sent-1 — with the old category-major
+    // pending-seed order this would only seed after all three sentences'
+    // six sentence-subject cards were exhausted; interleaved, it should
+    // seed right after sent-1's own two cards.
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // First batch: sent-1's two sentence-subject cards.
+    await screen.findByText('本を読みます。');
+    await waitFor(async () => {
+      expect(await db.studyItems.count()).toBe(2);
+    });
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(2);
+    });
+
+    // Second batch should be vocab-1's cards, not sent-2's — proves
+    // interleaving rather than draining every sentence first.
+    await screen.findByText('Reveal reading');
+    const seeded = await db.studyItems.where('subjectId').equals('vocab-1').toArray();
+    expect(seeded.map((item) => item.activityType).sort()).toEqual([
+      'cloze',
+      'reading_production',
+      'reading_retrieval',
+    ]);
+    const sent2Items = await db.studyItems.where('subjectId').equals('sent-2').toArray();
+    expect(sent2Items).toHaveLength(0);
+  });
 });
