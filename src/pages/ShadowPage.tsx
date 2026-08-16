@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import {
   deleteAttempt,
@@ -73,6 +74,7 @@ export function ShadowPage() {
   const [calibrating, setCalibrating] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -126,6 +128,7 @@ export function ShadowPage() {
   useEffect(() => {
     setPendingAttempt(null);
     setTargetRange(null);
+    setAnalyzingAttemptId(null);
   }, [sentenceId]);
 
   useEffect(() => {
@@ -417,56 +420,79 @@ export function ShadowPage() {
           ) : (
             <ul className="stack" style={{ listStyle: 'none', padding: 0 }}>
               {attempts.map((attempt) => (
-                <li
-                  key={attempt.id}
-                  className="row"
-                  style={{ justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <div>{new Date(attempt.createdAt).toLocaleString()}</div>
-                    <div className="muted">
-                      {formatDuration(attempt.durationMs)}
-                      {attempt.manualRating ? ` · ${attempt.manualRating}` : ''}
+                <li key={attempt.id} className="stack">
+                  <div
+                    className="row"
+                    style={{ justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <div>
+                      <div>{new Date(attempt.createdAt).toLocaleString()}</div>
+                      <div className="muted">
+                        {formatDuration(attempt.durationMs)}
+                        {attempt.manualRating ? ` · ${attempt.manualRating}` : ''}
+                      </div>
+                    </div>
+                    <div className="row">
+                      <button
+                        type="button"
+                        disabled={!referenceAudio}
+                        onClick={() => void handleAlternate(attempt)}
+                      >
+                        {shadowing.comparison?.mode === 'alternate' &&
+                        shadowing.comparison.attemptId === attempt.id
+                          ? 'Playing…'
+                          : 'Alternate'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!referenceAudio}
+                        onClick={() => void handleDualEar(attempt)}
+                      >
+                        {shadowing.comparison?.mode === 'dualEar' &&
+                        shadowing.comparison.attemptId === attempt.id
+                          ? 'Playing…'
+                          : 'Dual-ear'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!referenceAudio}
+                        className={analyzingAttemptId === attempt.id ? 'primary' : undefined}
+                        aria-pressed={analyzingAttemptId === attempt.id}
+                        onClick={() =>
+                          setAnalyzingAttemptId((current) =>
+                            current === attempt.id ? null : attempt.id,
+                          )
+                        }
+                      >
+                        {analyzingAttemptId === attempt.id ? 'Close analysis' : 'Analyze'}
+                      </button>
+                      {RATINGS.map((rating) => (
+                        <button
+                          key={rating.value}
+                          type="button"
+                          className={
+                            attempt.manualRating === rating.value ? 'primary' : undefined
+                          }
+                          aria-pressed={attempt.manualRating === rating.value}
+                          onClick={() => void rateAttempt(attempt.id, rating.value)}
+                        >
+                          {rating.label}
+                        </button>
+                      ))}
+                      <button type="button" onClick={() => void handleDelete(attempt.id)}>
+                        Delete
+                      </button>
                     </div>
                   </div>
-                  <div className="row">
-                    <button
-                      type="button"
-                      disabled={!referenceAudio}
-                      onClick={() => void handleAlternate(attempt)}
-                    >
-                      {shadowing.comparison?.mode === 'alternate' &&
-                      shadowing.comparison.attemptId === attempt.id
-                        ? 'Playing…'
-                        : 'Alternate'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!referenceAudio}
-                      onClick={() => void handleDualEar(attempt)}
-                    >
-                      {shadowing.comparison?.mode === 'dualEar' &&
-                      shadowing.comparison.attemptId === attempt.id
-                        ? 'Playing…'
-                        : 'Dual-ear'}
-                    </button>
-                    {RATINGS.map((rating) => (
-                      <button
-                        key={rating.value}
-                        type="button"
-                        className={
-                          attempt.manualRating === rating.value ? 'primary' : undefined
-                        }
-                        aria-pressed={attempt.manualRating === rating.value}
-                        onClick={() => void rateAttempt(attempt.id, rating.value)}
-                      >
-                        {rating.label}
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => void handleDelete(attempt.id)}>
-                      Delete
-                    </button>
-                  </div>
+                  {analyzingAttemptId === attempt.id && referenceAudio ? (
+                    <AnalysisPanel
+                      referenceBlob={referenceAudio.blob}
+                      learnerBlob={attempt.blob}
+                      hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}
+                      durationHintSeconds={attempt.durationMs / 1000}
+                      targetRange={targetRange ?? undefined}
+                    />
+                  ) : null}
                 </li>
               ))}
             </ul>

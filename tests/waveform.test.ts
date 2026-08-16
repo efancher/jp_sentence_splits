@@ -2,13 +2,24 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computePeaks,
+  crossCorrelateOffset,
+  detectOnsetSeconds,
   emptyLivePeaks,
   emptyLivePitchBuckets,
+  energyEnvelope,
   mergeLivePeak,
   peaksToPolyline,
   pitchBucketsToPolyline,
   pitchFramesToBucketSemitones,
 } from '../src/lib/waveform';
+
+function sineWave(hz: number, samples: number, sampleRate: number, amplitude = 0.5): Float32Array {
+  const buffer = new Float32Array(samples);
+  for (let i = 0; i < samples; i += 1) {
+    buffer[i] = amplitude * Math.sin((2 * Math.PI * hz * i) / sampleRate);
+  }
+  return buffer;
+}
 
 describe('computePeaks', () => {
   it('buckets samples into min/max pairs', () => {
@@ -121,5 +132,71 @@ describe('pitchBucketsToPolyline', () => {
 
   it('returns empty string for no values', () => {
     expect(pitchBucketsToPolyline([], 100, 100, -8, 8)).toBe('');
+  });
+});
+
+describe('energyEnvelope', () => {
+  it('reports near-zero energy for silence and positive energy for a tone', () => {
+    const silence = new Float32Array(2048);
+    const tone = sineWave(220, 2048, 16_000);
+    const silentEnvelope = energyEnvelope(silence);
+    const toneEnvelope = energyEnvelope(tone);
+    expect(Math.max(...silentEnvelope)).toBeCloseTo(0, 5);
+    expect(Math.max(...toneEnvelope)).toBeGreaterThan(0.1);
+  });
+});
+
+describe('detectOnsetSeconds', () => {
+  it('finds the onset where silence transitions into a tone', () => {
+    const sampleRate = 16_000;
+    const silenceSeconds = 0.5;
+    const silence = new Float32Array(sampleRate * silenceSeconds);
+    const tone = sineWave(220, sampleRate * 0.5, sampleRate);
+    const samples = new Float32Array(silence.length + tone.length);
+    samples.set(silence, 0);
+    samples.set(tone, silence.length);
+
+    const onset = detectOnsetSeconds(samples, sampleRate);
+    expect(onset).toBeGreaterThan(silenceSeconds - 0.1);
+    expect(onset).toBeLessThan(silenceSeconds + 0.1);
+  });
+
+  it('returns 0 for a clip with no clear onset (energy from the start)', () => {
+    const sampleRate = 16_000;
+    const tone = sineWave(220, sampleRate, sampleRate);
+    expect(detectOnsetSeconds(tone, sampleRate)).toBe(0);
+  });
+});
+
+describe('crossCorrelateOffset', () => {
+  // A pure constant-amplitude tone has an almost flat energy envelope
+  // (this function correlates energy envelopes, not raw waveforms), so it
+  // gives no distinctive feature to align against — use a silence/tone
+  // burst/silence signal instead, which has real energy structure.
+  function burstSignal(sampleRate: number, prePadSeconds: number): Float32Array {
+    const pre = new Float32Array(Math.round(sampleRate * prePadSeconds));
+    const tone = sineWave(220, Math.round(sampleRate * 0.4), sampleRate);
+    const post = new Float32Array(Math.round(sampleRate * 0.3));
+    const combined = new Float32Array(pre.length + tone.length + post.length);
+    combined.set(pre, 0);
+    combined.set(tone, pre.length);
+    combined.set(post, pre.length + tone.length);
+    return combined;
+  }
+
+  it('finds no offset between identical burst signals', () => {
+    const signal = burstSignal(16_000, 0.3);
+    expect(crossCorrelateOffset(signal, signal.slice())).toBe(0);
+  });
+
+  it('recovers roughly the known lag between a burst signal and a delayed copy', () => {
+    const sampleRate = 16_000;
+    const windowSize = 256;
+    const reference = burstSignal(sampleRate, 0.2);
+    const learner = burstSignal(sampleRate, 0.5); // burst starts 0.3s later
+    const expectedLagSamples = 0.3 * sampleRate;
+
+    const offset = crossCorrelateOffset(reference, learner, windowSize);
+    expect(Math.abs(Math.abs(offset) - expectedLagSamples)).toBeLessThanOrEqual(windowSize * 2);
   });
 });

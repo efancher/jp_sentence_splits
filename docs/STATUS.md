@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8.4a done).
+Last updated: 2026-08-16 (Phase 8.4b done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2190,6 +2190,78 @@ isn't reproducible in this harness; the important thing verified is that
 the whole live-estimation pipeline (analyser sampling → YIN → semitone
 conversion → bucket → polyline) ran end-to-end with zero console errors.
 
+### 8.4b — Post-hoc analysis panel: done, verified
+
+Second half of Phase 8's original item 4 — a saved-attempt-vs-reference
+comparison panel, split from 8.4a because it's a different UI (post-hoc,
+not live) built on the same pitch DSP. This closes out Phase 8's entire
+original item 4 and, with it, the full original planning-doc scope —
+only 8.5 (polish bundle) is left.
+
+**`src/lib/waveform.ts`** gained the alignment DSP from the source's
+`analysis/audio.ts` (`energyEnvelope`, `detectOnsetSeconds`,
+`crossCorrelateOffset`) plus `analyzeAlignment` — a simplified,
+**uncached** port of the source's `AnalysisService.analyzeAlignment`
+(the source persisted results to a `derivedAnalyses` table plus sync
+tracking this app doesn't have; clips are short enough to just recompute
+each time the panel opens). Also added `sliceCanonicalAudio` (new, not
+ported — trims decoded audio to a millisecond range) so the reference
+side can honor Phase 8.2's `targetRange` when one is set, exactly as
+that phase's own notes said 8.4 should.
+
+**New `src/lib/timingObservations.ts`** — ported `confidenceFromSignal`/
+`buildTimingObservations` from `analysis/japanese.ts`. Dropped the
+`morae`-driven sokuon/long-vowel observation lines: this app has no mora
+timing guide yet (still deferred per Phase 8.2's notes) — the function
+just never gets passed `morae`, so those two observation lines simply
+never appear, a graceful degradation rather than a stub.
+
+**New `src/components/AnalysisPanel.tsx`** — ported from the source
+component of the same name. Adaptations: takes `referenceBlob`/
+`learnerBlob` directly (the established Phase 8 pattern since 8.3, no
+asset-id/DB lookup), a new `targetRange` prop threaded to
+`analyzeAlignment` and to the reference side's pitch extraction (via
+`sliceCanonicalAudio`), and no `AnalysisService` caching layer per
+`waveform.ts`'s note above. Styling swapped from the source's dedicated
+CSS classes (`.analysis-panel`, `.peak-waveform`, `.button-row`, etc. —
+none of which exist in this app) for the `stack`/`row`/`muted`
+inline-style conventions already used throughout `ShadowPage.tsx`/
+`LiveShadowWaveform.tsx`.
+
+**Wired into `ShadowPage.tsx`**: each past attempt gets an "Analyze"
+toggle button (next to Alternate/Dual-ear) that opens the panel inline
+below that attempt's row; `hasReading` derived from
+`sentence.readingOnly`/`inlineReading`; passes the page's current
+`targetRange` state through automatically.
+
+New unit tests: `tests/waveform.test.ts` gained coverage for
+`energyEnvelope`/`detectOnsetSeconds`/`crossCorrelateOffset` — validated
+against synthetic silence/tone-burst signals with a known onset time and
+a known cross-correlation lag (a pure constant-amplitude tone turned out
+to be a bad test signal for the *energy-envelope*-based correlation,
+since it has no distinctive energy structure to align against — caught
+by an initial failing test, fixed by using a burst signal instead, not a
+bug in the ported algorithm itself). `tests/timingObservations.test.ts`
+covers the confidence/observation-building logic directly.
+`tests/shadowPage.test.tsx` gained a test that opens/closes the panel.
+`npm run check` — 449 passed, 2 skipped (pre-existing), 0 failed.
+
+**Manually verified in a real browser** (chromium, no fake-device flags
+needed this time since there's no mic involved) — seeded a 3s/220Hz
+reference tone and a 2.5s/260Hz attempt tone, each with a real silent
+onset (200ms silence before the tone) so onset detection had something
+genuine to find. Opening the panel produced a correct, verifiable
+result: duration ratio computed as 0.83, exactly matching 2.5s ÷ 3s;
+switching to onset-aligned mode correctly reduced the offset to ~0.00s
+(both clips share the same 200ms silence prefix, so their onsets should
+align); 2 observation articles rendered (duration-ratio, since 0.83
+differs from 1 by more than the 12% threshold; pitch-register, since
+both clips had a detectable median pitch); switching pitch display mode
+and alignment mode both re-ran cleanly; zero console errors throughout.
+This is stronger evidence than prior Phase 8 browser checks — the
+computed numbers themselves matched known ground truth, not just "no
+errors."
+
 ### Background (planning done 2026-08-16, before 8.1 started)
 
 The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
@@ -2314,12 +2386,10 @@ before building if this judgment turns out wrong):
 
 This was planning only at the time it was written, done at the user's
 request so a fresh session could pick it up without re-deriving the
-comparison above — see the "8.1" through "8.4a" entries earlier in this
-Phase 8 section for what's actually been built so far. Next up: 8.4b,
-the post-hoc `AnalysisPanel` (reference-vs-saved-attempt comparison:
-alignment modes, duration ratio, timing observations) — the pitch DSP it
-needs already landed in 8.4a, so this is mostly the alignment helpers
-(`energyEnvelope`/`detectOnsetSeconds`/`crossCorrelateOffset`,
-`analysis/japanese.ts`'s `confidenceFromSignal`/`buildTimingObservations`)
-plus the panel component and wiring it into `ShadowPage.tsx`'s attempt
-list, honoring 8.2's target-range sub-range if one is set.
+comparison above — see the "8.1" through "8.4b" entries earlier in this
+Phase 8 section for what's actually been built so far. **Phase 8's
+entire original planning scope (items 1-4) is now done** — only 8.5
+(polish bundle: hide/show transcript, attempt notes, favorite-marking)
+remains, plus the two deliberately-deferred stretch items (word/mora-
+precise practice-target isolation via a revived mora timing guide) noted
+throughout this section, neither of which blocks anything.

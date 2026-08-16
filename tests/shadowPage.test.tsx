@@ -122,6 +122,25 @@ describe('ShadowPage', () => {
     expect(betterButtons[0]).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('opens and closes the analysis panel for an attempt', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const analyzeButtons = screen.getAllByRole('button', { name: 'Analyze' });
+    await user.click(analyzeButtons[0]!);
+
+    expect(
+      screen.getByRole('button', { name: 'Close analysis' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'original' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'onset-aligned' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Speaker-normalized' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close analysis' }));
+    expect(screen.queryByRole('button', { name: 'original' })).not.toBeInTheDocument();
+  });
+
   it('marks a target range from the reference player and can clear it', async () => {
     const user = userEvent.setup();
     renderShadowPage();

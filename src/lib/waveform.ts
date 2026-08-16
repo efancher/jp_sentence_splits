@@ -1,11 +1,15 @@
 /**
  * Ported from
- * ~/projects/shadowing/web/src/{analysis/audio.ts,analysis/waveform.ts,services/media.ts}.
+ * ~/projects/shadowing/web/src/{analysis/audio.ts,analysis/waveform.ts,services/media.ts,services/analysis.ts}.
  * Amplitude-only subset landed in Phase 8.3; the pitch-bucket functions
  * (pitchFramesToBucketSemitones, pitchBucketsToPolyline,
- * emptyLivePitchBuckets) and alignment helpers (energyEnvelope,
- * detectOnsetSeconds, crossCorrelateOffset) were added in Phase 8.4a/8.4b.
+ * emptyLivePitchBuckets) landed in Phase 8.4a; the alignment helpers
+ * (energyEnvelope, detectOnsetSeconds, crossCorrelateOffset,
+ * analyzeAlignment — the last a simplified, uncached
+ * AnalysisService.analyzeAlignment) landed in Phase 8.4b.
  */
+
+import type { TimeRangeMs } from './recording';
 
 export const ANALYSIS_SAMPLE_RATE = 16_000;
 export const LIVE_WAVEFORM_BUCKETS = 240;
@@ -25,6 +29,20 @@ export interface CanonicalAudio {
   sampleRate: number;
   samples: Float32Array;
   durationSeconds: number;
+}
+
+/** Restricts canonical audio to a sub-range in milliseconds (Phase 8.2's practice-target isolation). */
+export function sliceCanonicalAudio(
+  audio: CanonicalAudio,
+  range: { startMs: number; endMs: number },
+): CanonicalAudio {
+  const startIndex = Math.max(0, Math.round((range.startMs / 1000) * audio.sampleRate));
+  const endIndex = Math.min(
+    audio.samples.length,
+    Math.round((range.endMs / 1000) * audio.sampleRate),
+  );
+  const samples = audio.samples.slice(startIndex, Math.max(startIndex, endIndex));
+  return { sampleRate: audio.sampleRate, samples, durationSeconds: samples.length / audio.sampleRate };
 }
 
 export interface WavePeak {
@@ -187,4 +205,122 @@ export function pitchBucketsToPolyline(
     points.push(`${x},${y}`);
   }
   return points.join(' ');
+}
+
+export function energyEnvelope(samples: Float32Array, windowSize = 256): Float32Array {
+  const envelope = new Float32Array(Math.ceil(samples.length / windowSize));
+  for (let i = 0; i < envelope.length; i += 1) {
+    let sum = 0;
+    const start = i * windowSize;
+    const end = Math.min(samples.length, start + windowSize);
+    for (let j = start; j < end; j += 1) {
+      const value = samples[j] ?? 0;
+      sum += value * value;
+    }
+    envelope[i] = Math.sqrt(sum / Math.max(1, end - start));
+  }
+  return envelope;
+}
+
+export function detectOnsetSeconds(
+  samples: Float32Array,
+  sampleRate: number,
+  thresholdRatio = 0.15,
+): number {
+  const envelope = energyEnvelope(samples);
+  let peak = 0;
+  for (const value of envelope) peak = Math.max(peak, value);
+  const threshold = peak * thresholdRatio;
+  const windowSize = 256;
+  for (let i = 0; i < envelope.length; i += 1) {
+    if ((envelope[i] ?? 0) >= threshold) return (i * windowSize) / sampleRate;
+  }
+  return 0;
+}
+
+export function crossCorrelateOffset(
+  reference: Float32Array,
+  learner: Float32Array,
+  windowSize = 256,
+): number {
+  const refEnv = energyEnvelope(reference, windowSize);
+  const learnEnv = energyEnvelope(learner, windowSize);
+  const maxLag = Math.min(80, Math.floor(refEnv.length / 2));
+  let bestLag = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let lag = -maxLag; lag <= maxLag; lag += 1) {
+    let score = 0;
+    let count = 0;
+    for (let i = 0; i < refEnv.length; i += 1) {
+      const j = i + lag;
+      if (j < 0 || j >= learnEnv.length) continue;
+      score += (refEnv[i] ?? 0) * (learnEnv[j] ?? 0);
+      count += 1;
+    }
+    if (count === 0) continue;
+    const normalized = score / count;
+    if (normalized > bestScore) {
+      bestScore = normalized;
+      bestLag = lag;
+    }
+  }
+  return bestLag * windowSize;
+}
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+export type AlignmentMode = 'original' | 'onset-aligned' | 'time-normalized';
+
+export interface AlignmentResult {
+  mode: AlignmentMode;
+  offsetSeconds: number;
+  durationRatio: number;
+  confidence: ConfidenceLevel;
+  referencePeaks: WavePeak[];
+  learnerPeaks: WavePeak[];
+}
+
+/**
+ * Compares a saved attempt against the reference clip: onset detection +
+ * cross-correlation to estimate timing offset, plus duration ratio. No
+ * caching layer (unlike the source's `AnalysisService`, which persisted
+ * results to a `derivedAnalyses` table this app doesn't have) — clips are
+ * short enough to just recompute on demand.
+ */
+export async function analyzeAlignment(
+  referenceBlob: Blob,
+  learnerBlob: Blob,
+  mode: AlignmentMode,
+  referenceRange?: TimeRangeMs,
+): Promise<AlignmentResult> {
+  const [referenceBuffer, learnerBuffer] = await Promise.all([
+    decodeAudioBuffer(referenceBlob),
+    decodeAudioBuffer(learnerBlob),
+  ]);
+  const referenceFull = canonicalizeAudioBuffer(referenceBuffer);
+  const reference = referenceRange ? sliceCanonicalAudio(referenceFull, referenceRange) : referenceFull;
+  const learner = canonicalizeAudioBuffer(learnerBuffer);
+  const referenceOnset = detectOnsetSeconds(reference.samples, reference.sampleRate);
+  const learnerOnset = detectOnsetSeconds(learner.samples, learner.sampleRate);
+  let offsetSeconds = 0;
+  let confidence: ConfidenceLevel = 'medium';
+  if (mode === 'onset-aligned') {
+    offsetSeconds = referenceOnset - learnerOnset;
+    confidence = 'medium';
+  } else if (mode === 'time-normalized') {
+    offsetSeconds = 0;
+    confidence = 'low';
+  } else {
+    const sampleOffset = crossCorrelateOffset(reference.samples, learner.samples);
+    offsetSeconds = sampleOffset / reference.sampleRate;
+    confidence = 'medium';
+  }
+  return {
+    mode,
+    offsetSeconds,
+    durationRatio:
+      reference.durationSeconds > 0 ? learner.durationSeconds / reference.durationSeconds : 1,
+    confidence,
+    referencePeaks: computePeaks(reference.samples),
+    learnerPeaks: computePeaks(learner.samples),
+  };
 }
