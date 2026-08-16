@@ -127,6 +127,7 @@ export interface Attempt {
   blob: Blob;
   notes?: string;
   manualRating?: AttemptRating;
+  isFavorite?: boolean;
   createdAt: string;
 }
 

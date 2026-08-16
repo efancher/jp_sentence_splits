@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8.4b done).
+Last updated: 2026-08-16 (Phase 8 fully complete — 8.5 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2261,6 +2261,51 @@ and alignment mode both re-ran cleanly; zero console errors throughout.
 This is stronger evidence than prior Phase 8 browser checks — the
 computed numbers themselves matched known ground truth, not just "no
 errors."
+
+### 8.5 — Polish bundle: done, verified — **Phase 8 fully complete**
+
+The last item of Phase 8's original plan. Small and additive, done
+together per the plan's own note rather than split further.
+
+- **`isFavorite?: boolean`** added to the `Attempt` type — no Dexie
+  schema/migration needed (the `attempts` store already wasn't indexed on
+  this field's siblings like `notes`; additive fields on a local-only
+  table are free). New `setAttemptFavorite` repository function mirrors
+  the existing `rateAttempt` pattern. "Favorite"/"Unfavorite" button per
+  attempt row; a ★ marker next to favorited attempts' timestamp.
+- **Notes on save**: `saveAttempt` already accepted an optional `notes`
+  field (present in the `Attempt` type since Phase 3, just never wired to
+  any input) — added a "Notes (optional)" text input on the draft-attempt
+  preview, passed through on save, cleared on save/discard/sentence
+  change. Saved notes render under the attempt's timestamp/duration line.
+- **Hide/show transcript**: a toggle button swaps the Japanese sentence
+  display for an "Audio-only practice" placeholder — lets a learner
+  practice by ear only, without seeing the text.
+- **Not ported**: the source's "default comparison to the favorited (or
+  else most-recent) attempt" behavior. That only makes sense for the
+  source app's UI shape (pick one attempt from a dropdown, then act on
+  "the selected attempt") — this app's `ShadowPage.tsx` already lets you
+  trigger Alternate/Dual-ear/Analyze on *any* attempt row directly, so
+  there's no single "current attempt" to default. Skipped as
+  inapplicable rather than force-fit.
+
+New unit tests: `tests/data.test.ts` gained `setAttemptFavorite`
+toggle/unknown-id coverage and a notes-persistence test.
+`tests/shadowPage.test.tsx` gained tests for the transcript toggle and
+the favorite/unfavorite flow, plus the existing smoke test now also
+asserts a saved note renders. `npm run check` — 453 passed, 2 skipped
+(pre-existing), 0 failed. **Manually verified in a real browser**
+(chromium, no special flags needed): hide transcript correctly swapped
+the display and back; favoriting/unfavoriting correctly toggled the
+button label and ★ marker; zero console errors.
+
+**Phase 8 — Shadowing feature parity + practice-target isolation — is
+now fully complete** (8.1 through 8.5, all manually verified in a real
+browser). The two items flagged throughout as deliberately deferred
+stretch goals (word/mora-precise practice-target isolation via a revived
+mora timing guide; the source's per-page "default comparison attempt"
+concept, ruled inapplicable above) remain open but don't block anything
+— revisit only if a concrete need shows up.
 
 ### Background (planning done 2026-08-16, before 8.1 started)
 

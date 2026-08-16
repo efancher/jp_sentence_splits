@@ -10,6 +10,7 @@ import {
   listAttemptsForSentence,
   rateAttempt,
   saveAttempt,
+  setAttemptFavorite,
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
@@ -75,6 +76,8 @@ export function ShadowPage() {
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
+  const [hideTranscript, setHideTranscript] = useState(false);
+  const [draftNotes, setDraftNotes] = useState('');
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -127,6 +130,7 @@ export function ShadowPage() {
 
   useEffect(() => {
     setPendingAttempt(null);
+    setDraftNotes('');
     setTargetRange(null);
     setAnalyzingAttemptId(null);
   }, [sentenceId]);
@@ -160,8 +164,10 @@ export function ShadowPage() {
         blob: pendingAttempt.blob,
         mimeType: RecordingService.supportedMimeType() ?? pendingAttempt.blob.type,
         durationMs: pendingAttempt.durationMs,
+        notes: draftNotes.trim() || undefined,
       });
       setPendingAttempt(null);
+      setDraftNotes('');
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Unable to save attempt.');
     }
@@ -272,15 +278,26 @@ export function ShadowPage() {
           <div>
             <div className="muted">{book?.title} · Shadow</div>
           </div>
-          <Link to={`/books/${bookId}/practice/${sentenceId}`}>
-            <button type="button">Back to Practice</button>
-          </Link>
+          <div className="row">
+            <button type="button" onClick={() => setHideTranscript((value) => !value)}>
+              {hideTranscript ? 'Show transcript' : 'Hide transcript'}
+            </button>
+            <Link to={`/books/${bookId}/practice/${sentenceId}`}>
+              <button type="button">Back to Practice</button>
+            </Link>
+          </div>
         </div>
 
         <div className="row" style={{ alignItems: 'center' }}>
-          <div className="jp jp-lg" style={{ flex: 1 }}>
-            {sentence.japanese}
-          </div>
+          {hideTranscript ? (
+            <div className="muted" style={{ flex: 1 }}>
+              Audio-only practice
+            </div>
+          ) : (
+            <div className="jp jp-lg" style={{ flex: 1 }}>
+              {sentence.japanese}
+            </div>
+          )}
         </div>
         {!referenceAudio || !referenceUrl ? (
           <p className="muted">
@@ -400,15 +417,33 @@ export function ShadowPage() {
         ) : null}
 
         {pendingAttempt && pendingUrl ? (
-          <div className="row" style={{ alignItems: 'center' }}>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <audio controls src={pendingUrl} />
-            <button type="button" onClick={() => void handleSave()}>
-              Save attempt
-            </button>
-            <button type="button" onClick={() => setPendingAttempt(null)}>
-              Discard
-            </button>
+          <div className="stack">
+            <div className="row" style={{ alignItems: 'center' }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <audio controls src={pendingUrl} />
+            </div>
+            <label>
+              Notes <span className="muted">(optional)</span>
+              <input
+                value={draftNotes}
+                onChange={(event) => setDraftNotes(event.target.value)}
+                placeholder="Focus for next time…"
+              />
+            </label>
+            <div className="row" style={{ alignItems: 'center' }}>
+              <button type="button" onClick={() => void handleSave()}>
+                Save attempt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingAttempt(null);
+                  setDraftNotes('');
+                }}
+              >
+                Discard
+              </button>
+            </div>
           </div>
         ) : null}
         {saveError ? <p className="muted">{saveError}</p> : null}
@@ -426,13 +461,26 @@ export function ShadowPage() {
                     style={{ justifyContent: 'space-between', alignItems: 'center' }}
                   >
                     <div>
-                      <div>{new Date(attempt.createdAt).toLocaleString()}</div>
+                      <div>
+                        {new Date(attempt.createdAt).toLocaleString()}
+                        {attempt.isFavorite ? ' ★' : ''}
+                      </div>
                       <div className="muted">
                         {formatDuration(attempt.durationMs)}
                         {attempt.manualRating ? ` · ${attempt.manualRating}` : ''}
                       </div>
+                      {attempt.notes ? <p className="muted">{attempt.notes}</p> : null}
                     </div>
                     <div className="row">
+                      <button
+                        type="button"
+                        aria-pressed={Boolean(attempt.isFavorite)}
+                        onClick={() =>
+                          void setAttemptFavorite(attempt.id, !attempt.isFavorite)
+                        }
+                      >
+                        {attempt.isFavorite ? 'Unfavorite' : 'Favorite'}
+                      </button>
                       <button
                         type="button"
                         disabled={!referenceAudio}

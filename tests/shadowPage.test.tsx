@@ -65,6 +65,7 @@ async function seed() {
       blob: new Blob(['newer'], { type: 'audio/webm' }),
       createdAt: '2026-01-02T00:00:00.000Z',
       manualRating: 'better',
+      notes: 'Watch the pitch drop on 読みます',
     },
   ]);
 }
@@ -116,10 +117,44 @@ describe('ShadowPage', () => {
     // Newest first.
     expect(within(attemptRows[0]!).getByText(/1\.5s/)).toBeInTheDocument();
     expect(within(attemptRows[0]!).getByText(/better/)).toBeInTheDocument();
+    expect(within(attemptRows[0]!).getByText('Watch the pitch drop on 読みます')).toBeInTheDocument();
     expect(within(attemptRows[1]!).getByText(/2\.0s/)).toBeInTheDocument();
 
     const betterButtons = screen.getAllByRole('button', { name: 'Better' });
     expect(betterButtons[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('toggles the hide/show transcript control', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getByRole('button', { name: 'Hide transcript' }));
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+    expect(screen.getByText('Audio-only practice')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show transcript' }));
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    expect(screen.queryByText('Audio-only practice')).not.toBeInTheDocument();
+  });
+
+  it('favorites and unfavorites an attempt', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const favoriteButtons = screen.getAllByRole('button', { name: 'Favorite' });
+    await user.click(favoriteButtons[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Unfavorite' })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/★/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Unfavorite' }));
+    await waitFor(() => {
+      expect(screen.queryByText(/★/)).not.toBeInTheDocument();
+    });
   });
 
   it('opens and closes the analysis panel for an attempt', async () => {

@@ -1487,6 +1487,17 @@ export async function rateAttempt(
   return attempt;
 }
 
+export async function setAttemptFavorite(
+  attemptId: string,
+  isFavorite: boolean,
+): Promise<Attempt> {
+  const db = getDb();
+  await db.attempts.update(attemptId, { isFavorite });
+  const attempt = await db.attempts.get(attemptId);
+  if (!attempt) throw new Error('Attempt not found');
+  return attempt;
+}
+
 // ---------------------------------------------------------------------------
 // FSRS-scheduled review (docs/UNIFIED_APP_ARCHITECTURE.md §10, Phase 4).
 // study_items are created lazily the first time a subject is encountered in

@@ -34,6 +34,7 @@ import {
   restoreBackup,
   saveAnalysis,
   saveAttempt,
+  setAttemptFavorite,
   setBookSentenceStatus,
   transferBookSentences,
   updateBookChapter,
@@ -387,6 +388,40 @@ describe('shadowing attempts', () => {
 
     expect(await getDb().syncRecordMeta.count()).toBe(0);
     expect(await getDb().syncQueue.count()).toBe(0);
+  });
+
+  it('toggles favorite on an attempt and rejects an unknown id', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+    });
+    expect(attempt.isFavorite).toBeUndefined();
+
+    const favorited = await setAttemptFavorite(attempt.id, true);
+    expect(favorited.isFavorite).toBe(true);
+
+    const unfavorited = await setAttemptFavorite(attempt.id, false);
+    expect(unfavorited.isFavorite).toBe(false);
+
+    await expect(setAttemptFavorite('missing-id', true)).rejects.toThrow(
+      'Attempt not found',
+    );
+  });
+
+  it('saves an attempt with notes', async () => {
+    const attempt = await saveAttempt({
+      sentenceId: 'sent-1',
+      blob: makeBlob(),
+      mimeType: 'audio/webm',
+      durationMs: 1_000,
+      notes: 'Focus on the pitch drop.',
+    });
+    expect(attempt.notes).toBe('Focus on the pitch drop.');
+    expect(await getDb().attempts.get(attempt.id)).toMatchObject({
+      notes: 'Focus on the pitch drop.',
+    });
   });
 });
 
