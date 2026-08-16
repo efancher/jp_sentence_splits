@@ -92,6 +92,11 @@ describe('buildWordTimingObservations', () => {
     expect(sokuon).toBeDefined();
     expect(sokuon?.message).toBe('Your 「っ」 in 「ちょっと」 is much shorter than the reference.');
     expect(sokuon?.confidence).toBe('high');
+    expect(sokuon?.severity).toBeGreaterThan(0.5);
+    expect(sokuon?.segment).toEqual({
+      startMs: reference.words[0]!.start * 1000,
+      endMs: reference.words[0]!.end * 1000,
+    });
   });
 
   it('flags a shortened long vowel at high confidence for a stark difference', () => {
@@ -139,6 +144,9 @@ describe('buildWordTimingObservations', () => {
     const observations = buildWordTimingObservations({ reference, learner });
     const durationObservation = observations.find((o) => o.kind === 'word-duration');
     expect(durationObservation?.message).toBe('You were slower than the reference during 「見に」.');
+    // ratio = 0.55 / 0.3 = 1.833..., severity = min(1, |ratio - 1|)
+    expect(durationObservation?.severity).toBeCloseTo(0.833, 2);
+    expect(durationObservation?.segment).toEqual({ startMs: 0, endMs: 300 });
   });
 
   it('produces no observations for a close match', () => {

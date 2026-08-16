@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 4 done).
+Last updated: 2026-08-16 (Phase 9 Milestone 5/6 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3021,7 +3021,74 @@ same recurring caveat as every UI-facing change in this project).
 **Verified**: `npm run check` green — 516 tests passed, 2 pre-existing
 skips (unrelated). `npm run build` clean.
 
-## Phase 9 roadmap (Milestones 5-9, not started)
+## Phase 9 Milestone 5/6 — feedback ranking + "Fix One Thing": done
+
+The brief's own centerpiece: rank the (potentially half a dozen)
+observations from Milestones 1-4 and surface **one** "Focus on this"
+issue, with practicing it one tap away — reusing the existing loop/A-B
+mechanism (`targetRange`, Phase 8.2) rather than a second practice
+workflow, per the brief's explicit instruction.
+
+Deliberately scoped down: automatic "✓ Much closer" comparison after a
+re-record is **not** included — that needs persisted attempt history to
+compare against, which is Milestone 8's territory. This pass: rank →
+surface one → one-tap practice segment.
+
+Added:
+- `TimingObservation` (`src/lib/timingObservations.ts`) gained two
+  optional fields: `severity?: number` (0-1; absent/0 means "never a
+  Focus-on-this candidate" — e.g. a reassuring "close to reference" note
+  or an informational pitch-register comparison, which stays informational
+  rather than being misrepresented as an issue) and `segment?: { startMs,
+  endMs }` (reference-clip, full-clip time base — exactly what
+  `targetRange` needs). Populated at each observation's source:
+  `timingObservations.ts`'s whole-clip duration ratio; both
+  `wordTimingObservations.ts` cases (word-duration linear, long-phone
+  **log-ratio-based** — symmetric between "half as long" and "twice as
+  long", unlike a plain `|ratio - 1|`, which would otherwise score those
+  very differently despite being equally notable); both
+  `pitchTimingObservations.ts` cases (timing-offset magnitude; shape
+  mismatch gets a fixed, modest severity — already the lower-confidence
+  category, kept as a low-priority candidate rather than excluded
+  entirely).
+- `src/lib/feedbackRanking.ts` — `rankObservations` (severity × a
+  confidence weight — high/medium/low — not confidence alone, so a severe
+  medium-confidence finding outranks a barely-noticeable high-confidence
+  one) and `selectPrimaryObservation` (ranks only observations with real
+  severity, so an all-informational set correctly yields no primary
+  candidate rather than presenting a reassurance note as "the" issue to
+  fix).
+- `src/components/AnalysisPanel.tsx` — new "FOCUS ON THIS" callout at the
+  **top** of the panel (combines all three observation sources, picks the
+  primary one) with a "Practice this part" button when a `segment` is
+  available; a short "Nothing stands out this time" note when analysis
+  has run but found nothing severity-worthy (the brief's "observant coach,
+  not examiner" framing — silence would read as broken, a score would
+  overclaim). New `onProposeSegment` prop.
+- `src/pages/ShadowPage.tsx` — passes `onProposeSegment={setTargetRange}`,
+  the exact same setter `handleMarkStart`/`handleMarkEnd` already call.
+  Once set, the **already-existing** "Loop target"/"Clear target"
+  controls and `targetRange`-scoped Alternate/Dual-ear comparisons (Phase
+  8.2) work immediately — genuinely no new playback code, confirmed by a
+  test that clicks "Practice this part" and asserts the existing
+  `Target: 0.5s–0.8s` display and "Loop target" button (both
+  `handleMarkStart`/`handleMarkEnd`'s own UI) actually update, not just
+  that a button renders.
+
+Tests: `tests/feedbackRanking.test.ts` (new, pure) — severity×confidence
+ordering, the "severity beats raw confidence" case, all-informational
+yields no primary, empty-list case. Extended
+`wordTimingObservations.test.ts`/`pitchTimingObservations.test.ts`'s
+existing cases with `severity`/`segment` assertions rather than adding
+parallel test cases. `shadowPage.test.tsx` — extended the existing
+Milestone-3 segment-timing test (already seeds a clear っ difference) to
+also assert the callout renders the same message and that clicking
+"Practice this part" drives the real, pre-existing target-range UI.
+
+**Verified**: `npm run check` green — 523 tests passed, 2 pre-existing
+skips (unrelated). `npm run build` clean.
+
+## Phase 9 roadmap (Milestones 7-9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -3043,10 +3110,10 @@ architecture decision or the researched facts above.
   cached permanently; learner-attempt alignment cached per attempt).
 - **Milestone 3 — mora/rhythm timing feedback: done**, see above.
 - **Milestone 4 — pitch-contour timing feedback: done**, see above.
-- **Milestone 5/6 — feedback ranking + "Fix One Thing"**: rank candidate
-  observations, surface one, auto-propose a loop range (reusing the
-  existing `targetRange`/mark-start/mark-end mechanism), re-analyze after
-  re-recording.
+- **Milestone 5/6 — feedback ranking + "Fix One Thing": done**, see
+  above. Cross-recording "✓ Much closer" comparison after a re-record
+  remains deliberately deferred to Milestone 8 (needs persisted attempt
+  history to compare against).
 - **Milestone 7 — ASR as a secondary signal**: faster-whisper `small` on
   the same server (~2 GB RAM, ~6x real-time on this box's CPU), used only
   to flag likely-mispronounced words for closer listening, never as ground

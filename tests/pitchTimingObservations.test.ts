@@ -69,6 +69,8 @@ describe('buildPitchTimingObservations', () => {
       confidence: 'medium',
       message: 'Your pitch drop occurs later than the reference around 「見に」.',
     });
+    expect(observations[0]?.severity).toBeGreaterThan(0);
+    expect(observations[0]?.segment).toEqual({ startMs: 0, endMs: 1000 });
   });
 
   it('flags an earlier pitch drop', () => {
@@ -106,6 +108,8 @@ describe('buildPitchTimingObservations', () => {
     expect(observations[0]).toMatchObject({
       kind: 'pitch_shape',
       confidence: 'low',
+      severity: 0.3,
+      segment: { startMs: 0, endMs: 1000 },
       message: 'Your pitch stays level during 「寒い」 where the reference falls.',
     });
   });

@@ -18,6 +18,16 @@ export interface TimingObservation {
   message: string;
   confidence: ConfidenceLevel;
   detail?: string;
+  /**
+   * 0-1, higher = more prominent/actionable (Phase 9, Milestone 5/6).
+   * Absent or 0 means "not a candidate for Focus on this" — e.g. a
+   * reassuring "close to reference" note, or an informational comparison
+   * (pitch register differences are expected across speakers, not
+   * something to fix).
+   */
+  severity?: number;
+  /** Reference-clip time range (full-clip time base), for auto-proposing a practice loop. */
+  segment?: { startMs: number; endMs: number };
 }
 
 export function confidenceFromSignal(options: {
@@ -49,6 +59,7 @@ export function buildTimingObservations(options: {
       id: 'duration-ratio',
       kind: 'duration',
       confidence: options.confidence,
+      severity: Math.min(1, Math.abs(ratio - 1)),
       message:
         ratio > 1
           ? 'Your recording is longer than the reference.'

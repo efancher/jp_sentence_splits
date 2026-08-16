@@ -242,9 +242,23 @@ describe('ShadowPage', () => {
     await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
 
     expect(await screen.findByText('Segment timing')).toBeInTheDocument();
+    // Appears twice: once in the "Segment timing" detail list, once in the
+    // "Focus on this" callout below.
     expect(
-      screen.getByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+      screen.getAllByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+    ).toHaveLength(2);
+
+    // "Focus on this" surfaces the same finding as the primary issue, and
+    // practicing it drives the *existing* target-range/loop mechanism
+    // (Phase 8.2) — not a new, separate practice workflow.
+    const focusOnThis = screen.getByLabelText('Focus on this');
+    expect(
+      within(focusOnThis).getByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
     ).toBeInTheDocument();
+
+    await user.click(within(focusOnThis).getByRole('button', { name: 'Practice this part' }));
+    expect(screen.getByText(/Target: 0\.5s–0\.8s/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Loop target' })).toBeEnabled();
   });
 
   it('has no server word timing section when the alignment service is unreachable', async () => {

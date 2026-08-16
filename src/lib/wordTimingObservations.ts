@@ -128,6 +128,8 @@ export function buildWordTimingObservations({
         id: `word-duration-${pairIndex}`,
         kind: 'word-duration',
         confidence: 'medium',
+        severity: Math.min(1, Math.abs(ratio - 1)),
+        segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
         message:
           ratio > 1
             ? `You were slower than the reference during 「${refWord.text}」.`
@@ -165,6 +167,11 @@ export function buildWordTimingObservations({
             id: `long-phone-${kind}-${pairIndex}-${kindIndex}`,
             kind: kind === 'consonant' ? 'sokuon_timing' : 'long_vowel_timing',
             confidence,
+            // Symmetric between "half as long" and "twice as long" —
+            // unlike a plain |ratio - 1|, which would score those very
+            // differently even though both are equally notable.
+            severity: Math.min(1, Math.abs(Math.log2(phoneRatio)) / 2),
+            segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
             message:
               kind === 'consonant'
                 ? `Your 「っ」 in 「${refWord.text}」 is ${degree} than the reference.`

@@ -14,6 +14,7 @@ import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
+import { selectPrimaryObservation } from '../lib/feedbackRanking';
 import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
@@ -154,6 +155,7 @@ export function AnalysisPanel({
   hasReading,
   durationHintSeconds,
   targetRange,
+  onProposeSegment,
 }: {
   /** Cache key for the reference clip's server alignment (Phase 9, Milestone 2b). */
   referenceAudioId: string;
@@ -167,6 +169,12 @@ export function AnalysisPanel({
   durationHintSeconds: number;
   /** Restricts the reference side to this sub-range (Phase 8.2's practice-target isolation). */
   targetRange?: TimeRangeMs;
+  /**
+   * Applies the "Focus on this" primary issue's segment as the reference
+   * player's practice-target range (Phase 9, Milestone 5/6) — reuses the
+   * existing loop/A-B mechanism (Phase 8.2) rather than a new one.
+   */
+  onProposeSegment?: (range: TimeRangeMs) => void;
 }) {
   const [mode, setMode] = useState<AlignmentMode>('original');
   const [pitchMode, setPitchMode] = useState<'hz' | 'semitones'>('semitones');
@@ -294,8 +302,38 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
 
+  const primaryObservation = useMemo(
+    () =>
+      selectPrimaryObservation([...observations, ...segmentObservations, ...pitchTimingObservations]),
+    [observations, segmentObservations, pitchTimingObservations],
+  );
+  const hasComputedAnyObservations =
+    observations.length > 0 || segmentObservations.length > 0 || pitchTimingObservations.length > 0;
+
   return (
     <div className="stack">
+      {primaryObservation ? (
+        <div className="panel stack" aria-label="Focus on this">
+          <strong>FOCUS ON THIS</strong>
+          <p style={{ margin: 0 }}>{primaryObservation.message}</p>
+          {primaryObservation.segment && onProposeSegment ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() =>
+                onProposeSegment({
+                  startMs: primaryObservation.segment!.startMs,
+                  endMs: primaryObservation.segment!.endMs,
+                })
+              }
+            >
+              Practice this part
+            </button>
+          ) : null}
+        </div>
+      ) : hasComputedAnyObservations ? (
+        <p className="muted">Nothing stands out this time.</p>
+      ) : null}
       <div className="row">
         {ALIGNMENT_MODES.map((value) => (
           <button

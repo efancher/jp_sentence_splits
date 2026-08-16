@@ -565,6 +565,7 @@ export function ShadowPage() {
                       hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}
                       durationHintSeconds={attempt.durationMs / 1000}
                       targetRange={targetRange ?? undefined}
+                      onProposeSegment={setTargetRange}
                     />
                   ) : null}
                 </li>

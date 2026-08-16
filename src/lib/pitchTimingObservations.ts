@@ -120,6 +120,8 @@ export function buildPitchTimingObservations({
         id: `pitch-timing-${index}`,
         kind: 'pitch_timing',
         confidence: 'medium',
+        severity: Math.min(1, Math.abs(offset) / 0.5),
+        segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
         message: `Your pitch ${verb} occurs ${offset > 0 ? 'later' : 'earlier'} than the reference around 「${refWord.text}」.`,
       });
       return;
@@ -129,6 +131,12 @@ export function buildPitchTimingObservations({
       id: `pitch-shape-${index}`,
       kind: 'pitch_shape',
       confidence: 'low',
+      // Fixed, modest — already the lower-confidence category; kept as a
+      // low-priority "Focus on this" candidate rather than excluded
+      // entirely, since a shape mismatch (not just timing) can still be
+      // the most useful thing to notice sometimes.
+      severity: 0.3,
+      segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
       message: `Your pitch ${describeTrend(learner.trend)} during 「${refWord.text}」 where the reference ${describeTrend(ref.trend)}.`,
     });
   });
