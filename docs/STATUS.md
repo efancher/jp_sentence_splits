@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8 fully complete — 8.5 done).
+Last updated: 2026-08-16 (Phase 9 Milestone 2a done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2565,3 +2565,269 @@ entire original planning scope (items 1-4) is now done** — only 8.5
 remains, plus the two deliberately-deferred stretch items (word/mora-
 precise practice-target isolation via a revived mora timing guide) noted
 throughout this section, neither of which blocks anything.
+
+## Phase 9 — Shadowing pronunciation/prosody feedback: Milestone 1 done
+
+New work, from a detailed user design brief: after shadowing a native
+recording, identify the single most useful reference-vs-learner difference
+(timing, pitch, rhythm) and let the user immediately practice just that
+segment, reusing the existing shadowing UI rather than building a second
+parallel system. Full brief covers 9 milestones (forced alignment, mora/pitch
+comparison, ranked "fix one thing" feedback, ASR, history, PASQA); this pass
+is Milestone 1 only, per the brief's own instruction to ship small,
+reviewable increments rather than one giant change.
+
+**Investigation before building** (per the brief's explicit Phase-1
+requirement to inspect first): this repo's shadowing module was already far
+more built out than the brief assumed — Phase 3 + Phase 8 (above) already
+ship recording, mic calibration, alternate/dual-ear A/B comparison,
+pitch-preserving playback speed, manual loop-point marking (`targetRange` in
+`ShadowPage.tsx`) that scopes both playback and analysis to a sub-range, YIN
+pitch extraction already speaker-normalized to semitones (`src/lib/pitch.ts`),
+onset-detection/cross-correlation alignment (`src/lib/waveform.ts`,
+`analyzeAlignment`), and a `TimingObservation[]` feedback model with
+high/medium/low confidence and hedged language (`src/lib/timingObservations.ts`,
+rendered in `src/components/AnalysisPanel.tsx`). The brief's philosophy
+(confidence levels, no fake precision scores, normalized pitch) was already
+largely in place. Missing relative to the brief: mora-unit segmentation
+(explicitly deferred in existing code comments), real forced-alignment time
+boundaries, ranked/prioritized feedback, ASR, pronunciation history, PASQA.
+
+**Architecture decision** (confirmed with the user this session): the
+repo's documented architecture is "no new backend service, static hosting +
+Supabase only" (`docs/UNIFIED_APP_ARCHITECTURE.md`), but the brief assumes a
+Hetzner server for the heavier analysis (forced alignment, ASR). Asked the
+user directly; confirmed **the machine this session runs on is that Hetzner
+server** — a 4 vCPU / 7.6 GB RAM / 57 GB-free-disk Ubuntu 24.04 vServer,
+already running personal infrastructure for this app ecosystem: VOICEVOX TTS
+(Docker) fronted by a small FastAPI wrapper
+(`~/projects/voicevox-tts-api`, `uvicorn` on `127.0.0.1:8001`), exposed to
+the user's **Tailscale tailnet only** via `tailscale serve` at
+`https://codex-dev.tailfbd89c.ts.net` (confirmed tailnet-only, not a public
+Funnel; the user's iPhone is already an active tailnet member). This is the
+pattern later milestones will extend for a new pronunciation-analysis
+service, rather than inventing new infrastructure — see the roadmap below.
+Researched MFA and faster-whisper Japanese feasibility on this box before
+committing to the path: MFA has real pretrained Japanese acoustic models
+(`japanese_mfa` v2/v3, CC BY 4.0) and a matching dictionary; faster-whisper's
+`small` model runs in ~2 GB RAM at ~6x real-time on CPU. Both fit this box's
+budget for single-user, occasional use. Also researched PASQA (a
+pitch-accent-focused Japanese speech quality model): real code + weights
+exist (`github.com/lycorp-jp/PASQA`, CC0), standalone learner-audio scoring
+with an auxiliary accent-error-localization signal, CPU-capable, needs a
+katakana mora sequence as input — a real candidate for a later, feature-flagged
+milestone, not blocking anything now.
+
+**Key simplification found while scoping Milestone 1**: the brief's core
+Japanese-specific requirement — mora-unit segmentation (ちょっと →
+ちょ|っ|と, not one-kana-one-unit) — turns out to need no server at all,
+because this app already stores a kana reading for most sentences
+(`Sentence.inlineReading` Satori-style `小鳥[ことり]` markup, already parsed
+by `src/lib/parseInlineReadings.ts` for furigana rendering; or
+`Sentence.readingOnly`, a whole-sentence reading string).
+`AnalysisPanel.tsx`/`ShadowPage.tsx` already gate confidence on
+`hasReading = Boolean(sentence.readingOnly || sentence.inlineReading)`. Mora
+segmentation from an existing reading is a deterministic pure function, so
+Milestone 1 shipped as a small, fully client-side, immediately-testable
+change with no new infrastructure.
+
+Added:
+- `src/lib/mora.ts` — `segmentIntoMorae(reading)`, standard Japanese mora
+  rules: small y-kana/vowel-kana (ゃゅょ/ゎ and katakana equivalents, plus
+  small vowels used in loanword combinations like ファ/ティ) merge into the
+  *preceding* unit; everything else (including っ/ッ, ん/ン, and long-vowel
+  ー) naturally becomes its own unit under "one kana starts one unit unless
+  it's a small kana". Reproduces the brief's own worked examples exactly:
+  ちょっと → ちょ|っ|と, がっこう → が|っ|こ|う, きょう → きょ|う. Each unit
+  is tagged `sokuon`/`moraic-n`/`long-vowel-mark`/`normal` so later
+  milestones can target messages at the right units (e.g. "your っ was
+  short"). Non-kana characters (punctuation, stray kanji) are skipped, not
+  thrown on. `getSentenceReadingForMora(sentence)` resolves the best
+  available reading — prefers `inlineReading` (parsed via the existing
+  `parseInlineReadings`, preserving real word boundaries as `wordIndex` on
+  each mora unit — useful for a later milestone's "propose a sensible loop
+  range around this word"), falls back to `readingOnly`, returns `null` when
+  neither exists (same gating precedent as `hasReading` elsewhere).
+  `MORA_SEGMENTATION_VERSION` — a plain version constant, the minimal honest
+  start on the brief's `analysis_version` requirement. Deliberately no Dexie
+  table/caching yet: mora segmentation is cheap and deterministic
+  (recompute on render), matching `AnalysisPanel.tsx`'s existing precedent
+  of recomputing short-clip analysis on demand rather than persisting it.
+  Caching starts earning its complexity in Milestone 2, once a real,
+  network-dependent, expensive alignment result needs to survive across
+  renders.
+- `src/pages/ShadowPage.tsx` — a `MoraBreakdown` row renders the sentence's
+  mora chips next to the transcript (hidden together with it under "Hide
+  transcript", since showing it would defeat audio-only practice; absent
+  entirely when the sentence has no reading data, no empty-state clutter).
+  `src/styles/global.css` — two small CSS rules distinguishing
+  sokuon/moraic-n/long-vowel chips by style (`data-kind` attribute selector,
+  no legend needed, glanceable on a phone).
+- Tests: `tests/mora.test.ts` (new, pure — the brief's own worked examples
+  plus ん-final, long-vowel, katakana small-vowel-merge, punctuation, and
+  empty-input edge cases; `getSentenceReadingForMora` precedence/fallback
+  cases). `tests/shadowPage.test.tsx` gained coverage for the mora row
+  appearing with reading data, hiding with the transcript, and being absent
+  without reading data.
+
+**Verified**: `npm run check` (typecheck + vitest) green — 486 tests passed,
+2 pre-existing skips (unrelated), including 13 new `mora.test.ts` tests and
+2 new `shadowPage.test.tsx` tests. **Not manually verified in a real
+browser** this session — no browser available in this environment (same
+constraint noted in earlier phases); the `npm run dev` server itself was
+smoke-tested (starts cleanly, serves the page). Real-browser check still
+recommended before considering Milestone 1 fully proven, consistent with
+this project's existing practice.
+
+## Phase 9 Milestone 2a — forced-alignment service (server-side only): done
+
+Stood up the new sibling service, `~/projects/shadowing-analysis-api`, on
+the Hetzner box identified in Milestone 1. Server-side only in this pass —
+no `jp_sentence_splits` frontend code touched (no fetch client, no Dexie
+caching, no `ShadowPage.tsx`/`AnalysisPanel.tsx` wiring). That's Milestone
+2b, a deliberate follow-up once this service was proven to actually work.
+
+**Real, hands-on findings that changed the design from what was planned**:
+- MFA genuinely needs conda (Kaldi bindings/`kalpy` and `pynini` aren't
+  portable pip wheels) — installed Miniforge to `~/miniforge3` (user-level,
+  no root) and created a `mfa` conda env with `montreal-forced-aligner`,
+  `openfst` (had to be installed explicitly — `mfa align` initially failed
+  with `ThirdpartyError: fstcompile` even though the conda package was
+  present, because the CLI wasn't being invoked through an activated
+  environment), and `spacy`/`sudachipy`/`sudachidict-core` (MFA's own
+  Japanese tokenizer, which turned out to handle raw untokenized Japanese
+  text correctly — no separate fugashi/UniDic tokenization step needed in
+  this service after all, simpler than Milestone 1's roadmap note assumed).
+  Downloaded `japanese_mfa` acoustic model (v3_0_0) and matching dictionary.
+- **The originally-planned "shell out to `mfa align` per request" design
+  was measured and rejected**: a full `mfa align` corpus run costs
+  ~155-165s per invocation regardless of clip length (corpus/database
+  setup, lexicon FST compilation, worker spin-up, all fixed overhead); the
+  lighter `mfa align_one` (no corpus database) is still ~45-50s. Both are
+  unusable for an interactive "record, then see feedback" loop. Found and
+  switched to `montreal_forced_aligner.online.alignment
+  .align_utterance_online` — a lower-level, warm, in-process API meant for
+  single-utterance alignment. Loading the acoustic model + compiled lexicon
+  + tokenizer once costs ~40s (dominated by lexicon FST compilation);
+  every alignment after that is **~1-3s**. This is the single biggest
+  design change from the approved plan, discovered during the plan's own
+  "spike, go/no-go" step — confirmed as a strict improvement (same output,
+  far less latency), not a scope change, so implementation continued
+  without pausing for new sign-off.
+- Alignment quality on a self-synthesized test sentence
+  (`今日はちょっと寒いですね`, via the already-running `voicevox-tts-api`)
+  looks genuinely good: plausible word boundaries for all six words, and
+  the phone tier correctly shows a held consonant (`tː`, IPA length mark)
+  for っ in ちょっと — direct, ready-to-use evidence for exactly the kind
+  of feedback the brief wants ("your っ is shorter than the reference").
+  **Go decision confirmed** — proceeded to build the service.
+
+Added (`~/projects/shadowing-analysis-api`, new sibling git repo, not yet
+committed):
+- `app/aligner.py` — the warm, lazy-loaded (on first `/align` call, not at
+  process start, so `systemd` startup itself stays fast) aligner. A
+  `threading.Lock` serializes both lazy construction and every `align()`
+  call — kalpy's aligner/lexicon aren't documented as safe for concurrent
+  use, and for a single-user personal service serialized ~1-3s alignments
+  cost nothing real. Strips kalpy's internal position-dependent phone
+  disambiguation suffix (e.g. `tɕ(46)` → `tɕ`) before returning.
+- `app/audio.py` — `ffmpeg` subprocess transcode (any container → 16 kHz
+  mono WAV); `ffmpeg`/`ffprobe` were already installed on this host, no new
+  system dependency.
+- `app/main.py` — `GET /health` (cheap — file-existence + in-memory-loaded
+  checks, never forces a model load) and `POST /align` (multipart
+  audio + transcript → word intervals with nested phone intervals, JSON).
+  No CORS/auth yet (documented `TODO`, deferred to Milestone 2b when the
+  real frontend origin is known); safe only because of tailnet-only network
+  exposure (below).
+- Tests (`~/miniforge3/envs/mfa/bin/python3 -m pytest`, mirroring
+  `voicevox-tts-api`'s monkeypatch-the-boundary convention): 12 fast tests
+  (`test_health.py`, `test_align.py` mocking `app.aligner`/`app.audio`,
+  `test_audio.py` against real `ffmpeg` with a tiny synthetic WAV) run in
+  ~2.6s with no MFA models needed. One `slow`-marked real end-to-end test
+  (`test_integration_alignment.py`) synthesizes its own fixture via
+  `voicevox-tts-api` (no checked-in audio) and asserts the exact expected
+  word sequence plus the っ length-mark signal; skips automatically if
+  models/VOICEVOX aren't available. **All 13 tests pass** (fast suite
+  2.61s; the slow test 45.69s, matching the ~40s one-time load).
+- `~/.config/systemd/user/shadowing-analysis-api.service` (also checked
+  into the repo) — a **user-level** unit, not system-wide: I do not have
+  passwordless `sudo` on this host, which rules out a root-owned
+  `systemd` service. `systemctl --user enable --now` works without root.
+  Verified running (`systemctl --user status`) and serving real requests
+  end-to-end over HTTP (curl), first request 42.5s (cold load), second
+  request 1.58s (warm) — matches the in-process spike measurements exactly.
+  Boot persistence needs `loginctl enable-linger`, which does need root —
+  documented in the new repo's README as a one-line command for the user
+  to run themselves, not attempted here.
+- `README.md` in the new repo, mirroring `voicevox-tts-api/README.md`'s
+  structure (why conda not pip, why warm in-process not CLI-subprocess,
+  install/run/config/API docs, tailnet-only exposure note).
+
+**Tailnet exposure — done.** Writing the `tailscale serve` config needed
+either root or being the tailscale "operator" (reading status, tried
+earlier, needed neither — a different permission tier than writing). The
+user ran `sudo tailscale set --operator=ed` once; after that,
+`tailscale serve --bg --set-path /shadowing-analysis http://127.0.0.1:8002`
+succeeded and coexists with the existing `/` → 8001 VOICEVOX mount
+(confirmed via `tailscale serve status`, both listed). Verified over the
+real tailnet HTTPS hostname, not just localhost:
+`curl https://codex-dev.tailfbd89c.ts.net/shadowing-analysis/health` and
+the existing `.../health` (VOICEVOX) both respond correctly side by side.
+
+**Phase 9 Milestone 2a is now fully done.**
+
+**Resource footprint observed** (Phase 20's requirement to document this
+per new dependency): `mfa` conda env + models, roughly a few GB on disk
+(exact size not yet measured precisely — worth a follow-up `du -sh` note);
+CPU-only throughout (no GPU used or required); the running service's RSS
+after the models are loaded was ~189 MB at idle in the `systemctl --user
+status` output above (before the first `/align` call — will grow once the
+acoustic model/lexicon are actually loaded into memory, not yet measured
+post-load). All well within this box's 7.6 GB RAM / 4 vCPU / 57 GB-free
+budget, alongside the existing VOICEVOX Docker container and TTS wrapper.
+
+**Not done in this pass, still open**: git commit for the new repo (not
+requested yet); Milestone 2b (`jp_sentence_splits` frontend wiring — fetch
+client, offline fallback, Dexie caching, `ShadowPage.tsx`/`AnalysisPanel.tsx`
+integration, CORS).
+
+## Phase 9 roadmap (Milestones 2b-9, not started)
+
+Recorded here so a future session doesn't need to re-derive the
+architecture decision or the researched facts above.
+
+- **Milestone 2a — forced-alignment service: fully done**, see above.
+  `~/projects/shadowing-analysis-api` is live under `systemd --user`,
+  exposed tailnet-only via `tailscale serve`, producing real word/phone
+  time boundaries in ~1-3s per request once warm.
+- **Milestone 2b — frontend wiring (separate change, not started)**: a
+  fetch client in `jp_sentence_splits` calling the new service's `/align`
+  for both the reference clip and each attempt, mapping the returned word
+  boundaries onto Milestone 1's mora units. Requires a **required** graceful
+  fallback to today's onset/cross-correlation heuristic when the API isn't
+  reachable (phone off the tailnet, etc.) — the app must keep working
+  exactly as it does today when the server is unreachable. CORS
+  configuration on the service (deferred from 2a, needs the real frontend
+  origin). This is the point where a real Dexie cache table +
+  `analysis_version` earns its complexity (reference-audio alignment
+  cached permanently; learner-attempt alignment cached per attempt).
+- **Milestone 3 — mora/rhythm timing feedback**: per-mora duration
+  comparison messages using Milestone 2's boundaries, extending
+  `timingObservations.ts`.
+- **Milestone 4 — pitch-contour feedback**: reuse the existing normalized
+  YIN pitch extraction, compare *where in time* (via Milestone 2's
+  alignment) pitch rises/falls happen, not just aggregate register.
+- **Milestone 5/6 — feedback ranking + "Fix One Thing"**: rank candidate
+  observations, surface one, auto-propose a loop range (reusing the
+  existing `targetRange`/mark-start/mark-end mechanism), re-analyze after
+  re-recording.
+- **Milestone 7 — ASR as a secondary signal**: faster-whisper `small` on
+  the same server (~2 GB RAM, ~6x real-time on this box's CPU), used only
+  to flag likely-mispronounced words for closer listening, never as ground
+  truth.
+- **Milestone 8 — pronunciation history**: new local-only Dexie table
+  (mirroring `attempts`' local-only, unsynced precedent) tracking trend
+  categories per sentence, not raw scores.
+- **Milestone 9 — PASQA (experimental, feature-flagged)**: prototype once
+  Milestones 2-4 give a real baseline to compare it against.
