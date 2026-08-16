@@ -1343,14 +1343,13 @@ review failures (`errorClassification` stays unpopulated, same
 tests passed (up from 254), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
-**Migration application**: `20260816010000_study_item_vocabulary_confusion_subject.sql`
-is pending manual paste into the Dashboard SQL editor (the backfill script
-doesn't depend on it — see below — but it should land before Phase 7.7
-starts writing `study_items` rows with `subject_type: 'vocabularyConfusion'`).
+**Migration applied** (2026-08-16): `20260816010000_study_item_vocabulary_confusion_subject.sql`
+pasted into the Dashboard SQL editor — `study_items.subject_type` now
+accepts `'vocabularyConfusion'` in production.
 
 **Backfill run against production** (2026-08-16): dry run via GitHub
 Actions ("Backfill verb-pair confusions" → "Run workflow") found 4
 candidate pairs, all correct transitive/intransitive readings — 付く/付ける,
 変わる/変える, 見せる/見る, 出る/出す. Re-run with `apply: true`: all 4
 inserted into `vocabulary_confusions`, 0 already present. Phase 7.6 is now
-fully done end-to-end except for the migration paste above.
+fully done end-to-end, migration included.
