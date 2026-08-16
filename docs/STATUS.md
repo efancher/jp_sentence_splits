@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.6).
+Last updated: 2026-08-16 (Phase 7.7).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1353,3 +1353,64 @@ candidate pairs, all correct transitive/intransitive readings — 付く/付け�
 変わる/変える, 見せる/見る, 出る/出す. Re-run with `apply: true`: all 4
 inserted into `vocabulary_confusions`, 0 already present. Phase 7.6 is now
 fully done end-to-end, migration included.
+
+## Phase 7.7 — Contrastive pair review: done
+
+The first consumer of Phase 7.6's `vocabulary_confusions` data, and the
+last of the 7.x sub-phases split from the roadmap's original bundled
+"interference/contrastive review" line. One StudyItem per confusion pair
+(not per word), `subjectType: 'vocabularyConfusion'`, subjectId a
+`VocabularyConfusion.id` — the evidence being scored is "can this learner
+tell these two apart," which is distinct from either word's own recall
+(already covered by reading_retrieval/cloze).
+
+Added:
+- `src/db/repository.ts` — `getConfusionPairCandidates(vocabularyTargetCandidates)`:
+  a confusion pair is eligible only if *both* members are themselves
+  vocabulary-target candidates (a surfaceForm-bearing sentence link within
+  the current review scope) — reuses `getVocabularyTargetCandidates`'s
+  output rather than re-querying, so a pair only shows up in a book's queue
+  when both words actually appear there, and each member arrives with its
+  own highlighted sentence for free.
+- `src/pages/ReviewPage.tsx` — new `CONFUSION_ACTIVITY_TYPES = ['contrastive']`,
+  wired into the scope query, due-queue merge, pending-seed pool, and
+  seeding batch exactly like the three existing activity-type groups
+  (sentence/vocabulary/audio). `QueueCard` gained an optional
+  `confusionPair` field; `PendingSeed` a `'confusion'` kind.
+- `ContrastivePairCard` (`src/pages/ReviewPage.tsx`): renders both
+  confusable words together, each highlighted (not blanked — visible, same
+  convention as reading_retrieval) in its own sentence. One shared "Reveal"
+  shows both readings/meanings at once, so the learner has to hold both in
+  mind and check for mix-ups, then rates the pair as a whole.
+- `tests/reviewPage.test.tsx` — `suppressVocabularyActivityTypes` helper
+  (mirrors `suppressUnconditionalSentenceActivityTypes`, for isolating the
+  contrastive card in tests from its two members' own reading_retrieval/cloze
+  cards) plus a new test seeding a real 付く/付ける pair across two
+  sentences, verifying the seeded study item's subjectType/activityType,
+  pre-reveal hiding of both readings, and post-reveal display of both
+  readings and meanings together.
+
+**Deliberately not done yet**: no explicit "which is which" quiz or typed
+answer — just juxtaposition, matching every prior review experience's
+minimal self-rate interaction; no manual confusion-pair entry UI; no
+automatic confusion detection from review failures
+(`errorClassification` stays unpopulated); no assistance flags specific to
+this card type. `vocabulary_confusions` still isn't in `backupSchema`/
+`buildBackupPayload` — this phase only *reads* existing confusion rows, it
+doesn't write new ones, so the "add it alongside whatever UI first writes
+confusion rows" gap noted in Phase 7.1 still stands.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 268
+tests passed (up from 267), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet manually verified in a real browser** — same caveat as every
+prior UI-facing phase; only 4 confusion pairs exist in production today
+(the Phase 7.6 backfill's output), so a real check should confirm at least
+one of them actually surfaces in a real book's review queue.
+
+This completes the "Phase 7 — Adaptive learning" sub-phasing's originally
+bundled 7.6/7.7 interference-review line (see docs/ROADMAP.md). Remaining
+Phase 7 sub-phases: 7.8 (natural-encounter evidence), 7.9 (production
+ladder/sentence transformations), 7.10 (session planner, graduation,
+explainability, debug view).

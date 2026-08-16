@@ -8,10 +8,12 @@ import {
   computeVocabularyContextDiversity,
   ensureStudyItem,
   ensureVocabularyStudyItem,
+  getConfusionPairCandidates,
   getDb,
   getDueStudyItems,
   getVocabularyTargetCandidates,
   recordReview,
+  type ConfusionPairCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import type {
@@ -59,12 +61,24 @@ const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
  */
 const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
 
+/**
+ * Contrastive pair review (Phase 7.7, docs brief §10): subjectType
+ * `vocabularyConfusion`, subjectId a VocabularyConfusion.id — one study item
+ * per pair, not per word, so FSRS scheduling reflects "can this learner tell
+ * these two apart" rather than either word's individual recall (that's
+ * already covered by reading_retrieval/cloze). Eligibility is handled by
+ * getConfusionPairCandidates (both members must be vocabulary-target
+ * candidates in scope); see docs/STATUS.md.
+ */
+const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
   reading_retrieval: 'Reading retrieval',
   cloze: 'Cloze',
   listening: 'Listening',
+  contrastive: 'Contrastive pair',
 };
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -81,6 +95,8 @@ interface QueueCard {
   target?: { vocabularyItem: VocabularyItem; surfaceForm: string };
   /** Set only for audio-comprehension cards (listening). */
   audio?: SentenceAudio;
+  /** Set only for contrastive-pair cards (Phase 7.7). */
+  confusionPair?: ConfusionPairCandidate;
 }
 
 /** A (subject, activityType) pair with no study_item yet — needs seeding. */
@@ -96,10 +112,16 @@ type PendingSeed =
       sentence: Sentence;
       audio: SentenceAudio;
       activityType: StudyActivityType;
+    }
+  | {
+      kind: 'confusion';
+      candidate: ConfusionPairCandidate;
+      activityType: StudyActivityType;
     };
 
 function pendingSeedKey(seed: PendingSeed): string {
   if (seed.kind === 'vocabulary') return seed.candidate.vocabularyItem.id;
+  if (seed.kind === 'confusion') return seed.candidate.confusion.id;
   return seed.sentence.id;
 }
 
@@ -198,6 +220,23 @@ export function ReviewPage() {
       (item) => item.subjectType === 'sentence' && audioBySentenceId.has(item.subjectId),
     );
 
+    const confusionPairCandidates = await getConfusionPairCandidates(
+      vocabularyTargetCandidates,
+    );
+    const confusionPairIdSet = new Set(
+      confusionPairCandidates.map((candidate) => candidate.confusion.id),
+    );
+    const existingConfusionItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(CONFUSION_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'vocabularyConfusion' &&
+        confusionPairIdSet.has(item.subjectId),
+    );
+
     return {
       book,
       sentences,
@@ -206,6 +245,8 @@ export function ReviewPage() {
       existingVocabularyItems,
       audioBySentenceId,
       existingAudioItems,
+      confusionPairCandidates,
+      existingConfusionItems,
     };
   }, [bookId]);
 
@@ -226,17 +267,25 @@ export function ReviewPage() {
         ]),
       );
 
-      const [dueSentenceItems, dueVocabularyItems, dueAudioItems] = await Promise.all([
-        getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
-          subjectIds: scope.sentences.map((item) => item.id),
-        }),
-        getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
-          subjectIds: [...byVocabularyItemId.keys()],
-        }),
-        getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
-          subjectIds: [...scope.audioBySentenceId.keys()],
-        }),
-      ]);
+      const byConfusionId = new Map(
+        scope.confusionPairCandidates.map((candidate) => [candidate.confusion.id, candidate]),
+      );
+
+      const [dueSentenceItems, dueVocabularyItems, dueAudioItems, dueConfusionItems] =
+        await Promise.all([
+          getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
+            subjectIds: scope.sentences.map((item) => item.id),
+          }),
+          getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
+            subjectIds: [...byVocabularyItemId.keys()],
+          }),
+          getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
+            subjectIds: [...scope.audioBySentenceId.keys()],
+          }),
+          getDueStudyItems(CONFUSION_ACTIVITY_TYPES, {
+            subjectIds: [...byConfusionId.keys()],
+          }),
+        ]);
 
       const dueSentenceCards = dueSentenceItems
         .map((studyItem): QueueCard | null => {
@@ -269,9 +318,21 @@ export function ReviewPage() {
         })
         .filter((card): card is QueueCard => card !== null);
 
-      const due = [...dueSentenceCards, ...dueVocabularyCards, ...dueAudioCards].sort(
-        (a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due),
-      );
+      const dueConfusionCards = dueConfusionItems
+        .map((studyItem): QueueCard | null => {
+          const candidate = byConfusionId.get(studyItem.subjectId);
+          return candidate
+            ? { studyItem, sentence: candidate.itemA.sentence, confusionPair: candidate }
+            : null;
+        })
+        .filter((card): card is QueueCard => card !== null);
+
+      const due = [
+        ...dueSentenceCards,
+        ...dueVocabularyCards,
+        ...dueAudioCards,
+        ...dueConfusionCards,
+      ].sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
 
       // Any (subject, activityType) pair with no study_item yet needs
       // seeding — tracked per-pair (not per-subject) so a subject left with
@@ -319,6 +380,18 @@ export function ReviewPage() {
           }
         }
       }
+      const existingConfusionKeys = new Set(
+        scope.existingConfusionItems.map(
+          (item) => `${item.subjectId}:${item.activityType}`,
+        ),
+      );
+      for (const candidate of scope.confusionPairCandidates) {
+        for (const activityType of CONFUSION_ACTIVITY_TYPES) {
+          if (!existingConfusionKeys.has(`${candidate.confusion.id}:${activityType}`)) {
+            pendingSeeds.push({ kind: 'confusion', candidate, activityType });
+          }
+        }
+      }
 
       if (cancelled) return;
       setQueue(due);
@@ -352,6 +425,18 @@ export function ReviewPage() {
             return item.kind === 'listening'
               ? { studyItem, sentence: item.sentence, audio: item.audio }
               : { studyItem, sentence: item.sentence };
+          }
+          if (item.kind === 'confusion') {
+            const studyItem = await ensureStudyItem(
+              'vocabularyConfusion',
+              item.candidate.confusion.id,
+              item.activityType,
+            );
+            return {
+              studyItem,
+              sentence: item.candidate.itemA.sentence,
+              confusionPair: item.candidate,
+            };
           }
           const studyItem = await ensureVocabularyStudyItem(
             item.candidate.vocabularyItem.id,
@@ -439,11 +524,14 @@ export function ReviewPage() {
   if (!initialized) return <p className="muted">Loading…</p>;
 
   const totalScopedSubjects =
-    (scope?.sentences.length ?? 0) + (scope?.vocabularyTargetCandidates.length ?? 0);
+    (scope?.sentences.length ?? 0) +
+    (scope?.vocabularyTargetCandidates.length ?? 0) +
+    (scope?.confusionPairCandidates.length ?? 0);
   const nextDue = [
     ...(scope?.existingSentenceItems ?? []),
     ...(scope?.existingVocabularyItems ?? []),
     ...(scope?.existingAudioItems ?? []),
+    ...(scope?.existingConfusionItems ?? []),
   ]
     .filter((item) => item.fsrsState.due > new Date().toISOString())
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due))[0]?.fsrsState.due;
@@ -505,6 +593,12 @@ export function ReviewPage() {
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onReplay={() => markAssistance('audio_replayed')}
+              />
+            ) : current.confusionPair ? (
+              <ContrastivePairCard
+                candidate={current.confusionPair}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
               />
             ) : (
               <>
@@ -645,6 +739,59 @@ function AudioComprehensionCard({
           <VocabChips items={sentence.targetVocabulary} />
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * Contrastive pair review (Phase 7.7, docs brief §10): both confusable
+ * words shown together, each highlighted (not blanked — the target word
+ * stays visible, same as reading_retrieval) in one of its own sentences, so
+ * the learner has to recall and distinguish both readings/meanings at once
+ * rather than reviewing either word in isolation. One shared reveal for the
+ * pair, one self-rating — the evidence is "could this learner tell these
+ * two apart," not either word's individual recall (already covered by
+ * reading_retrieval/cloze).
+ */
+function ContrastivePairCard({
+  candidate,
+  revealed,
+  onReveal,
+}: {
+  candidate: ConfusionPairCandidate;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  return (
+    <>
+      {[candidate.itemA, candidate.itemB].map((item) => {
+        const [before, target, after] = splitOnSurfaceForm(
+          item.sentence.japanese,
+          item.surfaceForm,
+        );
+        return (
+          <div key={item.vocabularyItem.id} className="stack">
+            <div className="jp jp-lg">
+              {before}
+              <mark>{target || item.surfaceForm}</mark>
+              {after}
+            </div>
+            {revealed ? (
+              <>
+                <div className="jp">{item.vocabularyItem.reading || '(no reading recorded)'}</div>
+                {item.vocabularyItem.meaning ? (
+                  <div className="muted">{item.vocabularyItem.meaning}</div>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        );
+      })}
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal
+        </button>
+      ) : null}
     </>
   );
 }

@@ -1973,5 +1973,37 @@ export async function recordConfusionObservation(
   return updated;
 }
 
+export interface ConfusionPairCandidate {
+  confusion: VocabularyConfusion;
+  itemA: VocabularyTargetCandidate;
+  itemB: VocabularyTargetCandidate;
+}
+
+/**
+ * Confusion pairs (Phase 7.6) eligible for contrastive review (Phase 7.7):
+ * both members must themselves be vocabulary-target candidates (a
+ * surfaceForm-bearing link within the current scope's sentences) — the same
+ * eligibility condition reading_retrieval/cloze already use, reused here
+ * via `vocabularyTargetCandidates` rather than re-querying, so a pair only
+ * shows up in a book's review queue if both words actually appear there.
+ */
+export async function getConfusionPairCandidates(
+  vocabularyTargetCandidates: VocabularyTargetCandidate[],
+): Promise<ConfusionPairCandidate[]> {
+  if (vocabularyTargetCandidates.length === 0) return [];
+  const db = getDb();
+  const byItemId = new Map(
+    vocabularyTargetCandidates.map((candidate) => [candidate.vocabularyItem.id, candidate]),
+  );
+  const confusions = await db.vocabularyConfusions.toArray();
+  const candidates: ConfusionPairCandidate[] = [];
+  for (const confusion of confusions) {
+    const itemA = byItemId.get(confusion.itemAId);
+    const itemB = byItemId.get(confusion.itemBId);
+    if (itemA && itemB) candidates.push({ confusion, itemA, itemB });
+  }
+  return candidates;
+}
+
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';
 export type { GlossbookDatabase } from './database';

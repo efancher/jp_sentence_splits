@@ -98,6 +98,39 @@ async function suppressUnconditionalSentenceActivityTypes(sentenceId: string) {
   }
 }
 
+/**
+ * Seeds far-future reading_retrieval/cloze study items for `vocabularyItemId`
+ * so those two vocabulary-target activity types never occupy the queue —
+ * used by the contrastive-pair test (Phase 7.7) to isolate the confusion
+ * pair's own card instead of its two members' individual review cards.
+ */
+async function suppressVocabularyActivityTypes(vocabularyItemId: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const farFutureFsrsState = {
+    due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    stability: 1,
+    difficulty: 1,
+    elapsedDays: 0,
+    scheduledDays: 0,
+    learningSteps: 0,
+    reps: 1,
+    lapses: 0,
+    state: 'review' as const,
+  };
+  for (const activityType of ['reading_retrieval', 'cloze']) {
+    await db.studyItems.add({
+      id: `si-${vocabularyItemId}-${activityType}`,
+      subjectType: 'vocabularyItem',
+      subjectId: vocabularyItemId,
+      activityType,
+      fsrsState: farFutureFsrsState,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 function renderReviewPage(path: string, routePath: string) {
   return render(
     withAppProviders(
@@ -282,6 +315,133 @@ describe('ReviewPage', () => {
 
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(2);
+    });
+  });
+
+  it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.books.add({
+      id: 'book-1',
+      title: 'Test Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    await db.sentences.bulkAdd([
+      {
+        id: 'sent-a',
+        normalizedKey: 'sent-a',
+        japanese: '電気が付きました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'The light turned on.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sent-b',
+        normalizedKey: 'sent-b',
+        japanese: '電気を付けました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'I turned on the light.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 1,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.bookSentences.bulkAdd([
+      { id: 'bs-a', bookId: 'book-1', sentenceId: 'sent-a', position: 0, status: 'unstarted', addedAt: now },
+      { id: 'bs-b', bookId: 'book-1', sentenceId: 'sent-b', position: 1, status: 'unstarted', addedAt: now },
+    ]);
+    await suppressUnconditionalSentenceActivityTypes('sent-a');
+    await suppressUnconditionalSentenceActivityTypes('sent-b');
+
+    await db.vocabularyItems.bulkAdd([
+      {
+        id: 'vocab-tsuku',
+        expression: '付く',
+        reading: 'つく',
+        meaning: 'to turn on (intransitive)',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'vocab-tsukeru',
+        expression: '付ける',
+        reading: 'つける',
+        meaning: 'to turn on (transitive)',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.sentenceVocabulary.bulkAdd([
+      {
+        id: 'sv-a',
+        sentenceId: 'sent-a',
+        vocabularyItemId: 'vocab-tsuku',
+        surfaceForm: '付き',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sv-b',
+        sentenceId: 'sent-b',
+        vocabularyItemId: 'vocab-tsukeru',
+        surfaceForm: '付け',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.vocabularyConfusions.add({
+      id: 'confusion-1',
+      itemAId: 'vocab-tsuku',
+      itemBId: 'vocab-tsukeru',
+      confusionType: 'transitivity',
+      observedCount: 1,
+      lastObservedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-tsuku');
+    await suppressVocabularyActivityTypes('vocab-tsukeru');
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('付き');
+    expect(screen.getByText('付け')).toBeInTheDocument();
+    expect(screen.queryByText('つく')).not.toBeInTheDocument();
+    expect(screen.queryByText('つける')).not.toBeInTheDocument();
+
+    await waitFor(async () => {
+      const seeded = await db.studyItems.where('subjectId').equals('confusion-1').toArray();
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0]!.activityType).toBe('contrastive');
+      expect(seeded[0]!.subjectType).toBe('vocabularyConfusion');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(screen.getByText('つく')).toBeInTheDocument();
+    expect(screen.getByText('つける')).toBeInTheDocument();
+    expect(screen.getByText('to turn on (intransitive)')).toBeInTheDocument();
+    expect(screen.getByText('to turn on (transitive)')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
     });
   });
 
