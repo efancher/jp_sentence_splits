@@ -735,10 +735,13 @@ export function ReviewPage() {
           </div>
         ) : (
           <>
-            <div className="muted">
-              {ACTIVITY_LABELS[current.studyItem.activityType] ??
-                current.studyItem.activityType}{' '}
-              · {queue.length} due
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="muted">
+                {ACTIVITY_LABELS[current.studyItem.activityType] ??
+                  current.studyItem.activityType}{' '}
+                · {queue.length} due
+              </div>
+              <Link to={`/study-items/${current.studyItem.id}`}>Why?</Link>
             </div>
             {current.target && current.studyItem.activityType === 'reading_production' ? (
               <ReadingProductionCard

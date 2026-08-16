@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.9b).
+Last updated: 2026-08-16 (Phase 7.10a).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1622,3 +1622,63 @@ current `partOfSpeech` coverage is.
 
 This completes Phase 7.9 (both slices). Remaining Phase 7 sub-phase: 7.10
 (session planner, graduation, explainability, debug view).
+
+## Phase 7.10a — Explainability/debug view: done
+
+First slice of Phase 7.10's four bundled pieces (session planner,
+graduation, explainability, debug view) — combines "explainability" and
+"debug view" into one, since both are the same underlying need: a
+read-only page showing why a study item is scheduled the way it is, and
+everything recorded about it. Purely additive — no change to `ReviewPage`'s
+queue-building logic itself, so unlike the session-planner piece (still
+not started) this needed no interaction with that file's now-five
+hand-duplicated activity-type categories (flagged as due for a real
+"activity descriptor" abstraction back in Phase 7.4's notes — still true,
+still not this phase's job).
+
+Added:
+- `getStudyItemDebugInfo(studyItemId)` (`src/db/repository.ts`): given a
+  study item, returns its raw `fsrsState`, every `Review` for it
+  (most-recent-first — finally surfacing `source`/`assistance`/
+  `responseRaw`/`expectedAnswer`, recorded since Phases 7.1/7.8/7.9 but
+  never shown anywhere before this), each review's `contextSentenceId`
+  resolved to a `Sentence` (keyed in a `Map` for lookup), and a `subject`
+  discriminated union (`sentence` / `vocabularyItem` — with its computed
+  maturity level, reusing `computeVocabularyContextDiversity`/
+  `computeMaturityLevel` from Phase 7.1/7.5 — / `vocabularyConfusion` /
+  `unknown`) describing whatever the study item is actually about.
+- `StudyItemDebugPage` (`src/pages/StudyItemDebugPage.tsx`), new route
+  `/study-items/:studyItemId`: subject summary, scheduling-state fields
+  (state/due/stability/difficulty/interval/reps/lapses/last review),
+  maturity block for a vocabulary-item subject, and the full review list
+  with source/assistance/typed-response/context-sentence per review.
+  `Back` uses `navigate(-1)` rather than a fixed link, since this page can
+  be reached from any review-scope (global or per-book).
+- `ReviewPage.tsx` gained a "Why?" link on the current card's header,
+  pointing at `/study-items/:id` for whichever study item is showing — the
+  natural in-context discovery path (a learner wondering "why is this here
+  / why did it rate this way" mid-session), rather than a separate
+  top-level browsable list of every study item (deferred — lower value
+  than answering the question for a card you're already looking at).
+- Tests: `tests/data.test.ts` — `getStudyItemDebugInfo` coverage for all
+  three known subject kinds (sentence, vocabularyItem with maturity,
+  vocabularyConfusion with both members) plus the unknown-id case.
+  `tests/studyItemDebugPage.test.tsx` (new file) — not-found state,
+  sentence-subject rendering, vocabulary-item maturity rendering, and a
+  natural-encounter review's typed response + context sentence rendering.
+  `tests/reviewPage.test.tsx` — one new test confirming the "Why?" link's
+  `href` matches the currently-showing card's actual study item id.
+
+**Deliberately not done yet**: no top-level browsable list of all study
+items (see above); no editing/deletion from this view (read-only, matches
+`reviews`' append-only design intent); no visualization (chart/timeline)
+of the review history, just a plain list; `errorClassification` is shown
+as raw `JSON.stringify` output since nothing populates it yet (same
+"don't overbuild for data that doesn't exist" call as everywhere else this
+has come up).
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 381
+tests passed (up from 371), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet manually verified in a real browser.**

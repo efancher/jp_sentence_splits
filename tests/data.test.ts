@@ -22,6 +22,7 @@ import {
   listAttemptsForSentence,
   materializeVocabularySelections,
   moveBookSentence,
+  getStudyItemDebugInfo,
   pickContextSentenceForVocabularyItem,
   rateAttempt,
   recordConfusionObservation,
@@ -919,6 +920,79 @@ describe('computeVocabularyContextDiversity (Phase 7.5)', () => {
       distinctSentenceCount: 2,
       distinctSourceCount: 2,
     });
+  });
+});
+
+describe('getStudyItemDebugInfo (Phase 7.10)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-debug-${createId('db')}`);
+  });
+
+  it('returns undefined for an unknown study item id', async () => {
+    expect(await getStudyItemDebugInfo('missing-id')).toBeUndefined();
+  });
+
+  it('returns a sentence subject with its reviews, most-recent-first, and no maturity block', async () => {
+    const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await getDb().sentences.add(stubSentence('sent-1'));
+    await recordReview({ studyItemId: studyItem.id, rating: 'good' });
+    await recordReview({ studyItemId: studyItem.id, rating: 'again' });
+
+    const info = await getStudyItemDebugInfo(studyItem.id);
+    expect(info?.subject).toEqual({ kind: 'sentence', sentence: expect.objectContaining({ id: 'sent-1' }) });
+    expect(info?.reviews).toHaveLength(2);
+    expect(info?.reviews[0]?.rating).toBe('again');
+    expect(info?.reviews[1]?.rating).toBe('good');
+  });
+
+  it('returns a vocabularyItem subject with its computed maturity level', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const studyItem = await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+
+    const info = await getStudyItemDebugInfo(studyItem.id);
+    expect(info?.subject.kind).toBe('vocabularyItem');
+    if (info?.subject.kind === 'vocabularyItem') {
+      expect(info.subject.vocabularyItem.id).toBe(vocabItem.id);
+      // No sentence links at all -> zero diversity -> fragile.
+      expect(info.subject.maturity.level).toBe('fragile');
+      expect(info.subject.maturity.diversity).toEqual({
+        distinctSentenceCount: 0,
+        distinctSourceCount: 0,
+      });
+    }
+  });
+
+  it('resolves each review\'s contextSentenceId to a Sentence, keyed for lookup', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const studyItem = await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+    await getDb().sentences.add(stubSentence('sent-context'));
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'good',
+      source: 'natural_encounter',
+      contextSentenceId: 'sent-context',
+    });
+
+    const info = await getStudyItemDebugInfo(studyItem.id);
+    expect(info?.reviews[0]?.source).toBe('natural_encounter');
+    expect(info?.reviews[0]?.contextSentenceId).toBe('sent-context');
+    expect(info?.contextSentencesById.get('sent-context')?.id).toBe('sent-context');
+  });
+
+  it('returns a vocabularyConfusion subject with both member vocabulary items', async () => {
+    const itemA = await ensureVocabularyItem('開く', 'あく');
+    const itemB = await ensureVocabularyItem('開ける', 'あける');
+    const confusion = await ensureVocabularyConfusion(itemA.id, itemB.id, 'transitivity');
+    const studyItem = await ensureStudyItem('vocabularyConfusion', confusion.id, 'contrastive');
+
+    const info = await getStudyItemDebugInfo(studyItem.id);
+    expect(info?.subject.kind).toBe('vocabularyConfusion');
+    if (info?.subject.kind === 'vocabularyConfusion') {
+      expect(info.subject.confusion.id).toBe(confusion.id);
+      expect([info.subject.itemA.id, info.subject.itemB.id].sort()).toEqual(
+        [itemA.id, itemB.id].sort(),
+      );
+    }
   });
 });
 

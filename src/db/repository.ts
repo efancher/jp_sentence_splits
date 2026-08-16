@@ -39,7 +39,13 @@ import {
 } from '../lib/csvImport';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { isHanCharacter } from '../lib/kanji';
-import { computeContextDiversity, type ContextDiversity } from '../lib/maturity';
+import {
+  computeContextDiversity,
+  computeMaturityLevel,
+  MATURE_MIN_SCHEDULED_DAYS,
+  type ContextDiversity,
+  type MaturityLevel,
+} from '../lib/maturity';
 import { nowIso } from '../lib/normalize';
 import { createInitialFsrsState, scheduleReview } from '../lib/scheduling';
 import {
@@ -2036,6 +2042,92 @@ export async function getConfusionPairCandidates(
     if (itemA && itemB) candidates.push({ confusion, itemA, itemB });
   }
   return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Study-item explainability/debug view (Phase 7.10). Read-only: gathers
+// everything a "why am I seeing this card, and why is it scheduled the way
+// it is" view needs — the study item's raw FSRS state, its full Review
+// history (finally surfacing source/assistance/responseRaw/expectedAnswer,
+// recorded since Phases 7.1/7.8/7.9 but never shown anywhere), each
+// review's context sentence if it has one, and — for a vocabulary-item
+// subject — its computed maturity ladder position (Phase 7.1/7.5).
+// ---------------------------------------------------------------------------
+
+export type StudyItemDebugSubject =
+  | { kind: 'sentence'; sentence: Sentence }
+  | {
+      kind: 'vocabularyItem';
+      vocabularyItem: VocabularyItem;
+      maturity: { diversity: ContextDiversity; level: MaturityLevel };
+    }
+  | {
+      kind: 'vocabularyConfusion';
+      confusion: VocabularyConfusion;
+      itemA: VocabularyItem;
+      itemB: VocabularyItem;
+    }
+  | { kind: 'unknown' };
+
+export interface StudyItemDebugInfo {
+  studyItem: StudyItem;
+  subject: StudyItemDebugSubject;
+  /** Most-recent-first. */
+  reviews: Review[];
+  contextSentencesById: Map<string, Sentence>;
+}
+
+export async function getStudyItemDebugInfo(
+  studyItemId: string,
+): Promise<StudyItemDebugInfo | undefined> {
+  const db = getDb();
+  const studyItem = await db.studyItems.get(studyItemId);
+  if (!studyItem) return undefined;
+
+  const reviews = (
+    await db.reviews.where('studyItemId').equals(studyItemId).toArray()
+  ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  const contextSentenceIds = [
+    ...new Set(
+      reviews
+        .map((review) => review.contextSentenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const contextSentences = await db.sentences.bulkGet(contextSentenceIds);
+  const contextSentencesById = new Map<string, Sentence>();
+  contextSentences.forEach((sentence, index) => {
+    if (sentence) contextSentencesById.set(contextSentenceIds[index]!, sentence);
+  });
+
+  let subject: StudyItemDebugSubject = { kind: 'unknown' };
+  if (studyItem.subjectType === 'sentence') {
+    const sentence = await db.sentences.get(studyItem.subjectId);
+    if (sentence) subject = { kind: 'sentence', sentence };
+  } else if (studyItem.subjectType === 'vocabularyItem') {
+    const vocabularyItem = await db.vocabularyItems.get(studyItem.subjectId);
+    if (vocabularyItem) {
+      const diversity = await computeVocabularyContextDiversity(vocabularyItem.id);
+      const level = computeMaturityLevel(diversity, {
+        hasLongIntervalSuccess:
+          studyItem.fsrsState.state === 'review' &&
+          studyItem.fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS,
+      });
+      subject = { kind: 'vocabularyItem', vocabularyItem, maturity: { diversity, level } };
+    }
+  } else if (studyItem.subjectType === 'vocabularyConfusion') {
+    const confusion = await db.vocabularyConfusions.get(studyItem.subjectId);
+    if (confusion) {
+      const [itemA, itemB] = await Promise.all([
+        db.vocabularyItems.get(confusion.itemAId),
+        db.vocabularyItems.get(confusion.itemBId),
+      ]);
+      if (itemA && itemB) subject = { kind: 'vocabularyConfusion', confusion, itemA, itemB };
+    }
+  }
+
+  return { studyItem, subject, reviews, contextSentencesById };
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

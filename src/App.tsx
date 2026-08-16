@@ -80,6 +80,11 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
+const StudyItemDebugPage = lazy(() =>
+  import('./pages/StudyItemDebugPage').then((module) => ({
+    default: module.StudyItemDebugPage,
+  })),
+);
 
 export default function App() {
   useTheme();
@@ -94,6 +99,7 @@ export default function App() {
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="review" element={<ReviewPage />} />
+            <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />
             <Route

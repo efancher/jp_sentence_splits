@@ -173,6 +173,23 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('links "Why?" to the current card\'s study-item debug page (Phase 7.10)', async () => {
+    await seedBookWithSentence();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    const studyItem = await waitFor(async () => {
+      const items = await getDb().studyItems.where('subjectId').equals('sent-1').toArray();
+      const comprehensionItem = items.find((item) => item.activityType === 'comprehension');
+      expect(comprehensionItem).toBeDefined();
+      return comprehensionItem!;
+    });
+    expect(screen.getByRole('link', { name: 'Why?' })).toHaveAttribute(
+      'href',
+      `/study-items/${studyItem.id}`,
+    );
+  });
+
   it('rates a card, advances the queue, and records a review', async () => {
     await seedBookWithSentence();
     const user = userEvent.setup();
