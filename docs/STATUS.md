@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 2b done).
+Last updated: 2026-08-16 (Phase 9 Milestone 3 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2887,7 +2887,74 @@ constraint noted throughout this project); the actual UI round-trip
 still needs a real-browser check before this is considered fully proven,
 consistent with this project's existing practice for UI-facing changes.
 
-## Phase 9 roadmap (Milestones 3-9, not started)
+## Phase 9 Milestone 3 — mora/rhythm timing feedback: done
+
+Turns Milestone 2b's raw word/phone timing into the kind of specific,
+actionable message the whole project is about — "Your 「っ」 in 「ちょっと」
+is much shorter than the reference," not a score.
+
+**Design finding that simplified this milestone**: originally assumed
+this would need cross-referencing Milestone 1's mora-unit segmentation
+(keyed to the sentence's *reading*) against MFA's per-word phone data.
+That turns out to be unreliable — MFA's word tier returns words in their
+**original orthographic form** (confirmed from real output: `今日`, `は`,
+`ちょっと`, not readings), tokenized by MFA's own Sudachi-based tokenizer,
+a different segmentation than Satori's furigana-word segments Milestone
+1's `wordIndex` is keyed to. The two tokenizations don't reliably line up
+word-for-word. **Better approach, needs no cross-tokenization at all**:
+MFA's phone labels already mark phonetic length directly with an IPA
+length mark (`ː`) — a held/geminate consonant (the actual acoustic
+realization of っ, which has no phone symbol of its own) or a long vowel,
+distinguishable by a small known vowel-symbol set
+(`src/lib/wordTimingObservations.ts`'s `isVowelPhoneBase`). No mora
+alignment, reading, or orthography needed — more robust, and arguably
+more honest than a fragile syllable-split, since gemination is genuinely
+ambiguous about which mora it "belongs to" phonetically.
+
+Added:
+- `src/lib/wordTimingObservations.ts` — `findLongPhones` (classifies
+  length-marked phones as vowel/consonant), `pairWords` (pairs reference
+  and learner words after filtering silence; pairs by index in the common
+  case of matching counts, falls back to a short-lookahead resync walk
+  when a word was inserted/dropped, so one mismatch doesn't throw off
+  every pair after it), `buildWordTimingObservations` (reuses the
+  existing `TimingObservation` type from `timingObservations.ts` rather
+  than inventing a parallel one). Two observation kinds: whole-word
+  duration ratio (`word-duration`, notable only above both a relative
+  *and* absolute threshold — avoids flagging tiny particles where a small
+  absolute difference produces a large ratio), and long-phone duration
+  comparison (`sokuon_timing`/`long_vowel_timing`, matched by kind and
+  position-within-kind between reference and learner). Confidence is
+  `'high'` for a stark ratio (matching the brief's own Phase 12 example of
+  a measured-duration claim being high-confidence) and `'medium'`
+  otherwise; near-matches produce no observation at all (silence, not a
+  "this is fine" note — with several words per sentence, spelling out
+  every close match would be noisy).
+- `src/components/AnalysisPanel.tsx` — a new "Segment timing" section,
+  populated once both reference/learner server alignment are ready,
+  visually separate from the existing local-analysis observations list.
+  Milestone 5/6 (ranking / "Fix One Thing") is what eventually merges
+  everything into one prioritized view; this milestone stays additive,
+  matching every prior one's scope discipline.
+
+Tests: `tests/wordTimingObservations.test.ts` (new, pure) — the brief's
+own worked example reconstructed from real observed `japanese_mfa` phone
+labels (ちょっと as `tɕ/o/tː/o`), both confidence tiers for the long-phone
+case, the word-duration-ratio case, the tiny-particle-noise-suppression
+case, the near-match-produces-nothing case, and the resync-past-an-
+inserted-word pairing case. `tests/shadowPage.test.tsx` — pre-seeds the
+Dexie alignment cache directly with distinct reference/learner results
+(rather than trying to distinguish an `alignAudio` mock call by blob
+content — Dexie-round-tripped Blobs in this test environment lose their
+real methods, a pre-existing, documented quirk) and asserts the exact
+"Your 「っ」... is much shorter" message renders.
+
+**Verified**: `npm run check` green — 509 tests passed, 2 pre-existing
+skips (unrelated). `npm run build` clean. **Not manually verified in a
+real browser** — no browser available in this environment, same
+constraint noted throughout this project.
+
+## Phase 9 roadmap (Milestones 4-9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -2907,9 +2974,7 @@ architecture decision or the researched facts above.
   origin). This is the point where a real Dexie cache table +
   `analysis_version` earns its complexity (reference-audio alignment
   cached permanently; learner-attempt alignment cached per attempt).
-- **Milestone 3 — mora/rhythm timing feedback**: per-mora duration
-  comparison messages using Milestone 2's boundaries, extending
-  `timingObservations.ts`.
+- **Milestone 3 — mora/rhythm timing feedback: done**, see above.
 - **Milestone 4 — pitch-contour feedback**: reuse the existing normalized
   YIN pitch extraction, compare *where in time* (via Milestone 2's
   alignment) pitch rises/falls happen, not just aggregate register.

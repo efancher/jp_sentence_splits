@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb } from '../src/db/repository';
+import { getDb, saveAttemptAlignment, saveReferenceAlignment } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import * as analysisApi from '../src/lib/analysisApi';
 import { ShadowPage } from '../src/pages/ShadowPage';
@@ -203,6 +203,48 @@ describe('ShadowPage', () => {
     // Silence (<eps>) is filtered out of the visible chip row.
     expect(screen.queryByText('<eps>')).not.toBeInTheDocument();
     expect(screen.getAllByText('ちょっと').length).toBeGreaterThan(0);
+  });
+
+  it('surfaces a segment-timing observation when reference and learner alignment differ', async () => {
+    // Pre-seed the Dexie cache directly with distinct reference/learner
+    // results (rather than trying to distinguish an `alignAudio` mock call
+    // by blob content — Dexie-round-tripped Blobs in this test environment
+    // lose their real methods, see src/test/setup.ts's Blob-clone note).
+    const chottoWord = (tHoldMs: number) => {
+      const firstOEnd = 0.69;
+      const tHoldEnd = firstOEnd + tHoldMs / 1000;
+      const finalOEnd = tHoldEnd + 0.05;
+      return {
+        start: 0.5,
+        end: finalOEnd,
+        text: 'ちょっと',
+        phones: [
+          { start: 0.5, end: 0.6, text: 'tɕ' },
+          { start: 0.6, end: firstOEnd, text: 'o' },
+          { start: firstOEnd, end: tHoldEnd, text: 'tː' },
+          { start: tHoldEnd, end: finalOEnd, text: 'o' },
+        ],
+      };
+    };
+    await saveReferenceAlignment('audio-1', {
+      durationSeconds: 1.7,
+      words: [chottoWord(100)],
+    });
+    await saveAttemptAlignment('attempt-newer', {
+      durationSeconds: 1.5,
+      words: [chottoWord(20)],
+    });
+
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+
+    expect(await screen.findByText('Segment timing')).toBeInTheDocument();
+    expect(
+      screen.getByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+    ).toBeInTheDocument();
   });
 
   it('has no server word timing section when the alignment service is unreachable', async () => {

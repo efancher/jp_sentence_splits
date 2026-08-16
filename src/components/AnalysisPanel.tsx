@@ -12,6 +12,7 @@ import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
+import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
@@ -272,6 +273,13 @@ export function AnalysisPanel({
     learnerPitch,
     confidence,
   });
+  const segmentObservations = useMemo(() => {
+    if (!serverAlignment?.reference || !serverAlignment.learner) return [];
+    return buildWordTimingObservations({
+      reference: serverAlignment.reference,
+      learner: serverAlignment.learner,
+    });
+  }, [serverAlignment]);
 
   return (
     <div className="stack">
@@ -319,6 +327,17 @@ export function AnalysisPanel({
           {serverAlignment.learner ? (
             <WordTimingRow words={serverAlignment.learner.words} label="Learner word timing" />
           ) : null}
+        </div>
+      ) : null}
+      {segmentObservations.length > 0 ? (
+        <div className="stack">
+          <strong>Segment timing</strong>
+          {segmentObservations.map((item) => (
+            <article key={item.id} className="stack" style={{ gap: 0 }}>
+              <strong>{item.confidence} confidence:</strong> {item.message}
+              {item.detail ? <p className="muted">{item.detail}</p> : null}
+            </article>
+          ))}
         </div>
       ) : null}
       <div className="row">
