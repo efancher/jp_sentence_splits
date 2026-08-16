@@ -21,6 +21,15 @@ export const TOUCH_TARGET_MIN_PX = 44;
 
 export const ICHI_MOE_BASE = 'https://ichi.moe/cl/qr/';
 
+/**
+ * Tailnet-only forced-alignment service (docs/STATUS.md Phase 9,
+ * Milestone 2a) — unreachable off the user's Tailscale tailnet regardless
+ * of who can read this constant, so it's not a secret and doesn't need to
+ * be an env var (same reasoning as ICHI_MOE_BASE above).
+ */
+export const SHADOWING_ANALYSIS_API_BASE =
+  'https://codex-dev.tailfbd89c.ts.net/shadowing-analysis';
+
 /** Speaking-rate presets for the device text-to-speech settings. */
 export const TTS_RATE_PRESETS = [
   { value: 0.6, label: 'Very slow (0.6×)' },

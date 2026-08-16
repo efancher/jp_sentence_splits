@@ -557,8 +557,11 @@ export function ShadowPage() {
                   </div>
                   {analyzingAttemptId === attempt.id && referenceAudio ? (
                     <AnalysisPanel
+                      referenceAudioId={referenceAudio.id}
                       referenceBlob={referenceAudio.blob}
+                      attemptId={attempt.id}
                       learnerBlob={attempt.blob}
+                      transcript={sentence.japanese}
                       hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}
                       durationHintSeconds={attempt.durationMs / 1000}
                       targetRange={targetRange ?? undefined}

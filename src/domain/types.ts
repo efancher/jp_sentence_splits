@@ -131,6 +131,49 @@ export interface Attempt {
   createdAt: string;
 }
 
+/** Shape returned by the forced-alignment service (docs/STATUS.md Phase 9). */
+export interface PhoneAlignment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface WordAlignment {
+  start: number;
+  end: number;
+  text: string;
+  phones: PhoneAlignment[];
+}
+
+export interface AlignmentResult {
+  durationSeconds: number;
+  words: WordAlignment[];
+}
+
+/**
+ * Cached forced alignment for a sentence's reference clip (Phase 9,
+ * Milestone 2b) — reference audio doesn't change, so this is kept
+ * indefinitely unless `alignmentVersion` goes stale. Local-only, same
+ * precedent as `Attempt` (§18): derived/recomputable data, not worth
+ * syncing.
+ */
+export interface ReferenceAlignment {
+  /** = SentenceAudio.id */
+  id: string;
+  alignmentVersion: number;
+  result: AlignmentResult;
+  computedAt: string;
+}
+
+/** Cached forced alignment for one shadowing attempt (Phase 9, Milestone 2b). */
+export interface AttemptAlignment {
+  /** = Attempt.id */
+  id: string;
+  alignmentVersion: number;
+  result: AlignmentResult;
+  computedAt: string;
+}
+
 export interface Book {
   id: string;
   title: string;

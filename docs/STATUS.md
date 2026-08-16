@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 2a done).
+Last updated: 2026-08-16 (Phase 9 Milestone 2b done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2792,7 +2792,102 @@ requested yet); Milestone 2b (`jp_sentence_splits` frontend wiring — fetch
 client, offline fallback, Dexie caching, `ShadowPage.tsx`/`AnalysisPanel.tsx`
 integration, CORS).
 
-## Phase 9 roadmap (Milestones 2b-9, not started)
+## Phase 9 Milestone 2b — frontend wiring: done
+
+Wires the `shadowing-analysis-api` service (Milestone 2a) into the actual
+shadowing UI. Scope deliberately kept tight, matching every prior
+milestone: fetch + cache real word/phone alignment for both the reference
+clip and a learner attempt, surface it minimally in `AnalysisPanel.tsx` as
+proof it works end-to-end. Turning alignment into ranked feedback messages
+is still Milestone 3, not started.
+
+Added:
+- `src/appConfig.ts` — `SHADOWING_ANALYSIS_API_BASE`, a hardcoded constant
+  (not an env var) pointing at the tailnet-only service, following the
+  exact precedent of the existing `ICHI_MOE_BASE` — it's not a secret and
+  doesn't differ between dev/prod.
+- `src/lib/analysisApi.ts` — `alignAudio(blob, transcript)`, a `FormData`
+  multipart POST to `/align` with a 60s `AbortController` timeout (covers
+  the ~45s cold-load case measured in Milestone 2a with margin). **Never
+  throws** — returns `null` on any failure (network error, non-200, bad
+  JSON, unexpected shape, timeout) so every caller can treat an
+  unreachable server as the ordinary, expected condition it is, not an
+  error state. `ALIGNMENT_VERSION = 1`, the same versioning precedent as
+  Milestone 1's `MORA_SEGMENTATION_VERSION`.
+- `src/domain/types.ts` — `PhoneAlignment`/`WordAlignment`/`AlignmentResult`
+  (mirroring the service's JSON exactly — it already returns camelCase, no
+  transform layer needed) and the two cache-row types,
+  `ReferenceAlignment`/`AttemptAlignment` (local-only, same precedent as
+  `Attempt` — derived/recomputable data, not worth syncing).
+- `src/db/database.ts` — schema `version(9)`: `referenceAlignments: 'id'`,
+  `attemptAlignments: 'id'`. This is the first genuinely expensive,
+  network-dependent analysis step in this app, so — per the Milestone 1
+  plan's own reasoning — the first one where a real persistent cache earns
+  its complexity (`AnalysisPanel`'s existing local pitch/waveform analysis
+  deliberately still recomputes on every open; that precedent is
+  unchanged).
+- `src/db/repository.ts` — `getReferenceAlignment`/`saveReferenceAlignment`,
+  `getAttemptAlignment`/`saveAttemptAlignment`. A mismatched
+  `alignmentVersion` is treated identically to a cache miss (Phase 19's
+  versioning requirement) — callers can't tell the difference between
+  "never computed" and "stale," which is the correct behavior since both
+  cases need a refetch.
+- `src/components/AnalysisPanel.tsx` — new required `referenceAudioId`/
+  `attemptId`/`transcript` props. A **separate** `useEffect` from the
+  existing local-analysis one, so a slow/cold/unreachable server call
+  never delays the already-fast local pitch/waveform results from
+  rendering (verified manually — see below). Checks the Dexie cache first,
+  calls `alignAudio` on a miss, saves a successful result. Renders a
+  "Word timing (server)" section — a chip row per word with its duration
+  (`WordTimingRow`), reusing `ShadowPage.tsx`'s Milestone-1 `MoraBreakdown`
+  chip styling rather than inventing a new visual pattern; silence
+  intervals (`<eps>`) are filtered out of the visible row. Renders nothing
+  at all when the server alignment is `unavailable` — no error banner, no
+  alarming state, matching the plan's explicit "required graceful
+  fallback" rule (an unreachable service is expected, not exceptional).
+- `src/pages/ShadowPage.tsx` — passes `referenceAudioId`/`attemptId`/
+  `transcript={sentence.japanese}` through to `AnalysisPanel`. `/align`'s
+  `transcript` takes plain Japanese text directly — no reading/
+  tokenization needed client-side, since MFA's own tokenizer handles raw
+  text (confirmed in the Milestone 2a spike).
+- `~/projects/shadowing-analysis-api` — added `CORSMiddleware`
+  (`app/config.py`'s new `ALLOWED_ORIGINS`, `app/main.py`), allow-listing
+  the real deployed frontend origin (`https://efancher.github.io`,
+  confirmed via `gh api repos/efancher/jp_sentence_splits/pages`) plus
+  local dev origins. Restarted the `systemd --user` service to pick up the
+  change; verified live over the tailnet with `curl -H "Origin:
+  https://efancher.github.io"` against both `/health` and a real `/align`
+  call — `Access-Control-Allow-Origin` present on both. New
+  `tests/test_cors.py` (allowed origin gets the header, an unlisted origin
+  doesn't).
+
+Tests: `tests/analysisApi.test.ts` (new — mocked `fetch`: success,
+non-200, network-error, malformed-JSON, unexpected-shape, and
+aborted/timeout cases all handled, confirming `alignAudio` never throws).
+`tests/data.test.ts` — round-trip + staleness tests for the four new
+repository functions. `tests/migration.test.ts` — v9 round-trip for both
+new stores. `tests/shadowPage.test.tsx` — mocks `analysisApi.alignAudio`
+directly (via `vi.mock`, matching this file's established pattern from
+other externally-dependent modules) to assert the "Word timing (server)"
+section appears when the service resolves and stays completely absent
+(with the rest of the panel — local pitch/waveform analysis — working
+exactly as before) when it resolves to `null`, proving the required
+fallback behavior at the component level, not just the fetch-client level.
+
+**Verified**: `npm run check` (typecheck + vitest) green — 498 tests
+passed, 2 pre-existing skips (unrelated), including all new/extended
+tests above. Real end-to-end verification against the live service (not
+just mocks): `curl`'d `/align` directly against
+`https://codex-dev.tailfbd89c.ts.net/shadowing-analysis` with a real
+VOICEVOX-synthesized clip and got back real word/phone timing with CORS
+headers present for the deployed origin. **Not manually verified in a
+real browser** — no browser available in this environment (same
+constraint noted throughout this project); the actual UI round-trip
+(open Shadow view, Analyze, see the "Word timing (server)" chips appear)
+still needs a real-browser check before this is considered fully proven,
+consistent with this project's existing practice for UI-facing changes.
+
+## Phase 9 roadmap (Milestones 3-9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.

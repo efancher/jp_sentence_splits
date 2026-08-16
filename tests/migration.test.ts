@@ -164,6 +164,41 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v9 with the referenceAlignments/attemptAlignments tables', async () => {
+    const name = `migrate-v9-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(9);
+    expect(db.tables.some((t) => t.name === 'referenceAlignments')).toBe(true);
+    expect(db.tables.some((t) => t.name === 'attemptAlignments')).toBe(true);
+
+    const now = new Date().toISOString();
+    const result = {
+      durationSeconds: 1.7,
+      words: [{ start: 0.5, end: 0.84, text: 'ちょっと', phones: [] }],
+    };
+    await db.referenceAlignments.put({
+      id: 'audio-1',
+      alignmentVersion: 1,
+      result,
+      computedAt: now,
+    });
+    await db.attemptAlignments.put({
+      id: 'attempt-1',
+      alignmentVersion: 1,
+      result,
+      computedAt: now,
+    });
+
+    expect((await db.referenceAlignments.get('audio-1'))?.result.words[0]?.text).toBe(
+      'ちょっと',
+    );
+    expect((await db.attemptAlignments.get('attempt-1'))?.alignmentVersion).toBe(1);
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

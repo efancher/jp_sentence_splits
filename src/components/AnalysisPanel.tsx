@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import {
+  getAttemptAlignment,
+  getReferenceAlignment,
+  saveAttemptAlignment,
+  saveReferenceAlignment,
+} from '../db/repository';
+import type { AlignmentResult } from '../domain/types';
+import { alignAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
@@ -13,6 +21,42 @@ import {
   type AlignmentMode,
   type WavePeak,
 } from '../lib/waveform';
+
+/**
+ * Checks the Dexie cache before calling the (slow, server-side) forced-
+ * alignment service, and saves a successful result back to it. Returns
+ * `undefined` on any failure/unreachable-server case — never throws, since
+ * an unavailable server is expected/ordinary here (docs/STATUS.md Phase 9,
+ * Milestone 2b).
+ */
+async function loadAlignment(
+  id: string,
+  blob: Blob,
+  transcript: string,
+  get: (id: string) => Promise<AlignmentResult | undefined>,
+  save: (id: string, result: AlignmentResult) => Promise<void>,
+): Promise<AlignmentResult | undefined> {
+  const cached = await get(id);
+  if (cached) return cached;
+  const fetched = await alignAudio(blob, transcript);
+  if (fetched) await save(id, fetched);
+  return fetched ?? undefined;
+}
+
+function WordTimingRow({ words, label }: { words: AlignmentResult['words']; label: string }) {
+  const audible = words.filter((word) => word.text && word.text !== '<eps>');
+  if (audible.length === 0) return null;
+  return (
+    <div className="row mora-row" aria-label={label}>
+      {audible.map((word, index) => (
+        <span key={`${word.text}-${index}`} className="chip jp">
+          {word.text}{' '}
+          <span className="muted">{Math.round((word.end - word.start) * 1000)}ms</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const WAVE_WIDTH = 600;
 const WAVE_HEIGHT = 80;
@@ -100,14 +144,23 @@ function PitchCanvas({
 }
 
 export function AnalysisPanel({
+  referenceAudioId,
   referenceBlob,
+  attemptId,
   learnerBlob,
+  transcript,
   hasReading,
   durationHintSeconds,
   targetRange,
 }: {
+  /** Cache key for the reference clip's server alignment (Phase 9, Milestone 2b). */
+  referenceAudioId: string;
   referenceBlob: Blob;
+  /** Cache key for the learner attempt's server alignment (Phase 9, Milestone 2b). */
+  attemptId: string;
   learnerBlob: Blob;
+  /** Plain Japanese sentence text sent to the alignment service. */
+  transcript: string;
   hasReading: boolean;
   durationHintSeconds: number;
   /** Restricts the reference side to this sub-range (Phase 8.2's practice-target isolation). */
@@ -166,6 +219,46 @@ export function AnalysisPanel({
     };
   }, [referenceBlob, learnerBlob, mode, targetRange]);
 
+  const [serverAlignment, setServerAlignment] = useState<{
+    reference?: AlignmentResult;
+    learner?: AlignmentResult;
+  }>();
+  const [serverAlignmentStatus, setServerAlignmentStatus] = useState<
+    'idle' | 'loading' | 'unavailable' | 'ready'
+  >('idle');
+
+  // Separate from the effect above on purpose: local pitch/waveform
+  // analysis is fast and should never wait on this — the alignment
+  // service can take up to ~45s on a cold start, and is expected to be
+  // unreachable sometimes (off-tailnet). See loadAlignment's contract.
+  useEffect(() => {
+    let active = true;
+    setServerAlignmentStatus('loading');
+    setServerAlignment(undefined);
+    void (async () => {
+      const [reference, learner] = await Promise.all([
+        loadAlignment(
+          referenceAudioId,
+          referenceBlob,
+          transcript,
+          getReferenceAlignment,
+          saveReferenceAlignment,
+        ),
+        loadAlignment(attemptId, learnerBlob, transcript, getAttemptAlignment, saveAttemptAlignment),
+      ]);
+      if (!active) return;
+      if (!reference && !learner) {
+        setServerAlignmentStatus('unavailable');
+        return;
+      }
+      setServerAlignment({ reference, learner });
+      setServerAlignmentStatus('ready');
+    })();
+    return () => {
+      active = false;
+    };
+  }, [referenceAudioId, referenceBlob, attemptId, learnerBlob, transcript]);
+
   const confidence = confidenceFromSignal({
     hasReading,
     voicedRatio: Math.min(referencePitch?.voicedRatio ?? 0, learnerPitch?.voicedRatio ?? 0),
@@ -213,6 +306,20 @@ export function AnalysisPanel({
             {alignment.durationRatio.toFixed(2)} · confidence {alignment.confidence}
           </p>
         </>
+      ) : null}
+      {serverAlignmentStatus === 'loading' ? (
+        <p className="muted">Fetching server word timing…</p>
+      ) : null}
+      {serverAlignmentStatus === 'ready' && serverAlignment ? (
+        <div className="stack">
+          <strong>Word timing (server)</strong>
+          {serverAlignment.reference ? (
+            <WordTimingRow words={serverAlignment.reference.words} label="Reference word timing" />
+          ) : null}
+          {serverAlignment.learner ? (
+            <WordTimingRow words={serverAlignment.learner.words} label="Learner word timing" />
+          ) : null}
+        </div>
       ) : null}
       <div className="row">
         <button

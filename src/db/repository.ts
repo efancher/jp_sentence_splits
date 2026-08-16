@@ -1,9 +1,11 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import type { BackupPayload } from '../domain/schemas';
 import type {
+  AlignmentResult,
   AnalysisChunk,
   AppSettings,
   Attempt,
+  AttemptAlignment,
   AttemptRating,
   Book,
   BookChapter,
@@ -13,6 +15,7 @@ import type {
   InboxMembership,
   InitialOrderMode,
   Kanji,
+  ReferenceAlignment,
   Review,
   ReviewAssistance,
   ReviewRating,
@@ -32,6 +35,7 @@ import type {
   VocabularyReviewStatus,
   VocabularySelection,
 } from '../domain/types';
+import { ALIGNMENT_VERSION } from '../lib/analysisApi';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -1502,6 +1506,57 @@ export async function setAttemptFavorite(
   const attempt = await db.attempts.get(attemptId);
   if (!attempt) throw new Error('Attempt not found');
   return attempt;
+}
+
+// ---------------------------------------------------------------------------
+// Cached forced-alignment results (docs/STATUS.md Phase 9, Milestone 2b).
+// A stale `alignmentVersion` is treated the same as a cache miss, so callers
+// always get either a fresh cached result or nothing — never a stale one.
+
+export async function getReferenceAlignment(
+  sentenceAudioId: string,
+): Promise<AlignmentResult | undefined> {
+  const db = getDb();
+  const row = await db.referenceAlignments.get(sentenceAudioId);
+  if (!row || row.alignmentVersion !== ALIGNMENT_VERSION) return undefined;
+  return row.result;
+}
+
+export async function saveReferenceAlignment(
+  sentenceAudioId: string,
+  result: AlignmentResult,
+): Promise<void> {
+  const db = getDb();
+  const row: ReferenceAlignment = {
+    id: sentenceAudioId,
+    alignmentVersion: ALIGNMENT_VERSION,
+    result,
+    computedAt: nowIso(),
+  };
+  await db.referenceAlignments.put(row);
+}
+
+export async function getAttemptAlignment(
+  attemptId: string,
+): Promise<AlignmentResult | undefined> {
+  const db = getDb();
+  const row = await db.attemptAlignments.get(attemptId);
+  if (!row || row.alignmentVersion !== ALIGNMENT_VERSION) return undefined;
+  return row.result;
+}
+
+export async function saveAttemptAlignment(
+  attemptId: string,
+  result: AlignmentResult,
+): Promise<void> {
+  const db = getDb();
+  const row: AttemptAlignment = {
+    id: attemptId,
+    alignmentVersion: ALIGNMENT_VERSION,
+    result,
+    computedAt: nowIso(),
+  };
+  await db.attemptAlignments.put(row);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,8 +17,10 @@ import {
   ensureVocabularyStudyItem,
   computeVocabularyContextDiversity,
   exportFullBackup,
+  getAttemptAlignment,
   getDb,
   getDueStudyItems,
+  getReferenceAlignment,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
   materializeVocabularySelections,
@@ -35,12 +37,14 @@ import {
   restoreBackup,
   saveAnalysis,
   saveAttempt,
+  saveAttemptAlignment,
+  saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
   transferBookSentences,
   updateBookChapter,
 } from '../src/db/repository';
-import type { Sentence, VocabularySelection } from '../src/domain/types';
+import type { AlignmentResult, Sentence, VocabularySelection } from '../src/domain/types';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
 import { createId } from '../src/lib/ids';
@@ -423,6 +427,36 @@ describe('shadowing attempts', () => {
     expect(await getDb().attempts.get(attempt.id)).toMatchObject({
       notes: 'Focus on the pitch drop.',
     });
+  });
+});
+
+describe('cached forced alignment (Phase 9, Milestone 2b)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-alignment-${createId('db')}`);
+  });
+
+  const result: AlignmentResult = {
+    durationSeconds: 1.7,
+    words: [{ start: 0.5, end: 0.84, text: 'ちょっと', phones: [] }],
+  };
+
+  it('round-trips a reference alignment', async () => {
+    expect(await getReferenceAlignment('audio-1')).toBeUndefined();
+    await saveReferenceAlignment('audio-1', result);
+    expect(await getReferenceAlignment('audio-1')).toEqual(result);
+  });
+
+  it('round-trips an attempt alignment', async () => {
+    expect(await getAttemptAlignment('attempt-1')).toBeUndefined();
+    await saveAttemptAlignment('attempt-1', result);
+    expect(await getAttemptAlignment('attempt-1')).toEqual(result);
+  });
+
+  it('treats a stale alignmentVersion as a cache miss', async () => {
+    await saveReferenceAlignment('audio-1', result);
+    await getDb().referenceAlignments.update('audio-1', { alignmentVersion: 0 });
+
+    expect(await getReferenceAlignment('audio-1')).toBeUndefined();
   });
 });
 

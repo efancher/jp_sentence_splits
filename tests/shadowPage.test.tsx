@@ -6,8 +6,14 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
+import * as analysisApi from '../src/lib/analysisApi';
 import { ShadowPage } from '../src/pages/ShadowPage';
 import { withAppProviders } from '../src/test/providers';
+
+vi.mock('../src/lib/analysisApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/analysisApi')>()),
+  alignAudio: vi.fn(),
+}));
 
 async function seed() {
   const db = getDb();
@@ -89,6 +95,9 @@ describe('ShadowPage', () => {
     await seed();
     // Blob-round-trip-through-Dexie compat (fake-indexeddb/jsdom Blob
     // mismatch) is handled globally now — see src/test/setup.ts.
+    // Default: server alignment "unavailable" (matches an off-tailnet
+    // device) — individual tests override this to check the "ready" path.
+    vi.mocked(analysisApi.alignAudio).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -174,6 +183,42 @@ describe('ShadowPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close analysis' }));
     expect(screen.queryByRole('button', { name: 'original' })).not.toBeInTheDocument();
+  });
+
+  it('shows server word timing once the alignment service resolves', async () => {
+    vi.mocked(analysisApi.alignAudio).mockResolvedValue({
+      durationSeconds: 1.7,
+      words: [
+        { start: 0, end: 0.5, text: '<eps>', phones: [] },
+        { start: 0.5, end: 0.84, text: 'ちょっと', phones: [] },
+      ],
+    });
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+
+    expect(await screen.findByText('Word timing (server)')).toBeInTheDocument();
+    // Silence (<eps>) is filtered out of the visible chip row.
+    expect(screen.queryByText('<eps>')).not.toBeInTheDocument();
+    expect(screen.getAllByText('ちょっと').length).toBeGreaterThan(0);
+  });
+
+  it('has no server word timing section when the alignment service is unreachable', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+
+    // Local analysis still works; the local-analysis alignment/pitch UI
+    // still renders exactly as before.
+    expect(screen.getByRole('button', { name: 'original' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Fetching server word timing…')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('Word timing (server)')).not.toBeInTheDocument();
   });
 
   it('marks a target range from the reference player and can clear it', async () => {
