@@ -496,13 +496,14 @@ export function ReviewPage() {
   // Due-ness is delegated to getDueStudyItems so this stays the single
   // source of truth for "due" semantics (not reimplemented here too).
   useEffect(() => {
-    if (!scope || initialized) return;
+    if (!scope || initialized || !settings) return;
     let cancelled = false;
     void (async () => {
       const dueByDescriptor = await Promise.all(
         descriptors.map((descriptor) =>
           getDueStudyItems(descriptor.activityTypes, {
             subjectIds: descriptor.candidates.map(descriptor.subjectId),
+            graduationMinScheduledDays: settings.graduationMinScheduledDays,
           }),
         ),
       );
@@ -569,7 +570,7 @@ export function ReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [scope, initialized, descriptors]);
+  }, [scope, initialized, descriptors, settings]);
 
   // Lazily seed study_items for the next never-reviewed subject once the
   // due queue runs dry (confirmed with the user — no batch seeding step),

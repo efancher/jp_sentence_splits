@@ -77,3 +77,21 @@ export function scheduleReview(
   const nextState = toLocalState(card);
   return { fsrsState: nextState, nextDue: nextState.due };
 }
+
+/**
+ * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
+ * treated as "due" once its FSRS interval has grown past
+ * `minScheduledDays` while in the stable `review` state — the algorithm's
+ * own signal that it's been retained long-term, not a separate tracked
+ * concept. `minScheduledDays <= 0` disables graduation entirely (every
+ * item keeps cycling through review forever), which is also
+ * `AppSettings.graduationMinScheduledDays`'s "0 = off" convention.
+ * Nothing about the FSRS state itself changes — this only affects whether
+ * `getDueStudyItems` treats the item as due; the interval keeps growing
+ * exactly as it would otherwise, so lowering the threshold later (or
+ * disabling it) immediately un-graduates everything above the new bar.
+ */
+export function isGraduated(fsrsState: FsrsState, minScheduledDays: number): boolean {
+  if (minScheduledDays <= 0) return false;
+  return fsrsState.state === 'review' && fsrsState.scheduledDays >= minScheduledDays;
+}

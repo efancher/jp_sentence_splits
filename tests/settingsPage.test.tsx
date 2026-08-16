@@ -37,4 +37,20 @@ describe('SettingsPage new-cards-per-session control (Phase 7.10)', () => {
       expect(settings?.newCardsPerSessionLimit).toBe(5);
     });
   });
+
+  it('shows the default graduation threshold and persists a change', async () => {
+    renderSettingsPage();
+
+    const input = await screen.findByLabelText(
+      'Graduate after this many days between reviews',
+    );
+    expect(input).toHaveValue(180);
+
+    fireEvent.change(input, { target: { value: '90' } });
+
+    await waitFor(async () => {
+      const settings = await getDb().settings.get('settings');
+      expect(settings?.graduationMinScheduledDays).toBe(90);
+    });
+  });
 });

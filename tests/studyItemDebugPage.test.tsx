@@ -9,6 +9,7 @@ import {
   ensureVocabularyStudyItem,
   getDb,
   recordReview,
+  updateSettings,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { StudyItemDebugPage } from '../src/pages/StudyItemDebugPage';
@@ -112,5 +113,29 @@ describe('StudyItemDebugPage (Phase 7.10)', () => {
     expect(await screen.findByText('Source: natural_encounter')).toBeInTheDocument();
     expect(screen.getByText(/Typed: つける/)).toBeInTheDocument();
     expect(screen.getByText(/From: 電気を付けました。/)).toBeInTheDocument();
+  });
+
+  it('shows whether the study item has graduated (Phase 7.10)', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const studyItem = await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+    await getDb().studyItems.update(studyItem.id, {
+      fsrsState: { ...studyItem.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+
+    renderPage(studyItem.id);
+
+    expect(await screen.findByText(/Yes/)).toBeInTheDocument();
+  });
+
+  it('shows "No" for a study item well under the graduation threshold', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const studyItem = await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+
+    renderPage(studyItem.id);
+
+    await screen.findByText('Graduated');
+    expect(screen.getByText('No')).toBeInTheDocument();
   });
 });

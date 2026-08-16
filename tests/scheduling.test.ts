@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInitialFsrsState, scheduleReview } from '../src/lib/scheduling';
+import { createInitialFsrsState, isGraduated, scheduleReview } from '../src/lib/scheduling';
+import type { FsrsState } from '../src/domain/types';
 
 describe('createInitialFsrsState', () => {
   it('creates a new, unreviewed card due immediately', () => {
@@ -64,6 +65,39 @@ describe('scheduleReview', () => {
       };
       const { fsrsState: result } = scheduleReview(fsrsState, 'good', now);
       expect(result.state).toBeDefined();
+    }
+  });
+});
+
+describe('isGraduated (Phase 7.10)', () => {
+  const reviewState = (scheduledDays: number): FsrsState => ({
+    due: new Date().toISOString(),
+    stability: 50,
+    difficulty: 3,
+    elapsedDays: 0,
+    scheduledDays,
+    learningSteps: 0,
+    reps: 5,
+    lapses: 0,
+    state: 'review',
+  });
+
+  it('is false when the threshold is 0 (disabled), regardless of interval', () => {
+    expect(isGraduated(reviewState(9999), 0)).toBe(false);
+  });
+
+  it('is false when the interval has not reached the threshold yet', () => {
+    expect(isGraduated(reviewState(179), 180)).toBe(false);
+  });
+
+  it('is true once the interval reaches the threshold in the review state', () => {
+    expect(isGraduated(reviewState(180), 180)).toBe(true);
+    expect(isGraduated(reviewState(300), 180)).toBe(true);
+  });
+
+  it('is false for a long interval in any state other than "review"', () => {
+    for (const state of ['new', 'learning', 'relearning'] as const) {
+      expect(isGraduated({ ...reviewState(300), state }, 180)).toBe(false);
     }
   });
 });

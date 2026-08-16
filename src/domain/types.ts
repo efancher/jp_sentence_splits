@@ -241,6 +241,14 @@ export interface AppSettings {
    * lazy-seeding of brand-new subjects.
    */
   newCardsPerSessionLimit: number;
+  /**
+   * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
+   * treated as due once its FSRS interval (`scheduledDays`) grows past
+   * this many days while in the stable `review` state — see
+   * `isGraduated`, src/lib/scheduling.ts. `0` disables graduation
+   * entirely (nothing ever retires from rotation).
+   */
+  graduationMinScheduledDays: number;
 }
 
 export interface InboxMembership {

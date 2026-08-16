@@ -1071,4 +1071,95 @@ describe('ReviewPage', () => {
     const sent2Items = await db.studyItems.where('subjectId').equals('sent-2').toArray();
     expect(sent2Items).toHaveLength(0);
   });
+
+  it('never shows a graduated study item as due, even though a due, non-graduated one still shows (Phase 7.10)', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.books.add({
+      id: 'book-1',
+      title: 'Test Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    await db.sentences.add({
+      id: 'sent-1',
+      normalizedKey: 'sent-1',
+      japanese: '本を読みます。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I read a book.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-1',
+      bookId: 'book-1',
+      sentenceId: 'sent-1',
+      position: 0,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    // comprehension: due now, but graduated (long-standing review interval).
+    await db.studyItems.add({
+      id: 'si-graduated',
+      subjectType: 'sentence',
+      subjectId: 'sent-1',
+      activityType: 'comprehension',
+      fsrsState: {
+        due: now,
+        stability: 50,
+        difficulty: 3,
+        elapsedDays: 0,
+        scheduledDays: 200,
+        learningSteps: 0,
+        reps: 5,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    // reading_in_context: due now, short interval — not graduated.
+    await db.studyItems.add({
+      id: 'si-not-graduated',
+      subjectType: 'sentence',
+      subjectId: 'sent-1',
+      activityType: 'reading_in_context',
+      fsrsState: {
+        due: now,
+        stability: 5,
+        difficulty: 3,
+        elapsedDays: 0,
+        scheduledDays: 3,
+        learningSteps: 0,
+        reps: 2,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // Only the non-graduated card should ever show.
+    await screen.findByText(/Reading in context/);
+    expect(screen.queryByText(/^Comprehension/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    // Graduated item stays graduated — nothing else was due/pending, so
+    // the queue empties instead of ever showing the graduated card.
+    await screen.findByText('All caught up.');
+  });
 });

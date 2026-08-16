@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { getStudyItemDebugInfo, type StudyItemDebugSubject } from '../db/repository';
+import { getStudyItemDebugInfo, readSettings, type StudyItemDebugSubject } from '../db/repository';
+import { isGraduated } from '../lib/scheduling';
 
 const MATURITY_LABELS: Record<string, string> = {
   fragile: 'Fragile',
@@ -21,6 +22,7 @@ const MATURITY_LABELS: Record<string, string> = {
 export function StudyItemDebugPage() {
   const { studyItemId } = useParams<{ studyItemId: string }>();
   const navigate = useNavigate();
+  const settings = useLiveQuery(() => readSettings(), []);
 
   // useLiveQuery itself returns undefined while loading — the querier
   // below never does, so `info?.found === false` is unambiguously "loaded,
@@ -75,6 +77,16 @@ export function StudyItemDebugPage() {
                     : '(never)'
                 }
               />
+              {settings ? (
+                <Field
+                  label="Graduated"
+                  value={
+                    isGraduated(info.studyItem.fsrsState, settings.graduationMinScheduledDays)
+                      ? `Yes — won't come up for review again unless you lower the threshold`
+                      : 'No'
+                  }
+                />
+              ) : null}
             </div>
 
             {info.subject.kind === 'vocabularyItem' ? (

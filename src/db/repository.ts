@@ -47,7 +47,7 @@ import {
   type MaturityLevel,
 } from '../lib/maturity';
 import { nowIso } from '../lib/normalize';
-import { createInitialFsrsState, scheduleReview } from '../lib/scheduling';
+import { createInitialFsrsState, isGraduated, scheduleReview } from '../lib/scheduling';
 import {
   parseShadowingPackage,
   type ShadowingImportPreview,
@@ -1523,7 +1523,13 @@ export async function ensureStudyItem(
 
 export async function getDueStudyItems(
   activityTypes: StudyActivityType[],
-  options: { subjectIds?: string[]; now?: Date; limit?: number } = {},
+  options: {
+    subjectIds?: string[];
+    now?: Date;
+    limit?: number;
+    /** Graduation (Phase 7.10) — omitted or 0 disables it; see isGraduated, src/lib/scheduling.ts. */
+    graduationMinScheduledDays?: number;
+  } = {},
 ): Promise<StudyItem[]> {
   const db = getDb();
   const nowIsoValue = (options.now ?? new Date()).toISOString();
@@ -1535,6 +1541,7 @@ export async function getDueStudyItems(
   const due = candidates
     .filter((item) => item.fsrsState.due <= nowIsoValue)
     .filter((item) => !subjectIdSet || subjectIdSet.has(item.subjectId))
+    .filter((item) => !isGraduated(item.fsrsState, options.graduationMinScheduledDays ?? 0))
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due));
   return options.limit ? due.slice(0, options.limit) : due;
 }

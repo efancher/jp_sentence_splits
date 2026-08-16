@@ -141,6 +141,26 @@ export function SettingsPage() {
           Caps how many never-before-seen words/sentences Review introduces
           in one sitting — already-due reviews are never capped by this.
         </p>
+        <label>
+          Graduate after this many days between reviews
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={settings.graduationMinScheduledDays}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              if (Number.isNaN(parsed) || parsed < 0) return;
+              void updateSettings({ graduationMinScheduledDays: parsed });
+            }}
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Once a word or sentence's review interval grows past this many
+          days, it stops being quizzed — the scheduler's own signal that
+          you've retained it long-term. Set to 0 to disable (nothing ever
+          retires).
+        </p>
       </section>
 
       <AuthAndSyncSettings />

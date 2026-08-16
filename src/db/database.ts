@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   textDisplayMode: 'plain',
   tts: { ...DEFAULT_TTS_SETTINGS },
   newCardsPerSessionLimit: 20,
+  graduationMinScheduledDays: 180,
 };
 
 export class GlossbookDatabase extends Dexie {

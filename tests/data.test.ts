@@ -443,6 +443,20 @@ describe('FSRS review (study_items/reviews)', () => {
     expect(results).toEqual([]);
   });
 
+  it('getDueStudyItems excludes a graduated item when graduationMinScheduledDays is set (Phase 7.10)', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+    const withGraduation = await getDueStudyItems(['comprehension'], {
+      graduationMinScheduledDays: 180,
+    });
+    expect(withGraduation).toEqual([]);
+
+    const withoutGraduation = await getDueStudyItems(['comprehension']);
+    expect(withoutGraduation.map((row) => row.id)).toEqual([item.id]);
+  });
+
   it('recordReview appends a Review and advances the study item past "new"', async () => {
     const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
     const { review, studyItem } = await recordReview({

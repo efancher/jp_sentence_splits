@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.10b).
+Last updated: 2026-08-16 (Phase 7.10c).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1856,8 +1856,73 @@ exhausted. All 19 pre-existing tests in that file still pass unchanged
 don't want, for the interleave to change their observed order).
 
 **Verified**: `npm run check` green — 384 tests passed (up from 383), 2
-pre-existing skips, `npm run build` green. **Not yet re-verified against
-the user's real production data** — worth confirming vocabulary-based
-cards actually now appear within a reasonable number of clicks in a real
-review session, now that both the data gap and the ordering bug are
-fixed.
+pre-existing skips, `npm run build` green. **Confirmed fixed by the user**
+against real production data (2026-08-16) — vocabulary-based cards now
+appear within the first few clicks of a review session, as intended.
+
+## Phase 7.10c — Graduation: done
+
+The last piece of Phase 7.10's original bundled line. Scoped with the
+user directly (the ambiguity flagged when 7.10a/b shipped): "eventually
+if it seems like I've learned it well enough, items should stop being
+quizzed." Landed as a configurable threshold on FSRS's own interval
+signal, not a separate tracked concept.
+
+Added:
+- `isGraduated(fsrsState, minScheduledDays)` (`src/lib/scheduling.ts`):
+  a study item is graduated once its interval (`scheduledDays`) reaches
+  `minScheduledDays` while in the stable `review` state (not `learning`/
+  `relearning`/`new`, so an item that just lapsed and is being relearned
+  is never mistaken for graduated even if its *pre-lapse* interval had
+  been long). `minScheduledDays <= 0` disables graduation entirely —
+  nothing about the FSRS math changes, only whether it's ever surfaced,
+  so raising or lowering the threshold later immediately (un)graduates
+  items with no migration or backfill needed.
+- New `AppSettings.graduationMinScheduledDays` (default 180 — about six
+  months; deliberately a much higher bar than the existing 21-day
+  `MATURE_MIN_SCHEDULED_DAYS` maturity-ladder threshold from Phase 7.1/7.5,
+  which only gates the mnemonic-auto-show behavior and was never meant to
+  mean "stop reviewing"), additive in the backup schema like every other
+  settings field. New number input on `SettingsPage.tsx` next to the
+  new-cards-per-session control, with matching "0 disables" convention.
+- `getDueStudyItems` (`src/db/repository.ts`) gained an optional
+  `graduationMinScheduledDays` option, filtering with `isGraduated` —
+  the same "single source of truth for due-ness" function every activity
+  category already goes through, so this is one filter, not five.
+  `ReviewPage.tsx` now waits for settings to load before building the
+  queue (previously only the seeding effect needed settings, for the
+  new-card cap) and passes the threshold into every descriptor's due-fetch
+  call.
+- `StudyItemDebugPage.tsx` shows a new "Graduated" field (Yes/No, with a
+  one-line explanation) — ties directly into 7.10a's explainability goal:
+  now "why don't I see this word anymore" has a direct answer.
+- Tests: `tests/scheduling.test.ts` (`isGraduated` — disabled, under
+  threshold, at/over threshold, and every non-`review` state). `tests/data.test.ts`
+  (`getDueStudyItems` excludes a graduated item, includes it again with no
+  threshold passed). `tests/reviewPage.test.tsx` (a graduated and a
+  non-graduated item due at the same time — only the non-graduated one
+  ever shows; queue correctly reports "All caught up" once it's rated,
+  never surfacing the graduated one). `tests/settingsPage.test.tsx` and
+  `tests/studyItemDebugPage.test.tsx` for the new controls/field.
+
+**Deliberately not done yet**: no manual "un-graduate" action (the only
+way to bring an item back today is lowering or disabling the setting,
+which un-graduates everything above the new bar at once, not one item at
+a time); no visual indicator of graduated items outside the debug page
+(no "graduated" badge on `/vocabulary` or book pages); graduation isn't
+itself a new evidence/event (no `Review` row, no sync entity) — it's
+purely a derived read of existing FSRS state, so there's nothing to sync
+or migrate.
+
+**Verified**: `npm run check` green — 393 tests passed (up from 384), 2
+pre-existing skips, `npm run build` green. **Manually verified in a real
+browser** (2026-08-16, same Playwright-driver approach as the rest of this
+session): seeded one graduated and one non-graduated study item both due
+now — only the non-graduated one ever appeared; after rating it, "All
+caught up" with the graduated item's own (correctly far-future, unrelated)
+due date shown; `/study-items/:id` for the graduated item correctly
+showed "Graduated: Yes."
+
+This completes Phase 7's full sub-phasing (7.1 through 7.10c) and, with
+it, every phase in the original roadmap (`docs/UNIFIED_APP_ARCHITECTURE.md`
+§15 — Phase 0 through Phase 7).
