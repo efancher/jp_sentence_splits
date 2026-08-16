@@ -99,10 +99,11 @@ async function suppressUnconditionalSentenceActivityTypes(sentenceId: string) {
 }
 
 /**
- * Seeds far-future reading_retrieval/cloze study items for `vocabularyItemId`
- * so those two vocabulary-target activity types never occupy the queue —
- * used by the contrastive-pair test (Phase 7.7) to isolate the confusion
- * pair's own card instead of its two members' individual review cards.
+ * Seeds far-future reading_retrieval/cloze/reading_production study items
+ * for `vocabularyItemId` so those vocabulary-target activity types never
+ * occupy the queue — used by the contrastive-pair test (Phase 7.7) to
+ * isolate the confusion pair's own card instead of its two members'
+ * individual review cards.
  */
 async function suppressVocabularyActivityTypes(vocabularyItemId: string) {
   const db = getDb();
@@ -118,7 +119,7 @@ async function suppressVocabularyActivityTypes(vocabularyItemId: string) {
     lapses: 0,
     state: 'review' as const,
   };
-  for (const activityType of ['reading_retrieval', 'cloze']) {
+  for (const activityType of ['reading_retrieval', 'cloze', 'reading_production']) {
     await db.studyItems.add({
       id: `si-${vocabularyItemId}-${activityType}`,
       subjectType: 'vocabularyItem',
@@ -253,7 +254,7 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('renders reading_retrieval and cloze cards for the same target word, each seeded once (Phase 7.2/7.3)', async () => {
+  it('renders reading_retrieval, cloze, and reading_production cards for the same target word, each seeded once (Phase 7.2/7.3/7.9)', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
@@ -293,6 +294,7 @@ describe('ReviewPage', () => {
         .toArray();
       expect(seeded.map((item) => item.activityType).sort()).toEqual([
         'cloze',
+        'reading_production',
         'reading_retrieval',
       ]);
       expect(seeded.every((item) => item.subjectType === 'vocabularyItem')).toBe(true);
@@ -313,9 +315,87 @@ describe('ReviewPage', () => {
     expect(screen.getByText('よむ')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
+    // reading_production card last — types the reading, checks, then rates.
+    await screen.findByText('Type the reading');
+    await user.type(screen.getByLabelText('Type the reading'), 'よむ');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    expect(screen.getByText('よむ')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
     await waitFor(async () => {
-      expect(await db.reviews.count()).toBe(2);
+      expect(await db.reviews.count()).toBe(3);
     });
+    const productionReview = (await db.reviews.toArray()).find(
+      (review) => review.responseRaw === 'よむ',
+    );
+    expect(productionReview?.expectedAnswer).toBe('よむ');
+  });
+
+  it('shows incorrect feedback for a wrong typed reading but still records the evidence and lets the learner self-rate (Phase 7.9)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Suppress reading_retrieval/cloze so only reading_production seeds.
+    const farFutureFsrsState = {
+      due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 0,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    for (const activityType of ['reading_retrieval', 'cloze']) {
+      await db.studyItems.add({
+        id: `si-vocab-1-${activityType}`,
+        subjectType: 'vocabularyItem',
+        subjectId: 'vocab-1',
+        activityType,
+        fsrsState: farFutureFsrsState,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Type the reading');
+    await user.type(screen.getByLabelText('Type the reading'), 'よみます');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+
+    expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
+    expect(screen.getByText('よむ')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Again' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.rating).toBe('again');
+    expect(review?.responseRaw).toBe('よみます');
+    expect(review?.expectedAnswer).toBe('よむ');
   });
 
   it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {

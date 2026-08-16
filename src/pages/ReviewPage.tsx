@@ -26,6 +26,7 @@ import type {
   VocabularyItem,
 } from '../domain/types';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
+import { normalizeSentenceKey } from '../lib/normalize';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -40,17 +41,22 @@ const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
 ];
 
 /**
- * Vocabulary-item-subject activity types (Phase 7.2/7.3, docs/STATUS.md) —
- * both target a specific occurrence of a word in one of its sentences, and
- * so share one eligibility condition and candidate source (see
+ * Vocabulary-item-subject activity types (Phase 7.2/7.3/7.9, docs/STATUS.md) —
+ * all three target a specific occurrence of a word in one of its sentences,
+ * and so share one eligibility condition and candidate source (see
  * getVocabularyTargetCandidates): a surfaceForm-bearing sentence_vocabulary
  * link. Vocabulary confirmed before that field existed, or imported outside
- * the picker, isn't a candidate for either yet. `reading_retrieval` shows
- * the word (hides the reading); `cloze` hides the word entirely.
+ * the picker, isn't a candidate for any of them yet. `reading_retrieval`
+ * shows the word (hides the reading); `cloze` hides the word entirely;
+ * `reading_production` (Phase 7.9, docs brief §12) shows the word and asks
+ * the learner to type the reading — recognition vs. production is a
+ * separate axis from what's hidden, so this is a third, harder rung on the
+ * same word rather than a variant of reading_retrieval.
  */
 const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_retrieval',
   'cloze',
+  'reading_production',
 ];
 
 /**
@@ -77,9 +83,16 @@ const ACTIVITY_LABELS: Record<string, string> = {
   reading_in_context: 'Reading in context',
   reading_retrieval: 'Reading retrieval',
   cloze: 'Cloze',
+  reading_production: 'Reading production',
   listening: 'Listening',
   contrastive: 'Contrastive pair',
 };
+
+/** Same normalization `normalizeSentenceKey` uses for sentence-identity matching (NFC, whitespace-insensitive) — reused here for typed-reading comparison since the requirements coincide. */
+function isReadingAnswerCorrect(typed: string, expected: string): boolean {
+  const normalizedTyped = normalizeSentenceKey(typed);
+  return normalizedTyped.length > 0 && normalizedTyped === normalizeSentenceKey(expected);
+}
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
   { value: 'again', label: 'Again' },
@@ -151,6 +164,8 @@ export function ReviewPage() {
   const [assistanceUsed, setAssistanceUsed] = useState<Set<ReviewAssistance>>(
     () => new Set(),
   );
+  /** Set only by reading_production's Check step; recorded as Review.responseRaw on rate. */
+  const [typedResponse, setTypedResponse] = useState('');
 
   const scope = useLiveQuery(async () => {
     const db = getDb();
@@ -468,6 +483,7 @@ export function ReviewPage() {
     setRevealed(false);
     setMnemonicVisible(false);
     setAssistanceUsed(new Set());
+    setTypedResponse('');
   }, [current?.studyItem.id]);
 
   // Mnemonic scaffolding (Phase 7.5, brief §7/§6): shown unprompted only
@@ -513,6 +529,9 @@ export function ReviewPage() {
         studyItemId: current.studyItem.id,
         rating,
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
+        responseRaw: typedResponse || undefined,
+        expectedAnswer:
+          typedResponse && current.target ? current.target.vocabularyItem.reading : undefined,
       });
       setQueue((q) => q.slice(1));
     } finally {
@@ -572,7 +591,24 @@ export function ReviewPage() {
                 current.studyItem.activityType}{' '}
               · {queue.length} due
             </div>
-            {current.target ? (
+            {current.target && current.studyItem.activityType === 'reading_production' ? (
+              <ReadingProductionCard
+                key={current.studyItem.id}
+                sentence={current.sentence}
+                vocabularyItem={current.target.vocabularyItem}
+                surfaceForm={current.target.surfaceForm}
+                revealed={revealed}
+                onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
+                mnemonicVisible={mnemonicVisible}
+                onShowMnemonic={() => {
+                  setMnemonicVisible(true);
+                  markAssistance('mnemonic_shown');
+                }}
+              />
+            ) : current.target ? (
               <VocabularyTargetCard
                 activityType={current.studyItem.activityType}
                 sentence={current.sentence}
@@ -687,6 +723,86 @@ function VocabularyTargetCard({
         </button>
       ) : (
         <>
+          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
+          {vocabularyItem.meaning ? (
+            <div className="muted">{vocabularyItem.meaning}</div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Reading production (Phase 7.9, docs brief §12): the "production ladder"'s
+ * first rung — same word/sentence as reading_retrieval, but the learner
+ * types the reading instead of just revealing it, so recall is checked
+ * (auto, via isReadingAnswerCorrect) rather than self-assessed from a
+ * shown answer. The 4-point self-rate afterward stays the actual scheduling
+ * signal, same as every other card type — correctness is recorded
+ * (Review.responseRaw/expectedAnswer, threaded up via onCheck) as
+ * supplementary evidence, not used to auto-pick a rating.
+ */
+function ReadingProductionCard({
+  sentence,
+  vocabularyItem,
+  surfaceForm,
+  revealed,
+  onCheck,
+  mnemonicVisible,
+  onShowMnemonic,
+}: {
+  sentence: Sentence;
+  vocabularyItem: VocabularyItem;
+  surfaceForm: string;
+  revealed: boolean;
+  onCheck: (typedReading: string) => void;
+  mnemonicVisible: boolean;
+  onShowMnemonic: () => void;
+}) {
+  const [value, setValue] = useState('');
+  const [wasCorrect, setWasCorrect] = useState(false);
+  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+
+  return (
+    <>
+      <div className="jp jp-lg">
+        {before}
+        <mark>{target || surfaceForm}</mark>
+        {after}
+      </div>
+      {!revealed && vocabularyItem.notes ? (
+        mnemonicVisible ? (
+          <div className="muted">💡 {vocabularyItem.notes}</div>
+        ) : (
+          <button type="button" onClick={onShowMnemonic}>
+            Show mnemonic
+          </button>
+        )
+      ) : null}
+      {!revealed ? (
+        <form
+          className="row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setWasCorrect(isReadingAnswerCorrect(value, vocabularyItem.reading));
+            onCheck(value);
+          }}
+        >
+          <label>
+            Type the reading
+            <input
+              type="text"
+              value={value}
+              autoComplete="off"
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </label>
+          <button type="submit">Check</button>
+        </form>
+      ) : (
+        <>
+          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
           <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.8).
+Last updated: 2026-08-16 (Phase 7.9a).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1467,6 +1467,66 @@ free-reading rather than a structured exercise); no surfacing of
 
 **Verified**: `npm run check` (typecheck + full vitest suite) green — 273
 tests passed (up from 268), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet manually verified in a real browser.**
+
+## Phase 7.9a — Reading production (production ladder, first slice): done
+
+Phase 7.9 was originally scoped as one bundled "production ladder/sentence
+transformations" line; split per this effort's established discipline
+(confirmed with the user before starting) into typed production first,
+sentence-transformation conjugation quizzing (porting `anki/wk_decks.py`'s
+`conjugate_vocab_form()`) as a later, separate slice.
+
+Added:
+- New `'reading_production'` vocabulary-item-subject activity type,
+  third alongside `reading_retrieval`/`cloze` in `VOCABULARY_ACTIVITY_TYPES`
+  (`src/pages/ReviewPage.tsx`) — same eligibility (a surfaceForm-bearing
+  `sentence_vocabulary` link), so every existing reading_retrieval/cloze
+  candidate now also gets a reading_production card seeded automatically.
+  Recognition vs. production is a separate axis from what's hidden, so this
+  is a genuinely new rung on the same word rather than a variant of
+  reading_retrieval.
+- `ReadingProductionCard` (`src/pages/ReviewPage.tsx`): shows the word
+  highlighted in its sentence (visible, like reading_retrieval), a text
+  input + "Check" button instead of a reveal button. Checking compares the
+  typed value against the vocabulary item's reading via a new
+  `isReadingAnswerCorrect` (NFC + whitespace-insensitive, reusing
+  `normalizeSentenceKey`'s existing behavior rather than writing a second
+  normalizer), shows ✓/✗ feedback plus the correct reading/meaning, then
+  the same shared four-point self-rate every other card type uses —
+  correctness is recorded as evidence, not used to auto-pick a rating,
+  matching the "self-rate is the real signal" convention everywhere else.
+  `key={current.studyItem.id}` on its render (new — no other card in this
+  file needed one, since none had local input state that could leak
+  between two same-type cards rendered back-to-back without a remount).
+- `recordReview` (`src/db/repository.ts`) unchanged in shape — it already
+  accepted `responseRaw`/`expectedAnswer` (reserved since Phase 4, never
+  populated). `ReviewPage.tsx` is the first real caller to pass them,
+  threaded through a new `typedResponse` state (reset alongside
+  `revealed`/`assistanceUsed` on card change) that `handleRate` forwards as
+  `responseRaw`/`expectedAnswer` only when non-empty — every other card
+  type's `recordReview` call is unaffected.
+- Tests: `tests/reviewPage.test.tsx` — extended the existing
+  reading_retrieval/cloze walkthrough test to also seed/render/rate the new
+  reading_production card and assert `responseRaw`/`expectedAnswer` on the
+  resulting review; new test for the incorrect-answer path (✗ feedback,
+  evidence still recorded, learner can still rate "Again"). Updated
+  `suppressVocabularyActivityTypes` (added in Phase 7.7's own test file) to
+  suppress all three vocabulary activity types, not two, so the
+  contrastive-pair test still isolates correctly now that a third one
+  exists.
+
+**Deliberately not done yet** (moved to a later 7.9 slice): no sentence
+transformations / conjugation quizzing (the `conjugate_vocab_form()` port);
+no kana-conversion-aware answer matching (e.g. typing a katakana or
+half-width variant of a hiragana reading won't match — NFC-normalize only,
+no script conversion); no typed-meaning production (English), only reading;
+no IME-specific input affordances beyond a plain text input.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 274
+tests passed (up from 273), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
 **Not yet manually verified in a real browser.**
