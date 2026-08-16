@@ -11,14 +11,27 @@ import { NativeAudioButton } from '../components/NativeAudioButton';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
-import { getDb, setBookSentenceStatus } from '../db/repository';
-import type { BookSentence, StudyStatus } from '../domain/types';
+import {
+  getDb,
+  getVocabularyTargetCandidates,
+  recordNaturalEncounter,
+  setBookSentenceStatus,
+  type VocabularyTargetCandidate,
+} from '../db/repository';
+import type { BookSentence, ReviewRating, StudyStatus } from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { hashString } from '../lib/ids';
 import { summarizeChunks } from '../lib/worksheet';
 
 type PracticeScope = 'all' | 'incomplete' | 'needs_review' | 'unstarted';
+
+const NATURAL_ENCOUNTER_RATINGS: { value: ReviewRating; label: string }[] = [
+  { value: 'again', label: 'Again' },
+  { value: 'hard', label: 'Hard' },
+  { value: 'good', label: 'Good' },
+  { value: 'easy', label: 'Easy' },
+];
 
 function filterMemberships(
   memberships: BookSentence[],
@@ -65,6 +78,9 @@ export function PracticePage() {
     english: false,
   });
   const [attempt, setAttempt] = useState('');
+  const [encounteredVocabularyItemIds, setEncounteredVocabularyItemIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -102,6 +118,11 @@ export function PracticePage() {
       .where('sentenceId')
       .equals(sentenceId)
       .toArray();
+    // Materialized vocabulary (Phase 5 picker confirms) for this sentence,
+    // if any — the natural-encounter panel (Phase 7.8) only offers a quick
+    // rating for words the learner has already chosen to track, not every
+    // word in the sentence.
+    const materializedVocabulary = await getVocabularyTargetCandidates([sentenceId]);
     return {
       book,
       allMemberships,
@@ -111,6 +132,7 @@ export function PracticePage() {
       index,
       membership: memberships[index] ?? null,
       sentenceAudio,
+      materializedVocabulary,
     };
   }, [bookId, routeSentenceId, scope, shuffled]);
 
@@ -130,6 +152,7 @@ export function PracticePage() {
       english: false,
     });
     setAttempt('');
+    setEncounteredVocabularyItemIds(new Set());
   }, [data?.sentence?.id]);
 
   // Cancel playback when moving between sentences or leaving Practice.
@@ -226,6 +249,18 @@ export function PracticePage() {
   async function mark(status: StudyStatus, advance = false) {
     await setBookSentenceStatus(bookId, sentence.id, status);
     if (advance && next) navigate(practicePath(next.sentenceId));
+  }
+
+  async function markEncounter(vocabularyItemId: string, rating: ReviewRating) {
+    if (encounteredVocabularyItemIds.has(vocabularyItemId)) return;
+    setEncounteredVocabularyItemIds(
+      (current) => new Set(current).add(vocabularyItemId),
+    );
+    await recordNaturalEncounter({
+      vocabularyItemId,
+      sentenceId: sentence.id,
+      rating,
+    });
   }
 
   return (
@@ -338,6 +373,21 @@ export function PracticePage() {
         {showVocabulary ? (
           <VocabChips items={sentence.targetVocabulary} />
         ) : null}
+        {showVocabulary && data.materializedVocabulary.length > 0 ? (
+          <div className="stack" style={{ gap: '0.35rem' }}>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>
+              Recognized these without hints?
+            </div>
+            {data.materializedVocabulary.map((candidate) => (
+              <NaturalEncounterRow
+                key={candidate.vocabularyItem.id}
+                candidate={candidate}
+                recorded={encounteredVocabularyItemIds.has(candidate.vocabularyItem.id)}
+                onRate={(rating) => void markEncounter(candidate.vocabularyItem.id, rating)}
+              />
+            ))}
+          </div>
+        ) : null}
         <label>
           Temporary attempt (not saved unless you copy into Analyze)
           <textarea
@@ -443,6 +493,50 @@ export function PracticePage() {
           Desktop shortcut: use ← and → to move through the session.
         </div>
       </section>
+    </div>
+  );
+}
+
+/**
+ * One materialized vocabulary item's natural-encounter quick-rate row
+ * (Phase 7.8, docs brief §9/§16): unlike ReviewPage's cards, there's
+ * nothing to hide — the learner has already read the full sentence with
+ * translation available — so this is a bare self-report, not a test. Rating
+ * disables the row (one rating per sentence visit; revisiting the word in a
+ * later sentence is a separate, legitimate encounter).
+ */
+function NaturalEncounterRow({
+  candidate,
+  recorded,
+  onRate,
+}: {
+  candidate: VocabularyTargetCandidate;
+  recorded: boolean;
+  onRate: (rating: ReviewRating) => void;
+}) {
+  const { vocabularyItem, surfaceForm } = candidate;
+  return (
+    <div className="row" style={{ alignItems: 'center' }}>
+      <span className="jp">{surfaceForm || vocabularyItem.expression}</span>
+      {vocabularyItem.reading ? (
+        <span className="muted">({vocabularyItem.reading})</span>
+      ) : null}
+      {vocabularyItem.meaning ? (
+        <span className="muted">{vocabularyItem.meaning}</span>
+      ) : null}
+      {recorded ? (
+        <span className="muted">Recorded</span>
+      ) : (
+        NATURAL_ENCOUNTER_RATINGS.map((rating) => (
+          <button
+            key={rating.value}
+            type="button"
+            onClick={() => onRate(rating.value)}
+          >
+            {rating.label}
+          </button>
+        ))
+      )}
     </div>
   );
 }

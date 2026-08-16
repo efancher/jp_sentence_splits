@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.7).
+Last updated: 2026-08-16 (Phase 7.8).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1414,3 +1414,59 @@ bundled 7.6/7.7 interference-review line (see docs/ROADMAP.md). Remaining
 Phase 7 sub-phases: 7.8 (natural-encounter evidence), 7.9 (production
 ladder/sentence transformations), 7.10 (session planner, graduation,
 explainability, debug view).
+
+## Phase 7.8 — Natural-encounter evidence: done
+
+The first real writer of `Review.source`/`Review.contextSentenceId`
+(reserved, unpopulated, since Phase 7.1). Distinguishes "I recognized this
+word while just reading, not in a review session" from a scheduled-review
+answer — both feed the same FSRS schedule, but as separate evidence.
+
+Added:
+- `src/db/repository.ts` — `recordReview`'s input gained optional `source?:
+  ReviewSource` and `contextSentenceId?: string`, threaded straight into
+  the `Review` it builds; no other behavior changed (both stay `undefined`
+  for every existing caller, so a scheduled review is still recorded
+  exactly as before). New `recordNaturalEncounter({ vocabularyItemId,
+  sentenceId, rating })`: get-or-creates the word's `reading_retrieval`
+  study item (the same one ReviewPage's reading_retrieval card would use)
+  via the existing `ensureVocabularyStudyItem`, then calls `recordReview`
+  with `source: 'natural_encounter'` and `contextSentenceId: sentenceId` —
+  deliberately one fixed activity type, not a choice between
+  reading_retrieval/cloze, to keep the opportunistic capture UI a single
+  quick action rather than a menu.
+- `src/pages/PracticePage.tsx` (the free-reading/practice flow, distinct
+  from ReviewPage's queue): fetches `getVocabularyTargetCandidates([sentenceId])`
+  for the sentence currently on screen (the same eligibility — a
+  surfaceForm-bearing `sentence_vocabulary` link — reading_retrieval/cloze
+  already use) and, when any exist, renders a "Recognized these without
+  hints?" panel below the existing vocab chips. Each materialized word gets
+  a `NaturalEncounterRow`: word + reading + meaning shown openly (no
+  hide/reveal — the learner has already read the full sentence with
+  translation available, so there's nothing to test, only to self-report)
+  plus the same four-point rating buttons as everywhere else. Rating
+  disables that row for the rest of the sentence visit (`encounteredVocabularyItemIds`,
+  reset alongside the existing `reveal`/`attempt` state on sentence change)
+  — one encounter recorded per visit, not per click; revisiting the word in
+  a later sentence is a separate, legitimate encounter.
+- Tests: `tests/data.test.ts` — `recordNaturalEncounter` creates/reuses the
+  right study item and tags source/contextSentenceId correctly; a plain
+  `recordReview` still leaves both fields undefined. New
+  `tests/practicePage.test.tsx` (PracticePage had no test file before this
+  phase) — panel absent with no materialized vocabulary; panel present,
+  rating recorded, row disabled after rating, for a sentence with one
+  materialized word.
+
+**Deliberately not done yet**: no UI on PracticePage to *choose* which
+study item/activity type an encounter counts toward (always
+reading_retrieval); no natural-encounter capture from ShadowPage or
+AnalyzePage, only PracticePage (the one page that's genuinely
+free-reading rather than a structured exercise); no surfacing of
+`source`/`contextSentenceId` anywhere in review history or a debug view
+(planned for 7.10); no batching/undo for an accidental rating.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 273
+tests passed (up from 268), 2 pre-existing skips (unrelated), 0 existing
+test behavior changed. `npm run build` green.
+
+**Not yet manually verified in a real browser.**

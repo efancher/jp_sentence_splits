@@ -25,6 +25,7 @@ import {
   pickContextSentenceForVocabularyItem,
   rateAttempt,
   recordConfusionObservation,
+  recordNaturalEncounter,
   recordReview,
   removeSentencesFromBook,
   reorderBookSentences,
@@ -792,6 +793,48 @@ describe('evidence-model foundation (Phase 7.1)', () => {
 
   it('getVocabularyTargetCandidates returns an empty array for no sentence ids', async () => {
     expect(await getVocabularyTargetCandidates([])).toEqual([]);
+  });
+
+  it('recordNaturalEncounter creates the word\'s reading_retrieval study item and tags the review source/context (Phase 7.8)', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    await getDb().sentences.add(stubSentence('sent-natural'));
+
+    const { review, studyItem } = await recordNaturalEncounter({
+      vocabularyItemId: vocabItem.id,
+      sentenceId: 'sent-natural',
+      rating: 'good',
+    });
+
+    expect(studyItem.subjectType).toBe('vocabularyItem');
+    expect(studyItem.subjectId).toBe(vocabItem.id);
+    expect(studyItem.activityType).toBe('reading_retrieval');
+    expect(review.source).toBe('natural_encounter');
+    expect(review.contextSentenceId).toBe('sent-natural');
+    expect(review.rating).toBe('good');
+  });
+
+  it('recordNaturalEncounter reuses an existing reading_retrieval study item rather than creating a second one', async () => {
+    const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
+    const formal = await ensureVocabularyStudyItem(vocabItem.id, 'reading_retrieval');
+    await getDb().sentences.add(stubSentence('sent-natural'));
+
+    const { studyItem } = await recordNaturalEncounter({
+      vocabularyItemId: vocabItem.id,
+      sentenceId: 'sent-natural',
+      rating: 'easy',
+    });
+
+    expect(studyItem.id).toBe(formal.id);
+    expect(
+      await getDb().studyItems.where('subjectId').equals(vocabItem.id).count(),
+    ).toBe(1);
+  });
+
+  it('recordReview leaves source/contextSentenceId undefined for an ordinary scheduled review', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const { review } = await recordReview({ studyItemId: item.id, rating: 'good' });
+    expect(review.source).toBeUndefined();
+    expect(review.contextSentenceId).toBeUndefined();
   });
 });
 

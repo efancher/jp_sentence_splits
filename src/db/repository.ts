@@ -16,6 +16,7 @@ import type {
   Review,
   ReviewAssistance,
   ReviewRating,
+  ReviewSource,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
@@ -1541,6 +1542,9 @@ export async function recordReview(input: {
   elapsedMs?: number;
   errorClassification?: ErrorClassification;
   assistance?: ReviewAssistance[];
+  /** Absent means `scheduled_review` (Phase 7.8, docs brief §9/§16). */
+  source?: ReviewSource;
+  contextSentenceId?: string;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -1562,6 +1566,8 @@ export async function recordReview(input: {
     elapsedMs: input.elapsedMs,
     errorClassification: input.errorClassification,
     assistance: input.assistance,
+    source: input.source,
+    contextSentenceId: input.contextSentenceId,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -1774,6 +1780,33 @@ export async function ensureVocabularyStudyItem(
   activityType: StudyActivityType,
 ): Promise<StudyItem> {
   return ensureStudyItem('vocabularyItem', vocabularyItemId, activityType);
+}
+
+/**
+ * Records evidence from an unprompted, opportunistic recognition of a
+ * vocabulary item while reading (Phase 7.8, docs brief §9/§16) — as
+ * opposed to a scheduled review-queue card. Always targets the word's
+ * `reading_retrieval` study item (get-or-create, same as the formal card),
+ * so natural-encounter evidence feeds the same FSRS schedule a learner
+ * would otherwise only advance via ReviewPage — just from a different
+ * sentence than whichever one originally seeded that study item, recorded
+ * via `contextSentenceId`.
+ */
+export async function recordNaturalEncounter(input: {
+  vocabularyItemId: string;
+  sentenceId: string;
+  rating: ReviewRating;
+}): Promise<{ review: Review; studyItem: StudyItem }> {
+  const studyItem = await ensureVocabularyStudyItem(
+    input.vocabularyItemId,
+    'reading_retrieval',
+  );
+  return recordReview({
+    studyItemId: studyItem.id,
+    rating: input.rating,
+    source: 'natural_encounter',
+    contextSentenceId: input.sentenceId,
+  });
 }
 
 /**
