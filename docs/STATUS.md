@@ -1343,18 +1343,14 @@ review failures (`errorClassification` stays unpopulated, same
 tests passed (up from 254), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
-**Not yet applied to the live Supabase project** — the new migration
-(`20260816010000_study_item_vocabulary_confusion_subject.sql`) hasn't been
-pasted into the Dashboard SQL editor yet. Apply it the same way as every
-prior migration before running the backfill script against production
-(the script itself doesn't depend on the migration — it only reads/writes
-`vocabulary_items`/`vocabulary_confusions` — but the migration should land
-first to keep production schema and this repo's migration history in
-sync).
+**Migration application**: `20260816010000_study_item_vocabulary_confusion_subject.sql`
+is pending manual paste into the Dashboard SQL editor (the backfill script
+doesn't depend on it — see below — but it should land before Phase 7.7
+starts writing `study_items` rows with `subject_type: 'vocabularyConfusion'`).
 
-**Backfill script not yet run against production** — needs
-`SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD` (already configured as
-repo secrets per Phase 2/5's setup) and should be run dry-run first via
-GitHub Actions ("Backfill verb-pair confusions" → "Run workflow", leave
-"apply" unchecked) to inspect the candidate pairs before ever running with
-`--apply`.
+**Backfill run against production** (2026-08-16): dry run via GitHub
+Actions ("Backfill verb-pair confusions" → "Run workflow") found 4
+candidate pairs, all correct transitive/intransitive readings — 付く/付ける,
+変わる/変える, 見せる/見る, 出る/出す. Re-run with `apply: true`: all 4
+inserted into `vocabulary_confusions`, 0 already present. Phase 7.6 is now
+fully done end-to-end except for the migration paste above.
