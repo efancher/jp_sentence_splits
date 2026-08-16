@@ -16,6 +16,8 @@ export function ImportBatchPage() {
   const [destinationBookId, setDestinationBookId] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [editingBatchName, setEditingBatchName] = useState(false);
+  const [batchNameDraft, setBatchNameDraft] = useState('');
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -71,18 +73,41 @@ export function ImportBatchPage() {
           Imported {new Date(data.batch.importedAt).toLocaleString()} ·{' '}
           {data.sentences.length} linked sentences
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const name = window.prompt(
-              'Rename import batch',
-              data.batch?.batchName,
-            );
-            if (name?.trim()) void renameImportBatch(batchId, name);
-          }}
-        >
-          Rename batch
-        </button>
+        {editingBatchName ? (
+          <form
+            className="row"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const name = batchNameDraft.trim();
+              if (name) await renameImportBatch(batchId, name);
+              setEditingBatchName(false);
+            }}
+          >
+            <input
+              autoFocus
+              value={batchNameDraft}
+              onChange={(event) => setBatchNameDraft(event.target.value)}
+              aria-label="Import batch name"
+            />
+            <button type="submit">Save</button>
+            <button
+              type="button"
+              onClick={() => setEditingBatchName(false)}
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setBatchNameDraft(data.batch?.batchName ?? '');
+              setEditingBatchName(true);
+            }}
+          >
+            Rename batch
+          </button>
+        )}
         {data.batch.warnings.length ? (
           <details>
             <summary>{data.batch.warnings.length} import warning(s)</summary>

@@ -249,6 +249,10 @@ export function BookDetailPage() {
   const [destinationBookId, setDestinationBookId] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(
+    null,
+  );
+  const [editingChapterTitle, setEditingChapterTitle] = useState('');
   const [snack, setSnack] = useState<{
     message: string;
     undo?: () => Promise<void>;
@@ -802,76 +806,108 @@ export function BookDetailPage() {
               (row) => row.membership.chapterId === chapter.id,
             ).length;
             const collapsed = collapsedChapters.has(chapter.id);
+            const isEditing = editingChapterId === chapter.id;
             return (
               <div key={chapter.id} className="chapter-row">
-                <div>
-                  <strong>{chapter.title}</strong>
-                  <div className="muted">
-                    {sentenceCount} sentence{sentenceCount === 1 ? '' : 's'}
-                    {collapsed ? ' · hidden' : ''}
-                  </div>
-                </div>
-                <div className="row">
-                  <button
-                    type="button"
-                    className={collapsed ? 'primary' : undefined}
-                    aria-pressed={collapsed}
-                    onClick={() => toggleChapterCollapsed(chapter.id)}
-                  >
-                    {collapsed ? 'Show' : 'Hide'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={chapterIndex === 0}
-                    onClick={() =>
-                      void updateBookChapter(bookId, chapter.id, {
-                        position: chapterIndex - 1,
-                      })
-                    }
-                  >
-                    Up
-                  </button>
-                  <button
-                    type="button"
-                    disabled={chapterIndex === chapters.length - 1}
-                    onClick={() =>
-                      void updateBookChapter(bookId, chapter.id, {
-                        position: chapterIndex + 1,
-                      })
-                    }
-                  >
-                    Down
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const title = window.prompt(
-                        'Rename chapter',
-                        chapter.title,
-                      );
-                      if (title?.trim()) {
-                        void updateBookChapter(bookId, chapter.id, { title });
+                {isEditing ? (
+                  <form
+                    className="row"
+                    style={{ flex: 1 }}
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const title = editingChapterTitle.trim();
+                      if (title) {
+                        await updateBookChapter(bookId, chapter.id, {
+                          title,
+                        });
                       }
+                      setEditingChapterId(null);
                     }}
                   >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete chapter “${chapter.title}”? Its sentences will become unassigned.`,
-                        )
-                      ) {
-                        void deleteBookChapter(bookId, chapter.id);
+                    <input
+                      autoFocus
+                      value={editingChapterTitle}
+                      onChange={(event) =>
+                        setEditingChapterTitle(event.target.value)
                       }
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
+                      aria-label="Chapter title"
+                    />
+                    <button type="submit">Save</button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingChapterId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <div>
+                      <strong>{chapter.title}</strong>
+                      <div className="muted">
+                        {sentenceCount} sentence
+                        {sentenceCount === 1 ? '' : 's'}
+                        {collapsed ? ' · hidden' : ''}
+                      </div>
+                    </div>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className={collapsed ? 'primary' : undefined}
+                        aria-pressed={collapsed}
+                        onClick={() => toggleChapterCollapsed(chapter.id)}
+                      >
+                        {collapsed ? 'Show' : 'Hide'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={chapterIndex === 0}
+                        onClick={() =>
+                          void updateBookChapter(bookId, chapter.id, {
+                            position: chapterIndex - 1,
+                          })
+                        }
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={chapterIndex === chapters.length - 1}
+                        onClick={() =>
+                          void updateBookChapter(bookId, chapter.id, {
+                            position: chapterIndex + 1,
+                          })
+                        }
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingChapterTitle(chapter.title);
+                          setEditingChapterId(chapter.id);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete chapter “${chapter.title}”? Its sentences will become unassigned.`,
+                            )
+                          ) {
+                            void deleteBookChapter(bookId, chapter.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
