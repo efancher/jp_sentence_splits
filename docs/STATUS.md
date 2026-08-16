@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8.2 done).
+Last updated: 2026-08-16 (Phase 8.3 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2037,6 +2037,99 @@ Dual-ear stop the reference side right around 3.0s instead of continuing
 to 6s, while the learner/attempt clip plays in full; zero console errors
 in the clean run.
 
+### 8.3 — Shadow mode (mic calibration + play-along recording + live waveform): done, verified
+
+Scoped down from the original line item: the live waveform ported here is
+**amplitude-only**. The original `LiveShadowWaveform.tsx` also draws a
+live pitch contour, but that half depends on the pitch-detection DSP
+(`analysis/pitch.ts`, plus the pitch-bucket half of `analysis/waveform.ts`)
+that's Phase 8.4's scope, not yet ported — pulling it forward here would
+have meant doing most of 8.4's work early and defeating the doc's own
+"read the simpler audio code in 8.3 first" sequencing rationale. The
+pitch-contour overlay is deferred to land with 8.4 instead.
+
+**Ported into `src/lib/recording.ts`** (previously flagged "not ported" in
+that file's own header comment, now updated): `calibrateMicrophone`
+(records ambient + speech RMS/peak over 2.5s via a throwaway
+`AudioContext`+`AnalyserNode`, returns guidance strings), `SHADOW_AUDIO_SETTLE_MS`,
+`playReferenceForShadowing`, and `ShadowReferencePlayer` — the key piece:
+one `AudioContext` shared between the mic's `AnalyserNode` (for live
+waveform sampling) and the reference clip's playback (`createMediaElementSource`
+routed through the *same* context), specifically so a second `AudioContext`
+can't chop the recording's opening sound — a real ordering constraint the
+original source noted from experience, preserved as-is.
+
+**New `src/lib/waveform.ts`** — amplitude-only subset ported from the
+source app's `analysis/{audio,waveform}.ts` + `services/media.ts`:
+`decodeAudioBuffer`, `canonicalizeAudioBuffer` (downmix + resample to
+16kHz), `computePeaks`/`peaksFromBlob` (static reference waveform),
+`mergeLivePeak`/`emptyLivePeaks` (live mic envelope), `peaksToPolyline`
+(SVG rendering). Left out: `energyEnvelope`/`detectOnsetSeconds`/
+`crossCorrelateOffset` (alignment helpers for 8.4's `AnalysisPanel`, not
+needed yet) and all pitch-bucket functions (8.4).
+
+**New `src/components/LiveShadowWaveform.tsx`** — ported (amplitude-only)
+from the source's component of the same name. One adaptation: takes a
+`referenceBlob` prop directly instead of a `referenceAssetId` DB lookup,
+since this app stores shadowing reference audio inline on
+`SentenceAudio.blob` rather than through a separate assets service.
+Renders the static reference waveform plus a live-updating polyline built
+from `requestAnimationFrame`-driven peak samples off the shared analyser,
+with a playhead line driven by the shadow player's own media clock
+(`getShadowMediaTime`), shifted by `SHADOW_OUTPUT_LATENCY_SECONDS` to
+track what's actually audible over Bluetooth headphones.
+
+**`src/lib/shadowing.ts` (`ShadowingController`)**: added a
+`shadowPlayer: ShadowReferencePlayer` field and a new `shadowActive`
+snapshot flag (true only once the graph is actually up, not just
+requested). `startRecording` gained an optional `shadowReference: { blob,
+playbackRate }` param — when `micMode === 'shadow'` and a reference is
+given, starts the shadow player on the *same* mic `MediaStream` the
+recorder is already using (no second `getUserMedia` call). A shadow-player
+start failure is treated as non-fatal — the mic recording itself
+continues; only the play-along/waveform side is affected — matching how
+comparison-playback errors are already handled elsewhere in this
+controller. `stopRecording`/`cancelRecording` both stop the shadow player.
+New `getShadowAnalyser`/`getShadowMediaTime` getters, threaded through
+`useShadowing`.
+
+**`ShadowPage.tsx`**: new "Shadow mode (play reference while recording)"
+checkbox (disabled without reference audio or mid-recording), a
+"Calibrate mic" button rendering the returned guidance list, and the
+`LiveShadowWaveform` rendered only while `isRecording && shadowing.shadowActive`.
+Record button passes `'shadow'` micMode + `{ blob: referenceAudio.blob,
+playbackRate: speed }` when shadow mode is checked.
+
+New unit tests: `tests/waveform.test.ts` covers the pure bucket/polyline
+math directly. `tests/shadowing.test.ts` gained a
+"ShadowingController shadow mode" block mocking `ShadowReferencePlayer`
+(via `vi.mock`/`vi.hoisted`, since real `AudioContext`/mic graphs aren't
+meaningfully fakeable at the unit level) to verify the *orchestration*:
+starts the player with the recording stream/blob/rate only in shadow
+mode, sets/clears `shadowActive` correctly across start/stop/cancel, and
+treats a player-start failure as non-fatal. `shadowPage.test.tsx` gained
+an assertion that the new checkbox/button render and the checkbox starts
+enabled (reference audio present). `npm run check` — 418 passed, 2
+skipped (pre-existing), 0 failed.
+
+**Manually verified in a real browser** (chromium, same throwaway-driver
+approach as 8.1/8.2) — this time launched with
+`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream` and
+`context.grantPermissions(['microphone'])` so mic access works
+headlessly without a real device. Confirmed: clicking "Calibrate mic"
+returns real guidance text after ~2.5s (the fake device's synthetic tone
+correctly triggered the clipping-guidance branch — expected given a
+full-scale test signal, not a bug); enabling shadow mode and clicking
+Record shows the live waveform section immediately and it disappears
+again on Stop, landing in the normal pending-attempt Save/Discard state;
+zero console errors throughout, meaning the shared-`AudioContext` graph
+(mic analyser + reference `createMediaElementSource`, both feeding one
+context) built and tore down cleanly. Whether the reference clip was
+*audibly* correct isn't something browser automation can check directly,
+but the absence of any construction/playback errors across the whole
+graph is strong indirect evidence, consistent with how this class of
+check has been done throughout Phase 8.
+
 ### Background (planning done 2026-08-16, before 8.1 started)
 
 The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
@@ -2161,6 +2254,8 @@ before building if this judgment turns out wrong):
 
 This was planning only at the time it was written, done at the user's
 request so a fresh session could pick it up without re-deriving the
-comparison above — see the "8.1" and "8.2" entries earlier in this Phase
-8 section for what's actually been built so far. Next up: 8.3, live
-shadow waveform + shadow-mode recording + mic calibration.
+comparison above — see the "8.1", "8.2", and "8.3" entries earlier in
+this Phase 8 section for what's actually been built so far. Next up:
+8.4, pitch/waveform comparison analysis (`AnalysisPanel` + the full
+`analysis/{pitch,waveform,audio}` DSP port, including the pitch-contour
+half of the live waveform that 8.3 deliberately deferred).

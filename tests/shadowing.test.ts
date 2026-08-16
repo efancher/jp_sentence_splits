@@ -3,6 +3,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_RECORDING_DURATION_MS } from '../src/lib/recording';
 import { ShadowingController } from '../src/lib/shadowing';
 
+const FakeShadowReferencePlayer = vi.hoisted(() => {
+  class FakeShadowReferencePlayer {
+    static instances: FakeShadowReferencePlayer[] = [];
+    start = vi.fn(async (_stream: MediaStream, _blob: Blob, _playbackRate?: number) => undefined);
+    stop = vi.fn();
+    getAnalyser = vi.fn(() => undefined);
+    currentTime = vi.fn(() => 0);
+
+    constructor() {
+      FakeShadowReferencePlayer.instances.push(this);
+    }
+  }
+  return FakeShadowReferencePlayer;
+});
+
+vi.mock('../src/lib/recording', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/recording')>();
+  return { ...actual, ShadowReferencePlayer: FakeShadowReferencePlayer };
+});
+
 class FakeMediaStreamTrack {
   stop = vi.fn();
 }
@@ -135,6 +155,79 @@ describe('ShadowingController recording lifecycle', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('ShadowingController shadow mode', () => {
+  beforeEach(() => {
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+    stubMediaDevices();
+    FakeShadowReferencePlayer.instances = [];
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('starts the shadow reference player with the recording stream and marks shadowActive', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    await controller.startRecording('shadow', { blob, playbackRate: 0.75 });
+
+    expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: true });
+    const player = FakeShadowReferencePlayer.instances[0]!;
+    expect(player.start).toHaveBeenCalledWith(expect.anything(), blob, 0.75);
+  });
+
+  it('does not start the shadow player without shadow micMode', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    await controller.startRecording(undefined, { blob });
+
+    expect(controller.getSnapshot().shadowActive).toBe(false);
+    expect(FakeShadowReferencePlayer.instances[0]?.start).not.toHaveBeenCalled();
+  });
+
+  it('stopRecording stops the shadow player and clears shadowActive', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    await controller.startRecording('shadow', { blob });
+    expect(controller.getSnapshot().shadowActive).toBe(true);
+
+    await controller.stopRecording();
+    expect(controller.getSnapshot().shadowActive).toBe(false);
+    expect(FakeShadowReferencePlayer.instances[0]?.stop).toHaveBeenCalledOnce();
+  });
+
+  it('cancelRecording stops the shadow player and clears shadowActive', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    await controller.startRecording('shadow', { blob });
+
+    controller.cancelRecording();
+    expect(controller.getSnapshot().shadowActive).toBe(false);
+    expect(FakeShadowReferencePlayer.instances[0]?.stop).toHaveBeenCalledOnce();
+  });
+
+  it('surfaces a non-fatal error if the shadow player fails to start, recording continues', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    const player = FakeShadowReferencePlayer.instances[0]!;
+    player.start = vi.fn(async () => {
+      throw new Error('Reference audio failed to load.');
+    });
+
+    await controller.startRecording('shadow', { blob });
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'recording',
+      shadowActive: false,
+      error: 'Reference audio failed to load.',
+    });
+  });
+
+  it('exposes the shadow player analyser and media time', () => {
+    const controller = new ShadowingController();
+    const player = FakeShadowReferencePlayer.instances[0];
+    expect(controller.getShadowAnalyser()).toBe(player?.getAnalyser());
+    expect(controller.getShadowMediaTime()).toBe(0);
   });
 });
 

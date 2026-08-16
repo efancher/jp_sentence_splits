@@ -2,6 +2,7 @@ import {
   MAX_RECORDING_DURATION_MS,
   PlaybackCoordinator,
   RecordingService,
+  ShadowReferencePlayer,
   type DualEarOptions,
   type RecordingMicMode,
   type TimeRangeMs,
@@ -9,12 +10,19 @@ import {
 
 export type ShadowingStatus = 'idle' | 'requesting-mic' | 'recording' | 'stopped';
 
+export interface ShadowReferenceOptions {
+  blob: Blob;
+  playbackRate?: number;
+}
+
 interface ShadowingSnapshot {
   status: ShadowingStatus;
   recordingElapsedMs: number;
   lastRecording: { blob: Blob; durationMs: number } | null;
   comparison: { mode: 'alternate' | 'dualEar'; attemptId: string } | null;
   error: string | null;
+  /** True once the shadow-mode reference/analyser graph is actually up (not just requested). */
+  shadowActive: boolean;
 }
 
 type Listener = () => void;
@@ -42,9 +50,11 @@ export class ShadowingController {
     lastRecording: null,
     comparison: null,
     error: null,
+    shadowActive: false,
   };
   private recordingService = new RecordingService();
   private playbackCoordinator = new PlaybackCoordinator();
+  private shadowPlayer = new ShadowReferencePlayer();
   private timer: ReturnType<typeof setInterval> | undefined;
   private recordingStartedAt = 0;
   private stopping = false;
@@ -61,7 +71,10 @@ export class ShadowingController {
     for (const listener of this.listeners) listener();
   }
 
-  async startRecording(micMode?: RecordingMicMode): Promise<void> {
+  async startRecording(
+    micMode?: RecordingMicMode,
+    shadowReference?: ShadowReferenceOptions,
+  ): Promise<void> {
     if (
       this.snapshot.status === 'recording' ||
       this.snapshot.status === 'requesting-mic'
@@ -73,6 +86,7 @@ export class ShadowingController {
       recordingElapsedMs: 0,
       lastRecording: null,
       error: null,
+      shadowActive: false,
     });
     try {
       await this.recordingService.start(micMode ? { micMode } : undefined);
@@ -83,6 +97,24 @@ export class ShadowingController {
     this.recordingStartedAt = Date.now();
     this.notify({ status: 'recording', recordingElapsedMs: 0 });
     this.timer = setInterval(() => this.tick(), TICK_MS);
+
+    if (micMode === 'shadow' && shadowReference) {
+      const stream = this.recordingService.getStream();
+      if (stream) {
+        try {
+          await this.shadowPlayer.start(
+            stream,
+            shadowReference.blob,
+            shadowReference.playbackRate,
+          );
+          this.notify({ shadowActive: true });
+        } catch (error) {
+          // Non-fatal: the mic recording itself is unaffected, only the
+          // play-along reference/live-waveform side failed to start.
+          this.notify({ error: messageFor(error) });
+        }
+      }
+    }
   }
 
   private tick(): void {
@@ -99,12 +131,18 @@ export class ShadowingController {
     if (this.snapshot.status !== 'recording' || this.stopping) return null;
     this.stopping = true;
     this.clearTimer();
+    this.shadowPlayer.stop();
     try {
       const result = await this.recordingService.stop();
-      this.notify({ status: 'stopped', lastRecording: result, error: null });
+      this.notify({ status: 'stopped', lastRecording: result, error: null, shadowActive: false });
       return result;
     } catch (error) {
-      this.notify({ status: 'idle', lastRecording: null, error: messageFor(error) });
+      this.notify({
+        status: 'idle',
+        lastRecording: null,
+        error: messageFor(error),
+        shadowActive: false,
+      });
       return null;
     } finally {
       this.stopping = false;
@@ -114,12 +152,23 @@ export class ShadowingController {
   cancelRecording(): void {
     this.clearTimer();
     this.recordingService.cancel();
+    this.shadowPlayer.stop();
     this.notify({
       status: 'idle',
       recordingElapsedMs: 0,
       lastRecording: null,
       error: null,
+      shadowActive: false,
     });
+  }
+
+  /** Shared analyser from the active shadow-mode session (do not open a second AudioContext). */
+  getShadowAnalyser(): AnalyserNode | undefined {
+    return this.shadowPlayer.getAnalyser();
+  }
+
+  getShadowMediaTime(): number {
+    return this.shadowPlayer.currentTime();
   }
 
   private clearTimer(): void {

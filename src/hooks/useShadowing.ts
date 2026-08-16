@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
 import type { DualEarOptions, RecordingMicMode, TimeRangeMs } from '../lib/recording';
-import { shadowingController } from '../lib/shadowing';
+import { shadowingController, type ShadowReferenceOptions } from '../lib/shadowing';
 
 export function useShadowing() {
   const snapshot = useSyncExternalStore(
@@ -9,7 +9,8 @@ export function useShadowing() {
     shadowingController.getSnapshot,
   );
   const startRecording = useCallback(
-    (micMode?: RecordingMicMode) => shadowingController.startRecording(micMode),
+    (micMode?: RecordingMicMode, shadowReference?: ShadowReferenceOptions) =>
+      shadowingController.startRecording(micMode, shadowReference),
     [],
   );
   const stopRecording = useCallback(
@@ -51,6 +52,14 @@ export function useShadowing() {
     () => shadowingController.stopComparison(),
     [],
   );
+  const getShadowAnalyser = useCallback(
+    () => shadowingController.getShadowAnalyser(),
+    [],
+  );
+  const getShadowMediaTime = useCallback(
+    () => shadowingController.getShadowMediaTime(),
+    [],
+  );
   return {
     ...snapshot,
     startRecording,
@@ -59,5 +68,7 @@ export function useShadowing() {
     playAlternate,
     playDualEar,
     stopComparison,
+    getShadowAnalyser,
+    getShadowMediaTime,
   };
 }

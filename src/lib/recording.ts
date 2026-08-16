@@ -1,10 +1,10 @@
 /**
  * Ported from ~/projects/shadowing/web/src/services/recording.ts
- * (docs/UNIFIED_APP_ARCHITECTURE.md §12, Phase 3 — shadowing core loop).
- * Scoped down: live-overlay-only pieces (calibrateMicrophone,
- * playReferenceForShadowing, ShadowReferencePlayer, stopShadowReference) and
- * the unused PlaybackCoordinator.playSequence are not ported — see the
- * architecture doc / plan for the follow-up pass that would need them.
+ * (docs/UNIFIED_APP_ARCHITECTURE.md §12, Phase 3 — shadowing core loop;
+ * calibrateMicrophone/playReferenceForShadowing/ShadowReferencePlayer/
+ * stopShadowReference added in Phase 8.3). The unused
+ * PlaybackCoordinator.playSequence is still not ported — nothing in this
+ * app needs an arbitrary N-clip sequence.
  */
 
 const RECORDING_MIME_TYPES = [
@@ -103,6 +103,216 @@ export class RecordingService {
     this.stream = undefined;
     this.recorder = undefined;
   }
+}
+
+/**
+ * Let the audio session settle after mic open before starting reference
+ * playback. Opening a second AudioContext for the live waveform used to
+ * interrupt this opener.
+ */
+export const SHADOW_AUDIO_SETTLE_MS = 200;
+
+export interface CalibrationResult {
+  ambientRms: number;
+  speechRms: number;
+  peak: number;
+  clipping: boolean;
+  guidance: string[];
+}
+
+export async function calibrateMicrophone(durationMs = 2500): Promise<CalibrationResult> {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const context = new AudioContext();
+  const source = context.createMediaStreamSource(stream);
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const data = new Float32Array(analyser.fftSize);
+  const samples: number[] = [];
+  const started = performance.now();
+  await new Promise<void>((resolve) => {
+    const tick = () => {
+      analyser.getFloatTimeDomainData(data);
+      let sum = 0;
+      let peak = 0;
+      for (const sample of data) {
+        sum += sample * sample;
+        peak = Math.max(peak, Math.abs(sample));
+      }
+      samples.push(Math.sqrt(sum / data.length), peak);
+      if (performance.now() - started >= durationMs) resolve();
+      else requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  stream.getTracks().forEach((track) => track.stop());
+  await context.close().catch(() => undefined);
+  const rmsValues = samples.filter((_, index) => index % 2 === 0);
+  const peaks = samples.filter((_, index) => index % 2 === 1);
+  const ambientRms =
+    rmsValues.slice(0, Math.ceil(rmsValues.length / 3)).reduce((a, b) => a + b, 0) /
+    Math.max(1, Math.ceil(rmsValues.length / 3));
+  const speechRms =
+    rmsValues.slice(Math.ceil(rmsValues.length / 3)).reduce((a, b) => a + b, 0) /
+    Math.max(1, rmsValues.length - Math.ceil(rmsValues.length / 3));
+  const peak = Math.max(...peaks, 0);
+  const clipping = peak > 0.98;
+  const guidance: string[] = [];
+  if (speechRms < 0.02) guidance.push('Move closer to the microphone.');
+  if (clipping) {
+    guidance.push('The recording is clipping. Move farther away or lower input volume.');
+  }
+  if (ambientRms > 0.03) guidance.push('Background noise may interfere with pitch detection.');
+  if (guidance.length === 0) guidance.push('Microphone levels look usable.');
+  return { ambientRms, speechRms, peak, clipping, guidance };
+}
+
+/** Start an HTMLAudioElement from the beginning at the given rate (shadow play-along). */
+export async function playReferenceForShadowing(
+  audio: HTMLAudioElement,
+  playbackRate = 1,
+): Promise<void> {
+  audio.pause();
+  audio.playbackRate = playbackRate;
+  audio.preservesPitch = true;
+  if (audio.readyState < HTMLMediaElement.HAVE_METADATA) {
+    await new Promise<void>((resolve, reject) => {
+      const onLoaded = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('Reference audio failed to load.'));
+      };
+      const cleanup = () => {
+        audio.removeEventListener('loadedmetadata', onLoaded);
+        audio.removeEventListener('error', onError);
+      };
+      audio.addEventListener('loadedmetadata', onLoaded, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+    });
+  }
+  audio.currentTime = 0;
+  if (audio.currentTime > 0.02) {
+    await new Promise<void>((resolve) => {
+      const onSeeked = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(() => {
+        audio.removeEventListener('seeked', onSeeked);
+        resolve();
+      }, 250);
+      audio.addEventListener('seeked', onSeeked, { once: true });
+      audio.currentTime = 0;
+    });
+  }
+  await audio.play();
+}
+
+/**
+ * Play-along reference while recording: one AudioContext for mic analysis +
+ * reference playback so a second context cannot chop the sentence opener.
+ */
+export class ShadowReferencePlayer {
+  private audio?: HTMLAudioElement;
+  private objectUrl?: string;
+  private context?: AudioContext;
+  private analyser?: AnalyserNode;
+  private micSource?: MediaStreamAudioSourceNode;
+  private elementSource?: MediaElementAudioSourceNode;
+
+  currentTime(): number {
+    return this.audio?.currentTime ?? 0;
+  }
+
+  getAnalyser(): AnalyserNode | undefined {
+    return this.analyser;
+  }
+
+  getSampleRate(): number {
+    return this.context?.sampleRate ?? 48_000;
+  }
+
+  async start(stream: MediaStream, blob: Blob, playbackRate = 1): Promise<void> {
+    this.stop();
+
+    const context = new AudioContext();
+    this.context = context;
+    if (context.state === 'suspended') await context.resume();
+
+    const micSource = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048;
+    micSource.connect(analyser);
+    this.micSource = micSource;
+    this.analyser = analyser;
+
+    const objectUrl = URL.createObjectURL(blob);
+    this.objectUrl = objectUrl;
+    const audio = new Audio(objectUrl);
+    audio.preload = 'auto';
+    this.audio = audio;
+
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('Reference audio failed to load.'));
+      };
+      const cleanup = () => {
+        audio.removeEventListener('canplaythrough', onReady);
+        audio.removeEventListener('error', onError);
+      };
+      audio.addEventListener('canplaythrough', onReady, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+      audio.load();
+    });
+
+    // Media element output must go through this context (not a second graph).
+    const elementSource = context.createMediaElementSource(audio);
+    elementSource.connect(context.destination);
+    this.elementSource = elementSource;
+
+    await new Promise((resolve) => window.setTimeout(resolve, SHADOW_AUDIO_SETTLE_MS));
+    await playReferenceForShadowing(audio, playbackRate);
+  }
+
+  stop(): void {
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+    }
+    this.audio = undefined;
+    try {
+      this.elementSource?.disconnect();
+      this.micSource?.disconnect();
+      this.analyser?.disconnect();
+    } catch {
+      // already disconnected
+    }
+    this.elementSource = undefined;
+    this.micSource = undefined;
+    this.analyser = undefined;
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = undefined;
+    }
+    const context = this.context;
+    this.context = undefined;
+    void context?.close().catch(() => undefined);
+  }
+}
+
+export function stopShadowReference(audio: HTMLAudioElement | null | undefined): void {
+  if (!audio) return;
+  audio.pause();
+  audio.currentTime = 0;
 }
 
 export interface TimeRangeMs {

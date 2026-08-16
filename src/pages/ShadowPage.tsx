@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import {
   deleteAttempt,
   getDb,
@@ -16,6 +17,8 @@ import {
   PLAYBACK_SPEEDS,
   PlaybackCoordinator,
   RecordingService,
+  calibrateMicrophone,
+  type CalibrationResult,
   type TimeRangeMs,
 } from '../lib/recording';
 
@@ -66,6 +69,10 @@ export function ShadowPage() {
   const [speed, setSpeed] = useState(1);
   const [targetRange, setTargetRange] = useState<TimeRangeMs | null>(null);
   const [isLoopingTarget, setIsLoopingTarget] = useState(false);
+  const [shadowMode, setShadowMode] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -229,6 +236,20 @@ export function ShadowPage() {
     }
   }
 
+  async function handleCalibrate() {
+    setCalibrating(true);
+    setCalibrationError(null);
+    try {
+      setCalibration(await calibrateMicrophone());
+    } catch (error) {
+      setCalibrationError(
+        error instanceof Error ? error.message : 'Unable to calibrate microphone.',
+      );
+    } finally {
+      setCalibrating(false);
+    }
+  }
+
   async function handleDelete(attemptId: string) {
     const ok = window.confirm(
       'Delete this shadowing attempt? This cannot be undone.',
@@ -304,11 +325,47 @@ export function ShadowPage() {
         )}
 
         <div className="row" style={{ alignItems: 'center' }}>
+          <label className="row" style={{ alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={shadowMode}
+              disabled={!referenceAudio || isRecording || isRequestingMic}
+              onChange={(event) => setShadowMode(event.target.checked)}
+            />
+            Shadow mode (play reference while recording)
+          </label>
+          <button
+            type="button"
+            disabled={calibrating || isRecording || isRequestingMic}
+            onClick={() => void handleCalibrate()}
+          >
+            {calibrating ? 'Calibrating…' : 'Calibrate mic'}
+          </button>
+        </div>
+        {calibration ? (
+          <ul className="stack" style={{ margin: 0 }}>
+            {calibration.guidance.map((line) => (
+              <li key={line} className="muted">
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {calibrationError ? <p className="muted">{calibrationError}</p> : null}
+
+        <div className="row" style={{ alignItems: 'center' }}>
           <button
             type="button"
             className="primary"
             disabled={isRecording || isRequestingMic}
-            onClick={() => void shadowing.startRecording()}
+            onClick={() =>
+              void shadowing.startRecording(
+                shadowMode && referenceAudio ? 'shadow' : undefined,
+                shadowMode && referenceAudio
+                  ? { blob: referenceAudio.blob, playbackRate: speed }
+                  : undefined,
+              )
+            }
           >
             {isRequestingMic ? 'Requesting mic…' : 'Record'}
           </button>
@@ -328,6 +385,15 @@ export function ShadowPage() {
           ) : null}
         </div>
         {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+
+        {isRecording && shadowing.shadowActive && referenceAudio ? (
+          <LiveShadowWaveform
+            referenceBlob={referenceAudio.blob}
+            active={isRecording && shadowing.shadowActive}
+            getMediaTime={shadowing.getShadowMediaTime}
+            analyser={shadowing.getShadowAnalyser()}
+          />
+        ) : null}
 
         {pendingAttempt && pendingUrl ? (
           <div className="row" style={{ alignItems: 'center' }}>

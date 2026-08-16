@@ -104,6 +104,13 @@ describe('ShadowPage', () => {
     expect(screen.getByRole('button', { name: 'Mark end' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
 
+    const shadowModeCheckbox = screen.getByRole('checkbox', {
+      name: /Shadow mode/,
+    });
+    expect(shadowModeCheckbox).toBeInTheDocument();
+    expect(shadowModeCheckbox).toBeEnabled(); // reference audio is present
+    expect(screen.getByRole('button', { name: 'Calibrate mic' })).toBeInTheDocument();
+
     const attemptRows = screen.getAllByRole('listitem');
     expect(attemptRows).toHaveLength(2);
     // Newest first.
