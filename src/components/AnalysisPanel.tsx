@@ -12,6 +12,7 @@ import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
+import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import {
   analyzeAlignment,
@@ -280,6 +281,18 @@ export function AnalysisPanel({
       learner: serverAlignment.learner,
     });
   }, [serverAlignment]);
+  const pitchTimingObservations = useMemo(() => {
+    if (!serverAlignment?.reference || !serverAlignment.learner || !referencePitch || !learnerPitch) {
+      return [];
+    }
+    return buildPitchTimingObservations({
+      referenceWords: serverAlignment.reference.words,
+      learnerWords: serverAlignment.learner.words,
+      referencePitch,
+      learnerPitch,
+      referenceTimeOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
+    });
+  }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
 
   return (
     <div className="stack">
@@ -333,6 +346,17 @@ export function AnalysisPanel({
         <div className="stack">
           <strong>Segment timing</strong>
           {segmentObservations.map((item) => (
+            <article key={item.id} className="stack" style={{ gap: 0 }}>
+              <strong>{item.confidence} confidence:</strong> {item.message}
+              {item.detail ? <p className="muted">{item.detail}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {pitchTimingObservations.length > 0 ? (
+        <div className="stack">
+          <strong>Pitch movement</strong>
+          {pitchTimingObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>
               <strong>{item.confidence} confidence:</strong> {item.message}
               {item.detail ? <p className="muted">{item.detail}</p> : null}

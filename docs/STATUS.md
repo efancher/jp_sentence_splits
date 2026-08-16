@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 3 done).
+Last updated: 2026-08-16 (Phase 9 Milestone 4 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -2954,7 +2954,74 @@ skips (unrelated). `npm run build` clean. **Not manually verified in a
 real browser** — no browser available in this environment, same
 constraint noted throughout this project.
 
-## Phase 9 roadmap (Milestones 4-9, not started)
+## Phase 9 Milestone 4 — pitch-contour timing feedback: done
+
+Compares *where in time* pitch movement happens, word by word, using
+Milestone 2b/3's real word alignment to scope each word's pitch frames —
+not just the aggregate median-register comparison
+`timingObservations.ts` already did (that comparison is unchanged and
+still runs). Directly implements the brief's flagship example: "Your
+pitch drop occurs later than the reference around 「見に」."
+
+Added `src/lib/pitchTimingObservations.ts`:
+- `classifyTrend` — per word, per side: average the first third vs. last
+  third of voiced, in-range pitch frames (`relativeSemitones`, already
+  speaker-normalized by `pitch.ts`); a word with fewer than 4 voiced
+  frames is `'unclear'` and produces no observation (mirrors this app's
+  existing signal-strength gating elsewhere, e.g.
+  `confidenceFromSignal`'s `voicedRatio` check). A difference under 1
+  semitone is `'flat'`.
+- When reference and learner **agree** on trend direction (both falling
+  or both rising), find each side's turning point (the peak for a fall,
+  the trough for a rise — specifically the *last* frame at the extreme
+  value, so a brief plateau at the peak is measured as "just before it
+  fell," not "the first moment it happened to reach that height" — a
+  real bug caught by this milestone's own tests before being fixed) as a
+  0-1 fraction of the word's voiced span, and flag a >0.25 fraction
+  offset as `"Your pitch {drop/rise} occurs {later/earlier} than the
+  reference around 「word」."`, confidence `'medium'` (matches the
+  brief's own Phase 12 example of this exact message being
+  medium-confidence).
+- When trends **disagree** in direction, a lower-confidence, more
+  general `"Your pitch {falls/rises/stays level} during 「word」 where the
+  reference {falls/rises/stays level}."`, confidence `'low'` — per the
+  brief's explicit caution to hedge here rather than imply a linguistic
+  pitch-accent judgment.
+- Handles `targetRange`-sliced reference audio correctly: reference word
+  timestamps are in the *full clip's* time base, but reference pitch may
+  have been extracted from a `targetRange`-sliced clip (Phase 8.2) whose
+  own clock starts at 0 — `referenceTimeOffsetSeconds` (`AnalysisPanel`
+  passes `targetRange.startMs / 1000`) translates between the two.
+  Learner audio is never sliced, so it needs no offset. Getting this
+  coordinate-space mismatch right (rather than silently comparing frames
+  from the wrong time ranges) was worth the extra parameter — a version
+  of this milestone that ignored `targetRange` entirely would have
+  silently produced wrong results for a common use case (practicing an
+  isolated sub-phrase) rather than an obviously-broken one.
+
+`src/components/AnalysisPanel.tsx` — new "Pitch movement" section,
+additive alongside "Segment timing" and the existing local-analysis
+observations (same scope discipline as every prior milestone — ranking
+everything together is Milestone 5/6).
+
+Tests: `tests/pitchTimingObservations.test.ts` (new, pure) — later/
+earlier drop detection, the shape-mismatch case, the
+close-enough/no-observation case for both matching-trend and
+both-flat pairs, the too-few-frames case, and the `targetRange` offset
+case. No new integration test in `shadowPage.test.tsx`: the existing
+local pitch/waveform analysis effect already silently fails under this
+project's test environment (no real `AudioContext`/`decodeAudioData` in
+jsdom — a pre-existing, documented boundary, not something this
+milestone introduced), so `referencePitch`/`learnerPitch` never populate
+in that test run today; asserting a "Pitch movement" section render
+would be testing environment behavior, not this feature's logic. Real
+coverage is the 7 unit tests plus a real-browser check (not yet done,
+same recurring caveat as every UI-facing change in this project).
+
+**Verified**: `npm run check` green — 516 tests passed, 2 pre-existing
+skips (unrelated). `npm run build` clean.
+
+## Phase 9 roadmap (Milestones 5-9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -2975,9 +3042,7 @@ architecture decision or the researched facts above.
   `analysis_version` earns its complexity (reference-audio alignment
   cached permanently; learner-attempt alignment cached per attempt).
 - **Milestone 3 — mora/rhythm timing feedback: done**, see above.
-- **Milestone 4 — pitch-contour feedback**: reuse the existing normalized
-  YIN pitch extraction, compare *where in time* (via Milestone 2's
-  alignment) pitch rises/falls happen, not just aggregate register.
+- **Milestone 4 — pitch-contour timing feedback: done**, see above.
 - **Milestone 5/6 — feedback ranking + "Fix One Thing"**: rank candidate
   observations, surface one, auto-propose a loop range (reusing the
   existing `targetRange`/mark-start/mark-end mechanism), re-analyze after
