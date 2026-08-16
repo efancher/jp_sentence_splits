@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.10c).
+Last updated: 2026-08-16 (Phase 8 planning).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1926,3 +1926,93 @@ showed "Graduated: Yes."
 This completes Phase 7's full sub-phasing (7.1 through 7.10c) and, with
 it, every phase in the original roadmap (`docs/UNIFIED_APP_ARCHITECTURE.md`
 §15 — Phase 0 through Phase 7).
+
+## Phase 8 — Shadowing feature parity: planning only, not started
+
+The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
+practice experience than the original standalone `~/projects/shadowing/web`
+app it was ported from, and asked for feature parity plus improvements.
+This section is the result of a direct file-by-file comparison
+(2026-08-16) — read before starting any of 8.x so the research doesn't
+need repeating.
+
+**Compared**: `~/projects/shadowing/web/src/pages/SentencePage.tsx` (653
+lines, the original app's practice page) against this repo's
+`src/pages/ShadowPage.tsx` (300 lines). Phase 3's own notes already flagged
+two of the gaps below as deliberately deferred ("to be ported together
+with their consumer once the core loop is in daily use") — the other gaps
+were only found by this pass's closer read.
+
+**Missing, worth porting, recommended order**:
+
+1. **Playback speed control** (`SpeedControl` in the original;
+   `PLAYBACK_SPEEDS` constant in `shadowing/web/src/services`). Applies to
+   reference and comparison playback (`audio.playbackRate`, with
+   `preservesPitch = true` so slowing down doesn't drop pitch — matters
+   for a pitch-accent-relevant app). Small, self-contained, good first
+   slice to re-familiarize with this code.
+2. **Live shadow waveform + shadow-mode recording + mic calibration**.
+   Not ported at all in Phase 3 (`src/lib/recording.ts`'s port comment
+   lists exactly what was skipped: `calibrateMicrophone`,
+   `playReferenceForShadowing`, `ShadowReferencePlayer`,
+   `stopShadowReference` — all in
+   `~/projects/shadowing/web/src/services/recording.ts`). Also needs
+   `~/projects/shadowing/web/src/components/LiveShadowWaveform.tsx` (242
+   lines) ported as a new component. Mechanism: build one Web Audio graph
+   (mic `AnalyserNode` + reference playback) *before* drawing, so a
+   second `AudioContext` can't chop the recording's opening sound — see
+   `SentencePage.tsx`'s `startRecording()` comment on this exact ordering
+   requirement, it's a real gotcha, not incidental structure. Also add a
+   "Calibrate mic" button (`calibrateMicrophone()` returns a guidance
+   string list to render). No dependency on item 3.
+3. **Pitch/waveform comparison analysis** (`AnalysisPanel.tsx`, 216
+   lines) — the biggest single piece. Needs
+   `~/projects/shadowing/web/src/analysis/{pitch,japanese,waveform,audio}.ts`
+   (102–134 lines each, real audio DSP — pitch-contour extraction/
+   comparison) ported to `src/lib/`. Renders reference-vs-attempt pitch
+   contours after a comparison playback. Independent of item 2
+   (`AnalysisPanel` takes `referenceAssetId`/`learnerAssetId` and loads
+   its own buffers) — only sequenced after it here because re-reading the
+   simpler audio code in item 2 first should make this DSP port less
+   error-prone, mirroring how Phase 7.9b's conjugation port went
+   smoothly after several earlier phases' worth of familiarity with this
+   codebase's conventions. **Before starting**: check whether
+   `shadowing/web` has its own tests for these analysis functions
+   (`tests/` in that repo) — Phase 7.9b's conjugation port validated
+   cleanly against the source's own fixture set on the first try; the
+   same approach (port + validate against existing fixtures, don't
+   re-derive correctness from scratch) should apply here if fixtures
+   exist.
+4. **Polish bundle** (small, low-risk, do together): hide/show transcript
+   (audio-only practice toggle), a notes field on a draft attempt before
+   saving, favorite-marking on saved attempts, and defaulting comparison
+   to the favorited (or else most-recent) attempt. All straightforward
+   UI-state additions to `ShadowPage.tsx`/`Attempt`
+   (`isFavorite`/`notes` fields would need adding to the `Attempt` type
+   and Dexie schema — check `~/projects/shadowing/web/src/types.ts`'s
+   `Attempt` shape for the exact fields to add, additive/no migration
+   risk since `attempts` is already a local-only, non-synced table per
+   Phase 3's notes).
+
+**Deliberately recommended against porting** (flag to the user again
+before building if this judgment turns out wrong):
+- **Chunk practice** (pipe-separated text chunks, `saveChunks`/
+  `practiceChunks` in the original) — this app already has a much richer
+  chunk/role structural-analysis engine (Cure Dolly chunks, `AnalyzePage`/
+  `ChunkPuzzleStrip`); porting a second, unrelated "chunk" concept under
+  the same name would likely confuse rather than help.
+- **Mora timing guide** (editable per-mora timing markers,
+  `TimingGuideService`) — a rhythm-practice aid with no obvious
+  integration point in this app's existing UI; unclear standalone value
+  without the chunk-practice feature it was paired with in the original.
+- **Manual reference-audio attach/replace/remove from the practice page**
+  (`ReferenceAudioService.attach`/`remove`, file upload UI) — in the
+  original app this was the *only* way to get reference audio onto a
+  sentence; here, reference audio already arrives via the shadowing-ZIP
+  import pipeline (Phase 2/3) for the sentences that have it. Worth
+  reconsidering only if it turns out learners want to add ad-hoc
+  reference clips to sentences that weren't imported with one.
+
+**Nothing built yet** — this is planning only, done at the user's request
+so a fresh session (they intend to start a new one for this work) can
+pick it up without re-deriving the comparison above.
