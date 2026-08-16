@@ -21,8 +21,12 @@ export function useShadowing() {
     [],
   );
   const playAlternate = useCallback(
-    (referenceEl: HTMLAudioElement, attemptEl: HTMLAudioElement, attemptId: string) =>
-      shadowingController.playAlternate(referenceEl, attemptEl, attemptId),
+    (
+      referenceEl: HTMLAudioElement,
+      attemptEl: HTMLAudioElement,
+      attemptId: string,
+      playbackRate?: number,
+    ) => shadowingController.playAlternate(referenceEl, attemptEl, attemptId, playbackRate),
     [],
   );
   const playDualEar = useCallback(

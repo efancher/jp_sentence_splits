@@ -132,10 +132,11 @@ export class ShadowingController {
     referenceEl: HTMLAudioElement,
     attemptEl: HTMLAudioElement,
     attemptId: string,
+    playbackRate = 1,
   ): Promise<void> {
     this.notify({ comparison: { mode: 'alternate', attemptId }, error: null });
     try {
-      await this.playbackCoordinator.alternate(referenceEl, attemptEl);
+      await this.playbackCoordinator.alternate(referenceEl, attemptEl, 250, playbackRate);
     } catch (error) {
       this.notify({ error: messageFor(error) });
     } finally {

@@ -194,6 +194,28 @@ describe('PlaybackCoordinator.alternate', () => {
     expect(reference.pause).toHaveBeenCalledOnce();
     expect(learner.play).not.toHaveBeenCalled();
   });
+
+  it('applies playbackRate and preservesPitch to both elements before playing', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const reference = new FakeAudioElement();
+    const learner = new FakeAudioElement();
+
+    const done = coordinator.alternate(
+      reference as unknown as HTMLAudioElement,
+      learner as unknown as HTMLAudioElement,
+      0,
+      0.75,
+    );
+    expect(reference.playbackRate).toBe(0.75);
+    expect(reference.preservesPitch).toBe(true);
+    expect(learner.playbackRate).toBe(0.75);
+    expect(learner.preservesPitch).toBe(true);
+
+    reference.dispatch('ended');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    learner.dispatch('ended');
+    await done;
+  });
 });
 
 function chainableNode() {

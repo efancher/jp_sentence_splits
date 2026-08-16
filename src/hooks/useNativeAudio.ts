@@ -9,7 +9,8 @@ export function useNativeAudio() {
     nativeAudioController.getSnapshot,
   );
   const play = useCallback(
-    (record: SentenceAudio) => nativeAudioController.play(record),
+    (record: SentenceAudio, playbackRate?: number) =>
+      nativeAudioController.play(record, playbackRate),
     [],
   );
   const stop = useCallback(() => nativeAudioController.stop(), []);

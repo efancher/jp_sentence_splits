@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8 planning).
+Last updated: 2026-08-16 (Phase 8.1 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1927,7 +1927,52 @@ This completes Phase 7's full sub-phasing (7.1 through 7.10c) and, with
 it, every phase in the original roadmap (`docs/UNIFIED_APP_ARCHITECTURE.md`
 §15 — Phase 0 through Phase 7).
 
-## Phase 8 — Shadowing feature parity: planning only, not started
+## Phase 8 — Shadowing feature parity: in progress (8.1 done)
+
+### 8.1 — Playback speed control: done, verified
+
+Ported `PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25]` (`src/lib/recording.ts`) and
+wired a `speed` control into `ShadowPage.tsx`, applied to every kind of
+playback the page does:
+
+- **Reference audio** (`NativeAudioButton`): added an optional
+  `playbackRate` prop, threaded through `useNativeAudio` →
+  `NativeAudioController.play(record, playbackRate)`, which sets
+  `audio.playbackRate`/`audio.preservesPitch = true` on the underlying
+  `Audio` object before playing.
+- **Alternate comparison** (`PlaybackCoordinator.alternate`): added a 4th
+  `playbackRate` param (positional, defaulting to 1, so the existing
+  `recording.test.ts` calls that only pass `gapMs` stay valid) — sets both
+  the reference and learner `<audio>` elements' `playbackRate`/
+  `preservesPitch` before playing. Threaded through
+  `ShadowingController.playAlternate` and `useShadowing`.
+  `PlaybackCoordinator.dualEar`/`playDualEar` already supported
+  `options.playbackRate` from Phase 3 — just needed `ShadowPage.tsx` to
+  pass `{ playbackRate: speed }` through.
+
+New unit tests: `PlaybackCoordinator.alternate` applies rate/pitch to both
+elements (`recording.test.ts`), `NativeAudioController.play` applies a
+custom rate and defaults to 1 (`nativeAudio.test.ts`), and
+`ShadowingController.playAlternate` passes a custom rate through
+(`shadowing.test.ts`). `npm run check` — 397 passed, 2 skipped
+(pre-existing), 0 failed.
+
+**Manually verified in a real browser** (chromium via a throwaway
+Playwright driver, not committed — same approach as the 7.6–7.10b session,
+see that entry in `unified_app_migration` memory for the IndexedDB-seeding
+gotcha). Seeded a book/sentence/reference-audio/attempt directly via a raw
+`indexedDB.open()` connection, reloaded, opened Shadow, confirmed: the
+"Playback speed" `<select>` renders all four options
+(`0.5×`/`0.75×`/`1× (normal)`/`1.25×`); selecting `0.75×` then clicking
+Alternate sets `playbackRate: 0.75` and `preservesPitch: true` on both the
+hidden reference and attempt `<audio>` elements; zero console errors. This
+environment's chromium binary was missing `libnspr4`/`libnss3`/
+`libnssutil3` shared libs — resolved the same no-root way as before
+(`apt-get download` + `dpkg-deb -x` into a local prefix, `LD_LIBRARY_PATH`
+pointed at it), this time via apt directly rather than a full Playwright
+browser-deps install.
+
+### Background (planning done 2026-08-16, before 8.1 started)
 
 The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
 practice experience than the original standalone `~/projects/shadowing/web`
@@ -2049,6 +2094,8 @@ before building if this judgment turns out wrong):
   reconsidering only if it turns out learners want to add ad-hoc
   reference clips to sentences that weren't imported with one.
 
-**Nothing built yet** — this is planning only, done at the user's request
-so a fresh session (they intend to start a new one for this work) can
-pick it up without re-deriving the comparison above.
+This was planning only at the time it was written, done at the user's
+request so a fresh session could pick it up without re-deriving the
+comparison above — see the "8.1 — Playback speed control" entry earlier
+in this Phase 8 section for what's actually been built so far. Next up:
+8.2, practice-target isolation.

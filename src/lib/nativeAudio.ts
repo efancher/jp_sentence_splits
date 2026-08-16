@@ -38,11 +38,13 @@ export class NativeAudioController {
     for (const listener of this.listeners) listener();
   }
 
-  async play(record: SentenceAudio): Promise<void> {
+  async play(record: SentenceAudio, playbackRate = 1): Promise<void> {
     this.stop();
     const generation = ++this.generation;
     const url = URL.createObjectURL(record.blob);
     const audio = new Audio(url);
+    audio.playbackRate = playbackRate;
+    audio.preservesPitch = true;
     this.objectUrl = url;
     this.audio = audio;
     audio.onended = () => this.finish(generation);

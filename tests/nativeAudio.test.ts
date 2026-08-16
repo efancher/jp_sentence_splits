@@ -7,6 +7,8 @@ class MockAudio {
   static instances: MockAudio[] = [];
   src: string;
   currentTime = 0;
+  playbackRate = 1;
+  preservesPitch = false;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
   play = vi.fn(async () => undefined);
@@ -66,6 +68,24 @@ describe('NativeAudioController', () => {
       activeItemId: null,
     });
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:5');
+  });
+
+  it('applies a custom playback rate with pitch preserved', async () => {
+    const controller = new NativeAudioController();
+    await controller.play(audioRecord('audio-1'), 0.75);
+    expect(MockAudio.instances[0]).toMatchObject({
+      playbackRate: 0.75,
+      preservesPitch: true,
+    });
+  });
+
+  it('defaults to normal playback rate when none is given', async () => {
+    const controller = new NativeAudioController();
+    await controller.play(audioRecord('audio-1'));
+    expect(MockAudio.instances[0]).toMatchObject({
+      playbackRate: 1,
+      preservesPitch: true,
+    });
   });
 
   it('stops the current clip before starting another', async () => {

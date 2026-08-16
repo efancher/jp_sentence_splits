@@ -12,7 +12,7 @@ import {
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
-import { MAX_RECORDING_DURATION_MS, RecordingService } from '../lib/recording';
+import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, RecordingService } from '../lib/recording';
 
 const RATINGS: { value: AttemptRating; label: string }[] = [
   { value: 'better', label: 'Better' },
@@ -23,6 +23,27 @@ const RATINGS: { value: AttemptRating; label: string }[] = [
 
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function SpeedControl({
+  speed,
+  onChange,
+}: {
+  speed: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label>
+      Playback speed
+      <select value={speed} onChange={(event) => onChange(Number(event.target.value))}>
+        {PLAYBACK_SPEEDS.map((value) => (
+          <option key={value} value={value}>
+            {value === 1 ? '1× (normal)' : `${value}×`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export function ShadowPage() {
@@ -37,6 +58,7 @@ export function ShadowPage() {
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [speed, setSpeed] = useState(1);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -130,6 +152,7 @@ export function ShadowPage() {
         referenceAudioRef.current,
         attemptAudioRef.current,
         attempt.id,
+        speed,
       );
     } finally {
       URL.revokeObjectURL(attemptUrl);
@@ -141,7 +164,9 @@ export function ShadowPage() {
     if (!referenceAudio) return;
     setActiveAttemptId(attempt.id);
     try {
-      await shadowing.playDualEar(referenceAudio.blob, attempt.blob, attempt.id);
+      await shadowing.playDualEar(referenceAudio.blob, attempt.blob, attempt.id, {
+        playbackRate: speed,
+      });
     } finally {
       setActiveAttemptId(null);
     }
@@ -175,14 +200,18 @@ export function ShadowPage() {
           <div className="jp jp-lg" style={{ flex: 1 }}>
             {sentence.japanese}
           </div>
-          {referenceAudio ? <NativeAudioButton audio={referenceAudio} /> : null}
+          {referenceAudio ? (
+            <NativeAudioButton audio={referenceAudio} playbackRate={speed} />
+          ) : null}
         </div>
         {!referenceAudio ? (
           <p className="muted">
             No reference audio for this sentence yet — import one from
             Practice. You can still record and save shadowing attempts.
           </p>
-        ) : null}
+        ) : (
+          <SpeedControl speed={speed} onChange={setSpeed} />
+        )}
 
         <div className="row" style={{ alignItems: 'center' }}>
           <button

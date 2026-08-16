@@ -7,12 +7,14 @@ interface NativeAudioButtonProps {
   displayLabel?: string;
   /** Called each time playback actually starts (not on stop) — e.g. for assistance tracking. */
   onPlay?: () => void;
+  playbackRate?: number;
 }
 
 export function NativeAudioButton({
   audio,
   displayLabel = 'Native',
   onPlay,
+  playbackRate,
 }: NativeAudioButtonProps) {
   const native = useNativeAudio();
   const speech = useJapaneseSpeech();
@@ -35,7 +37,7 @@ export function NativeAudioButton({
         }
         speech.stop();
         onPlay?.();
-        void native.play(audio);
+        void native.play(audio, playbackRate);
       }}
     >
       {active ? '🎧 Playing…' : `🎧 ${displayLabel}`}

@@ -17,6 +17,9 @@ const RECORDING_MIME_TYPES = [
 
 export const MAX_RECORDING_DURATION_MS = 30_000;
 
+/** Ported from shadowing/web's services/shared.ts (Phase 8.1). */
+export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25] as const;
+
 export type RecordingMicMode = 'default' | 'shadow';
 
 /** Mic constraints for normal vs play-while-record (AirPods-friendly) modes. */
@@ -289,10 +292,15 @@ export class PlaybackCoordinator {
     reference: HTMLAudioElement,
     learner: HTMLAudioElement,
     gapMs = 250,
+    playbackRate = 1,
   ): Promise<void> {
     this.cancel();
     this.controller = new AbortController();
     const { signal } = this.controller;
+    reference.playbackRate = playbackRate;
+    reference.preservesPitch = true;
+    learner.playbackRate = playbackRate;
+    learner.preservesPitch = true;
     await playUntilEnded(reference, signal);
     if (signal.aborted) return;
     await new Promise((resolve) => window.setTimeout(resolve, gapMs));

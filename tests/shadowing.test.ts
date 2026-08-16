@@ -52,6 +52,8 @@ function stubMediaDevices(
 class FakeAudioElement {
   listeners: Record<string, Array<() => void>> = {};
   currentTime = 0;
+  playbackRate = 1;
+  preservesPitch = false;
   play = vi.fn(async () => undefined);
   pause = vi.fn();
 
@@ -160,6 +162,26 @@ describe('ShadowingController comparison playback', () => {
     await done;
 
     expect(controller.getSnapshot().comparison).toBeNull();
+  });
+
+  it('passes a custom playbackRate through to both elements', async () => {
+    const controller = new ShadowingController();
+    const reference = new FakeAudioElement();
+    const learner = new FakeAudioElement();
+
+    const done = controller.playAlternate(
+      reference as unknown as HTMLAudioElement,
+      learner as unknown as HTMLAudioElement,
+      'attempt-1',
+      0.5,
+    );
+    expect(reference.playbackRate).toBe(0.5);
+    expect(learner.playbackRate).toBe(0.5);
+
+    reference.dispatch('ended');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    learner.dispatch('ended');
+    await done;
   });
 
   it('stopComparison cancels an in-flight comparison', async () => {
