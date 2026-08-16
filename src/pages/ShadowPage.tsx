@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
@@ -14,6 +14,7 @@ import {
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
+import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
 import {
   MAX_RECORDING_DURATION_MS,
   PLAYBACK_SPEEDS,
@@ -33,6 +34,20 @@ const RATINGS: { value: AttemptRating; label: string }[] = [
 
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Shadowing pronunciation-feedback Milestone 1 (docs/STATUS.md Phase 9). */
+function MoraBreakdown({ units }: { units: MoraUnit[] }) {
+  if (units.length === 0) return null;
+  return (
+    <div className="row mora-row" aria-label="Mora breakdown">
+      {units.map((unit) => (
+        <span key={unit.index} className="chip jp" data-kind={unit.kind}>
+          {unit.text}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function SpeedControl({
@@ -150,6 +165,13 @@ export function ShadowPage() {
     },
     [sentenceId, stopComparison, cancelRecording],
   );
+
+  const moraUnits = useMemo<MoraUnit[]>(() => {
+    const sentence = data?.sentence;
+    if (!sentence) return [];
+    const chunks = getSentenceReadingForMora(sentence);
+    return chunks ? segmentIntoMorae(chunks) : [];
+  }, [data?.sentence]);
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
@@ -299,6 +321,7 @@ export function ShadowPage() {
             </div>
           )}
         </div>
+        {!hideTranscript ? <MoraBreakdown units={moraUnits} /> : null}
         {!referenceAudio || !referenceUrl ? (
           <p className="muted">
             No reference audio for this sentence yet — import one from

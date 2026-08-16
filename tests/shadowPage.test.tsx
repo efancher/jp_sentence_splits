@@ -200,6 +200,29 @@ describe('ShadowPage', () => {
     expect(screen.queryByText(/Target:/)).not.toBeInTheDocument();
   });
 
+  it('shows a mora breakdown when the sentence has reading data, hidden with the transcript', async () => {
+    const user = userEvent.setup();
+    await getDb().sentences.update('sent-1', {
+      inlineReading: '本[ほん]を 読[よ]みます。',
+    });
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const breakdown = screen.getByLabelText('Mora breakdown');
+    for (const mora of ['ほ', 'ん', 'を', 'よ', 'み', 'ま', 'す']) {
+      expect(within(breakdown).getByText(mora)).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Hide transcript' }));
+    expect(screen.queryByLabelText('Mora breakdown')).not.toBeInTheDocument();
+  });
+
+  it('has no mora breakdown when the sentence has no reading data', async () => {
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+    expect(screen.queryByLabelText('Mora breakdown')).not.toBeInTheDocument();
+  });
+
   it('deletes an attempt after confirmation', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();

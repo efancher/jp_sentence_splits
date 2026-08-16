@@ -250,6 +250,18 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* Mora breakdown (ShadowPage) — distinguish timing-bearing unit kinds
+   without needing a legend. */
+.mora-row .chip[data-kind='sokuon'] {
+  background: color-mix(in srgb, var(--accent) 25%, var(--chip));
+  font-weight: 600;
+}
+
+.mora-row .chip[data-kind='moraic-n'],
+.mora-row .chip[data-kind='long-vowel-mark'] {
+  border: 1px dashed var(--border);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
