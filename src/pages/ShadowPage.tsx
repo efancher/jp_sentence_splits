@@ -2,7 +2,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { NativeAudioButton } from '../components/NativeAudioButton';
 import {
   deleteAttempt,
   getDb,
@@ -12,7 +11,13 @@ import {
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
-import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, RecordingService } from '../lib/recording';
+import {
+  MAX_RECORDING_DURATION_MS,
+  PLAYBACK_SPEEDS,
+  PlaybackCoordinator,
+  RecordingService,
+  type TimeRangeMs,
+} from '../lib/recording';
 
 const RATINGS: { value: AttemptRating; label: string }[] = [
   { value: 'better', label: 'Better' },
@@ -59,9 +64,12 @@ export function ShadowPage() {
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [speed, setSpeed] = useState(1);
+  const [targetRange, setTargetRange] = useState<TimeRangeMs | null>(null);
+  const [isLoopingTarget, setIsLoopingTarget] = useState(false);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const targetLoopCoordinator = useRef(new PlaybackCoordinator());
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -110,13 +118,21 @@ export function ShadowPage() {
 
   useEffect(() => {
     setPendingAttempt(null);
+    setTargetRange(null);
   }, [sentenceId]);
 
-  // Stop any in-flight recording/comparison when leaving this sentence.
+  useEffect(() => {
+    if (!referenceAudioRef.current) return;
+    referenceAudioRef.current.playbackRate = speed;
+    referenceAudioRef.current.preservesPitch = true;
+  }, [speed, referenceUrl]);
+
+  // Stop any in-flight recording/comparison/target-loop when leaving this sentence.
   useEffect(
     () => () => {
       stopComparison();
       cancelRecording();
+      targetLoopCoordinator.current.cancel();
     },
     [sentenceId, stopComparison, cancelRecording],
   );
@@ -142,9 +158,9 @@ export function ShadowPage() {
   }
 
   async function handleAlternate(attempt: Attempt) {
-    if (!referenceUrl || !referenceAudioRef.current || !attemptAudioRef.current) return;
+    if (!referenceAudioRef.current || !attemptAudioRef.current) return;
+    targetLoopCoordinator.current.cancel();
     const attemptUrl = URL.createObjectURL(attempt.blob);
-    referenceAudioRef.current.src = referenceUrl;
     attemptAudioRef.current.src = attemptUrl;
     setActiveAttemptId(attempt.id);
     try {
@@ -153,6 +169,7 @@ export function ShadowPage() {
         attemptAudioRef.current,
         attempt.id,
         speed,
+        targetRange ?? undefined,
       );
     } finally {
       URL.revokeObjectURL(attemptUrl);
@@ -162,13 +179,53 @@ export function ShadowPage() {
 
   async function handleDualEar(attempt: Attempt) {
     if (!referenceAudio) return;
+    targetLoopCoordinator.current.cancel();
     setActiveAttemptId(attempt.id);
     try {
       await shadowing.playDualEar(referenceAudio.blob, attempt.blob, attempt.id, {
         playbackRate: speed,
+        referenceRange: targetRange ?? undefined,
       });
     } finally {
       setActiveAttemptId(null);
+    }
+  }
+
+  function handleMarkStart() {
+    const audio = referenceAudioRef.current;
+    if (!audio) return;
+    const startMs = Math.round(audio.currentTime * 1000);
+    setTargetRange((prev) => ({ startMs, endMs: prev?.endMs ?? startMs }));
+  }
+
+  function handleMarkEnd() {
+    const audio = referenceAudioRef.current;
+    if (!audio) return;
+    const endMs = Math.round(audio.currentTime * 1000);
+    setTargetRange((prev) => ({ startMs: prev?.startMs ?? 0, endMs }));
+  }
+
+  function handleClearTarget() {
+    targetLoopCoordinator.current.cancel();
+    setTargetRange(null);
+  }
+
+  async function handleToggleTargetLoop() {
+    if (isLoopingTarget) {
+      targetLoopCoordinator.current.cancel();
+      return;
+    }
+    if (!targetRange || !referenceAudioRef.current) return;
+    stopComparison();
+    setIsLoopingTarget(true);
+    try {
+      await targetLoopCoordinator.current.loopRange(
+        referenceAudioRef.current,
+        targetRange,
+        speed,
+      );
+    } finally {
+      setIsLoopingTarget(false);
     }
   }
 
@@ -200,17 +257,50 @@ export function ShadowPage() {
           <div className="jp jp-lg" style={{ flex: 1 }}>
             {sentence.japanese}
           </div>
-          {referenceAudio ? (
-            <NativeAudioButton audio={referenceAudio} playbackRate={speed} />
-          ) : null}
         </div>
-        {!referenceAudio ? (
+        {!referenceAudio || !referenceUrl ? (
           <p className="muted">
             No reference audio for this sentence yet — import one from
             Practice. You can still record and save shadowing attempts.
           </p>
         ) : (
-          <SpeedControl speed={speed} onChange={setSpeed} />
+          <div className="stack">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio
+              ref={referenceAudioRef}
+              controls
+              src={referenceUrl}
+              aria-label="Reference audio"
+              className="audio-player"
+            />
+            <SpeedControl speed={speed} onChange={setSpeed} />
+            <div className="row" style={{ alignItems: 'center' }}>
+              <button type="button" onClick={handleMarkStart}>
+                Mark start
+              </button>
+              <button type="button" onClick={handleMarkEnd}>
+                Mark end
+              </button>
+              {targetRange ? (
+                <>
+                  <span className="muted">
+                    Target: {formatDuration(targetRange.startMs)}–
+                    {formatDuration(targetRange.endMs)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!isLoopingTarget && targetRange.endMs <= targetRange.startMs}
+                    onClick={() => void handleToggleTargetLoop()}
+                  >
+                    {isLoopingTarget ? 'Stop loop' : 'Loop target'}
+                  </button>
+                  <button type="button" onClick={handleClearTarget}>
+                    Clear target
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
         )}
 
         <div className="row" style={{ alignItems: 'center' }}>
@@ -316,12 +406,12 @@ export function ShadowPage() {
           )}
         </div>
 
-        {/* Hidden players used only for Alternate playback, which needs real
-            HTMLAudioElement references (see PlaybackCoordinator.alternate). */}
-        {/* eslint-disable jsx-a11y/media-has-caption */}
-        <audio ref={referenceAudioRef} aria-label="Reference audio" hidden />
+        {/* Hidden player used only for Alternate playback's attempt side,
+            which needs a real HTMLAudioElement reference (see
+            PlaybackCoordinator.alternate). The reference side reuses the
+            visible player above. */}
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio ref={attemptAudioRef} aria-label="Attempt audio" hidden />
-        {/* eslint-enable jsx-a11y/media-has-caption */}
       </section>
     </div>
   );

@@ -105,29 +105,48 @@ export class RecordingService {
   }
 }
 
+export interface TimeRangeMs {
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Plays `audio` from `range.startMs` (or 0) until it either ends naturally
+ * or, if `range.endMs` is given, crosses that point — resolving either way.
+ */
 function playUntilEnded(
   audio: HTMLAudioElement,
   signal?: AbortSignal,
+  range?: TimeRangeMs,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       resolve();
       return;
     }
+    const startSec = range ? range.startMs / 1000 : 0;
+    const endSec = range ? range.endMs / 1000 : undefined;
     const onAbort = () => {
       audio.pause();
-      audio.currentTime = 0;
+      audio.currentTime = startSec;
       cleanup();
       resolve();
     };
     const cleanup = () => {
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
+      if (endSec !== undefined) audio.removeEventListener('timeupdate', onTimeUpdate);
       signal?.removeEventListener('abort', onAbort);
     };
     const onEnded = () => {
       cleanup();
       resolve();
+    };
+    const onTimeUpdate = () => {
+      if (endSec !== undefined && audio.currentTime >= endSec) {
+        audio.pause();
+        onEnded();
+      }
     };
     const onError = () => {
       cleanup();
@@ -135,8 +154,9 @@ function playUntilEnded(
     };
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('error', onError);
+    if (endSec !== undefined) audio.addEventListener('timeupdate', onTimeUpdate);
     signal?.addEventListener('abort', onAbort, { once: true });
-    audio.currentTime = 0;
+    audio.currentTime = startSec;
     audio.play().catch((error: unknown) => {
       cleanup();
       reject(error);
@@ -144,9 +164,50 @@ function playUntilEnded(
   });
 }
 
+/**
+ * Plays `audio` repeatedly within `range`, jumping back to the start
+ * whenever playback crosses the end — until `signal` aborts. Backs Phase
+ * 8.2's practice-target isolation (new code, not ported from anywhere).
+ */
+function playLoopedRange(
+  audio: HTMLAudioElement,
+  range: TimeRangeMs,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const startSec = range.startMs / 1000;
+    const endSec = range.endMs / 1000;
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const cleanup = () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onTimeUpdate = () => {
+      if (audio.currentTime >= endSec) audio.currentTime = startSec;
+    };
+    const onAbort = () => {
+      audio.pause();
+      cleanup();
+      resolve();
+    };
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    signal.addEventListener('abort', onAbort, { once: true });
+    audio.currentTime = startSec;
+    audio.play().catch(() => {
+      cleanup();
+      resolve();
+    });
+  });
+}
+
 export interface DualEarOptions {
   swapEars?: boolean;
   playbackRate?: number;
+  /** Trims only the reference side to this range; the learner side always plays in full. */
+  referenceRange?: TimeRangeMs;
 }
 
 /**
@@ -259,12 +320,28 @@ export async function playDualEar(
         reject(new Error('Dual-ear playback failed.'));
       };
 
+      const referenceEndSec = options.referenceRange
+        ? options.referenceRange.endMs / 1000
+        : undefined;
+      const onReferenceTimeUpdate = () => {
+        if (referenceEndSec !== undefined && referenceAudio.currentTime >= referenceEndSec) {
+          referenceAudio.removeEventListener('timeupdate', onReferenceTimeUpdate);
+          referenceAudio.pause();
+          onEnded();
+        }
+      };
+
       referenceAudio.addEventListener('ended', onEnded, { once: true });
       learnerAudio.addEventListener('ended', onEnded, { once: true });
       referenceAudio.addEventListener('error', onError, { once: true });
       learnerAudio.addEventListener('error', onError, { once: true });
+      if (referenceEndSec !== undefined) {
+        referenceAudio.addEventListener('timeupdate', onReferenceTimeUpdate);
+      }
 
-      referenceAudio.currentTime = 0;
+      referenceAudio.currentTime = options.referenceRange
+        ? options.referenceRange.startMs / 1000
+        : 0;
       learnerAudio.currentTime = 0;
       Promise.all([referenceAudio.play(), learnerAudio.play()]).catch(
         (error: unknown) => {
@@ -293,6 +370,7 @@ export class PlaybackCoordinator {
     learner: HTMLAudioElement,
     gapMs = 250,
     playbackRate = 1,
+    referenceRange?: TimeRangeMs,
   ): Promise<void> {
     this.cancel();
     this.controller = new AbortController();
@@ -301,7 +379,7 @@ export class PlaybackCoordinator {
     reference.preservesPitch = true;
     learner.playbackRate = playbackRate;
     learner.preservesPitch = true;
-    await playUntilEnded(reference, signal);
+    await playUntilEnded(reference, signal, referenceRange);
     if (signal.aborted) return;
     await new Promise((resolve) => window.setTimeout(resolve, gapMs));
     if (signal.aborted) return;
@@ -316,5 +394,19 @@ export class PlaybackCoordinator {
     this.cancel();
     this.controller = new AbortController();
     await playDualEar(referenceBlob, learnerBlob, options, this.controller.signal);
+  }
+
+  /** Loops `audio` within `range` until `cancel()` is called. */
+  async loopRange(
+    audio: HTMLAudioElement,
+    range: TimeRangeMs,
+    playbackRate = 1,
+  ): Promise<void> {
+    this.cancel();
+    this.controller = new AbortController();
+    const { signal } = this.controller;
+    audio.playbackRate = playbackRate;
+    audio.preservesPitch = true;
+    await playLoopedRange(audio, range, signal);
   }
 }

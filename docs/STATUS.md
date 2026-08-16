@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 8.1 done).
+Last updated: 2026-08-16 (Phase 8.2 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1972,6 +1972,71 @@ environment's chromium binary was missing `libnspr4`/`libnss3`/
 pointed at it), this time via apt directly rather than a full Playwright
 browser-deps install.
 
+### 8.2 — Practice-target isolation: done, verified
+
+New code (not a port). Learner marks an arbitrary sub-range of the
+reference clip and can loop just that range, or scope Alternate/Dual-ear
+comparisons to it — the "manual loop-point marking" first cut this doc
+recommended, using the simpler "mark start/end while listening" variant
+rather than draggable timeline handles.
+
+**UI (`ShadowPage.tsx`)**: replaced the old `NativeAudioButton`
+tap-to-play reference control with a real, scrubbable
+`<audio controls>` element (`referenceAudioRef`, now always visible when
+reference audio exists, reused for Alternate playback too — no second
+audio element). Added "Mark start"/"Mark end" buttons that read the
+player's current `currentTime`; a "Target: Xs–Ys" readout; "Loop
+target"/"Stop loop"; "Clear target". Speed control now applies via an
+effect on this same element instead of through `NativeAudioButton`.
+
+**Lib (`src/lib/recording.ts`)**:
+- `PlaybackCoordinator.loopRange(audio, range, playbackRate)` — new
+  primitive, loops an element within a `TimeRangeMs` until cancelled
+  (`timeupdate` listener resets `currentTime` back to the range start).
+  Catches `play()` rejection (e.g. unsupported source) and resolves
+  rather than leaving an unhandled rejection — a real bug a first
+  real-browser pass caught that unit tests (whose fake `play()` mock
+  never rejects) missed.
+- `playUntilEnded` gained an optional `range` param (used by `alternate`)
+  — seeks to `range.startMs` and resolves early via `timeupdate` once
+  `range.endMs` is crossed, instead of only ever waiting for the file's
+  natural `ended` event. Backward-compatible: omitting `range` is
+  identical to the old whole-clip behavior.
+- `PlaybackCoordinator.alternate` gained an optional 5th
+  `referenceRange` param, threaded straight to `playUntilEnded` for the
+  reference side only — the learner/attempt side always plays in full.
+- `DualEarOptions` gained `referenceRange`; `playDualEar` seeds the
+  reference `Audio` element's `currentTime` to the range start and adds
+  its own `timeupdate` listener that pauses + counts as "ended" once the
+  range end is crossed, so completion still only resolves once both
+  sides are done — the learner side is untouched.
+
+Threaded `referenceRange`/`targetRange` through
+`ShadowingController.playAlternate` and `useShadowing`, matching the
+existing `playbackRate` threading from 8.1.
+
+New unit tests: `loopRange` seeks/loops/applies rate/handles a rejected
+`play()`/isn't affected by a superseded loop (`recording.test.ts`);
+`alternate` and `dualEar` each get a test confirming only the reference
+side is trimmed while the learner/attempt plays in full. `shadowPage.test.tsx`'s
+existing smoke test was updated for the new visible player (was asserting
+on the now-removed `NativeAudioButton`); added a component test that
+marks a range via the real `<audio>` element's `currentTime` and confirms
+the UI shows/clears it. `npm run check` — 404 passed, 2 skipped
+(pre-existing), 0 failed.
+
+**Manually verified in a real browser** (chromium, same throwaway-driver
+approach as 8.1, not committed) — twice, since the fake-bytes blob used
+for a first pass surfaced the `play()`-rejection bug above; a second pass
+used a real (silent) synthesized WAV blob so playback actually runs.
+Confirmed: marking a 0.5s–2.3s range and looping it produces a real
+observed wraparound in `currentTime` (samples like `2.18 → 0.53`) and
+stays within the range; stopping the loop pauses the element; on a
+separate 6s reference clip with a 1s–3s target, both Alternate and
+Dual-ear stop the reference side right around 3.0s instead of continuing
+to 6s, while the learner/attempt clip plays in full; zero console errors
+in the clean run.
+
 ### Background (planning done 2026-08-16, before 8.1 started)
 
 The user flagged that Phase 3 (2026-08-14) shipped a narrower shadowing
@@ -2096,6 +2161,6 @@ before building if this judgment turns out wrong):
 
 This was planning only at the time it was written, done at the user's
 request so a fresh session could pick it up without re-deriving the
-comparison above — see the "8.1 — Playback speed control" entry earlier
-in this Phase 8 section for what's actually been built so far. Next up:
-8.2, practice-target isolation.
+comparison above — see the "8.1" and "8.2" entries earlier in this Phase
+8 section for what's actually been built so far. Next up: 8.3, live
+shadow waveform + shadow-mode recording + mic calibration.

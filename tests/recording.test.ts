@@ -216,6 +216,106 @@ describe('PlaybackCoordinator.alternate', () => {
     learner.dispatch('ended');
     await done;
   });
+
+  it('scopes only the reference side to a range, learner still plays in full', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const reference = new FakeAudioElement();
+    const learner = new FakeAudioElement();
+
+    const done = coordinator.alternate(
+      reference as unknown as HTMLAudioElement,
+      learner as unknown as HTMLAudioElement,
+      0,
+      1,
+      { startMs: 500, endMs: 1500 },
+    );
+    expect(reference.currentTime).toBe(0.5);
+
+    reference.currentTime = 1.5;
+    reference.dispatch('timeupdate');
+    expect(reference.pause).toHaveBeenCalledOnce();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(learner.play).toHaveBeenCalledOnce();
+    expect(learner.currentTime).toBe(0);
+    learner.dispatch('ended');
+    await done;
+  });
+});
+
+describe('PlaybackCoordinator.loopRange', () => {
+  it('seeks to the start and jumps back whenever playback crosses the end', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+      startMs: 1000,
+      endMs: 2000,
+    });
+    expect(audio.currentTime).toBe(1);
+    expect(audio.play).toHaveBeenCalledOnce();
+
+    audio.currentTime = 2.1;
+    audio.dispatch('timeupdate');
+    expect(audio.currentTime).toBe(1);
+
+    coordinator.cancel();
+    await done;
+    expect(audio.pause).toHaveBeenCalledOnce();
+  });
+
+  it('applies playbackRate and preservesPitch', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(
+      audio as unknown as HTMLAudioElement,
+      { startMs: 0, endMs: 1000 },
+      0.5,
+    );
+    expect(audio.playbackRate).toBe(0.5);
+    expect(audio.preservesPitch).toBe(true);
+
+    coordinator.cancel();
+    await done;
+  });
+
+  it('resolves without throwing if play() rejects (e.g. unsupported source)', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+    audio.play = vi.fn(async () => {
+      throw new Error('NotSupportedError');
+    });
+
+    await expect(
+      coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+        startMs: 0,
+        endMs: 1000,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('cancelling one loop does not affect a fresh one on the same coordinator', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const first = new FakeAudioElement();
+    const second = new FakeAudioElement();
+
+    const firstDone = coordinator.loopRange(first as unknown as HTMLAudioElement, {
+      startMs: 0,
+      endMs: 1000,
+    });
+    const secondDone = coordinator.loopRange(second as unknown as HTMLAudioElement, {
+      startMs: 0,
+      endMs: 1000,
+    });
+    await firstDone; // superseded by the second loopRange's implicit cancel()
+    expect(first.pause).toHaveBeenCalledOnce();
+    expect(second.pause).not.toHaveBeenCalled();
+
+    coordinator.cancel();
+    await secondDone;
+    expect(second.pause).toHaveBeenCalledOnce();
+  });
 });
 
 function chainableNode() {
@@ -285,6 +385,28 @@ describe('PlaybackCoordinator.dualEar / playDualEar', () => {
     referenceAudio?.dispatch('ended');
     learnerAudio?.dispatch('ended');
 
+    await done;
+  });
+
+  it('trims only the reference side when referenceRange is given', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const reference = new Blob(['ref'], { type: 'audio/webm' });
+    const learner = new Blob(['learner'], { type: 'audio/webm' });
+
+    const done = coordinator.dualEar(reference, learner, {
+      referenceRange: { startMs: 500, endMs: 1500 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const [referenceAudio, learnerAudio] = DualEarFakeAudio.instances;
+    expect(referenceAudio?.currentTime).toBe(0.5);
+    expect(learnerAudio?.currentTime).toBe(0);
+
+    referenceAudio!.currentTime = 1.5;
+    referenceAudio!.dispatch('timeupdate');
+    expect(referenceAudio?.pause).toHaveBeenCalledOnce();
+
+    learnerAudio?.dispatch('ended');
     await done;
   });
 });

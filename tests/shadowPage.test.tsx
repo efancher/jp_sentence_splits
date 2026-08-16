@@ -98,11 +98,10 @@ describe('ShadowPage', () => {
     renderShadowPage();
 
     expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {
-        name: /Play native sentence recording from Reference Video/,
-      }),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Reference audio')).toBeInTheDocument();
+    expect(screen.getByLabelText('Playback speed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark start' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark end' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
 
     const attemptRows = screen.getAllByRole('listitem');
@@ -114,6 +113,30 @@ describe('ShadowPage', () => {
 
     const betterButtons = screen.getAllByRole('button', { name: 'Better' });
     expect(betterButtons[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('marks a target range from the reference player and can clear it', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+
+    const referenceAudio = (await screen.findByLabelText(
+      'Reference audio',
+    )) as HTMLAudioElement;
+    Object.defineProperty(referenceAudio, 'currentTime', {
+      configurable: true,
+      writable: true,
+      value: 0.5,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Mark start' }));
+    referenceAudio.currentTime = 2.3;
+    await user.click(screen.getByRole('button', { name: 'Mark end' }));
+
+    expect(screen.getByText(/Target: 0\.5s–2\.3s/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Loop target' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Clear target' }));
+    expect(screen.queryByText(/Target:/)).not.toBeInTheDocument();
   });
 
   it('deletes an attempt after confirmation', async () => {

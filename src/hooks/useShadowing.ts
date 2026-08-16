@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-import type { DualEarOptions, RecordingMicMode } from '../lib/recording';
+import type { DualEarOptions, RecordingMicMode, TimeRangeMs } from '../lib/recording';
 import { shadowingController } from '../lib/shadowing';
 
 export function useShadowing() {
@@ -26,7 +26,15 @@ export function useShadowing() {
       attemptEl: HTMLAudioElement,
       attemptId: string,
       playbackRate?: number,
-    ) => shadowingController.playAlternate(referenceEl, attemptEl, attemptId, playbackRate),
+      referenceRange?: TimeRangeMs,
+    ) =>
+      shadowingController.playAlternate(
+        referenceEl,
+        attemptEl,
+        attemptId,
+        playbackRate,
+        referenceRange,
+      ),
     [],
   );
   const playDualEar = useCallback(

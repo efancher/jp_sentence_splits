@@ -4,6 +4,7 @@ import {
   RecordingService,
   type DualEarOptions,
   type RecordingMicMode,
+  type TimeRangeMs,
 } from './recording';
 
 export type ShadowingStatus = 'idle' | 'requesting-mic' | 'recording' | 'stopped';
@@ -133,10 +134,17 @@ export class ShadowingController {
     attemptEl: HTMLAudioElement,
     attemptId: string,
     playbackRate = 1,
+    referenceRange?: TimeRangeMs,
   ): Promise<void> {
     this.notify({ comparison: { mode: 'alternate', attemptId }, error: null });
     try {
-      await this.playbackCoordinator.alternate(referenceEl, attemptEl, 250, playbackRate);
+      await this.playbackCoordinator.alternate(
+        referenceEl,
+        attemptEl,
+        250,
+        playbackRate,
+        referenceRange,
+      );
     } catch (error) {
       this.notify({ error: messageFor(error) });
     } finally {
