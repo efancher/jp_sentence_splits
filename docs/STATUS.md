@@ -1775,3 +1775,44 @@ mature item from regular rotation, moving it to a lighter-touch review
 cadence, or marking it "learned"). Needs scoping with the user before
 starting: it's not clear from context alone what "graduation" should
 mean here.
+
+## Real-data gap found during the user's own manual check, and its backfill
+
+The user's own manual browser check (after this session's automated one)
+found that review only ever showed plain sentences — no reading_retrieval/
+cloze/reading_production/sentence_transformation/contrastive-pair cards,
+and no natural-encounter panel on PracticePage. Root cause, confirmed
+directly against production: **0 of 503** `sentence_vocabulary` rows had
+`surface_form` set. Every one of those card types (Phase 7.2/7.3/7.5/7.7/
+7.8/7.9a/7.9b) correctly gates eligibility on a surfaceForm-bearing link
+(`getVocabularyTargetCandidates`) — working exactly as designed, just
+against data that didn't exist yet. `surface_form` is written by exactly
+one path, `materializeVocabularySelections`, called only from
+`AnalyzePage.tsx`'s interactive vocabulary-picker confirm action — every
+real link so far came from the one-time Anki import (Phase 2), which
+predates and bypasses that field entirely, and the confirm flow hadn't
+been used live since Phase 5 shipped it.
+
+Added `scripts/backfill-vocabulary-surface-forms.ts` (+
+`.github/workflows/backfill-vocabulary-surface-forms.yml`, same
+dry-run-by-default/`--apply`/manual-`workflow_dispatch`-only shape as
+every other backfill script here) to retroactively infer `surface_form`
+for existing links: exact substring match of the vocabulary item's
+dictionary `expression` against its sentence's text first, then — for
+items with a `partOfSpeech` JMDict tag — every conjugated form via
+`src/lib/conjugation.ts` (the same engine Phase 7.9b's card uses),
+first substring match wins. Run against production (2026-08-16):
+**385 of 498** links matched and updated (113 had no match — mostly
+conjugation forms this engine doesn't cover, e.g. volitional/たい, or a
+handful of pre-existing garbled `expression` values from the Anki import,
+not something this script can or should fix). Spot-checked the conjugated
+matches by hand — all grammatically correct (働く→働いて, 分かる→分かった/
+分からない, 青い→青くて, 言う→言いました, etc.). Confirmed post-run: 2 of
+the 4 confusion pairs now have both members eligible and will actually
+surface as contrastive-pair cards; the other 2 still won't (their other
+member never got a surfaceForm match) — expected, not a bug.
+
+Idempotent and re-runnable (only null-`surface_form` links are selected),
+so running it again later after more of the Anki-imported vocabulary gets
+a `partOfSpeech` tag (via `backfill:vocabulary-meanings`) will pick up
+more conjugation-based matches than this first pass could.
