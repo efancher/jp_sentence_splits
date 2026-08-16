@@ -7,6 +7,7 @@ import type {
   Attempt,
   AttemptAlignment,
   AttemptRating,
+  AttemptTranscription,
   Book,
   BookChapter,
   BookSentence,
@@ -35,7 +36,7 @@ import type {
   VocabularyReviewStatus,
   VocabularySelection,
 } from '../domain/types';
-import { ALIGNMENT_VERSION } from '../lib/analysisApi';
+import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -1557,6 +1558,24 @@ export async function saveAttemptAlignment(
     computedAt: nowIso(),
   };
   await db.attemptAlignments.put(row);
+}
+
+export async function getAttemptTranscription(attemptId: string): Promise<string | undefined> {
+  const db = getDb();
+  const row = await db.attemptTranscriptions.get(attemptId);
+  if (!row || row.transcriptionVersion !== TRANSCRIPTION_VERSION) return undefined;
+  return row.text;
+}
+
+export async function saveAttemptTranscription(attemptId: string, text: string): Promise<void> {
+  const db = getDb();
+  const row: AttemptTranscription = {
+    id: attemptId,
+    transcriptionVersion: TRANSCRIPTION_VERSION,
+    text,
+    computedAt: nowIso(),
+  };
+  await db.attemptTranscriptions.put(row);
 }
 
 // ---------------------------------------------------------------------------

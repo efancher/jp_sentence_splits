@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 5/6 done).
+Last updated: 2026-08-16 (Phase 9 Milestone 7 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3088,7 +3088,99 @@ also assert the callout renders the same message and that clicking
 **Verified**: `npm run check` green — 523 tests passed, 2 pre-existing
 skips (unrelated). `npm run build` clean.
 
-## Phase 9 roadmap (Milestones 7-9, not started)
+## Phase 9 Milestone 7 — ASR as a secondary diagnostic signal: done
+
+Adds Japanese speech recognition on the **learner's** recording only —
+the reference transcript is already known and more reliable than an
+open-vocabulary recognizer's guess, so ASR here is explicitly a
+secondary, non-authoritative signal, never ground truth. "Possible
+pronunciation difference around 「word」," never "You pronounced 「word」
+incorrectly" — this distinction was the brief's explicit, repeated
+instruction for this milestone.
+
+**Resource check done before building** (Phase 20's requirement to
+document this for every new dependency): the alignment service alone was
+already using ~2.4 GB RSS warm, and this shared personal box had only
+~1.5 GB genuinely free (several unrelated Claude/Codex sessions also
+running). The originally-researched `small` Whisper model (~2 GB
+estimated) was too risky to add on top of that — switched to `base`
+(int8-quantized) and **measured actual RSS before committing**, matching
+the Milestone 2a spike pattern rather than trusting the estimate: `base`
+uses **~270 MB RSS** and transcribed a self-synthesized test clip
+**exactly right** in ~2s. Real go/no-go, not a guess.
+
+Added (`~/projects/shadowing-analysis-api`):
+- `app/asr.py` — mirrors `aligner.py`'s lazy-singleton-behind-a-lock
+  shape exactly (loads on first `/transcribe` call, not at process start,
+  keeping `systemd` startup fast). Passes the known sentence text as
+  Whisper's `initial_prompt` — a standard bias-decoding technique,
+  usable here specifically because the transcript is already known
+  (the whole premise of this project).
+- `app/main.py` — new `POST /transcribe` (multipart `audio` + optional
+  `prompt`), same validation/error-status conventions as `/align`; a
+  shared `_read_and_validate_audio` helper extracted so the two endpoints
+  don't duplicate that logic. `GET /health` gained an `asr` sub-object
+  mirroring `mfa`'s shape.
+- Tests: `tests/test_asr.py` (8 cases, mirrors `test_align.py`'s
+  validation/error-path coverage, mocked — no real model needed for the
+  fast suite) and `tests/test_integration_asr.py` (real end-to-end,
+  synthesizes its own clip via `voicevox-tts-api`, same pattern as the
+  alignment integration test). **Verified**: 23 fast tests pass (2.4s);
+  both real integration tests (alignment + ASR) pass (44s total, matching
+  the ~40s one-time MFA lexicon load). Restarted `systemd --user`, live
+  `curl` against `https://codex-dev.tailfbd89c.ts.net/shadowing-analysis/transcribe`
+  over the real tailnet returned the exact expected text with the
+  deployed origin's CORS header present.
+
+Added (`jp_sentence_splits`):
+- `src/lib/analysisApi.ts` — `transcribeAudio(blob, prompt?)`, same
+  never-throws contract as `alignAudio`. `TRANSCRIPTION_VERSION`
+  constant, same precedent as `ALIGNMENT_VERSION`.
+- `src/lib/asrObservations.ts` — a small O(n·m) LCS-based character diff
+  (no library needed for ~10-30 character strings) between the ASR text
+  and the **reference alignment's own word texts concatenated** (not the
+  raw `sentence.japanese` string — guarantees exact character-offset
+  correspondence to the word list; the raw sentence can carry punctuation
+  the alignment doesn't). Both sides normalized (strip whitespace and
+  `、。！？「」`) first so formatting differences aren't mistaken for
+  pronunciation differences. Unmatched character runs map back to the
+  specific reference word(s) they fall within — one observation per
+  distinct affected word, not one blob message for the whole sentence.
+  Always `confidence: 'low'` and a fixed, modest `severity` — a candidate
+  for "Focus on this" (Milestone 5/6), but naturally outranked by more
+  certain measured-duration/phonetic-timing findings from Milestones 3/4,
+  with zero special-casing needed (the existing ranking logic already
+  handles this correctly by design).
+- `AttemptTranscription` (`src/domain/types.ts`), Dexie `version(10)`
+  (`attemptTranscriptions: 'id'`), `getAttemptTranscription`/
+  `saveAttemptTranscription` (`src/db/repository.ts`) — cached per
+  learner attempt only (no reference-side equivalent needed). Same
+  local-only precedent as the alignment cache tables.
+- `src/components/AnalysisPanel.tsx` — a third independent effect (learner
+  blob only, no dual reference/learner fetch this time — reference
+  transcript is already known) so a slow/unreachable ASR call never
+  blocks the alignment or local-analysis sections. New "Possible
+  pronunciation differences" section, folded into the same combined
+  observation list already feeding `selectPrimaryObservation` — no
+  changes needed to the ranking logic itself.
+
+Tests: `tests/asrObservations.test.ts` (new, pure) — exact match and
+punctuation-only differences produce nothing (confirms normalization
+works), a substitution flags the specific right word, multiple affected
+words each get their own message rather than one blob. Extended
+`tests/analysisApi.test.ts` with `transcribeAudio` cases mirroring
+`alignAudio`'s. `tests/data.test.ts`/`tests/migration.test.ts` —
+round-trip + staleness + v10 schema tests. `tests/shadowPage.test.tsx` —
+a real component-level integration test (unlike Milestone 4's pitch
+work, ASR doesn't need local Web Audio decode, only the mocked fetch, so
+this one *is* meaningfully testable end-to-end) confirming the section
+renders and is hedged at low confidence, not presented as a definite
+error.
+
+**Verified**: `npm run check` green — 538 tests passed, 2 pre-existing
+skips (unrelated). `npm run build` clean.
+
+## Phase 9 roadmap (Milestones 8-9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -3114,10 +3206,8 @@ architecture decision or the researched facts above.
   above. Cross-recording "✓ Much closer" comparison after a re-record
   remains deliberately deferred to Milestone 8 (needs persisted attempt
   history to compare against).
-- **Milestone 7 — ASR as a secondary signal**: faster-whisper `small` on
-  the same server (~2 GB RAM, ~6x real-time on this box's CPU), used only
-  to flag likely-mispronounced words for closer listening, never as ground
-  truth.
+- **Milestone 7 — ASR as a secondary signal: done**, see above (used
+  `base`, not `small`, after a real memory check on this host).
 - **Milestone 8 — pronunciation history**: new local-only Dexie table
   (mirroring `attempts`' local-only, unsynced precedent) tracking trend
   categories per sentence, not raw scores.

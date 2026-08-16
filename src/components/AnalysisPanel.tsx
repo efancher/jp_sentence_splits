@@ -2,18 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   getAttemptAlignment,
+  getAttemptTranscription,
   getReferenceAlignment,
   saveAttemptAlignment,
+  saveAttemptTranscription,
   saveReferenceAlignment,
 } from '../db/repository';
 import type { AlignmentResult } from '../domain/types';
-import { alignAudio } from '../lib/analysisApi';
+import { alignAudio, transcribeAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
+import { buildAsrObservations } from '../lib/asrObservations';
 import { selectPrimaryObservation } from '../lib/feedbackRanking';
 import {
   analyzeAlignment,
@@ -43,6 +46,19 @@ async function loadAlignment(
   if (cached) return cached;
   const fetched = await alignAudio(blob, transcript);
   if (fetched) await save(id, fetched);
+  return fetched ?? undefined;
+}
+
+/** Same cache-then-fetch contract as `loadAlignment`, for ASR (Phase 9, Milestone 7). */
+async function loadTranscription(
+  attemptId: string,
+  blob: Blob,
+  prompt: string,
+): Promise<string | undefined> {
+  const cached = await getAttemptTranscription(attemptId);
+  if (cached !== undefined) return cached;
+  const fetched = await transcribeAudio(blob, prompt);
+  if (fetched) await saveAttemptTranscription(attemptId, fetched);
   return fetched ?? undefined;
 }
 
@@ -269,6 +285,24 @@ export function AnalysisPanel({
     };
   }, [referenceAudioId, referenceBlob, attemptId, learnerBlob, transcript]);
 
+  const [transcribedText, setTranscribedText] = useState<string>();
+
+  // A third, independent effect (Phase 9, Milestone 7) — ASR is a
+  // secondary, non-authoritative signal on the learner recording only
+  // (the reference transcript is already known), and shouldn't block or
+  // be blocked by the alignment fetch above.
+  useEffect(() => {
+    let active = true;
+    setTranscribedText(undefined);
+    void (async () => {
+      const text = await loadTranscription(attemptId, learnerBlob, transcript);
+      if (active) setTranscribedText(text);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [attemptId, learnerBlob, transcript]);
+
   const confidence = confidenceFromSignal({
     hasReading,
     voicedRatio: Math.min(referencePitch?.voicedRatio ?? 0, learnerPitch?.voicedRatio ?? 0),
@@ -302,13 +336,29 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
 
+  const asrObservations = useMemo(() => {
+    if (!serverAlignment?.reference || !transcribedText) return [];
+    return buildAsrObservations({
+      referenceWords: serverAlignment.reference.words,
+      transcribedText,
+    });
+  }, [serverAlignment, transcribedText]);
+
   const primaryObservation = useMemo(
     () =>
-      selectPrimaryObservation([...observations, ...segmentObservations, ...pitchTimingObservations]),
-    [observations, segmentObservations, pitchTimingObservations],
+      selectPrimaryObservation([
+        ...observations,
+        ...segmentObservations,
+        ...pitchTimingObservations,
+        ...asrObservations,
+      ]),
+    [observations, segmentObservations, pitchTimingObservations, asrObservations],
   );
   const hasComputedAnyObservations =
-    observations.length > 0 || segmentObservations.length > 0 || pitchTimingObservations.length > 0;
+    observations.length > 0 ||
+    segmentObservations.length > 0 ||
+    pitchTimingObservations.length > 0 ||
+    asrObservations.length > 0;
 
   return (
     <div className="stack">
@@ -395,6 +445,17 @@ export function AnalysisPanel({
         <div className="stack">
           <strong>Pitch movement</strong>
           {pitchTimingObservations.map((item) => (
+            <article key={item.id} className="stack" style={{ gap: 0 }}>
+              <strong>{item.confidence} confidence:</strong> {item.message}
+              {item.detail ? <p className="muted">{item.detail}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {asrObservations.length > 0 ? (
+        <div className="stack">
+          <strong>Possible pronunciation differences</strong>
+          {asrObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>
               <strong>{item.confidence} confidence:</strong> {item.message}
               {item.detail ? <p className="muted">{item.detail}</p> : null}

@@ -18,6 +18,7 @@ import {
   computeVocabularyContextDiversity,
   exportFullBackup,
   getAttemptAlignment,
+  getAttemptTranscription,
   getDb,
   getDueStudyItems,
   getReferenceAlignment,
@@ -38,6 +39,7 @@ import {
   saveAnalysis,
   saveAttempt,
   saveAttemptAlignment,
+  saveAttemptTranscription,
   saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
@@ -457,6 +459,25 @@ describe('cached forced alignment (Phase 9, Milestone 2b)', () => {
     await getDb().referenceAlignments.update('audio-1', { alignmentVersion: 0 });
 
     expect(await getReferenceAlignment('audio-1')).toBeUndefined();
+  });
+});
+
+describe('cached ASR transcription (Phase 9, Milestone 7)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-transcription-${createId('db')}`);
+  });
+
+  it('round-trips an attempt transcription', async () => {
+    expect(await getAttemptTranscription('attempt-1')).toBeUndefined();
+    await saveAttemptTranscription('attempt-1', '今日はちょっと寒いですね');
+    expect(await getAttemptTranscription('attempt-1')).toBe('今日はちょっと寒いですね');
+  });
+
+  it('treats a stale transcriptionVersion as a cache miss', async () => {
+    await saveAttemptTranscription('attempt-1', '今日はちょっと寒いですね');
+    await getDb().attemptTranscriptions.update('attempt-1', { transcriptionVersion: 0 });
+
+    expect(await getAttemptTranscription('attempt-1')).toBeUndefined();
   });
 });
 

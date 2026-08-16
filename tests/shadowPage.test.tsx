@@ -13,6 +13,7 @@ import { withAppProviders } from '../src/test/providers';
 vi.mock('../src/lib/analysisApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/analysisApi')>()),
   alignAudio: vi.fn(),
+  transcribeAudio: vi.fn(),
 }));
 
 async function seed() {
@@ -98,6 +99,7 @@ describe('ShadowPage', () => {
     // Default: server alignment "unavailable" (matches an off-tailnet
     // device) — individual tests override this to check the "ready" path.
     vi.mocked(analysisApi.alignAudio).mockResolvedValue(null);
+    vi.mocked(analysisApi.transcribeAudio).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -275,6 +277,33 @@ describe('ShadowPage', () => {
       expect(screen.queryByText('Fetching server word timing…')).not.toBeInTheDocument();
     });
     expect(screen.queryByText('Word timing (server)')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a hedged ASR diagnostic when the recognized text differs from the reference', async () => {
+    await saveReferenceAlignment('audio-1', {
+      durationSeconds: 1.2,
+      words: [
+        { start: 0, end: 0.3, text: '本', phones: [] },
+        { start: 0.3, end: 0.5, text: 'を', phones: [] },
+        { start: 0.5, end: 1.2, text: '読みます', phones: [] },
+      ],
+    });
+    vi.mocked(analysisApi.transcribeAudio).mockResolvedValue('本を見ます');
+
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+
+    expect(await screen.findByText('Possible pronunciation differences')).toBeInTheDocument();
+    // May also appear in the "Focus on this" callout if it's the
+    // highest-ranked observation — either way, it must appear at least once.
+    expect(
+      screen.getAllByText('Possible pronunciation difference around 「読みます」.').length,
+    ).toBeGreaterThanOrEqual(1);
+    // Hedged, low confidence — never presented as a definite error.
+    expect(screen.getAllByText(/low confidence:/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('marks a target range from the reference player and can clear it', async () => {

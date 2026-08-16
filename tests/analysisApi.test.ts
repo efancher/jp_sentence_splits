@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { alignAudio } from '../src/lib/analysisApi';
+import { alignAudio, transcribeAudio } from '../src/lib/analysisApi';
 
 const blob = new Blob(['audio'], { type: 'audio/webm' });
 
@@ -71,5 +71,62 @@ describe('alignAudio', () => {
     );
 
     await expect(alignAudio(blob, '今日は')).resolves.toBeNull();
+  });
+});
+
+describe('transcribeAudio', () => {
+  it('returns the recognized text on success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ text: '今日はちょっと寒いですね' }), { status: 200 })),
+    );
+
+    expect(await transcribeAudio(blob, '今日はちょっと寒いですね')).toBe('今日はちょっと寒いですね');
+  });
+
+  it('works without a prompt', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ text: 'hello' }), { status: 200 })),
+    );
+
+    expect(await transcribeAudio(blob)).toBe('hello');
+  });
+
+  it('returns null on a non-200 response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('unavailable', { status: 503 })));
+
+    expect(await transcribeAudio(blob)).toBeNull();
+  });
+
+  it('returns null on a network error, without throwing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+
+    await expect(transcribeAudio(blob)).resolves.toBeNull();
+  });
+
+  it('returns null when the response shape is unexpected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ oops: true }), { status: 200 })),
+    );
+
+    expect(await transcribeAudio(blob)).toBeNull();
+  });
+
+  it('returns null when the request is aborted (timeout)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }),
+    );
+
+    await expect(transcribeAudio(blob)).resolves.toBeNull();
   });
 });

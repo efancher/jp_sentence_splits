@@ -199,6 +199,29 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v10 with the attemptTranscriptions table', async () => {
+    const name = `migrate-v10-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(10);
+    expect(db.tables.some((t) => t.name === 'attemptTranscriptions')).toBe(true);
+
+    const now = new Date().toISOString();
+    await db.attemptTranscriptions.put({
+      id: 'attempt-1',
+      transcriptionVersion: 1,
+      text: '今日はちょっと寒いですね',
+      computedAt: now,
+    });
+
+    expect((await db.attemptTranscriptions.get('attempt-1'))?.text).toBe(
+      '今日はちょっと寒いですね',
+    );
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

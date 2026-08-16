@@ -174,6 +174,20 @@ export interface AttemptAlignment {
   computedAt: string;
 }
 
+/**
+ * Cached ASR transcription of a learner attempt (Phase 9, Milestone 7) —
+ * a secondary, non-authoritative diagnostic signal only. No
+ * reference-side equivalent: the reference transcript is already known.
+ * Local-only, same precedent as `AttemptAlignment`.
+ */
+export interface AttemptTranscription {
+  /** = Attempt.id */
+  id: string;
+  transcriptionVersion: number;
+  text: string;
+  computedAt: string;
+}
+
 export interface Book {
   id: string;
   title: string;
