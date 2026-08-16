@@ -121,6 +121,7 @@ function SortableRow({
   sentence,
   chapterTitle,
   status,
+  vocabularyReviewStatus,
   selected,
   editOrder,
   onSelect,
@@ -132,6 +133,8 @@ function SortableRow({
   sentence: Sentence;
   chapterTitle?: string;
   status: string;
+  /** Undefined means no analysis row exists yet — never opened AnalyzePage for this sentence. */
+  vocabularyReviewStatus: 'unreviewed' | 'confirmed' | undefined;
   selected: boolean;
   editOrder: boolean;
   onSelect: (checked: boolean) => void;
@@ -161,6 +164,9 @@ function SortableRow({
           />
           <span className="muted">#{position + 1}</span>
           <span className={`status-pill ${status}`}>{status}</span>
+          <span className={`status-pill ${vocabularyReviewStatus ?? 'unreviewed'}`}>
+            vocab: {vocabularyReviewStatus === 'confirmed' ? 'confirmed' : 'needs review'}
+          </span>
         </label>
         {editOrder ? (
           <button
@@ -934,6 +940,7 @@ export function BookDetailPage() {
                     (chapter) => chapter.id === row.membership.chapterId,
                   )?.title}
                   status={row.analysis?.status ?? row.membership.status}
+                  vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
                   selected={selected.has(row.membership.sentenceId)}
                   editOrder={editOrder}
                   onSelect={(checked) => {

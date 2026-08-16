@@ -7,6 +7,7 @@ import {
   commitImport,
   createBook,
   createBookChapter,
+  deferUnreadySentenceReviews,
   deleteAttempt,
   deleteBookChapter,
   ensureKanji,
@@ -526,6 +527,149 @@ describe('FSRS review (study_items/reviews)', () => {
     const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
     expect(keys).toContain('study_items');
     expect(keys).toContain('reviews');
+  });
+});
+
+describe('deferUnreadySentenceReviews (full-sentence gating)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-defer-${createId('db')}`);
+  });
+
+  async function linkVocabulary(sentenceId: string, vocabularyItemId: string) {
+    const now = nowIsoForTest();
+    await getDb().sentenceVocabulary.add({
+      id: createId('svoc'),
+      sentenceId,
+      vocabularyItemId,
+      surfaceForm: '本',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  async function confirmVocabularyReview(sentenceId: string) {
+    const now = nowIsoForTest();
+    await getDb().analyses.put({
+      sentenceId,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  it('defers a due sentence item that has never had its vocabulary reviewed at all (a brand-new sentence)', async () => {
+    // No sentence_vocabulary links and no `analyses` row at all — exactly
+    // the state of a freshly imported sentence. This must gate, not pass
+    // through as "nothing to check" (the bug the user caught: a new
+    // sentence shouldn't skip ahead of ones whose vocabulary is proven).
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('leaves a due sentence item alone once its vocabulary review is confirmed with nothing linked', async () => {
+    // Reviewed and found nothing worth tracking (e.g. a very short
+    // sentence) — genuinely nothing left to gate on.
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await confirmVocabularyReview('sent-1');
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
+  });
+
+  it('defers a due sentence item whose linked vocabulary is not yet proficient', async () => {
+    const sentenceItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await confirmVocabularyReview('sent-1');
+    await ensureStudyItem('vocabularyItem', 'vocab-1', 'reading_retrieval'); // stays 'new'
+    await linkVocabulary('sent-1', 'vocab-1');
+
+    const now = new Date();
+    const result = await deferUnreadySentenceReviews(['comprehension'], { now });
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+
+    const persisted = await getDb().studyItems.get(sentenceItem.id);
+    const deferredDue = new Date(persisted!.fsrsState.due);
+    expect(deferredDue.getTime()).toBeGreaterThanOrEqual(
+      now.getTime() + 7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  it('leaves a sentence item due once all its linked vocabulary is proficient', async () => {
+    const sentenceItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await confirmVocabularyReview('sent-1');
+    const vocabItem = await ensureStudyItem('vocabularyItem', 'vocab-1', 'reading_retrieval');
+    await getDb().studyItems.update(vocabItem.id, {
+      fsrsState: { ...vocabItem.fsrsState, state: 'review' },
+    });
+    await linkVocabulary('sent-1', 'vocab-1');
+
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(sentenceItem.id);
+    expect(persisted?.fsrsState.due).toBe(sentenceItem.fsrsState.due);
+  });
+
+  it('requires every linked vocabulary item to be proficient, not just one', async () => {
+    const sentenceItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await confirmVocabularyReview('sent-1');
+    const proficientVocab = await ensureStudyItem(
+      'vocabularyItem',
+      'vocab-proficient',
+      'reading_retrieval',
+    );
+    await getDb().studyItems.update(proficientVocab.id, {
+      fsrsState: { ...proficientVocab.fsrsState, state: 'review' },
+    });
+    await ensureStudyItem('vocabularyItem', 'vocab-new', 'reading_retrieval'); // stays 'new'
+    await linkVocabulary('sent-1', 'vocab-proficient');
+    await linkVocabulary('sent-1', 'vocab-new');
+
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+    const persisted = await getDb().studyItems.get(sentenceItem.id);
+    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('ignores a sentence_vocabulary link with no surfaceForm (not a real review target)', async () => {
+    const sentenceItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await confirmVocabularyReview('sent-1');
+    await ensureStudyItem('vocabularyItem', 'vocab-1', 'reading_retrieval'); // stays 'new'
+    const now = nowIsoForTest();
+    await getDb().sentenceVocabulary.add({
+      id: createId('svoc'),
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      createdAt: now,
+      updatedAt: now,
+      // no surfaceForm
+    });
+
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(sentenceItem.id);
+    expect(persisted?.fsrsState.due).toBe(sentenceItem.fsrsState.due);
+  });
+
+  it('never pulls a due date earlier, only pushes an unready item further out', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: farFuture } });
+    await ensureStudyItem('vocabularyItem', 'vocab-1', 'reading_retrieval'); // stays 'new'
+    await linkVocabulary('sent-1', 'vocab-1');
+
+    // Not due yet (30 days out), so deferUnreadySentenceReviews shouldn't touch it.
+    const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 0, checked: 0 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(farFuture);
   });
 });
 

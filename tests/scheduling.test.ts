@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInitialFsrsState, isGraduated, scheduleReview } from '../src/lib/scheduling';
+import {
+  createInitialFsrsState,
+  isGraduated,
+  isSentenceReadyForFullReview,
+  isSentenceVocabularyReady,
+  isVocabularyItemProficient,
+  scheduleReview,
+} from '../src/lib/scheduling';
 import type { FsrsState } from '../src/domain/types';
 
 describe('createInitialFsrsState', () => {
@@ -99,5 +106,55 @@ describe('isGraduated (Phase 7.10)', () => {
     for (const state of ['new', 'learning', 'relearning'] as const) {
       expect(isGraduated({ ...reviewState(300), state }, 180)).toBe(false);
     }
+  });
+});
+
+describe('isVocabularyItemProficient (full-sentence gating)', () => {
+  it('is true once a vocabulary item reaches review or relearning', () => {
+    expect(isVocabularyItemProficient('review')).toBe(true);
+    expect(isVocabularyItemProficient('relearning')).toBe(true);
+  });
+
+  it('is false while still new or in initial learning', () => {
+    expect(isVocabularyItemProficient('new')).toBe(false);
+    expect(isVocabularyItemProficient('learning')).toBe(false);
+  });
+});
+
+describe('isSentenceVocabularyReady (full-sentence gating)', () => {
+  it('is ready when the sentence has no reviewable vocabulary links', () => {
+    expect(isSentenceVocabularyReady([], new Set())).toBe(true);
+  });
+
+  it('is not ready if any linked vocabulary item is not yet proficient', () => {
+    const proficient = new Set(['word-a']);
+    expect(isSentenceVocabularyReady(['word-a', 'word-b'], proficient)).toBe(false);
+  });
+
+  it('is ready only once every linked vocabulary item is proficient', () => {
+    const proficient = new Set(['word-a', 'word-b']);
+    expect(isSentenceVocabularyReady(['word-a', 'word-b'], proficient)).toBe(true);
+  });
+});
+
+describe('isSentenceReadyForFullReview (full-sentence gating)', () => {
+  it('is not ready when vocabulary review status is undefined (a brand-new, never-analyzed sentence)', () => {
+    expect(isSentenceReadyForFullReview(undefined, [], new Set())).toBe(false);
+  });
+
+  it('is not ready while vocabulary review status is "unreviewed", even with nothing linked', () => {
+    expect(isSentenceReadyForFullReview('unreviewed', [], new Set())).toBe(false);
+  });
+
+  it('is ready once confirmed with nothing linked (reviewed, nothing worth tracking)', () => {
+    expect(isSentenceReadyForFullReview('confirmed', [], new Set())).toBe(true);
+  });
+
+  it('is not ready once confirmed if a linked vocabulary item is not yet proficient', () => {
+    expect(isSentenceReadyForFullReview('confirmed', ['word-a'], new Set())).toBe(false);
+  });
+
+  it('is ready once confirmed and every linked vocabulary item is proficient', () => {
+    expect(isSentenceReadyForFullReview('confirmed', ['word-a'], new Set(['word-a']))).toBe(true);
   });
 });

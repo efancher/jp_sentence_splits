@@ -63,6 +63,19 @@ async function seedBookWithSentence() {
     status: 'unstarted',
     addedAt: now,
   });
+  // Vocabulary review confirmed with nothing linked, so Phase 7.11's
+  // full-sentence gate doesn't interfere with tests that aren't about it.
+  await db.analyses.add({
+    sentenceId: 'sent-1',
+    chunks: [],
+    notes: '',
+    status: 'empty',
+    formatVersion: 2,
+    vocabularyReviewStatus: 'confirmed',
+    vocabularySelections: [],
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 /**
@@ -171,6 +184,46 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await getDb().studyItems.count()).toBe(2);
     });
+  });
+
+  it('never lazily seeds a full-sentence card for a sentence whose vocabulary has never been reviewed (Phase 7.11)', async () => {
+    // Deliberately not seedBookWithSentence() — that helper marks
+    // vocabularyReviewStatus 'confirmed'. This sentence has no `analyses`
+    // row at all, matching a freshly imported sentence nobody has opened
+    // AnalyzePage for yet.
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.books.add({ id: 'book-1', title: 'Test Book', archived: false, chapters: [], updatedAt: now });
+    await db.sentences.add({
+      id: 'sent-new',
+      normalizedKey: 'sent-new',
+      japanese: '新しい文です。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'This is a new sentence.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-new',
+      bookId: 'book-1',
+      sentenceId: 'sent-new',
+      position: 0,
+      status: 'unstarted',
+      addedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('All caught up.');
+    expect(screen.queryByText('新しい文です。')).not.toBeInTheDocument();
+    expect(await db.studyItems.count()).toBe(0);
   });
 
   it('links "Why?" to the current card\'s study-item debug page (Phase 7.10)', async () => {
@@ -950,6 +1003,17 @@ describe('ReviewPage', () => {
         status: 'unstarted',
         addedAt: now,
       });
+      await db.analyses.add({
+        sentenceId: id,
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: 'confirmed',
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     const user = userEvent.setup();
@@ -1018,11 +1082,25 @@ describe('ReviewPage', () => {
         status: 'unstarted',
         addedAt: now,
       });
+      await db.analyses.add({
+        sentenceId: id,
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: 'confirmed',
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
     }
-    // A vocabulary item linked to sent-1 — with the old category-major
-    // pending-seed order this would only seed after all three sentences'
-    // six sentence-subject cards were exhausted; interleaved, it should
-    // seed right after sent-1's own two cards.
+    // A vocabulary item linked to sent-2 (not sent-1 — Phase 7.11's
+    // full-sentence gate would otherwise block sent-1's own cards on
+    // vocab-1 not being proficient yet, which isn't what this test is
+    // about) — with the old category-major pending-seed order this would
+    // only seed after all three sentences' six sentence-subject cards were
+    // exhausted; interleaved, it should seed right after sent-1's own two
+    // cards.
     await db.vocabularyItems.add({
       id: 'vocab-1',
       expression: '読む',
@@ -1033,7 +1111,7 @@ describe('ReviewPage', () => {
     });
     await db.sentenceVocabulary.add({
       id: 'sv-1',
-      sentenceId: 'sent-1',
+      sentenceId: 'sent-2',
       vocabularyItemId: 'vocab-1',
       surfaceForm: '読みます',
       createdAt: now,
@@ -1106,6 +1184,20 @@ describe('ReviewPage', () => {
       position: 0,
       status: 'unstarted',
       addedAt: now,
+    });
+    // Vocabulary review confirmed with nothing linked, so Phase 7.11's
+    // full-sentence gate doesn't also hide these cards — this test is
+    // specifically about graduation, not vocabulary gating.
+    await db.analyses.add({
+      sentenceId: 'sent-1',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
     });
     // comprehension: due now, but graduated (long-standing review interval).
     await db.studyItems.add({

@@ -47,7 +47,13 @@ import {
   type MaturityLevel,
 } from '../lib/maturity';
 import { nowIso } from '../lib/normalize';
-import { createInitialFsrsState, isGraduated, scheduleReview } from '../lib/scheduling';
+import {
+  createInitialFsrsState,
+  isGraduated,
+  isSentenceReadyForFullReview,
+  isVocabularyItemProficient,
+  scheduleReview,
+} from '../lib/scheduling';
 import {
   parseShadowingPackage,
   type ShadowingImportPreview,
@@ -1555,6 +1561,122 @@ export async function getDueStudyItems(
     .filter((item) => !isGraduated(item.fsrsState, options.graduationMinScheduledDays ?? 0))
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due));
   return options.limit ? due.slice(0, options.limit) : due;
+}
+
+/**
+ * Distinct, surface-form-bearing (i.e. actually reviewable — see
+ * getVocabularyTargetCandidates) vocabulary item ids linked to each of
+ * `sentenceIds`, keyed by sentence id. Batched across all sentences in one
+ * pass for use by deferUnreadySentenceReviews below.
+ */
+export async function getReviewableVocabularyItemIdsBySentence(
+  sentenceIds: string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (sentenceIds.length === 0) return map;
+  const db = getDb();
+  const links = await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray();
+  for (const link of links) {
+    if (!link.surfaceForm) continue;
+    const existing = map.get(link.sentenceId);
+    if (existing) {
+      if (!existing.includes(link.vocabularyItemId)) existing.push(link.vocabularyItemId);
+    } else {
+      map.set(link.sentenceId, [link.vocabularyItemId]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Full-sentence review readiness (Phase 7.11) for each of `sentenceIds` —
+ * shared by deferUnreadySentenceReviews (existing due items) and
+ * ReviewPage's pending-seed filtering (items that don't exist yet), so a
+ * sentence's readiness is computed the same way whichever path checks it.
+ */
+export async function getSentenceFullReviewReadiness(
+  sentenceIds: string[],
+): Promise<Map<string, boolean>> {
+  const readiness = new Map<string, boolean>();
+  if (sentenceIds.length === 0) return readiness;
+  const db = getDb();
+  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
+  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
+  const vocabularyStudyItems = allVocabularyItemIds.length
+    ? (await db.studyItems.where('subjectType').equals('vocabularyItem').toArray()).filter(
+        (item) => allVocabularyItemIds.includes(item.subjectId),
+      )
+    : [];
+  const proficientVocabularyItemIds = new Set(
+    vocabularyStudyItems
+      .filter((item) => isVocabularyItemProficient(item.fsrsState.state))
+      .map((item) => item.subjectId),
+  );
+  const analysesBySentenceId = new Map(
+    (await db.analyses.bulkGet(sentenceIds))
+      .filter((item): item is SentenceAnalysis => Boolean(item))
+      .map((item) => [item.sentenceId, item]),
+  );
+  for (const sentenceId of sentenceIds) {
+    const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
+    const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
+    readiness.set(
+      sentenceId,
+      isSentenceReadyForFullReview(vocabularyReviewStatus, vocabularyItemIds, proficientVocabularyItemIds),
+    );
+  }
+  return readiness;
+}
+
+/**
+ * Full-sentence review gating (user request, 2026-08-16): pushes any
+ * currently-due `sentence`-subject study item (among `activityTypes`, e.g.
+ * `SENTENCE_ACTIVITY_TYPES`) that isn't ready yet (see
+ * getSentenceFullReviewReadiness above) out to at least `minDeferDays` from
+ * `now`. Called both as an ongoing gate (ReviewPage runs this before every
+ * queue build, so an *already-existing* sentence card never surfaces
+ * before its vocabulary does — items that don't exist yet are handled
+ * separately, by filtering ReviewPage's pending-seed pool through the same
+ * readiness check, since a brand-new lazily-seeded item would otherwise
+ * bypass this function entirely) and as a one-time reset over whatever's
+ * currently due. Never pulls a due date earlier — only ever pushes an
+ * unready item further out.
+ */
+export async function deferUnreadySentenceReviews(
+  activityTypes: StudyActivityType[],
+  options: { now?: Date; minDeferDays?: number } = {},
+): Promise<{ deferred: number; checked: number }> {
+  const db = getDb();
+  const now = options.now ?? new Date();
+  const nowIsoValue = now.toISOString();
+  const minDeferDays = options.minDeferDays ?? 7;
+
+  const dueSentenceItems = (
+    await db.studyItems.where('activityType').anyOf(activityTypes).toArray()
+  ).filter((item) => item.subjectType === 'sentence' && item.fsrsState.due <= nowIsoValue);
+  if (dueSentenceItems.length === 0) return { deferred: 0, checked: 0 };
+
+  const sentenceIds = [...new Set(dueSentenceItems.map((item) => item.subjectId))];
+  const readiness = await getSentenceFullReviewReadiness(sentenceIds);
+
+  const minDueIso = new Date(now.getTime() + minDeferDays * 24 * 60 * 60 * 1000).toISOString();
+  const updates: StudyItem[] = [];
+  for (const item of dueSentenceItems) {
+    if (readiness.get(item.subjectId)) continue;
+    if (item.fsrsState.due >= minDueIso) continue;
+    updates.push({
+      ...item,
+      fsrsState: { ...item.fsrsState, due: minDueIso },
+      updatedAt: nowIsoValue,
+    });
+  }
+  if (updates.length > 0) {
+    await db.studyItems.bulkPut(updates);
+    notifySyncMany(
+      updates.map((item) => ({ entity: 'study_items' as const, recordId: item.id, payload: item })),
+    );
+  }
+  return { deferred: updates.length, checked: dueSentenceItems.length };
 }
 
 export async function recordReview(input: {

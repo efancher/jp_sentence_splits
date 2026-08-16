@@ -271,6 +271,16 @@ strong.jp {
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
 }
 
+.status-pill.confirmed {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.status-pill.unreviewed {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+}
+
 .list-card {
   display: grid;
   gap: 0.45rem;

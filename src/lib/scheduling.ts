@@ -95,3 +95,53 @@ export function isGraduated(fsrsState: FsrsState, minScheduledDays: number): boo
   if (minScheduledDays <= 0) return false;
   return fsrsState.state === 'review' && fsrsState.scheduledDays >= minScheduledDays;
 }
+
+/**
+ * A vocabulary item counts as "shown proficiency" once FSRS has moved it
+ * past its initial learning steps into `review` (or, after a later lapse,
+ * `relearning` — reaching `relearning` requires having been in `review`
+ * first, so it still implies the item was once successfully recalled).
+ * `new`/`learning` mean it's never been successfully recalled yet.
+ */
+export function isVocabularyItemProficient(state: FsrsState['state']): boolean {
+  return state === 'review' || state === 'relearning';
+}
+
+/**
+ * Full-sentence review gating (user request, 2026-08-16), the "vocabulary
+ * is confirmed, is it proficient" half: given the vocabulary items already
+ * confirmed for a sentence, every one of them must have been shown
+ * proficient — otherwise the sentence card just tests whether the learner
+ * remembers vocabulary they haven't demonstrated recall of yet, which
+ * isn't a useful signal. A sentence with zero confirmed vocabulary items
+ * (a short sentence with nothing worth tracking, once vocabulary *has*
+ * been reviewed — see isSentenceReadyForFullReview for the "has it even
+ * been reviewed yet" half) has nothing left to gate on, so it's ready.
+ */
+export function isSentenceVocabularyReady(
+  vocabularyItemIds: readonly string[],
+  proficientVocabularyItemIds: ReadonlySet<string>,
+): boolean {
+  if (vocabularyItemIds.length === 0) return true;
+  return vocabularyItemIds.every((id) => proficientVocabularyItemIds.has(id));
+}
+
+/**
+ * Full-sentence review gating, the complete rule: a sentence isn't ready
+ * for its "full sentence" review cards until its vocabulary has actually
+ * been *reviewed* (`SentenceAnalysis.vocabularyReviewStatus === 'confirmed'`
+ * — a brand-new or not-yet-analyzed sentence has this undefined/'unreviewed',
+ * which must gate it too, not pass it through as "nothing to check" — that
+ * was the bug in the first version of this rule, caught by the user asking
+ * "does a new sentence just skip the gate?") *and*, once reviewed, every
+ * vocabulary item confirmed for it must itself be proficient
+ * (isSentenceVocabularyReady).
+ */
+export function isSentenceReadyForFullReview(
+  vocabularyReviewStatus: 'unreviewed' | 'confirmed' | undefined,
+  vocabularyItemIds: readonly string[],
+  proficientVocabularyItemIds: ReadonlySet<string>,
+): boolean {
+  if (vocabularyReviewStatus !== 'confirmed') return false;
+  return isSentenceVocabularyReady(vocabularyItemIds, proficientVocabularyItemIds);
+}

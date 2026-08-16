@@ -6,11 +6,13 @@ import { NativeAudioButton } from '../components/NativeAudioButton';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
+  deferUnreadySentenceReviews,
   ensureStudyItem,
   ensureVocabularyStudyItem,
   getConfusionPairCandidates,
   getDb,
   getDueStudyItems,
+  getSentenceFullReviewReadiness,
   getVocabularyTargetCandidates,
   readSettings,
   recordReview,
@@ -499,6 +501,19 @@ export function ReviewPage() {
     if (!scope || initialized || !settings) return;
     let cancelled = false;
     void (async () => {
+      // Full-sentence review gating (user request, 2026-08-16): before
+      // computing what's due, push out any sentence card whose vocabulary
+      // hasn't been shown proficient yet — see deferUnreadySentenceReviews.
+      // That only covers items that already exist; a sentence with no
+      // study_item yet for some SENTENCE_ACTIVITY_TYPES entry (e.g. only
+      // comprehension has ever been seeded, not reading_in_context) would
+      // otherwise bypass it entirely via lazy seeding below — sentenceReadiness
+      // covers that path.
+      await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
+      const sentenceReadiness = await getSentenceFullReviewReadiness(
+        scope.sentences.map((sentence) => sentence.id),
+      );
+
       const dueByDescriptor = await Promise.all(
         descriptors.map((descriptor) =>
           getDueStudyItems(descriptor.activityTypes, {
@@ -546,6 +561,12 @@ export function ReviewPage() {
         const seeds: PendingSeed[] = [];
         for (const candidate of descriptor.candidates) {
           const subjectId = descriptor.subjectId(candidate);
+          // A not-yet-ready sentence (Phase 7.11) never gets a *new*
+          // full-sentence study item lazily seeded — existing ones are
+          // handled by deferUnreadySentenceReviews above.
+          if (descriptor.key === 'sentence' && sentenceReadiness.get(subjectId) === false) {
+            continue;
+          }
           for (const activityType of descriptor.activityTypes) {
             if (!existingKeys.has(`${subjectId}:${activityType}`)) {
               seeds.push({ descriptorKey: descriptor.key, candidate, activityType, subjectId });

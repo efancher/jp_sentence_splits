@@ -1927,7 +1927,134 @@ This completes Phase 7's full sub-phasing (7.1 through 7.10c) and, with
 it, every phase in the original roadmap (`docs/UNIFIED_APP_ARCHITECTURE.md`
 §15 — Phase 0 through Phase 7).
 
-## Phase 8 — Shadowing feature parity: in progress (8.1 done)
+## Phase 7.11 — Full-sentence review gating: done (user request, 2026-08-16)
+
+Added well after Phase 7 was otherwise complete, directly from the user:
+"full sentences for the review should wait until the user shows they are
+remembering the vocabulary in the sentence... the next reviewer for those
+pieces should be at least a week away," followed by "reset the current
+review status, since it's mostly full sentences I haven't shown the
+proficiency for the vocabulary in them yet." Shipped in two passes — the
+first version had a real bug the user caught before it went further; both
+are documented here since the fix changed the core rule, not just an edge
+case.
+
+**Proficiency signal** (unchanged across both passes): a vocabulary item
+counts as "shown proficiency" once its FSRS state reaches `review` (or,
+after a later lapse, `relearning` — reaching `relearning` requires having
+passed through `review` first, so it still implies a successful recall
+happened at some point). `new`/`learning` mean it's never been
+successfully recalled. `isVocabularyItemProficient` (`src/lib/scheduling.ts`).
+
+**First pass (bug, corrected same day)**: gated a sentence's full-sentence
+cards (`comprehension`/`reading_in_context`) on every *linked* reviewable
+vocabulary item being proficient, but treated a sentence with **zero**
+vocabulary links as "nothing to gate on" and let it through immediately.
+The user caught this: "if I add a new sentence it will automatically go
+into the review list unless I select the vocabulary for review for it?"
+— exactly right. A brand-new, never-analyzed sentence has zero links (not
+because its vocabulary is known, but because nobody's looked at it yet),
+so the first pass let every new sentence skip straight to the front of
+the line, which is backwards from the actual goal.
+
+**Corrected rule**: a sentence is ready for full-sentence review only if
+`SentenceAnalysis.vocabularyReviewStatus === 'confirmed'` (set by the
+`VocabularyPicker` on `AnalyzePage.tsx` when the user finishes reviewing
+that sentence's vocabulary — already existed since Phase 5/7.6, just never
+consulted by review scheduling before this) **and**, once confirmed,
+every surfaceForm-bearing `sentence_vocabulary` link is itself proficient.
+No `analyses` row at all (the default for a freshly imported sentence)
+means `vocabularyReviewStatus` is `undefined`, which fails the first check
+— gated, not passed through. A sentence confirmed with zero vocabulary
+links (a short sentence with nothing worth tracking) has nothing left to
+check and is ready. New pure functions in `src/lib/scheduling.ts`:
+`isSentenceVocabularyReady` (the "are the confirmed links proficient"
+half, kept from the first pass) and `isSentenceReadyForFullReview` (wraps
+it with the `vocabularyReviewStatus` precondition) — both unit-tested
+directly (`tests/scheduling.test.ts`).
+
+**Second bug, found while fixing the first**: even after correcting the
+rule, a *lazily-seeded* sentence card (an activity type — e.g.
+`reading_in_context` — with no `study_item` yet, created on demand the
+first time the queue runs dry) bypassed the gate entirely, because lazy
+seeding builds and queues a card directly rather than going through
+`getDueStudyItems`/`deferUnreadySentenceReviews`. Fixed by extracting the
+readiness computation into a shared `getSentenceFullReviewReadiness`
+(`src/db/repository.ts`) and filtering `ReviewPage.tsx`'s pending-seed
+pool through it for the `sentence` descriptor specifically — a not-ready
+sentence never gets a *new* study item lazily created in the first place
+(existing due ones are still handled by `deferUnreadySentenceReviews`).
+
+**`src/db/repository.ts`**: `getReviewableVocabularyItemIdsBySentence`
+(batched sentence→vocabulary-item-id lookup, surfaceForm-bearing links
+only), `getSentenceFullReviewReadiness` (batched per-sentence readiness,
+shared by both call sites above), and `deferUnreadySentenceReviews` (for
+every currently-due sentence-subject study item among the given activity
+types, checks readiness and, if not ready, pushes `fsrsState.due` out to
+`max(currentDue, now + 7 days)`; never pulls a due date earlier).
+`ReviewPage.tsx` calls `deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES)`
+once at the start of every queue-build (for existing items) and filters
+pending seeds through `getSentenceFullReviewReadiness` (for items that
+don't exist yet) — so the gate covers both paths, not just one.
+
+**Book-page visibility** (user's follow-up ask: "we might need some
+manual way to gate those so I can go through them... it's not very clear
+to me what that process should be"): `BookDetailPage.tsx`'s per-sentence
+row already had a chunking-status pill; added a second pill next to it
+showing `vocab: needs review` (warning color) or `vocab: confirmed`
+(success color), reading `row.analysis?.vocabularyReviewStatus` directly
+— no new query, that data was already loaded. The row's existing
+"Analyze" button is already the direct fix action. New CSS:
+`.status-pill.confirmed`/`.status-pill.unreviewed` (`src/styles/global.css`).
+Scoped down deliberately: no new dedicated "needs vocabulary" filter/list
+page yet — the user's own framing of the full sentence pipeline (acquire
+→ sort into books/chapters → order → chunk + mark vocabulary, the last
+two independent/parallel not sequential per `SentenceAnalysis`'s own
+existing fields) is a bigger conversation than this pass, noted here for
+whenever that's picked up again.
+
+**One-time production reset**: `scripts/defer-unready-sentence-reviews.ts`
+(dry-run by default, `--apply` to write) applies the identical gating
+logic — imports `isSentenceReadyForFullReview`/`isVocabularyItemProficient`
+directly from `src/lib/scheduling.ts` rather than reimplementing them,
+matching this repo's established precedent (e.g. the conjugation-engine
+reuse in `backfill-vocabulary-surface-forms.ts`) — to whatever's already
+due in production, since the ongoing in-app gate only affects sentences
+whose queue gets rebuilt *after* this session, not the backlog already
+sitting due. **Run twice** against production 2026-08-16, once per pass:
+first pass deferred 12 of 18 due full-sentence items (21 `study_items`
+total — still an early, small dataset), leaving 6 no-vocab-link items
+alone (the since-fixed bug); after the rule correction, a second run
+found those same 6 — all with `vocabularyReviewStatus` never confirmed —
+and deferred them too, leaving 0 due full-sentence items. A follow-up dry
+run after each pass confirmed idempotency (0 more to defer both times).
+
+**Manually verified in a real browser** (chromium) at each stage: a due
+sentence with an unready-but-linked vocab item correctly hidden from the
+queue with its due date pushed exactly 7 days out; after the fix, a
+brand-new sentence (no `analyses` row) correctly produces zero
+`study_items` at all (not seeded, not shown, "All caught up" instead of
+appearing) rather than sneaking through via lazy seeding; the book-page
+vocab pill renders both states with correct color-coding.
+
+New/updated tests: `tests/scheduling.test.ts` (`isSentenceReadyForFullReview`
+directly). `tests/data.test.ts`'s `deferUnreadySentenceReviews` describe
+block reworked around a `confirmVocabularyReview` helper — covers a
+never-reviewed sentence (gated), confirmed-with-nothing-linked (ready),
+defers an unready confirmed item, leaves a fully-proficient one alone,
+requires *every* linked item proficient not just one, ignores a
+surfaceForm-less link, never pulls a due date earlier than it already
+was. `tests/reviewPage.test.tsx` gained a dedicated regression test for
+the lazy-seed bypass bug, plus `vocabularyReviewStatus: 'confirmed'`
+seeding added to `seedBookWithSentence()` and three other tests whose
+sentences needed to stay ungated to test what they were actually about
+(graduation, the new-card cap, pending-seed interleaving — the
+interleaving test also had to relink its vocabulary candidate from
+sent-1 to sent-2, since linking it to sent-1 would have gated sent-1
+itself, which that test wasn't testing). `npm run check` — 471 passed, 2
+skipped (pre-existing), 0 failed.
+
+## Phase 8 — Shadowing feature parity: fully complete (8.1-8.5)
 
 ### 8.1 — Playback speed control: done, verified
 
