@@ -123,6 +123,24 @@ export function SettingsPage() {
             <option value="existing_book">Existing book</option>
           </select>
         </label>
+        <label>
+          New cards per review session
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={settings.newCardsPerSessionLimit}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              if (Number.isNaN(parsed) || parsed < 0) return;
+              void updateSettings({ newCardsPerSessionLimit: parsed });
+            }}
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Caps how many never-before-seen words/sentences Review introduces
+          in one sitting — already-due reviews are never capped by this.
+        </p>
       </section>
 
       <AuthAndSyncSettings />

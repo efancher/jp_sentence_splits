@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.10a).
+Last updated: 2026-08-16 (Phase 7.10b).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1681,4 +1681,97 @@ has come up).
 tests passed (up from 371), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
-**Not yet manually verified in a real browser.**
+**Manually verified in a real browser** (2026-08-16, this session) —
+see the note at the end of Phase 7.10b below; this covers 7.10a too.
+
+## Phase 7.10b — Activity-descriptor refactor + session planner (new-card cap): done
+
+Two pieces, done together at the user's direction: the refactor Phase 7.4's
+notes flagged (`ReviewPage.tsx` hand-duplicating five parallel
+activity-type categories) was a real prerequisite for building the session
+planner cleanly — a planner needs to reason about "how many new subjects
+have I introduced" uniformly across all five categories, not five
+separately-copy-pasted counters.
+
+**Refactor** (`src/pages/ReviewPage.tsx`): introduced an `ActivityDescriptor`
+type — `{ key, activityTypes, candidates, existingItems, subjectId,
+buildCard, ensure }` — one per category (sentence/vocabulary/listening/
+confusion/transformation), built by `buildActivityDescriptors(scope)` from
+the same `ReviewScope` data the old code already computed (only the audio
+category's shape changed, from a `Map` to an array of `{ sentence, audio }`
+candidates, since a descriptor needs a flat candidate list). The due-queue
+fetch/merge, the pending-seed computation, and the lazy seeding-batch
+effect are now each a single generic loop over `descriptors` instead of
+five near-identical blocks; `pendingSeedKey()` is gone entirely (`subjectId`
+is computed once and carried on `PendingSeed`, doing double duty as the
+seeding-batch key). `defineActivityDescriptor<C>()` is a small
+generic-to-non-generic constructor — the only `as unknown as` cast in the
+file (and the only place this codebase has one at all), needed because an
+array holding descriptors of different candidate types `C` requires a
+common non-generic shape; each call site is still fully typed. Card
+rendering (the `current.target ? ... : current.audio ? ...` dispatch and
+the five card components) is untouched — the duplication was entirely in
+the data layer, not rendering.
+
+**Session planner** (docs brief, "session planner" bullet of Phase 7.10):
+new `AppSettings.newCardsPerSessionLimit` (default 20, additive in the
+backup schema same as every prior settings field) caps how many *new*
+subjects (not already-due reviews) `ReviewPage` introduces per sitting —
+tracked via a `newCardsIntroduced` state counter, incremented once per
+seeded batch (a word's reading_retrieval+cloze+reading_production seeding
+together still counts once, matching the "new cards today" mental model
+other SRS apps use, not a per-card count). The lazy-seeding effect now
+also gates on `newCardsIntroduced < settings.newCardsPerSessionLimit`;
+already-due reviews are never affected. When the cap stops new seeding
+before the pool is empty, the empty state now distinguishes this from
+genuine "nothing left" — "New-card limit reached for this session (N of
+LIMIT introduced) — M more waiting next time," computed from
+`pool`'s remaining distinct `(descriptorKey, subjectId)` pairs. New number
+input on `SettingsPage.tsx` ("New cards per review session").
+
+Tests: `tests/reviewPage.test.tsx` — one new end-to-end test (cap=1, three
+sentences, confirms only the first seeds, the other two never do, and the
+limit-reached message shows the right counts) plus zero changes needed to
+any of the 17 pre-existing tests (confirming the refactor is behavior-
+preserving — same 381→383 count delta is purely additive). New
+`tests/settingsPage.test.tsx` (first test coverage for this page) for the
+new control. `npm run check` green — 383 tests passed (up from 381
+after the refactor's zero-net-change verification), 2 pre-existing skips,
+`npm run build` green.
+
+**Manually verified in a real browser** (2026-08-16): no `chromium-cli`
+in this environment, so used a small Playwright driver instead (browser
+binaries + shared libs installed user-locally via `apt-get download` +
+`dpkg-deb -x`, no root available). Seeded IndexedDB directly (bypassing
+Dexie's own change-tracking, which doesn't see writes from a second raw
+connection — a page reload was needed after seeding for `useLiveQuery` to
+pick them up) and drove the full review flow end-to-end:
+comprehension → reading_production (typed a wrong answer on purpose,
+confirmed "✗ Not quite" plus the correct answer, still rateable) →
+sentence_transformation (typed はなした for 話す's plain past, got
+"✓ Correct" with 話した/はなした shown) → contrastive pair (both
+付く/付ける sentences shown together, revealed both readings) →
+reading_retrieval → "All caught up," matching next-due timestamp. Also
+verified separately: PracticePage's natural-encounter panel (rate a word,
+row becomes "Recorded"); `/study-items/:id` both empty (no reviews yet)
+and populated (state advanced to `learning`, review history showing
+rating/timestamp/source) after rating a card; and this phase's own
+new-card cap (`newCardsPerSessionLimit: 1` in Settings, seeded 3 new
+sentences, confirmed only one seeded and the "New-card limit reached ...
+2 more waiting next time" message appeared). One environment-only
+caveat: this container has no CJK fonts, so Japanese text rendered as
+tofu boxes in screenshots — confirmed via DOM text extraction (not just
+visually) that the actual text content was correct throughout, so this is
+a sandbox display artifact, not an app bug.
+
+This is the last done slice of Phase 7's sub-phasing so far. **"Graduation"
+is still not built** — the fourth item in Phase 7.10's original bundled
+line ("session planner, graduation, explainability, debug view"), not yet
+scoped or started. The maturity ladder (Phase 7.1/7.5:
+fragile→established→generalized→mature, surfaced read-only on the
+`StudyItemDebugPage`) is related but isn't itself a graduation
+*mechanic* — nothing currently acts on maturity level (e.g. retiring a
+mature item from regular rotation, moving it to a lighter-touch review
+cadence, or marking it "learned"). Needs scoping with the user before
+starting: it's not clear from context alone what "graduation" should
+mean here.

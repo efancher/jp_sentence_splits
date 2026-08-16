@@ -178,6 +178,8 @@ export const settingsSchema = z.object({
   textDisplayMode: z.enum(['plain', 'furigana', 'reading']),
   // Additive in backup format v1: absent in older backups.
   tts: ttsSettingsSchema.default({ rate: 0.9, pitch: 1.0, volume: 1.0 }),
+  // Additive (Phase 7.10): absent in older backups.
+  newCardsPerSessionLimit: z.number().int().nonnegative().default(20),
 });
 
 export const inboxMembershipSchema = z.object({

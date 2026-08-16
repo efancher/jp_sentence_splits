@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
@@ -12,11 +12,13 @@ import {
   getDb,
   getDueStudyItems,
   getVocabularyTargetCandidates,
+  readSettings,
   recordReview,
   type ConfusionPairCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import type {
+  Book,
   ReviewAssistance,
   ReviewRating,
   Sentence,
@@ -182,39 +184,6 @@ interface QueueCard {
   transformation?: SentenceTransformationCandidate;
 }
 
-/** A (subject, activityType) pair with no study_item yet — needs seeding. */
-type PendingSeed =
-  | { kind: 'sentence'; sentence: Sentence; activityType: StudyActivityType }
-  | {
-      kind: 'vocabulary';
-      candidate: VocabularyTargetCandidate;
-      activityType: StudyActivityType;
-    }
-  | {
-      kind: 'listening';
-      sentence: Sentence;
-      audio: SentenceAudio;
-      activityType: StudyActivityType;
-    }
-  | {
-      kind: 'confusion';
-      candidate: ConfusionPairCandidate;
-      activityType: StudyActivityType;
-    }
-  | {
-      kind: 'transformation';
-      candidate: SentenceTransformationCandidate;
-      activityType: StudyActivityType;
-    };
-
-function pendingSeedKey(seed: PendingSeed): string {
-  if (seed.kind === 'vocabulary' || seed.kind === 'transformation') {
-    return seed.candidate.vocabularyItem.id;
-  }
-  if (seed.kind === 'confusion') return seed.candidate.confusion.id;
-  return seed.sentence.id;
-}
-
 /** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
 function splitOnSurfaceForm(
   japanese: string,
@@ -227,6 +196,145 @@ function splitOnSurfaceForm(
     surfaceForm,
     japanese.slice(index + surfaceForm.length),
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Activity descriptors (Phase 7.10, generalizing five previously
+// hand-duplicated categories — flagged as due for this back in Phase 7.4's
+// notes, docs/STATUS.md). Each descriptor packages one (subjectType,
+// activityTypes, eligibility) category's already-fetched candidate list
+// with the three functions that used to be copy-pasted per category: how
+// to key a candidate (doubles as its due-lookup subjectId and pending-seed
+// key), how to turn a (StudyItem, candidate) pair into a renderable
+// QueueCard, and how to get-or-create that candidate's StudyItem. The
+// due-queue/pending-seed logic in ReviewPage itself is now one generic
+// loop over `descriptors` instead of five near-identical blocks.
+// ---------------------------------------------------------------------------
+
+interface ActivityDescriptor {
+  key: string;
+  activityTypes: StudyActivityType[];
+  candidates: unknown[];
+  existingItems: StudyItem[];
+  subjectId: (candidate: unknown) => string;
+  buildCard: (studyItem: StudyItem, candidate: unknown) => QueueCard;
+  ensure: (candidate: unknown, activityType: StudyActivityType) => Promise<StudyItem>;
+}
+
+/**
+ * Each call site below is fully typed in its own candidate type `C`; the
+ * cast here is the one place that fact isn't visible to the type checker
+ * (an array mixing several `ActivityDescriptor<C>`s needs a common
+ * non-generic shape) — centralized in this one helper rather than
+ * scattered `any` throughout (this codebase otherwise has none).
+ */
+function defineActivityDescriptor<C>(descriptor: {
+  key: string;
+  activityTypes: StudyActivityType[];
+  candidates: C[];
+  existingItems: StudyItem[];
+  subjectId: (candidate: C) => string;
+  buildCard: (studyItem: StudyItem, candidate: C) => QueueCard;
+  ensure: (candidate: C, activityType: StudyActivityType) => Promise<StudyItem>;
+}): ActivityDescriptor {
+  return descriptor as unknown as ActivityDescriptor;
+}
+
+interface AudioCandidate {
+  sentence: Sentence;
+  audio: SentenceAudio;
+}
+
+interface ReviewScope {
+  book: Book | undefined;
+  sentences: Sentence[];
+  existingSentenceItems: StudyItem[];
+  vocabularyTargetCandidates: VocabularyTargetCandidate[];
+  existingVocabularyItems: StudyItem[];
+  audioCandidates: AudioCandidate[];
+  existingAudioItems: StudyItem[];
+  confusionPairCandidates: ConfusionPairCandidate[];
+  existingConfusionItems: StudyItem[];
+  sentenceTransformationCandidates: SentenceTransformationCandidate[];
+  existingTransformationItems: StudyItem[];
+}
+
+function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
+  return [
+    defineActivityDescriptor<Sentence>({
+      key: 'sentence',
+      activityTypes: SENTENCE_ACTIVITY_TYPES,
+      candidates: scope.sentences,
+      existingItems: scope.existingSentenceItems,
+      subjectId: (sentence) => sentence.id,
+      buildCard: (studyItem, sentence) => ({ studyItem, sentence }),
+      ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
+    }),
+    defineActivityDescriptor<VocabularyTargetCandidate>({
+      key: 'vocabulary',
+      activityTypes: VOCABULARY_ACTIVITY_TYPES,
+      candidates: scope.vocabularyTargetCandidates,
+      existingItems: scope.existingVocabularyItems,
+      subjectId: (candidate) => candidate.vocabularyItem.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        target: { vocabularyItem: candidate.vocabularyItem, surfaceForm: candidate.surfaceForm },
+      }),
+      ensure: (candidate, activityType) =>
+        ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+    }),
+    defineActivityDescriptor<AudioCandidate>({
+      key: 'listening',
+      activityTypes: AUDIO_ACTIVITY_TYPES,
+      candidates: scope.audioCandidates,
+      existingItems: scope.existingAudioItems,
+      subjectId: (candidate) => candidate.sentence.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        audio: candidate.audio,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureStudyItem('sentence', candidate.sentence.id, activityType),
+    }),
+    defineActivityDescriptor<ConfusionPairCandidate>({
+      key: 'confusion',
+      activityTypes: CONFUSION_ACTIVITY_TYPES,
+      candidates: scope.confusionPairCandidates,
+      existingItems: scope.existingConfusionItems,
+      subjectId: (candidate) => candidate.confusion.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.itemA.sentence,
+        confusionPair: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureStudyItem('vocabularyConfusion', candidate.confusion.id, activityType),
+    }),
+    defineActivityDescriptor<SentenceTransformationCandidate>({
+      key: 'transformation',
+      activityTypes: TRANSFORMATION_ACTIVITY_TYPES,
+      candidates: scope.sentenceTransformationCandidates,
+      existingItems: scope.existingTransformationItems,
+      subjectId: (candidate) => candidate.vocabularyItem.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        transformation: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+    }),
+  ];
+}
+
+/** A (descriptor, candidate, activityType) triple with no study_item yet — needs seeding. `subjectId` doubles as the pending-seed batching key. */
+interface PendingSeed {
+  descriptorKey: string;
+  candidate: unknown;
+  activityType: StudyActivityType;
+  subjectId: string;
 }
 
 export function ReviewPage() {
@@ -243,8 +351,18 @@ export function ReviewPage() {
   );
   /** Set only by reading_production's Check step; recorded as Review.responseRaw on rate. */
   const [typedResponse, setTypedResponse] = useState('');
+  /**
+   * Session planner (Phase 7.10): counts distinct new subjects seeded this
+   * sitting (one per batch, not per card — a word's reading_retrieval +
+   * cloze + reading_production seeding together still counts once), so it
+   * can be compared against `settings.newCardsPerSessionLimit`. Resets on
+   * remount (a fresh page load is a fresh session), not persisted.
+   */
+  const [newCardsIntroduced, setNewCardsIntroduced] = useState(0);
 
-  const scope = useLiveQuery(async () => {
+  const settings = useLiveQuery(() => readSettings(), []);
+
+  const scope = useLiveQuery(async (): Promise<ReviewScope> => {
     const db = getDb();
     const book = bookId ? await db.books.get(bookId) : undefined;
     let sentences: Sentence[];
@@ -265,6 +383,7 @@ export function ReviewPage() {
     }
     const sentenceIds = sentences.map((item) => item.id);
     const sentenceIdSet = new Set(sentenceIds);
+    const bySentenceId = new Map(sentences.map((item) => [item.id, item]));
     const existingSentenceItems = (
       await db.studyItems
         .where('activityType')
@@ -302,6 +421,11 @@ export function ReviewPage() {
       if (!audioBySentenceId.has(row.sentenceId)) {
         audioBySentenceId.set(row.sentenceId, row);
       }
+    }
+    const audioCandidates: AudioCandidate[] = [];
+    for (const [sentenceId, audio] of audioBySentenceId) {
+      const sentence = bySentenceId.get(sentenceId);
+      if (sentence) audioCandidates.push({ sentence, audio });
     }
     const existingAudioItems = (
       await db.studyItems
@@ -352,7 +476,7 @@ export function ReviewPage() {
       existingSentenceItems,
       vocabularyTargetCandidates,
       existingVocabularyItems,
-      audioBySentenceId,
+      audioCandidates,
       existingAudioItems,
       confusionPairCandidates,
       existingConfusionItems,
@@ -360,6 +484,11 @@ export function ReviewPage() {
       existingTransformationItems,
     };
   }, [bookId]);
+
+  const descriptors = useMemo(
+    () => (scope ? buildActivityDescriptors(scope) : []),
+    [scope],
+  );
 
   // Build the session queue once, the first time scope data arrives —
   // re-running this on every live-query tick would reshuffle the queue out
@@ -370,174 +499,42 @@ export function ReviewPage() {
     if (!scope || initialized) return;
     let cancelled = false;
     void (async () => {
-      const bySentenceId = new Map(scope.sentences.map((item) => [item.id, item]));
-      const byVocabularyItemId = new Map(
-        scope.vocabularyTargetCandidates.map((candidate) => [
-          candidate.vocabularyItem.id,
-          candidate,
-        ]),
+      const dueByDescriptor = await Promise.all(
+        descriptors.map((descriptor) =>
+          getDueStudyItems(descriptor.activityTypes, {
+            subjectIds: descriptor.candidates.map(descriptor.subjectId),
+          }),
+        ),
       );
 
-      const byConfusionId = new Map(
-        scope.confusionPairCandidates.map((candidate) => [candidate.confusion.id, candidate]),
-      );
-      const byTransformationVocabularyItemId = new Map(
-        scope.sentenceTransformationCandidates.map((candidate) => [
-          candidate.vocabularyItem.id,
-          candidate,
-        ]),
-      );
-
-      const [
-        dueSentenceItems,
-        dueVocabularyItems,
-        dueAudioItems,
-        dueConfusionItems,
-        dueTransformationItems,
-      ] = await Promise.all([
-        getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
-          subjectIds: scope.sentences.map((item) => item.id),
-        }),
-        getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
-          subjectIds: [...byVocabularyItemId.keys()],
-        }),
-        getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
-          subjectIds: [...scope.audioBySentenceId.keys()],
-        }),
-        getDueStudyItems(CONFUSION_ACTIVITY_TYPES, {
-          subjectIds: [...byConfusionId.keys()],
-        }),
-        getDueStudyItems(TRANSFORMATION_ACTIVITY_TYPES, {
-          subjectIds: [...byTransformationVocabularyItemId.keys()],
-        }),
-      ]);
-
-      const dueSentenceCards = dueSentenceItems
-        .map((studyItem): QueueCard | null => {
-          const sentence = bySentenceId.get(studyItem.subjectId);
-          return sentence ? { studyItem, sentence } : null;
-        })
-        .filter((card): card is QueueCard => card !== null);
-
-      const dueVocabularyCards = dueVocabularyItems
-        .map((studyItem): QueueCard | null => {
-          const candidate = byVocabularyItemId.get(studyItem.subjectId);
-          return candidate
-            ? {
-                studyItem,
-                sentence: candidate.sentence,
-                target: {
-                  vocabularyItem: candidate.vocabularyItem,
-                  surfaceForm: candidate.surfaceForm,
-                },
-              }
-            : null;
-        })
-        .filter((card): card is QueueCard => card !== null);
-
-      const dueAudioCards = dueAudioItems
-        .map((studyItem): QueueCard | null => {
-          const sentence = bySentenceId.get(studyItem.subjectId);
-          const audio = scope.audioBySentenceId.get(studyItem.subjectId);
-          return sentence && audio ? { studyItem, sentence, audio } : null;
-        })
-        .filter((card): card is QueueCard => card !== null);
-
-      const dueConfusionCards = dueConfusionItems
-        .map((studyItem): QueueCard | null => {
-          const candidate = byConfusionId.get(studyItem.subjectId);
-          return candidate
-            ? { studyItem, sentence: candidate.itemA.sentence, confusionPair: candidate }
-            : null;
-        })
-        .filter((card): card is QueueCard => card !== null);
-
-      const dueTransformationCards = dueTransformationItems
-        .map((studyItem): QueueCard | null => {
-          const candidate = byTransformationVocabularyItemId.get(studyItem.subjectId);
-          return candidate
-            ? { studyItem, sentence: candidate.sentence, transformation: candidate }
-            : null;
-        })
-        .filter((card): card is QueueCard => card !== null);
-
-      const due = [
-        ...dueSentenceCards,
-        ...dueVocabularyCards,
-        ...dueAudioCards,
-        ...dueConfusionCards,
-        ...dueTransformationCards,
-      ].sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
+      const due: QueueCard[] = [];
+      descriptors.forEach((descriptor, index) => {
+        const byId = new Map(
+          descriptor.candidates.map((candidate) => [descriptor.subjectId(candidate), candidate]),
+        );
+        for (const studyItem of dueByDescriptor[index]!) {
+          const candidate = byId.get(studyItem.subjectId);
+          if (candidate) due.push(descriptor.buildCard(studyItem, candidate));
+        }
+      });
+      due.sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
 
       // Any (subject, activityType) pair with no study_item yet needs
       // seeding — tracked per-pair (not per-subject) so a subject left with
       // only some activity types seeded still gets the rest.
-      const existingSentenceKeys = new Set(
-        scope.existingSentenceItems.map(
-          (item) => `${item.subjectId}:${item.activityType}`,
-        ),
-      );
       const pendingSeeds: PendingSeed[] = [];
-      for (const sentence of scope.sentences) {
-        for (const activityType of SENTENCE_ACTIVITY_TYPES) {
-          if (!existingSentenceKeys.has(`${sentence.id}:${activityType}`)) {
-            pendingSeeds.push({ kind: 'sentence', sentence, activityType });
-          }
-        }
-      }
-      const existingVocabularyKeys = new Set(
-        scope.existingVocabularyItems.map(
-          (item) => `${item.subjectId}:${item.activityType}`,
-        ),
-      );
-      for (const candidate of scope.vocabularyTargetCandidates) {
-        for (const activityType of VOCABULARY_ACTIVITY_TYPES) {
-          if (
-            !existingVocabularyKeys.has(
-              `${candidate.vocabularyItem.id}:${activityType}`,
-            )
-          ) {
-            pendingSeeds.push({ kind: 'vocabulary', candidate, activityType });
-          }
-        }
-      }
-      const existingAudioKeys = new Set(
-        scope.existingAudioItems.map(
-          (item) => `${item.subjectId}:${item.activityType}`,
-        ),
-      );
-      for (const [sentenceId, audio] of scope.audioBySentenceId) {
-        const sentence = bySentenceId.get(sentenceId);
-        if (!sentence) continue;
-        for (const activityType of AUDIO_ACTIVITY_TYPES) {
-          if (!existingAudioKeys.has(`${sentenceId}:${activityType}`)) {
-            pendingSeeds.push({ kind: 'listening', sentence, audio, activityType });
-          }
-        }
-      }
-      const existingConfusionKeys = new Set(
-        scope.existingConfusionItems.map(
-          (item) => `${item.subjectId}:${item.activityType}`,
-        ),
-      );
-      for (const candidate of scope.confusionPairCandidates) {
-        for (const activityType of CONFUSION_ACTIVITY_TYPES) {
-          if (!existingConfusionKeys.has(`${candidate.confusion.id}:${activityType}`)) {
-            pendingSeeds.push({ kind: 'confusion', candidate, activityType });
-          }
-        }
-      }
-      const existingTransformationKeys = new Set(
-        scope.existingTransformationItems.map(
-          (item) => `${item.subjectId}:${item.activityType}`,
-        ),
-      );
-      for (const candidate of scope.sentenceTransformationCandidates) {
-        for (const activityType of TRANSFORMATION_ACTIVITY_TYPES) {
-          if (
-            !existingTransformationKeys.has(`${candidate.vocabularyItem.id}:${activityType}`)
-          ) {
-            pendingSeeds.push({ kind: 'transformation', candidate, activityType });
+      for (const descriptor of descriptors) {
+        const existingKeys = new Set(
+          descriptor.existingItems.map(
+            (item) => `${item.subjectId}:${item.activityType}`,
+          ),
+        );
+        for (const candidate of descriptor.candidates) {
+          const subjectId = descriptor.subjectId(candidate);
+          for (const activityType of descriptor.activityTypes) {
+            if (!existingKeys.has(`${subjectId}:${activityType}`)) {
+              pendingSeeds.push({ descriptorKey: descriptor.key, candidate, activityType, subjectId });
+            }
           }
         }
       }
@@ -550,77 +547,42 @@ export function ReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [scope, initialized]);
+  }, [scope, initialized, descriptors]);
 
   // Lazily seed study_items for the next never-reviewed subject once the
-  // due queue runs dry (confirmed with the user — no batch seeding step).
+  // due queue runs dry (confirmed with the user — no batch seeding step),
+  // gated by the session planner's new-card cap (Phase 7.10,
+  // settings.newCardsPerSessionLimit) — already-due reviews above are
+  // never subject to this, only the introduction of brand-new subjects.
   useEffect(() => {
     if (!initialized || queue.length > 0 || pool.length === 0 || seeding) return;
+    if (!settings) return;
+    if (newCardsIntroduced >= settings.newCardsPerSessionLimit) return;
     const first = pool[0]!;
-    const batchKey = pendingSeedKey(first);
     const batch = pool.filter(
-      (item) => item.kind === first.kind && pendingSeedKey(item) === batchKey,
+      (item) => item.descriptorKey === first.descriptorKey && item.subjectId === first.subjectId,
     );
+    const descriptor = descriptors.find((candidate) => candidate.key === first.descriptorKey);
+    if (!descriptor) return;
     setSeeding(true);
     void (async () => {
       const cards = await Promise.all(
-        batch.map(async (item): Promise<QueueCard> => {
-          if (item.kind === 'sentence' || item.kind === 'listening') {
-            const studyItem = await ensureStudyItem(
-              'sentence',
-              item.sentence.id,
-              item.activityType,
-            );
-            return item.kind === 'listening'
-              ? { studyItem, sentence: item.sentence, audio: item.audio }
-              : { studyItem, sentence: item.sentence };
-          }
-          if (item.kind === 'confusion') {
-            const studyItem = await ensureStudyItem(
-              'vocabularyConfusion',
-              item.candidate.confusion.id,
-              item.activityType,
-            );
-            return {
-              studyItem,
-              sentence: item.candidate.itemA.sentence,
-              confusionPair: item.candidate,
-            };
-          }
-          if (item.kind === 'transformation') {
-            const studyItem = await ensureVocabularyStudyItem(
-              item.candidate.vocabularyItem.id,
-              item.activityType,
-            );
-            return {
-              studyItem,
-              sentence: item.candidate.sentence,
-              transformation: item.candidate,
-            };
-          }
-          const studyItem = await ensureVocabularyStudyItem(
-            item.candidate.vocabularyItem.id,
-            item.activityType,
-          );
-          return {
-            studyItem,
-            sentence: item.candidate.sentence,
-            target: {
-              vocabularyItem: item.candidate.vocabularyItem,
-              surfaceForm: item.candidate.surfaceForm,
-            },
-          };
+        batch.map(async (item) => {
+          const studyItem = await descriptor.ensure(item.candidate, item.activityType);
+          return descriptor.buildCard(studyItem, item.candidate);
         }),
       );
       setPool((current) =>
         current.filter(
-          (item) => !(item.kind === first.kind && pendingSeedKey(item) === batchKey),
+          (item) =>
+            !(item.descriptorKey === first.descriptorKey && item.subjectId === first.subjectId),
         ),
       );
       setQueue(cards);
+      setNewCardsIntroduced((count) => count + 1);
       setSeeding(false);
     })();
-  }, [initialized, queue.length, pool, seeding]);
+  }, [initialized, queue.length, pool, seeding, descriptors, settings, newCardsIntroduced]);
 
   const current = queue[0];
 
@@ -689,20 +651,23 @@ export function ReviewPage() {
   if (bookId && scope === undefined) return <p className="muted">Loading…</p>;
   if (!initialized) return <p className="muted">Loading…</p>;
 
-  const totalScopedSubjects =
-    (scope?.sentences.length ?? 0) +
-    (scope?.vocabularyTargetCandidates.length ?? 0) +
-    (scope?.confusionPairCandidates.length ?? 0) +
-    (scope?.sentenceTransformationCandidates.length ?? 0);
-  const nextDue = [
-    ...(scope?.existingSentenceItems ?? []),
-    ...(scope?.existingVocabularyItems ?? []),
-    ...(scope?.existingAudioItems ?? []),
-    ...(scope?.existingConfusionItems ?? []),
-    ...(scope?.existingTransformationItems ?? []),
-  ]
+  const totalScopedSubjects = descriptors.reduce(
+    (sum, descriptor) => sum + descriptor.candidates.length,
+    0,
+  );
+  const nextDue = descriptors
+    .flatMap((descriptor) => descriptor.existingItems)
     .filter((item) => item.fsrsState.due > new Date().toISOString())
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due))[0]?.fsrsState.due;
+  // New-card cap reached (Phase 7.10) with genuinely new subjects still
+  // waiting — distinct from "nothing left to seed at all."
+  const remainingNewSubjects = new Set(
+    pool.map((item) => `${item.descriptorKey}:${item.subjectId}`),
+  ).size;
+  const newCardLimitReached =
+    !!settings &&
+    newCardsIntroduced >= settings.newCardsPerSessionLimit &&
+    remainingNewSubjects > 0;
 
   return (
     <div className="stack">
@@ -727,11 +692,19 @@ export function ReviewPage() {
         ) : !current ? (
           <div className="empty-state">
             <strong>All caught up.</strong>
-            <span className="muted">
-              {nextDue
-                ? `Next review due ${new Date(nextDue).toLocaleString()}.`
-                : 'Nothing due right now.'}
-            </span>
+            {newCardLimitReached ? (
+              <span className="muted">
+                New-card limit reached for this session ({newCardsIntroduced} of{' '}
+                {settings!.newCardsPerSessionLimit} introduced) — {remainingNewSubjects} more
+                waiting next time. Raise the limit in Settings if you want more now.
+              </span>
+            ) : (
+              <span className="muted">
+                {nextDue
+                  ? `Next review due ${new Date(nextDue).toLocaleString()}.`
+                  : 'Nothing due right now.'}
+              </span>
+            )}
           </div>
         ) : (
           <>
@@ -1141,3 +1114,4 @@ function ContrastivePairCard({
     </>
   );
 }
+

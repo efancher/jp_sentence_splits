@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultImportDestination: 'inbox',
   textDisplayMode: 'plain',
   tts: { ...DEFAULT_TTS_SETTINGS },
+  newCardsPerSessionLimit: 20,
 };
 
 export class GlossbookDatabase extends Dexie {

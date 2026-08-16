@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb } from '../src/db/repository';
+import { getDb, updateSettings } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReviewPage } from '../src/pages/ReviewPage';
@@ -908,5 +908,73 @@ describe('ReviewPage', () => {
     expect(
       await screen.findByText('No sentences to review here yet.'),
     ).toBeInTheDocument();
+  });
+
+  it('stops introducing new subjects once the session planner\'s new-card cap is reached (Phase 7.10)', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await updateSettings({ newCardsPerSessionLimit: 1 });
+    await db.books.add({
+      id: 'book-1',
+      title: 'Test Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    for (const [id, japanese] of [
+      ['sent-1', '本を読みます。'],
+      ['sent-2', '猫がいます。'],
+      ['sent-3', '水を飲みます。'],
+    ] as const) {
+      await db.sentences.add({
+        id,
+        normalizedKey: id,
+        japanese,
+        readingOnly: '',
+        inlineReading: '',
+        translation: `(${id})`,
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.bookSentences.add({
+        id: `bs-${id}`,
+        bookId: 'book-1',
+        sentenceId: id,
+        position: 0,
+        status: 'unstarted',
+        addedAt: now,
+      });
+    }
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // Only sent-1's two activity types should seed (one "new subject" batch).
+    await screen.findByText('本を読みます。');
+    await waitFor(async () => {
+      expect(await db.studyItems.count()).toBe(2);
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    expect(
+      await screen.findByText(/New-card limit reached for this session/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 of 1 introduced/)).toBeInTheDocument();
+    expect(screen.getByText(/2 more waiting next time/)).toBeInTheDocument();
+    // sent-2/sent-3 never got seeded.
+    expect(await db.studyItems.count()).toBe(2);
   });
 });

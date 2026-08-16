@@ -233,6 +233,14 @@ export interface AppSettings {
   defaultImportDestination: ImportDestination;
   textDisplayMode: TextDisplayMode;
   tts: TtsSettings;
+  /**
+   * Session planner (Phase 7.10, docs/STATUS.md): caps how many new
+   * (never-before-seeded) subjects ReviewPage introduces in one sitting —
+   * a real number, not "0 = unlimited," so set it high if you want it out
+   * of the way. Already-due reviews are never capped by this, only the
+   * lazy-seeding of brand-new subjects.
+   */
+  newCardsPerSessionLimit: number;
 }
 
 export interface InboxMembership {
