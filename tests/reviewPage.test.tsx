@@ -398,6 +398,105 @@ describe('ReviewPage', () => {
     expect(review?.expectedAnswer).toBe('よむ');
   });
 
+  it('renders a sentence-transformation card for a conjugable vocabulary item and checks the typed conjugated reading (Phase 7.9)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hanasu',
+      expression: '話す',
+      reading: 'はなす',
+      meaning: 'to speak',
+      partOfSpeech: 'v5s; vt',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hanasu',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hanasu',
+      surfaceForm: '話す',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Suppress reading_retrieval/cloze/reading_production so only
+    // sentence_transformation seeds for this word.
+    await suppressVocabularyActivityTypes('vocab-hanasu');
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Conjugate to: Plain past');
+    expect(screen.getByText('話す')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Type the conjugated reading'), 'はなした');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    expect(screen.getByText('話した')).toBeInTheDocument();
+    expect(screen.getByText('はなした')).toBeInTheDocument();
+    expect(screen.getByText('to speak')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe('はなした');
+    expect(review?.expectedAnswer).toBe('はなした');
+
+    const studyItems = await db.studyItems
+      .where('subjectId')
+      .equals('vocab-hanasu')
+      .toArray();
+    const transformationItem = studyItems.find(
+      (item) => item.activityType === 'sentence_transformation',
+    );
+    expect(transformationItem?.subjectType).toBe('vocabularyItem');
+  });
+
+  it('does not seed a sentence-transformation card for a non-conjugable (or non-conjugating) vocabulary item', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hon',
+      expression: '本',
+      reading: 'ほん',
+      meaning: 'book',
+      partOfSpeech: 'n',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hon',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hon',
+      surfaceForm: '本',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-hon')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(
+        studyItems.some((item) => item.activityType === 'sentence_transformation'),
+      ).toBe(false);
+    });
+  });
+
   it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {
     const db = getDb();
     const now = new Date().toISOString();

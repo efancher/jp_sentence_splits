@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 7.9a).
+Last updated: 2026-08-16 (Phase 7.9b).
 
 ## Phase 0 — Repository analysis: done
 
@@ -1530,3 +1530,95 @@ tests passed (up from 273), 2 pre-existing skips (unrelated), 0 existing
 test behavior changed. `npm run build` green.
 
 **Not yet manually verified in a real browser.**
+
+## Phase 7.9b — Sentence transformations (production ladder, second slice): done
+
+The second and final slice of the roadmap's originally bundled "production
+ladder/sentence transformations" line — completes Phase 7.9. Ports
+`~/projects/anki/wk_decks.py`'s `conjugate_vocab_form()` (godan/ichidan/
+suru/kuru/i-adjective/na-adjective, ~lines 2953-3510) and wires it into a
+new review card.
+
+**Word-class detection differs from the source on purpose**: the Python
+code classified words from WaniKani-subject `parts_of_speech` strings
+(e.g. `"godan verb"`), which this app's data doesn't have. Checked real
+production data first (207 `vocabulary_items` rows with a non-null
+`part_of_speech`, sampled via a throwaway script, not committed): the field
+holds JMDict tags instead (`v5r; vt`, `adj-i`, `n,vs,vi` — note both `;`
+and `,` appear as delimiters across rows), populated by the JMDict-backfill
+and Anki-import pipelines. Wrote a new classifier for that shape
+(`conjugationWordClassFromPartOfSpeech`) rather than porting the
+WaniKani-string one, which doesn't apply here. The actual conjugation math
+(stem-splitting, suffix tables, the いく/いい/くる irregulars) is ported
+as-is and needed no adaptation.
+
+Added:
+- `src/lib/conjugation.ts` — pure port: `conjugate(expression, reading,
+  wordClass, formKey)`, `conjugationWordClassFromPartOfSpeech`,
+  `conjugationFormsForWordClass`. No Dexie/Supabase coupling, mirroring
+  `src/lib/maturity.ts`/`src/lib/scheduling.ts`'s existing "pure domain
+  lib" convention.
+- `fixtures/conjugation-fixtures.json` — the same 86 fixture rows
+  `~/projects/anki/conjugation_fixtures.json` used to validate the
+  original Python engine (field names adapted: `word_class` values
+  `irregular_verb`/`suru_verb` renamed to this port's `kuru`/`suru`, which
+  split what the Python `irregular_verb` bucket lumped together). `tests/conjugation.test.ts`
+  runs `conjugate()` against all 86 as `it.each` cases — **all 86 passed
+  on the first run**, i.e. the port matches the source exactly against its
+  own ground truth. Plus classifier tests (JMDict tag → word class,
+  comma/semicolon delimiter handling, null cases) and a few conjugate()
+  edge cases (form not offered by the class, empty input, mismatched word
+  shape).
+- New `'sentence_transformation'` activity type (`src/pages/ReviewPage.tsx`),
+  a fourth activity type for `subjectType: 'vocabularyItem'` (distinct
+  StudyItem tuple from reading_retrieval/cloze/reading_production, no
+  schema change needed) — but with narrower eligibility than those three:
+  `getSentenceTransformationCandidates` (pure filter, no DB call — unlike
+  `getConfusionPairCandidates`, everything it needs is already on each
+  `VocabularyTargetCandidate`) keeps only words whose `partOfSpeech` maps
+  to a word class *and* whose conjugated form actually differs from the
+  dictionary form. Fixed to a single form for this slice —
+  `TRANSFORMATION_FORM_KEY = 'plain_past'` — rather than cycling through
+  all 13 verb/10 adjective forms per word; wired as its own due-queue/
+  pending-seed category, same shape as the confusion-pair category Phase
+  7.7 added.
+- `SentenceTransformationCard`: shows the sentence with the *dictionary*
+  form highlighted plus a "Conjugate to: Plain past" prompt, a typed-reading
+  input (reusing `isReadingAnswerCorrect` from Phase 7.9a), and on reveal
+  shows both the conjugated expression and reading (unlike
+  reading_production, the conjugated kanji form itself is part of the
+  answer, not already visible) plus meaning. `responseRaw`/`expectedAnswer`
+  threaded through the same `typedResponse` state Phase 7.9a added;
+  `handleRate` now picks `expectedAnswer` from either
+  `current.transformation.target.reading` or `current.target.vocabularyItem.reading`
+  depending on which card type is active.
+- Tests: `tests/reviewPage.test.tsx` — new end-to-end test seeding a real
+  godan verb (話す/はなす, `partOfSpeech: 'v5s; vt'`), rendering the card,
+  typing the conjugated reading (はなした), checking, and confirming both
+  the review's `responseRaw`/`expectedAnswer` and the seeded study item's
+  `subjectType`/`activityType`; a second test confirming a non-conjugable
+  word (plain noun, `partOfSpeech: 'n'`) never seeds a
+  `sentence_transformation` study item at all.
+
+**Deliberately not done yet**: only `plain_past` is quizzed, not the other
+12 verb/9 adjective forms (`conjugationFormsForWordClass` is exported and
+ready for that, just not consumed yet); no per-word-class distribution
+control (a word gets exactly one sentence_transformation card, same
+"start small" scope as reading_production's one card per word); no
+`errorClassification` population from conjugation mismatches; only ~207
+production `vocabulary_items` rows currently have any `partOfSpeech` at
+all, so this card type's real-world queue presence is small until more of
+the JMDict-meaning backfill/Anki-import pipeline's `partOfSpeech` coverage
+grows (a pre-existing, separate gap, not something this phase changes).
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 371
+tests passed (up from 274 — the conjugation fixture suite alone added 95),
+2 pre-existing skips (unrelated), 0 existing test behavior changed.
+`npm run build` green.
+
+**Not yet manually verified in a real browser** — worth specifically
+checking against a real conjugable word once one is due, given how thin
+current `partOfSpeech` coverage is.
+
+This completes Phase 7.9 (both slices). Remaining Phase 7 sub-phase: 7.10
+(session planner, graduation, explainability, debug view).

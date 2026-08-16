@@ -1,0 +1,776 @@
+[
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "polite_present",
+    "expectedExpression": "話します",
+    "expectedReading": "はなします",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "話した",
+    "expectedReading": "はなした",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "話して",
+    "expectedReading": "はなして",
+    "note": "godan す"
+  },
+  {
+    "expression": "買う",
+    "reading": "かう",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "買った",
+    "expectedReading": "かった",
+    "note": "godan う"
+  },
+  {
+    "expression": "買う",
+    "reading": "かう",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "買って",
+    "expectedReading": "かって",
+    "note": "godan う"
+  },
+  {
+    "expression": "書く",
+    "reading": "かく",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "書いた",
+    "expectedReading": "かいた",
+    "note": "godan く"
+  },
+  {
+    "expression": "書く",
+    "reading": "かく",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "書いて",
+    "expectedReading": "かいて",
+    "note": "godan く"
+  },
+  {
+    "expression": "泳ぐ",
+    "reading": "およぐ",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "泳いだ",
+    "expectedReading": "およいだ",
+    "note": "godan ぐ"
+  },
+  {
+    "expression": "泳ぐ",
+    "reading": "およぐ",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "泳いで",
+    "expectedReading": "およいで",
+    "note": "godan ぐ"
+  },
+  {
+    "expression": "立つ",
+    "reading": "たつ",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "立った",
+    "expectedReading": "たった",
+    "note": "godan つ"
+  },
+  {
+    "expression": "立つ",
+    "reading": "たつ",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "立って",
+    "expectedReading": "たって",
+    "note": "godan つ"
+  },
+  {
+    "expression": "死ぬ",
+    "reading": "しぬ",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "死んだ",
+    "expectedReading": "しんだ",
+    "note": "godan ぬ"
+  },
+  {
+    "expression": "死ぬ",
+    "reading": "しぬ",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "死んで",
+    "expectedReading": "しんで",
+    "note": "godan ぬ"
+  },
+  {
+    "expression": "飛ぶ",
+    "reading": "とぶ",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "飛んだ",
+    "expectedReading": "とんだ",
+    "note": "godan ぶ"
+  },
+  {
+    "expression": "飛ぶ",
+    "reading": "とぶ",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "飛んで",
+    "expectedReading": "とんで",
+    "note": "godan ぶ"
+  },
+  {
+    "expression": "読む",
+    "reading": "よむ",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "読んだ",
+    "expectedReading": "よんだ",
+    "note": "godan む"
+  },
+  {
+    "expression": "読む",
+    "reading": "よむ",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "読んで",
+    "expectedReading": "よんで",
+    "note": "godan む"
+  },
+  {
+    "expression": "帰る",
+    "reading": "かえる",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "帰った",
+    "expectedReading": "かえった",
+    "note": "godan る"
+  },
+  {
+    "expression": "帰る",
+    "reading": "かえる",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "帰って",
+    "expectedReading": "かえって",
+    "note": "godan る"
+  },
+  {
+    "expression": "入る",
+    "reading": "はいる",
+    "wordClass": "godan",
+    "formKey": "polite_present",
+    "expectedExpression": "入ります",
+    "expectedReading": "はいります",
+    "note": "godan kanji+る"
+  },
+  {
+    "expression": "入る",
+    "reading": "はいる",
+    "wordClass": "godan",
+    "formKey": "plain_negative",
+    "expectedExpression": "入らない",
+    "expectedReading": "はいらない",
+    "note": "godan kanji+る"
+  },
+  {
+    "expression": "行く",
+    "reading": "いく",
+    "wordClass": "godan",
+    "formKey": "te_form",
+    "expectedExpression": "行って",
+    "expectedReading": "いって",
+    "note": "irregular 行く"
+  },
+  {
+    "expression": "行く",
+    "reading": "いく",
+    "wordClass": "godan",
+    "formKey": "plain_past",
+    "expectedExpression": "行った",
+    "expectedReading": "いった",
+    "note": "irregular 行く"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "polite_present",
+    "expectedExpression": "食べます",
+    "expectedReading": "たべます",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "plain_negative",
+    "expectedExpression": "食べない",
+    "expectedReading": "たべない",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "plain_past",
+    "expectedExpression": "食べた",
+    "expectedReading": "たべた",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "te_form",
+    "expectedExpression": "食べて",
+    "expectedReading": "たべて",
+    "note": "ichidan"
+  },
+  {
+    "expression": "入れる",
+    "reading": "いれる",
+    "wordClass": "ichidan",
+    "formKey": "polite_present",
+    "expectedExpression": "入れます",
+    "expectedReading": "いれます",
+    "note": "ichidan"
+  },
+  {
+    "expression": "入れる",
+    "reading": "いれる",
+    "wordClass": "ichidan",
+    "formKey": "te_form",
+    "expectedExpression": "入れて",
+    "expectedReading": "いれて",
+    "note": "ichidan"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "polite_present",
+    "expectedExpression": "します",
+    "expectedReading": "します",
+    "note": "する"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "plain_negative",
+    "expectedExpression": "しない",
+    "expectedReading": "しない",
+    "note": "する"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "te_form",
+    "expectedExpression": "して",
+    "expectedReading": "して",
+    "note": "する"
+  },
+  {
+    "expression": "勉強する",
+    "reading": "べんきょうする",
+    "wordClass": "suru",
+    "formKey": "polite_present",
+    "expectedExpression": "勉強します",
+    "expectedReading": "べんきょうします",
+    "note": "する compound"
+  },
+  {
+    "expression": "勉強する",
+    "reading": "べんきょうする",
+    "wordClass": "suru",
+    "formKey": "plain_past",
+    "expectedExpression": "勉強した",
+    "expectedReading": "べんきょうした",
+    "note": "する compound"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "polite_present",
+    "expectedExpression": "来ます",
+    "expectedReading": "きます",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "plain_negative",
+    "expectedExpression": "来ない",
+    "expectedReading": "こない",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "plain_past",
+    "expectedExpression": "来た",
+    "expectedReading": "きた",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "te_form",
+    "expectedExpression": "来て",
+    "expectedReading": "きて",
+    "note": "来る"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "plain_negative",
+    "expectedExpression": "大きくない",
+    "expectedReading": "おおきくない",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "plain_past",
+    "expectedExpression": "大きかった",
+    "expectedReading": "おおきかった",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "plain_past_negative",
+    "expectedExpression": "大きくなかった",
+    "expectedReading": "おおきくなかった",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "polite",
+    "expectedExpression": "大きいです",
+    "expectedReading": "おおきいです",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "polite_past",
+    "expectedExpression": "大きかったです",
+    "expectedReading": "おおきかったです",
+    "note": "い-adj"
+  },
+  {
+    "expression": "いい",
+    "reading": "いい",
+    "wordClass": "i_adjective",
+    "formKey": "plain_negative",
+    "expectedExpression": "よくない",
+    "expectedReading": "よくない",
+    "note": "irregular いい"
+  },
+  {
+    "expression": "いい",
+    "reading": "いい",
+    "wordClass": "i_adjective",
+    "formKey": "plain_past",
+    "expectedExpression": "よかった",
+    "expectedReading": "よかった",
+    "note": "irregular いい"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "plain_negative",
+    "expectedExpression": "大人じゃない",
+    "expectedReading": "おとなじゃない",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "plain_past",
+    "expectedExpression": "大人だった",
+    "expectedReading": "おとなだった",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "polite",
+    "expectedExpression": "大人です",
+    "expectedReading": "おとなです",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "polite_past",
+    "expectedExpression": "大人でした",
+    "expectedReading": "おとなでした",
+    "note": "な-adj"
+  },
+  {
+    "expression": "元気",
+    "reading": "げんき",
+    "wordClass": "na_adjective",
+    "formKey": "plain_past_negative",
+    "expectedExpression": "元気じゃなかった",
+    "expectedReading": "げんきじゃなかった",
+    "note": "な-adj"
+  },
+  {
+    "expression": "元気",
+    "reading": "げんき",
+    "wordClass": "na_adjective",
+    "formKey": "polite_negative",
+    "expectedExpression": "元気じゃないです",
+    "expectedReading": "げんきじゃないです",
+    "note": "な-adj"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "plain_past_negative",
+    "expectedExpression": "話さなかった",
+    "expectedReading": "はなさなかった",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "polite_past_negative",
+    "expectedExpression": "話しませんでした",
+    "expectedReading": "はなしませんでした",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "potential",
+    "expectedExpression": "話せる",
+    "expectedReading": "はなせる",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "passive",
+    "expectedExpression": "話される",
+    "expectedReading": "はなされる",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "causative",
+    "expectedExpression": "話させる",
+    "expectedReading": "はなさせる",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "ba_form",
+    "expectedExpression": "話せば",
+    "expectedReading": "はなせば",
+    "note": "godan す"
+  },
+  {
+    "expression": "話す",
+    "reading": "はなす",
+    "wordClass": "godan",
+    "formKey": "tara_form",
+    "expectedExpression": "話したら",
+    "expectedReading": "はなしたら",
+    "note": "godan す"
+  },
+  {
+    "expression": "行く",
+    "reading": "いく",
+    "wordClass": "godan",
+    "formKey": "potential",
+    "expectedExpression": "行ける",
+    "expectedReading": "いける",
+    "note": "irregular 行く"
+  },
+  {
+    "expression": "行く",
+    "reading": "いく",
+    "wordClass": "godan",
+    "formKey": "tara_form",
+    "expectedExpression": "行ったら",
+    "expectedReading": "いったら",
+    "note": "irregular 行く"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "plain_past_negative",
+    "expectedExpression": "食べなかった",
+    "expectedReading": "たべなかった",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "polite_past_negative",
+    "expectedExpression": "食べませんでした",
+    "expectedReading": "たべませんでした",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "potential",
+    "expectedExpression": "食べられる",
+    "expectedReading": "たべられる",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "passive",
+    "expectedExpression": "食べられる",
+    "expectedReading": "たべられる",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "causative",
+    "expectedExpression": "食べさせる",
+    "expectedReading": "たべさせる",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "ba_form",
+    "expectedExpression": "食べれば",
+    "expectedReading": "たべれば",
+    "note": "ichidan"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "formKey": "tara_form",
+    "expectedExpression": "食べたら",
+    "expectedReading": "たべたら",
+    "note": "ichidan"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "potential",
+    "expectedExpression": "できる",
+    "expectedReading": "できる",
+    "note": "する"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "passive",
+    "expectedExpression": "される",
+    "expectedReading": "される",
+    "note": "する"
+  },
+  {
+    "expression": "する",
+    "reading": "する",
+    "wordClass": "suru",
+    "formKey": "causative",
+    "expectedExpression": "させる",
+    "expectedReading": "させる",
+    "note": "する"
+  },
+  {
+    "expression": "勉強する",
+    "reading": "べんきょうする",
+    "wordClass": "suru",
+    "formKey": "potential",
+    "expectedExpression": "勉強できる",
+    "expectedReading": "べんきょうできる",
+    "note": "する compound"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "plain_past_negative",
+    "expectedExpression": "来なかった",
+    "expectedReading": "こなかった",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "potential",
+    "expectedExpression": "来られる",
+    "expectedReading": "こられる",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "causative",
+    "expectedExpression": "来させる",
+    "expectedReading": "こさせる",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "ba_form",
+    "expectedExpression": "来れば",
+    "expectedReading": "くれば",
+    "note": "来る"
+  },
+  {
+    "expression": "来る",
+    "reading": "くる",
+    "wordClass": "kuru",
+    "formKey": "tara_form",
+    "expectedExpression": "来たら",
+    "expectedReading": "きたら",
+    "note": "来る"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "polite_past_negative",
+    "expectedExpression": "大きくなかったです",
+    "expectedReading": "おおきくなかったです",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "te_form",
+    "expectedExpression": "大きくて",
+    "expectedReading": "おおきくて",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "ba_form",
+    "expectedExpression": "大きければ",
+    "expectedReading": "おおきければ",
+    "note": "い-adj"
+  },
+  {
+    "expression": "大きい",
+    "reading": "おおきい",
+    "wordClass": "i_adjective",
+    "formKey": "tara_form",
+    "expectedExpression": "大きかったら",
+    "expectedReading": "おおきかったら",
+    "note": "い-adj"
+  },
+  {
+    "expression": "いい",
+    "reading": "いい",
+    "wordClass": "i_adjective",
+    "formKey": "te_form",
+    "expectedExpression": "よくて",
+    "expectedReading": "よくて",
+    "note": "irregular いい"
+  },
+  {
+    "expression": "いい",
+    "reading": "いい",
+    "wordClass": "i_adjective",
+    "formKey": "ba_form",
+    "expectedExpression": "よければ",
+    "expectedReading": "よければ",
+    "note": "irregular いい"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "polite_past_negative",
+    "expectedExpression": "大人じゃなかったです",
+    "expectedReading": "おとなじゃなかったです",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "te_form",
+    "expectedExpression": "大人で",
+    "expectedReading": "おとなで",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "ba_form",
+    "expectedExpression": "大人なら",
+    "expectedReading": "おとななら",
+    "note": "な-adj"
+  },
+  {
+    "expression": "大人",
+    "reading": "おとな",
+    "wordClass": "na_adjective",
+    "formKey": "tara_form",
+    "expectedExpression": "大人だったら",
+    "expectedReading": "おとなだったら",
+    "note": "な-adj"
+  }
+]

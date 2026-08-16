@@ -25,6 +25,12 @@ import type {
   StudyItem,
   VocabularyItem,
 } from '../domain/types';
+import {
+  conjugate,
+  conjugationWordClassFromPartOfSpeech,
+  type ConjugatedForm,
+  type ConjugationWordClass,
+} from '../lib/conjugation';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { normalizeSentenceKey } from '../lib/normalize';
 
@@ -78,6 +84,24 @@ const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
  */
 const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
 
+/**
+ * Sentence transformation (Phase 7.9, sentence-transformations slice, docs
+ * brief §12): subjectType stays `vocabularyItem` (a fourth activity type
+ * alongside reading_retrieval/cloze/reading_production for the same
+ * subject, distinguished by activityType like those three already are from
+ * each other) — but eligibility is narrower: only words whose
+ * `partOfSpeech` maps to a conjugation word class (see
+ * conjugationWordClassFromPartOfSpeech, src/lib/conjugation.ts) and whose
+ * conjugated form actually differs from the dictionary form. Fixed to a
+ * single form (plain past) for this first slice — see
+ * getSentenceTransformationCandidates — rather than cycling through all 13
+ * verb/10 adjective forms, matching every prior phase's "start small"
+ * precedent.
+ */
+const TRANSFORMATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
+const TRANSFORMATION_FORM_KEY = 'plain_past';
+const TRANSFORMATION_FORM_LABEL = 'Plain past';
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
@@ -86,7 +110,51 @@ const ACTIVITY_LABELS: Record<string, string> = {
   reading_production: 'Reading production',
   listening: 'Listening',
   contrastive: 'Contrastive pair',
+  sentence_transformation: 'Sentence transformation',
 };
+
+interface SentenceTransformationCandidate {
+  vocabularyItem: VocabularyItem;
+  sentence: Sentence;
+  surfaceForm: string;
+  wordClass: ConjugationWordClass;
+  target: ConjugatedForm;
+}
+
+/**
+ * Pure filter over already-fetched vocabulary-target candidates (no DB
+ * access needed, unlike getConfusionPairCandidates) — a word is a
+ * candidate only if its partOfSpeech is conjugable and conjugating it to
+ * TRANSFORMATION_FORM_KEY actually produces something different from the
+ * dictionary form (skips e.g. a word whose plain-past happens to equal its
+ * dictionary form, or one conjugate() can't handle at all).
+ */
+function getSentenceTransformationCandidates(
+  candidates: VocabularyTargetCandidate[],
+): SentenceTransformationCandidate[] {
+  const result: SentenceTransformationCandidate[] = [];
+  for (const candidate of candidates) {
+    const wordClass = conjugationWordClassFromPartOfSpeech(
+      candidate.vocabularyItem.partOfSpeech,
+    );
+    if (!wordClass) continue;
+    const target = conjugate(
+      candidate.vocabularyItem.expression,
+      candidate.vocabularyItem.reading,
+      wordClass,
+      TRANSFORMATION_FORM_KEY,
+    );
+    if (!target) continue;
+    if (
+      target.expression === candidate.vocabularyItem.expression &&
+      target.reading === candidate.vocabularyItem.reading
+    ) {
+      continue;
+    }
+    result.push({ ...candidate, wordClass, target });
+  }
+  return result;
+}
 
 /** Same normalization `normalizeSentenceKey` uses for sentence-identity matching (NFC, whitespace-insensitive) — reused here for typed-reading comparison since the requirements coincide. */
 function isReadingAnswerCorrect(typed: string, expected: string): boolean {
@@ -110,6 +178,8 @@ interface QueueCard {
   audio?: SentenceAudio;
   /** Set only for contrastive-pair cards (Phase 7.7). */
   confusionPair?: ConfusionPairCandidate;
+  /** Set only for sentence-transformation cards (Phase 7.9). */
+  transformation?: SentenceTransformationCandidate;
 }
 
 /** A (subject, activityType) pair with no study_item yet — needs seeding. */
@@ -130,10 +200,17 @@ type PendingSeed =
       kind: 'confusion';
       candidate: ConfusionPairCandidate;
       activityType: StudyActivityType;
+    }
+  | {
+      kind: 'transformation';
+      candidate: SentenceTransformationCandidate;
+      activityType: StudyActivityType;
     };
 
 function pendingSeedKey(seed: PendingSeed): string {
-  if (seed.kind === 'vocabulary') return seed.candidate.vocabularyItem.id;
+  if (seed.kind === 'vocabulary' || seed.kind === 'transformation') {
+    return seed.candidate.vocabularyItem.id;
+  }
   if (seed.kind === 'confusion') return seed.candidate.confusion.id;
   return seed.sentence.id;
 }
@@ -252,6 +329,23 @@ export function ReviewPage() {
         confusionPairIdSet.has(item.subjectId),
     );
 
+    const sentenceTransformationCandidates = getSentenceTransformationCandidates(
+      vocabularyTargetCandidates,
+    );
+    const transformationVocabularyItemIdSet = new Set(
+      sentenceTransformationCandidates.map((candidate) => candidate.vocabularyItem.id),
+    );
+    const existingTransformationItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(TRANSFORMATION_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'vocabularyItem' &&
+        transformationVocabularyItemIdSet.has(item.subjectId),
+    );
+
     return {
       book,
       sentences,
@@ -262,6 +356,8 @@ export function ReviewPage() {
       existingAudioItems,
       confusionPairCandidates,
       existingConfusionItems,
+      sentenceTransformationCandidates,
+      existingTransformationItems,
     };
   }, [bookId]);
 
@@ -285,22 +381,36 @@ export function ReviewPage() {
       const byConfusionId = new Map(
         scope.confusionPairCandidates.map((candidate) => [candidate.confusion.id, candidate]),
       );
+      const byTransformationVocabularyItemId = new Map(
+        scope.sentenceTransformationCandidates.map((candidate) => [
+          candidate.vocabularyItem.id,
+          candidate,
+        ]),
+      );
 
-      const [dueSentenceItems, dueVocabularyItems, dueAudioItems, dueConfusionItems] =
-        await Promise.all([
-          getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
-            subjectIds: scope.sentences.map((item) => item.id),
-          }),
-          getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
-            subjectIds: [...byVocabularyItemId.keys()],
-          }),
-          getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
-            subjectIds: [...scope.audioBySentenceId.keys()],
-          }),
-          getDueStudyItems(CONFUSION_ACTIVITY_TYPES, {
-            subjectIds: [...byConfusionId.keys()],
-          }),
-        ]);
+      const [
+        dueSentenceItems,
+        dueVocabularyItems,
+        dueAudioItems,
+        dueConfusionItems,
+        dueTransformationItems,
+      ] = await Promise.all([
+        getDueStudyItems(SENTENCE_ACTIVITY_TYPES, {
+          subjectIds: scope.sentences.map((item) => item.id),
+        }),
+        getDueStudyItems(VOCABULARY_ACTIVITY_TYPES, {
+          subjectIds: [...byVocabularyItemId.keys()],
+        }),
+        getDueStudyItems(AUDIO_ACTIVITY_TYPES, {
+          subjectIds: [...scope.audioBySentenceId.keys()],
+        }),
+        getDueStudyItems(CONFUSION_ACTIVITY_TYPES, {
+          subjectIds: [...byConfusionId.keys()],
+        }),
+        getDueStudyItems(TRANSFORMATION_ACTIVITY_TYPES, {
+          subjectIds: [...byTransformationVocabularyItemId.keys()],
+        }),
+      ]);
 
       const dueSentenceCards = dueSentenceItems
         .map((studyItem): QueueCard | null => {
@@ -342,11 +452,21 @@ export function ReviewPage() {
         })
         .filter((card): card is QueueCard => card !== null);
 
+      const dueTransformationCards = dueTransformationItems
+        .map((studyItem): QueueCard | null => {
+          const candidate = byTransformationVocabularyItemId.get(studyItem.subjectId);
+          return candidate
+            ? { studyItem, sentence: candidate.sentence, transformation: candidate }
+            : null;
+        })
+        .filter((card): card is QueueCard => card !== null);
+
       const due = [
         ...dueSentenceCards,
         ...dueVocabularyCards,
         ...dueAudioCards,
         ...dueConfusionCards,
+        ...dueTransformationCards,
       ].sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
 
       // Any (subject, activityType) pair with no study_item yet needs
@@ -407,6 +527,20 @@ export function ReviewPage() {
           }
         }
       }
+      const existingTransformationKeys = new Set(
+        scope.existingTransformationItems.map(
+          (item) => `${item.subjectId}:${item.activityType}`,
+        ),
+      );
+      for (const candidate of scope.sentenceTransformationCandidates) {
+        for (const activityType of TRANSFORMATION_ACTIVITY_TYPES) {
+          if (
+            !existingTransformationKeys.has(`${candidate.vocabularyItem.id}:${activityType}`)
+          ) {
+            pendingSeeds.push({ kind: 'transformation', candidate, activityType });
+          }
+        }
+      }
 
       if (cancelled) return;
       setQueue(due);
@@ -451,6 +585,17 @@ export function ReviewPage() {
               studyItem,
               sentence: item.candidate.itemA.sentence,
               confusionPair: item.candidate,
+            };
+          }
+          if (item.kind === 'transformation') {
+            const studyItem = await ensureVocabularyStudyItem(
+              item.candidate.vocabularyItem.id,
+              item.activityType,
+            );
+            return {
+              studyItem,
+              sentence: item.candidate.sentence,
+              transformation: item.candidate,
             };
           }
           const studyItem = await ensureVocabularyStudyItem(
@@ -525,13 +670,15 @@ export function ReviewPage() {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
+      const expectedReading = current.transformation
+        ? current.transformation.target.reading
+        : current.target?.vocabularyItem.reading;
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
         responseRaw: typedResponse || undefined,
-        expectedAnswer:
-          typedResponse && current.target ? current.target.vocabularyItem.reading : undefined,
+        expectedAnswer: typedResponse ? expectedReading : undefined,
       });
       setQueue((q) => q.slice(1));
     } finally {
@@ -545,12 +692,14 @@ export function ReviewPage() {
   const totalScopedSubjects =
     (scope?.sentences.length ?? 0) +
     (scope?.vocabularyTargetCandidates.length ?? 0) +
-    (scope?.confusionPairCandidates.length ?? 0);
+    (scope?.confusionPairCandidates.length ?? 0) +
+    (scope?.sentenceTransformationCandidates.length ?? 0);
   const nextDue = [
     ...(scope?.existingSentenceItems ?? []),
     ...(scope?.existingVocabularyItems ?? []),
     ...(scope?.existingAudioItems ?? []),
     ...(scope?.existingConfusionItems ?? []),
+    ...(scope?.existingTransformationItems ?? []),
   ]
     .filter((item) => item.fsrsState.due > new Date().toISOString())
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due))[0]?.fsrsState.due;
@@ -635,6 +784,16 @@ export function ReviewPage() {
                 candidate={current.confusionPair}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+              />
+            ) : current.transformation ? (
+              <SentenceTransformationCard
+                key={current.studyItem.id}
+                candidate={current.transformation}
+                revealed={revealed}
+                onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
               />
             ) : (
               <>
@@ -804,6 +963,74 @@ function ReadingProductionCard({
         <>
           <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
           <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
+          {vocabularyItem.meaning ? (
+            <div className="muted">{vocabularyItem.meaning}</div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Sentence transformation (Phase 7.9, sentence-transformations slice): the
+ * "production ladder"'s second rung — instead of recalling the dictionary
+ * reading, the learner has to produce a specific conjugated form (fixed to
+ * TRANSFORMATION_FORM_KEY, "plain past," for this slice). Same typed-input
+ * + check + reveal + self-rate shape as ReadingProductionCard, but checks
+ * against the pre-computed target reading (candidate.target.reading) and
+ * reveals both the conjugated expression and reading on top of the usual
+ * meaning, since the conjugated kanji form is itself part of the answer a
+ * learner would want to see, unlike reading_production where the dictionary
+ * expression was already shown.
+ */
+function SentenceTransformationCard({
+  candidate,
+  revealed,
+  onCheck,
+}: {
+  candidate: SentenceTransformationCandidate;
+  revealed: boolean;
+  onCheck: (typedReading: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  const [wasCorrect, setWasCorrect] = useState(false);
+  const { vocabularyItem, sentence, surfaceForm, target } = candidate;
+  const [before, dictionaryForm, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+
+  return (
+    <>
+      <div className="jp jp-lg">
+        {before}
+        <mark>{dictionaryForm || surfaceForm}</mark>
+        {after}
+      </div>
+      <div className="muted">Conjugate to: {TRANSFORMATION_FORM_LABEL}</div>
+      {!revealed ? (
+        <form
+          className="row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setWasCorrect(isReadingAnswerCorrect(value, target.reading));
+            onCheck(value);
+          }}
+        >
+          <label>
+            Type the conjugated reading
+            <input
+              type="text"
+              value={value}
+              autoComplete="off"
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </label>
+          <button type="submit">Check</button>
+        </form>
+      ) : (
+        <>
+          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
+          <div className="jp">{target.expression}</div>
+          <div className="jp">{target.reading}</div>
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}
