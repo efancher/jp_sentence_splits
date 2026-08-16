@@ -1951,7 +1951,38 @@ were only found by this pass's closer read.
    `preservesPitch = true` so slowing down doesn't drop pitch — matters
    for a pitch-accent-relevant app). Small, self-contained, good first
    slice to re-familiarize with this code.
-2. **Live shadow waveform + shadow-mode recording + mic calibration**.
+2. **Practice-target isolation** (new — not a port, added 2026-08-16 at
+   the user's request: "the ability to isolate smaller phrases or words to
+   practice and compare shadowing against smaller targets... helpful as a
+   beginner"). Neither app has this ready-made; two design options,
+   investigated against `shadowing/web`'s existing building blocks:
+   - **Recommended first cut — manual loop-point marking**: let the
+     learner drag/tap two handles on the reference clip's own timeline
+     (or play-and-tap "mark start"/"mark end" while listening) to carve
+     out an arbitrary sub-range, no forced alignment or word-boundary
+     data needed. Loop reference playback within that range; scope the
+     next recording + comparison (alternate/dual-ear, and 8.4's pitch
+     panel once it exists) to just that range too. Small: a start/end
+     time pair is the only new state, plausibly not even persisted at
+     first (recompute per session) or stored as two optional fields on
+     `Attempt` (`targetStartMs`/`targetEndMs`) if remembering the last
+     target per sentence turns out to matter. Entirely new code, not a
+     port — no dependency on anything else in this phase.
+   - **Deferred, more precise option — word/mora-level selection**: the
+     original's **mora timing guide** (`TimingGuideService`,
+     `seedMoraUnits` in `analysis/japanese.ts`) turns out to be exactly
+     the missing piece for *word*-boundary-precise isolation, which this
+     doc's first pass wrongly dismissed as low-value (see the reversed
+     note in "recommended against porting" below) — each mora gets a
+     start/end time, so a word/phrase's range is just its component
+     morae's span. The catch: `seedMoraUnits` only heuristically
+     estimates timing (uniform slice = `duration / moraCount`, no real
+     forced alignment), accurate enough only after the learner manually
+     drags each marker into place while listening — real but nontrivial
+     per-sentence setup cost. Worth doing later if manual loop-marking
+     turns out too coarse or fiddly for consistently hitting a specific
+     word; skip unless that need actually shows up.
+3. **Live shadow waveform + shadow-mode recording + mic calibration**.
    Not ported at all in Phase 3 (`src/lib/recording.ts`'s port comment
    lists exactly what was skipped: `calibrateMicrophone`,
    `playReferenceForShadowing`, `ShadowReferencePlayer`,
@@ -1964,26 +1995,28 @@ were only found by this pass's closer read.
    `SentencePage.tsx`'s `startRecording()` comment on this exact ordering
    requirement, it's a real gotcha, not incidental structure. Also add a
    "Calibrate mic" button (`calibrateMicrophone()` returns a guidance
-   string list to render). No dependency on item 3.
-3. **Pitch/waveform comparison analysis** (`AnalysisPanel.tsx`, 216
+   string list to render). No dependency on item 4.
+4. **Pitch/waveform comparison analysis** (`AnalysisPanel.tsx`, 216
    lines) — the biggest single piece. Needs
    `~/projects/shadowing/web/src/analysis/{pitch,japanese,waveform,audio}.ts`
    (102–134 lines each, real audio DSP — pitch-contour extraction/
    comparison) ported to `src/lib/`. Renders reference-vs-attempt pitch
-   contours after a comparison playback. Independent of item 2
+   contours after a comparison playback. Independent of item 3
    (`AnalysisPanel` takes `referenceAssetId`/`learnerAssetId` and loads
    its own buffers) — only sequenced after it here because re-reading the
-   simpler audio code in item 2 first should make this DSP port less
+   simpler audio code in item 3 first should make this DSP port less
    error-prone, mirroring how Phase 7.9b's conjugation port went
    smoothly after several earlier phases' worth of familiarity with this
-   codebase's conventions. **Before starting**: check whether
-   `shadowing/web` has its own tests for these analysis functions
-   (`tests/` in that repo) — Phase 7.9b's conjugation port validated
-   cleanly against the source's own fixture set on the first try; the
-   same approach (port + validate against existing fixtures, don't
-   re-derive correctness from scratch) should apply here if fixtures
-   exist.
-4. **Polish bundle** (small, low-risk, do together): hide/show transcript
+   codebase's conventions. If item 2's practice-target isolation landed
+   first, this should honor the selected sub-range too (compare pitch
+   contours over just that window), not just whole-sentence audio.
+   **Before starting**: check whether `shadowing/web` has its own tests
+   for these analysis functions (`tests/` in that repo) — Phase 7.9b's
+   conjugation port validated cleanly against the source's own fixture
+   set on the first try; the same approach (port + validate against
+   existing fixtures, don't re-derive correctness from scratch) should
+   apply here if fixtures exist.
+5. **Polish bundle** (small, low-risk, do together): hide/show transcript
    (audio-only practice toggle), a notes field on a draft attempt before
    saving, favorite-marking on saved attempts, and defaulting comparison
    to the favorited (or else most-recent) attempt. All straightforward
@@ -2002,9 +2035,12 @@ before building if this judgment turns out wrong):
   `ChunkPuzzleStrip`); porting a second, unrelated "chunk" concept under
   the same name would likely confuse rather than help.
 - **Mora timing guide** (editable per-mora timing markers,
-  `TimingGuideService`) — a rhythm-practice aid with no obvious
-  integration point in this app's existing UI; unclear standalone value
-  without the chunk-practice feature it was paired with in the original.
+  `TimingGuideService`) — **reversed 2026-08-16**: this doc originally
+  called it low-value with no integration point; it turns out to be the
+  natural foundation for word-precise practice-target isolation (item 2
+  above). Still not recommended as a *first* build — start with item 2's
+  simpler manual loop-marking, and only port this if that turns out too
+  imprecise for reliably targeting a specific word.
 - **Manual reference-audio attach/replace/remove from the practice page**
   (`ReferenceAudioService.attach`/`remove`, file upload UI) — in the
   original app this was the *only* way to get reference audio onto a
