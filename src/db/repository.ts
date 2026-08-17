@@ -160,6 +160,23 @@ export async function updateBook(
   return updated;
 }
 
+export async function updateSentenceTranslation(
+  sentenceId: string,
+  translation: string,
+): Promise<Sentence> {
+  const db = getDb();
+  const existing = await db.sentences.get(sentenceId);
+  if (!existing) throw new Error('Sentence not found');
+  const updated: Sentence = {
+    ...existing,
+    translation,
+    updatedAt: nowIso(),
+  };
+  await db.sentences.put(updated);
+  notifySync('sentences', updated.id, updated);
+  return updated;
+}
+
 export async function deleteBook(bookId: string): Promise<void> {
   const db = getDb();
   const memberships = await db.bookSentences
@@ -1924,6 +1941,23 @@ export async function ensureVocabularyItem(
   ]);
 
   return item;
+}
+
+export async function updateVocabularyItem(
+  itemId: string,
+  patch: Partial<Pick<VocabularyItem, 'meaning' | 'partOfSpeech' | 'notes'>>,
+): Promise<VocabularyItem> {
+  const db = getDb();
+  const existing = await db.vocabularyItems.get(itemId);
+  if (!existing) throw new Error('Vocabulary item not found');
+  const updated: VocabularyItem = {
+    ...existing,
+    ...patch,
+    updatedAt: nowIso(),
+  };
+  await db.vocabularyItems.put(updated);
+  notifySync('vocabulary_items', updated.id, updated);
+  return updated;
 }
 
 /**

@@ -1,6 +1,7 @@
 # Status
 
-Last updated: 2026-08-17 (Phase 9 complete — Milestone 9 done).
+Last updated: 2026-08-17 (Phase 9 complete — Milestone 9 done; sentence
+translation and vocabulary meaning are now editable in the UI, see below).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3418,3 +3419,42 @@ project got real reasoning recorded, and these two hadn't yet.
   of the reference-vs-learner *comparison* work Phase 9 was scoped
   around. Reasonable follow-up if the existing controls turn out too
   unstructured in daily use.
+
+## New: sentence translation and vocabulary meaning are now editable
+
+Closes the gap flagged back in the "backfill JMDict glosses" note above: a
+CSV-imported book with no translation column (e.g. GLIM SPANKY —
+「怒りをくれよ」) had no way to add `sentence.translation` or a confirmed
+`VocabularyItem.meaning` after the fact — both were display-only everywhere
+(`AnalyzePage.tsx`'s "Satori English" panel, `VocabularyListPage.tsx`'s
+"(no meaning yet)" line). The JMDict backfill only helps when JMDict already
+has a matching entry; hand-picked lyrics/slang often don't.
+
+Added:
+- `src/db/repository.ts` — `updateSentenceTranslation(sentenceId, translation)`
+  and `updateVocabularyItem(itemId, patch)` (meaning/partOfSpeech/notes),
+  both mirroring `updateBook`'s existing get-patch-put-notifySync shape.
+- `AnalyzePage.tsx` — "Satori English" is now a `<textarea>` folded into the
+  page's existing autosave bag (alongside chunks/notes), so editing a
+  translation behaves exactly like editing analysis notes already did:
+  debounced autosave plus save-on-blur, same "Saving…/Saved" indicator.
+- `VocabularyListPage.tsx` — the meaning line is now an `<input>` per card
+  (`VocabularyMeaningField`), save-on-blur via `updateVocabularyItem`. This
+  page lists every confirmed vocabulary item across all books and already
+  had search-by-meaning, so it doubles as the place to find and fix
+  still-empty meanings — search functionally does not change but the field
+  it filters on is now directly editable in place.
+
+**Verified**: `npm run check` green. Extended
+`tests/vocabularyListPage.test.tsx` (meaning shown via input value now,
+not text; added a case that types a meaning, blurs, and confirms the DB
+row updated). No existing AnalyzePage test file existed to extend; the new
+translation field was verified by close 1-to-1 pattern match against the
+adjacent `notes` textarea in the same component (identical autosave bag,
+identical onBlur→saveNow wiring) plus a manual dev-server boot — not
+exercised in an actual browser this session (no browser tool available
+here), so give it a quick look in the UI before relying on it for real
+edits.
+
+**Code-reviewed**: not yet — small, low-risk, pattern-matched change; flag
+if a review pass would still be wanted before this ships to production.

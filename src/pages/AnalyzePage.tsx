@@ -14,6 +14,7 @@ import {
   materializeVocabularySelections,
   saveAnalysis,
   setBookSentenceStatus,
+  updateSentenceTranslation,
 } from '../db/repository';
 import type {
   AnalysisChunk,
@@ -72,6 +73,7 @@ export function AnalyzePage() {
   const [spaced, setSpaced] = useState('');
   const [chunks, setChunks] = useState<AnalysisChunk[]>([]);
   const [notes, setNotes] = useState('');
+  const [translation, setTranslation] = useState('');
   const [vocabularySelections, setVocabularySelections] = useState<
     VocabularySelection[]
   >([]);
@@ -125,6 +127,7 @@ export function AnalyzePage() {
     setDismissedSuggestionIds(new Set());
     setHeuristicPreview(null);
     setNotes(data.analysis?.notes ?? '');
+    setTranslation(data.sentence.translation ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
     const suggestions = data.sentence.vocabularySuggestions ?? [];
     const savedSelections = data.analysis?.vocabularySelections ?? [];
@@ -172,14 +175,18 @@ export function AnalyzePage() {
     {
       chunks,
       notes,
+      translation,
       vocabularySelections,
       vocabularyReviewStatus,
     },
     async (value) => {
-      await saveAnalysis(sentenceId, value.chunks, value.notes, {
-        reviewStatus: value.vocabularyReviewStatus,
-        selections: value.vocabularySelections,
-      });
+      await Promise.all([
+        saveAnalysis(sentenceId, value.chunks, value.notes, {
+          reviewStatus: value.vocabularyReviewStatus,
+          selections: value.vocabularySelections,
+        }),
+        updateSentenceTranslation(sentenceId, value.translation),
+      ]);
     },
     { enabled: hydrated },
   );
@@ -364,9 +371,18 @@ export function AnalyzePage() {
         ) : null}
         <VocabChips items={sentence.targetVocabulary} />
         {showEnglish ? (
-          <div className="panel" style={{ boxShadow: 'none' }}>
-            <div className="muted">Satori English</div>
-            <div>{sentence.translation || '(none)'}</div>
+          <div className="panel stack" style={{ boxShadow: 'none' }}>
+            <label className="muted" htmlFor="sentence-translation">
+              Satori English
+            </label>
+            <textarea
+              id="sentence-translation"
+              value={translation}
+              onChange={(event) => setTranslation(event.target.value)}
+              onBlur={() => void saveNow()}
+              placeholder="English translation…"
+              rows={2}
+            />
           </div>
         ) : null}
       </section>

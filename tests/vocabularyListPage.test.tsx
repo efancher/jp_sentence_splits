@@ -39,7 +39,9 @@ describe('VocabularyListPage', () => {
     await ensureVocabularyItem('大学', 'だいがく', { meaning: 'university' });
     renderPage();
     expect(await screen.findByText('だいがく')).toBeInTheDocument();
-    expect(screen.getByText('university')).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText('Meaning for 大学'),
+    ).toHaveValue('university');
   });
 
   it('filters by search query', async () => {
@@ -47,11 +49,26 @@ describe('VocabularyListPage', () => {
     await ensureVocabularyItem('猫', 'ねこ', { meaning: 'cat' });
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('university');
+    await screen.findByLabelText('Meaning for 大学');
 
     await user.type(screen.getByLabelText(/search vocabulary/i), 'cat');
-    expect(screen.getByText('cat')).toBeInTheDocument();
-    expect(screen.queryByText('university')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Meaning for 猫')).toHaveValue('cat');
+    expect(screen.queryByLabelText('Meaning for 大学')).not.toBeInTheDocument();
+  });
+
+  it('lets the user edit a vocabulary item meaning inline', async () => {
+    const item = await ensureVocabularyItem('猫', 'ねこ');
+    const user = userEvent.setup();
+    renderPage();
+
+    const input = await screen.findByLabelText('Meaning for 猫');
+    await user.type(input, 'cat');
+    await user.tab();
+
+    await screen.findByText('Saved');
+    const { getDb } = await import('../src/db/repository');
+    const updated = await getDb().vocabularyItems.get(item.id);
+    expect(updated?.meaning).toBe('cat');
   });
 
   it('renders each kanji character as a link to its detail page', async () => {

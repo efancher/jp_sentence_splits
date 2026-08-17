@@ -1,9 +1,50 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getDb } from '../db/repository';
+import { getDb, updateVocabularyItem } from '../db/repository';
+import type { VocabularyItem } from '../domain/types';
 import { isHanCharacter } from '../lib/kanji';
+
+function VocabularyMeaningField({ item }: { item: VocabularyItem }) {
+  const [meaning, setMeaning] = useState(item.meaning);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(
+    'idle',
+  );
+
+  useEffect(() => {
+    setMeaning(item.meaning);
+    setSaveState('idle');
+  }, [item.id, item.meaning]);
+
+  async function save() {
+    if (meaning === item.meaning) return;
+    setSaveState('saving');
+    await updateVocabularyItem(item.id, { meaning: meaning.trim() });
+    setSaveState('saved');
+  }
+
+  return (
+    <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+      <input
+        value={meaning}
+        onChange={(event) => {
+          setMeaning(event.target.value);
+          setSaveState('idle');
+        }}
+        onBlur={() => void save()}
+        placeholder="Meaning (English)…"
+        aria-label={`Meaning for ${item.expression}`}
+        style={{ flex: 1 }}
+      />
+      {saveState === 'saving' ? (
+        <span className="muted">Saving…</span>
+      ) : saveState === 'saved' ? (
+        <span className="muted">Saved</span>
+      ) : null}
+    </div>
+  );
+}
 
 export function VocabularyListPage() {
   const [query, setQuery] = useState('');
@@ -62,7 +103,7 @@ export function VocabularyListPage() {
                 )}
               </div>
               {item.reading ? <div className="muted">{item.reading}</div> : null}
-              <div>{item.meaning || '(no meaning yet)'}</div>
+              <VocabularyMeaningField item={item} />
               {item.partOfSpeech ? (
                 <div className="muted">{item.partOfSpeech}</div>
               ) : null}
