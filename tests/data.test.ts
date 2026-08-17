@@ -22,6 +22,7 @@ import {
   getDb,
   getDueStudyItems,
   getReferenceAlignment,
+  listAttemptAnalysisSummariesForSentence,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
   materializeVocabularySelections,
@@ -39,6 +40,7 @@ import {
   saveAnalysis,
   saveAttempt,
   saveAttemptAlignment,
+  saveAttemptAnalysisSummary,
   saveAttemptTranscription,
   saveReferenceAlignment,
   setAttemptFavorite,
@@ -478,6 +480,57 @@ describe('cached ASR transcription (Phase 9, Milestone 7)', () => {
     await getDb().attemptTranscriptions.update('attempt-1', { transcriptionVersion: 0 });
 
     expect(await getAttemptTranscription('attempt-1')).toBeUndefined();
+  });
+});
+
+describe('pronunciation history summaries (Phase 9, Milestone 8)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-history-${createId('db')}`);
+  });
+
+  it('saves and lists summaries for a sentence, oldest and newest', async () => {
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-1',
+      sentenceId: 'sent-1',
+      createdAt: '2026-08-12T00:00:00.000Z',
+      timingSeverity: 0.8,
+      pitchSeverity: 0.2,
+    });
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-2',
+      sentenceId: 'sent-1',
+      createdAt: '2026-08-14T00:00:00.000Z',
+      timingSeverity: 0.3,
+      pitchSeverity: 0.1,
+      primaryIssueKind: 'sokuon_timing',
+      primaryIssueMessage: 'Your 「っ」 in 「ちょっと」 is shorter than the reference.',
+    });
+    // A different sentence's summary should never leak in.
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-3',
+      sentenceId: 'sent-2',
+      createdAt: '2026-08-13T00:00:00.000Z',
+      timingSeverity: 0.5,
+      pitchSeverity: 0.5,
+    });
+
+    const summaries = await listAttemptAnalysisSummariesForSentence('sent-1');
+    expect(summaries.map((s) => s.id).sort()).toEqual(['attempt-1', 'attempt-2']);
+    const withIssue = summaries.find((s) => s.id === 'attempt-2');
+    expect(withIssue?.primaryIssueKind).toBe('sokuon_timing');
+  });
+
+  it('excludes summaries with a stale analysisSummaryVersion', async () => {
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-1',
+      sentenceId: 'sent-1',
+      createdAt: '2026-08-12T00:00:00.000Z',
+      timingSeverity: 0.5,
+      pitchSeverity: 0.5,
+    });
+    await getDb().attemptAnalysisSummaries.update('attempt-1', { analysisSummaryVersion: 0 });
+
+    expect(await listAttemptAnalysisSummariesForSentence('sent-1')).toEqual([]);
   });
 });
 

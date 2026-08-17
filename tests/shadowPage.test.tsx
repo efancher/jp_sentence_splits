@@ -306,6 +306,50 @@ describe('ShadowPage', () => {
     expect(screen.getAllByText(/low confidence:/).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows pronunciation history trend labels once attempts have been analyzed', async () => {
+    const chottoWord = (tHoldMs: number) => {
+      const firstOEnd = 0.69;
+      const tHoldEnd = firstOEnd + tHoldMs / 1000;
+      const finalOEnd = tHoldEnd + 0.05;
+      return {
+        start: 0.5,
+        end: finalOEnd,
+        text: 'ちょっと',
+        phones: [
+          { start: 0.5, end: 0.6, text: 'tɕ' },
+          { start: 0.6, end: firstOEnd, text: 'o' },
+          { start: firstOEnd, end: tHoldEnd, text: 'tː' },
+          { start: tHoldEnd, end: finalOEnd, text: 'o' },
+        ],
+      };
+    };
+    await saveReferenceAlignment('audio-1', { durationSeconds: 1.7, words: [chottoWord(100)] });
+    // Older attempt: っ far too short (severity ~1.0, "needs work"). Newer
+    // attempt: still short but meaningfully closer (severity ~0.43,
+    // "improving" — 70%+ of the previous severity per trendLabel's ratio).
+    await saveAttemptAlignment('attempt-older', { durationSeconds: 1.5, words: [chottoWord(20)] });
+    await saveAttemptAlignment('attempt-newer', { durationSeconds: 1.65, words: [chottoWord(55)] });
+
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const rows = screen.getAllByRole('listitem');
+    // Newest first: rows[0] = attempt-newer, rows[1] = attempt-older.
+    await user.click(within(rows[1]!).getByRole('button', { name: 'Analyze' }));
+    await within(rows[1]!).findByText('Segment timing');
+
+    await user.click(within(rows[0]!).getByRole('button', { name: 'Analyze' }));
+    await within(rows[0]!).findByText('Segment timing');
+
+    await waitFor(() => {
+      expect(within(rows[1]!).getByText(/Timing: needs work/)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(within(rows[0]!).getByText(/Timing: improving/)).toBeInTheDocument();
+    });
+  });
+
   it('marks a target range from the reference player and can clear it', async () => {
     const user = userEvent.setup();
     renderShadowPage();

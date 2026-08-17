@@ -7,6 +7,7 @@ import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import {
   deleteAttempt,
   getDb,
+  listAttemptAnalysisSummariesForSentence,
   listAttemptsForSentence,
   rateAttempt,
   saveAttempt,
@@ -15,6 +16,7 @@ import {
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
 import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
+import { buildHistoryDisplay } from '../lib/pronunciationHistory';
 import {
   MAX_RECORDING_DURATION_MS,
   PLAYBACK_SPEEDS,
@@ -100,11 +102,12 @@ export function ShadowPage() {
 
   const data = useLiveQuery(async () => {
     const db = getDb();
-    const [book, sentence, sentenceAudio, attempts] = await Promise.all([
+    const [book, sentence, sentenceAudio, attempts, analysisSummaries] = await Promise.all([
       db.books.get(bookId),
       db.sentences.get(sentenceId),
       db.sentenceAudio.where('sentenceId').equals(sentenceId).toArray(),
       listAttemptsForSentence(sentenceId),
+      listAttemptAnalysisSummariesForSentence(sentenceId),
     ]);
     const matchingSourceId = book?.sourceKey?.startsWith('shadowing:')
       ? book.sourceKey.slice('shadowing:'.length)
@@ -112,7 +115,7 @@ export function ShadowPage() {
     const referenceAudio =
       sentenceAudio.find((audio) => audio.sourceId === matchingSourceId) ??
       sentenceAudio[0];
-    return { book, sentence, referenceAudio, attempts };
+    return { book, sentence, referenceAudio, attempts, analysisSummaries };
   }, [bookId, sentenceId]);
 
   // Pick up recordings that finished either by the Stop button or by hitting
@@ -175,7 +178,10 @@ export function ShadowPage() {
 
   if (!data?.sentence) return <p className="muted">Loading…</p>;
 
-  const { book, sentence, referenceAudio, attempts } = data;
+  const { book, sentence, referenceAudio, attempts, analysisSummaries } = data;
+  const historyByAttemptId = new Map(
+    buildHistoryDisplay(analysisSummaries).map((entry) => [entry.summary.id, entry]),
+  );
 
   async function handleSave() {
     if (!pendingAttempt) return;
@@ -493,6 +499,12 @@ export function ShadowPage() {
                         {attempt.manualRating ? ` · ${attempt.manualRating}` : ''}
                       </div>
                       {attempt.notes ? <p className="muted">{attempt.notes}</p> : null}
+                      {historyByAttemptId.has(attempt.id) ? (
+                        <div className="muted">
+                          Timing: {historyByAttemptId.get(attempt.id)!.timingLabel} · Pitch:{' '}
+                          {historyByAttemptId.get(attempt.id)!.pitchLabel}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="row">
                       <button
@@ -557,9 +569,11 @@ export function ShadowPage() {
                   </div>
                   {analyzingAttemptId === attempt.id && referenceAudio ? (
                     <AnalysisPanel
+                      sentenceId={sentenceId}
                       referenceAudioId={referenceAudio.id}
                       referenceBlob={referenceAudio.blob}
                       attemptId={attempt.id}
+                      attemptCreatedAt={attempt.createdAt}
                       learnerBlob={attempt.blob}
                       transcript={sentence.japanese}
                       hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}

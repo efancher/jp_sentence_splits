@@ -5,6 +5,7 @@ import {
   getAttemptTranscription,
   getReferenceAlignment,
   saveAttemptAlignment,
+  saveAttemptAnalysisSummary,
   saveAttemptTranscription,
   saveReferenceAlignment,
 } from '../db/repository';
@@ -18,6 +19,7 @@ import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { selectPrimaryObservation } from '../lib/feedbackRanking';
+import { categorizeObservations } from '../lib/pronunciationHistory';
 import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
@@ -163,9 +165,11 @@ function PitchCanvas({
 }
 
 export function AnalysisPanel({
+  sentenceId,
   referenceAudioId,
   referenceBlob,
   attemptId,
+  attemptCreatedAt,
   learnerBlob,
   transcript,
   hasReading,
@@ -173,11 +177,15 @@ export function AnalysisPanel({
   targetRange,
   onProposeSegment,
 }: {
+  /** History records (Phase 9, Milestone 8) are grouped by sentence. */
+  sentenceId: string;
   /** Cache key for the reference clip's server alignment (Phase 9, Milestone 2b). */
   referenceAudioId: string;
   referenceBlob: Blob;
   /** Cache key for the learner attempt's server alignment (Phase 9, Milestone 2b). */
   attemptId: string;
+  /** The attempt's own recording time — history is ordered/labeled by this, not analysis time. */
+  attemptCreatedAt: string;
   learnerBlob: Blob;
   /** Plain Japanese sentence text sent to the alignment service. */
   transcript: string;
@@ -286,6 +294,7 @@ export function AnalysisPanel({
   }, [referenceAudioId, referenceBlob, attemptId, learnerBlob, transcript]);
 
   const [transcribedText, setTranscribedText] = useState<string>();
+  const [asrSettled, setAsrSettled] = useState(false);
 
   // A third, independent effect (Phase 9, Milestone 7) — ASR is a
   // secondary, non-authoritative signal on the learner recording only
@@ -294,9 +303,12 @@ export function AnalysisPanel({
   useEffect(() => {
     let active = true;
     setTranscribedText(undefined);
+    setAsrSettled(false);
     void (async () => {
       const text = await loadTranscription(attemptId, learnerBlob, transcript);
-      if (active) setTranscribedText(text);
+      if (!active) return;
+      setTranscribedText(text);
+      setAsrSettled(true);
     })();
     return () => {
       active = false;
@@ -359,6 +371,32 @@ export function AnalysisPanel({
     segmentObservations.length > 0 ||
     pitchTimingObservations.length > 0 ||
     asrObservations.length > 0;
+
+  // Once every source has settled (not just local analysis — the server
+  // alignment/ASR calls too), save a lightweight trend summary for the
+  // history view (Phase 9, Milestone 8). Redundant re-saves on later
+  // renders are harmless (a single Dexie `put`, same key).
+  const analysisSettled =
+    !busy && serverAlignmentStatus !== 'idle' && serverAlignmentStatus !== 'loading' && asrSettled;
+  useEffect(() => {
+    if (!analysisSettled) return;
+    const all = [...observations, ...segmentObservations, ...pitchTimingObservations, ...asrObservations];
+    const { timingSeverity, pitchSeverity } = categorizeObservations(all);
+    const primary = selectPrimaryObservation(all);
+    void saveAttemptAnalysisSummary({
+      id: attemptId,
+      sentenceId,
+      createdAt: attemptCreatedAt,
+      timingSeverity,
+      pitchSeverity,
+      primaryIssueKind: primary?.kind,
+      primaryIssueMessage: primary?.message,
+    });
+    // Intentionally not depending on the observation arrays themselves —
+    // they're new references every render; `analysisSettled` already
+    // captures "the inputs that produce them have stopped changing".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisSettled, attemptId, sentenceId, attemptCreatedAt]);
 
   return (
     <div className="stack">

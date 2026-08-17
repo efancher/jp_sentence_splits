@@ -222,6 +222,29 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v11 with the attemptAnalysisSummaries table', async () => {
+    const name = `migrate-v11-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(11);
+    expect(db.tables.some((t) => t.name === 'attemptAnalysisSummaries')).toBe(true);
+
+    const now = new Date().toISOString();
+    await db.attemptAnalysisSummaries.put({
+      id: 'attempt-1',
+      sentenceId: 'sent-1',
+      createdAt: now,
+      analysisSummaryVersion: 1,
+      timingSeverity: 0.5,
+      pitchSeverity: 0.1,
+    });
+
+    expect((await db.attemptAnalysisSummaries.get('attempt-1'))?.sentenceId).toBe('sent-1');
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

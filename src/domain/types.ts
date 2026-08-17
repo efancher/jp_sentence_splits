@@ -188,6 +188,28 @@ export interface AttemptTranscription {
   computedAt: string;
 }
 
+/**
+ * Lightweight per-attempt analysis summary (Phase 9, Milestone 8) —
+ * deliberately not every derived observation forever, just enough to show
+ * a trend over time ("Timing: needs work" -> "improving" -> "close").
+ * Full detail is already recomputable on demand from the cached
+ * alignment/transcription (Milestones 2b/7). Local-only, same precedent
+ * as the other attempt-scoped analysis caches.
+ */
+export interface AttemptAnalysisSummary {
+  /** = Attempt.id */
+  id: string;
+  sentenceId: string;
+  createdAt: string;
+  analysisSummaryVersion: number;
+  /** Max severity (0-1) among this attempt's timing-category observations, 0 if none. */
+  timingSeverity: number;
+  /** Max severity (0-1) among this attempt's pitch-category observations, 0 if none. */
+  pitchSeverity: number;
+  primaryIssueKind?: string;
+  primaryIssueMessage?: string;
+}
+
 export interface Book {
   id: string;
   title: string;

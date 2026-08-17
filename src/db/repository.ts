@@ -6,6 +6,7 @@ import type {
   AppSettings,
   Attempt,
   AttemptAlignment,
+  AttemptAnalysisSummary,
   AttemptRating,
   AttemptTranscription,
   Book,
@@ -37,6 +38,7 @@ import type {
   VocabularySelection,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
+import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -1576,6 +1578,22 @@ export async function saveAttemptTranscription(attemptId: string, text: string):
     computedAt: nowIso(),
   };
   await db.attemptTranscriptions.put(row);
+}
+
+export async function saveAttemptAnalysisSummary(
+  summary: Omit<AttemptAnalysisSummary, 'analysisSummaryVersion'>,
+): Promise<void> {
+  const db = getDb();
+  const row: AttemptAnalysisSummary = { ...summary, analysisSummaryVersion: ANALYSIS_SUMMARY_VERSION };
+  await db.attemptAnalysisSummaries.put(row);
+}
+
+export async function listAttemptAnalysisSummariesForSentence(
+  sentenceId: string,
+): Promise<AttemptAnalysisSummary[]> {
+  const db = getDb();
+  const rows = await db.attemptAnalysisSummaries.where('sentenceId').equals(sentenceId).toArray();
+  return rows.filter((row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION);
 }
 
 // ---------------------------------------------------------------------------

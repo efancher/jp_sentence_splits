@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-16 (Phase 9 Milestone 7 done).
+Last updated: 2026-08-17 (Phase 9 Milestone 8 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3180,7 +3180,79 @@ error.
 **Verified**: `npm run check` green — 538 tests passed, 2 pre-existing
 skips (unrelated). `npm run build` clean.
 
-## Phase 9 roadmap (Milestones 8-9, not started)
+## Phase 9 Milestone 8 — pronunciation history: done
+
+Stores a lightweight per-attempt analysis summary and shows a trend label
+per category next to each attempt, e.g. "Timing: needs work" ->
+"improving" -> "close" — the brief's own worked example (Phase 14),
+finally closing the "✓ Much closer" cross-recording comparison
+deliberately deferred from Milestone 5/6.
+
+Deliberately **not** every derived observation forever: a summary is just
+two severity numbers (timing/pitch), the primary issue's kind/message,
+and a version — the full detail is already recomputable on demand from
+the cached alignment/transcription (Milestones 2b/7). Also **not**
+included: the brief's Phase 15 cross-sentence learner *profile*
+("っ timing: recurring issue" aggregated across many sentences) — that's
+a materially different aggregation (across sentences, not across
+attempts of one sentence) and a natural follow-on once per-sentence
+history is live and in daily use, not part of this milestone's scope.
+
+Added:
+- `src/lib/pronunciationHistory.ts` — `categorizeObservations` (max
+  severity within the brief's own two example categories: `duration`/
+  `word-duration`/`sokuon_timing`/`long_vowel_timing` → Timing;
+  `pitch`/`pitch_timing`/`pitch_shape` → Pitch; ASR/meta observations
+  belong to neither, matching the brief's own two-category example
+  exactly rather than inventing more). `trendLabel(current, previous)` —
+  `'close'` when nothing notable is left; `'needs work'` for a first-time
+  or non-improved issue; `'improving'`/`'much closer'` when meaningfully
+  better than the previous attempt (a large jump down to a low absolute
+  severity gets the stronger label, matching the brief's own "Aug 14
+  improving" -> "Aug 16 much closer" progression). `buildHistoryDisplay`
+  sorts a sentence's summaries oldest-first and labels each relative to
+  its true predecessor, not just adjacent array order.
+- `AttemptAnalysisSummary` (`src/domain/types.ts`), Dexie `version(11)`
+  (`attemptAnalysisSummaries: 'id, sentenceId, createdAt'` — indexed on
+  `sentenceId`, mirroring `attempts`' own indexing convention, for the
+  "all history for this sentence" query), `saveAttemptAnalysisSummary`/
+  `listAttemptAnalysisSummariesForSentence` (`src/db/repository.ts`) — a
+  stale `analysisSummaryVersion` is filtered out entirely rather than
+  returned, same "stale = missing" precedent as the alignment/
+  transcription caches.
+- `src/components/AnalysisPanel.tsx` — new required `sentenceId`/
+  `attemptCreatedAt` props (history is grouped by sentence and ordered by
+  when the attempt was *recorded*, not when it happened to be analyzed).
+  A new effect saves the summary once every source has settled (local
+  analysis, server alignment, and ASR all independently — a new
+  `analysisSettled` derived flag combining all three); redundant re-saves
+  on later renders are harmless (a single Dexie `put` on the same key).
+- `src/pages/ShadowPage.tsx` — queries summaries for the sentence
+  alongside attempts (already-existing `useLiveQuery`), builds the
+  history display, and renders each attempt's "Timing: X · Pitch: Y"
+  line under its existing notes — no new section, fits the existing
+  attempt-row density per the brief's "avoid dense tables" mobile
+  requirement.
+
+Tests: `tests/pronunciationHistory.test.ts` (new, pure) — category
+max-severity grouping, exclusion of ASR/meta kinds, all six
+`trendLabel` cases (close/needs-work/improving/much-closer/no-change/
+regression), and a chronological multi-entry sequence confirming each
+entry compares to its *true* predecessor after sorting, not raw array
+order. `tests/data.test.ts`/`tests/migration.test.ts` — round-trip,
+stale-version exclusion, cross-sentence isolation, v11 schema test.
+`tests/shadowPage.test.tsx` — a real end-to-end scenario: seed two
+attempts with different severities, analyze both in turn, and confirm
+the older attempt's row shows "needs work" while the newer one shows
+"improving" — proving the whole chain (analysis -> summary save ->
+`useLiveQuery` re-render -> trend labeling) actually works together, not
+just each piece in isolation.
+
+**Verified**: `npm run check` green — 553 tests passed, 2 pre-existing
+skips (unrelated). `npm run build` clean, `npm run lint` shows no new
+warnings.
+
+## Phase 9 roadmap (Milestone 9, not started)
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -3208,8 +3280,7 @@ architecture decision or the researched facts above.
   history to compare against).
 - **Milestone 7 — ASR as a secondary signal: done**, see above (used
   `base`, not `small`, after a real memory check on this host).
-- **Milestone 8 — pronunciation history**: new local-only Dexie table
-  (mirroring `attempts`' local-only, unsynced precedent) tracking trend
-  categories per sentence, not raw scores.
-- **Milestone 9 — PASQA (experimental, feature-flagged)**: prototype once
-  Milestones 2-4 give a real baseline to compare it against.
+- **Milestone 8 — pronunciation history: done**, see above. Cross-sentence
+  learner *profile* (Phase 15) remains a deliberate, separate follow-on.
+- **Milestone 9 — PASQA (experimental, feature-flagged)**: prototype now
+  that Milestones 2-4 give a real baseline to compare it against.
