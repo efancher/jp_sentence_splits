@@ -3376,3 +3376,45 @@ architecture decision or the researched facts above.
 
 **Phase 9 — the full 9-milestone shadowing pronunciation/prosody feedback
 system — is now complete.**
+
+## Phase 9: two more items deliberately out of scope, with reasoning
+
+Flagged here explicitly rather than left as a bare mention in
+`docs/ROADMAP.md`'s summary line — every other deferred item in this
+project got real reasoning recorded, and these two hadn't yet.
+
+- **The brief's Phase 25 debug/diagnostic view** (a separate view showing
+  reference/learner alignment, F0, mora boundaries, ASR output, and
+  ranked feedback candidates, explicitly *not* meant for the normal
+  learner UI). Not built as a separate view because almost all of that
+  detail is **already visible inline** in `AnalysisPanel.tsx`'s existing
+  sections — "Word timing (server)," "Segment timing," "Pitch movement,"
+  "Possible pronunciation differences" already surface alignment, phone
+  timing, and ASR output directly, just not gated behind a dedicated
+  debug toggle the way the brief pictured. A real gap remains: there's no
+  single view of the *ranked candidate list before* `selectPrimaryObservation`
+  picks one (only the winner is shown as "FOCUS ON THIS"), which would be
+  the one genuinely new piece a debug view would add. Reasonable
+  lower-priority UI-polish follow-up, not core to the reference-vs-learner
+  comparison loop the brief asked to prioritize.
+- **The brief's Phase 13 named practice-mode taxonomy** (Listen / Echo /
+  Delayed shadowing / Close shadowing / Independent production /
+  Meaning→production). The brief itself said not to necessarily implement
+  all of these immediately, and to first extend the *existing* playback
+  modes rather than build new ones — Phase 8 (this repo's own numbering,
+  predating Phase 9) already covers several of these under different
+  names: "Listen" is just playing the reference clip (already trivial);
+  "Close shadowing" is Phase 8.3's shadow-mode play-along recording
+  (reference plays while recording, near-immediate following); "Hide
+  transcript" (Phase 8.5) is the mechanical inverse of "Independent
+  production" (show text, skip the native-audio-first step) and mostly
+  already achievable by simply not pressing play before recording, just
+  without a dedicated named toggle. Two are genuinely not built at all:
+  **delayed shadowing** (a specific 500-1000ms offset timer between
+  reference playback and recording) and **meaning→production** (show the
+  English translation instead of the Japanese text, requiring the
+  learner to produce the sentence from meaning alone) — both would need
+  real new UI, not just relabeling existing controls, and neither is part
+  of the reference-vs-learner *comparison* work Phase 9 was scoped
+  around. Reasonable follow-up if the existing controls turn out too
+  unstructured in daily use.
