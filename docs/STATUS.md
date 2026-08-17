@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-08-17 (Phase 9 Milestone 8 done).
+Last updated: 2026-08-17 (Phase 9 complete — Milestone 9 done).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3252,7 +3252,95 @@ just each piece in isolation.
 skips (unrelated). `npm run build` clean, `npm run lint` shows no new
 warnings.
 
-## Phase 9 roadmap (Milestone 9, not started)
+## Phase 9 Milestone 9 — PASQA investigation: not integrated, documented why
+
+Per the brief's own explicit instructions for this milestone ("do not
+make the first implementation dependent on PASQA... if not practical,
+document why and leave the architecture ready for it later"), this pass
+is research and a documented decision, not new code. The brief's own
+checklist, answered:
+
+1. **Code/weights available?** Yes — `github.com/lycorp-jp/PASQA` and
+   `huggingface.co/ly-corporation/PASQA` are both real, live, and
+   published alongside an INTERSPEECH 2026 paper
+   (arXiv:2606.20137, "PASQA: Pitch-Accent-focused Speech Quality
+   Assessment Model...").
+2. **License?** CC0 1.0 (public domain) — no restriction on use.
+3. **Hardware requirements?** Confirmed by fetching the real
+   `pyproject.toml`: `torch>=2.3.0,<2.9`, `torchaudio`, `s3prl==0.4.10`
+   (a self-supervised speech-representation toolkit that wraps its own
+   upstream backbone model — likely HuBERT/wav2vec2-scale, exact variant
+   not disclosed in public docs), plus `soundfile`/`pyyaml`/`numpy`.
+   Defaults to CUDA if available, falls back to CPU — no hard GPU
+   requirement, but this is a **fundamentally heavier dependency stack**
+   than anything else in `shadowing-analysis-api`: MFA uses Kaldi (no
+   deep-learning framework at all) and faster-whisper uses CTranslate2
+   (a lightweight C++ inference engine, deliberately not PyTorch) —
+   both chosen specifically to stay light. PyTorch's CPU wheel alone
+   typically adds 500 MB-2 GB of installed size, before `s3prl`'s own
+   backbone checkpoint (commonly 90 MB-1.2 GB depending on which
+   upstream model it loads) or PASQA's own downstream head weights.
+4. **Inference cost?** Not documented publicly (no benchmark numbers in
+   the paper abstract or repo); given the SSL-backbone-plus-head
+   architecture, plausibly comparable to or heavier than faster-whisper's
+   `base` model per call, but genuinely unknown without installing it.
+5. **Installation complexity?** Moderate — `uv`-managed Python project,
+   a plain `pip install`-able dependency set (no conda-only bindings like
+   MFA's kalpy/pynini), so installable in principle, just heavy.
+6. **Compares/references known Japanese speech?** No — confirmed
+   standalone: scores learner audio directly against a katakana mora
+   sequence (which Milestone 1's `segmentIntoMorae` output could feed
+   once romanized to katakana), no reference recording needed. This
+   would make it a genuinely different kind of signal from everything
+   built in Milestones 1-8 (all reference-vs-learner comparison) — closer
+   in spirit to Milestone 7's ASR (a secondary, standalone signal).
+7. **Localized accent-error information?** The model description mentions
+   "an auxiliary accent-error localization task," but the published
+   inference example only demonstrates the aggregate MOS score — no
+   confirmed working example of the localization output specifically.
+8. **Would it meaningfully improve the current pitch-comparison system?**
+   Genuinely unclear without hands-on testing — it's trained specifically
+   for pitch-accent correctness (narrower and more specialized than this
+   project's own general reference-vs-learner pitch-contour comparison,
+   Milestone 4), which could be a real complement, but the resource cost
+   to find out is non-trivial on this box.
+
+**Verdict: not integrated now.** This host had only ~1-1.5 GB genuinely
+free even *before* Milestone 7's ASR addition (the alignment service
+alone uses ~2.4 GB RSS warm); Milestone 7 deliberately chose the smaller
+`base` Whisper model specifically because of that measured constraint.
+Adding PyTorch + `s3prl` + an SSL backbone on top would be a materially
+bigger, riskier addition to an already memory-constrained shared personal
+box, for a feature whose real-world benefit here is still unconfirmed.
+Not a rejection of PASQA — a resource-driven "not yet."
+
+**Architecture left ready**, per the brief's instruction — no code
+changes needed to add this later, since the pattern is already
+established three times over (Milestones 2a/7):
+- Server: a new `app/pasqa.py` would mirror `aligner.py`/`asr.py`'s
+  lazy-singleton-behind-a-lock shape exactly (load on first use, not at
+  `systemd` startup), and a new `POST /pasqa-score` endpoint would follow
+  `main.py`'s existing validation/error-status conventions.
+- Frontend: a new `src/lib/pasqaObservations.ts` would follow the exact
+  shape of `asrObservations.ts` (a `TimingObservation[]`-producing pure
+  function, `confidence: 'low'`/modest `severity` given it's an
+  experimental signal) — folded into `AnalysisPanel.tsx`'s existing
+  combined-observation list feeding `selectPrimaryObservation`, requiring
+  **zero changes** to the ranking logic itself (this is the same
+  "additive, no special-casing" pattern every prior milestone's signal
+  followed).
+- A real feature flag (e.g. an `AppSettings` toggle) only becomes
+  meaningful once there's a working backend to gate — not added now as a
+  dead switch with nothing behind it, which would just be confusing UI
+  for no benefit.
+
+**With Milestone 9 addressed (documented, not shipped, per the brief's
+own instruction for this specific milestone), Phase 9 — the full
+9-milestone shadowing pronunciation/prosody feedback system — is now
+complete**: mora segmentation (1), forced alignment (2a/2b), timing (3)
+and pitch (4) feedback, ranked "Fix One Thing" (5/6), ASR as a secondary
+signal (7), pronunciation history (8), and a documented, ready-to-build
+path for PASQA (9).
 
 Recorded here so a future session doesn't need to re-derive the
 architecture decision or the researched facts above.
@@ -3282,5 +3370,9 @@ architecture decision or the researched facts above.
   `base`, not `small`, after a real memory check on this host).
 - **Milestone 8 — pronunciation history: done**, see above. Cross-sentence
   learner *profile* (Phase 15) remains a deliberate, separate follow-on.
-- **Milestone 9 — PASQA (experimental, feature-flagged)**: prototype now
-  that Milestones 2-4 give a real baseline to compare it against.
+- **Milestone 9 — PASQA: investigated, documented, not integrated**, see
+  above — a resource-driven "not yet" (would need PyTorch + s3prl on an
+  already memory-constrained shared box), architecture left ready.
+
+**Phase 9 — the full 9-milestone shadowing pronunciation/prosody feedback
+system — is now complete.**
