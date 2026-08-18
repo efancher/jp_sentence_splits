@@ -25,6 +25,8 @@ import {
   listAttemptAnalysisSummariesForSentence,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
+  listCardIssueReports,
+  listCardIssueReportsWithContext,
   materializeVocabularySelections,
   moveBookSentence,
   getStudyItemDebugInfo,
@@ -35,6 +37,8 @@ import {
   recordReview,
   removeSentencesFromBook,
   reorderBookSentences,
+  reportCardIssue,
+  resolveCardIssueReport,
   restoreBookSentenceSnapshot,
   restoreBackup,
   saveAnalysis,
@@ -1181,6 +1185,75 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     const { review } = await recordReview({ studyItemId: item.id, rating: 'good' });
     expect(review.source).toBeUndefined();
     expect(review.contextSentenceId).toBeUndefined();
+  });
+});
+
+describe('card issue reports', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-issues-${createId('db')}`);
+  });
+
+  it('reportCardIssue creates an open report referencing the study item and sentence', async () => {
+    const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const report = await reportCardIssue({
+      studyItemId: studyItem.id,
+      sentenceId: 'sent-1',
+      activityType: 'comprehension',
+      note: 'Translation looks wrong.',
+    });
+
+    expect(report.status).toBe('open');
+    expect(report.studyItemId).toBe(studyItem.id);
+    expect(report.sentenceId).toBe('sent-1');
+    expect(await getDb().cardIssueReports.get(report.id)).toBeTruthy();
+  });
+
+  it('listCardIssueReports filters by status and sorts newest first', async () => {
+    const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const first = await reportCardIssue({
+      studyItemId: studyItem.id,
+      activityType: 'comprehension',
+      note: 'First.',
+    });
+    const second = await reportCardIssue({
+      studyItemId: studyItem.id,
+      activityType: 'comprehension',
+      note: 'Second.',
+    });
+    await resolveCardIssueReport(first.id);
+
+    const open = await listCardIssueReports('open');
+    expect(open.map((item) => item.id)).toEqual([second.id]);
+
+    const all = await listCardIssueReports();
+    expect(all.map((item) => item.id)).toEqual([second.id, first.id]);
+  });
+
+  it('resolveCardIssueReport marks the report resolved with a timestamp', async () => {
+    const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const report = await reportCardIssue({
+      studyItemId: studyItem.id,
+      activityType: 'comprehension',
+      note: 'Something is off.',
+    });
+
+    const resolved = await resolveCardIssueReport(report.id);
+    expect(resolved.status).toBe('resolved');
+    expect(resolved.resolvedAt).toBeTruthy();
+  });
+
+  it('listCardIssueReportsWithContext attaches the sentence shown at report time', async () => {
+    const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await getDb().sentences.add(stubSentence('sent-1', { japanese: '猫が好きです。' }));
+    await reportCardIssue({
+      studyItemId: studyItem.id,
+      sentenceId: 'sent-1',
+      activityType: 'comprehension',
+      note: 'Reading missing.',
+    });
+
+    const [withContext] = await listCardIssueReportsWithContext();
+    expect(withContext?.sentence?.japanese).toBe('猫が好きです。');
   });
 });
 

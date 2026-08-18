@@ -245,6 +245,33 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v12 with the cardIssueReports table', async () => {
+    const name = `migrate-v12-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(12);
+    expect(db.tables.some((t) => t.name === 'cardIssueReports')).toBe(true);
+
+    const now = new Date().toISOString();
+    await db.cardIssueReports.put({
+      id: 'issue-1',
+      studyItemId: 'study-item-1',
+      sentenceId: 'sent-1',
+      activityType: 'reading_retrieval',
+      note: 'The reading shown looks wrong.',
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const report = await db.cardIssueReports.get('issue-1');
+    expect(report?.studyItemId).toBe('study-item-1');
+    expect(report?.status).toBe('open');
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

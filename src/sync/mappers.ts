@@ -1,6 +1,7 @@
 import type {
   Book,
   BookSentence,
+  CardIssueReport,
   ImportBatch,
   InboxMembership,
   Kanji,
@@ -30,7 +31,8 @@ export type LocalSyncPayload =
   | SentenceVocabulary
   | Kanji
   | VocabularyKanji
-  | VocabularyConfusion;
+  | VocabularyConfusion
+  | CardIssueReport;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -585,6 +587,43 @@ export function remoteToVocabularyConfusion(
   };
 }
 
+export function cardIssueReportToRemote(
+  report: CardIssueReport,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: report.id,
+    owner_id: ownerId,
+    study_item_id: report.studyItemId,
+    sentence_id: report.sentenceId ?? null,
+    activity_type: report.activityType,
+    note: report.note,
+    status: report.status,
+    resolved_at: report.resolvedAt ?? null,
+    created_at: report.createdAt,
+    updated_at: report.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToCardIssueReport(
+  row: Record<string, unknown>,
+): CardIssueReport {
+  return {
+    id: String(row.id),
+    studyItemId: String(row.study_item_id),
+    sentenceId: (row.sentence_id as string | null) ?? undefined,
+    activityType: String(row.activity_type),
+    note: String(row.note),
+    status: row.status as CardIssueReport['status'],
+    resolvedAt: (row.resolved_at as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -636,6 +675,8 @@ export function toRemoteRow(
         ownerId,
         version,
       );
+    case 'card_issue_reports':
+      return cardIssueReportToRemote(payload as CardIssueReport, ownerId, version);
   }
 }
 

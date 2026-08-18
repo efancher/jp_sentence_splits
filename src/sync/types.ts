@@ -13,7 +13,8 @@ export type SyncEntity =
   | 'sentence_vocabulary'
   | 'kanji'
   | 'vocabulary_kanji'
-  | 'vocabulary_confusions';
+  | 'vocabulary_confusions'
+  | 'card_issue_reports';
 
 export type SyncOperationType = 'upsert' | 'delete';
 
@@ -101,4 +102,5 @@ export const SYNCABLE_ENTITIES: readonly SyncEntity[] = [
   'sentence_vocabulary',
   'kanji',
   'vocabulary_kanji',
+  'card_issue_reports',
 ] as const;

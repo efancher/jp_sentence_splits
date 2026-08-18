@@ -12,6 +12,8 @@ import type {
   Book,
   BookChapter,
   BookSentence,
+  CardIssueReport,
+  CardIssueStatus,
   ErrorClassification,
   ImportBatch,
   InboxMembership,
@@ -2317,6 +2319,91 @@ export async function getConfusionPairCandidates(
     if (itemA && itemB) candidates.push({ confusion, itemA, itemB });
   }
   return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Card issue reports: a lightweight "flag this card, deal with it later"
+// mechanism raised from ReviewPage. Deliberately not part of
+// backupSchema/restoreBackup (same reasoning Phase 1 used for `sources`) —
+// these are synced like study_items/reviews, so cloud sync (or
+// scripts/list-card-issues.ts, for a future Claude session) is the actual
+// durability story, not the local JSON backup.
+// ---------------------------------------------------------------------------
+
+export async function reportCardIssue(input: {
+  studyItemId: string;
+  sentenceId?: string;
+  activityType: StudyActivityType;
+  note: string;
+}): Promise<CardIssueReport> {
+  const db = getDb();
+  const timestamp = nowIso();
+  const report: CardIssueReport = {
+    id: createId('card_issue'),
+    studyItemId: input.studyItemId,
+    sentenceId: input.sentenceId,
+    activityType: input.activityType,
+    note: input.note,
+    status: 'open',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.cardIssueReports.put(report);
+  notifySync('card_issue_reports', report.id, report);
+  return report;
+}
+
+export async function listCardIssueReports(
+  status?: CardIssueStatus,
+): Promise<CardIssueReport[]> {
+  const db = getDb();
+  const all = await db.cardIssueReports.toArray();
+  const filtered = status ? all.filter((item) => item.status === status) : all;
+  return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export interface CardIssueReportWithContext {
+  report: CardIssueReport;
+  sentence?: Sentence;
+}
+
+/** listCardIssueReports plus the sentence shown at report time, for the /issues list UI. */
+export async function listCardIssueReportsWithContext(): Promise<
+  CardIssueReportWithContext[]
+> {
+  const db = getDb();
+  const reports = await listCardIssueReports();
+  const sentenceIds = [
+    ...new Set(
+      reports
+        .map((report) => report.sentenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const sentences = await db.sentences.bulkGet(sentenceIds);
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  return reports.map((report) => ({
+    report,
+    sentence: report.sentenceId ? sentenceById.get(report.sentenceId) : undefined,
+  }));
+}
+
+export async function resolveCardIssueReport(id: string): Promise<CardIssueReport> {
+  const db = getDb();
+  const existing = await db.cardIssueReports.get(id);
+  if (!existing) throw new Error('Issue report not found');
+  const timestamp = nowIso();
+  const updated: CardIssueReport = {
+    ...existing,
+    status: 'resolved',
+    resolvedAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.cardIssueReports.put(updated);
+  notifySync('card_issue_reports', updated.id, updated);
+  return updated;
 }
 
 // ---------------------------------------------------------------------------

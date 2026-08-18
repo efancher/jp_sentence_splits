@@ -284,6 +284,20 @@ export const vocabularyConfusionSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const cardIssueStatusSchema = z.enum(['open', 'resolved']);
+
+export const cardIssueReportSchema = z.object({
+  id: z.string(),
+  studyItemId: z.string(),
+  sentenceId: z.string().optional(),
+  activityType: z.string(),
+  note: z.string().min(1),
+  status: cardIssueStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().optional(),
+});
+
 // Moved ahead of backupSchema (which now references them) — const bindings
 // can't be forward-referenced across a module's top-level evaluation order,
 // same reason fsrsStateSchema/studyItemSchema/reviewSchema were reordered in

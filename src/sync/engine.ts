@@ -18,6 +18,7 @@ import {
   remoteToAnalysis,
   remoteToBook,
   remoteToBookSentence,
+  remoteToCardIssueReport,
   remoteToImportBatch,
   remoteToInbox,
   remoteToKanji,
@@ -607,6 +608,9 @@ async function applyRemoteDelete(
     case 'vocabulary_confusions':
       await db.vocabularyConfusions.delete(recordId);
       break;
+    case 'card_issue_reports':
+      await db.cardIssueReports.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -684,6 +688,9 @@ async function applyRemoteUpsert(
     case 'vocabulary_confusions':
       await db.vocabularyConfusions.put(remoteToVocabularyConfusion(remote));
       break;
+    case 'card_issue_reports':
+      await db.cardIssueReports.put(remoteToCardIssueReport(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -714,6 +721,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const sentenceVocabulary = await db.sentenceVocabulary.toArray();
   const vocabularyKanji = await db.vocabularyKanji.toArray();
   const vocabularyConfusions = await db.vocabularyConfusions.toArray();
+  const cardIssueReports = await db.cardIssueReports.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -753,6 +761,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const confusion of vocabularyConfusions) {
     await trackAndEnqueue('vocabulary_confusions', confusion.id, confusion);
+  }
+  for (const report of cardIssueReports) {
+    await trackAndEnqueue('card_issue_reports', report.id, report);
   }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
@@ -803,6 +814,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.sentenceVocabulary,
       db.vocabularyKanji,
       db.vocabularyConfusions,
+      db.cardIssueReports,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -821,6 +833,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.sentenceVocabulary.clear();
       await db.vocabularyKanji.clear();
       await db.vocabularyConfusions.clear();
+      await db.cardIssueReports.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -871,6 +884,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
     await db.vocabularyConfusions.bulkPut(
       rows.map((r) => remoteToVocabularyConfusion(r)),
     );
+  });
+  await pullFullTable('card_issue_reports', userId, async (rows) => {
+    await db.cardIssueReports.bulkPut(rows.map((r) => remoteToCardIssueReport(r)));
   });
 
   const { data: maxEvent } = await supabase

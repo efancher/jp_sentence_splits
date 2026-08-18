@@ -55,6 +55,11 @@ const BuildPage = lazy(() =>
     default: module.BuildPage,
   })),
 );
+const CardIssuesPage = lazy(() =>
+  import('./pages/CardIssuesPage').then((module) => ({
+    default: module.CardIssuesPage,
+  })),
+);
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((module) => ({
     default: module.SearchPage,
@@ -104,6 +109,7 @@ export default function App() {
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="review" element={<ReviewPage />} />
+            <Route path="issues" element={<CardIssuesPage />} />
             <Route path="study-items" element={<StudyItemsListPage />} />
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />

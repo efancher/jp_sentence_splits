@@ -560,3 +560,27 @@ export interface VocabularyConfusion {
   createdAt: string;
   updatedAt: string;
 }
+
+export type CardIssueStatus = 'open' | 'resolved';
+
+/**
+ * A learner-authored free-text flag on a review card ("this reading looks
+ * wrong", "translation doesn't match") — a lightweight substitute for
+ * fixing the card mid-review. `sentenceId` is the sentence shown at report
+ * time (absent for subject types with no single sentence, e.g. a
+ * contrastive pair spanning two). Meant to be batched: reported during
+ * study, resolved later in one sitting (`/issues`, or a future Claude
+ * session reading them via `scripts/list-card-issues.ts`), not acted on
+ * immediately.
+ */
+export interface CardIssueReport {
+  id: string;
+  studyItemId: string;
+  sentenceId?: string;
+  activityType: StudyActivityType;
+  note: string;
+  status: CardIssueStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}

@@ -16,6 +16,7 @@ import {
   getVocabularyTargetCandidates,
   readSettings,
   recordReview,
+  reportCardIssue,
   type ConfusionPairCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
@@ -376,6 +377,11 @@ export function ReviewPage() {
   );
   /** Set only by reading_production's Check step; recorded as Review.responseRaw on rate. */
   const [typedResponse, setTypedResponse] = useState('');
+  /** "Report issue" — an inline text box, not window.prompt (silently no-ops on installed iOS Safari PWAs). */
+  const [reportingIssue, setReportingIssue] = useState(false);
+  const [issueNote, setIssueNote] = useState('');
+  const [submittingIssue, setSubmittingIssue] = useState(false);
+  const [issueReported, setIssueReported] = useState(false);
   /**
    * Session planner (Phase 7.10): counts distinct new subjects seeded this
    * sitting (one per batch, not per card — a word's reading_retrieval +
@@ -658,6 +664,9 @@ export function ReviewPage() {
     setMnemonicVisible(false);
     setAssistanceUsed(new Set());
     setTypedResponse('');
+    setReportingIssue(false);
+    setIssueNote('');
+    setIssueReported(false);
   }, [current?.studyItem.id]);
 
   // Mnemonic scaffolding (Phase 7.5, brief §7/§6): shown unprompted only
@@ -712,6 +721,24 @@ export function ReviewPage() {
       setQueue((q) => q.slice(1));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleReportIssue() {
+    if (!current || !issueNote.trim() || submittingIssue) return;
+    setSubmittingIssue(true);
+    try {
+      await reportCardIssue({
+        studyItemId: current.studyItem.id,
+        sentenceId: current.sentence.id,
+        activityType: current.studyItem.activityType,
+        note: issueNote.trim(),
+      });
+      setReportingIssue(false);
+      setIssueNote('');
+      setIssueReported(true);
+    } finally {
+      setSubmittingIssue(false);
     }
   }
 
@@ -783,6 +810,44 @@ export function ReviewPage() {
               </div>
               <Link to={`/study-items/${current.studyItem.id}`}>Why?</Link>
             </div>
+            {reportingIssue ? (
+              <form
+                className="stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleReportIssue();
+                }}
+              >
+                <textarea
+                  value={issueNote}
+                  onChange={(event) => setIssueNote(event.target.value)}
+                  placeholder="What's wrong with this card?"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="row">
+                  <button type="submit" disabled={!issueNote.trim() || submittingIssue}>
+                    Submit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportingIssue(false);
+                      setIssueNote('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <button type="button" onClick={() => setReportingIssue(true)}>
+                  Report issue
+                </button>
+                {issueReported ? <span className="muted">✓ Reported</span> : null}
+              </div>
+            )}
             {current.target && current.studyItem.activityType === 'reading_production' ? (
               <ReadingProductionCard
                 key={current.studyItem.id}

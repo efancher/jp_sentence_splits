@@ -2,7 +2,8 @@
 
 Last updated: 2026-08-18 (Phase 9 complete — Milestone 9 done; sentence
 translation and vocabulary meaning are now editable in the UI; a batch of
-small Phase 7.10/9 follow-ups landed together, see below).
+small Phase 7.10/9 follow-ups landed together; card issue reports
+("report a problem with this card") added — see below).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3459,6 +3460,68 @@ edits.
 
 **Code-reviewed**: not yet — small, low-risk, pattern-matched change; flag
 if a review pass would still be wanted before this ships to production.
+
+## New: card issue reports ("report a problem with this card")
+
+User request: a lightweight way to flag a review card as wrong (bad
+reading, wrong translation, etc.) from `ReviewPage` without breaking the
+review flow, to be triaged in a batch later rather than fixed immediately.
+Confirmed with the user: reports sync to Supabase (not local-only), so a
+future Claude session can read them directly via a script — same
+authorization pattern as the WaniKani/JMDict import scripts — instead of
+requiring the user to export or paste anything.
+
+Added:
+- `src/domain/types.ts`/`schemas.ts` — `CardIssueReport` (`studyItemId`,
+  optional `sentenceId`, `activityType`, `note`, `status: 'open' |
+  'resolved'`, `createdAt`/`updatedAt`/`resolvedAt`) + matching Zod schema.
+  Not added to `backupSchema`/`restoreBackup` — same reasoning Phase 1 used
+  for `sources`: cloud sync (and `scripts/list-card-issues.ts`) is the real
+  durability story here, not the local JSON backup.
+- Dexie schema v12 (`cardIssueReports` store) and a matching Postgres
+  migration (`supabase/migrations/20260818000000_card_issue_reports.sql`):
+  owner-only RLS, `sync_private.owns_study_item` cross-reference check on
+  insert/update (same pattern as `reviews`), `on delete cascade` from
+  `study_items` (a report about a deleted card is moot) and `on delete set
+  null` from `sentences` (never lose report history over a sentence edit).
+- Full sync wiring (`src/sync/types.ts`, `mappers.ts`, `engine.ts`) — push,
+  pull, first-login upload, and replace-with-cloud — mirrors exactly how
+  `vocabulary_confusions` got wired in Phase 7.1.
+- `src/db/repository.ts` — `reportCardIssue` (create, status `open`),
+  `listCardIssueReports`/`listCardIssueReportsWithContext` (joined with the
+  sentence shown at report time, for the list UI), `resolveCardIssueReport`.
+- `ReviewPage.tsx` — a "Report issue" button on the current card opens an
+  inline `<textarea>` (not `window.prompt` — silently no-ops on installed
+  iOS Safari PWAs, see prior incident) with Submit/Cancel; submitting shows
+  "✓ Reported" without advancing the queue, so reporting doesn't interrupt
+  rating the card.
+- `src/pages/CardIssuesPage.tsx` (new `/issues` route + bottom-nav entry) —
+  lists reports (open by default, a checkbox reveals resolved ones too)
+  with the sentence, note, and a "Mark resolved" button; links back to
+  `/study-items/:id` for full card context.
+- `scripts/list-card-issues.ts` (`npm run issues:list`) — read-only,
+  authenticates the same way `scripts/import-wanikani-kanji.ts` does (anon
+  client + `SCRIPT_SUPABASE_EMAIL`/`PASSWORD`), prints every open report
+  with its sentence text for a future Claude session to triage in bulk.
+- Tests: `tests/migration.test.ts` (schema v12 round-trip), a new `describe`
+  block in `tests/data.test.ts` covering create/list/filter/resolve and the
+  sentence-context join.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 600
+passed, 2 skipped (pre-existing, unrelated). `npm run build` succeeds.
+Browser smoke test (Playwright driving the dev server) was attempted but
+this container has no system Chromium dependencies (`libnspr4` etc.
+missing) and no sudo to install them — UI correctness rests on the
+component/build checks above plus close pattern-matching against
+`ReviewPage`'s existing reveal/rate controls and `StudyItemsListPage`'s
+list layout, not an actual rendered screenshot. Worth a quick manual check
+in the real app before relying on it.
+
+**Deliberately not done yet**: no delete/reopen action (resolve is
+one-way; re-reporting the same card creates a new row, which is fine at
+this volume), no edit-in-place fix-the-card action from `/issues` (the
+whole point is triage happens in a later Claude conversation, not inline
+in the app), not wired into `backupSchema` (see above).
 
 ## Fix: stuck push failures from duplicate get-or-create kanji/vocabulary rows
 

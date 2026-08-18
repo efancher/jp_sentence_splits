@@ -9,6 +9,7 @@ import type {
   AttemptTranscription,
   Book,
   BookSentence,
+  CardIssueReport,
   ImportBatch,
   InboxMembership,
   Kanji,
@@ -87,6 +88,10 @@ export class GlossbookDatabase extends Dexie {
   // Lightweight per-attempt analysis summaries for the history view
   // (Phase 9, Milestone 8) — local-only, same precedent.
   attemptAnalysisSummaries!: EntityTable<AttemptAnalysisSummary, 'id'>;
+  // Learner-reported card issues ("this reading looks wrong"), synced like
+  // study_items/reviews so a future session can review a batch via
+  // scripts/list-card-issues.ts — see docs/STATUS.md.
+  cardIssueReports!: EntityTable<CardIssueReport, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -371,6 +376,44 @@ export class GlossbookDatabase extends Dexie {
       attemptAlignments: 'id',
       attemptTranscriptions: 'id',
       attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+    });
+
+    // Card issue reports — purely additive, every store above is unchanged.
+    this.version(12).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
+      attempts: 'id, sentenceId, createdAt, manualRating',
+      vocabularyConfusions:
+        'id, itemAId, itemBId, [itemAId+itemBId], updatedAt',
+      referenceAlignments: 'id',
+      attemptAlignments: 'id',
+      attemptTranscriptions: 'id',
+      attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+      cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
     });
   }
 }

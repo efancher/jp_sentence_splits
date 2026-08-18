@@ -8,6 +8,7 @@ const NAV = [
   { to: '/', label: 'Books', end: true },
   { to: '/inbox', label: 'Inbox' },
   { to: '/review', label: 'Review' },
+  { to: '/issues', label: 'Issues' },
   { to: '/study-items', label: 'Study items' },
   { to: '/vocabulary', label: 'Words' },
   { to: '/search', label: 'Search' },
