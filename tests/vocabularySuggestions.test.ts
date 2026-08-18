@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildMorphStrip,
+  canMergeSelections,
   canMergeSuggestionIntoSelection,
   combineSuggestions,
   defaultSelectionsFromSuggestions,
   isContentPos,
+  mergeSelections,
   mergeSuggestionIntoSelection,
   selectionFromSuggestion,
   suggestionsFromTokens,
@@ -127,6 +129,54 @@ describe('vocabularySuggestions', () => {
       japanese,
     );
     expect(again).toBe(combined);
+  });
+
+  it('combines tokens separated only by a readability space, keeping the space in surface', () => {
+    // Some source sentences insert a space between clauses (e.g. before a
+    // trailing auxiliary) even though there's no real token boundary there.
+    const japanese = 'して あげるから';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'し', start: 0, end: 1, lemma: 'する', reading: 'し', pos: '動詞' },
+      { surface: 'て', start: 1, end: 2, lemma: 'て', reading: 'て', pos: '助詞' },
+      { surface: 'あげる', start: 3, end: 6, lemma: 'あげる', reading: 'あげる', pos: '動詞' },
+      { surface: 'から', start: 6, end: 8, lemma: 'から', reading: 'から', pos: '助詞' },
+    ]);
+    const shite = combineSuggestions(suggestions.slice(0, 2), japanese)!;
+    expect(shite.surface).toBe('して');
+
+    const ageru = suggestions[2]!;
+    expect(canMergeSuggestionIntoSelection(ageru, shite, japanese)).toBe(true);
+
+    const shiteAsSuggestion = { ...suggestions[1]!, start: shite.start, end: shite.end, surface: shite.surface };
+    const combined = combineSuggestions([shiteAsSuggestion, ageru], japanese);
+    expect(combined).not.toBeNull();
+    expect(combined!.surface).toBe('して あげる');
+  });
+
+  it('rejects merging across a real (non-whitespace) gap like punctuation', () => {
+    const japanese = 'あの、先輩';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: 'あの', start: 0, end: 2, lemma: 'あの', reading: 'あの', pos: '感動詞' },
+      { surface: '先輩', start: 3, end: 5, lemma: '先輩', reading: 'せんぱい', pos: '名詞' },
+    ]);
+    expect(combineSuggestions(suggestions, japanese)).toBeNull();
+  });
+
+  it('merges two selections separated only by whitespace', () => {
+    const japanese = 'して あげるから';
+    const shite = selectionFromSuggestion(
+      suggestionsFromTokens(japanese, [
+        { surface: 'して', start: 0, end: 2, lemma: 'する', reading: 'して', pos: '動詞' },
+      ])[0]!,
+    );
+    const ageru = selectionFromSuggestion(
+      suggestionsFromTokens(japanese, [
+        { surface: 'あげる', start: 3, end: 6, lemma: 'あげる', reading: 'あげる', pos: '動詞' },
+      ])[0]!,
+    );
+    expect(canMergeSelections(shite, ageru, japanese)).toBe(true);
+    const merged = mergeSelections(ageru, shite, japanese);
+    expect(merged?.surface).toBe('して あげる');
   });
 
   it('rejects invalid spans', () => {

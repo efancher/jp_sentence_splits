@@ -56,6 +56,20 @@ export function validateSpan(
   return japanese.slice(start, end) === surface;
 }
 
+/**
+ * True when two spans touch directly, or the only text between them is
+ * whitespace (e.g. a readability space some sources insert between clauses).
+ * Punctuation and other characters still count as a real gap.
+ */
+function isAdjacentAcrossWhitespace(
+  japanese: string,
+  earlierEnd: number,
+  laterStart: number,
+): boolean {
+  if (earlierEnd > laterStart) return false;
+  return /^\s*$/.test(japanese.slice(earlierEnd, laterStart));
+}
+
 export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,
@@ -130,7 +144,9 @@ export function combineSuggestions(
   if (suggestions.length < 2) return null;
   const ordered = [...suggestions].sort((a, b) => a.start - b.start);
   for (let i = 1; i < ordered.length; i += 1) {
-    if (ordered[i].start !== ordered[i - 1].end) return null;
+    if (!isAdjacentAcrossWhitespace(japanese, ordered[i - 1].end, ordered[i].start)) {
+      return null;
+    }
   }
   const start = ordered[0].start;
   const end = ordered[ordered.length - 1].end;
@@ -179,7 +195,8 @@ export function canMergeSuggestionIntoSelection(
   }
   if (selectionCoversSuggestion(selection, suggestion)) return true;
   return (
-    suggestion.end === selection.start || suggestion.start === selection.end
+    isAdjacentAcrossWhitespace(japanese, suggestion.end, selection.start) ||
+    isAdjacentAcrossWhitespace(japanese, selection.end, suggestion.start)
   );
 }
 
@@ -204,7 +221,7 @@ export function mergeSuggestionIntoSelection(
   const surface = japanese.slice(start, end);
   if (!validateSpan(japanese, start, end, surface)) return null;
 
-  const suggestionBefore = suggestion.end === selection.start;
+  const suggestionBefore = suggestion.end <= selection.start;
   const expression = suggestionBefore
     ? `${suggestion.expression}${selection.expression}`
     : `${selection.expression}${suggestion.expression}`;
@@ -244,7 +261,10 @@ export function canMergeSelections(
   if (a.id === b.id) return false;
   if (!validateSpan(japanese, a.start, a.end, a.surface)) return false;
   if (!validateSpan(japanese, b.start, b.end, b.surface)) return false;
-  return a.end === b.start || a.start === b.end;
+  return (
+    isAdjacentAcrossWhitespace(japanese, a.end, b.start) ||
+    isAdjacentAcrossWhitespace(japanese, b.end, a.start)
+  );
 }
 
 /**
@@ -257,7 +277,7 @@ export function mergeSelections(
   japanese: string,
 ): VocabularySelection | null {
   if (!canMergeSelections(dragged, target, japanese)) return null;
-  const draggedBefore = dragged.end === target.start;
+  const draggedBefore = dragged.end <= target.start;
   const start = Math.min(dragged.start, target.start);
   const end = Math.max(dragged.end, target.end);
   const surface = japanese.slice(start, end);
