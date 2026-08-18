@@ -84,19 +84,12 @@ export async function uploadReferenceAudio(input: {
   return path;
 }
 
-export async function downloadReferenceAudio(
-  audioId: string,
-  storagePath: string,
-): Promise<Blob | null> {
+async function fetchFromStorage(storagePath: string): Promise<Blob | null> {
   const meta = await ensureSyncMeta();
   if (meta.wifiOnlyAudioDownload && !isWifiConnection()) {
     syncLog('info', 'Skipping audio download (Wi-Fi only)', 'AUDIO_WIFI');
     return null;
   }
-
-  const db = getDb();
-  const existing = await db.sentenceAudio.get(audioId);
-  if (existing?.blob?.size) return existing.blob;
 
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -109,6 +102,50 @@ export async function downloadReferenceAudio(
     return null;
   }
   return data;
+}
+
+export async function downloadReferenceAudio(
+  audioId: string,
+  storagePath: string,
+): Promise<Blob | null> {
+  const db = getDb();
+  const existing = await db.sentenceAudio.get(audioId);
+  if (existing?.blob?.size) return existing.blob;
+  return fetchFromStorage(storagePath);
+}
+
+/**
+ * Re-downloads a sentence's reference audio from Supabase Storage and
+ * overwrites the local copy, bypassing the local cache. Safari's IndexedDB
+ * occasionally hands back a Blob that fails on playback (WebKitBlobResource
+ * error) even though its metadata/size look fine; the cloud original is
+ * unaffected, so refetching it heals the local cache.
+ */
+export async function repairSentenceAudio(audioId: string): Promise<Blob | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data: row, error } = await supabase
+    .from('reference_audio')
+    .select('storage_path, mime_type')
+    .eq('id', audioId)
+    .maybeSingle();
+  const storagePath = (row as { storage_path?: string } | null)?.storage_path;
+  if (error || !storagePath) {
+    syncLog('warn', error?.message ?? 'No cloud copy to repair from', 'AUDIO_REPAIR');
+    return null;
+  }
+
+  const blob = await fetchFromStorage(storagePath);
+  if (!blob) return null;
+
+  const db = getDb();
+  await db.sentenceAudio.update(audioId, {
+    blob,
+    mimeType: (row as { mime_type?: string } | null)?.mime_type ?? blob.type,
+  });
+  syncLog('info', 'Repaired local audio blob from cloud copy', 'AUDIO_REPAIR', { audioId });
+  return blob;
 }
 
 export async function clearDownloadedAudioCache(): Promise<number> {

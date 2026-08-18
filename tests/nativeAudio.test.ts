@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SentenceAudio } from '../src/domain/types';
 import { NativeAudioController } from '../src/lib/nativeAudio';
 
+const repairSentenceAudio = vi.fn(async (_audioId: string): Promise<Blob | null> => null);
+vi.mock('../src/sync/audioSync', () => ({
+  repairSentenceAudio: (audioId: string) => repairSentenceAudio(audioId),
+}));
+
 class MockAudio {
   static instances: MockAudio[] = [];
   src: string;
@@ -49,6 +54,8 @@ describe('NativeAudioController', () => {
       revokeObjectURL,
     });
     revokeObjectURL.mockClear();
+    repairSentenceAudio.mockReset();
+    repairSentenceAudio.mockResolvedValue(null);
   });
 
   afterEach(() => vi.unstubAllGlobals());
@@ -109,7 +116,7 @@ describe('NativeAudioController', () => {
     });
   });
 
-  it('shows a user-safe error when playback fails', async () => {
+  it('shows a user-safe error when playback fails and no cloud copy repairs it', async () => {
     class RejectingAudio extends MockAudio {
       override play = vi.fn(async () => {
         throw new Error('codec details');
@@ -118,10 +125,38 @@ describe('NativeAudioController', () => {
     vi.stubGlobal('Audio', RejectingAudio);
     const controller = new NativeAudioController();
     await controller.play(audioRecord('audio-1'));
+    expect(repairSentenceAudio).toHaveBeenCalledWith('audio-1');
     expect(controller.getSnapshot()).toMatchObject({
       isPlaying: false,
       activeItemId: null,
       error: 'Unable to play this sentence recording on this device.',
+    });
+  });
+
+  it('recovers by refetching from the cloud when the local blob is corrupt (Safari WebKitBlobResource)', async () => {
+    let failNext = true;
+    class FlakyAudio extends MockAudio {
+      override play = vi.fn(async () => {
+        if (failNext) throw new Error('WebKitBlobResource error 1');
+      });
+    }
+    vi.stubGlobal('Audio', FlakyAudio);
+    const freshBlob = new Blob(['fresh'], { type: 'audio/mp4' });
+    repairSentenceAudio.mockImplementation(async () => {
+      failNext = false;
+      return freshBlob;
+    });
+
+    const controller = new NativeAudioController();
+    await controller.play(audioRecord('audio-1'));
+
+    expect(repairSentenceAudio).toHaveBeenCalledOnce();
+    expect(MockAudio.instances).toHaveLength(2);
+    expect(MockAudio.instances[1]?.src).toBe('blob:5');
+    expect(controller.getSnapshot()).toMatchObject({
+      isPlaying: true,
+      activeItemId: 'audio-1',
+      error: null,
     });
   });
 });

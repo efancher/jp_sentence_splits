@@ -3507,3 +3507,51 @@ same documented boundary as `shouldApplyRemoteEvent`. Not yet verified
 against production Supabase (no mocking harness exists for that path
 either) — the Mac that hit this should be watched after it picks up the
 fix to confirm the 6 pending mutations clear.
+
+## Fix: reference-audio playback self-heals from a corrupt local Safari blob
+
+Reported: a shadowing reference clip played fine on the user's phone (Safari)
+but failed on their Mac (also Safari) with `WebKitBlobResource error 1` /
+`NotSupportedError` on `audio.play()`. Not a codec/container problem (both
+devices are the same WebKit engine, so a real codec gap would fail on both);
+this is a known Safari IndexedDB bug where a stored Blob can come back as a
+reference that no longer resolves to real bytes, on one device only, with the
+row's own metadata (size, mimeType) looking completely fine.
+
+Fix: turned `downloadReferenceAudio` in `src/sync/audioSync.ts` — defined
+during earlier sync work but never actually called from anywhere — into the
+basis for a real self-healing path. New `repairSentenceAudio(audioId)` looks
+up the `reference_audio` row's `storage_path`/`mime_type` directly from
+Supabase (the local `SentenceAudio` record doesn't cache `storagePath`),
+re-downloads the blob from Storage, and overwrites the local Dexie copy —
+the cloud original is unaffected by a single device's local corruption, so
+this heals it without a full book re-import.
+
+Wired into both playback paths that render reference/native audio:
+- `NativeAudioController.play()` (`src/lib/nativeAudio.ts`, used by
+  Practice's 🎧 Native button): `play()` split into `attemptPlayback`/
+  `recoverAndRetry` — on the first failure (either the `audio.play()`
+  rejection or the element's `onerror`), it calls `repairSentenceAudio` and
+  retries exactly once with the fresh blob before giving up with the
+  existing user-facing error message.
+- `ShadowPage`'s reference `<audio controls>` element (no equivalent JS
+  `play()` call to hook, since playback is user-driven via native browser
+  controls): a new `onError` handler triggers the same repair once per
+  sentence view; `db.sentenceAudio.update` inside `repairSentenceAudio`
+  retriggers the page's existing `useLiveQuery`, which regenerates
+  `referenceUrl` from the fresh blob automatically. A `referenceError`
+  message shows if the cloud has no copy to repair from either (e.g.
+  reference-audio sync was off when the book was imported).
+
+Only fixes clips already uploaded to Supabase Storage (reference-audio cloud
+sync must have been on at import time) — otherwise `repairSentenceAudio`
+finds no `storage_path` and the existing error message stands, same as
+before this fix.
+
+**Verified**: `npm run check` green (typecheck + full suite, 562 passed / 2
+pre-existing skips). New tests in `tests/nativeAudio.test.ts` cover both the
+successful repair-and-retry and the no-cloud-copy-to-repair-from case
+(mocking `repairSentenceAudio` — the real function's Supabase Storage calls
+aren't covered, same documented boundary as other sync code in this file).
+Not yet verified against the user's actual corrupt Mac blob in a real
+browser.

@@ -41,6 +41,21 @@ export class NativeAudioController {
   async play(record: SentenceAudio, playbackRate = 1): Promise<void> {
     this.stop();
     const generation = ++this.generation;
+    this.notify({
+      isPlaying: true,
+      activeItemId: record.id,
+      error: null,
+    });
+    await this.attemptPlayback(record, playbackRate, generation, false);
+  }
+
+  private async attemptPlayback(
+    record: SentenceAudio,
+    playbackRate: number,
+    generation: number,
+    isRetry: boolean,
+  ): Promise<void> {
+    this.revokeObjectUrl();
     const url = URL.createObjectURL(record.blob);
     const audio = new Audio(url);
     audio.playbackRate = playbackRate;
@@ -48,29 +63,57 @@ export class NativeAudioController {
     this.objectUrl = url;
     this.audio = audio;
     audio.onended = () => this.finish(generation);
-    audio.onerror = () => {
-      if (generation !== this.generation) return;
+
+    let handled = false;
+    const handleFailure = () => {
+      if (generation !== this.generation || handled) return;
+      handled = true;
+      void this.recoverAndRetry(record, playbackRate, generation, isRetry);
+    };
+    audio.onerror = handleFailure;
+
+    try {
+      await audio.play();
+    } catch {
+      if (generation === this.generation && !handled) {
+        handled = true;
+        await this.recoverAndRetry(record, playbackRate, generation, isRetry);
+      }
+    }
+  }
+
+  /**
+   * Safari's IndexedDB occasionally hands back a Blob that fails to play
+   * (WebKitBlobResource error) even though it looks intact locally. One
+   * retry after refetching the clip from Supabase Storage recovers from
+   * that without the user having to re-import the whole book.
+   */
+  private async recoverAndRetry(
+    record: SentenceAudio,
+    playbackRate: number,
+    generation: number,
+    isRetry: boolean,
+  ): Promise<void> {
+    if (isRetry) {
+      console.error('Native sentence audio playback failed after repair attempt.');
+      this.finish(
+        generation,
+        'Unable to play this sentence recording on this device.',
+      );
+      return;
+    }
+    const { repairSentenceAudio } = await import('../sync/audioSync');
+    const freshBlob = await repairSentenceAudio(record.id);
+    if (generation !== this.generation) return;
+    if (!freshBlob) {
       console.error('Unable to play imported native sentence audio.');
       this.finish(
         generation,
         'Unable to play this sentence recording on this device.',
       );
-    };
-    this.notify({
-      isPlaying: true,
-      activeItemId: record.id,
-      error: null,
-    });
-    try {
-      await audio.play();
-    } catch (error) {
-      if (generation !== this.generation) return;
-      console.error('Native sentence audio playback failed:', error);
-      this.finish(
-        generation,
-        'Unable to play this sentence recording on this device.',
-      );
+      return;
     }
+    await this.attemptPlayback({ ...record, blob: freshBlob }, playbackRate, generation, true);
   }
 
   stop(): void {

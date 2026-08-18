@@ -95,6 +95,8 @@ export function ShadowPage() {
   const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
   const [hideTranscript, setHideTranscript] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const referenceRepairAttempted = useRef(false);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -151,7 +153,32 @@ export function ShadowPage() {
     setDraftNotes('');
     setTargetRange(null);
     setAnalyzingAttemptId(null);
+    setReferenceError(null);
+    referenceRepairAttempted.current = false;
   }, [sentenceId]);
+
+  /**
+   * Safari's IndexedDB occasionally hands back a reference-audio Blob that
+   * fails to play (WebKitBlobResource error) even though it looks intact
+   * locally. One retry after refetching the clip from Supabase Storage
+   * recovers from that without a full book re-import; `db.sentenceAudio`
+   * updating retriggers the liveQuery above and swaps in a fresh
+   * `referenceUrl` automatically.
+   */
+  function handleReferenceAudioError() {
+    const audioId = data?.referenceAudio?.id;
+    if (referenceRepairAttempted.current || !audioId) return;
+    referenceRepairAttempted.current = true;
+    void (async () => {
+      const { repairSentenceAudio } = await import('../sync/audioSync');
+      const freshBlob = await repairSentenceAudio(audioId);
+      if (!freshBlob) {
+        setReferenceError(
+          'Could not play this recording on this device. Try re-importing the book.',
+        );
+      }
+    })();
+  }
 
   useEffect(() => {
     if (!referenceAudioRef.current) return;
@@ -342,7 +369,9 @@ export function ShadowPage() {
               src={referenceUrl}
               aria-label="Reference audio"
               className="audio-player"
+              onError={handleReferenceAudioError}
             />
+            {referenceError ? <p className="muted">{referenceError}</p> : null}
             <SpeedControl speed={speed} onChange={setSpeed} />
             <div className="row" style={{ alignItems: 'center' }}>
               <button type="button" onClick={handleMarkStart}>
