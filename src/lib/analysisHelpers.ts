@@ -268,12 +268,12 @@ export function moveChunkBoundary(
     if (index >= next.length - 1) return chunks;
     const current = next[index]!;
     const following = next[index + 1]!;
-    if (isZeroGaChunk(following) || !current.japanese) return chunks;
-    const ch = current.japanese.slice(0, 1);
-    current.japanese = current.japanese.slice(1);
-    following.japanese = ch + following.japanese;
-    if (!current.japanese) {
-      next.splice(index, 1);
+    if (isZeroGaChunk(following) || !following.japanese) return chunks;
+    const ch = following.japanese.slice(0, 1);
+    following.japanese = following.japanese.slice(1);
+    current.japanese = current.japanese + ch;
+    if (!following.japanese) {
+      next.splice(index + 1, 1);
     }
   }
 
