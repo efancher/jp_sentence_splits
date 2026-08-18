@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyReviewError,
+  computeGraduatedSubjectIds,
   createInitialFsrsState,
   isGraduated,
   isSentenceReadyForFullReview,
@@ -8,7 +10,7 @@ import {
   isVocabularyItemProficient,
   scheduleReview,
 } from '../src/lib/scheduling';
-import type { FsrsState } from '../src/domain/types';
+import type { FsrsState, StudyItem } from '../src/domain/types';
 
 describe('createInitialFsrsState', () => {
   it('creates a new, unreviewed card due immediately', () => {
@@ -156,5 +158,124 @@ describe('isSentenceReadyForFullReview (full-sentence gating)', () => {
 
   it('is ready once confirmed and every linked vocabulary item is proficient', () => {
     expect(isSentenceReadyForFullReview('confirmed', ['word-a'], new Set(['word-a']))).toBe(true);
+  });
+});
+
+describe('classifyReviewError (evidence-based only)', () => {
+  it('classifies a wrong reading_production answer as incorrect_reading', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'vocabularyItem',
+        activityType: 'reading_production',
+        rating: 'again',
+        responseRaw: 'たべる',
+        expectedAnswer: 'たべた',
+      }),
+    ).toBe('incorrect_reading');
+  });
+
+  it('classifies a wrong sentence_transformation answer as grammar_misunderstanding', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'vocabularyItem',
+        activityType: 'sentence_transformation',
+        rating: 'hard',
+        responseRaw: 'いった',
+        expectedAnswer: 'いかなかった',
+      }),
+    ).toBe('grammar_misunderstanding');
+  });
+
+  it('does not classify a matching typed answer', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'vocabularyItem',
+        activityType: 'reading_production',
+        rating: 'good',
+        responseRaw: 'いった',
+        expectedAnswer: 'いった',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('classifies a failed contrastive-pair review as vocabulary_confusion', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'vocabularyConfusion',
+        activityType: 'contrastive',
+        rating: 'again',
+      }),
+    ).toBe('vocabulary_confusion');
+  });
+
+  it('does not classify a passed contrastive-pair review', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'vocabularyConfusion',
+        activityType: 'contrastive',
+        rating: 'good',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('leaves self-rated-only activity types (no typed answer) unclassified', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'comprehension',
+        rating: 'again',
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('computeGraduatedSubjectIds', () => {
+  function studyItem(
+    id: string,
+    subjectId: string,
+    overrides: Partial<FsrsState> = {},
+  ): StudyItem {
+    const now = new Date().toISOString();
+    return {
+      id,
+      subjectType: 'vocabularyItem',
+      subjectId,
+      activityType: 'reading_retrieval',
+      fsrsState: {
+        due: now,
+        stability: 50,
+        difficulty: 3,
+        elapsedDays: 0,
+        scheduledDays: 200,
+        learningSteps: 0,
+        reps: 5,
+        lapses: 0,
+        state: 'review',
+        ...overrides,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  it('includes a subject once its only study item crosses the threshold', () => {
+    const graduated = computeGraduatedSubjectIds([studyItem('si-1', 'word-a')], 180);
+    expect(graduated.has('word-a')).toBe(true);
+  });
+
+  it('excludes a subject with one still-active study item among several', () => {
+    const graduated = computeGraduatedSubjectIds(
+      [
+        studyItem('si-1', 'word-a'),
+        studyItem('si-2', 'word-a', { state: 'new', scheduledDays: 0 }),
+      ],
+      180,
+    );
+    expect(graduated.has('word-a')).toBe(false);
+  });
+
+  it('excludes a subject with no study items (never appears in the input)', () => {
+    const graduated = computeGraduatedSubjectIds([studyItem('si-1', 'word-a')], 180);
+    expect(graduated.has('word-b')).toBe(false);
   });
 });

@@ -34,6 +34,7 @@ import {
   getDb,
   moveBookSentence,
   previewBookOrderFromPaste,
+  readSettings,
   removeSentencesFromBook,
   reorderBookFromPaste,
   reorderBookSentences,
@@ -47,6 +48,7 @@ import {
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
+import { computeGraduatedSubjectIds } from '../lib/scheduling';
 import type { Book, Sentence } from '../domain/types';
 import type { PasteOrderResult } from '../lib/pasteOrder';
 
@@ -122,6 +124,7 @@ function SortableRow({
   chapterTitle,
   status,
   vocabularyReviewStatus,
+  graduated,
   selected,
   editOrder,
   onSelect,
@@ -135,6 +138,8 @@ function SortableRow({
   status: string;
   /** Undefined means no analysis row exists yet — never opened AnalyzePage for this sentence. */
   vocabularyReviewStatus: 'unreviewed' | 'confirmed' | undefined;
+  /** Every one of this sentence's own study items (comprehension/reading_in_context) has crossed the graduation threshold. */
+  graduated: boolean;
   selected: boolean;
   editOrder: boolean;
   onSelect: (checked: boolean) => void;
@@ -167,6 +172,7 @@ function SortableRow({
           <span className={`status-pill ${vocabularyReviewStatus ?? 'unreviewed'}`}>
             vocab: {vocabularyReviewStatus === 'confirmed' ? 'confirmed' : 'needs review'}
           </span>
+          {graduated ? <span className="status-pill">Graduated</span> : null}
         </label>
         {editOrder ? (
           <button
@@ -302,6 +308,16 @@ export function BookDetailPage() {
     () => (data?.rows ?? []).map((row) => row.membership.sentenceId),
     [data],
   );
+
+  const settings = useLiveQuery(() => readSettings(), []);
+  const sentenceStudyItems = useLiveQuery(
+    () => getDb().studyItems.where('subjectType').equals('sentence').toArray(),
+    [],
+  );
+  const graduatedSentenceIds = useMemo(() => {
+    if (!sentenceStudyItems || !settings) return new Set<string>();
+    return computeGraduatedSubjectIds(sentenceStudyItems, settings.graduationMinScheduledDays);
+  }, [sentenceStudyItems, settings]);
 
   const collapsedChapters = useMemo(
     () => new Set(data?.book?.collapsedChapterIds ?? []),
@@ -977,6 +993,7 @@ export function BookDetailPage() {
                   )?.title}
                   status={row.analysis?.status ?? row.membership.status}
                   vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
+                  graduated={graduatedSentenceIds.has(row.membership.sentenceId)}
                   selected={selected.has(row.membership.sentenceId)}
                   editOrder={editOrder}
                   onSelect={(checked) => {

@@ -625,6 +625,50 @@ describe('FSRS review (study_items/reviews)', () => {
     ).rejects.toThrow('Study item not found');
   });
 
+  it('auto-classifies a wrong reading_production answer as incorrect_reading', async () => {
+    const item = await ensureStudyItem('vocabularyItem', 'word-1', 'reading_production');
+    const { review } = await recordReview({
+      studyItemId: item.id,
+      rating: 'again',
+      responseRaw: 'たべる',
+      expectedAnswer: 'たべた',
+    });
+    expect(review.errorClassification).toBe('incorrect_reading');
+  });
+
+  it('auto-classifies a wrong sentence_transformation answer as grammar_misunderstanding', async () => {
+    const item = await ensureStudyItem('vocabularyItem', 'word-1', 'sentence_transformation');
+    const { review } = await recordReview({
+      studyItemId: item.id,
+      rating: 'hard',
+      responseRaw: 'いった',
+      expectedAnswer: 'いかなかった',
+    });
+    expect(review.errorClassification).toBe('grammar_misunderstanding');
+  });
+
+  it('auto-classifies a failed contrastive-pair review as vocabulary_confusion', async () => {
+    const item = await ensureStudyItem('vocabularyConfusion', 'pair-1', 'contrastive');
+    const { review } = await recordReview({ studyItemId: item.id, rating: 'again' });
+    expect(review.errorClassification).toBe('vocabulary_confusion');
+  });
+
+  it('leaves a bare self-rated comprehension review unclassified', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const { review } = await recordReview({ studyItemId: item.id, rating: 'again' });
+    expect(review.errorClassification).toBeUndefined();
+  });
+
+  it('does not override an explicitly-provided errorClassification', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const { review } = await recordReview({
+      studyItemId: item.id,
+      rating: 'again',
+      errorClassification: 'listening_failure',
+    });
+    expect(review.errorClassification).toBe('listening_failure');
+  });
+
   it('enqueues sync metadata for study_items/reviews writes, unlike local-only attempts', async () => {
     const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
     await recordReview({ studyItemId: item.id, rating: 'good' });

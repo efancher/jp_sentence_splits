@@ -208,6 +208,8 @@ export interface AttemptAnalysisSummary {
   pitchSeverity: number;
   primaryIssueKind?: string;
   primaryIssueMessage?: string;
+  /** The primary issue's own severity (0-1) — distinct from timingSeverity/pitchSeverity, which are category maxes, not necessarily this specific observation's value. Used for cross-recording comparison (docs/STATUS.md). */
+  primaryIssueSeverity?: number;
 }
 
 export interface Book {

@@ -55,6 +55,7 @@ import {
 } from '../lib/maturity';
 import { nowIso } from '../lib/normalize';
 import {
+  classifyReviewError,
   createInitialFsrsState,
   isGraduated,
   isSentenceReadyForFullReview,
@@ -1819,7 +1820,15 @@ export async function recordReview(input: {
     responseRaw: input.responseRaw,
     expectedAnswer: input.expectedAnswer,
     elapsedMs: input.elapsedMs,
-    errorClassification: input.errorClassification,
+    errorClassification:
+      input.errorClassification ??
+      classifyReviewError({
+        subjectType: studyItem.subjectType,
+        activityType: studyItem.activityType,
+        rating: input.rating,
+        responseRaw: input.responseRaw,
+        expectedAnswer: input.expectedAnswer,
+      }),
     assistance: input.assistance,
     source: input.source,
     contextSentenceId: input.contextSentenceId,
@@ -2394,6 +2403,73 @@ export async function getStudyItemDebugInfo(
   }
 
   return { studyItem, subject, reviews, contextSentencesById };
+}
+
+/**
+ * A short human label for a study item's subject, for the top-level
+ * `/study-items` browsable list (Phase 7.10a follow-up). Deliberately a
+ * separate, batched implementation rather than calling
+ * `getStudyItemDebugInfo` once per row — that function's per-item
+ * `db.get()` calls would be an N+1 query pattern at list scale.
+ */
+export interface StudyItemSummary {
+  studyItem: StudyItem;
+  subjectLabel: string;
+}
+
+export async function listStudyItemSummaries(): Promise<StudyItemSummary[]> {
+  const db = getDb();
+  const studyItems = await db.studyItems.toArray();
+
+  const sentenceIds = studyItems
+    .filter((item) => item.subjectType === 'sentence')
+    .map((item) => item.subjectId);
+  const vocabularyItemIds = studyItems
+    .filter((item) => item.subjectType === 'vocabularyItem')
+    .map((item) => item.subjectId);
+  const confusionIds = studyItems
+    .filter((item) => item.subjectType === 'vocabularyConfusion')
+    .map((item) => item.subjectId);
+
+  const [sentences, vocabularyItems, confusions] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.vocabularyItems.bulkGet(vocabularyItemIds),
+    db.vocabularyConfusions.bulkGet(confusionIds),
+  ]);
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const vocabularyItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+  const confusionById = new Map(
+    confusions
+      .filter((row): row is VocabularyConfusion => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  return studyItems.map((studyItem) => {
+    let subjectLabel = studyItem.subjectId;
+    if (studyItem.subjectType === 'sentence') {
+      const sentence = sentenceById.get(studyItem.subjectId);
+      if (sentence) subjectLabel = sentence.japanese;
+    } else if (studyItem.subjectType === 'vocabularyItem') {
+      const vocabularyItem = vocabularyItemById.get(studyItem.subjectId);
+      if (vocabularyItem) {
+        subjectLabel = `${vocabularyItem.expression} (${vocabularyItem.reading})`;
+      }
+    } else if (studyItem.subjectType === 'vocabularyConfusion') {
+      const confusion = confusionById.get(studyItem.subjectId);
+      if (confusion) {
+        const itemA = vocabularyItemById.get(confusion.itemAId);
+        const itemB = vocabularyItemById.get(confusion.itemBId);
+        subjectLabel = `${itemA?.expression ?? confusion.itemAId} vs ${itemB?.expression ?? confusion.itemBId}`;
+      }
+    }
+    return { studyItem, subjectLabel };
+  });
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

@@ -1,7 +1,8 @@
 # Status
 
-Last updated: 2026-08-17 (Phase 9 complete — Milestone 9 done; sentence
-translation and vocabulary meaning are now editable in the UI, see below).
+Last updated: 2026-08-18 (Phase 9 complete — Milestone 9 done; sentence
+translation and vocabulary meaning are now editable in the UI; a batch of
+small Phase 7.10/9 follow-ups landed together, see below).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3555,3 +3556,86 @@ successful repair-and-retry and the no-cloud-copy-to-repair-from case
 aren't covered, same documented boundary as other sync code in this file).
 Not yet verified against the user's actual corrupt Mac blob in a real
 browser.
+
+## Small batch: 7.10a/9-follow-up list view, comparison, badges, and the last two practice modes
+
+A session was interrupted mid-way with the working tree left uncommitted;
+picked back up and finished. Several small, independent follow-ups flagged
+as deferred elsewhere in this doc, landed together:
+
+- **`/study-items` top-level list** (`src/pages/StudyItemsListPage.tsx`,
+  `src/db/repository.ts`'s `listStudyItemSummaries`) — the browsable list
+  explicitly deferred when Phase 7.10a shipped its per-card debug view
+  ("lower value than answering the question for a card you're already
+  looking at ... built now on request"). Batched lookups
+  (`bulkGet`/`Map`), not one query per row, avoiding an N+1 at list scale.
+  Sorted by due date; new `AppShell` nav entry.
+- **Cross-recording "Focus on this" comparison** (`compareObservations` in
+  `src/lib/feedbackRanking.ts`, wired into `AnalysisPanel.tsx`) — Milestone
+  8 already compared category-level timing/pitch severity between
+  consecutive attempts; this compares the specific ranked "Focus on this"
+  issue instead, so a re-record can say "closer than last time" (same
+  issue, smaller gap) or "what stood out last time isn't showing up
+  anymore" (resolved, or a different issue took over). Hedged severity
+  delta with an epsilon threshold, not a percentage — matches this
+  system's established "no fake precision" posture. `AttemptAnalysisSummary`
+  gained `primaryIssueSeverity` (the one raw number this needed that wasn't
+  already persisted) — additive, no migration.
+- **Full ranked-observations disclosure** (`AnalysisPanel.tsx`) — closes
+  the gap flagged when Phase 9 scoped down a separate debug view ("no
+  single view of the ranked candidate list before selectPrimaryObservation
+  picks one"). A collapsed `<details>` under "Focus on this" listing every
+  candidate `rankObservations` considered, not just the winner — pure view
+  of already-computed data.
+- **Auto error-classification** (`classifyReviewError` in
+  `src/lib/scheduling.ts`, called from `recordReview`) — `reviews.errorClassification`
+  has been schema-ready but unpopulated since Phase 1/7.1. Now filled from
+  concrete evidence only, not a guess from a bare self-rating: a wrong
+  typed answer on `reading_production`/`sentence_transformation` classifies
+  itself from the same text comparison the UI already did to show ✓/✗; a
+  failed contrastive-pair review is definitionally a `vocabulary_confusion`.
+  Comprehension/listening/reading_in_context stay unclassified on purpose —
+  a bare "again" there could mean anything.
+- **"Graduated" badges** (`computeGraduatedSubjectIds` in
+  `src/lib/scheduling.ts`, wired into `BookDetailPage.tsx`'s per-sentence
+  pill and `VocabularyListPage.tsx`) — surfaces Phase 7.10c's existing
+  `isGraduated` per-item logic at the subject level (every study item a
+  sentence/vocabulary item actually has must have crossed the threshold,
+  not just one of them). Badge only, no new control — matches the existing
+  global-threshold-only graduation setting.
+- **Sentence-transformation form variety** (`pickTransformationTarget` in
+  `ReviewPage.tsx`) — the 7.9b slice fixed every word to one form ("plain
+  past") by design, flagged as a "start small" scope-down rather than a
+  gap. Now picks a form per word, deterministically from a hash of the
+  vocabulary item's id (`hashString`, stable across reloads) so a word
+  always asks the same form but different words spread across all 13
+  verb/10 adjective forms `conjugationFormsForWordClass` exposes; falls
+  through to the next form if the picked one doesn't conjugate or produces
+  no visible change (same skip conditions the fixed-form version used).
+- **Delayed shadowing + meaning→production** (`ShadowPage.tsx`) — the two
+  practice modes flagged, in the Phase 9 wrap-up above, as "genuinely not
+  built at all" from the design brief's named taxonomy. Delayed shadowing:
+  a "Delayed shadow" control plays the reference clip in full, then after a
+  configurable gap (0.5–2.0s) auto-starts recording — a fixed listen-then-
+  produce gap, distinct from shadow mode's simultaneous play-along.
+  Meaning→production: a "Show meaning instead" toggle swaps the Japanese
+  transcript for `sentence.translation`, disabled when a sentence has none
+  (e.g. CSV imports without a translation column). Both are UI-only
+  additions on top of already-shipped mechanisms (recording, translation
+  editing) — no new schema.
+
+**Verified**: `npm run check` (typecheck + full suite) and `npm run build`
+green, run repeatedly (3× full-suite in a row) to rule out the flakiness
+this file has a documented history of — none seen. Added
+`tests/shadowPage.test.tsx` coverage for the two new practice modes
+(toggle meaning/Japanese, disabled-without-translation, delayed-shadow
+play→pending→cancel, and play→ended→delay-elapses→recording-attempt via a
+stubbed `audio.play`); the other five follow-ups already had test coverage
+from before the interruption. **Not yet manually verified in a real
+browser** — this pass was resuming and finishing already-written code plus
+closing the one broken build error (unused-variable failures in
+`ShadowPage.tsx` from wiring left half-done), not fresh design; give
+delayed shadowing and the meaning toggle a real run before relying on them.
+
+**Code-reviewed**: not yet — flag if a review pass is wanted before this
+ships.

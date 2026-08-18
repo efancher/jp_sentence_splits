@@ -94,6 +94,9 @@ export function ShadowPage() {
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
   const [hideTranscript, setHideTranscript] = useState(false);
+  const [showMeaningInstead, setShowMeaningInstead] = useState(false);
+  const [delayMs, setDelayMs] = useState(750);
+  const [delayedRecordPending, setDelayedRecordPending] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const referenceRepairAttempted = useRef(false);
@@ -101,6 +104,8 @@ export function ShadowPage() {
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
+  /** Cleanup for an in-flight "play reference, then auto-record" sequence (delayed shadowing). */
+  const delayedShadowCancelRef = useRef<(() => void) | null>(null);
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -192,9 +197,51 @@ export function ShadowPage() {
       stopComparison();
       cancelRecording();
       targetLoopCoordinator.current.cancel();
+      delayedShadowCancelRef.current?.();
     },
     [sentenceId, stopComparison, cancelRecording],
   );
+
+  function cancelDelayedShadow() {
+    delayedShadowCancelRef.current?.();
+    delayedShadowCancelRef.current = null;
+    setDelayedRecordPending(false);
+  }
+
+  /**
+   * Delayed shadowing (the brief's named practice-mode taxonomy, docs/
+   * STATUS.md follow-up): play the reference clip in full, wait `delayMs`
+   * after it ends, then auto-start recording — a fixed gap between hearing
+   * and producing, rather than shadow mode's simultaneous play-along or a
+   * manual "press Record whenever." Always plays the whole clip from the
+   * start, not target-range-scoped — the existing loop mechanism already
+   * covers sub-range practice; this stays a single deliberate listen.
+   */
+  async function handleDelayedShadow() {
+    const audio = referenceAudioRef.current;
+    if (!audio) return;
+    cancelDelayedShadow();
+    setDelayedRecordPending(true);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const handleEnded = () => {
+      timeoutId = setTimeout(() => {
+        delayedShadowCancelRef.current = null;
+        setDelayedRecordPending(false);
+        void shadowing.startRecording();
+      }, delayMs);
+    };
+    audio.addEventListener('ended', handleEnded);
+    delayedShadowCancelRef.current = () => {
+      audio.removeEventListener('ended', handleEnded);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+    audio.currentTime = 0;
+    try {
+      await audio.play();
+    } catch {
+      cancelDelayedShadow();
+    }
+  }
 
   const moraUnits = useMemo<MoraUnit[]>(() => {
     const sentence = data?.sentence;
@@ -334,6 +381,13 @@ export function ShadowPage() {
             <div className="muted">{book?.title} · Shadow</div>
           </div>
           <div className="row">
+            <button
+              type="button"
+              onClick={() => setShowMeaningInstead((value) => !value)}
+              disabled={!sentence.translation}
+            >
+              {showMeaningInstead ? 'Show Japanese' : 'Show meaning instead'}
+            </button>
             <button type="button" onClick={() => setHideTranscript((value) => !value)}>
               {hideTranscript ? 'Show transcript' : 'Hide transcript'}
             </button>
@@ -348,13 +402,15 @@ export function ShadowPage() {
             <div className="muted" style={{ flex: 1 }}>
               Audio-only practice
             </div>
+          ) : showMeaningInstead && sentence.translation ? (
+            <div style={{ flex: 1 }}>{sentence.translation}</div>
           ) : (
             <div className="jp jp-lg" style={{ flex: 1 }}>
               {sentence.japanese}
             </div>
           )}
         </div>
-        {!hideTranscript ? <MoraBreakdown units={moraUnits} /> : null}
+        {!hideTranscript && !showMeaningInstead ? <MoraBreakdown units={moraUnits} /> : null}
         {!referenceAudio || !referenceUrl ? (
           <p className="muted">
             No reference audio for this sentence yet — import one from
@@ -430,6 +486,39 @@ export function ShadowPage() {
           </ul>
         ) : null}
         {calibrationError ? <p className="muted">{calibrationError}</p> : null}
+
+        <div className="row" style={{ alignItems: 'center' }}>
+          <label>
+            Delay before recording
+            <select
+              value={delayMs}
+              disabled={delayedRecordPending || isRecording || isRequestingMic}
+              onChange={(event) => setDelayMs(Number(event.target.value))}
+            >
+              {[500, 750, 1000, 1500, 2000].map((value) => (
+                <option key={value} value={value}>
+                  {(value / 1000).toFixed(1)}s
+                </option>
+              ))}
+            </select>
+          </label>
+          {delayedRecordPending ? (
+            <>
+              <span className="muted">Listen, then get ready…</span>
+              <button type="button" onClick={cancelDelayedShadow}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={!referenceAudio || isRecording || isRequestingMic}
+              onClick={() => void handleDelayedShadow()}
+            >
+              Delayed shadow
+            </button>
+          )}
+        </div>
 
         <div className="row" style={{ alignItems: 'center' }}>
           <button

@@ -1,7 +1,14 @@
 import { createEmptyCard, fsrs, Rating, State } from 'ts-fsrs';
 import type { Card } from 'ts-fsrs';
 
-import type { FsrsState, ReviewRating } from '../domain/types';
+import type {
+  ErrorClassification,
+  FsrsState,
+  ReviewRating,
+  StudyActivityType,
+  StudyItem,
+  StudySubjectType,
+} from '../domain/types';
 
 /**
  * Thin wrapper around ts-fsrs (docs/UNIFIED_APP_ARCHITECTURE.md §10). Pure
@@ -97,6 +104,36 @@ export function isGraduated(fsrsState: FsrsState, minScheduledDays: number): boo
 }
 
 /**
+ * Which subjects (sentence ids, vocabulary item ids, ...) count as fully
+ * graduated — every study item that subject actually has (whichever
+ * activity types were seeded for it) has crossed the threshold. A subject
+ * with no study items at all is never graduated (nothing to have crossed
+ * any threshold), and a subject with a mix of graduated/still-active
+ * activity types isn't "done" either. Shared by the /vocabulary and book
+ * detail "Graduated" badges (Phase 7.10 follow-up) — badge only, no
+ * per-item override, matching this codebase's existing global-threshold-only
+ * graduation control.
+ */
+export function computeGraduatedSubjectIds(
+  studyItems: readonly StudyItem[],
+  minScheduledDays: number,
+): Set<string> {
+  const bySubjectId = new Map<string, StudyItem[]>();
+  for (const studyItem of studyItems) {
+    const list = bySubjectId.get(studyItem.subjectId) ?? [];
+    list.push(studyItem);
+    bySubjectId.set(studyItem.subjectId, list);
+  }
+  const graduated = new Set<string>();
+  for (const [subjectId, items] of bySubjectId) {
+    if (items.every((item) => isGraduated(item.fsrsState, minScheduledDays))) {
+      graduated.add(subjectId);
+    }
+  }
+  return graduated;
+}
+
+/**
  * A vocabulary item counts as "shown proficiency" once FSRS has moved it
  * past its initial learning steps into `review` (or, after a later lapse,
  * `relearning` — reaching `relearning` requires having been in `review`
@@ -144,4 +181,42 @@ export function isSentenceReadyForFullReview(
 ): boolean {
   if (vocabularyReviewStatus !== 'confirmed') return false;
   return isSentenceVocabularyReady(vocabularyItemIds, proficientVocabularyItemIds);
+}
+
+/**
+ * Auto-populate `Review.errorClassification`, but only where there's
+ * concrete evidence, not a guess from a bare self-rating (the schema's own
+ * documented intent — see `ErrorClassification`'s comment in
+ * domain/types.ts — and this codebase's repeated "don't overbuild for
+ * unproven need" precedent). Two evidence sources:
+ * - A typed answer that doesn't match what was expected
+ *   (`reading_production`/`sentence_transformation` cards) — the specific
+ *   text comparison already happened in the UI to show "✓/✗", this just
+ *   reuses the same two strings to decide *why* it was wrong.
+ * - A failed (`again`) contrastive-pair review — the card's entire premise
+ *   is "can you tell these two words apart," so a miss is definitionally a
+ *   `vocabulary_confusion`, no text comparison needed.
+ * Comprehension/listening/reading_in_context stay unclassified: a bare
+ * "again" there could mean anything, and guessing would be noise, not
+ * signal.
+ */
+export function classifyReviewError(input: {
+  subjectType: StudySubjectType;
+  activityType: StudyActivityType;
+  rating: ReviewRating;
+  responseRaw?: string;
+  expectedAnswer?: string;
+}): ErrorClassification | undefined {
+  if (
+    input.responseRaw !== undefined &&
+    input.expectedAnswer !== undefined &&
+    input.responseRaw !== input.expectedAnswer
+  ) {
+    if (input.activityType === 'reading_production') return 'incorrect_reading';
+    if (input.activityType === 'sentence_transformation') return 'grammar_misunderstanding';
+  }
+  if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
+    return 'vocabulary_confusion';
+  }
+  return undefined;
 }

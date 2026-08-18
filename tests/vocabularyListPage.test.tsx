@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { ensureVocabularyItem } from '../src/db/repository';
+import {
+  ensureVocabularyItem,
+  ensureVocabularyStudyItem,
+  getDb,
+  updateSettings,
+} from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { VocabularyListPage } from '../src/pages/VocabularyListPage';
 import { withAppProviders } from '../src/test/providers';
@@ -76,5 +81,44 @@ describe('VocabularyListPage', () => {
     renderPage();
     const link = await screen.findByRole('link', { name: '大' });
     expect(link).toHaveAttribute('href', expect.stringContaining('/kanji/'));
+  });
+
+  it('shows a Graduated badge once every one of a word\'s study items crosses the threshold', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    const item = await ensureVocabularyItem('大学', 'だいがく');
+    const studyItem = await ensureVocabularyStudyItem(item.id, 'reading_retrieval');
+    await getDb().studyItems.update(studyItem.id, {
+      fsrsState: { ...studyItem.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Graduated')).toBeInTheDocument();
+  });
+
+  it('does not show a Graduated badge while any of a word\'s study items is still active', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    const item = await ensureVocabularyItem('大学', 'だいがく');
+    const retrieval = await ensureVocabularyStudyItem(item.id, 'reading_retrieval');
+    await getDb().studyItems.update(retrieval.id, {
+      fsrsState: { ...retrieval.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+    // A second activity type for the same word, still nowhere near graduated.
+    await ensureVocabularyStudyItem(item.id, 'cloze');
+
+    renderPage();
+
+    await screen.findByLabelText('Meaning for 大学');
+    expect(screen.queryByText('Graduated')).not.toBeInTheDocument();
+  });
+
+  it('does not show a Graduated badge for a word with no study items at all', async () => {
+    await updateSettings({ graduationMinScheduledDays: 180 });
+    await ensureVocabularyItem('大学', 'だいがく');
+
+    renderPage();
+
+    await screen.findByLabelText('Meaning for 大学');
+    expect(screen.queryByText('Graduated')).not.toBeInTheDocument();
   });
 });

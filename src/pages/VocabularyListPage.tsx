@@ -2,9 +2,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getDb, updateVocabularyItem } from '../db/repository';
+import { getDb, readSettings, updateVocabularyItem } from '../db/repository';
 import type { VocabularyItem } from '../domain/types';
 import { isHanCharacter } from '../lib/kanji';
+import { computeGraduatedSubjectIds } from '../lib/scheduling';
 
 function VocabularyMeaningField({ item }: { item: VocabularyItem }) {
   const [meaning, setMeaning] = useState(item.meaning);
@@ -49,6 +50,15 @@ function VocabularyMeaningField({ item }: { item: VocabularyItem }) {
 export function VocabularyListPage() {
   const [query, setQuery] = useState('');
   const items = useLiveQuery(() => getDb().vocabularyItems.toArray(), []);
+  const settings = useLiveQuery(() => readSettings(), []);
+  const vocabularyStudyItems = useLiveQuery(
+    () => getDb().studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+    [],
+  );
+  const graduatedItemIds = useMemo(() => {
+    if (!vocabularyStudyItems || !settings) return new Set<string>();
+    return computeGraduatedSubjectIds(vocabularyStudyItems, settings.graduationMinScheduledDays);
+  }, [vocabularyStudyItems, settings]);
 
   const filtered = useMemo(() => {
     const all = [...(items ?? [])].sort((a, b) =>
@@ -91,16 +101,21 @@ export function VocabularyListPage() {
         ) : (
           filtered.map((item) => (
             <article key={item.id} className="list-card">
-              <div className="jp">
-                {Array.from(item.expression).map((char, index) =>
-                  isHanCharacter(char) ? (
-                    <Link key={index} to={`/kanji/${encodeURIComponent(char)}`}>
-                      {char}
-                    </Link>
-                  ) : (
-                    <span key={index}>{char}</span>
-                  ),
-                )}
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div className="jp">
+                  {Array.from(item.expression).map((char, index) =>
+                    isHanCharacter(char) ? (
+                      <Link key={index} to={`/kanji/${encodeURIComponent(char)}`}>
+                        {char}
+                      </Link>
+                    ) : (
+                      <span key={index}>{char}</span>
+                    ),
+                  )}
+                </div>
+                {graduatedItemIds.has(item.id) ? (
+                  <span className="muted">Graduated</span>
+                ) : null}
               </div>
               {item.reading ? <div className="muted">{item.reading}</div> : null}
               <VocabularyMeaningField item={item} />

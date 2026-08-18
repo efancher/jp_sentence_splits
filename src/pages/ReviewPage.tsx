@@ -31,10 +31,12 @@ import type {
 } from '../domain/types';
 import {
   conjugate,
+  conjugationFormsForWordClass,
   conjugationWordClassFromPartOfSpeech,
   type ConjugatedForm,
   type ConjugationWordClass,
 } from '../lib/conjugation';
+import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { normalizeSentenceKey } from '../lib/normalize';
 
@@ -96,15 +98,15 @@ const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
  * each other) — but eligibility is narrower: only words whose
  * `partOfSpeech` maps to a conjugation word class (see
  * conjugationWordClassFromPartOfSpeech, src/lib/conjugation.ts) and whose
- * conjugated form actually differs from the dictionary form. Fixed to a
- * single form (plain past) for this first slice — see
- * getSentenceTransformationCandidates — rather than cycling through all 13
- * verb/10 adjective forms, matching every prior phase's "start small"
- * precedent.
+ * conjugated form actually differs from the dictionary form. The first
+ * slice fixed every word to a single form (plain past); which form gets
+ * quizzed is now picked per word — deterministically, from a hash of the
+ * vocabulary item's id, so the same word always asks the same form (stable
+ * across reloads/re-renders) while different words spread across the 13
+ * verb/10 adjective forms `conjugationFormsForWordClass` already exposes —
+ * see pickTransformationTarget.
  */
 const TRANSFORMATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
-const TRANSFORMATION_FORM_KEY = 'plain_past';
-const TRANSFORMATION_FORM_LABEL = 'Plain past';
 
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
@@ -123,15 +125,47 @@ interface SentenceTransformationCandidate {
   surfaceForm: string;
   wordClass: ConjugationWordClass;
   target: ConjugatedForm;
+  formLabel: string;
+}
+
+/**
+ * Picks which conjugation form a word gets quizzed on: starts at a form
+ * index derived from a stable hash of the vocabulary item's id (so the
+ * same word always picks the same form), then tries the remaining forms in
+ * order if the chosen one doesn't actually conjugate to anything (some
+ * forms aren't implemented for every word class) or produces no visible
+ * change from the dictionary form — same skip conditions the original
+ * fixed-to-plain-past version used, just no longer giving up after one try.
+ */
+function pickTransformationTarget(
+  vocabularyItem: VocabularyItem,
+  wordClass: ConjugationWordClass,
+): { target: ConjugatedForm; formLabel: string } | null {
+  const forms = conjugationFormsForWordClass(wordClass);
+  if (forms.length === 0) return null;
+  const startIndex = Number.parseInt(hashString(vocabularyItem.id), 16) % forms.length;
+  for (let offset = 0; offset < forms.length; offset += 1) {
+    const form = forms[(startIndex + offset) % forms.length]!;
+    const target = conjugate(
+      vocabularyItem.expression,
+      vocabularyItem.reading,
+      wordClass,
+      form.key,
+    );
+    if (!target) continue;
+    if (target.expression === vocabularyItem.expression && target.reading === vocabularyItem.reading) {
+      continue;
+    }
+    return { target, formLabel: form.label };
+  }
+  return null;
 }
 
 /**
  * Pure filter over already-fetched vocabulary-target candidates (no DB
  * access needed, unlike getConfusionPairCandidates) — a word is a
- * candidate only if its partOfSpeech is conjugable and conjugating it to
- * TRANSFORMATION_FORM_KEY actually produces something different from the
- * dictionary form (skips e.g. a word whose plain-past happens to equal its
- * dictionary form, or one conjugate() can't handle at all).
+ * candidate only if its partOfSpeech is conjugable and pickTransformationTarget
+ * finds a usable form for it.
  */
 function getSentenceTransformationCandidates(
   candidates: VocabularyTargetCandidate[],
@@ -142,20 +176,9 @@ function getSentenceTransformationCandidates(
       candidate.vocabularyItem.partOfSpeech,
     );
     if (!wordClass) continue;
-    const target = conjugate(
-      candidate.vocabularyItem.expression,
-      candidate.vocabularyItem.reading,
-      wordClass,
-      TRANSFORMATION_FORM_KEY,
-    );
-    if (!target) continue;
-    if (
-      target.expression === candidate.vocabularyItem.expression &&
-      target.reading === candidate.vocabularyItem.reading
-    ) {
-      continue;
-    }
-    result.push({ ...candidate, wordClass, target });
+    const picked = pickTransformationTarget(candidate.vocabularyItem, wordClass);
+    if (!picked) continue;
+    result.push({ ...candidate, wordClass, target: picked.target, formLabel: picked.formLabel });
   }
   return result;
 }
@@ -995,8 +1018,8 @@ function ReadingProductionCard({
 /**
  * Sentence transformation (Phase 7.9, sentence-transformations slice): the
  * "production ladder"'s second rung — instead of recalling the dictionary
- * reading, the learner has to produce a specific conjugated form (fixed to
- * TRANSFORMATION_FORM_KEY, "plain past," for this slice). Same typed-input
+ * reading, the learner has to produce a specific conjugated form (which
+ * form varies per word, see pickTransformationTarget). Same typed-input
  * + check + reveal + self-rate shape as ReadingProductionCard, but checks
  * against the pre-computed target reading (candidate.target.reading) and
  * reveals both the conjugated expression and reading on top of the usual
@@ -1015,7 +1038,7 @@ function SentenceTransformationCard({
 }) {
   const [value, setValue] = useState('');
   const [wasCorrect, setWasCorrect] = useState(false);
-  const { vocabularyItem, sentence, surfaceForm, target } = candidate;
+  const { vocabularyItem, sentence, surfaceForm, target, formLabel } = candidate;
   const [before, dictionaryForm, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
 
   return (
@@ -1025,7 +1048,7 @@ function SentenceTransformationCard({
         <mark>{dictionaryForm || surfaceForm}</mark>
         {after}
       </div>
-      <div className="muted">Conjugate to: {TRANSFORMATION_FORM_LABEL}</div>
+      <div className="muted">Conjugate to: {formLabel}</div>
       {!revealed ? (
         <form
           className="row"

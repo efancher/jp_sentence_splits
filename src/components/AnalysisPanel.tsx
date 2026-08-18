@@ -4,6 +4,7 @@ import {
   getAttemptAlignment,
   getAttemptTranscription,
   getReferenceAlignment,
+  listAttemptAnalysisSummariesForSentence,
   saveAttemptAlignment,
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
@@ -15,10 +16,11 @@ import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
+import type { TimingObservation } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
-import { selectPrimaryObservation } from '../lib/feedbackRanking';
+import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
 import { categorizeObservations } from '../lib/pronunciationHistory';
 import {
   analyzeAlignment,
@@ -202,6 +204,8 @@ export function AnalysisPanel({
 }) {
   const [mode, setMode] = useState<AlignmentMode>('original');
   const [pitchMode, setPitchMode] = useState<'hz' | 'semitones'>('semitones');
+  /** The "All observations" list only mounts once opened — collapsed really means absent, not just visually hidden (matters for cross-recording occurrence counts elsewhere in this panel). */
+  const [allObservationsOpen, setAllObservationsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [referencePitch, setReferencePitch] = useState<PitchAnalysisPayload>();
@@ -213,6 +217,26 @@ export function AnalysisPanel({
     durationRatio: number;
     confidence: ReturnType<typeof confidenceFromSignal>;
   }>();
+  /** Most recent attempt for this sentence strictly before this one, for the cross-recording comparison below — undefined until loaded, or if this is the first attempt. */
+  const [previousSummary, setPreviousSummary] = useState<{
+    primaryIssueKind?: string;
+    primaryIssueMessage?: string;
+    primaryIssueSeverity?: number;
+  }>();
+
+  useEffect(() => {
+    let active = true;
+    void listAttemptAnalysisSummariesForSentence(sentenceId).then((summaries) => {
+      if (!active) return;
+      const previous = summaries
+        .filter((summary) => summary.id !== attemptId && summary.createdAt < attemptCreatedAt)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      setPreviousSummary(previous);
+    });
+    return () => {
+      active = false;
+    };
+  }, [sentenceId, attemptId, attemptCreatedAt]);
 
   useEffect(() => {
     let active = true;
@@ -372,6 +396,24 @@ export function AnalysisPanel({
     pitchTimingObservations.length > 0 ||
     asrObservations.length > 0;
 
+  /**
+   * Every candidate `selectPrimaryObservation` considered, ranked, not just
+   * the winner — closes the one real gap flagged when Phase 9 scoped down
+   * a separate debug view (docs/STATUS.md: "there's no single view of the
+   * ranked candidate list before selectPrimaryObservation picks one").
+   * Purely a view of already-computed data, no new analysis.
+   */
+  const rankedObservations = useMemo(
+    () =>
+      rankObservations([
+        ...observations,
+        ...segmentObservations,
+        ...pitchTimingObservations,
+        ...asrObservations,
+      ]),
+    [observations, segmentObservations, pitchTimingObservations, asrObservations],
+  );
+
   // Once every source has settled (not just local analysis — the server
   // alignment/ASR calls too), save a lightweight trend summary for the
   // history view (Phase 9, Milestone 8). Redundant re-saves on later
@@ -391,6 +433,7 @@ export function AnalysisPanel({
       pitchSeverity,
       primaryIssueKind: primary?.kind,
       primaryIssueMessage: primary?.message,
+      primaryIssueSeverity: primary?.severity,
     });
     // Intentionally not depending on the observation arrays themselves —
     // they're new references every render; `analysisSettled` already
@@ -398,12 +441,44 @@ export function AnalysisPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisSettled, attemptId, sentenceId, attemptCreatedAt]);
 
+  /**
+   * Cross-recording comparison (docs/STATUS.md follow-up to Phase 9,
+   * Milestone 8's per-sentence timing/pitch trend labels): those labels
+   * compare category-level severity between consecutive attempts; this
+   * compares the specific "Focus on this" issue instead, so a re-record can
+   * say "that same thing is smaller now" or "a different issue took over,"
+   * not just "timing: improving." Only computed once this attempt's own
+   * analysis has settled, so it isn't shown against a still-loading primary.
+   */
+  const comparison = useMemo(() => {
+    if (!analysisSettled || !previousSummary) return undefined;
+    const previousPrimary: TimingObservation | undefined = previousSummary.primaryIssueKind
+      ? {
+          id: 'previous',
+          kind: previousSummary.primaryIssueKind,
+          message: previousSummary.primaryIssueMessage ?? '',
+          confidence: 'medium',
+          severity: previousSummary.primaryIssueSeverity,
+        }
+      : undefined;
+    return compareObservations(previousPrimary, primaryObservation);
+  }, [analysisSettled, previousSummary, primaryObservation]);
+
   return (
     <div className="stack">
       {primaryObservation ? (
         <div className="panel stack" aria-label="Focus on this">
           <strong>FOCUS ON THIS</strong>
           <p style={{ margin: 0 }}>{primaryObservation.message}</p>
+          {comparison?.status === 'improved' ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Closer than last time — still the same kind of thing, but the gap is smaller.
+            </p>
+          ) : comparison?.status === 'new_focus' ? (
+            <p className="muted" style={{ margin: 0 }}>
+              What stood out last time isn't showing up anymore.
+            </p>
+          ) : null}
           {primaryObservation.segment && onProposeSegment ? (
             <button
               type="button"
@@ -420,7 +495,32 @@ export function AnalysisPanel({
           ) : null}
         </div>
       ) : hasComputedAnyObservations ? (
-        <p className="muted">Nothing stands out this time.</p>
+        <p className="muted">
+          Nothing stands out this time.
+          {comparison?.status === 'resolved'
+            ? ' What stood out last time isn’t showing up anymore.'
+            : ''}
+        </p>
+      ) : null}
+      {rankedObservations.length > 0 ? (
+        <details onToggle={(event) => setAllObservationsOpen(event.currentTarget.open)}>
+          <summary className="muted">All observations ({rankedObservations.length})</summary>
+          {allObservationsOpen ? (
+            <div className="stack" style={{ gap: '0.25rem' }}>
+              {rankedObservations.map((observation) => (
+                <div key={observation.id} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span>{observation.message}</span>
+                  <span className="muted">
+                    {observation.kind} · {observation.confidence}
+                    {observation.severity !== undefined
+                      ? ` · severity ${observation.severity.toFixed(2)}`
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </details>
       ) : null}
       <div className="row">
         {ALIGNMENT_MODES.map((value) => (

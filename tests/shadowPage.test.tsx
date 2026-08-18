@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -77,6 +77,24 @@ async function seed() {
   ]);
 }
 
+/** A single-word alignment result with an っ (small tsu) hold of `tHoldMs`, for segment-timing tests. */
+function chottoWord(tHoldMs: number) {
+  const firstOEnd = 0.69;
+  const tHoldEnd = firstOEnd + tHoldMs / 1000;
+  const finalOEnd = tHoldEnd + 0.05;
+  return {
+    start: 0.5,
+    end: finalOEnd,
+    text: 'ちょっと',
+    phones: [
+      { start: 0.5, end: 0.6, text: 'tɕ' },
+      { start: 0.6, end: firstOEnd, text: 'o' },
+      { start: firstOEnd, end: tHoldEnd, text: 'tː' },
+      { start: tHoldEnd, end: finalOEnd, text: 'o' },
+    ],
+  };
+}
+
 function renderShadowPage() {
   return render(
     withAppProviders(
@@ -149,6 +167,69 @@ describe('ShadowPage', () => {
     expect(screen.queryByText('Audio-only practice')).not.toBeInTheDocument();
   });
 
+  it('toggles the meaning-instead-of-Japanese control', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    await user.click(screen.getByRole('button', { name: 'Show meaning instead' }));
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+    expect(screen.getByText('I read a book.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show Japanese' }));
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    expect(screen.queryByText('I read a book.')).not.toBeInTheDocument();
+  });
+
+  it('disables the meaning-instead control when the sentence has no translation', async () => {
+    await getDb().sentences.update('sent-1', { translation: '' });
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+    expect(screen.getByRole('button', { name: 'Show meaning instead' })).toBeDisabled();
+  });
+
+  it('plays the reference clip and shows a pending state when starting delayed shadow', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const audio = (await screen.findByLabelText('Reference audio')) as HTMLAudioElement;
+    const playSpy = vi.fn(async () => {});
+    audio.play = playSpy;
+
+    await user.click(screen.getByRole('button', { name: 'Delayed shadow' }));
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Listen, then get ready…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delayed shadow' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Delayed shadow' })).toBeInTheDocument();
+    expect(screen.queryByText('Listen, then get ready…')).not.toBeInTheDocument();
+  });
+
+  it('starts recording after the reference clip ends and the delay elapses', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    const audio = (await screen.findByLabelText('Reference audio')) as HTMLAudioElement;
+    audio.play = vi.fn(async () => {});
+    await user.selectOptions(screen.getByLabelText('Delay before recording'), '500');
+    await user.click(screen.getByRole('button', { name: 'Delayed shadow' }));
+
+    fireEvent(audio, new Event('ended'));
+
+    // Delay elapses (real timers — the timeout lives inside an 'ended'
+    // listener, not directly reachable by vi.useFakeTimers here) and the
+    // page falls back out of the pending state once startRecording settles.
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: 'Delayed shadow' })).toBeInTheDocument();
+      },
+      { timeout: 2_000 },
+    );
+  });
+
   it('favorites and unfavorites an attempt', async () => {
     const user = userEvent.setup();
     renderShadowPage();
@@ -212,22 +293,6 @@ describe('ShadowPage', () => {
     // results (rather than trying to distinguish an `alignAudio` mock call
     // by blob content — Dexie-round-tripped Blobs in this test environment
     // lose their real methods, see src/test/setup.ts's Blob-clone note).
-    const chottoWord = (tHoldMs: number) => {
-      const firstOEnd = 0.69;
-      const tHoldEnd = firstOEnd + tHoldMs / 1000;
-      const finalOEnd = tHoldEnd + 0.05;
-      return {
-        start: 0.5,
-        end: finalOEnd,
-        text: 'ちょっと',
-        phones: [
-          { start: 0.5, end: 0.6, text: 'tɕ' },
-          { start: 0.6, end: firstOEnd, text: 'o' },
-          { start: firstOEnd, end: tHoldEnd, text: 'tː' },
-          { start: tHoldEnd, end: finalOEnd, text: 'o' },
-        ],
-      };
-    };
     await saveReferenceAlignment('audio-1', {
       durationSeconds: 1.7,
       words: [chottoWord(100)],
@@ -261,6 +326,75 @@ describe('ShadowPage', () => {
     await user.click(within(focusOnThis).getByRole('button', { name: 'Practice this part' }));
     expect(screen.getByText(/Target: 0\.5s–0\.8s/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Loop target' })).toBeEnabled();
+  });
+
+  it('lists every ranked observation, not just the primary one, behind a disclosure', async () => {
+    await saveReferenceAlignment('audio-1', {
+      durationSeconds: 1.7,
+      words: [chottoWord(100)],
+    });
+    await saveAttemptAlignment('attempt-newer', {
+      durationSeconds: 1.5,
+      words: [chottoWord(20)],
+    });
+
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+
+    const disclosure = await screen.findByText(/All observations \(\d+\)/);
+    expect(disclosure).toBeInTheDocument();
+    await user.click(disclosure);
+    // The primary finding shows up a third time inside the full ranked list
+    // (already appears in "Segment timing" and "Focus on this").
+    expect(
+      screen.getAllByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+    ).toHaveLength(3);
+  });
+
+  it('shows a "closer than last time" note when a re-recorded attempt has the same issue but smaller', async () => {
+    await saveReferenceAlignment('audio-1', {
+      durationSeconds: 1.7,
+      words: [chottoWord(100)],
+    });
+    // Older attempt: っ almost entirely dropped, a stark gap from the 100ms reference.
+    await saveAttemptAlignment('attempt-older', {
+      durationSeconds: 1.5,
+      words: [chottoWord(10)],
+    });
+    // Newer attempt: still short, but the gap has narrowed a lot.
+    await saveAttemptAlignment('attempt-newer', {
+      durationSeconds: 1.5,
+      words: [chottoWord(55)],
+    });
+
+    const user = userEvent.setup();
+    renderShadowPage();
+    await screen.findByText('本を読みます。');
+
+    // Attempts render newest-first — analyze the older one first so it has
+    // a saved summary by the time the newer one is analyzed.
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[1]!);
+    expect(
+      await screen.findAllByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+    ).toHaveLength(2);
+    await waitFor(async () => {
+      expect(await getDb().attemptAnalysisSummaries.get('attempt-older')).toBeDefined();
+    });
+    await user.click(screen.getByRole('button', { name: 'Close analysis' }));
+
+    // Both rows show "Analyze" again now that attempt-older's panel is
+    // closed — attempt-newer is index 0 (attempts render newest-first).
+    await user.click(screen.getAllByRole('button', { name: 'Analyze' })[0]!);
+    expect(
+      await screen.findAllByText('Your 「っ」 in 「ちょっと」 is shorter than the reference.'),
+    ).toHaveLength(2);
+    expect(
+      await screen.findByText(
+        'Closer than last time — still the same kind of thing, but the gap is smaller.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('has no server word timing section when the alignment service is unreachable', async () => {

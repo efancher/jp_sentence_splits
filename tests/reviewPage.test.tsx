@@ -5,10 +5,40 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb, updateSettings } from '../src/db/repository';
-import { createId } from '../src/lib/ids';
+import {
+  conjugate,
+  conjugationFormsForWordClass,
+  type ConjugationWordClass,
+} from '../src/lib/conjugation';
+import { createId, hashString } from '../src/lib/ids';
 import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
+
+/**
+ * Mirrors ReviewPage's private pickTransformationTarget (not exported —
+ * this file only imports the page component, matching this suite's
+ * existing convention) so tests can assert against whichever form the
+ * per-word hash actually picks, rather than assuming it's always plain
+ * past now that the quizzed form varies by word (see ReviewPage.tsx).
+ */
+function expectedTransformation(
+  expression: string,
+  reading: string,
+  vocabularyItemId: string,
+  wordClass: ConjugationWordClass,
+) {
+  const forms = conjugationFormsForWordClass(wordClass);
+  const startIndex = Number.parseInt(hashString(vocabularyItemId), 16) % forms.length;
+  for (let offset = 0; offset < forms.length; offset += 1) {
+    const form = forms[(startIndex + offset) % forms.length]!;
+    const target = conjugate(expression, reading, wordClass, form.key);
+    if (!target) continue;
+    if (target.expression === expression && target.reading === reading) continue;
+    return { formLabel: form.label, target };
+  }
+  throw new Error('No usable conjugation form found for test fixture');
+}
 
 // Minimal fake <audio> so listening-card tests can drive playback/`onended`
 // deterministically — mirrors tests/nativeAudio.test.ts's own MockAudio,
@@ -495,18 +525,20 @@ describe('ReviewPage', () => {
     // sentence_transformation seeds for this word.
     await suppressVocabularyActivityTypes('vocab-hanasu');
 
+    const { formLabel, target } = expectedTransformation('話す', 'はなす', 'vocab-hanasu', 'godan');
+
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Conjugate to: Plain past');
+    await screen.findByText(`Conjugate to: ${formLabel}`);
     expect(screen.getByText('話す')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Type the conjugated reading'), 'はなした');
+    await user.type(screen.getByLabelText('Type the conjugated reading'), target.reading);
     await user.click(screen.getByRole('button', { name: 'Check' }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
-    expect(screen.getByText('話した')).toBeInTheDocument();
-    expect(screen.getByText('はなした')).toBeInTheDocument();
+    expect(screen.getByText(target.expression)).toBeInTheDocument();
+    expect(screen.getByText(target.reading)).toBeInTheDocument();
     expect(screen.getByText('to speak')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Good' }));
@@ -515,8 +547,8 @@ describe('ReviewPage', () => {
       expect(await db.reviews.count()).toBe(1);
     });
     const [review] = await db.reviews.toArray();
-    expect(review?.responseRaw).toBe('はなした');
-    expect(review?.expectedAnswer).toBe('はなした');
+    expect(review?.responseRaw).toBe(target.reading);
+    expect(review?.expectedAnswer).toBe(target.reading);
 
     const studyItems = await db.studyItems
       .where('subjectId')
@@ -526,6 +558,51 @@ describe('ReviewPage', () => {
       (item) => item.activityType === 'sentence_transformation',
     );
     expect(transformationItem?.subjectType).toBe('vocabularyItem');
+  });
+
+  it('quizzes a different word on whichever form its own id hashes to, deterministically', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-tabeta',
+      expression: '食べる',
+      reading: 'たべる',
+      meaning: 'to eat',
+      partOfSpeech: 'v1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-tabeta',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-tabeta',
+      surfaceForm: '食べる',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-tabeta');
+
+    const { formLabel, target } = expectedTransformation(
+      '食べる',
+      'たべる',
+      'vocab-tabeta',
+      'ichidan',
+    );
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(`Conjugate to: ${formLabel}`);
+    expect(screen.getByLabelText('Type the conjugated reading')).toBeInTheDocument();
+
+    // Confirms the pick is stable across a fresh mount too — same word,
+    // same hash, same form, not re-rolled on every render.
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Type the conjugated reading'), target.reading);
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
   });
 
   it('does not seed a sentence-transformation card for a non-conjugable (or non-conjugating) vocabulary item', async () => {
