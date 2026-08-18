@@ -1,9 +1,12 @@
+import type { EntityTable } from 'dexie';
+
 import { getDb } from '../db/database';
 import {
   bumpQueueRetry,
   ensureSyncMeta,
   listPendingMutations,
   putRecordMeta,
+  recordMetaKey,
   removeQueueItem,
   addConflict,
   updateSyncMeta,
@@ -178,7 +181,16 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
 
   if (!existing) {
     const { error } = await supabase.from(table).insert(row);
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (
+        error.code === '23505' &&
+        (item.entity === 'kanji' || item.entity === 'vocabulary_items') &&
+        (await adoptRemoteDuplicate(item.entity, item.recordId, row))
+      ) {
+        return;
+      }
+      throw new Error(error.message);
+    }
     const writtenVersion = Number(
       (row as { version?: number }).version ?? localVersion,
     );
@@ -210,6 +222,119 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   }
 
   await acknowledgeSyncedVersion(item.entity, item.recordId, nextVersion);
+}
+
+type DedupEntity = 'kanji' | 'vocabulary_items';
+
+/**
+ * `kanji`/`vocabulary_items` are get-or-create, deduped locally by natural
+ * key (character / expression+reading — see repository.ts's ensureKanji/
+ * ensureVocabularyItem). If a device's local cache missed a row that
+ * already exists remotely (e.g. a stale cursor from before a bulk import,
+ * docs/STATUS.md), get-or-create mints a duplicate with a fresh local id,
+ * and its insert hits the remote natural-key unique index (23505) instead
+ * of the id-based version_conflict path. Recover by adopting the existing
+ * remote row's id in place of retrying an insert that can never succeed.
+ */
+async function adoptRemoteDuplicate(
+  entity: DedupEntity,
+  localId: string,
+  row: Record<string, unknown>,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const query = supabase.from(entity).select('*').is('deleted_at', null);
+  const { data: remote, error } =
+    entity === 'kanji'
+      ? await query.eq('character', row.character as string).maybeSingle()
+      : await query
+          .eq('expression', row.expression as string)
+          .eq('reading', row.reading as string)
+          .maybeSingle();
+  if (error || !remote) return false;
+
+  await remapDuplicateEntityId(entity, localId, remote as Record<string, unknown>);
+  syncLog('warn', 'Adopted remote row for duplicate get-or-create insert', 'DEDUP_ADOPT', {
+    entity,
+    localId,
+    remoteId: String(remote.id),
+  });
+  return true;
+}
+
+/**
+ * Rewrites a local get-or-create row (and every local link that references
+ * it) from `localId` to the id of the already-existing remote row. Exported
+ * for unit tests, since the network lookup in adoptRemoteDuplicate isn't
+ * testable without a Supabase-mocking harness (this file's existing
+ * boundary — see shouldApplyRemoteEvent).
+ */
+export async function remapDuplicateEntityId(
+  entity: DedupEntity,
+  oldId: string,
+  remoteRow: Record<string, unknown>,
+): Promise<void> {
+  const db = getDb();
+  const newId = String(remoteRow.id);
+  const remoteVersion = Number(remoteRow.version ?? 1);
+  const now = new Date().toISOString();
+
+  await db.transaction(
+    'rw',
+    [db.kanji, db.vocabularyItems, db.vocabularyKanji, db.sentenceVocabulary, db.syncQueue, db.syncRecordMeta],
+    async () => {
+      if (entity === 'kanji') {
+        await db.kanji.delete(oldId);
+        await db.kanji.put(remoteToKanji(remoteRow));
+      } else {
+        await db.vocabularyItems.delete(oldId);
+        await db.vocabularyItems.put(remoteToVocabularyItem(remoteRow));
+      }
+
+      await db.syncRecordMeta.delete(recordMetaKey(entity, oldId));
+      await putRecordMeta({
+        entity,
+        recordId: newId,
+        version: remoteVersion,
+        syncedVersion: remoteVersion,
+        updatedAt: now,
+      });
+
+      if (entity === 'kanji') {
+        await remapLinkReferences(db.vocabularyKanji, 'kanjiId', oldId, newId, 'vocabulary_kanji');
+      } else {
+        await remapLinkReferences(db.vocabularyKanji, 'vocabularyItemId', oldId, newId, 'vocabulary_kanji');
+        await remapLinkReferences(db.sentenceVocabulary, 'vocabularyItemId', oldId, newId, 'sentence_vocabulary');
+      }
+    },
+  );
+}
+
+/** Repoints every local link row's foreign key (and any queued push for it) from `oldId` to `newId`. */
+async function remapLinkReferences<T extends { id: string }, F extends keyof T & string>(
+  table: EntityTable<T, 'id'>,
+  fkField: F,
+  oldId: string,
+  newId: string,
+  syncEntity: SyncEntity,
+): Promise<void> {
+  const db = getDb();
+  const links = await table.where(fkField).equals(oldId).toArray();
+  for (const link of links) {
+    const updated: T = { ...link, [fkField]: newId };
+    await table.put(updated);
+    const queueItem = await db.syncQueue
+      .where('[entity+recordId]')
+      .equals([syncEntity, link.id])
+      .first();
+    if (queueItem) {
+      await db.syncQueue.put({
+        ...queueItem,
+        payload: updated,
+        lastError: undefined,
+      });
+    }
+  }
 }
 
 async function handlePushConflict(

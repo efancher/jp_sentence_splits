@@ -3458,3 +3458,52 @@ edits.
 
 **Code-reviewed**: not yet — small, low-risk, pattern-matched change; flag
 if a review pass would still be wanted before this ships to production.
+
+## Fix: stuck push failures from duplicate get-or-create kanji/vocabulary rows
+
+Found live: a device (Mac desktop) stuck in `status: "error"` with 6
+pending mutations, `lastError` reading `kanji: duplicate key value
+violates unique constraint "kanji_owner_character_uidx" (+5 more)`,
+retrying identically forever.
+
+Root cause: this is exactly the residual gap flagged (but not built) in
+the Phase 5-era pull-performance fix above — a device whose local kanji
+cache is missing rows that already exist remotely (e.g. a cursor that
+predates the WaniKani/Anki bulk imports, or just never pulled everything
+yet). `ensureKanji`/`ensureVocabularyItem` (`src/db/repository.ts`) are
+get-or-create, but dedupe against the **local** Dexie table only. When the
+local cache misses a row, get-or-create mints a new local row with a
+fresh id for a character/expression that already exists remotely. That
+insert then hits the remote natural-key unique index
+(`kanji_owner_character_uidx` / `vocabulary_items_owner_expr_reading_uidx`)
+instead of the id-based `version_conflict` path `pushOne` already handles
+— so it's a generic push failure, retried forever, never resolved. The
+"+5 more" were `vocabulary_kanji`/`sentence_vocabulary` link rows whose
+`kanji_id`/`vocabulary_item_id` FK pointed at the phantom local row,
+failing in turn.
+
+Fix (`src/sync/engine.ts`): on a `23505` unique-violation insert for
+`kanji`/`vocabulary_items` specifically, `adoptRemoteDuplicate` looks up
+the existing remote row by its natural key (character; expression+reading)
+instead of retrying the doomed insert. `remapDuplicateEntityId` (exported
+for tests) then, in one Dexie transaction: replaces the local row (keyed
+by the old id) with the remote row's data under the remote's id, updates
+`syncRecordMeta` accordingly, and repoints every local `vocabulary_kanji`/
+`sentence_vocabulary` link's foreign key from the old id to the new one —
+including rewriting the `payload` of any already-queued push for that
+link, via the new generic `remapLinkReferences` helper, so the next sync
+cycle pushes the corrected id instead of failing the same way again.
+(Link pushes already in the same in-memory `pending` batch when the remap
+happens still use their stale snapshot and fail once more that cycle —
+self-heals on the existing 30s auto-retry since `listPendingMutations`
+re-reads the corrected payload from Dexie next time.)
+
+**Verified**: `npm run check` green (typecheck + full suite, 561 passed /
+2 pre-existing skips). Added a direct test for `remapDuplicateEntityId`
+(`tests/sync.test.ts`, "duplicate get-or-create insert recovery") —
+covers the local-only remap logic; the network lookup in
+`adoptRemoteDuplicate` isn't testable without a Supabase-mocking harness,
+same documented boundary as `shouldApplyRemoteEvent`. Not yet verified
+against production Supabase (no mocking harness exists for that path
+either) — the Mac that hit this should be watched after it picks up the
+fix to confirm the 6 pending mutations clear.

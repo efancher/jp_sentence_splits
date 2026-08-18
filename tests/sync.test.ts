@@ -430,6 +430,71 @@ describe('sync queue and local-first mutations', () => {
   });
 });
 
+describe('duplicate get-or-create insert recovery', () => {
+  beforeEach(() => {
+    resetDbForTests(`sync-dedup-${createId('db')}`);
+  });
+
+  it('remaps a duplicate local kanji to the remote row and repoints links', async () => {
+    const { remapDuplicateEntityId } = await import('../src/sync/engine');
+
+    // Simulates a device whose local kanji cache missed '大' (e.g. a stale
+    // cursor from before a bulk import), so ensureVocabularyItem's
+    // get-or-create minted a fresh local kanji id instead of finding the
+    // one that already exists remotely.
+    const item = await ensureVocabularyItem('大学', 'だいがく', {
+      meaning: 'university',
+    });
+    const link = await getDb().vocabularyKanji.where('vocabularyItemId').equals(item.id).first();
+    const localKanjiId = link!.kanjiId;
+
+    await enqueueMutation({
+      entity: 'vocabulary_kanji',
+      recordId: link!.id,
+      operation: 'upsert',
+      expectedVersion: null,
+      payload: link,
+    });
+
+    const remoteRow = {
+      id: 'kanji_remote_authoritative',
+      character: '大',
+      meanings: ['big'],
+      onyomi: ['ダイ'],
+      kunyomi: ['おお'],
+      nanori: [],
+      notes: null,
+      external_id: 'wk:123',
+      created_at: '2026-08-14T00:00:00.000Z',
+      updated_at: '2026-08-14T00:00:00.000Z',
+      version: 1,
+    };
+
+    await remapDuplicateEntityId('kanji', localKanjiId, remoteRow);
+
+    expect(await getDb().kanji.get(localKanjiId)).toBeUndefined();
+    const remapped = await getDb().kanji.get('kanji_remote_authoritative');
+    expect(remapped?.meanings).toEqual(['big']);
+
+    const updatedLink = await getDb().vocabularyKanji.get(link!.id);
+    expect(updatedLink?.kanjiId).toBe('kanji_remote_authoritative');
+
+    const queueItem = await getDb().syncQueue
+      .where('[entity+recordId]')
+      .equals(['vocabulary_kanji', link!.id])
+      .first();
+    expect(
+      (queueItem?.payload as { kanjiId: string } | undefined)?.kanjiId,
+    ).toBe('kanji_remote_authoritative');
+
+    const meta = await getDb().syncRecordMeta.get(
+      'kanji:kanji_remote_authoritative',
+    );
+    expect(meta?.version).toBe(1);
+    expect(await getDb().syncRecordMeta.get(`kanji:${localKanjiId}`)).toBeUndefined();
+  });
+});
+
 describe('sync mappers', () => {
   beforeEach(() => {
     resetDbForTests(`sync-map-${createId('db')}`);
