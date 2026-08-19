@@ -3,7 +3,8 @@
 Last updated: 2026-08-18 (Phase 9 complete — Milestone 9 done; sentence
 translation and vocabulary meaning are now editable in the UI; a batch of
 small Phase 7.10/9 follow-ups landed together; card issue reports
-("report a problem with this card") added — see below).
+("report a problem with this card") added; two small Analyze-editor/
+Vocabulary-picker chunk-boundary bugs fixed — see below).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3702,3 +3703,45 @@ delayed shadowing and the meaning toggle a real run before relying on them.
 
 **Code-reviewed**: not yet — flag if a review pass is wanted before this
 ships.
+
+## Fix: Boundary → button breaking chunk merges in the Analyze editor
+
+Found live: splitting a word off a longer chunk (e.g. isolating あげる from
+あげるから) so it could then be merged into a combined chunk (してあげる) —
+the "Boundary →" button appeared to do nothing.
+
+Root cause: `moveChunkBoundary`'s `'right'` branch (`src/lib/analysisHelpers.ts`)
+took the *current* chunk's first character and prepended it to the
+*following* chunk, instead of taking the following chunk's first character
+and appending it to the current chunk. For any chunk longer than one
+character this produced chunk text out of source order, which the
+`chunksMatchSource` consistency guard silently reverted — so the button's
+visible effect was nothing, with no error surfaced anywhere.
+
+Fixed the character-move direction (pull from `following`, append to
+`current`, splice out `following` only once it's empty — mirroring the
+existing `'left'` branch's shape). No schema/UI change, one function.
+
+**Verified**: new cases added to `tests/analysisHelpers.test.ts` covering
+multi-character chunks in both directions; `npm run check` green.
+
+## Fix: vocabulary-picker merges rejected across a whitespace-only gap
+
+Found live: some source sentences have a literal space between clauses
+(e.g. "して あげるから") that isn't a real token boundary. Dragging して onto
+あげる in the Vocabulary Picker was rejected as "not adjacent" because
+`canMergeSuggestionIntoSelection`/`canMergeSelections`/`combineSuggestions`
+all required spans to touch exactly (`a.end === b.start`), and the space
+sat in the gap.
+
+Added `isAdjacentAcrossWhitespace` (`src/lib/vocabularySuggestions.ts`):
+true when two spans touch directly, or the only text between them is
+whitespace. Real gaps (punctuation, other characters) still block merging.
+Wired into all four merge-eligibility/merge-execution functions listed
+above; the whitespace itself is preserved in the merged surface text (the
+merge functions' "before/after" ordering checks changed from `===` to
+`<=` accordingly).
+
+**Verified**: `tests/vocabularySuggestions.test.ts` gained cases for
+whitespace-gap merges (both directions) and confirms punctuation gaps
+still correctly block merging; `npm run check` green.
