@@ -15,6 +15,9 @@ import type {
   CardIssueReport,
   CardIssueStatus,
   ErrorClassification,
+  GrammarPattern,
+  GrammarRelationship,
+  GrammarRelationshipType,
   ImportBatch,
   InboxMembership,
   InitialOrderMode,
@@ -27,6 +30,7 @@ import type {
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
+  SentenceGrammar,
   SentenceVocabulary,
   StudyActivityType,
   StudyItem,
@@ -46,6 +50,7 @@ import {
   parseSatoriCsvText,
   type ImportPreview,
 } from '../lib/csvImport';
+import { normalizeGrammarPatternKey } from '../lib/grammarPatterns';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { isHanCharacter } from '../lib/kanji';
 import {
@@ -789,6 +794,7 @@ export async function saveAnalysis(
       'unreviewed',
     vocabularySelections:
       vocabulary?.selections ?? existing?.vocabularySelections ?? [],
+    grammarSuggestions: existing?.grammarSuggestions ?? [],
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -1118,6 +1124,9 @@ export async function exportFullBackup(): Promise<BackupPayload> {
     sentenceVocabulary: await db.sentenceVocabulary.toArray(),
     kanji: await db.kanji.toArray(),
     vocabularyKanji: await db.vocabularyKanji.toArray(),
+    grammarPatterns: await db.grammarPatterns.toArray(),
+    sentenceGrammar: await db.sentenceGrammar.toArray(),
+    grammarRelationships: await db.grammarRelationships.toArray(),
     settings,
   };
   return buildBackupPayload(bundle);
@@ -1147,6 +1156,15 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
   );
   const kanjiIds = new Set(vocabularyKanji.map((item) => item.kanjiId));
   const kanji = full.kanji.filter((item) => kanjiIds.has(item.id));
+  const sentenceGrammar = full.sentenceGrammar.filter((item) =>
+    sentenceIds.has(item.sentenceId),
+  );
+  const grammarPatternIds = new Set(
+    sentenceGrammar.map((item) => item.grammarPatternId),
+  );
+  const grammarPatterns = full.grammarPatterns.filter((item) =>
+    grammarPatternIds.has(item.id),
+  );
   return buildBackupPayload({
     books: [book],
     sentences: full.sentences.filter((item) => sentenceIds.has(item.id)),
@@ -1160,6 +1178,11 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
     sentenceVocabulary,
     kanji,
     vocabularyKanji,
+    // grammarRelationships excluded from book scope — corpus-wide, spans
+    // patterns not necessarily both encountered within this one book.
+    grammarPatterns,
+    sentenceGrammar,
+    grammarRelationships: [],
     settings: full.settings,
   });
 }
@@ -1182,6 +1205,9 @@ export async function restoreBackup(
     db.sentenceVocabulary,
     db.kanji,
     db.vocabularyKanji,
+    db.grammarPatterns,
+    db.sentenceGrammar,
+    db.grammarRelationships,
     db.settings,
     db.sentenceAudio,
   ] as const;
@@ -1201,6 +1227,9 @@ export async function restoreBackup(
         db.sentenceVocabulary.clear(),
         db.kanji.clear(),
         db.vocabularyKanji.clear(),
+        db.grammarPatterns.clear(),
+        db.sentenceGrammar.clear(),
+        db.grammarRelationships.clear(),
         db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
@@ -1215,6 +1244,9 @@ export async function restoreBackup(
       await db.vocabularyItems.bulkPut(payload.vocabularyItems);
       await db.sentenceVocabulary.bulkPut(payload.sentenceVocabulary);
       await db.vocabularyKanji.bulkPut(payload.vocabularyKanji);
+      await db.grammarPatterns.bulkPut(payload.grammarPatterns);
+      await db.sentenceGrammar.bulkPut(payload.sentenceGrammar);
+      await db.grammarRelationships.bulkPut(payload.grammarRelationships);
       await db.settings.put(payload.settings);
     });
     return;
@@ -1294,6 +1326,22 @@ export async function restoreBackup(
       for (const link of payload.vocabularyKanji) {
         const existing = await db.vocabularyKanji.get(link.id);
         if (!existing) await db.vocabularyKanji.put(link);
+      }
+      for (const pattern of payload.grammarPatterns) {
+        const existing = await db.grammarPatterns.get(pattern.id);
+        if (!existing || pattern.updatedAt >= existing.updatedAt) {
+          await db.grammarPatterns.put(pattern);
+        }
+      }
+      for (const link of payload.sentenceGrammar) {
+        const existing = await db.sentenceGrammar.get(link.id);
+        if (!existing) await db.sentenceGrammar.put(link);
+      }
+      for (const relationship of payload.grammarRelationships) {
+        const existing = await db.grammarRelationships.get(relationship.id);
+        if (!existing || relationship.updatedAt >= existing.updatedAt) {
+          await db.grammarRelationships.put(relationship);
+        }
       }
       const settings = await ensureSettings(db);
       await db.settings.put({ ...settings, ...payload.settings, id: 'settings' });
@@ -2171,23 +2219,20 @@ export async function getVocabularyTargetCandidates(
 }
 
 /**
- * Fetches the data `computeContextDiversity` (src/lib/maturity.ts) needs
- * for one vocabulary item and calls it — the Dexie-querying half of
- * maturity computation, kept separate from the pure ladder logic itself
- * (Phase 7.1). A sentence's "source" is the sourceKey (or id, as a
- * stand-in) of any Book containing it via `book_sentences`, since Sentence
- * has no direct link to the `sources` table yet.
+ * Fetches the data `computeContextDiversity` (src/lib/maturity.ts) needs for
+ * a set of sentence ids and calls it — the Dexie-querying half of maturity
+ * computation, kept separate from the pure ladder logic itself (Phase 7.1).
+ * A sentence's "source" is the sourceKey (or id, as a stand-in) of any Book
+ * containing it via `book_sentences`, since Sentence has no direct link to
+ * the `sources` table yet. Shared by computeVocabularyContextDiversity and
+ * computeGrammarPatternContextDiversity — same diversity question, different
+ * link table feeding it the sentence ids.
  */
-export async function computeVocabularyContextDiversity(
-  vocabularyItemId: string,
+async function contextDiversityFromSentenceIds(
+  sentenceIds: string[],
 ): Promise<ContextDiversity> {
-  const db = getDb();
-  const links = await db.sentenceVocabulary
-    .where('vocabularyItemId')
-    .equals(vocabularyItemId)
-    .toArray();
-  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
   if (sentenceIds.length === 0) return computeContextDiversity(new Map());
+  const db = getDb();
 
   const memberships = await db.bookSentences
     .where('sentenceId')
@@ -2209,6 +2254,31 @@ export async function computeVocabularyContextDiversity(
     sourceKeysBySentenceId.set(sentenceId, keys);
   }
   return computeContextDiversity(sourceKeysBySentenceId);
+}
+
+export async function computeVocabularyContextDiversity(
+  vocabularyItemId: string,
+): Promise<ContextDiversity> {
+  const db = getDb();
+  const links = await db.sentenceVocabulary
+    .where('vocabularyItemId')
+    .equals(vocabularyItemId)
+    .toArray();
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  return contextDiversityFromSentenceIds(sentenceIds);
+}
+
+/** Grammar-pattern counterpart of computeVocabularyContextDiversity, over sentenceGrammar instead of sentenceVocabulary. */
+export async function computeGrammarPatternContextDiversity(
+  grammarPatternId: string,
+): Promise<ContextDiversity> {
+  const db = getDb();
+  const links = await db.sentenceGrammar
+    .where('grammarPatternId')
+    .equals(grammarPatternId)
+    .toArray();
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  return contextDiversityFromSentenceIds(sentenceIds);
 }
 
 /** Canonical (unordered) pair ordering so A↔B is never stored twice. */
@@ -2429,6 +2499,11 @@ export type StudyItemDebugSubject =
       itemA: VocabularyItem;
       itemB: VocabularyItem;
     }
+  | {
+      kind: 'grammarPattern';
+      grammarPattern: GrammarPattern;
+      maturity: { diversity: ContextDiversity; level: MaturityLevel };
+    }
   | { kind: 'unknown' };
 
 export interface StudyItemDebugInfo {
@@ -2487,6 +2562,17 @@ export async function getStudyItemDebugInfo(
       ]);
       if (itemA && itemB) subject = { kind: 'vocabularyConfusion', confusion, itemA, itemB };
     }
+  } else if (studyItem.subjectType === 'grammarPattern') {
+    const grammarPattern = await db.grammarPatterns.get(studyItem.subjectId);
+    if (grammarPattern) {
+      const diversity = await computeGrammarPatternContextDiversity(grammarPattern.id);
+      const level = computeMaturityLevel(diversity, {
+        hasLongIntervalSuccess:
+          studyItem.fsrsState.state === 'review' &&
+          studyItem.fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS,
+      });
+      subject = { kind: 'grammarPattern', grammarPattern, maturity: { diversity, level } };
+    }
   }
 
   return { studyItem, subject, reviews, contextSentencesById };
@@ -2517,11 +2603,15 @@ export async function listStudyItemSummaries(): Promise<StudyItemSummary[]> {
   const confusionIds = studyItems
     .filter((item) => item.subjectType === 'vocabularyConfusion')
     .map((item) => item.subjectId);
+  const grammarPatternIds = studyItems
+    .filter((item) => item.subjectType === 'grammarPattern')
+    .map((item) => item.subjectId);
 
-  const [sentences, vocabularyItems, confusions] = await Promise.all([
+  const [sentences, vocabularyItems, confusions, grammarPatterns] = await Promise.all([
     db.sentences.bulkGet(sentenceIds),
     db.vocabularyItems.bulkGet(vocabularyItemIds),
     db.vocabularyConfusions.bulkGet(confusionIds),
+    db.grammarPatterns.bulkGet(grammarPatternIds),
   ]);
   const sentenceById = new Map(
     sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
@@ -2534,6 +2624,11 @@ export async function listStudyItemSummaries(): Promise<StudyItemSummary[]> {
   const confusionById = new Map(
     confusions
       .filter((row): row is VocabularyConfusion => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+  const grammarPatternById = new Map(
+    grammarPatterns
+      .filter((row): row is GrammarPattern => Boolean(row))
       .map((row) => [row.id, row]),
   );
 
@@ -2554,9 +2649,343 @@ export async function listStudyItemSummaries(): Promise<StudyItemSummary[]> {
         const itemB = vocabularyItemById.get(confusion.itemBId);
         subjectLabel = `${itemA?.expression ?? confusion.itemAId} vs ${itemB?.expression ?? confusion.itemBId}`;
       }
+    } else if (studyItem.subjectType === 'grammarPattern') {
+      const grammarPattern = grammarPatternById.get(studyItem.subjectId);
+      if (grammarPattern) subjectLabel = grammarPattern.canonicalName;
     }
     return { studyItem, subjectLabel };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Grammar patterns (grammar-learning system foundation, docs/AI_OVERVIEW.md).
+// GrammarPattern/SentenceGrammar/GrammarRelationship mirror the
+// VocabularyItem/SentenceVocabulary/VocabularyConfusion shapes above — see
+// the doc comments on those types (src/domain/types.ts) for how and why they
+// diverge. No UI writes to these yet (Phase 2 of the grammar-learning plan);
+// this section is schema-adjacent foundation only.
+// ---------------------------------------------------------------------------
+
+/**
+ * Get-or-create a canonical GrammarPattern, deduped on normalizedKey (exact
+ * match modulo leading/trailing tilde/wave-dash and whitespace — see
+ * normalizeGrammarPatternKey). Never overwrites an existing row, mirroring
+ * ensureVocabularyItem/ensureKanji.
+ */
+export async function ensureGrammarPattern(
+  canonicalName: string,
+  fields: {
+    shortMeaning?: string;
+    structuralTemplate?: string;
+    explanation?: string;
+    structuralNotes?: string;
+    family?: string;
+    notes?: string;
+    aliases?: string[];
+    provenance?: 'manual' | 'ai_suggested';
+    externalId?: string;
+  } = {},
+): Promise<GrammarPattern> {
+  const db = getDb();
+  const normalizedKey = normalizeGrammarPatternKey(canonicalName);
+  const existing = await db.grammarPatterns
+    .where('normalizedKey')
+    .equals(normalizedKey)
+    .first();
+  if (existing) return existing;
+
+  const timestamp = nowIso();
+  const pattern: GrammarPattern = {
+    id: createId('grammar_pattern'),
+    canonicalName: canonicalName.trim(),
+    normalizedKey,
+    aliases: fields.aliases ?? [],
+    shortMeaning: fields.shortMeaning ?? '',
+    structuralTemplate: fields.structuralTemplate,
+    explanation: fields.explanation,
+    structuralNotes: fields.structuralNotes,
+    family: fields.family,
+    notes: fields.notes,
+    provenance: fields.provenance ?? 'manual',
+    externalId: fields.externalId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.grammarPatterns.put(pattern);
+  notifySync('grammar_patterns', pattern.id, pattern);
+  return pattern;
+}
+
+export async function updateGrammarPattern(
+  patternId: string,
+  patch: Partial<
+    Pick<
+      GrammarPattern,
+      | 'shortMeaning'
+      | 'structuralTemplate'
+      | 'explanation'
+      | 'structuralNotes'
+      | 'family'
+      | 'notes'
+      | 'aliases'
+    >
+  >,
+): Promise<GrammarPattern> {
+  const db = getDb();
+  const existing = await db.grammarPatterns.get(patternId);
+  if (!existing) throw new Error('Grammar pattern not found');
+  const updated: GrammarPattern = { ...existing, ...patch, updatedAt: nowIso() };
+  await db.grammarPatterns.put(updated);
+  notifySync('grammar_patterns', updated.id, updated);
+  return updated;
+}
+
+/**
+ * Get-or-create the occurrence link for (sentenceId, grammarPatternId). A
+ * pattern recurring more than once within the same sentence collapses onto
+ * one row — an accepted v1 simplification, same class of limitation as
+ * SentenceVocabulary not distinguishing repeated occurrences of a word.
+ * Repeat calls patch in newly-supplied fields (never overwriting existing
+ * ones with undefined) and OR `confirmedByLearner` so a later "Got it"/
+ * "Track" can promote an AI-suggested-only occurrence, but nothing can ever
+ * flip a confirmed occurrence back to unconfirmed.
+ */
+export async function ensureSentenceGrammar(
+  sentenceId: string,
+  grammarPatternId: string,
+  fields: {
+    chunkId?: string;
+    surfaceForm?: string;
+    start?: number;
+    end?: number;
+    occurrenceExplanation?: string;
+    confirmedByLearner?: boolean;
+    source?: 'manual' | 'ai_suggested';
+  } = {},
+): Promise<SentenceGrammar> {
+  const db = getDb();
+  const existing = await db.sentenceGrammar
+    .where('[sentenceId+grammarPatternId]')
+    .equals([sentenceId, grammarPatternId])
+    .first();
+  const timestamp = nowIso();
+
+  if (existing) {
+    const updated: SentenceGrammar = {
+      ...existing,
+      chunkId: fields.chunkId ?? existing.chunkId,
+      surfaceForm: fields.surfaceForm ?? existing.surfaceForm,
+      start: fields.start ?? existing.start,
+      end: fields.end ?? existing.end,
+      occurrenceExplanation: fields.occurrenceExplanation ?? existing.occurrenceExplanation,
+      confirmedByLearner: existing.confirmedByLearner || Boolean(fields.confirmedByLearner),
+      updatedAt: timestamp,
+    };
+    await db.sentenceGrammar.put(updated);
+    notifySync('sentence_grammar', updated.id, updated);
+    return updated;
+  }
+
+  const created: SentenceGrammar = {
+    id: createId('sentence_grammar'),
+    sentenceId,
+    grammarPatternId,
+    chunkId: fields.chunkId,
+    surfaceForm: fields.surfaceForm,
+    start: fields.start,
+    end: fields.end,
+    occurrenceExplanation: fields.occurrenceExplanation,
+    confirmedByLearner: Boolean(fields.confirmedByLearner),
+    source: fields.source ?? 'manual',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.sentenceGrammar.put(created);
+  notifySync('sentence_grammar', created.id, created);
+  return created;
+}
+
+export interface GrammarEncounter {
+  sentenceGrammar: SentenceGrammar;
+  sentence: Sentence;
+  books: Book[];
+  hasAudio: boolean;
+}
+
+/**
+ * "Your encounters" (design brief §5/§6) for a GrammarPattern: every
+ * sentence it's been linked to, with book/source provenance and whether
+ * native audio is available, newest first. Prefers the learner's own
+ * corpus over any generated example — if there's only one encounter, this
+ * simply returns that one, per the brief's explicit instruction not to
+ * manufacture a bigger corpus than actually exists.
+ */
+export async function listSentenceGrammarForPattern(
+  grammarPatternId: string,
+): Promise<GrammarEncounter[]> {
+  const db = getDb();
+  const links = await db.sentenceGrammar
+    .where('grammarPatternId')
+    .equals(grammarPatternId)
+    .toArray();
+  if (links.length === 0) return [];
+
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  const [sentences, memberships, audioRows] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const sentenceById = new Map<string, Sentence>();
+  sentences.forEach((sentence, index) => {
+    if (sentence) sentenceById.set(sentenceIds[index]!, sentence);
+  });
+  const bookIds = [...new Set(memberships.map((item) => item.bookId))];
+  const books = await db.books.bulkGet(bookIds);
+  const bookById = new Map<string, Book>();
+  books.forEach((book, index) => {
+    if (book) bookById.set(bookIds[index]!, book);
+  });
+  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
+
+  const encounters: GrammarEncounter[] = [];
+  for (const link of links) {
+    const sentence = sentenceById.get(link.sentenceId);
+    if (!sentence) continue;
+    const linkedBooks = memberships
+      .filter((item) => item.sentenceId === link.sentenceId)
+      .map((item) => bookById.get(item.bookId))
+      .filter((book): book is Book => Boolean(book));
+    encounters.push({
+      sentenceGrammar: link,
+      sentence,
+      books: linkedBooks,
+      hasAudio: audioSentenceIds.has(link.sentenceId),
+    });
+  }
+  return encounters.sort((a, b) =>
+    b.sentenceGrammar.createdAt.localeCompare(a.sentenceGrammar.createdAt),
+  );
+}
+
+/** Get-or-create a grammarPattern-subject study item for a given activityType — thin wrapper, mirrors ensureVocabularyStudyItem. */
+export async function ensureGrammarStudyItem(
+  grammarPatternId: string,
+  activityType: StudyActivityType,
+): Promise<StudyItem> {
+  return ensureStudyItem('grammarPattern', grammarPatternId, activityType);
+}
+
+/**
+ * Natural-encounter evidence for a grammar pattern (design brief §10),
+ * mirroring recordNaturalEncounter exactly — same lazy get-or-create study
+ * item, same recordReview call with source/contextSentenceId. Unlike
+ * vocabulary (where any self-reported recognition may reasonably start FSRS
+ * tracking for that word), this is meant to be called only for patterns the
+ * learner has already opted into tracking (see ensureGrammarStudyItem's
+ * callers) — that policy lives in the UI layer that calls this function, not
+ * here, so the primitive itself stays uniform with recordNaturalEncounter
+ * rather than growing a special case.
+ */
+export async function recordGrammarNaturalEncounter(input: {
+  grammarPatternId: string;
+  sentenceId: string;
+  rating: ReviewRating;
+  activityType?: StudyActivityType;
+}): Promise<{ review: Review; studyItem: StudyItem }> {
+  const studyItem = await ensureGrammarStudyItem(
+    input.grammarPatternId,
+    input.activityType ?? 'grammar_comprehension',
+  );
+  return recordReview({
+    studyItemId: studyItem.id,
+    rating: input.rating,
+    source: 'natural_encounter',
+    contextSentenceId: input.sentenceId,
+  });
+}
+
+/** Canonical (unordered) pair ordering, mirroring canonicalConfusionPair. */
+function canonicalGrammarPatternPair(
+  patternAId: string,
+  patternBId: string,
+): [string, string] {
+  return patternAId < patternBId ? [patternAId, patternBId] : [patternBId, patternAId];
+}
+
+/**
+ * Get-or-create a typed relationship edge for (patternAId, patternBId,
+ * relationshipType). Unlike ensureVocabularyConfusion (one row per
+ * unordered pair, full stop), a pair may have more than one relationship
+ * row — one per distinct relationshipType — so this keys on the full
+ * triple. Never overwrites an existing row's notes; use
+ * recordGrammarRelationshipObservation to bump the count on repeated
+ * observations.
+ */
+export async function ensureGrammarRelationship(
+  patternAId: string,
+  patternBId: string,
+  relationshipType: GrammarRelationshipType,
+  fields: { notes?: string } = {},
+): Promise<GrammarRelationship> {
+  const [a, b] = canonicalGrammarPatternPair(patternAId, patternBId);
+  const db = getDb();
+  const existing = await db.grammarRelationships
+    .where('[patternAId+patternBId+relationshipType]')
+    .equals([a, b, relationshipType])
+    .first();
+  if (existing) return existing;
+
+  const timestamp = nowIso();
+  const relationship: GrammarRelationship = {
+    id: createId('grammar_relationship'),
+    patternAId: a,
+    patternBId: b,
+    relationshipType,
+    notes: fields.notes,
+    observedCount: 1,
+    lastObservedAt: timestamp,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.grammarRelationships.put(relationship);
+  notifySync('grammar_relationships', relationship.id, relationship);
+  return relationship;
+}
+
+/** Record another observation of an already-known (or new) relationship edge. */
+export async function recordGrammarRelationshipObservation(
+  patternAId: string,
+  patternBId: string,
+  relationshipType: GrammarRelationshipType,
+): Promise<GrammarRelationship> {
+  const [a, b] = canonicalGrammarPatternPair(patternAId, patternBId);
+  const db = getDb();
+  const existing = await db.grammarRelationships
+    .where('[patternAId+patternBId+relationshipType]')
+    .equals([a, b, relationshipType])
+    .first();
+  const timestamp = nowIso();
+  const updated: GrammarRelationship = existing
+    ? {
+        ...existing,
+        observedCount: existing.observedCount + 1,
+        lastObservedAt: timestamp,
+        updatedAt: timestamp,
+      }
+    : {
+        id: createId('grammar_relationship'),
+        patternAId: a,
+        patternBId: b,
+        relationshipType,
+        observedCount: 1,
+        lastObservedAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+  await db.grammarRelationships.put(updated);
+  notifySync('grammar_relationships', updated.id, updated);
+  return updated;
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';

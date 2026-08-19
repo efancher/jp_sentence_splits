@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../src/db/database';
 import {
   createBook,
+  ensureGrammarPattern,
+  ensureGrammarRelationship,
   ensureKanji,
+  ensureSentenceGrammar,
   ensureVocabularyItem,
   materializeVocabularySelections,
   saveAnalysis,
@@ -585,5 +588,68 @@ describe('sync mappers', () => {
     expect(local.vocabularyItemId).toBe(item.id);
     expect(local.kanjiId).toBe(link!.kanjiId);
     expect(local.positionInWord).toBe(link!.positionInWord);
+  });
+
+  it('round-trips a grammar pattern through remote shape', async () => {
+    const { grammarPatternToRemote, remoteToGrammarPattern } = await import(
+      '../src/sync/mappers'
+    );
+    const pattern = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+      aliases: ['わけない'],
+    });
+    const remote = grammarPatternToRemote(pattern, 'user-1', 2);
+    expect(remote.owner_id).toBe('user-1');
+    expect(remote.canonical_name).toBe('〜わけがない');
+    const local = remoteToGrammarPattern(remote);
+    expect(local.canonicalName).toBe('〜わけがない');
+    expect(local.normalizedKey).toBe(pattern.normalizedKey);
+    expect(local.shortMeaning).toBe("there's no way...");
+    expect(local.aliases).toEqual(['わけない']);
+  });
+
+  it('round-trips a sentence_grammar link through remote shape', async () => {
+    const { sentenceGrammarToRemote, remoteToSentenceGrammar } = await import(
+      '../src/sync/mappers'
+    );
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const link = await ensureSentenceGrammar('sent-1', pattern.id, {
+      surfaceForm: 'わけないでしょ',
+      start: 4,
+      end: 11,
+      confirmedByLearner: true,
+    });
+    const remote = sentenceGrammarToRemote(link, 'user-1', 1);
+    expect(remote.sentence_id).toBe('sent-1');
+    expect(remote.start_index).toBe(4);
+    expect(remote.end_index).toBe(11);
+    const local = remoteToSentenceGrammar(remote);
+    expect(local.sentenceId).toBe('sent-1');
+    expect(local.grammarPatternId).toBe(pattern.id);
+    expect(local.surfaceForm).toBe('わけないでしょ');
+    expect(local.start).toBe(4);
+    expect(local.end).toBe(11);
+    expect(local.confirmedByLearner).toBe(true);
+  });
+
+  it('round-trips a grammar relationship through remote shape', async () => {
+    const { grammarRelationshipToRemote, remoteToGrammarRelationship } = await import(
+      '../src/sync/mappers'
+    );
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    const relationship = await ensureGrammarRelationship(
+      wakega.id,
+      hazuga.id,
+      'structural_relative',
+    );
+    const remote = grammarRelationshipToRemote(relationship, 'user-1', 1);
+    expect(remote.pattern_a_id).toBe(relationship.patternAId);
+    expect(remote.relationship_type).toBe('structural_relative');
+    const local = remoteToGrammarRelationship(remote);
+    expect(local.patternAId).toBe(relationship.patternAId);
+    expect(local.patternBId).toBe(relationship.patternBId);
+    expect(local.relationshipType).toBe('structural_relative');
+    expect(local.observedCount).toBe(1);
   });
 });

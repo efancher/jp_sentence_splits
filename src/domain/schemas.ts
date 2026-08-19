@@ -128,6 +128,19 @@ export const analysisChunkSchema = z.object({
   kind: z.enum(['surface', 'zero_ga']).optional(),
 });
 
+export const grammarSuggestionSchema = z.object({
+  id: z.string(),
+  candidateName: z.string().min(1),
+  matchedPatternId: z.string().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().positive().optional(),
+  chunkId: z.string().optional(),
+  shortMeaning: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  rank: z.enum(['important', 'familiar', 'nuance', 'optional']),
+  source: z.enum(['ai', 'manual']),
+});
+
 export const sentenceAnalysisSchema = z.object({
   sentenceId: z.string(),
   chunks: z.array(analysisChunkSchema),
@@ -136,6 +149,9 @@ export const sentenceAnalysisSchema = z.object({
   formatVersion: z.number().default(ANALYSIS_FORMAT_VERSION),
   vocabularyReviewStatus: vocabularyReviewStatusSchema.default('unreviewed'),
   vocabularySelections: z.array(vocabularySelectionSchema).default([]),
+  // Additive (grammar-learning system): absent on analyses saved before this
+  // field existed.
+  grammarSuggestions: z.array(grammarSuggestionSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -195,6 +211,7 @@ export const studySubjectTypeSchema = z.enum([
   'vocabularyItem',
   'chunk',
   'vocabularyConfusion',
+  'grammarPattern',
 ]);
 
 export const fsrsStateSchema = z.object({
@@ -353,6 +370,62 @@ export const vocabularyKanjiSchema = z.object({
   updatedAt: z.string(),
 });
 
+// Grammar-learning system (docs/AI_OVERVIEW.md) — additive, same "moved
+// ahead of backupSchema" reasoning as vocabularyItemSchema etc. above.
+export const grammarPatternSchema = z.object({
+  id: z.string(),
+  canonicalName: z.string().min(1),
+  normalizedKey: z.string(),
+  aliases: z.array(z.string()).default([]),
+  shortMeaning: z.string(),
+  structuralTemplate: z.string().optional(),
+  explanation: z.string().optional(),
+  structuralNotes: z.string().optional(),
+  family: z.string().optional(),
+  notes: z.string().optional(),
+  provenance: z.enum(['manual', 'ai_suggested']),
+  externalId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const sentenceGrammarSchema = z.object({
+  id: z.string(),
+  sentenceId: z.string(),
+  grammarPatternId: z.string(),
+  chunkId: z.string().optional(),
+  surfaceForm: z.string().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().positive().optional(),
+  occurrenceExplanation: z.string().optional(),
+  confirmedByLearner: z.boolean(),
+  source: z.enum(['manual', 'ai_suggested']),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const grammarRelationshipTypeSchema = z.enum([
+  'similar_meaning',
+  'contrast',
+  'commonly_confused',
+  'stronger_stance',
+  'weaker_stance',
+  'formal_variant',
+  'structural_relative',
+]);
+
+export const grammarRelationshipSchema = z.object({
+  id: z.string(),
+  patternAId: z.string(),
+  patternBId: z.string(),
+  relationshipType: grammarRelationshipTypeSchema,
+  notes: z.string().optional(),
+  observedCount: z.number().int().nonnegative(),
+  lastObservedAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 export const backupSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
   appVersion: z.string(),
@@ -376,6 +449,11 @@ export const backupSchema = z.object({
     sentenceVocabulary: z.number().default(0),
     kanji: z.number().default(0),
     vocabularyKanji: z.number().default(0),
+    // Additive (grammar-learning system): same "missing key -> 0, not a
+    // parse failure" reasoning as the vocabulary/kanji counts above.
+    grammarPatterns: z.number().default(0),
+    sentenceGrammar: z.number().default(0),
+    grammarRelationships: z.number().default(0),
   }),
   books: z.array(bookSchema),
   sentences: z.array(sentenceSchema),
@@ -389,6 +467,13 @@ export const backupSchema = z.object({
   sentenceVocabulary: z.array(sentenceVocabularySchema).default([]),
   kanji: z.array(kanjiSchema).default([]),
   vocabularyKanji: z.array(vocabularyKanjiSchema).default([]),
+  // Additive (grammar-learning system): backups exported before this change
+  // won't have these keys at all — .default([]) so restoring one still
+  // succeeds instead of failing safeParse (same lesson as Phase 5's own
+  // documented fix for vocabularyItems/kanji/etc. above).
+  grammarPatterns: z.array(grammarPatternSchema).default([]),
+  sentenceGrammar: z.array(sentenceGrammarSchema).default([]),
+  grammarRelationships: z.array(grammarRelationshipSchema).default([]),
   settings: settingsSchema,
 });
 

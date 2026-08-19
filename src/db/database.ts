@@ -10,6 +10,8 @@ import type {
   Book,
   BookSentence,
   CardIssueReport,
+  GrammarPattern,
+  GrammarRelationship,
   ImportBatch,
   InboxMembership,
   Kanji,
@@ -18,6 +20,7 @@ import type {
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
+  SentenceGrammar,
   SentenceVocabulary,
   Source,
   StudyItem,
@@ -92,6 +95,12 @@ export class GlossbookDatabase extends Dexie {
   // study_items/reviews so a future session can review a batch via
   // scripts/list-card-issues.ts — see docs/STATUS.md.
   cardIssueReports!: EntityTable<CardIssueReport, 'id'>;
+  // Grammar-learning system (docs/AI_OVERVIEW.md) — Layer 2 on top of the
+  // existing Cure-Dolly structural analysis. See src/db/repository.ts's
+  // "Grammar patterns" section.
+  grammarPatterns!: EntityTable<GrammarPattern, 'id'>;
+  sentenceGrammar!: EntityTable<SentenceGrammar, 'id'>;
+  grammarRelationships!: EntityTable<GrammarRelationship, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -414,6 +423,50 @@ export class GlossbookDatabase extends Dexie {
       attemptTranscriptions: 'id',
       attemptAnalysisSummaries: 'id, sentenceId, createdAt',
       cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
+    });
+
+    // Grammar-learning system foundation — purely additive, every store
+    // above is unchanged.
+    this.version(13).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
+      attempts: 'id, sentenceId, createdAt, manualRating',
+      vocabularyConfusions:
+        'id, itemAId, itemBId, [itemAId+itemBId], updatedAt',
+      referenceAlignments: 'id',
+      attemptAlignments: 'id',
+      attemptTranscriptions: 'id',
+      attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+      cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
+      grammarPatterns: 'id, canonicalName, normalizedKey, updatedAt',
+      sentenceGrammar:
+        'id, sentenceId, grammarPatternId, [sentenceId+grammarPatternId], chunkId, updatedAt',
+      grammarRelationships:
+        'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
     });
   }
 }

@@ -2,6 +2,8 @@ import type {
   Book,
   BookSentence,
   CardIssueReport,
+  GrammarPattern,
+  GrammarRelationship,
   ImportBatch,
   InboxMembership,
   Kanji,
@@ -9,6 +11,7 @@ import type {
   Sentence,
   SentenceAnalysis,
   SentenceAudio,
+  SentenceGrammar,
   SentenceVocabulary,
   StudyItem,
   VocabularyConfusion,
@@ -32,7 +35,10 @@ export type LocalSyncPayload =
   | Kanji
   | VocabularyKanji
   | VocabularyConfusion
-  | CardIssueReport;
+  | CardIssueReport
+  | GrammarPattern
+  | SentenceGrammar
+  | GrammarRelationship;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -214,6 +220,7 @@ export function analysisToRemote(
     format_version: analysis.formatVersion,
     vocabulary_review_status: analysis.vocabularyReviewStatus ?? 'unreviewed',
     vocabulary_selections: analysis.vocabularySelections ?? [],
+    grammar_suggestions: analysis.grammarSuggestions ?? [],
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
     deleted_at: null,
@@ -234,6 +241,8 @@ export function remoteToAnalysis(row: Record<string, unknown>): SentenceAnalysis
     vocabularySelections:
       (row.vocabulary_selections as SentenceAnalysis['vocabularySelections']) ??
       [],
+    grammarSuggestions:
+      (row.grammar_suggestions as SentenceAnalysis['grammarSuggestions']) ?? [],
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -624,6 +633,131 @@ export function remoteToCardIssueReport(
   };
 }
 
+export function grammarPatternToRemote(
+  pattern: GrammarPattern,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: pattern.id,
+    owner_id: ownerId,
+    canonical_name: pattern.canonicalName,
+    normalized_key: pattern.normalizedKey,
+    aliases: pattern.aliases,
+    short_meaning: pattern.shortMeaning,
+    structural_template: pattern.structuralTemplate ?? null,
+    explanation: pattern.explanation ?? null,
+    structural_notes: pattern.structuralNotes ?? null,
+    family: pattern.family ?? null,
+    notes: pattern.notes ?? null,
+    provenance: pattern.provenance,
+    external_id: pattern.externalId ?? null,
+    created_at: pattern.createdAt,
+    updated_at: pattern.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToGrammarPattern(row: Record<string, unknown>): GrammarPattern {
+  return {
+    id: String(row.id),
+    canonicalName: String(row.canonical_name),
+    normalizedKey: String(row.normalized_key),
+    aliases: (row.aliases as string[] | null) ?? [],
+    shortMeaning: String(row.short_meaning ?? ''),
+    structuralTemplate: (row.structural_template as string | null) ?? undefined,
+    explanation: (row.explanation as string | null) ?? undefined,
+    structuralNotes: (row.structural_notes as string | null) ?? undefined,
+    family: (row.family as string | null) ?? undefined,
+    notes: (row.notes as string | null) ?? undefined,
+    provenance: row.provenance as GrammarPattern['provenance'],
+    externalId: (row.external_id as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function sentenceGrammarToRemote(
+  link: SentenceGrammar,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: link.id,
+    owner_id: ownerId,
+    sentence_id: link.sentenceId,
+    grammar_pattern_id: link.grammarPatternId,
+    chunk_id: link.chunkId ?? null,
+    surface_form: link.surfaceForm ?? null,
+    // start/end -> *_index: `end` needs quoting as a Postgres identifier
+    // (reserved in CASE...END etc.), simplest to just avoid it.
+    start_index: link.start ?? null,
+    end_index: link.end ?? null,
+    occurrence_explanation: link.occurrenceExplanation ?? null,
+    confirmed_by_learner: link.confirmedByLearner,
+    source: link.source,
+    created_at: link.createdAt,
+    updated_at: link.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSentenceGrammar(row: Record<string, unknown>): SentenceGrammar {
+  return {
+    id: String(row.id),
+    sentenceId: String(row.sentence_id),
+    grammarPatternId: String(row.grammar_pattern_id),
+    chunkId: (row.chunk_id as string | null) ?? undefined,
+    surfaceForm: (row.surface_form as string | null) ?? undefined,
+    start: (row.start_index as number | null) ?? undefined,
+    end: (row.end_index as number | null) ?? undefined,
+    occurrenceExplanation: (row.occurrence_explanation as string | null) ?? undefined,
+    confirmedByLearner: Boolean(row.confirmed_by_learner),
+    source: row.source as SentenceGrammar['source'],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function grammarRelationshipToRemote(
+  relationship: GrammarRelationship,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: relationship.id,
+    owner_id: ownerId,
+    pattern_a_id: relationship.patternAId,
+    pattern_b_id: relationship.patternBId,
+    relationship_type: relationship.relationshipType,
+    notes: relationship.notes ?? null,
+    observed_count: relationship.observedCount,
+    last_observed_at: relationship.lastObservedAt,
+    created_at: relationship.createdAt,
+    updated_at: relationship.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToGrammarRelationship(
+  row: Record<string, unknown>,
+): GrammarRelationship {
+  return {
+    id: String(row.id),
+    patternAId: String(row.pattern_a_id),
+    patternBId: String(row.pattern_b_id),
+    relationshipType: row.relationship_type as GrammarRelationship['relationshipType'],
+    notes: (row.notes as string | null) ?? undefined,
+    observedCount: Number(row.observed_count),
+    lastObservedAt: String(row.last_observed_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -677,6 +811,12 @@ export function toRemoteRow(
       );
     case 'card_issue_reports':
       return cardIssueReportToRemote(payload as CardIssueReport, ownerId, version);
+    case 'grammar_patterns':
+      return grammarPatternToRemote(payload as GrammarPattern, ownerId, version);
+    case 'sentence_grammar':
+      return sentenceGrammarToRemote(payload as SentenceGrammar, ownerId, version);
+    case 'grammar_relationships':
+      return grammarRelationshipToRemote(payload as GrammarRelationship, ownerId, version);
   }
 }
 

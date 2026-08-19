@@ -1,10 +1,13 @@
 # Status
 
-Last updated: 2026-08-18 (Phase 9 complete — Milestone 9 done; sentence
-translation and vocabulary meaning are now editable in the UI; a batch of
-small Phase 7.10/9 follow-ups landed together; card issue reports
-("report a problem with this card") added; two small Analyze-editor/
-Vocabulary-picker chunk-boundary bugs fixed — see below).
+Last updated: 2026-08-19 (Grammar-learning system Phase 1 — corpus-model
+foundation — added: GrammarPattern/SentenceGrammar/GrammarRelationship,
+Dexie v13, Postgres migration + sync wiring, backup extension, repository
+primitives, no UI yet — see below. Before that: Phase 9 complete —
+Milestone 9 done; sentence translation and vocabulary meaning are now
+editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
+together; card issue reports ("report a problem with this card") added;
+two small Analyze-editor/Vocabulary-picker chunk-boundary bugs fixed).
 
 ## Phase 0 — Repository analysis: done
 
@@ -3745,3 +3748,157 @@ merge functions' "before/after" ordering checks changed from `===` to
 **Verified**: `tests/vocabularySuggestions.test.ts` gained cases for
 whitespace-gap merges (both directions) and confirms punctuation gaps
 still correctly block merging; `npm run check` green.
+
+## Grammar-learning system — Phase 1 (corpus-model foundation): done
+
+New feature area, scoped with the user via an architectural-analysis pass
+before any code (see the planning discussion, not itself checked in as a
+doc — the short version: preserve the existing Cure-Dolly structural
+analysis untouched as Layer 1; add grammar patterns as a new Layer 2 that
+reuses the `StudyItem`/`Review`/FSRS/natural-encounter machinery rather
+than a parallel scheduler; Layer 3 — usage network/contrast — emerges from
+the same tables incrementally, no upfront ontology). This pass is schema +
+repository + sync + backup foundation only, deliberately **no UI** — Phase
+2 (manual annotation from Analyze) is the first real writer, validating the
+domain model with real data before any AI involvement (Phase 4+).
+
+Added, purely additively (nothing existing was touched other than one
+schema-consistency fix, see below):
+
+- `src/domain/types.ts` — `GrammarPattern` (the reusable Japanese
+  construction, canonical across the corpus, unique on `normalizedKey` —
+  mirrors `VocabularyItem`), `SentenceGrammar` (one encounter with a
+  pattern in one sentence — mirrors `SentenceVocabulary`, including the
+  same "chunkId isn't a real FK" accepted limitation),
+  `GrammarRelationship` (a *typed* edge between two patterns —
+  structurally mirrors `VocabularyConfusion`'s canonicalized-pair/
+  get-or-create/observed-count shape, but is its own table: unlike
+  `VocabularyConfusion`, more than one relationship row can exist for the
+  same pair, one per distinct `relationshipType`, since two patterns can
+  be simultaneously e.g. `structural_relative` and, independently,
+  `commonly_confused`). `GrammarSuggestion` — embedded on
+  `SentenceAnalysis.grammarSuggestions`, not a table, mirroring
+  `VocabularySuggestion`'s "provisional until confirmed" shape, but placed
+  on `SentenceAnalysis` rather than `Sentence` (unlike
+  `VocabularySuggestion`) since grammar detection is an analysis-time
+  concern, not an import-time tokenizer artifact. `StudySubjectType`
+  widened with `'grammarPattern'`.
+- `src/lib/grammarPatterns.ts` — `normalizeGrammarPatternKey`, the pure
+  dedup-key function `ensureGrammarPattern` uses: strips leading/trailing
+  tilde/wave-dash (～/〜/~) and whitespace, NFC-normalizes, so
+  "～わけがない"/"〜わけがない"/"わけがない" all resolve to one pattern.
+  Deliberately *not* kanji/kana-variant-aware (訳がない vs わけがない stay
+  distinct in v1) — that's AI-assisted merge-on-confirm work (Phase 4), not
+  exact-match dedup.
+- `src/domain/schemas.ts` — matching Zod schemas
+  (`grammarPatternSchema`/`sentenceGrammarSchema`/
+  `grammarRelationshipTypeSchema`/`grammarRelationshipSchema`/
+  `grammarSuggestionSchema`), `studySubjectTypeSchema` widened,
+  `sentenceAnalysisSchema.grammarSuggestions` added, `backupSchema`
+  extended with `.default([])`/`.default(0)` for the three new
+  arrays/counts — applying Phase 5's own documented lesson proactively
+  (a backup exported before this change is missing these keys entirely;
+  without the default, restoring it would fail `safeParse` outright).
+- `src/appConfig.ts` — `ANALYSIS_FORMAT_VERSION` bumped 2 → 3
+  (`grammarSuggestions` added to `SentenceAnalysis`, same precedent as the
+  1 → 2 bump for `vocabularySelections`/`vocabularyReviewStatus`).
+- `src/db/database.ts` — Dexie schema v13, three new empty stores
+  (`grammarPatterns`, `sentenceGrammar`, `grammarRelationships`).
+- `src/db/repository.ts` — `ensureGrammarPattern`/`updateGrammarPattern`
+  (get-or-create/patch, mirrors `ensureVocabularyItem`),
+  `ensureSentenceGrammar` (get-or-create occurrence link, merges
+  newly-supplied fields into an existing row and ORs `confirmedByLearner`
+  so a later "Track" can promote an AI-suggested-only occurrence but never
+  un-confirm one), `listSentenceGrammarForPattern` ("Your encounters" —
+  sentence/book/source/native-audio join, newest first — the query behind
+  design brief §5/§6), `ensureGrammarStudyItem` (thin wrapper, mirrors
+  `ensureVocabularyStudyItem`), `recordGrammarNaturalEncounter` (mirrors
+  `recordNaturalEncounter` exactly — same lazy get-or-create study item,
+  same `recordReview` call with `source: 'natural_encounter'`; the
+  "only call this for patterns already opted into tracking" policy is
+  documented as a UI-layer responsibility, not a repository-level guard,
+  so the primitive itself stays uniform with the vocabulary version),
+  `ensureGrammarRelationship`/`recordGrammarRelationshipObservation`
+  (canonicalized-pair get-or-create/increment, keyed on the full
+  `(patternAId, patternBId, relationshipType)` triple),
+  `computeGrammarPatternContextDiversity` (grammar counterpart of
+  `computeVocabularyContextDiversity` — both now share one extracted
+  `contextDiversityFromSentenceIds` helper instead of duplicating the
+  book/source-lookup logic, a small refactor of existing code alongside
+  the new addition). `getStudyItemDebugInfo`'s subject-type switch and
+  `listStudyItemSummaries`'s label switch both gained a `grammarPattern`
+  case, for free reuse of the existing "Why?" debug view.
+- `supabase/migrations/20260819000000_grammar_learning_foundation.sql` —
+  `grammar_patterns`/`sentence_grammar`/`grammar_relationships` tables
+  (owner-only RLS, the usual `set_updated_at`/`bump_version`/
+  `append_sync_event` triggers), a new `sync_private.owns_grammar_pattern`
+  ownership-check helper (same "owner_id alone isn't enough" reasoning as
+  `owns_vocabulary_item`/`owns_kanji`/`owns_study_item`), `analyses`
+  gains a `grammar_suggestions jsonb` column, `study_items.subject_type`
+  check constraint widened for `'grammarPattern'` (same precedent as the
+  `'vocabularyConfusion'` migration). `sentence_grammar`'s span columns are
+  named `start_index`/`end_index`, not `start`/`end` — `end` needs quoting
+  as a Postgres identifier, simplest to just avoid it.
+- `src/sync/types.ts`/`mappers.ts`/`engine.ts` — `grammar_patterns`/
+  `sentence_grammar`/`grammar_relationships` added to `SyncEntity`,
+  matching mapper pairs, wired into `applyRemoteUpsert`/`applyRemoteDelete`/
+  `uploadAllLocalData`/`replaceLocalWithCloud` (grammar_patterns pulled/
+  pushed before sentence_grammar/grammar_relationships, same
+  parent-before-child ordering as kanji/vocabulary_items before their link
+  tables; grammar_relationships full-table-pulled on replace, same as
+  vocabulary_confusions, since contrast/relationship browsing needs the
+  whole corpus, not a due-queue subset). `analysisToRemote`/
+  `remoteToAnalysis` extended for `grammar_suggestions` too.
+- `src/lib/backup.ts` + `exportFullBackup`/`exportBookBackup`/
+  `restoreBackup` (`src/db/repository.ts`) — all three grammar tables
+  included in full backups; book-scoped backups include `grammarPatterns`/
+  `sentenceGrammar` (filtered by the book's sentences, same cascade as
+  `vocabularyItems`/`sentenceVocabulary`) but exclude
+  `grammarRelationships` — same reasoning as `vocabularyConfusions` being
+  excluded from book scope today: a corpus-wide concept spanning patterns
+  not necessarily both encountered in one book.
+- `tests/migration.test.ts` (v13 round-trip), `tests/data.test.ts` (new
+  "grammar patterns" describe block: dedup, get-or-create/merge semantics,
+  "Your encounters" listing, study-item creation, context diversity,
+  relationship canonicalization + multi-type-per-pair, natural-encounter
+  reuse-vs-create, sync-metadata enqueueing, backup round-trip, and an
+  older-backup-missing-grammar-keys regression test — mirroring Phase 5's
+  own `.default([])` lesson test), `tests/sync.test.ts` (mapper
+  round-trips for all three entities), `tests/grammarPatterns.test.ts`
+  (new — pure `normalizeGrammarPatternKey` unit tests, including a real
+  NFC-normalization case built from distinct code-unit sequences).
+
+**Schema-consistency fix caught while wiring this up**: `SentenceAnalysis.
+grammarSuggestions` initially used a TypeScript optional (`?:`) modifier
+while its Zod schema used `.default([])` (making the *inferred* Zod output
+type non-optional) — the same field being optional on one side and
+required on the other broke `BackupPayload`/`BackupBundle` assignability.
+Fixed by declaring it required in the TS type (documented as a "declared
+required, but old rows won't actually have it at runtime — read
+defensively" caveat), matching the exact precedent already set by
+`vocabularySelections`/`vocabularyReviewStatus` in the same interface.
+`saveAnalysis` now also carries `grammarSuggestions` through on every save
+(`existing?.grammarSuggestions ?? []`), so every analysis touched via the
+existing Analyze save path gets a real `[]` going forward rather than
+depending on defensive reads forever.
+
+**Deliberately not done yet** (Phase 2+ of the grammar-learning plan, not
+forgotten): any UI (Analyze grammar-noticed panel, `/grammar` browser,
+pattern detail page, ReviewPage activity types); AI-assisted
+suggestion/canonicalization (needs a product decision on the LLM-proxy
+approach — a Supabase Edge Function calling a hosted API directly,
+decoupled from the Hetzner/Tailscale forced-alignment box, discussed and
+agreed with the user but not built); grammar `StudyItem` activity types
+beyond the `'grammarPattern'` subject type itself existing (no
+`grammar_comprehension`/`grammar_completion` card UI yet — the FSRS/Review
+plumbing is exercised only by tests calling the repository functions
+directly); the personalized curriculum/priority heuristic; contrastive
+exercises. No `GrammarPattern` rows are seeded — every one will be created
+from a real encounter (manual in Phase 2, AI-suggested-then-confirmed in
+Phase 4+), matching this app's "native media first" principle at the
+pattern-creation level, not just the example-sentence level.
+
+**Verified**: `npm run check` (typecheck + full suite) green — 629 tests
+passed (up from 600), 2 pre-existing skips (unrelated), 0 failed; no
+existing test modified. `npm run build` and `npm run lint` also green, no
+new lint warnings.

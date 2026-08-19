@@ -272,6 +272,57 @@ describe('Dexie schema migrations', () => {
     await indexedDB.deleteDatabase(name);
   });
 
+  it('opens at schema v13 with the grammar-learning tables', async () => {
+    const name = `migrate-v13-${createId('db')}`;
+    const db = new GlossbookDatabase(name);
+    await db.open();
+    expect(db.verno).toBeGreaterThanOrEqual(13);
+    for (const table of ['grammarPatterns', 'sentenceGrammar', 'grammarRelationships']) {
+      expect(db.tables.some((t) => t.name === table)).toBe(true);
+    }
+
+    const now = new Date().toISOString();
+    await db.grammarPatterns.put({
+      id: 'pattern-1',
+      canonicalName: '〜わけがない',
+      normalizedKey: 'わけがない',
+      aliases: ['わけない'],
+      shortMeaning: "there's no way...",
+      provenance: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceGrammar.put({
+      id: 'sg-1',
+      sentenceId: 'sent-1',
+      grammarPatternId: 'pattern-1',
+      confirmedByLearner: true,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.grammarRelationships.put({
+      id: 'gr-1',
+      patternAId: 'pattern-1',
+      patternBId: 'pattern-2',
+      relationshipType: 'structural_relative',
+      observedCount: 1,
+      lastObservedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const pattern = await db.grammarPatterns.get('pattern-1');
+    expect(pattern?.canonicalName).toBe('〜わけがない');
+    const occurrence = await db.sentenceGrammar.get('sg-1');
+    expect(occurrence?.grammarPatternId).toBe('pattern-1');
+    const relationship = await db.grammarRelationships.get('gr-1');
+    expect(relationship?.relationshipType).toBe('structural_relative');
+
+    db.close();
+    await indexedDB.deleteDatabase(name);
+  });
+
   it('adds empty chapter collections to books from schema v2', async () => {
     const name = `migrate-v2-${createId('db')}`;
     const legacy = new Dexie(name);

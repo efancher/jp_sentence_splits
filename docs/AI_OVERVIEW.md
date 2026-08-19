@@ -147,6 +147,36 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
+- **Grammar-learning system** (new, Phase 1 of its own plan — schema/
+  repository/sync/backup foundation only, no UI yet): a second layer on top
+  of the Cure-Dolly structural analysis, answering "what reusable
+  construction is operating here" rather than "how is this sentence
+  assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
+  the canonical construction (e.g. ～わけがない), corpus-wide, deduped on a
+  normalized key (`src/lib/grammarPatterns.ts` strips leading/trailing
+  tilde/wave-dash and whitespace, NFC-normalizes; kanji/kana variants like
+  訳がない are *not* auto-merged in v1). `SentenceGrammar` — one encounter
+  with a pattern in one sentence (mirrors `SentenceVocabulary`, including
+  its "chunkId isn't a real FK" limitation), carrying
+  `confirmedByLearner`/`source` so a passively-AI-suggested occurrence is
+  distinguishable from one the learner actually acted on.
+  `GrammarRelationship` — a *typed* edge between two patterns
+  (`similar_meaning`/`contrast`/`commonly_confused`/`stronger_stance`/
+  `weaker_stance`/`formal_variant`/`structural_relative`); structurally
+  mirrors `VocabularyConfusion`'s canonicalized-pair get-or-create shape but
+  is its own table (not a reuse) and, unlike `VocabularyConfusion`, allows
+  more than one row per pair — one per distinct `relationshipType`, since
+  two patterns can be both `structural_relative` and independently
+  `commonly_confused`. `StudySubjectType` gained `'grammarPattern'`, so
+  grammar review reuses `StudyItem`/`Review`/FSRS/`natural_encounter`
+  unchanged — no parallel scheduler is planned. `GrammarSuggestion` is
+  embedded on `SentenceAnalysis.grammarSuggestions` (not a table),
+  mirroring `VocabularySuggestion`'s provisional-until-confirmed shape, but
+  lives on `SentenceAnalysis` rather than `Sentence` since grammar
+  detection is an analysis-time concern, not an import-time tokenizer
+  artifact. No `GrammarPattern` rows are seeded — every one is created from
+  a real encounter, matching this app's native-media-first principle at
+  the pattern level, not just the example-sentence level.
 - `AppSettings` (singleton) — theme, TTS voice/rate, `newCardsPerSessionLimit`
   (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
@@ -384,10 +414,12 @@ place by design.
 - **What's synced vs. local-only**: books/sentences/analyses/import
   batches/inbox/reference audio/study_items/reviews/vocabulary_items/
   sentence_vocabulary/kanji/vocabulary_kanji/vocabulary_confusions/
-  card_issue_reports all sync. `sources` exists in Dexie/Postgres but has
-  no writer/reader wired into the sync engine yet (schema-ready only).
-  `attempts` and all shadowing-analysis caches (alignment, transcription,
-  summaries) are local-only by design.
+  card_issue_reports/grammar_patterns/sentence_grammar/
+  grammar_relationships all sync (the three grammar tables are wired
+  schema-first, Phase 1 — no UI writes to them yet). `sources` exists in
+  Dexie/Postgres but has no writer/reader wired into the sync engine yet
+  (schema-ready only). `attempts` and all shadowing-analysis caches
+  (alignment, transcription, summaries) are local-only by design.
 
 ### 9. Settings, backup & TTS — `SettingsPage.tsx`
 Theme, default import destination, text-display mode (plain/furigana/

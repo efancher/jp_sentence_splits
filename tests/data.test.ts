@@ -10,7 +10,12 @@ import {
   deferUnreadySentenceReviews,
   deleteAttempt,
   deleteBookChapter,
+  computeGrammarPatternContextDiversity,
+  ensureGrammarPattern,
+  ensureGrammarRelationship,
+  ensureGrammarStudyItem,
   ensureKanji,
+  ensureSentenceGrammar,
   ensureStudyItem,
   ensureVocabularyConfusion,
   ensureVocabularyItem,
@@ -23,6 +28,7 @@ import {
   getDueStudyItems,
   getReferenceAlignment,
   listAttemptAnalysisSummariesForSentence,
+  listSentenceGrammarForPattern,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
   listCardIssueReports,
@@ -33,6 +39,8 @@ import {
   pickContextSentenceForVocabularyItem,
   rateAttempt,
   recordConfusionObservation,
+  recordGrammarNaturalEncounter,
+  recordGrammarRelationshipObservation,
   recordNaturalEncounter,
   recordReview,
   removeSentencesFromBook,
@@ -51,6 +59,7 @@ import {
   setBookSentenceStatus,
   transferBookSentences,
   updateBookChapter,
+  updateGrammarPattern,
 } from '../src/db/repository';
 import type { AlignmentResult, Sentence, VocabularySelection } from '../src/domain/types';
 import { parseBackupJson } from '../src/lib/backup';
@@ -1341,6 +1350,308 @@ describe('computeVocabularyContextDiversity (Phase 7.5)', () => {
   });
 });
 
+describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-grammar-${createId('db')}`);
+  });
+
+  it('ensureGrammarPattern creates a new pattern and dedups on normalizedKey', async () => {
+    const first = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    const second = await ensureGrammarPattern('わけがない', { shortMeaning: 'ignored' });
+    expect(second.id).toBe(first.id);
+    expect(second.shortMeaning).toBe("there's no way...");
+    expect(await getDb().grammarPatterns.count()).toBe(1);
+  });
+
+  it('treats distinct patterns (different normalizedKey) as separate rows', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    expect(wakega.id).not.toBe(hazuga.id);
+    expect(await getDb().grammarPatterns.count()).toBe(2);
+  });
+
+  it('updateGrammarPattern patches fields without touching others', async () => {
+    const pattern = await ensureGrammarPattern('〜てしまう', { family: 'aspect' });
+    const updated = await updateGrammarPattern(pattern.id, {
+      explanation: 'completion, often with a regret/unwanted-result nuance',
+    });
+    expect(updated.explanation).toBe(
+      'completion, often with a regret/unwanted-result nuance',
+    );
+    expect(updated.family).toBe('aspect');
+  });
+
+  it('ensureSentenceGrammar creates an occurrence link', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const link = await ensureSentenceGrammar('sent-1', pattern.id, {
+      surfaceForm: 'わけないでしょ',
+      confirmedByLearner: true,
+      source: 'manual',
+    });
+    expect(link.sentenceId).toBe('sent-1');
+    expect(link.grammarPatternId).toBe(pattern.id);
+    expect(link.confirmedByLearner).toBe(true);
+    expect(await getDb().sentenceGrammar.count()).toBe(1);
+  });
+
+  it('ensureSentenceGrammar is get-or-create per (sentenceId, grammarPatternId), merging new fields in', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const first = await ensureSentenceGrammar('sent-1', pattern.id, {
+      source: 'ai_suggested',
+    });
+    const second = await ensureSentenceGrammar('sent-1', pattern.id, {
+      confirmedByLearner: true,
+    });
+    expect(second.id).toBe(first.id);
+    expect(second.confirmedByLearner).toBe(true);
+    expect(second.source).toBe('ai_suggested');
+    expect(await getDb().sentenceGrammar.count()).toBe(1);
+  });
+
+  it('ensureSentenceGrammar never un-confirms an already-confirmed occurrence', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
+    const second = await ensureSentenceGrammar('sent-1', pattern.id, {});
+    expect(second.confirmedByLearner).toBe(true);
+  });
+
+  it('listSentenceGrammarForPattern returns an empty array with no encounters', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    expect(await listSentenceGrammarForPattern(pattern.id)).toEqual([]);
+  });
+
+  it('listSentenceGrammarForPattern returns encounters newest first with book/audio context', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
+    const book = await createBook({ title: 'Book A' });
+    await getDb().bookSentences.add({
+      id: 'bs-1',
+      bookId: book.id,
+      sentenceId: 'sent-new',
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIsoForTest(),
+    });
+    await getDb().sentenceAudio.add({
+      id: 'audio-1',
+      sentenceId: 'sent-new',
+      sourceId: 'src-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['fake audio'], { type: 'audio/mp3' }),
+      importedAt: nowIsoForTest(),
+    });
+    await ensureSentenceGrammar('sent-old', pattern.id, {
+      confirmedByLearner: true,
+    });
+    await ensureSentenceGrammar('sent-new', pattern.id, {
+      confirmedByLearner: true,
+    });
+
+    const encounters = await listSentenceGrammarForPattern(pattern.id);
+    expect(encounters).toHaveLength(2);
+    expect(encounters[0]?.sentence.id).toBe('sent-new');
+    expect(encounters[0]?.books.map((b) => b.id)).toEqual([book.id]);
+    expect(encounters[0]?.hasAudio).toBe(true);
+    expect(encounters[1]?.sentence.id).toBe('sent-old');
+    expect(encounters[1]?.books).toEqual([]);
+    expect(encounters[1]?.hasAudio).toBe(false);
+  });
+
+  it('ensureGrammarStudyItem creates a grammarPattern-subject study item', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const studyItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    expect(studyItem.subjectType).toBe('grammarPattern');
+    expect(studyItem.subjectId).toBe(pattern.id);
+  });
+
+  it('computeGrammarPatternContextDiversity mirrors the vocabulary version, over sentenceGrammar', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    expect(await computeGrammarPatternContextDiversity(pattern.id)).toEqual({
+      distinctSentenceCount: 0,
+      distinctSourceCount: 0,
+    });
+
+    const bookA = await createBook({ title: 'Book A' });
+    const bookB = await createBook({ title: 'Book B' });
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await ensureSentenceGrammar('sent-2', pattern.id, {});
+    await getDb().bookSentences.bulkAdd([
+      {
+        id: 'bs-1',
+        bookId: bookA.id,
+        sentenceId: 'sent-1',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+      {
+        id: 'bs-2',
+        bookId: bookB.id,
+        sentenceId: 'sent-2',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+    ]);
+
+    expect(await computeGrammarPatternContextDiversity(pattern.id)).toEqual({
+      distinctSentenceCount: 2,
+      distinctSourceCount: 2,
+    });
+  });
+
+  it('ensureGrammarRelationship creates a canonicalized, deduped edge', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+
+    const forward = await ensureGrammarRelationship(
+      wakega.id,
+      hazuga.id,
+      'structural_relative',
+    );
+    const backward = await ensureGrammarRelationship(
+      hazuga.id,
+      wakega.id,
+      'structural_relative',
+    );
+
+    expect(backward.id).toBe(forward.id);
+    expect(await getDb().grammarRelationships.count()).toBe(1);
+    const [expectedA, expectedB] =
+      wakega.id < hazuga.id ? [wakega.id, hazuga.id] : [hazuga.id, wakega.id];
+    expect(forward.patternAId).toBe(expectedA);
+    expect(forward.patternBId).toBe(expectedB);
+  });
+
+  it('allows more than one relationship row for the same pair, one per relationshipType', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarRelationship(wakega.id, hazuga.id, 'structural_relative');
+    await ensureGrammarRelationship(wakega.id, hazuga.id, 'commonly_confused');
+    expect(await getDb().grammarRelationships.count()).toBe(2);
+  });
+
+  it('recordGrammarRelationshipObservation increments the count and bumps lastObservedAt', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+
+    const first = await recordGrammarRelationshipObservation(
+      wakega.id,
+      hazuga.id,
+      'commonly_confused',
+    );
+    expect(first.observedCount).toBe(1);
+
+    const second = await recordGrammarRelationshipObservation(
+      hazuga.id,
+      wakega.id,
+      'commonly_confused',
+    );
+    expect(second.id).toBe(first.id);
+    expect(second.observedCount).toBe(2);
+    expect(await getDb().grammarRelationships.count()).toBe(1);
+  });
+
+  it('recordGrammarNaturalEncounter creates the pattern\'s grammar_comprehension study item and tags the review source/context', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.add(stubSentence('sent-natural'));
+
+    const { review, studyItem } = await recordGrammarNaturalEncounter({
+      grammarPatternId: pattern.id,
+      sentenceId: 'sent-natural',
+      rating: 'good',
+    });
+
+    expect(studyItem.subjectType).toBe('grammarPattern');
+    expect(studyItem.subjectId).toBe(pattern.id);
+    expect(studyItem.activityType).toBe('grammar_comprehension');
+    expect(review.source).toBe('natural_encounter');
+    expect(review.contextSentenceId).toBe('sent-natural');
+  });
+
+  it('recordGrammarNaturalEncounter reuses an existing tracked study item rather than creating a second one', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const tracked = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().sentences.add(stubSentence('sent-natural'));
+
+    const { studyItem } = await recordGrammarNaturalEncounter({
+      grammarPatternId: pattern.id,
+      sentenceId: 'sent-natural',
+      rating: 'easy',
+    });
+
+    expect(studyItem.id).toBe(tracked.id);
+    expect(
+      await getDb().studyItems.where('subjectId').equals(pattern.id).count(),
+    ).toBe(1);
+  });
+
+  it('exportFullBackup/restoreBackup round-trips grammar data', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    await ensureSentenceGrammar('sent-1', wakega.id, { confirmedByLearner: true });
+    await ensureGrammarRelationship(wakega.id, hazuga.id, 'structural_relative');
+
+    const backup = await exportFullBackup();
+    expect(backup.grammarPatterns).toHaveLength(2);
+    expect(backup.sentenceGrammar).toHaveLength(1);
+    expect(backup.grammarRelationships).toHaveLength(1);
+
+    const parsed = parseBackupJson(JSON.stringify(backup));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      await restoreBackup(parsed.data, 'replace');
+      expect(await getDb().grammarPatterns.count()).toBe(2);
+      expect(await getDb().sentenceGrammar.count()).toBe(1);
+      expect(await getDb().grammarRelationships.count()).toBe(1);
+    }
+  });
+
+  it('parseBackupJson accepts an older backup missing the grammar keys entirely', async () => {
+    const backup = await exportFullBackup();
+    const raw = JSON.parse(JSON.stringify(backup)) as Record<string, unknown>;
+    delete raw.grammarPatterns;
+    delete raw.sentenceGrammar;
+    delete raw.grammarRelationships;
+    const counts = raw.counts as Record<string, unknown>;
+    delete counts.grammarPatterns;
+    delete counts.sentenceGrammar;
+    delete counts.grammarRelationships;
+
+    const parsed = parseBackupJson(JSON.stringify(raw));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.data.grammarPatterns).toEqual([]);
+      expect(parsed.data.sentenceGrammar).toEqual([]);
+      expect(parsed.data.grammarRelationships).toEqual([]);
+      expect(parsed.data.counts.grammarPatterns).toBe(0);
+    }
+  });
+
+  it('enqueues sync metadata for grammar pattern/occurrence/relationship writes', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
+    const other = await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarRelationship(pattern.id, other.id, 'structural_relative');
+
+    await vi.waitFor(async () => {
+      const keys = (await getDb().syncRecordMeta.toArray()).map((row) => row.entity);
+      expect(keys).toContain('grammar_patterns');
+      expect(keys).toContain('sentence_grammar');
+      expect(keys).toContain('grammar_relationships');
+    });
+  });
+});
+
 describe('getStudyItemDebugInfo (Phase 7.10)', () => {
   beforeEach(() => {
     resetDbForTests(`data-debug-${createId('db')}`);
@@ -1410,6 +1721,23 @@ describe('getStudyItemDebugInfo (Phase 7.10)', () => {
       expect([info.subject.itemA.id, info.subject.itemB.id].sort()).toEqual(
         [itemA.id, itemB.id].sort(),
       );
+    }
+  });
+
+  it('returns a grammarPattern subject with its computed maturity level', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const studyItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+
+    const info = await getStudyItemDebugInfo(studyItem.id);
+    expect(info?.subject.kind).toBe('grammarPattern');
+    if (info?.subject.kind === 'grammarPattern') {
+      expect(info.subject.grammarPattern.id).toBe(pattern.id);
+      // No sentence links at all -> zero diversity -> fragile.
+      expect(info.subject.maturity.level).toBe('fragile');
+      expect(info.subject.maturity.diversity).toEqual({
+        distinctSentenceCount: 0,
+        distinctSourceCount: 0,
+      });
     }
   });
 });

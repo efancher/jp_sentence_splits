@@ -13,8 +13,11 @@ export const DEPLOY_BASE = '/jp_sentence_splits/';
 
 export const DB_NAME = 'satori-glossbook';
 export const BACKUP_FORMAT_VERSION = 1;
-/** Bumped when vocabularySelections / vocabularyReviewStatus were added. */
-export const ANALYSIS_FORMAT_VERSION = 2;
+/**
+ * Bumped when vocabularySelections / vocabularyReviewStatus were added (2),
+ * then again when grammarSuggestions (grammar-learning system) was added (3).
+ */
+export const ANALYSIS_FORMAT_VERSION = 3;
 
 export const AUTOSAVE_DEBOUNCE_MS = 450;
 export const TOUCH_TARGET_MIN_PX = 44;

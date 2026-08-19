@@ -14,7 +14,10 @@ export type SyncEntity =
   | 'kanji'
   | 'vocabulary_kanji'
   | 'vocabulary_confusions'
-  | 'card_issue_reports';
+  | 'card_issue_reports'
+  | 'grammar_patterns'
+  | 'sentence_grammar'
+  | 'grammar_relationships';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

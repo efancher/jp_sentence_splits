@@ -261,6 +261,33 @@ export interface AnalysisChunk {
   kind?: 'surface' | 'zero_ga';
 }
 
+/**
+ * A candidate grammar construction detected in a sentence (grammar-learning
+ * system, see docs/AI_OVERVIEW.md) — embedded, not a table, mirroring
+ * VocabularySuggestion's shape: a lightweight, non-canonical hint that only
+ * materializes into a real GrammarPattern/SentenceGrammar row once the
+ * learner acts on it (Got it / Explain / Track). Lives on SentenceAnalysis
+ * rather than Sentence (unlike VocabularySuggestion) because grammar
+ * detection is an analysis-time concern — it needs the sentence text and
+ * potentially the chunk structure — not an import-time tokenizer artifact.
+ */
+export interface GrammarSuggestion {
+  id: string;
+  /** Proposed display form, e.g. "〜わけがない" — matched against GrammarPattern.canonicalName/aliases on confirm. */
+  candidateName: string;
+  /** Set once resolved to an existing canonical pattern (dedup/merge, not a fresh create). */
+  matchedPatternId?: string;
+  start?: number;
+  end?: number;
+  chunkId?: string;
+  shortMeaning?: string;
+  /** 0-1, when supplied by an AI suggestion; absent for manual entries. */
+  confidence?: number;
+  /** Coarse priority so Analyze can show only what's worth noticing (design brief §16). */
+  rank: 'important' | 'familiar' | 'nuance' | 'optional';
+  source: 'ai' | 'manual';
+}
+
 export interface SentenceAnalysis {
   sentenceId: string;
   chunks: AnalysisChunk[];
@@ -270,6 +297,15 @@ export interface SentenceAnalysis {
   /** Vocabulary picker confirmation — independent of Cure Dolly chunk status. */
   vocabularyReviewStatus: VocabularyReviewStatus;
   vocabularySelections: VocabularySelection[];
+  /**
+   * Grammar-pattern candidates surfaced for this sentence (design brief §3).
+   * Additive, same precedent as vocabularySelections/vocabularyReviewStatus
+   * (Phase 5): declared required here, but analyses saved before this field
+   * existed won't actually have it at runtime — readers should still treat
+   * it defensively (`?? []`), same as remoteToAnalysis already does for the
+   * other additive SentenceAnalysis fields.
+   */
+  grammarSuggestions: GrammarSuggestion[];
   createdAt: string;
   updatedAt: string;
 }
@@ -440,7 +476,12 @@ export interface VocabularyKanji {
  * became its first consumer. subjectId for that type is a
  * VocabularyConfusion.id.
  */
-export type StudySubjectType = 'sentence' | 'vocabularyItem' | 'chunk' | 'vocabularyConfusion';
+export type StudySubjectType =
+  | 'sentence'
+  | 'vocabularyItem'
+  | 'chunk'
+  | 'vocabularyConfusion'
+  | 'grammarPattern';
 
 /**
  * activityType is intentionally a plain string, not a closed union — new
@@ -583,4 +624,117 @@ export interface CardIssueReport {
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Grammar-learning system (docs/AI_OVERVIEW.md) — additive. Layer 2 on top of
+// the existing Cure-Dolly structural analysis (SentenceAnalysis.chunks,
+// unchanged): GrammarPattern is the reusable Japanese construction (analogous
+// to VocabularyItem), SentenceGrammar is one encounter with it in one
+// sentence (analogous to SentenceVocabulary), GrammarRelationship is a typed
+// edge between two patterns (structurally mirrors VocabularyConfusion but is
+// its own table — see docs/STATUS.md design notes). GrammarPattern rows are
+// only ever created from a real encounter (materialized from a
+// GrammarSuggestion on learner confirm) — no pre-seeded taxonomy, matching
+// this app's "native media first" principle.
+// ---------------------------------------------------------------------------
+
+/**
+ * The reusable Japanese construction (e.g. ～わけがない), canonical across
+ * the whole corpus — never exists in an "unconfirmed" state, mirroring
+ * VocabularyItem (only GrammarSuggestion, embedded on SentenceAnalysis, is
+ * ever provisional).
+ */
+export interface GrammarPattern {
+  id: string;
+  /** Display form, e.g. "〜わけがない". */
+  canonicalName: string;
+  /**
+   * Dedup key (leading/trailing tilde/wave-dash and whitespace stripped,
+   * NFC-normalized — see src/lib/grammarPatterns.ts). Deliberately *not*
+   * kanji/kana-variant-aware in v1 (e.g. 訳がない vs わけがない still create
+   * distinct rows) — that class of canonicalization is AI-assisted
+   * merge-on-confirm work, not automatic exact-match dedup.
+   */
+  normalizedKey: string;
+  /** Known variant surface forms/spellings, e.g. ["わけない", "訳がない"]. */
+  aliases: string[];
+  /** Concise communicative function — not a dictionary definition. */
+  shortMeaning: string;
+  /** e.g. "[verb/adj plain form] + わけがない". */
+  structuralTemplate?: string;
+  /** Literal/structural mechanics + communicative function + natural English — not collapsed into one gloss (design brief §4). */
+  explanation?: string;
+  /** Cure-Dolly-compatible structural breakdown, complementing (not replacing) AnalysisChunk. */
+  structuralNotes?: string;
+  /** Loose functional grouping tag, free string like StudyActivityType — no fixed ontology. */
+  family?: string;
+  notes?: string;
+  provenance: 'manual' | 'ai_suggested';
+  /** For future idempotent seeding/import; unused by any current writer. */
+  externalId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One encounter with a GrammarPattern in one Sentence — analogous to
+ * SentenceVocabulary. `chunkId` is not a real FK (AnalysisChunk lives inside
+ * one jsonb blob per sentence), same accepted limitation as
+ * SentenceVocabulary.chunkId.
+ */
+export interface SentenceGrammar {
+  id: string;
+  sentenceId: string;
+  grammarPatternId: string;
+  chunkId?: string;
+  /** Exact text as it appeared in this sentence, e.g. "わけないでしょ". */
+  surfaceForm?: string;
+  start?: number;
+  end?: number;
+  /** Explanation specific to *this* occurrence — what the construction is doing here, not the pattern's generic explanation. */
+  occurrenceExplanation?: string;
+  /**
+   * True once the learner has explicitly acted on this occurrence (Got it /
+   * Explain / Track) — false for an AI-suggested occurrence nobody has
+   * looked at yet. Does not by itself imply a StudyItem exists; see
+   * ensureGrammarStudyItem in repository.ts.
+   */
+  confirmedByLearner: boolean;
+  source: 'manual' | 'ai_suggested';
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A typed edge between two GrammarPatterns (design brief §7/§8) — structural
+ * sibling of VocabularyConfusion (same canonicalized-pair/get-or-create/
+ * observation-count shape) rather than a literal reuse: VocabularyConfusion's
+ * itemAId/itemBId are non-polymorphic FKs into vocabulary_items and its
+ * confusionType values (reading/kanji/transitivity) don't apply to grammar.
+ * Unlike VocabularyConfusion, more than one relationship row can exist for
+ * the same pair (one per distinct relationshipType) — two patterns can be
+ * both a `structural_relative` and, independently, `commonly_confused`, and
+ * collapsing those into a single typed field would lose one of the facts.
+ */
+export type GrammarRelationshipType =
+  | 'similar_meaning'
+  | 'contrast'
+  | 'commonly_confused'
+  | 'stronger_stance'
+  | 'weaker_stance'
+  | 'formal_variant'
+  | 'structural_relative';
+
+export interface GrammarRelationship {
+  id: string;
+  /** Canonicalized patternAId < patternBId, so a pair is never stored twice in both directions for the same relationshipType. */
+  patternAId: string;
+  patternBId: string;
+  relationshipType: GrammarRelationshipType;
+  notes?: string;
+  observedCount: number;
+  lastObservedAt: string;
+  createdAt: string;
+  updatedAt: string;
 }

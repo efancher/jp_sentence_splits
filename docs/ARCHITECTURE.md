@@ -53,6 +53,27 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
+**Grammar-learning system** (additive, Phase 1 of its own plan, see
+`docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
+structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1
+answers "how is this sentence assembled," the new layer answers "what
+reusable construction is operating here." `GrammarPattern` is the
+canonical, corpus-wide construction (analogous to `VocabularyItem`,
+deduped on a normalized key via `src/lib/grammarPatterns.ts`);
+`SentenceGrammar` is one encounter with a pattern in one sentence
+(analogous to `SentenceVocabulary`); `GrammarRelationship` is a typed edge
+between two patterns (structurally mirrors `VocabularyConfusion`'s
+canonicalized-pair shape but is its own table — more than one relationship
+row can exist per pair, one per `relationshipType`, since e.g.
+"structurally related" and "commonly confused" are independent facts).
+`StudySubjectType` gained `'grammarPattern'`, so grammar review reuses
+`StudyItem`/`Review`/FSRS/natural-encounter machinery unchanged — no
+parallel scheduler. `GrammarSuggestion` (embedded on
+`SentenceAnalysis.grammarSuggestions`, not a table) is the provisional,
+pre-confirmation counterpart, mirroring `VocabularySuggestion`. As of Phase
+1 this is schema/repository/sync/backup foundation only — no UI writes to
+it yet.
+
 ## Sync engine
 
 `src/sync/engine.ts` — per-record optimistic concurrency (`version` +
@@ -66,8 +87,10 @@ All unified-model tables are now wired into the TypeScript sync engine
 (`src/sync/mappers.ts`, `SyncEntity`) — `study_items`/`reviews` since Phase
 4, `vocabulary_items`/`kanji`/`sentence_vocabulary`/`vocabulary_kanji`
 since Phase 5, `vocabulary_confusions` since Phase 7.6, `card_issue_reports`
-since the card-issue-reports feature. The one exception is `sources`: still
-no writer anywhere, so nothing to sync yet.
+since the card-issue-reports feature, `grammar_patterns`/
+`sentence_grammar`/`grammar_relationships` since the grammar-learning
+system's Phase 1 (schema-only — no UI writer yet). The one exception is
+`sources`: still no writer anywhere, so nothing to sync yet.
 
 ## Scheduling
 

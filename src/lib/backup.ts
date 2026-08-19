@@ -4,12 +4,15 @@ import type {
   AppSettings,
   Book,
   BookSentence,
+  GrammarPattern,
+  GrammarRelationship,
   ImportBatch,
   InboxMembership,
   Kanji,
   Review,
   Sentence,
   SentenceAnalysis,
+  SentenceGrammar,
   SentenceVocabulary,
   StudyItem,
   VocabularyItem,
@@ -30,6 +33,9 @@ export interface BackupBundle {
   sentenceVocabulary: SentenceVocabulary[];
   kanji: Kanji[];
   vocabularyKanji: VocabularyKanji[];
+  grammarPatterns: GrammarPattern[];
+  sentenceGrammar: SentenceGrammar[];
+  grammarRelationships: GrammarRelationship[];
   settings: AppSettings;
 }
 
@@ -51,6 +57,9 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
       sentenceVocabulary: bundle.sentenceVocabulary.length,
       kanji: bundle.kanji.length,
       vocabularyKanji: bundle.vocabularyKanji.length,
+      grammarPatterns: bundle.grammarPatterns.length,
+      sentenceGrammar: bundle.sentenceGrammar.length,
+      grammarRelationships: bundle.grammarRelationships.length,
     },
     books: bundle.books,
     sentences: bundle.sentences,
@@ -64,6 +73,9 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
     sentenceVocabulary: bundle.sentenceVocabulary,
     kanji: bundle.kanji,
     vocabularyKanji: bundle.vocabularyKanji,
+    grammarPatterns: bundle.grammarPatterns,
+    sentenceGrammar: bundle.sentenceGrammar,
+    grammarRelationships: bundle.grammarRelationships,
     settings: bundle.settings,
   };
   const checksum = hashString(
@@ -141,6 +153,15 @@ export function filterBackupForBook(
   );
   const kanjiIds = new Set(vocabularyKanji.map((item) => item.kanjiId));
   const kanji = payload.kanji.filter((item) => kanjiIds.has(item.id));
+  const sentenceGrammar = payload.sentenceGrammar.filter((item) =>
+    sentenceIds.has(item.sentenceId),
+  );
+  const grammarPatternIds = new Set(
+    sentenceGrammar.map((item) => item.grammarPatternId),
+  );
+  const grammarPatterns = payload.grammarPatterns.filter((item) =>
+    grammarPatternIds.has(item.id),
+  );
   const bundle = buildBackupPayload({
     books: [book],
     sentences,
@@ -156,6 +177,12 @@ export function filterBackupForBook(
     sentenceVocabulary,
     kanji,
     vocabularyKanji,
+    // grammarRelationships excluded, same as vocabularyConfusions above —
+    // a corpus-wide concept spanning patterns not necessarily both
+    // encountered within this one book.
+    grammarPatterns,
+    sentenceGrammar,
+    grammarRelationships: [],
     settings: payload.settings,
   });
   return bundle;

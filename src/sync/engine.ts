@@ -19,12 +19,15 @@ import {
   remoteToBook,
   remoteToBookSentence,
   remoteToCardIssueReport,
+  remoteToGrammarPattern,
+  remoteToGrammarRelationship,
   remoteToImportBatch,
   remoteToInbox,
   remoteToKanji,
   remoteToReferenceAudio,
   remoteToReview,
   remoteToSentence,
+  remoteToSentenceGrammar,
   remoteToSentenceVocabulary,
   remoteToStudyItem,
   remoteToVocabularyConfusion,
@@ -611,6 +614,15 @@ async function applyRemoteDelete(
     case 'card_issue_reports':
       await db.cardIssueReports.delete(recordId);
       break;
+    case 'grammar_patterns':
+      await db.grammarPatterns.delete(recordId);
+      break;
+    case 'sentence_grammar':
+      await db.sentenceGrammar.delete(recordId);
+      break;
+    case 'grammar_relationships':
+      await db.grammarRelationships.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -691,6 +703,15 @@ async function applyRemoteUpsert(
     case 'card_issue_reports':
       await db.cardIssueReports.put(remoteToCardIssueReport(remote));
       break;
+    case 'grammar_patterns':
+      await db.grammarPatterns.put(remoteToGrammarPattern(remote));
+      break;
+    case 'sentence_grammar':
+      await db.sentenceGrammar.put(remoteToSentenceGrammar(remote));
+      break;
+    case 'grammar_relationships':
+      await db.grammarRelationships.put(remoteToGrammarRelationship(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -722,6 +743,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const vocabularyKanji = await db.vocabularyKanji.toArray();
   const vocabularyConfusions = await db.vocabularyConfusions.toArray();
   const cardIssueReports = await db.cardIssueReports.toArray();
+  const grammarPatterns = await db.grammarPatterns.toArray();
+  const sentenceGrammar = await db.sentenceGrammar.toArray();
+  const grammarRelationships = await db.grammarRelationships.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -764,6 +788,18 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const report of cardIssueReports) {
     await trackAndEnqueue('card_issue_reports', report.id, report);
+  }
+  // grammarPatterns before sentenceGrammar/grammarRelationships — both
+  // reference it, same parent-before-child ordering as kanji/vocabularyItems
+  // before their link tables above.
+  for (const pattern of grammarPatterns) {
+    await trackAndEnqueue('grammar_patterns', pattern.id, pattern);
+  }
+  for (const link of sentenceGrammar) {
+    await trackAndEnqueue('sentence_grammar', link.id, link);
+  }
+  for (const relationship of grammarRelationships) {
+    await trackAndEnqueue('grammar_relationships', relationship.id, relationship);
   }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
@@ -815,6 +851,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.vocabularyKanji,
       db.vocabularyConfusions,
       db.cardIssueReports,
+      db.grammarPatterns,
+      db.sentenceGrammar,
+      db.grammarRelationships,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -834,6 +873,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.vocabularyKanji.clear();
       await db.vocabularyConfusions.clear();
       await db.cardIssueReports.clear();
+      await db.grammarPatterns.clear();
+      await db.sentenceGrammar.clear();
+      await db.grammarRelationships.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -887,6 +929,18 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('card_issue_reports', userId, async (rows) => {
     await db.cardIssueReports.bulkPut(rows.map((r) => remoteToCardIssueReport(r)));
+  });
+  // grammarPatterns before sentenceGrammar/grammarRelationships — both
+  // reference it, same parent-before-child ordering as kanji/vocabularyItems
+  // above.
+  await pullFullTable('grammar_patterns', userId, async (rows) => {
+    await db.grammarPatterns.bulkPut(rows.map((r) => remoteToGrammarPattern(r)));
+  });
+  await pullFullTable('sentence_grammar', userId, async (rows) => {
+    await db.sentenceGrammar.bulkPut(rows.map((r) => remoteToSentenceGrammar(r)));
+  });
+  await pullFullTable('grammar_relationships', userId, async (rows) => {
+    await db.grammarRelationships.bulkPut(rows.map((r) => remoteToGrammarRelationship(r)));
   });
 
   const { data: maxEvent } = await supabase

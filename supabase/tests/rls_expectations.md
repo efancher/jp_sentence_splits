@@ -32,17 +32,26 @@ manual or via the SQL outline above against a staging project.
 ## Unified study model tables (owner-only, no sharing)
 
 `sources`, `vocabulary_items`, `sentence_vocabulary`, `kanji`,
-`vocabulary_kanji`, `study_items`, `reviews`, `vocabulary_confusions` —
-simpler than the book-shared tables above, since none of them support
-sharing yet.
+`vocabulary_kanji`, `study_items`, `reviews`, `vocabulary_confusions`,
+`grammar_patterns`, `sentence_grammar`, `grammar_relationships` — simpler
+than the book-shared tables above, since none of them support sharing yet.
 
-`sentence_vocabulary`/`vocabulary_kanji`/`reviews`/`vocabulary_confusions`
-additionally check that *referenced* rows (`vocabulary_item_id`, `kanji_id`,
-`study_item_id`, `sentence_id`, `item_a_id`/`item_b_id`) belong to the same
-owner (`sync_private.owns_vocabulary_item`/`owns_kanji`/`owns_study_item`/
-`sentence_editable`) — `owner_id = auth.uid()` on the row being written is
-not sufficient by itself, since it doesn't prevent a caller from pointing
-their own row at someone else's referenced record.
+`sentence_vocabulary`/`vocabulary_kanji`/`reviews`/`vocabulary_confusions`/
+`sentence_grammar`/`grammar_relationships` additionally check that
+*referenced* rows (`vocabulary_item_id`, `kanji_id`, `study_item_id`,
+`sentence_id`, `item_a_id`/`item_b_id`, `grammar_pattern_id`,
+`pattern_a_id`/`pattern_b_id`) belong to the same owner
+(`sync_private.owns_vocabulary_item`/`owns_kanji`/`owns_study_item`/
+`owns_grammar_pattern`/`sentence_editable`) — `owner_id = auth.uid()` on the
+row being written is not sufficient by itself, since it doesn't prevent a
+caller from pointing their own row at someone else's referenced record.
+
+`grammar_relationships` mirrors `vocabulary_confusions`' `item_a_id <
+item_b_id` check constraint (`pattern_a_id < pattern_b_id`), but — unlike
+`vocabulary_confusions` — its unique index is on `(pattern_a_id,
+pattern_b_id, relationship_type)`, not just the pair: two patterns may
+legitimately have more than one relationship row (e.g. both
+`structural_relative` and, independently, `commonly_confused`).
 
 `vocabulary_confusions` additionally enforces `item_a_id < item_b_id` at the
 database layer (a check constraint, not just application-level
