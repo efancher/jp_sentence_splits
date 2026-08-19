@@ -5,6 +5,9 @@ Read these before making substantial changes:
 - docs/ARCHITECTURE.md — architecture and design decisions
 - docs/STATUS.md — current implementation state
 - docs/ROADMAP.md — planned work
+- docs/AI_OVERVIEW.md — present-tense, feature-oriented reference meant to
+  be pasted into another AI's context (not a changelog); keep it in sync
+  when a feature area materially changes, same triggers as below
 
 Before implementing:
 1. Inspect the relevant existing code.
