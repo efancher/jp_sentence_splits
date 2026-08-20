@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -101,11 +101,15 @@ describe('GrammarPicker', () => {
 
     await screen.findByText('Confirmed');
     await screen.findByText('Tracked');
-    const studyItems = await getDb()
-      .studyItems.where('subjectId')
-      .equals(pattern.id)
-      .toArray();
-    expect(studyItems).toHaveLength(2);
+    // onTrack fires its two ensureGrammarStudyItem writes as a detached
+    // async chain (not awaited by the click event itself), and "Tracked"
+    // renders as soon as the *first* one lands — so this needs its own
+    // wait rather than assuming both are done the instant "Tracked" shows.
+    const studyItems = await waitFor(async () => {
+      const items = await getDb().studyItems.where('subjectId').equals(pattern.id).toArray();
+      expect(items).toHaveLength(2);
+      return items;
+    });
     expect(studyItems.every((item) => item.subjectType === 'grammarPattern')).toBe(true);
     expect(studyItems.map((item) => item.activityType).sort()).toEqual([
       'grammar_completion',
