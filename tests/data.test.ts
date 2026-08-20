@@ -17,6 +17,7 @@ import {
   ensureKanji,
   ensureSentenceGrammar,
   ensureStudyItem,
+  removeSentenceGrammar,
   ensureVocabularyConfusion,
   ensureVocabularyItem,
   ensureVocabularyStudyItem,
@@ -1417,6 +1418,20 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(second.confirmedByLearner).toBe(true);
   });
 
+  it('removeSentenceGrammar unlinks the occurrence but keeps the canonical pattern', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const link = await ensureSentenceGrammar('sent-1', pattern.id, {
+      confirmedByLearner: true,
+    });
+    await removeSentenceGrammar(link.id);
+    expect(await getDb().sentenceGrammar.get(link.id)).toBeUndefined();
+    expect(await getDb().grammarPatterns.get(pattern.id)).toBeTruthy();
+  });
+
+  it('removeSentenceGrammar is a no-op for an id that does not exist', async () => {
+    await expect(removeSentenceGrammar('missing-id')).resolves.toBeUndefined();
+  });
+
   it('listSentenceGrammarForPattern returns an empty array with no encounters', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     expect(await listSentenceGrammarForPattern(pattern.id)).toEqual([]);
@@ -1447,11 +1462,21 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
       blob: new Blob(['fake audio'], { type: 'audio/mp3' }),
       importedAt: nowIsoForTest(),
     });
-    await ensureSentenceGrammar('sent-old', pattern.id, {
+    const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {
       confirmedByLearner: true,
     });
-    await ensureSentenceGrammar('sent-new', pattern.id, {
+    const newLink = await ensureSentenceGrammar('sent-new', pattern.id, {
       confirmedByLearner: true,
+    });
+    // Force distinct, well-separated createdAt values: both links can land
+    // in the same millisecond in a fast in-memory test run, and Dexie/
+    // IndexedDB doesn't guarantee insertion order for equal index keys —
+    // sorting on createdAt alone would then be flaky under the full suite.
+    await getDb().sentenceGrammar.update(oldLink.id, {
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await getDb().sentenceGrammar.update(newLink.id, {
+      createdAt: '2026-02-01T00:00:00.000Z',
     });
 
     const encounters = await listSentenceGrammarForPattern(pattern.id);

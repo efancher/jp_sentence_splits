@@ -53,7 +53,7 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
-**Grammar-learning system** (additive, Phase 1 of its own plan, see
+**Grammar-learning system** (additive, Phases 1-2 of its own plan, see
 `docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
 structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1
 answers "how is this sentence assembled," the new layer answers "what
@@ -70,9 +70,11 @@ row can exist per pair, one per `relationshipType`, since e.g.
 `StudyItem`/`Review`/FSRS/natural-encounter machinery unchanged — no
 parallel scheduler. `GrammarSuggestion` (embedded on
 `SentenceAnalysis.grammarSuggestions`, not a table) is the provisional,
-pre-confirmation counterpart, mirroring `VocabularySuggestion`. As of Phase
-1 this is schema/repository/sync/backup foundation only — no UI writes to
-it yet.
+pre-confirmation counterpart, mirroring `VocabularySuggestion`. Phase 2
+added the first UI writer — a "Grammar noticed" panel
+(`src/components/GrammarPicker.tsx`) in `AnalyzePage.tsx`, manual
+annotation only (search-existing-or-create-new, Got it/Explain/Track). No
+AI-assisted suggestion and no dedicated review-card UI yet.
 
 ## Sync engine
 

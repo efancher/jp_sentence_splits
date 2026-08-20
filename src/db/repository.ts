@@ -2805,6 +2805,20 @@ export async function ensureSentenceGrammar(
   return created;
 }
 
+/**
+ * Unlink a pattern from one sentence (mis-tag correction) — never deletes
+ * the underlying GrammarPattern itself, since other sentences may
+ * reference it, same "never delete the canonical row" precedent as
+ * materializeVocabularySelections.
+ */
+export async function removeSentenceGrammar(sentenceGrammarId: string): Promise<void> {
+  const db = getDb();
+  const existing = await db.sentenceGrammar.get(sentenceGrammarId);
+  if (!existing) return;
+  await db.sentenceGrammar.delete(sentenceGrammarId);
+  notifySync('sentence_grammar', sentenceGrammarId, existing, 'delete');
+}
+
 export interface GrammarEncounter {
   sentenceGrammar: SentenceGrammar;
   sentence: Sentence;

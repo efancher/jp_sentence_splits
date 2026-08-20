@@ -1,9 +1,12 @@
 # Status
 
-Last updated: 2026-08-19 (Grammar-learning system Phase 1 — corpus-model
-foundation — added: GrammarPattern/SentenceGrammar/GrammarRelationship,
-Dexie v13, Postgres migration + sync wiring, backup extension, repository
-primitives, no UI yet — see below. Before that: Phase 9 complete —
+Last updated: 2026-08-20 (Grammar-learning system Phase 2 — manual
+annotation from Analyze — the "Grammar noticed" panel: search-existing-or-
+create-new pattern tagging, Got it/Explain/Track actions, no AI yet. Phase
+1 (corpus-model foundation — GrammarPattern/SentenceGrammar/
+GrammarRelationship, Dexie v13, Postgres migration + sync wiring, backup
+extension, repository primitives) landed and its migration has been
+applied to the live Supabase project. Before that: Phase 9 complete —
 Milestone 9 done; sentence translation and vocabulary meaning are now
 editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
 together; card issue reports ("report a problem with this card") added;
@@ -3902,3 +3905,111 @@ pattern-creation level, not just the example-sentence level.
 passed (up from 600), 2 pre-existing skips (unrelated), 0 failed; no
 existing test modified. `npm run build` and `npm run lint` also green, no
 new lint warnings.
+
+**Migration applied**: `20260819000000_grammar_learning_foundation.sql` run
+against the live Supabase project (user-confirmed, 2026-08-20) — ran clean.
+
+## Grammar-learning system — Phase 2 (manual annotation from Analyze): done
+
+First real UI writer for the Phase 1 schema, deliberately AI-free (per the
+plan's own ordering — validate the domain model with real manual
+annotations before Phase 4 adds any AI suggestion/canonicalization). The
+"Grammar noticed" panel appears in `AnalyzePage.tsx`, directly below the
+existing `VocabularyPicker`, and is intentionally decoupled from that
+page's autosave/chunks state — each action (add/confirm/track/remove) is
+an immediate, deliberate repository write, not a debounced draft field, so
+tagging grammar never gates on or interferes with the chunk-analysis save
+cycle, and skipping it costs nothing (matches the design brief's "the
+normal path should remain fast" instruction).
+
+Added:
+- `src/components/GrammarPicker.tsx` — new component,
+  `<GrammarPicker sentenceId={sentenceId} />`. Self-contained: reads its
+  own data via `useLiveQuery` (this sentence's `SentenceGrammar` links
+  joined to their `GrammarPattern`s, plus which of those patterns already
+  have a `grammarPattern`-subject `StudyItem`) and calls repository
+  functions directly on every action — no round-trip through
+  `AnalyzePage`'s own state, matching how `PracticePage`'s natural-
+  encounter buttons and `VocabularyListPage`'s inline meaning editing
+  already call repository functions directly from UI handlers in this
+  codebase.
+  - **Add**: a single text input with a `<datalist>` of existing pattern
+    names (excluding ones already tagged on this sentence) for
+    autocomplete. Matches an existing pattern by exact `canonicalName`/
+    `aliases` match first; only creates a new `GrammarPattern`
+    (`provenance: 'manual'`) if nothing matches — the dedup half of
+    canonicalization (exact/normalized-key matching via
+    `ensureGrammarPattern`) is exercised for real here for the first time.
+    Newly added occurrences start **unconfirmed** — adding a name is not
+    the same action as confirming you understood it; that's a deliberate
+    reading of the design brief's three-action model (Got it/Explain/
+    Track are the *post-add* actions), not an oversight.
+  - **Got it**: `ensureSentenceGrammar(..., { confirmedByLearner: true })`
+    only — no `StudyItem`, so merely acknowledging a pattern never starts
+    FSRS scheduling for it (the Track/Got-it split from the architecture
+    discussion, implemented for the first time).
+  - **Track**: the same confirm, plus
+    `ensureGrammarStudyItem(patternId, 'grammar_comprehension')` — enters
+    the pattern into the ordinary FSRS due-queue via the existing
+    `StudyItem`/`Review` machinery (no review UI consumes
+    `grammar_comprehension` yet — Phase 5 of the grammar plan — so a
+    tracked pattern currently accrues a due `StudyItem` with no queue
+    surfacing it; harmless, matches this codebase's existing "seed before
+    the consumer exists" precedent, e.g. `vocabularyConfusion` was
+    reserved a full phase before `contrastive` review shipped).
+  - **Explain**: expands an inline edit form (no modal — this app's
+    existing PWA constraint, `window.prompt`/`confirm` silently no-op on
+    an installed iOS Safari PWA, so every new surface uses inline controls)
+    for the pattern's `shortMeaning`/`structuralNotes`/`explanation`/
+    `family`, plus the occurrence's own `occurrenceExplanation` — since
+    Phase 2 has no AI, this doubles as the only way to actually fill in a
+    pattern's meaning/explanation today. Save writes both rows in one
+    `Promise.all` (`updateGrammarPattern` + `ensureSentenceGrammar`).
+  - **Remove**: `removeSentenceGrammar` (new repository function,
+    `src/db/repository.ts`) — unlinks the occurrence only, never deletes
+    the canonical `GrammarPattern` (same "other sentences may reference
+    it" reasoning as `materializeVocabularySelections` never deleting a
+    `VocabularyItem`).
+- `src/pages/AnalyzePage.tsx` — one import, one JSX line
+  (`<GrammarPicker sentenceId={sentenceId} />` between the
+  `VocabularyPicker` and the "Chunk entry" section). No other change to
+  this file.
+- `tests/grammarPicker.test.tsx` (new) — empty state; add-creates-and-links;
+  add-with-an-existing-name-dedups (no duplicate `GrammarPattern`); Got it
+  confirms without a study item; Track confirms and creates the
+  `grammarPattern`/`grammar_comprehension` study item; Explain/Save
+  persists both the pattern and the occurrence; Remove unlinks but keeps
+  the canonical pattern. `tests/data.test.ts` — two new cases for
+  `removeSentenceGrammar` (unlinks but keeps the pattern; no-ops on an
+  unknown id).
+
+**Flakiness found and fixed while adding this pass's tests** (not a
+regression in shipped code — test-only): the Phase 1
+`listSentenceGrammarForPattern returns encounters newest first...` test
+(`tests/data.test.ts`) created two `SentenceGrammar` links back-to-back and
+sorted on `createdAt` — under the full suite (fast enough for both calls to
+land in the same millisecond) this occasionally failed, since
+Dexie/IndexedDB doesn't guarantee insertion order for equal index keys on a
+`.where().equals()` scan. Same class of pre-existing flakiness this
+codebase has hit and fixed before (see the Phase 5-era "Test-suite
+flakiness fix" entry above) — fixed by pinning the two links'
+`createdAt` values explicitly in the test rather than relying on real-clock
+ordering. A second, unrelated pre-existing flaky test
+(`listCardIssueReports filters by status and sorts newest first`, same
+root-cause family, not touched by this pass at all) was also observed
+failing intermittently under the full suite during this work — flagged
+here since it was newly noticed, not fixed (out of scope: unrelated
+feature area, not introduced or worsened by this work).
+
+**Deliberately not done yet**: Phase 3 (`/grammar` browser, pattern detail
+page with "Your encounters") — `GrammarPicker` doesn't yet link anywhere,
+since there's nowhere to link to. Phase 4 (AI-assisted suggestion/
+canonicalization). Phase 5 (an actual `grammar_comprehension`/
+`grammar_completion` card in `ReviewPage` — tracked patterns accrue FSRS
+state today with no queue consuming it yet, as noted above).
+
+**Verified**: `npm run check` green — 638 tests passed (up from 629), 2
+pre-existing skips (unrelated), 0 failed, run 3× to confirm the fix above
+actually closed the flakiness (no failures across 3 consecutive runs of
+the affected files). `npm run build` and `npm run lint` green, no new
+warnings.

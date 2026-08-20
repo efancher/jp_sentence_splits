@@ -147,8 +147,10 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new, Phase 1 of its own plan — schema/
-  repository/sync/backup foundation only, no UI yet): a second layer on top
+- **Grammar-learning system** (new; Phase 1 — schema/repository/sync/
+  backup foundation — and Phase 2 — manual annotation from Analyze, see
+  the Feature walkthrough below — are done; AI-assisted suggestion and a
+  dedicated review-card UI are not built yet): a second layer on top
   of the Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
@@ -233,7 +235,20 @@ materializes real `VocabularyItem`/`SentenceVocabulary`/`Kanji`/
 `repository.ts`) — this is the load-bearing bridge between the
 sentence-analysis world and the SRS world. Sentence translation and
 confirmed vocabulary meanings are directly editable inline (textarea/
-input, autosave).
+input, autosave). Just below it, a **"Grammar noticed" panel**
+(`GrammarPicker.tsx`) is the entry point for the grammar-learning system's
+second layer: search-existing-or-create-new pattern tagging (autocomplete
+against every `GrammarPattern` already in the corpus), with three
+per-occurrence actions — **Got it** (confirms the occurrence,
+`SentenceGrammar.confirmedByLearner`, no SRS involvement), **Track**
+(confirms *and* seeds a `grammarPattern`-subject `StudyItem`, entering the
+pattern into the same FSRS due-queue vocabulary/sentences use), and
+**Explain** (an inline, no-modal edit form for the pattern's meaning/
+structural notes and this occurrence's own context-specific explanation —
+currently the *only* way to fill those in, since AI-assisted suggestion
+hasn't shipped yet). Unlike `VocabularyPicker`, this panel is deliberately
+decoupled from the page's autosave/chunks state — every action is an
+immediate repository write, not a debounced draft.
 
 ### 3. Practice & Build modes (lightweight, non-SRS study)
 - **Practice** (`PracticePage.tsx`) — reveal-based drilling scoped to a
@@ -415,8 +430,9 @@ place by design.
   batches/inbox/reference audio/study_items/reviews/vocabulary_items/
   sentence_vocabulary/kanji/vocabulary_kanji/vocabulary_confusions/
   card_issue_reports/grammar_patterns/sentence_grammar/
-  grammar_relationships all sync (the three grammar tables are wired
-  schema-first, Phase 1 — no UI writes to them yet). `sources` exists in
+  grammar_relationships all sync (`grammar_patterns`/`sentence_grammar`
+  now have a real writer, `GrammarPicker.tsx`; `grammar_relationships`
+  remains schema-only, no writer yet). `sources` exists in
   Dexie/Postgres but has no writer/reader wired into the sync engine yet
   (schema-ready only). `attempts` and all shadowing-analysis caches
   (alignment, transcription, summaries) are local-only by design.

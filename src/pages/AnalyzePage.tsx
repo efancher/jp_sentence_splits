@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
+import { GrammarPicker } from '../components/GrammarPicker';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
@@ -412,6 +413,8 @@ export function AnalyzePage() {
           })();
         }}
       />
+
+      <GrammarPicker sentenceId={sentenceId} />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Chunk entry</h3>
