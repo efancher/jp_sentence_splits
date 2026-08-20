@@ -1165,6 +1165,12 @@ export function ReviewPage() {
  * reading. `cloze` hides the target word itself (a blank), and reveals it
  * alongside the reading — a step harder, since there's no visible word to
  * anchor recall against.
+ *
+ * `cloze` also shows the sentence translation as a pre-reveal hint: a bare
+ * grammatical blank often admits many plausible fillers (e.g. "the ___ I
+ * saw" fits movie/book/photo/... equally), so without the meaning the
+ * exercise degenerates into remembering which exact word this sentence
+ * used rather than recalling the word from its meaning-in-context.
  */
 function VocabularyTargetCard({
   activityType,
@@ -1194,6 +1200,9 @@ function VocabularyTargetCard({
         <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
         {after}
       </div>
+      {isCloze && !revealed && sentence.translation ? (
+        <div className="muted">{sentence.translation}</div>
+      ) : null}
       {!revealed && vocabularyItem.notes ? (
         mnemonicVisible ? (
           <div className="muted">💡 {vocabularyItem.notes}</div>

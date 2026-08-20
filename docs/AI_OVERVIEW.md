@@ -320,7 +320,9 @@ subject. Activity types currently wired, grouped by subject/eligibility:
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide
-  reading), `cloze` (hide the word entirely in its sentence),
+  reading), `cloze` (hide the word entirely in its sentence, showing the
+  sentence translation as a pre-reveal hint so the blank isn't otherwise
+  under-constrained),
   `reading_production` (show the word, type the reading — typed-answer
   checked via `isReadingAnswerCorrect`), `sentence_transformation`
   (conjugate a word to a per-word-hashed target form — 13 verb/10

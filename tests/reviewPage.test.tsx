@@ -416,10 +416,13 @@ describe('ReviewPage', () => {
     expect(screen.getByText('to read')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
-    // cloze card next — the word itself is blanked until reveal.
+    // cloze card next — the word itself is blanked until reveal, with the
+    // sentence translation shown as a hint (Phase 7.3 follow-up: a blank
+    // alone under-constrains the answer, see docs/STATUS.md).
     await screen.findByText('Reveal word');
     expect(screen.queryByText('読みます')).not.toBeInTheDocument();
     expect(screen.getByText('_____')).toBeInTheDocument();
+    expect(screen.getByText('I read a book.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Reveal word' }));
     expect(screen.getByText('読みます')).toBeInTheDocument();

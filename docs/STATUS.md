@@ -4766,3 +4766,26 @@ regardless of what the aligner does. Two new tests in
 `tests/reviewPage.test.tsx` cover the `<unk>` placeholder and the
 always-present reference line. `npm run typecheck`/`lint`/`test` all green
 (715 passed, 2 pre-existing skips, no new warnings).
+
+## Cloze cards: show sentence translation as a pre-reveal hint (2026-08-20): done
+
+User feedback: cloze cards (Phase 7.3) blank the target word with no hint
+beyond an optional mnemonic, and for generic nouns (e.g. 映画 in "the ___ I
+saw is the same movie my friend saw") the sentence grammar alone doesn't
+constrain the answer — many words fit, so the "exercise" was really just
+remembering which exact word this specific sentence used, not recalling a
+word from its meaning. Phase 7.3 had deliberately omitted any hint
+("keep reviews fast"), but an unguessable blank isn't a faster exercise, it's
+not a real exercise.
+
+Fix: `VocabularyTargetCard` (`src/pages/ReviewPage.tsx`) now shows
+`sentence.translation` as a muted line under the blank whenever
+`activityType === 'cloze'` and the card isn't revealed yet — `reading_retrieval`
+unaffected, since there the target word itself is already visible. No schema
+changes; `translation` already existed on `Sentence` and just wasn't wired
+into this card. `tests/reviewPage.test.tsx`'s existing Phase 7.2/7.3/7.9
+combined test extended with an assertion that the fixture's translation
+("I read a book.") is visible on the cloze card before reveal.
+
+**Verified**: `npm run check` (typecheck + full vitest suite) green — 715
+tests passed, 2 pre-existing skips, no new warnings.
