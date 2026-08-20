@@ -5,11 +5,13 @@ import {
   canMergeSelections,
   canMergeSuggestionIntoSelection,
   combineSuggestions,
+  combinedExpressionWarning,
   defaultSelectionsFromSuggestions,
   isContentPos,
   mergeSelections,
   mergeSuggestionIntoSelection,
   selectionFromSuggestion,
+  suggestionFromToken,
   suggestionsFromTokens,
   validateSpan,
 } from '../src/lib/vocabularySuggestions';
@@ -182,5 +184,96 @@ describe('vocabularySuggestions', () => {
   it('rejects invalid spans', () => {
     expect(validateSpan('abc', 0, 2, 'ab')).toBe(true);
     expect(validateSpan('abc', 0, 2, 'xx')).toBe(false);
+  });
+
+  describe('combinedExpressionWarning', () => {
+    it('warns when a combined selection includes a particle and auxiliary verb', () => {
+      const japanese = 'やって来ました。';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: 'やっ', start: 0, end: 2, lemma: 'やる', reading: 'やっ', pos: '動詞' },
+        { surface: 'て', start: 2, end: 3, lemma: 'て', reading: 'て', pos: '助詞' },
+        { surface: '来', start: 3, end: 4, lemma: '来る', reading: 'き', pos: '動詞' },
+        { surface: 'まし', start: 4, end: 6, lemma: 'ます', reading: 'まし', pos: '助動詞' },
+        { surface: 'た', start: 6, end: 7, lemma: 'た', reading: 'た', pos: '助動詞' },
+      ]);
+      const combined = combineSuggestions(suggestions.slice(0, 5), japanese)!;
+      const warning = combinedExpressionWarning(combined);
+      expect(warning).toContain('particle');
+      expect(warning).toContain('auxiliary verb');
+    });
+
+    it('does not warn on a combined selection made entirely of content words', () => {
+      const japanese = '学校生活';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: '学校', start: 0, end: 2, lemma: '学校', reading: 'がっこう', pos: '名詞' },
+        { surface: '生活', start: 2, end: 4, lemma: '生活', reading: 'せいかつ', pos: '名詞' },
+      ]);
+      const combined = combineSuggestions(suggestions, japanese)!;
+      expect(combinedExpressionWarning(combined)).toBeNull();
+    });
+
+    it('does not warn on a non-combined (single-token) selection', () => {
+      const suggestion = suggestionsFromTokens('て', [
+        { surface: 'て', start: 0, end: 1, lemma: 'て', reading: 'て', pos: '助詞' },
+      ])[0]!;
+      const selection = selectionFromSuggestion(suggestion);
+      expect(combinedExpressionWarning(selection)).toBeNull();
+    });
+  });
+
+  describe('suggestionFromToken reading derivation', () => {
+    const japanese = '見つけました';
+
+    it('derives the dictionary reading when surface is a prefix of the lemma (ichidan る-drop)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '見つけ', start: 0, end: 3, lemma: '見つける', reading: 'みつけ', pos: '動詞' },
+        japanese,
+      );
+      expect(suggestion?.expression).toBe('見つける');
+      expect(suggestion?.reading).toBe('みつける');
+    });
+
+    it('derives the dictionary reading for a single-kanji ichidan stem (見る)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '見', start: 0, end: 1, lemma: '見る', reading: 'み', pos: '動詞' },
+        '見た',
+      );
+      expect(suggestion?.expression).toBe('見る');
+      expect(suggestion?.reading).toBe('みる');
+    });
+
+    it('leaves the surface reading untouched when surface is not a prefix of the lemma (godan stem change)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '話し', start: 0, end: 2, lemma: '話す', reading: 'はなし', pos: '動詞' },
+        '話した',
+      );
+      expect(suggestion?.expression).toBe('話す');
+      expect(suggestion?.reading).toBe('はなし');
+    });
+
+    it('does not derive a reading for 来る, whose reading changes irregularly across forms', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '来', start: 0, end: 1, lemma: '来る', reading: 'き', pos: '動詞' },
+        '来ました',
+      );
+      expect(suggestion?.expression).toBe('来る');
+      expect(suggestion?.reading).toBe('き');
+    });
+
+    it('does not double-append the tail when the reading is already correct (idempotent rerun)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '見つけ', start: 0, end: 3, lemma: '見つける', reading: 'みつける', pos: '動詞' },
+        japanese,
+      );
+      expect(suggestion?.reading).toBe('みつける');
+    });
+
+    it('leaves the reading as-is when the surface already equals the lemma', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '先輩', start: 0, end: 2, lemma: '先輩', reading: 'せんぱい', pos: '名詞' },
+        '先輩',
+      );
+      expect(suggestion?.reading).toBe('せんぱい');
+    });
   });
 });

@@ -4612,3 +4612,96 @@ evidence.
 **Verified**: `npm run typecheck`, `npm run test` (full suite: 703 passed,
 2 pre-existing skips, 0 failed — up from 693), `npm run lint` (no new
 warnings), and `npm run build` all green.
+
+## Vocabulary reading-mismatch bug + cleanup (2026-08-20): done
+
+Triggered by two learner-filed card issue reports (`npm run issues:list`,
+new `.claude/skills/card-issue-triage/SKILL.md` documents the workflow):
+見つける's `reading_retrieval` card showed みつけ instead of みつける, and
+見る showed み instead of みる.
+
+**Root cause**: `suggestionFromToken` (`src/lib/vocabularySuggestions.ts`)
+paired `expression = token.lemma` (dictionary form) with `reading =
+token.reading` — but `token.reading` from the Shadowmine morphology package
+is the reading of the **surface** (conjugated) text, not the lemma. There's
+no separate lemma-reading field in the source token data, so any conjugated
+content word ended up with a dictionary-form spelling paired with a
+conjugated-form reading.
+
+**Fix**: new `deriveDictionaryReading(surface, surfaceReading, lemma)`. When
+`surface` is a literal prefix of `lemma` (ichidan る-drop, i-adjectives), the
+cut-off tail is shared kanji/kana whose reading doesn't change with
+conjugation, so appending it directly recovers the dictionary reading —
+except 来る/くる (kuru), whose reading genuinely changes across forms
+(き/こ/く), excluded the same way `conjugation.ts` already special-cases it.
+Idempotent by construction (won't double-append if `surfaceReading` already
+ends with the tail) — an early version wasn't, and a rerun of the backfill
+script (below) corrupted 3 already-fixed rows before this guard was added;
+caught immediately via direct DB check and corrected.
+
+**Backfill/cleanup, in order** (all dry-run-by-default, `--apply` to write,
+all idempotent):
+1. `npm run fix:vocabulary-reading-mismatches` — applies
+   `deriveDictionaryReading` to existing `vocabulary_items`, using
+   `sentence_vocabulary.surface_form` (Phase 7.2) as the original surface
+   text each link was created from. Fixed 9 items on real data.
+2. `npm run fix:vocabulary-godan-readings` — same bug, different shape:
+   godan verbs whose stem sound changes under conjugation (話す/話し) aren't
+   a literal-prefix case, so uses JMDict (`scripts/lib/jmdict.ts`) as ground
+   truth instead, only auto-fixing when there's exactly one *common* JMDict
+   reading for the expression (行く/ゆく-style genuine ambiguity is left for
+   manual review, not guessed). Fixed 7 items; found 4 more duplicate pairs
+   in the process.
+3. `npm run merge:duplicate-vocabulary-items` — a word studied once via its
+   dictionary form (correct reading) and once via a conjugated form (buggy
+   reading, pre-fix) becomes two separate `vocabulary_items` rows, since
+   `ensureVocabularyItem` dedupes on the exact `(expression, reading)` pair.
+   Detects such pairs (both string-math- and JMDict-derived) and merges:
+   `study_items` repointed (not deleted) to preserve FSRS state/review
+   history/`card_issue_reports`, `sentence_vocabulary`/`vocabulary_kanji`
+   repointed or dropped on collision, buggy `vocabulary_items` row
+   soft-deleted last. Verified post-merge that 見る's 3 study_items, 2
+   reviews, and open card_issue_report all survived pointing at the correct
+   item. Merged 8 pairs total (4 + 4 from the godan pass).
+4. `npm run fix:delete-garbled-combined-vocabulary` — separate, unrelated
+   issue found during triage (not applied — blocked by the auto-mode
+   permission classifier as a delete; left for the user to run manually if
+   wanted). See below.
+
+**Separate finding, not the same bug**: `combineSuggestions`/
+`mergeSuggestionIntoSelection`/`mergeSelections` concatenate each combined
+piece's raw `.expression`/`.reading` — their own doc comments already call
+this "a starting point... the user can edit," i.e. working as designed, not
+a bug. When confirmed without editing, combining a function word (particle,
+auxiliary verb) glues its bare dictionary-form lemma into the result, e.g.
+combining 売られた + 喧嘩 without editing produced expression "売るれるた喧嘩"
+instead of a real phrase. 7 such items found in production, none with any
+`study_items` (never scheduled/reviewed, so deleting them risks nothing).
+`scripts/delete-garbled-combined-vocabulary.ts` written (explicit id list —
+"garbled combine" vs. a legitimate multi-morpheme phrase isn't reliably
+distinguishable by pattern alone without a dictionary; a regex heuristic
+tried during triage false-positived on real words like いい加減) but not
+run.
+
+**Preventive fix (the one actually asked for, forward-looking)**: new
+`combinedExpressionWarning(selection)` in `vocabularySuggestions.ts` — for a
+`source: 'combined'` selection, checks each `+`-joined `pos` segment via the
+existing `isContentPos`; if any is a particle/auxiliary/symbol, returns a
+plain-language warning naming which. Wired into `VocabularyPicker.tsx`
+two ways: inline on `SelectedCard` (visible while editing, styled like the
+existing "Span does not match" indicator) and as a `window.alert` on
+`confirm()` listing all such selections before saving. Deliberately an
+`alert`, not `window.confirm` — [[project_pwa_native_dialogs_broken]] notes
+`window.confirm`/`prompt` silently no-op on the installed iOS PWA, so this
+had to be a dismiss-and-continue heads-up, not a block. It's a hint, not a
+validator (no dictionary lookup backing it), so it can also fire on
+legitimate particle-containing phrases — informational only, never blocks
+confirming.
+
+**Verified**: `npm run test` (full suite, 712 passed, 2 pre-existing skips),
+`npm run typecheck`, `npm run lint` (no new warnings), `npm run build`, all
+green. New tests: 8 cases in `tests/vocabularySuggestions.test.ts` covering
+`deriveDictionaryReading` (ichidan, single-kanji stem, godan fallback,
+kuru exclusion, idempotent rerun, no-op on unconjugated surface) and
+`combinedExpressionWarning` (particle+auxiliary combo, content-only combo,
+non-combined selection).

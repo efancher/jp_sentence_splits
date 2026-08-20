@@ -26,6 +26,10 @@
     "backfill:verb-pair-confusions": "tsx scripts/backfill-verb-pair-confusions.ts",
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts",
+    "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
+    "merge:duplicate-vocabulary-items": "tsx scripts/merge-duplicate-vocabulary-items.ts",
+    "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",
+    "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",
     "issues:list": "tsx scripts/list-card-issues.ts"
   },
   "dependencies": {

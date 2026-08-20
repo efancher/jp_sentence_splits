@@ -70,6 +70,37 @@ function isAdjacentAcrossWhitespace(
   return /^\s*$/.test(japanese.slice(earlierEnd, laterStart));
 }
 
+/**
+ * `token.reading` is the reading of the surface (conjugated) text, not of
+ * `lemma` (the dictionary form) — pairing them directly mismatches a
+ * dictionary-form spelling with a conjugated-form reading (e.g. lemma
+ * 見つける paired with surface-reading みつけ instead of みつける). When
+ * `surface` is a literal prefix of `lemma`, the cut-off tail is shared
+ * kanji/kana whose reading doesn't change with conjugation, so appending it
+ * directly recovers the dictionary reading. The one exception is 来る
+ * (kuru), whose reading genuinely changes across forms (き/こ/く) — the same
+ * irregular case conjugation.ts special-cases rather than derives.
+ *
+ * Idempotent by construction: if `surfaceReading` already ends with the
+ * tail being appended, it's already the dictionary reading (either fixed
+ * already, or coincidentally correct as-is) — appending again would double
+ * it up (見つける -> みつけるる). This matters because callers may pass an
+ * already-correct reading back in on a rerun (e.g. the reading-mismatch
+ * backfill script, which re-derives from every known surface form each run).
+ */
+export function deriveDictionaryReading(
+  surface: string,
+  surfaceReading: string,
+  lemma: string,
+): string {
+  if (lemma === surface) return surfaceReading;
+  if (lemma === '来る' || lemma === 'くる') return surfaceReading;
+  if (!lemma.startsWith(surface)) return surfaceReading;
+  const tail = lemma.slice(surface.length);
+  if (surfaceReading.endsWith(tail)) return surfaceReading;
+  return surfaceReading + tail;
+}
+
 export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,
@@ -79,13 +110,14 @@ export function suggestionFromToken(
   }
   const expression = token.lemma.trim() || token.surface;
   const pos = token.pos?.trim() ?? '';
+  const surfaceReading = token.reading?.trim() ?? '';
   return {
     id: createId('vsug'),
     surface: token.surface,
     start: token.start,
     end: token.end,
     expression,
-    reading: token.reading?.trim() ?? '',
+    reading: deriveDictionaryReading(token.surface, surfaceReading, expression),
     pos,
     source: 'morphology',
     selectedByDefault: isContentPos(pos),
@@ -307,6 +339,46 @@ export function mergeSelections(
     source: 'combined',
     suggestionIds,
   };
+}
+
+const NON_CONTENT_POS_LABELS: Record<(typeof SKIP_POS_PREFIXES)[number], string> = {
+  助詞: 'a particle',
+  助動詞: 'an auxiliary verb',
+  補助記号: 'a symbol',
+  記号: 'a symbol',
+  空白: 'whitespace',
+};
+
+/**
+ * Warns when a combined selection's expression/reading still embed a
+ * function word's bare dictionary-form lemma — combineSuggestions,
+ * mergeSuggestionIntoSelection, and mergeSelections all just concatenate
+ * each piece's `.expression`/`.reading` (see their own doc comments: "a
+ * starting point... the user can edit"), and gluing a particle or auxiliary
+ * verb's citation form into a phrase this way rarely produces a real word.
+ * E.g. combining 売られた + 喧嘩 without editing produces expression
+ * "売るれるた喧嘩" (dictionary forms 売る+れる+た mashed together) instead
+ * of the real phrase.
+ *
+ * A hint, not a validator: genuine multi-morpheme phrases that legitimately
+ * include a particle (e.g. 調子に乗る) will also trigger this, since there's
+ * no dictionary lookup here to tell the two apart — callers should treat it
+ * as informational, not something to block confirming on.
+ */
+export function combinedExpressionWarning(
+  selection: VocabularySelection,
+): string | null {
+  if (selection.source !== 'combined' || !selection.pos) return null;
+  const parts = selection.pos.split('+').filter(Boolean);
+  const offendingPrefixes = new Set<(typeof SKIP_POS_PREFIXES)[number]>();
+  for (const part of parts) {
+    if (isContentPos(part)) continue;
+    const prefix = SKIP_POS_PREFIXES.find((candidate) => part.startsWith(candidate));
+    if (prefix) offendingPrefixes.add(prefix);
+  }
+  if (!offendingPrefixes.size) return null;
+  const labels = [...offendingPrefixes].map((prefix) => NON_CONTENT_POS_LABELS[prefix]);
+  return `This combination includes ${labels.join(' and ')} in its raw dictionary form, which usually doesn't read as a real word or phrase — check the expression/reading match how it's actually written.`;
 }
 
 /**

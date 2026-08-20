@@ -29,6 +29,7 @@ import {
   canMergeSelections,
   canMergeSuggestionIntoSelection,
   combineSuggestions,
+  combinedExpressionWarning,
   defaultSelectionsFromSuggestions,
   isContentPos,
   mergeSelections,
@@ -309,6 +310,7 @@ function SelectedCard({
   const spanOk =
     Boolean(item.surface) &&
     validateSpan(japanese, item.start, item.end, item.surface);
+  const combinedWarning = combinedExpressionWarning(item);
   const style: CSSProperties = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -356,6 +358,9 @@ function SelectedCard({
           </div>
           {item.source === 'combined' ? (
             <div className="muted">Combined from adjacent pieces</div>
+          ) : null}
+          {combinedWarning ? (
+            <div style={{ color: 'var(--danger)' }}>{combinedWarning}</div>
           ) : null}
           {!spanOk ? (
             <div style={{ color: 'var(--danger)' }}>
@@ -618,6 +623,17 @@ export function VocabularyPicker({
         window.alert('Every selection needs a dictionary expression.');
         return;
       }
+    }
+    // Non-blocking heads-up, not a confirm/cancel gate — window.confirm
+    // silently no-ops on the installed iOS PWA, so this has to be an alert
+    // the user dismisses, after which confirming still proceeds normally.
+    const combinedWarnings = selections
+      .map((item) => combinedExpressionWarning(item))
+      .filter((warning): warning is string => Boolean(warning));
+    if (combinedWarnings.length) {
+      window.alert(
+        `Heads up, before saving:\n\n${combinedWarnings.map((warning, index) => `${index + 1}. ${warning}`).join('\n\n')}`,
+      );
     }
     onChange({ selections, reviewStatus: 'confirmed' });
     onConfirmAndNext?.({
