@@ -50,7 +50,7 @@ describe('GrammarListPage', () => {
 
     expect(await screen.findByText('〜わけがない')).toBeInTheDocument();
     expect(screen.getByText("there's no way...")).toBeInTheDocument();
-    expect(screen.getByText(/2 encounters/)).toBeInTheDocument();
+    expect(screen.getByText(/Encountered 2 times/)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /わけがない/ });
     expect(link).toHaveAttribute('href', expect.stringContaining(`/grammar/${pattern.id}`));
   });
@@ -64,6 +64,22 @@ describe('GrammarListPage', () => {
 
     await screen.findByText('〜わけがない');
     expect(screen.getByText('Tracked')).toBeInTheDocument();
+  });
+
+  it('groups patterns into priority-bucket sections', async () => {
+    const worthLearning = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', worthLearning.id, {});
+    await ensureSentenceGrammar('sent-2', worthLearning.id, {});
+    await ensureSentenceGrammar('sent-3', worthLearning.id, {});
+    const developing = await ensureGrammarPattern('〜てしまう');
+    await ensureSentenceGrammar('sent-4', developing.id, {});
+    await ensureGrammarStudyItem(developing.id, 'grammar_comprehension');
+
+    renderPage();
+
+    await screen.findByText('〜わけがない');
+    expect(screen.getByText('Worth learning now')).toBeInTheDocument();
+    expect(screen.getByText('Developing')).toBeInTheDocument();
   });
 
   it('filters by search query against name, meaning, and family', async () => {

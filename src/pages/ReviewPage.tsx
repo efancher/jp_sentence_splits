@@ -572,10 +572,26 @@ export function ReviewPage() {
       ).filter((item) => item.subjectType === 'grammarPattern');
       const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
       if (trackedPatternIds.length > 0) {
-        const [trackedPatterns, allPatterns] = await Promise.all([
+        const [trackedPatterns, allPatterns, relationships] = await Promise.all([
           db.grammarPatterns.bulkGet(trackedPatternIds),
           db.grammarPatterns.toArray(),
+          db.grammarRelationships.toArray(),
         ]);
+        // Rank GrammarRelationship-linked patterns first among completion
+        // distractors (grammar-learning system Phase 8) — a distractor the
+        // learner has actually flagged as confusable is more useful than a
+        // random one from the corpus. See buildGrammarCompletionChoices's
+        // doc comment.
+        const relatedPatternIdsByPattern = new Map<string, Set<string>>();
+        for (const relationship of relationships) {
+          const addRelation = (id: string, otherId: string) => {
+            const set = relatedPatternIdsByPattern.get(id);
+            if (set) set.add(otherId);
+            else relatedPatternIdsByPattern.set(id, new Set([otherId]));
+          };
+          addRelation(relationship.patternAId, relationship.patternBId);
+          addRelation(relationship.patternBId, relationship.patternAId);
+        }
         for (const pattern of trackedPatterns) {
           if (!pattern) continue;
           const context = await pickContextSentenceForGrammarPattern(pattern.id);
@@ -584,7 +600,12 @@ export function ReviewPage() {
           grammarCandidates.push({
             pattern,
             sentence: context.sentence,
-            choices: buildGrammarCompletionChoices(pattern, otherPatterns),
+            choices: buildGrammarCompletionChoices(
+              pattern,
+              otherPatterns,
+              undefined,
+              relatedPatternIdsByPattern.get(pattern.id),
+            ),
           });
         }
         const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));

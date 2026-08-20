@@ -1,14 +1,24 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import {
+  ensureGrammarRelationship,
   getDb,
+  listGrammarRelationshipsForPattern,
   listSentenceGrammarForPattern,
   updateGrammarPattern,
+  type GrammarRelationshipView,
 } from '../db/repository';
-import type { GrammarPattern } from '../domain/types';
+import type { GrammarPattern, GrammarRelationshipType } from '../domain/types';
+import {
+  computeGrammarLearnerState,
+  GRAMMAR_LEARNER_STATE_LABELS,
+  GRAMMAR_RELATIONSHIP_TYPE_LABELS,
+  GRAMMAR_RELATIONSHIP_TYPES,
+} from '../lib/grammarPatterns';
+import { isVocabularyItemProficient } from '../lib/scheduling';
 
 function GrammarPatternFields({ pattern }: { pattern: GrammarPattern }) {
   const [shortMeaning, setShortMeaning] = useState(pattern.shortMeaning);
@@ -102,22 +112,155 @@ function GrammarPatternFields({ pattern }: { pattern: GrammarPattern }) {
   );
 }
 
+function RelatedPatterns({
+  patternId,
+  relationships,
+  otherPatterns,
+}: {
+  patternId: string;
+  relationships: GrammarRelationshipView[];
+  otherPatterns: GrammarPattern[];
+}) {
+  const [targetId, setTargetId] = useState('');
+  const [relationshipType, setRelationshipType] = useState<GrammarRelationshipType>(
+    'commonly_confused',
+  );
+  const [saving, setSaving] = useState(false);
+
+  const linkedIds = useMemo(
+    () =>
+      new Set(
+        relationships.map((view) =>
+          view.relationship.patternAId === patternId
+            ? view.relationship.patternBId
+            : view.relationship.patternAId,
+        ),
+      ),
+    [relationships, patternId],
+  );
+  const candidates = useMemo(
+    () => otherPatterns.filter((candidate) => candidate.id !== patternId),
+    [otherPatterns, patternId],
+  );
+
+  async function addRelationship() {
+    if (!targetId) return;
+    setSaving(true);
+    try {
+      await ensureGrammarRelationship(patternId, targetId, relationshipType);
+      setTargetId('');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="stack">
+      <h3 style={{ margin: 0 }}>Related patterns</h3>
+      {relationships.length === 0 ? (
+        <p className="muted">No related patterns linked yet.</p>
+      ) : (
+        relationships.map((view) => (
+          <Link
+            key={view.relationship.id}
+            to={`/grammar/${encodeURIComponent(view.otherPattern.id)}`}
+            className="list-card"
+          >
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <strong className="jp">{view.otherPattern.canonicalName}</strong>
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                {GRAMMAR_RELATIONSHIP_TYPE_LABELS[view.relationship.relationshipType]}
+              </span>
+            </div>
+            {view.otherPattern.shortMeaning ? (
+              <div className="muted">{view.otherPattern.shortMeaning}</div>
+            ) : null}
+          </Link>
+        ))
+      )}
+      {candidates.length > 0 ? (
+        <div className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <select
+            value={relationshipType}
+            onChange={(event) =>
+              setRelationshipType(event.target.value as GrammarRelationshipType)
+            }
+            aria-label="Relationship type"
+          >
+            {GRAMMAR_RELATIONSHIP_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {GRAMMAR_RELATIONSHIP_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+          <select
+            value={targetId}
+            onChange={(event) => setTargetId(event.target.value)}
+            aria-label="Pattern to link"
+          >
+            <option value="">Choose a pattern…</option>
+            {candidates.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.canonicalName}
+                {linkedIds.has(candidate.id) ? ' (already linked)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!targetId || saving}
+            onClick={() => void addRelationship()}
+          >
+            Link
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function GrammarPatternDetailPage() {
   const { patternId = '' } = useParams();
 
   const data = useLiveQuery(async () => {
     const db = getDb();
     const pattern = await db.grammarPatterns.get(patternId);
-    if (!pattern) return { pattern: null, encounters: [], tracked: false };
-    const [encounters, studyItems] = await Promise.all([
+    if (!pattern) {
+      return {
+        pattern: null,
+        encounters: [],
+        tracked: false,
+        state: 'encountered' as const,
+        relationships: [],
+        allPatterns: [],
+      };
+    }
+    const [encounters, studyItems, relationships, allPatterns] = await Promise.all([
       listSentenceGrammarForPattern(patternId),
       db.studyItems
         .where('subjectType')
         .equals('grammarPattern')
         .toArray(),
+      listGrammarRelationshipsForPattern(patternId),
+      db.grammarPatterns.toArray(),
     ]);
-    const tracked = studyItems.some((item) => item.subjectId === patternId);
-    return { pattern, encounters, tracked };
+    const patternStudyItems = studyItems.filter((item) => item.subjectId === patternId);
+    const tracked = patternStudyItems.length > 0;
+    const confirmedCount = encounters.filter(
+      (encounter) => encounter.sentenceGrammar.confirmedByLearner,
+    ).length;
+    const proficient = patternStudyItems.some(
+      (item) =>
+        item.activityType === 'grammar_comprehension' &&
+        isVocabularyItemProficient(item.fsrsState.state),
+    );
+    const state = computeGrammarLearnerState({
+      encounterCount: encounters.length,
+      confirmedCount,
+      tracked,
+      proficient,
+    });
+    return { pattern, encounters, tracked, state, relationships, allPatterns };
   }, [patternId]);
 
   return (
@@ -134,7 +277,10 @@ export function GrammarPatternDetailPage() {
           <>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <div className="jp jp-lg">{data.pattern.canonicalName}</div>
-              {data.tracked ? <span className="status-pill">Tracked</span> : null}
+              <div className="row" style={{ gap: '0.5rem' }}>
+                <span className="status-pill">{GRAMMAR_LEARNER_STATE_LABELS[data.state]}</span>
+                {data.tracked ? <span className="status-pill">Tracked</span> : null}
+              </div>
             </div>
             {data.pattern.aliases.length ? (
               <div className="muted">
@@ -195,6 +341,14 @@ export function GrammarPatternDetailPage() {
             })
           )}
         </section>
+      ) : null}
+
+      {data?.pattern ? (
+        <RelatedPatterns
+          patternId={data.pattern.id}
+          relationships={data.relationships}
+          otherPatterns={data.allPatterns}
+        />
       ) : null}
     </div>
   );

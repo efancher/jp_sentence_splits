@@ -14,11 +14,17 @@ import { VocabChips } from '../components/VocabChips';
 import {
   getDb,
   getVocabularyTargetCandidates,
+  recordGrammarNaturalEncounter,
   recordNaturalEncounter,
   setBookSentenceStatus,
   type VocabularyTargetCandidate,
 } from '../db/repository';
-import type { BookSentence, ReviewRating, StudyStatus } from '../domain/types';
+import type {
+  BookSentence,
+  GrammarPattern,
+  ReviewRating,
+  StudyStatus,
+} from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { hashString } from '../lib/ids';
@@ -81,6 +87,9 @@ export function PracticePage() {
   const [encounteredVocabularyItemIds, setEncounteredVocabularyItemIds] = useState<
     Set<string>
   >(() => new Set());
+  const [encounteredGrammarPatternIds, setEncounteredGrammarPatternIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -123,6 +132,32 @@ export function PracticePage() {
     // rating for words the learner has already chosen to track, not every
     // word in the sentence.
     const materializedVocabulary = await getVocabularyTargetCandidates([sentenceId]);
+    // Tracked grammar patterns linked to this sentence (Phase 6/7/8 slice of
+    // the grammar-learning system) — mirrors the vocabulary natural-encounter
+    // panel above, but only surfaces patterns the learner already opted into
+    // tracking via GrammarPicker's "Track" button (see
+    // recordGrammarNaturalEncounter's doc comment: that policy lives here,
+    // not in the repository primitive).
+    const sentenceGrammarLinks = await db.sentenceGrammar
+      .where('sentenceId')
+      .equals(sentenceId)
+      .toArray();
+    let trackedGrammarPatterns: GrammarPattern[] = [];
+    if (sentenceGrammarLinks.length > 0) {
+      const patternIds = [...new Set(sentenceGrammarLinks.map((link) => link.grammarPatternId))];
+      const [patterns, grammarStudyItems] = await Promise.all([
+        db.grammarPatterns.bulkGet(patternIds),
+        db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
+      ]);
+      const trackedPatternIds = new Set(
+        grammarStudyItems
+          .filter((item) => patternIds.includes(item.subjectId))
+          .map((item) => item.subjectId),
+      );
+      trackedGrammarPatterns = patterns.filter(
+        (pattern): pattern is GrammarPattern => !!pattern && trackedPatternIds.has(pattern.id),
+      );
+    }
     return {
       book,
       allMemberships,
@@ -133,6 +168,7 @@ export function PracticePage() {
       membership: memberships[index] ?? null,
       sentenceAudio,
       materializedVocabulary,
+      trackedGrammarPatterns,
     };
   }, [bookId, routeSentenceId, scope, shuffled]);
 
@@ -153,6 +189,7 @@ export function PracticePage() {
     });
     setAttempt('');
     setEncounteredVocabularyItemIds(new Set());
+    setEncounteredGrammarPatternIds(new Set());
   }, [data?.sentence?.id]);
 
   // Cancel playback when moving between sentences or leaving Practice.
@@ -258,6 +295,18 @@ export function PracticePage() {
     );
     await recordNaturalEncounter({
       vocabularyItemId,
+      sentenceId: sentence.id,
+      rating,
+    });
+  }
+
+  async function markGrammarEncounter(grammarPatternId: string, rating: ReviewRating) {
+    if (encounteredGrammarPatternIds.has(grammarPatternId)) return;
+    setEncounteredGrammarPatternIds(
+      (current) => new Set(current).add(grammarPatternId),
+    );
+    await recordGrammarNaturalEncounter({
+      grammarPatternId,
       sentenceId: sentence.id,
       rating,
     });
@@ -385,6 +434,34 @@ export function PracticePage() {
                 recorded={encounteredVocabularyItemIds.has(candidate.vocabularyItem.id)}
                 onRate={(rating) => void markEncounter(candidate.vocabularyItem.id, rating)}
               />
+            ))}
+          </div>
+        ) : null}
+        {data.trackedGrammarPatterns.length > 0 ? (
+          <div className="stack" style={{ gap: '0.35rem' }}>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>
+              Recognized this grammar without hints?
+            </div>
+            {data.trackedGrammarPatterns.map((pattern) => (
+              <div key={pattern.id} className="row" style={{ alignItems: 'center' }}>
+                <span className="jp">{pattern.canonicalName}</span>
+                {pattern.shortMeaning ? (
+                  <span className="muted">{pattern.shortMeaning}</span>
+                ) : null}
+                {encounteredGrammarPatternIds.has(pattern.id) ? (
+                  <span className="muted">Recorded</span>
+                ) : (
+                  NATURAL_ENCOUNTER_RATINGS.map((rating) => (
+                    <button
+                      key={rating.value}
+                      type="button"
+                      onClick={() => void markGrammarEncounter(pattern.id, rating.value)}
+                    >
+                      {rating.label}
+                    </button>
+                  ))
+                )}
+              </div>
             ))}
           </div>
         ) : null}

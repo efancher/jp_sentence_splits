@@ -29,6 +29,8 @@ import {
   getDueStudyItems,
   getReferenceAlignment,
   listAttemptAnalysisSummariesForSentence,
+  listGrammarPatternSummaries,
+  listGrammarRelationshipsForPattern,
   listSentenceGrammarForPattern,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
@@ -1708,6 +1710,129 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
       expect(keys).toContain('sentence_grammar');
       expect(keys).toContain('grammar_relationships');
     });
+  });
+});
+
+describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (grammar-learning system Phase 6/7/8)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-grammar-summaries-${createId('db')}`);
+  });
+
+  it('buckets an untracked, lightly-encountered pattern as recently_encountered', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.add(stubSentence('sent-1'));
+    await ensureSentenceGrammar('sent-1', pattern.id);
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      encounterCount: 1,
+      tracked: false,
+      state: 'encountered',
+      priorityBucket: 'recently_encountered',
+    });
+    expect(summaries[0].priorityExplanation).toContain('not tracked yet');
+  });
+
+  it('buckets an untracked pattern encountered 3+ times as worth_learning_now', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.bulkAdd([
+      stubSentence('sent-1'),
+      stubSentence('sent-2'),
+      stubSentence('sent-3'),
+    ]);
+    await ensureSentenceGrammar('sent-1', pattern.id);
+    await ensureSentenceGrammar('sent-2', pattern.id);
+    await ensureSentenceGrammar('sent-3', pattern.id);
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0].encounterCount).toBe(3);
+    expect(summaries[0].priorityBucket).toBe('worth_learning_now');
+  });
+
+  it('counts distinct sources across two different books', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const bookA = await createBook({ title: 'Book A' });
+    const bookB = await createBook({ title: 'Book B' });
+    await getDb().sentences.bulkAdd([stubSentence('sent-1'), stubSentence('sent-2')]);
+    await ensureSentenceGrammar('sent-1', pattern.id);
+    await ensureSentenceGrammar('sent-2', pattern.id);
+    await getDb().bookSentences.bulkAdd([
+      {
+        id: 'bs-1',
+        bookId: bookA.id,
+        sentenceId: 'sent-1',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+      {
+        id: 'bs-2',
+        bookId: bookB.id,
+        sentenceId: 'sent-2',
+        position: 0,
+        status: 'unstarted',
+        addedAt: nowIsoForTest(),
+      },
+    ]);
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0].distinctSourceCount).toBe(2);
+  });
+
+  it('buckets a tracked but not-yet-proficient pattern as developing', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0]).toMatchObject({ tracked: true, priorityBucket: 'developing' });
+  });
+
+  it('buckets a tracked, proficient pattern with no recent again ratings as strong', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review' },
+    });
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0]).toMatchObject({
+      tracked: true,
+      state: 'recognized',
+      priorityBucket: 'strong',
+    });
+  });
+
+  it('reports needed-help counts from the last 7 grammar_comprehension reviews in the priority explanation', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await recordReview({ studyItemId: item.id, rating: 'again' });
+    await recordReview({ studyItemId: item.id, rating: 'good' });
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0].recentReviewCount).toBe(2);
+    expect(summaries[0].recentAgainCount).toBe(1);
+    expect(summaries[0].priorityExplanation).toContain('needed help on 1 of the last 2 reviews');
+  });
+
+  it('listGrammarRelationshipsForPattern returns empty for a pattern with no relationships', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    expect(await listGrammarRelationshipsForPattern(pattern.id)).toEqual([]);
+  });
+
+  it('listGrammarRelationshipsForPattern returns the other pattern regardless of which side of the edge it is on', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarRelationship(wakega.id, hazuga.id, 'commonly_confused');
+
+    const fromWakega = await listGrammarRelationshipsForPattern(wakega.id);
+    expect(fromWakega).toHaveLength(1);
+    expect(fromWakega[0].otherPattern.id).toBe(hazuga.id);
+    expect(fromWakega[0].relationship.relationshipType).toBe('commonly_confused');
+
+    const fromHazuga = await listGrammarRelationshipsForPattern(hazuga.id);
+    expect(fromHazuga).toHaveLength(1);
+    expect(fromHazuga[0].otherPattern.id).toBe(wakega.id);
   });
 });
 

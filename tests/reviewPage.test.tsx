@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
   ensureGrammarPattern,
+  ensureGrammarRelationship,
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
@@ -16,6 +17,7 @@ import {
   conjugationFormsForWordClass,
   type ConjugationWordClass,
 } from '../src/lib/conjugation';
+import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId, hashString } from '../src/lib/ids';
 import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReviewPage } from '../src/pages/ReviewPage';
@@ -1475,5 +1477,65 @@ describe('ReviewPage', () => {
       .toArray();
     expect(review?.expectedAnswer).toBe('〜わけがない');
     expect(review?.rating).toBe('good');
+  });
+
+  it('ranks a GrammarRelationship-linked pattern ahead of the rest of the corpus as a grammar_completion distractor', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-3',
+      normalizedKey: 'sent-grammar-3',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-3');
+
+    const correct = await ensureGrammarPattern('〜わけがない');
+    const others = await Promise.all(
+      ['〜はずがない', '〜てしまう', '〜ながら', '〜ば', '〜たら', '〜のに'].map((name) =>
+        ensureGrammarPattern(name),
+      ),
+    );
+    // Find a pattern that would NOT be among the default (no-relationship)
+    // distractor picks, so linking it is the only way it can show up —
+    // proving the relationship, not hash luck, drove the selection.
+    const unranked = buildGrammarCompletionChoices(correct, others);
+    const excluded = others.find(
+      (pattern) => !unranked.some((choice) => choice.id === pattern.id),
+    );
+    expect(excluded).toBeDefined();
+    await ensureGrammarRelationship(correct.id, excluded!.id, 'commonly_confused');
+
+    await ensureSentenceGrammar('sent-grammar-3', correct.id, { confirmedByLearner: true });
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction/);
+    expect(screen.getByRole('button', { name: excluded!.canonicalName })).toBeInTheDocument();
   });
 });

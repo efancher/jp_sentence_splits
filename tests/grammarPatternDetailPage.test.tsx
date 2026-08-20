@@ -7,6 +7,7 @@ import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
   createBook,
   ensureGrammarPattern,
+  ensureGrammarRelationship,
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
@@ -127,6 +128,59 @@ describe('GrammarPatternDetailPage', () => {
       'href',
       expect.stringContaining(`/books/${book.id}/analyze/sent-1`),
     );
+  });
+
+  it('shows Recognized once a tracked pattern is FSRS-proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review' },
+    });
+
+    renderPage(pattern.id);
+
+    await screen.findByText('〜わけがない');
+    expect(screen.getByText('Recognized')).toBeInTheDocument();
+  });
+
+  it('shows an empty related-patterns state with no relationships', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    renderPage(pattern.id);
+
+    expect(await screen.findByText('Related patterns')).toBeInTheDocument();
+    expect(screen.getByText(/no related patterns linked yet/i)).toBeInTheDocument();
+  });
+
+  it('lists an existing relationship with its type and links to the other pattern', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない', {
+      shortMeaning: 'should be...',
+    });
+    await ensureGrammarRelationship(wakega.id, hazuga.id, 'commonly_confused');
+
+    renderPage(wakega.id);
+
+    await screen.findByText('Related patterns');
+    expect(screen.getByText('〜はずがない')).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /はずがない/ });
+    expect(link).toHaveTextContent('Commonly confused with');
+    expect(link).toHaveAttribute('href', expect.stringContaining(`/grammar/${hazuga.id}`));
+  });
+
+  it('creates a new relationship via the related-patterns picker', async () => {
+    const wakega = await ensureGrammarPattern('〜わけがない');
+    const hazuga = await ensureGrammarPattern('〜はずがない');
+    const user = userEvent.setup();
+
+    renderPage(wakega.id);
+    await screen.findByText('Related patterns');
+
+    await user.selectOptions(screen.getByLabelText('Relationship type'), 'commonly_confused');
+    await user.selectOptions(screen.getByLabelText('Pattern to link'), hazuga.id);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+
+    expect(await screen.findByText('〜はずがない')).toBeInTheDocument();
+    expect(await getDb().grammarRelationships.count()).toBe(1);
   });
 
   it('shows plain (unlinked) sentence text for an encounter with no book membership', async () => {

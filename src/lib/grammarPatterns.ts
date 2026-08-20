@@ -1,6 +1,27 @@
-import type { GrammarPattern } from '../domain/types';
+import type { GrammarPattern, GrammarRelationshipType } from '../domain/types';
 import { hashString } from './ids';
 import { stripMarkup } from './normalize';
+
+/** Human-readable labels for GrammarRelationshipType, for the detail page's "Related patterns" section. */
+export const GRAMMAR_RELATIONSHIP_TYPE_LABELS: Record<GrammarRelationshipType, string> = {
+  similar_meaning: 'Similar meaning',
+  contrast: 'Contrasts with',
+  commonly_confused: 'Commonly confused with',
+  stronger_stance: 'Stronger stance than',
+  weaker_stance: 'Weaker stance than',
+  formal_variant: 'Formal variant of',
+  structural_relative: 'Structurally related to',
+};
+
+export const GRAMMAR_RELATIONSHIP_TYPES: GrammarRelationshipType[] = [
+  'similar_meaning',
+  'contrast',
+  'commonly_confused',
+  'stronger_stance',
+  'weaker_stance',
+  'formal_variant',
+  'structural_relative',
+];
 
 /**
  * Dedup key for GrammarPattern.canonicalName (see ensureGrammarPattern,
@@ -52,6 +73,110 @@ export function blankPatternInSentence(
   };
 }
 
+export type GrammarLearnerState =
+  | 'encountered'
+  | 'noticed'
+  | 'recognized'
+  | 'distinguished'
+  | 'productive';
+
+/**
+ * Derives the design brief's Encountered -> Noticed -> Recognized ->
+ * Distinguished -> Productive ladder (§9) from accumulated evidence —
+ * never a manually-set field. The top two tiers are architecturally
+ * reachable (the type exists, callers can add them) but nothing currently
+ * produces the evidence they'd need: Distinguished wants a contrast-type
+ * activity ("can you tell these two apart," not just "recall the right
+ * one" — grammar_completion tests the latter), Productive wants a
+ * production/transformation activity. Neither exists yet (design brief
+ * §11 C/D/F/G, deliberately deferred past Phase 5) — see docs/STATUS.md.
+ */
+export function computeGrammarLearnerState(input: {
+  encounterCount: number;
+  confirmedCount: number;
+  tracked: boolean;
+  proficient: boolean;
+}): GrammarLearnerState {
+  if (input.tracked && input.proficient) return 'recognized';
+  if (input.confirmedCount > 0) return 'noticed';
+  return 'encountered';
+}
+
+/** Human-readable labels for GrammarLearnerState, for badges on the list/detail pages. */
+export const GRAMMAR_LEARNER_STATE_LABELS: Record<GrammarLearnerState, string> = {
+  encountered: 'Encountered',
+  noticed: 'Noticed',
+  recognized: 'Recognized',
+  distinguished: 'Distinguished',
+  productive: 'Productive',
+};
+
+export type GrammarPriorityBucket =
+  | 'worth_learning_now'
+  | 'developing'
+  | 'strong'
+  | 'recently_encountered';
+
+export const GRAMMAR_PRIORITY_BUCKET_LABELS: Record<GrammarPriorityBucket, string> = {
+  worth_learning_now: 'Worth learning now',
+  developing: 'Developing',
+  strong: 'Strong',
+  recently_encountered: 'Recently encountered',
+};
+
+/** Display order for the /grammar dashboard sections — most actionable first. */
+export const GRAMMAR_PRIORITY_BUCKET_ORDER: GrammarPriorityBucket[] = [
+  'worth_learning_now',
+  'developing',
+  'recently_encountered',
+  'strong',
+];
+
+export interface GrammarPriorityInput {
+  encounterCount: number;
+  tracked: boolean;
+  state: GrammarLearnerState;
+  /** Among the tracked pattern's most recent grammar_comprehension reviews. */
+  recentAgainCount: number;
+  recentReviewCount: number;
+}
+
+/**
+ * A simple, explainable heuristic (design brief §14 explicitly prefers this
+ * over opaque scoring) grouping a pattern for the /grammar dashboard — four
+ * buckets, each derivable at a glance from the same fields
+ * explainGrammarPriority renders as prose, not a numeric score nobody can
+ * audit.
+ */
+export function computeGrammarPriorityBucket(
+  input: GrammarPriorityInput,
+): GrammarPriorityBucket {
+  if (input.state === 'recognized' && input.recentAgainCount === 0) return 'strong';
+  if (input.tracked) return 'developing';
+  if (input.encounterCount >= 3) return 'worth_learning_now';
+  return 'recently_encountered';
+}
+
+/** Explainable one-liner behind a bucket assignment — design brief §14's own worked example. */
+export function explainGrammarPriority(
+  input: GrammarPriorityInput & { distinctSourceCount: number },
+): string {
+  const parts = [`Encountered ${input.encounterCount} time${input.encounterCount === 1 ? '' : 's'}`];
+  if (input.distinctSourceCount > 1) {
+    parts.push(`across ${input.distinctSourceCount} sources`);
+  }
+  if (input.tracked && input.recentReviewCount > 0) {
+    parts.push(
+      `needed help on ${input.recentAgainCount} of the last ${input.recentReviewCount} review${
+        input.recentReviewCount === 1 ? '' : 's'
+      }`,
+    );
+  } else if (!input.tracked) {
+    parts.push('not tracked yet');
+  }
+  return `${parts.join(', ')}.`;
+}
+
 /** Default number of options on a grammar_completion multiple-choice card, including the correct one. */
 export const GRAMMAR_COMPLETION_CHOICE_COUNT = 4;
 
@@ -66,13 +191,25 @@ export const GRAMMAR_COMPLETION_CHOICE_COUNT = 4;
  * ReviewPage.tsx's pickTransformationTarget) — the same pattern always
  * gets the same choices in the same order across reloads/re-renders,
  * rather than reshuffling on every render.
+ *
+ * `relatedPatternIds` (design brief §7/§8, grammar-learning system Phase
+ * 8) — patterns explicitly linked to the correct one via
+ * `GrammarRelationship` are ranked ahead of the rest of the corpus: a
+ * distractor the learner has actually flagged as confusable (via the
+ * detail page's "Related patterns" control) is a more useful contrast
+ * than a random unrelated one. Falls back to the whole-corpus hash order
+ * when no relationships exist yet, same as before this parameter existed.
  */
 export function buildGrammarCompletionChoices(
   pattern: GrammarPattern,
   otherPatterns: readonly GrammarPattern[],
   count = GRAMMAR_COMPLETION_CHOICE_COUNT,
+  relatedPatternIds: ReadonlySet<string> = new Set(),
 ): GrammarPattern[] {
   const ranked = [...otherPatterns].sort((a, b) => {
+    const relatedA = relatedPatternIds.has(a.id) ? 0 : 1;
+    const relatedB = relatedPatternIds.has(b.id) ? 0 : 1;
+    if (relatedA !== relatedB) return relatedA - relatedB;
     const ha = Number.parseInt(hashString(`${pattern.id}:pick:${a.id}`), 16);
     const hb = Number.parseInt(hashString(`${pattern.id}:pick:${b.id}`), 16);
     return ha - hb;

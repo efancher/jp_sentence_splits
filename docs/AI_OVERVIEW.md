@@ -147,11 +147,15 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phases 1-5 — schema/repository/sync/
+- **Grammar-learning system** (new; Phases 1-8 — schema/repository/sync/
   backup foundation, manual annotation from Analyze, the `/grammar`
-  browser/detail UI, AI-assisted suggestion/explanation, and
-  `grammar_comprehension`/`grammar_completion` review cards, see the
-  Feature walkthrough below — are all done): a second layer on top of the
+  browser/detail UI, AI-assisted suggestion/explanation,
+  `grammar_comprehension`/`grammar_completion` review cards, a derived
+  learner-state ladder, a personalized `/grammar` curriculum dashboard,
+  and a first slice of `GrammarRelationship` browsing/creation, see the
+  Feature walkthrough below — are all done; Phase 9 — contrast/
+  transformation/production activity types — deliberately not started,
+  see `docs/STATUS.md`): a second layer on top of the
   Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
@@ -265,7 +269,11 @@ manual flow completely unaffected.
   nav. Also hosts a "Recognized these without hints?" panel that lets the
   user self-report natural encounters with vocabulary outside the formal
   review queue (`recordNaturalEncounter`, feeds `Review.source =
-  'natural_encounter'`).
+  'natural_encounter'`), and (Phase 6/7/8 of the grammar-learning system)
+  an analogous "Recognized this grammar without hints?" panel — only for
+  patterns already tracked (a `grammarPattern` study item exists) and
+  linked to the current sentence via `SentenceGrammar`, feeding
+  `recordGrammarNaturalEncounter`.
 - **Build mode** (`BuildPage.tsx`, `src/lib/buildMode.ts`) — inverse of
   Analyze: shows the English prompt, learner reassembles the Japanese
   sentence from shuffled chunk tiles using saved analysis chunks as the
@@ -312,6 +320,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   itself** — only "Track" in `GrammarPicker.tsx` creates these study
   items (both together), and only in the global `/review` queue, never
   book-scoped (a tracked pattern isn't "of" one book).
+  `grammar_completion`'s distractor pool ranks `GrammarRelationship`-linked
+  patterns first (Phase 8, `buildGrammarCompletionChoices`'s
+  `relatedPatternIds` param) — a distractor the learner flagged as
+  confusable via the detail page is a more useful contrast than a random
+  one from the corpus.
 
 **Gating and mnemonic/assistance tracking**: a sentence's full-sentence
 cards (`comprehension`/`reading_in_context`) are deliberately withheld
@@ -357,19 +370,30 @@ which remains unbuilt.
 
 ### 5a. Grammar browsing — `GrammarListPage.tsx` (`/grammar`),
 `GrammarPatternDetailPage.tsx` (`/grammar/:patternId`)
-Same shape as vocabulary/kanji browsing, one layer up. The list sorts by
-encounter count (most-encountered-in-your-reading first, not alphabetical)
-— closer to "what's actually showing up" than a dictionary. The detail
-page is where "Your encounters" (design brief §5/§6 — "where else have I
-seen this?") actually lives: every sentence a pattern has been tagged in,
-via `listSentenceGrammarForPattern`, each linking into
+A personalized curriculum dashboard (Phase 7), not a flat browsable list:
+`/grammar` groups tagged patterns into four explainable priority buckets
+(`GRAMMAR_PRIORITY_BUCKET_ORDER` — Worth learning now / Developing /
+Recently encountered / Strong, via `computeGrammarPriorityBucket`), each
+pattern showing a prose explanation of its own bucket
+(`explainGrammarPriority`, e.g. "Encountered 3 times, across 2 sources,
+needed help on 1 of the last 5 reviews.") rather than a bare number or an
+opaque score — closer to "what's actually showing up, and how well do you
+know it" than a dictionary or a JLPT-ordered syllabus. The detail page
+shows a derived learner-state badge (`GrammarLearnerState` — Encountered /
+Noticed / Recognized, `computeGrammarLearnerState`, Phase 6; never
+manually set) alongside "Your encounters" (design brief §5/§6 — "where
+else have I seen this?"): every sentence a pattern has been tagged in, via
+`listSentenceGrammarForPattern`, each linking into
 `/books/:bookId/analyze/:sentenceId` when a book membership exists (plain
 text otherwise), with native audio playback (`NativeAudioButton`) when the
 sentence has `SentenceAudio`. The pattern's own `shortMeaning`/
 `structuralNotes`/`explanation`/`family` are editable inline — currently
 the only way to fill them in, same caveat as `GrammarPicker`'s Explain
-panel (no AI yet). No `GrammarRelationship` (contrast/family) browsing UI
-yet — deliberately deferred (Phase 8 of the grammar-learning plan).
+panel (no AI yet). A **"Related patterns"** section (Phase 8) lists
+existing `GrammarRelationship` edges via `listGrammarRelationshipsForPattern`
+(each linking to the other pattern's own detail page) and an inline picker
+(relationship-type + pattern selects, no native dialogs) to create new
+ones via `ensureGrammarRelationship`.
 
 ### 6. Shadowing & pronunciation feedback — `ShadowPage.tsx`
 (`/books/:bookId/shadow/:sentenceId`)

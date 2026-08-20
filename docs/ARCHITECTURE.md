@@ -86,7 +86,22 @@ pre-fills the existing manual-edit form, saved by the same Save action.
 Phase 5 added FSRS-scheduled review: `grammar_comprehension`/
 `grammar_completion` activity types on the existing `StudyItem`/`Review`
 machinery, entered only via "Track" (never lazily seeded by `ReviewPage`
-itself, unlike every other category), global scope only.
+itself, unlike every other category), global scope only. Phases 6+7+8
+(shipped together) added a derived learner-state ladder
+(`computeGrammarLearnerState`: Encountered → Noticed → Recognized from
+existing evidence, never manually set — the top two tiers,
+Distinguished/Productive, are reachable in the type but nothing produces
+their evidence yet, since that needs the contrast/production activity
+types Phase 9 defers), a personalized `/grammar` dashboard that groups
+tagged patterns into explainable priority buckets instead of one
+encounter-count list (`computeGrammarPriorityBucket`/
+`explainGrammarPriority` — prose, not an opaque score), a "Related
+patterns" section on the detail page to view/create `GrammarRelationship`
+edges, a grammar natural-encounter panel on `PracticePage` mirroring the
+vocabulary one, and relationship-aware distractor ranking in
+`ReviewPage`'s `grammar_completion` cards. Phase 9 (production/
+transformation/contrast activity types) remains deliberately deferred —
+see `docs/STATUS.md`.
 
 ## Sync engine
 

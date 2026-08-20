@@ -1,17 +1,31 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system Phase 5 — grammar evidence
-+ SRS — `grammar_comprehension`/`grammar_completion` review cards wired
-into `ReviewPage`, global scope only; tracked patterns now actually get
-quizzed instead of just accruing an idle `StudyItem`. Phase 4's
-`grammar-assist` Edge Function has been deployed live and confirmed
-working by the user. Phases 1-4 (corpus-model foundation, manual
-annotation from Analyze, `/grammar` browser/detail, AI-assisted
-suggestion/explanation) already done. Before that: Phase 9 complete —
-Milestone 9 done; sentence translation and vocabulary meaning are now
-editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
-together; card issue reports ("report a problem with this card") added;
-two small Analyze-editor/Vocabulary-picker chunk-boundary bugs fixed).
+Last updated: 2026-08-20 (Grammar-learning system Phases 6+7+8 — derived
+learner state, personalized curriculum dashboard, and a first slice of
+grammar relationships — landed together as one pass. `computeGrammarLearnerState`
+derives Encountered/Noticed/Recognized from existing evidence (no new
+manually-set field); `/grammar` now groups tagged patterns into
+explainable priority buckets (Worth learning now / Developing / Recently
+encountered / Strong) instead of one flat encounter-count list;
+`GrammarPatternDetailPage` shows the derived state badge and a new
+"Related patterns" section to view/create `GrammarRelationship` edges;
+`PracticePage` gained a grammar natural-encounter panel mirroring the
+existing vocabulary one; `ReviewPage`'s `grammar_completion` distractor
+pool now ranks relationship-linked patterns first. The grammar plan's own
+Phase 9 (production/transformation activity types, not to be confused with
+the unrelated general-roadmap "Phase 9" mentioned further below)
+deliberately still not started — see the dedicated entry below. Before
+that: Phase 5 shipped
+`grammar_comprehension`/`grammar_completion` review cards wired into
+`ReviewPage`, global scope only. Phase 4's `grammar-assist` Edge Function
+deployed live and confirmed working by the user. Phases 1-4 (corpus-model
+foundation, manual annotation from Analyze, `/grammar` browser/detail,
+AI-assisted suggestion/explanation) already done. Before that: Phase 9 (of
+the earlier, unrelated roadmap) complete — Milestone 9 done; sentence
+translation and vocabulary meaning are now editable in the UI; a batch of
+small Phase 7.10/9 follow-ups landed together; card issue reports ("report
+a problem with this card") added; two small Analyze-editor/Vocabulary-
+picker chunk-boundary bugs fixed).
 
 ## Phase 0 — Repository analysis: done
 
@@ -4322,6 +4336,165 @@ exist yet, Phase 8); activity types C (Contrast), D (Prediction), F
 (Transformation), G (Production) from design brief §11; any
 learner-state-ladder UI surfacing "Recognized"/"Distinguished" derived from
 this new evidence (Phase 6/7).
+
+## Grammar-learning system — Phases 6+7+8 (learner state, curriculum dashboard, relationships): done
+
+Shipped as one combined pass rather than three separate ones — the pure
+derivation logic (Phase 6), the dashboard consuming it (Phase 7), and a
+first slice of relationships (Phase 8) turned out to have no natural
+seam once written: the dashboard's priority bucket *is* a function of
+learner state, and its "most useful distractor" story needs relationships
+to exist first. Design brief §9/§13/§14.
+
+- `src/lib/grammarPatterns.ts` — new pure functions, all unit-tested
+  (`tests/grammarPatterns.test.ts`):
+  - `GrammarLearnerState` (`'encountered'|'noticed'|'recognized'|
+    'distinguished'|'productive'`) and `computeGrammarLearnerState({
+    encounterCount, confirmedCount, tracked, proficient })` — derived,
+    never manually set. `recognized` requires tracked + FSRS-proficient
+    (`isVocabularyItemProficient`, i.e. the study item has reached FSRS
+    `review`/`relearning`); `noticed` requires at least one
+    learner-confirmed `SentenceGrammar` link; otherwise `encountered`.
+    **The top two tiers (`distinguished`, `productive`) are
+    architecturally reachable but nothing produces their evidence yet** —
+    `distinguished` needs a contrast-type activity (design brief §11C,
+    "can you tell these two apart," which `grammar_completion` does not
+    test — it tests "recall the right one from a pool," not
+    discrimination between a specific confusable pair), `productive`
+    needs a production/transformation activity (§11F/G). Both are
+    Phase 9 work, deliberately still not started (see below) — this is
+    documented in the function's own doc comment, not silently swept
+    under a TODO.
+  - `GrammarPriorityBucket` (`'worth_learning_now'|'developing'|
+    'strong'|'recently_encountered'`), `GRAMMAR_PRIORITY_BUCKET_LABELS`,
+    `GRAMMAR_PRIORITY_BUCKET_ORDER` (dashboard section order, most
+    actionable first), `computeGrammarPriorityBucket(input)` — a simple,
+    explainable four-way heuristic (design brief §14 explicitly prefers
+    this over an opaque numeric score): `strong` (recognized, no recent
+    "again" ratings) → `developing` (tracked, not yet strong) →
+    `worth_learning_now` (untracked, encountered 3+ times) →
+    `recently_encountered` (everything else).
+  - `explainGrammarPriority(input & { distinctSourceCount })` — the prose
+    one-liner behind a bucket assignment (§14's own worked example),
+    e.g. "Encountered 3 times, across 2 sources, needed help on 1 of the
+    last 5 reviews." — rendered directly on both `/grammar` and the
+    detail page instead of a bare number, so the ranking is always
+    auditable from the UI itself.
+  - `GRAMMAR_LEARNER_STATE_LABELS`, `GRAMMAR_RELATIONSHIP_TYPE_LABELS`,
+    `GRAMMAR_RELATIONSHIP_TYPES` — display-label lookups for the new UI.
+  - `buildGrammarCompletionChoices` gained a 4th, optional
+    `relatedPatternIds: ReadonlySet<string>` parameter — patterns in the
+    set are ranked ahead of the rest of the corpus when picking
+    distractors, falling back to the previous whole-corpus hash order
+    when the set is empty (unchanged default behavior for every existing
+    caller/test).
+
+- `src/db/repository.ts`:
+  - `GrammarPatternSummary` gained `confirmedCount`, `distinctSourceCount`,
+    `state`, `priorityBucket`, `priorityExplanation`, `recentAgainCount`,
+    `recentReviewCount`. `listGrammarPatternSummaries()` rewritten to stay
+    batched (five whole-table reads — `grammarPatterns`, `sentenceGrammar`,
+    `studyItems` filtered to `grammarPattern`, `bookSentences`, `books` —
+    plus one `reviews` read scoped to just each pattern's
+    `grammar_comprehension` study item, never N+1 regardless of pattern
+    count, same discipline as `listStudyItemSummaries`). "Recent" reviews
+    (last 7, for the "needed help on N of the last M" explanation) are
+    scoped to `grammar_comprehension` specifically, not `grammar_completion`
+    too — comprehension is self-rated on every review regardless of
+    whether the learner struggled, so its rating history is the more
+    direct "did this feel hard" signal; completion's auto-graded
+    correctness is already folded into its own FSRS state, a different
+    kind of evidence.
+  - `GrammarRelationshipView` (`{relationship, otherPattern}`) and
+    `listGrammarRelationshipsForPattern(grammarPatternId)` (new) — queries
+    both the `patternAId` and `patternBId` indexes and bulk-fetches the
+    other pattern in each edge, for the detail page's "Related patterns"
+    section. `ensureGrammarRelationship`/`recordGrammarRelationshipObservation`
+    and the underlying `grammarRelationships` table/sync wiring already
+    existed from Phase 1 groundwork — Phase 8's actual new work is this
+    read path plus the two UI consumers below.
+
+- `src/pages/GrammarListPage.tsx` — rewritten from one flat
+  encounter-count-sorted list to sections grouped by `priorityBucket`
+  (`GRAMMAR_PRIORITY_BUCKET_ORDER`), sorted by `encounterCount` within
+  each section, showing `priorityExplanation` in place of the old raw
+  "N encounters" text. No JLPT-order syllabus anywhere — native encounter
+  frequency/diversity/evidence, computed from the learner's own tagged
+  corpus, is the only ranking input (design brief's own repeated
+  instruction).
+
+- `src/pages/GrammarPatternDetailPage.tsx` — shows the derived
+  `GrammarLearnerState` as a badge alongside the existing `Tracked` pill
+  (computed locally from the page's own encounters/study-items query, not
+  by calling the batched `listGrammarPatternSummaries` for a single
+  pattern). New "Related patterns" section: lists existing
+  `GrammarRelationship` edges (via `listGrammarRelationshipsForPattern`,
+  each row linking to the other pattern's own detail page) plus an
+  inline picker (relationship-type `<select>` + pattern `<select>` +
+  "Link" button) that calls `ensureGrammarRelationship` — no native
+  `window.prompt`/`confirm` (PWA constraint, see memory note), plain
+  form controls only.
+
+- `src/pages/PracticePage.tsx` — new grammar natural-encounter panel
+  ("Recognized this grammar without hints?"), directly mirroring the
+  existing vocabulary one (`NATURAL_ENCOUNTER_RATINGS`,
+  `markGrammarEncounter`/`recordGrammarNaturalEncounter`, disables the row
+  after rating). Deliberately scoped to only *already-tracked* patterns
+  linked to the current sentence via `SentenceGrammar` (queries
+  `sentenceGrammar` for the sentence, then filters to patterns with an
+  existing `grammarPattern` study item) — an untracked, merely-noticed
+  pattern never shows a rating row here, matching
+  `recordGrammarNaturalEncounter`'s own doc comment that this policy
+  belongs in the UI layer, not the primitive.
+
+- `src/pages/ReviewPage.tsx` — the `grammar_completion` scope-building
+  block now does one extra batched `db.grammarRelationships.toArray()`
+  read (only when there's at least one tracked pattern) and builds a
+  `patternId -> Set<relatedPatternId>` map from it, passed as
+  `buildGrammarCompletionChoices`'s new 4th argument. A distractor the
+  learner has actually flagged as confusable (via the detail page's new
+  picker) now out-ranks a random unrelated pattern from the corpus.
+
+- Tests: `tests/grammarPatterns.test.ts` (new describe blocks for
+  `computeGrammarLearnerState`, `computeGrammarPriorityBucket`,
+  `explainGrammarPriority`, and a `relatedPatternIds`-ranking case for
+  `buildGrammarCompletionChoices`), `tests/data.test.ts` (new
+  `listGrammarPatternSummaries`/`listGrammarRelationshipsForPattern`
+  describe block — bucket assignment across all four buckets, source-
+  diversity counting across two books, recent-review needed-help
+  counting, and both directions of the relationship-edge lookup),
+  `tests/grammarListPage.test.tsx` (updated the encounter-count assertion
+  for the new explanation text, added a bucket-sections test),
+  `tests/grammarPatternDetailPage.test.tsx` (new: Recognized badge once
+  FSRS-proficient, empty related-patterns state, listing an existing
+  relationship, creating one via the picker), `tests/practicePage.test.tsx`
+  (new describe block: panel hidden with no linked pattern, hidden for a
+  merely-noticed-but-untracked pattern, records a review and disables the
+  row for a tracked one), `tests/reviewPage.test.tsx` (new case: computes
+  the *default* no-relationship distractor set via the real
+  `buildGrammarCompletionChoices`, picks a pattern that default ordering
+  would exclude, links it via `ensureGrammarRelationship`, then asserts
+  it renders as a choice — proves the relationship drove inclusion rather
+  than hash luck).
+
+**Deliberately still not done** (grammar-learning system's own Phase 9,
+distinct from the unrelated general-roadmap "Phase 9" mentioned earlier in
+this file): production/transformation-type review activities (design
+brief §11 D/F/G — prediction, transformation, production) and a
+contrast-type activity (§11C). The plan's own scoping guidance called
+these out as reasonable to defer past v1, and nothing elsewhere in this
+pass depends on them existing — `computeGrammarLearnerState`'s top two
+tiers simply stay unreachable in practice until they land, which is
+surfaced honestly in that function's doc comment and in the dashboard
+(patterns can reach `strong`, i.e. `recognized`, but never visibly become
+`distinguished`/`productive` yet since nothing supplies that state or a
+corresponding label anywhere in the UI). Revisit if usage of the current
+system shows the two-activity-type v1 (`grammar_comprehension`/
+`grammar_completion`) isn't giving learners enough signal on its own.
+
+**Verified**: `npm run typecheck`, `npm run test` (full suite: 693 passed,
+2 pre-existing skips, 0 failed — up from 663), `npm run lint` (no new
+warnings beyond the pre-existing ones), and `npm run build` all green.
 
 **Verified**: `npm run check` green — 663 tests passed (up from 650), 2
 pre-existing skips (unrelated), 0 failed. Run 7× total across the session

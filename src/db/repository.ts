@@ -50,7 +50,14 @@ import {
   parseSatoriCsvText,
   type ImportPreview,
 } from '../lib/csvImport';
-import { normalizeGrammarPatternKey } from '../lib/grammarPatterns';
+import {
+  computeGrammarLearnerState,
+  computeGrammarPriorityBucket,
+  explainGrammarPriority,
+  normalizeGrammarPatternKey,
+  type GrammarLearnerState,
+  type GrammarPriorityBucket,
+} from '../lib/grammarPatterns';
 import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
 import { isHanCharacter } from '../lib/kanji';
 import {
@@ -2884,36 +2891,168 @@ export async function listSentenceGrammarForPattern(
 export interface GrammarPatternSummary {
   pattern: GrammarPattern;
   encounterCount: number;
+  confirmedCount: number;
+  distinctSourceCount: number;
   tracked: boolean;
+  state: GrammarLearnerState;
+  priorityBucket: GrammarPriorityBucket;
+  priorityExplanation: string;
+  recentAgainCount: number;
+  recentReviewCount: number;
 }
 
 /**
- * Every GrammarPattern with its encounter count (SentenceGrammar links) and
- * whether it's currently tracked (has any grammarPattern-subject StudyItem)
- * — the `/grammar` browser's list view. Batched (three whole-table reads
- * regardless of pattern count), not N+1 — same shape as
- * listStudyItemSummaries.
+ * Every GrammarPattern with its encounter/source-diversity counts, derived
+ * learner state (design brief §9, computeGrammarLearnerState), and
+ * dashboard priority bucket (§13/§14, computeGrammarPriorityBucket) — the
+ * `/grammar` browser's list view. Batched, not N+1: five whole-table reads
+ * (plus one `reviews` read scoped to grammar study items) regardless of
+ * pattern count, same discipline as listStudyItemSummaries.
+ *
+ * "Recent" reviews (for the priority explanation's "needed help on N of
+ * the last M reviews") are scoped to each pattern's own
+ * `grammar_comprehension` study item specifically, not `grammar_completion`
+ * too — comprehension is self-rated on every review regardless of whether
+ * the learner actually struggled, so its rating history is the more direct
+ * "did this feel hard" signal; completion's auto-graded correctness is a
+ * different kind of evidence already folded into its own FSRS state.
  */
 export async function listGrammarPatternSummaries(): Promise<GrammarPatternSummary[]> {
   const db = getDb();
-  const [patterns, links, studyItems] = await Promise.all([
+  const [patterns, links, studyItems, bookSentences, books] = await Promise.all([
     db.grammarPatterns.toArray(),
     db.sentenceGrammar.toArray(),
     db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
+    db.bookSentences.toArray(),
+    db.books.toArray(),
   ]);
-  const encounterCountByPatternId = new Map<string, number>();
-  for (const link of links) {
-    encounterCountByPatternId.set(
-      link.grammarPatternId,
-      (encounterCountByPatternId.get(link.grammarPatternId) ?? 0) + 1,
-    );
+
+  const sourceKeyByBookId = new Map(books.map((book) => [book.id, book.sourceKey ?? book.id]));
+  const sourceKeysBySentenceId = new Map<string, Set<string>>();
+  for (const membership of bookSentences) {
+    const key = sourceKeyByBookId.get(membership.bookId);
+    if (!key) continue;
+    const existing = sourceKeysBySentenceId.get(membership.sentenceId);
+    if (existing) existing.add(key);
+    else sourceKeysBySentenceId.set(membership.sentenceId, new Set([key]));
   }
-  const trackedPatternIds = new Set(studyItems.map((item) => item.subjectId));
-  return patterns.map((pattern) => ({
-    pattern,
-    encounterCount: encounterCountByPatternId.get(pattern.id) ?? 0,
-    tracked: trackedPatternIds.has(pattern.id),
-  }));
+
+  const linksByPatternId = new Map<string, SentenceGrammar[]>();
+  for (const link of links) {
+    const list = linksByPatternId.get(link.grammarPatternId);
+    if (list) list.push(link);
+    else linksByPatternId.set(link.grammarPatternId, [link]);
+  }
+
+  const studyItemsByPatternId = new Map<string, StudyItem[]>();
+  for (const item of studyItems) {
+    const list = studyItemsByPatternId.get(item.subjectId);
+    if (list) list.push(item);
+    else studyItemsByPatternId.set(item.subjectId, [item]);
+  }
+  const comprehensionStudyItemIds = studyItems
+    .filter((item) => item.activityType === 'grammar_comprehension')
+    .map((item) => item.id);
+  const recentReviews = comprehensionStudyItemIds.length
+    ? await db.reviews.where('studyItemId').anyOf(comprehensionStudyItemIds).toArray()
+    : [];
+  const reviewsByStudyItemId = new Map<string, Review[]>();
+  for (const review of recentReviews) {
+    const list = reviewsByStudyItemId.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByStudyItemId.set(review.studyItemId, [review]);
+  }
+
+  return patterns.map((pattern) => {
+    const patternLinks = linksByPatternId.get(pattern.id) ?? [];
+    const encounterCount = patternLinks.length;
+    const confirmedCount = patternLinks.filter((link) => link.confirmedByLearner).length;
+    const distinctSentenceIds = [...new Set(patternLinks.map((link) => link.sentenceId))];
+    const sourceKeys = new Set<string>();
+    for (const sentenceId of distinctSentenceIds) {
+      for (const key of sourceKeysBySentenceId.get(sentenceId) ?? []) sourceKeys.add(key);
+    }
+
+    const patternStudyItems = studyItemsByPatternId.get(pattern.id) ?? [];
+    const tracked = patternStudyItems.length > 0;
+    const comprehensionItem = patternStudyItems.find(
+      (item) => item.activityType === 'grammar_comprehension',
+    );
+    const recent = comprehensionItem
+      ? (reviewsByStudyItemId.get(comprehensionItem.id) ?? [])
+          .slice()
+          .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+          .slice(0, 7)
+      : [];
+    const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
+    const proficient = patternStudyItems.some(
+      (item) =>
+        item.activityType === 'grammar_comprehension' &&
+        isVocabularyItemProficient(item.fsrsState.state),
+    );
+
+    const state = computeGrammarLearnerState({
+      encounterCount,
+      confirmedCount,
+      tracked,
+      proficient,
+    });
+    const priorityInput = {
+      encounterCount,
+      tracked,
+      state,
+      recentAgainCount,
+      recentReviewCount: recent.length,
+    };
+    const priorityBucket = computeGrammarPriorityBucket(priorityInput);
+    const priorityExplanation = explainGrammarPriority({
+      ...priorityInput,
+      distinctSourceCount: sourceKeys.size,
+    });
+
+    return {
+      pattern,
+      encounterCount,
+      confirmedCount,
+      distinctSourceCount: sourceKeys.size,
+      tracked,
+      state,
+      priorityBucket,
+      priorityExplanation,
+      recentAgainCount,
+      recentReviewCount: recent.length,
+    };
+  });
+}
+
+export interface GrammarRelationshipView {
+  relationship: GrammarRelationship;
+  otherPattern: GrammarPattern;
+}
+
+/** Every relationship edge touching `grammarPatternId`, paired with the *other* pattern in each — for the detail page's "Related patterns" section (design brief §7/§8, grammar-learning system Phase 8). */
+export async function listGrammarRelationshipsForPattern(
+  grammarPatternId: string,
+): Promise<GrammarRelationshipView[]> {
+  const db = getDb();
+  const [asA, asB] = await Promise.all([
+    db.grammarRelationships.where('patternAId').equals(grammarPatternId).toArray(),
+    db.grammarRelationships.where('patternBId').equals(grammarPatternId).toArray(),
+  ]);
+  const relationships = [...asA, ...asB];
+  if (relationships.length === 0) return [];
+  const otherIds = relationships.map((relationship) =>
+    relationship.patternAId === grammarPatternId
+      ? relationship.patternBId
+      : relationship.patternAId,
+  );
+  const otherPatterns = await db.grammarPatterns.bulkGet(otherIds);
+  const views: GrammarRelationshipView[] = [];
+  relationships.forEach((relationship, index) => {
+    const otherPattern = otherPatterns[index];
+    if (otherPattern) views.push({ relationship, otherPattern });
+  });
+  return views;
 }
 
 /**
