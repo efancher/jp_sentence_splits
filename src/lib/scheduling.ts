@@ -189,14 +189,16 @@ export function isSentenceReadyForFullReview(
  * documented intent — see `ErrorClassification`'s comment in
  * domain/types.ts — and this codebase's repeated "don't overbuild for
  * unproven need" precedent). Two evidence sources:
- * - A typed answer that doesn't match what was expected
- *   (`reading_production`/`sentence_transformation` cards) — the specific
- *   text comparison already happened in the UI to show "✓/✗", this just
- *   reuses the same two strings to decide *why* it was wrong.
+ * - A typed answer/selected choice that doesn't match what was expected
+ *   (`reading_production`/`sentence_transformation`/`grammar_completion`
+ *   cards) — the specific comparison already happened in the UI to show
+ *   "✓/✗", this just reuses the same two strings to decide *why* it was
+ *   wrong.
  * - A failed (`again`) contrastive-pair review — the card's entire premise
  *   is "can you tell these two words apart," so a miss is definitionally a
  *   `vocabulary_confusion`, no text comparison needed.
- * Comprehension/listening/reading_in_context stay unclassified: a bare
+ * Comprehension/listening/reading_in_context/grammar_comprehension stay
+ * unclassified: a bare
  * "again" there could mean anything, and guessing would be noise, not
  * signal.
  */
@@ -214,6 +216,7 @@ export function classifyReviewError(input: {
   ) {
     if (input.activityType === 'reading_production') return 'incorrect_reading';
     if (input.activityType === 'sentence_transformation') return 'grammar_misunderstanding';
+    if (input.activityType === 'grammar_completion') return 'grammar_misunderstanding';
   }
   if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
     return 'vocabulary_confusion';

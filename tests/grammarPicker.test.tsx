@@ -91,7 +91,7 @@ describe('GrammarPicker', () => {
     ).toBe(0);
   });
 
-  it('"Track" confirms the occurrence and creates a grammarPattern study item', async () => {
+  it('"Track" confirms the occurrence and creates both starting grammarPattern study items', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-1', pattern.id, {});
     const user = userEvent.setup();
@@ -105,9 +105,12 @@ describe('GrammarPicker', () => {
       .studyItems.where('subjectId')
       .equals(pattern.id)
       .toArray();
-    expect(studyItems).toHaveLength(1);
-    expect(studyItems[0]?.subjectType).toBe('grammarPattern');
-    expect(studyItems[0]?.activityType).toBe('grammar_comprehension');
+    expect(studyItems).toHaveLength(2);
+    expect(studyItems.every((item) => item.subjectType === 'grammarPattern')).toBe(true);
+    expect(studyItems.map((item) => item.activityType).sort()).toEqual([
+      'grammar_completion',
+      'grammar_comprehension',
+    ]);
   });
 
   it('"Explain" expands the form and Save persists edits to the pattern and the occurrence', async () => {

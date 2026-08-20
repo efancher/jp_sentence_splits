@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb, updateSettings } from '../src/db/repository';
+import {
+  ensureGrammarPattern,
+  ensureGrammarStudyItem,
+  ensureSentenceGrammar,
+  getDb,
+  updateSettings,
+} from '../src/db/repository';
 import {
   conjugate,
   conjugationFormsForWordClass,
@@ -1330,5 +1336,144 @@ describe('ReviewPage', () => {
     // Graduated item stays graduated — nothing else was due/pending, so
     // the queue empties instead of ever showing the graduated card.
     await screen.findByText('All caught up.');
+  });
+
+  // ---------------------------------------------------------------------
+  // Grammar-pattern review (grammar-learning system Phase 5, docs/STATUS.md).
+  // Global scope only (no bookId) — see GRAMMAR_ACTIVITY_TYPES's doc
+  // comment in ReviewPage.tsx. Unlike every other category, a grammar
+  // study item is never lazily seeded by ReviewPage itself, so these tests
+  // pre-seed via ensureGrammarStudyItem directly (mirroring how "Track" in
+  // GrammarPicker would) rather than relying on the pending-seed pool.
+  // ---------------------------------------------------------------------
+
+  it('renders a grammar_comprehension card, reveals the pattern meaning, and records the review', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-1',
+      normalizedKey: 'sent-grammar-1',
+      japanese: 'そんなこと言うわけないでしょ。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd say something like that.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-1');
+
+    const pattern = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    await ensureSentenceGrammar('sent-grammar-1', pattern.id, { confirmedByLearner: true });
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    // Keep grammar_completion out of this test's queue/pending-seed pool
+    // entirely — it already has a study item, just far in the future.
+    const completionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await db.studyItems.update(completionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText('そんなこと言うわけないでしょ。');
+    expect(screen.getByText(/What does/)).toBeInTheDocument();
+    expect(screen.getByText(/Grammar comprehension/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(await screen.findByText("there's no way...")).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const reviews = await db.reviews.toArray();
+      expect(reviews.some((review) => review.rating === 'good')).toBe(true);
+    });
+  });
+
+  it('renders a grammar_completion card, grades the chosen construction, and records the review', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-2',
+      normalizedKey: 'sent-grammar-2',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-2');
+
+    const correct = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarPattern('〜てしまう');
+    await ensureSentenceGrammar('sent-grammar-2', correct.id, { confirmedByLearner: true });
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction/);
+    // Blanking: 〜わけがない strips to わけがない, which appears verbatim
+    // in 忘れるわけがない — so the sentence should render blanked.
+    expect(screen.queryByText('忘れるわけがない。')).not.toBeInTheDocument();
+    expect(screen.getByText('_____')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '〜わけがない' }));
+
+    expect(await screen.findByText('✓ Correct')).toBeInTheDocument();
+    expect(screen.queryByText('_____')).not.toBeInTheDocument();
+    expect(screen.getAllByText('〜わけがない').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const reviews = await db.reviews.toArray();
+      expect(reviews.some((review) => review.responseRaw === '〜わけがない')).toBe(true);
+    });
+    const [review] = await db.reviews
+      .filter((item) => item.responseRaw === '〜わけがない')
+      .toArray();
+    expect(review?.expectedAnswer).toBe('〜わけがない');
+    expect(review?.rating).toBe('good');
   });
 });

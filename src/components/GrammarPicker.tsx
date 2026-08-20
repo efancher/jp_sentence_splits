@@ -235,7 +235,13 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                   await ensureSentenceGrammar(sentenceId, pattern.id, {
                     confirmedByLearner: true,
                   });
+                  // Seed both starting activity types together (design
+                  // brief §11's "smallest set that provides substantial
+                  // value") — Track is the only entry point into grammar's
+                  // FSRS rotation, ReviewPage never lazily seeds a new
+                  // grammar study item on its own.
                   await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+                  await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
                 })()
               }
               onRemove={() => void removeSentenceGrammar(link.id)}

@@ -2916,6 +2916,29 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
   }));
 }
 
+/**
+ * Most-recently-linked sentence for a grammar pattern — mirrors
+ * pickContextSentenceForVocabularyItem's shape exactly. Used by ReviewPage
+ * to pick which of a tracked pattern's encounters to show for a
+ * grammar_comprehension/grammar_completion card.
+ */
+export async function pickContextSentenceForGrammarPattern(
+  grammarPatternId: string,
+): Promise<{ sentence: Sentence; sentenceGrammar: SentenceGrammar } | undefined> {
+  const db = getDb();
+  const links = await db.sentenceGrammar
+    .where('grammarPatternId')
+    .equals(grammarPatternId)
+    .toArray();
+  if (links.length === 0) return undefined;
+  const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  for (const link of sorted) {
+    const sentence = await db.sentences.get(link.sentenceId);
+    if (sentence) return { sentence, sentenceGrammar: link };
+  }
+  return undefined;
+}
+
 /** Get-or-create a grammarPattern-subject study item for a given activityType — thin wrapper, mirrors ensureVocabularyStudyItem. */
 export async function ensureGrammarStudyItem(
   grammarPatternId: string,

@@ -147,12 +147,12 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phases 1-4 — schema/repository/sync/
+- **Grammar-learning system** (new; Phases 1-5 — schema/repository/sync/
   backup foundation, manual annotation from Analyze, the `/grammar`
-  browser/detail UI, and AI-assisted suggestion/explanation, see the
-  Feature walkthrough below — are done; a dedicated review-card UI is not
-  built yet): a second layer on top of the Cure-Dolly structural analysis,
-  answering "what reusable
+  browser/detail UI, AI-assisted suggestion/explanation, and
+  `grammar_comprehension`/`grammar_completion` review cards, see the
+  Feature walkthrough below — are all done): a second layer on top of the
+  Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
   the canonical construction (e.g. ～わけがない), corpus-wide, deduped on a
@@ -302,6 +302,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.
+- **GrammarPattern subject** (grammar-learning system Phase 5):
+  `grammar_comprehension` (show a sentence containing the tracked pattern,
+  reveal what it contributes) and `grammar_completion` (multiple choice
+  among the pattern and up to 3 distractors from the corpus, blanking the
+  sentence when the pattern's canonical name happens to appear in it
+  verbatim — `blankPatternInSentence`, `src/lib/grammarPatterns.ts`).
+  Uniquely among activity types, **never lazily seeded by `ReviewPage`
+  itself** — only "Track" in `GrammarPicker.tsx` creates these study
+  items (both together), and only in the global `/review` queue, never
+  book-scoped (a tracked pattern isn't "of" one book).
 
 **Gating and mnemonic/assistance tracking**: a sentence's full-sentence
 cards (`comprehension`/`reading_in_context`) are deliberately withheld

@@ -7,6 +7,7 @@ import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
   deferUnreadySentenceReviews,
+  ensureGrammarStudyItem,
   ensureStudyItem,
   ensureVocabularyStudyItem,
   getConfusionPairCandidates,
@@ -14,6 +15,7 @@ import {
   getDueStudyItems,
   getSentenceFullReviewReadiness,
   getVocabularyTargetCandidates,
+  pickContextSentenceForGrammarPattern,
   readSettings,
   recordReview,
   reportCardIssue,
@@ -22,6 +24,7 @@ import {
 } from '../db/repository';
 import type {
   Book,
+  GrammarPattern,
   ReviewAssistance,
   ReviewRating,
   Sentence,
@@ -37,6 +40,10 @@ import {
   type ConjugatedForm,
   type ConjugationWordClass,
 } from '../lib/conjugation';
+import {
+  blankPatternInSentence,
+  buildGrammarCompletionChoices,
+} from '../lib/grammarPatterns';
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { normalizeSentenceKey } from '../lib/normalize';
@@ -109,6 +116,24 @@ const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
  */
 const TRANSFORMATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
 
+/**
+ * Grammar-pattern review (grammar-learning system Phase 5, docs/STATUS.md):
+ * subjectType `grammarPattern`, subjectId a GrammarPattern.id. Unlike every
+ * other category above, this one is never lazily seeded by ReviewPage
+ * itself — a grammarPattern study item only ever comes from an explicit
+ * "Track" in GrammarPicker (src/components/GrammarPicker.tsx), which seeds
+ * both activity types together. `candidates` below is therefore built from
+ * *already-tracked* patterns only (not "every pattern in scope"), so the
+ * generic pending-seed pool naturally seeds nothing new for this
+ * descriptor — it only catches an older-Track pattern that's missing one of
+ * the two types (see buildActivityDescriptors). Global scope only (no
+ * bookId): a pattern isn't really "of" one book the way a sentence is.
+ */
+const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = [
+  'grammar_comprehension',
+  'grammar_completion',
+];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
@@ -118,6 +143,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   listening: 'Listening',
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Sentence transformation',
+  grammar_comprehension: 'Grammar comprehension',
+  grammar_completion: 'Grammar completion',
 };
 
 interface SentenceTransformationCandidate {
@@ -197,6 +224,18 @@ const RATINGS: { value: ReviewRating; label: string }[] = [
   { value: 'easy', label: 'Easy' },
 ];
 
+interface GrammarReviewCandidate {
+  pattern: GrammarPattern;
+  sentence: Sentence;
+  /**
+   * Includes the correct pattern; length 1 means no other pattern exists
+   * yet to contrast against (a fresh corpus with only one tracked
+   * pattern) — GrammarCompletionCard degrades to a plain reveal in that
+   * case rather than a broken one-option "choice."
+   */
+  choices: GrammarPattern[];
+}
+
 interface QueueCard {
   studyItem: StudyItem;
   sentence: Sentence;
@@ -208,6 +247,8 @@ interface QueueCard {
   confusionPair?: ConfusionPairCandidate;
   /** Set only for sentence-transformation cards (Phase 7.9). */
   transformation?: SentenceTransformationCandidate;
+  /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
+  grammar?: GrammarReviewCandidate;
 }
 
 /** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
@@ -283,6 +324,8 @@ interface ReviewScope {
   existingConfusionItems: StudyItem[];
   sentenceTransformationCandidates: SentenceTransformationCandidate[];
   existingTransformationItems: StudyItem[];
+  grammarCandidates: GrammarReviewCandidate[];
+  existingGrammarItems: StudyItem[];
 }
 
 function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
@@ -351,6 +394,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+    }),
+    defineActivityDescriptor<GrammarReviewCandidate>({
+      key: 'grammar',
+      activityTypes: GRAMMAR_ACTIVITY_TYPES,
+      candidates: scope.grammarCandidates,
+      existingItems: scope.existingGrammarItems,
+      subjectId: (candidate) => candidate.pattern.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        grammar: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureGrammarStudyItem(candidate.pattern.id, activityType),
     }),
   ];
 }
@@ -501,6 +558,42 @@ export function ReviewPage() {
         transformationVocabularyItemIdSet.has(item.subjectId),
     );
 
+    // Grammar patterns (grammar-learning system Phase 5): global scope
+    // only (bookId unset) — a tracked pattern isn't scoped to one book the
+    // way a sentence is, and its "context sentence" may come from any book
+    // it's been encountered in. Candidates are built from already-tracked
+    // patterns (any existing grammarPattern study item), not "every
+    // pattern in the corpus" — see GRAMMAR_ACTIVITY_TYPES's doc comment.
+    let grammarCandidates: GrammarReviewCandidate[] = [];
+    let existingGrammarItems: StudyItem[] = [];
+    if (!bookId) {
+      const grammarStudyItems = (
+        await db.studyItems.where('activityType').anyOf(GRAMMAR_ACTIVITY_TYPES).toArray()
+      ).filter((item) => item.subjectType === 'grammarPattern');
+      const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
+      if (trackedPatternIds.length > 0) {
+        const [trackedPatterns, allPatterns] = await Promise.all([
+          db.grammarPatterns.bulkGet(trackedPatternIds),
+          db.grammarPatterns.toArray(),
+        ]);
+        for (const pattern of trackedPatterns) {
+          if (!pattern) continue;
+          const context = await pickContextSentenceForGrammarPattern(pattern.id);
+          if (!context) continue;
+          const otherPatterns = allPatterns.filter((item) => item.id !== pattern.id);
+          grammarCandidates.push({
+            pattern,
+            sentence: context.sentence,
+            choices: buildGrammarCompletionChoices(pattern, otherPatterns),
+          });
+        }
+        const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
+        existingGrammarItems = grammarStudyItems.filter((item) =>
+          grammarCandidateIds.has(item.subjectId),
+        );
+      }
+    }
+
     return {
       book,
       sentences,
@@ -513,6 +606,8 @@ export function ReviewPage() {
       existingConfusionItems,
       sentenceTransformationCandidates,
       existingTransformationItems,
+      grammarCandidates,
+      existingGrammarItems,
     };
   }, [bookId]);
 
@@ -708,15 +803,17 @@ export function ReviewPage() {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
-      const expectedReading = current.transformation
+      const expectedAnswerValue = current.transformation
         ? current.transformation.target.reading
-        : current.target?.vocabularyItem.reading;
+        : current.grammar
+          ? current.grammar.pattern.canonicalName
+          : current.target?.vocabularyItem.reading;
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
         responseRaw: typedResponse || undefined,
-        expectedAnswer: typedResponse ? expectedReading : undefined,
+        expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
       });
       setQueue((q) => q.slice(1));
     } finally {
@@ -902,6 +999,22 @@ export function ReviewPage() {
                   setTypedResponse(value);
                   setRevealed(true);
                 }}
+              />
+            ) : current.grammar && current.studyItem.activityType === 'grammar_completion' ? (
+              <GrammarCompletionCard
+                key={current.studyItem.id}
+                candidate={current.grammar}
+                revealed={revealed}
+                onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
+              />
+            ) : current.grammar ? (
+              <GrammarComprehensionCard
+                candidate={current.grammar}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
               />
             ) : (
               <>
@@ -1243,6 +1356,159 @@ function ContrastivePairCard({
           Reveal
         </button>
       ) : null}
+    </>
+  );
+}
+
+/**
+ * Grammar comprehension (grammar-learning system Phase 5, design brief
+ * §11A): show a native sentence containing the tracked pattern, ask what
+ * it contributes, reveal the pattern's own meaning/explanation alongside
+ * the sentence translation — self-rated, no typed/selected answer, same
+ * "bare self-rating, no auto-classification" shape as plain
+ * comprehension/reading_in_context.
+ */
+function GrammarComprehensionCard({
+  candidate,
+  revealed,
+  onReveal,
+}: {
+  candidate: GrammarReviewCandidate;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const { pattern, sentence } = candidate;
+  return (
+    <>
+      <div className="jp jp-lg">{sentence.japanese}</div>
+      <div className="muted">
+        What does <span className="jp">{pattern.canonicalName}</span> contribute here?
+      </div>
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal
+        </button>
+      ) : (
+        <>
+          {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+          {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
+          {pattern.structuralNotes ? (
+            <div className="muted">{pattern.structuralNotes}</div>
+          ) : null}
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Grammar completion (grammar-learning system Phase 5, design brief §11E):
+ * multiple choice among the tracked pattern and up to three distractors
+ * (GrammarReviewCandidate.choices, precomputed in ReviewPage's scope
+ * query). Blanks the pattern's surface form when it appears verbatim in
+ * the sentence (blankPatternInSentence — best-effort, no real span data
+ * exists yet); otherwise shows the full sentence and asks which
+ * construction it uses, rather than guessing at a blank. Auto-graded (the
+ * app knows the right choice), but still funnels through the same
+ * typed-response/self-rate flow every other typed/selected card uses —
+ * `onCheck` sets `typedResponse` to the chosen pattern's name, which
+ * `classifyReviewError` then compares against `expectedAnswer` the same
+ * way it already does for reading_production/sentence_transformation.
+ * Degrades to a plain reveal (like GrammarComprehensionCard) when fewer
+ * than two choices exist — a fresh corpus with only one tracked pattern
+ * has nothing to contrast against yet.
+ */
+function GrammarCompletionCard({
+  candidate,
+  revealed,
+  onCheck,
+}: {
+  candidate: GrammarReviewCandidate;
+  revealed: boolean;
+  onCheck: (chosenCanonicalName: string) => void;
+}) {
+  const { pattern, sentence, choices } = candidate;
+  const [selected, setSelected] = useState<string | null>(null);
+  const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
+
+  if (choices.length < 2) {
+    return (
+      <>
+        <div className="jp jp-lg">{sentence.japanese}</div>
+        <div className="muted">
+          What does <span className="jp">{pattern.canonicalName}</span> contribute here?
+        </div>
+        {!revealed ? (
+          <button type="button" onClick={() => onCheck('')}>
+            Reveal
+          </button>
+        ) : (
+          <>
+            {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+            {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          </>
+        )}
+      </>
+    );
+  }
+
+  if (!revealed) {
+    return (
+      <>
+        <div className="jp jp-lg">
+          {blank ? (
+            <>
+              {blank.before}
+              <mark>_____</mark>
+              {blank.after}
+            </>
+          ) : (
+            sentence.japanese
+          )}
+        </div>
+        <div className="muted">
+          {blank
+            ? 'Which construction fits the blank?'
+            : 'Which construction does this sentence use?'}
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          {choices.map((choice) => (
+            <button
+              key={choice.id}
+              type="button"
+              className="jp"
+              onClick={() => {
+                setSelected(choice.canonicalName);
+                onCheck(choice.canonicalName);
+              }}
+            >
+              {choice.canonicalName}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="muted">
+        {selected === pattern.canonicalName ? '✓ Correct' : '✗ Not quite'}
+      </div>
+      <div className="jp jp-lg">
+        {blank ? (
+          <>
+            {blank.before}
+            <mark>{pattern.canonicalName}</mark>
+            {blank.after}
+          </>
+        ) : (
+          sentence.japanese
+        )}
+      </div>
+      {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+      {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
     </>
   );
 }

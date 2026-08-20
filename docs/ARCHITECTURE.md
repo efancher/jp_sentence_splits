@@ -53,7 +53,7 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
-**Grammar-learning system** (additive, Phases 1-4 of its own plan, see
+**Grammar-learning system** (additive, Phases 1-5 of its own plan, see
 `docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
 structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1
 answers "how is this sentence assembled," the new layer answers "what
@@ -82,8 +82,11 @@ integration in this codebase — a `grammar-assist` Supabase Edge Function
 suggestion and context-specific explanation, called from `GrammarPicker.tsx`
 via `src/lib/grammarAssist.ts`. AI output is never authoritative: a
 suggestion only materializes on explicit Add, and a drafted explanation only
-pre-fills the existing manual-edit form, saved by the same Save action. No
-dedicated review-card UI yet.
+pre-fills the existing manual-edit form, saved by the same Save action.
+Phase 5 added FSRS-scheduled review: `grammar_comprehension`/
+`grammar_completion` activity types on the existing `StudyItem`/`Review`
+machinery, entered only via "Track" (never lazily seeded by `ReviewPage`
+itself, unlike every other category), global scope only.
 
 ## Sync engine
 
@@ -113,7 +116,9 @@ is a thin wrapper with no knowledge of sentences/chunks — it only ever sees
 Live since Phase 4 (`comprehension`/`reading_in_context`), extended through
 Phase 7 to `vocabularyItem` and `vocabularyConfusion` subjects and several
 more `activityType`s (`reading_production`, `sentence_transformation`,
-listening, cloze) — see `docs/STATUS.md` for the full list. Also includes
+listening, cloze), and to the `grammarPattern` subject (grammar-learning
+system Phase 5, `grammar_comprehension`/`grammar_completion`) — see
+`docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
 (`isGraduated`, retiring a study item from the due rotation past a
 configurable FSRS-interval threshold).

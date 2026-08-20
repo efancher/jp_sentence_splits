@@ -1,12 +1,13 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system Phase 4 — AI-assisted
-suggestion/explanation — a new `grammar-assist` Supabase Edge Function
-(Claude Haiku) wired into the "Grammar noticed" panel and pattern
-explanation form; suggestions are never auto-applied, only shown for the
-learner to Add/Dismiss or Save-after-editing. Phases 1-3 (corpus-model
-foundation, manual annotation from Analyze, `/grammar` browser/detail)
-already done. Before that: Phase 9 complete —
+Last updated: 2026-08-20 (Grammar-learning system Phase 5 — grammar evidence
++ SRS — `grammar_comprehension`/`grammar_completion` review cards wired
+into `ReviewPage`, global scope only; tracked patterns now actually get
+quizzed instead of just accruing an idle `StudyItem`. Phase 4's
+`grammar-assist` Edge Function has been deployed live and confirmed
+working by the user. Phases 1-4 (corpus-model foundation, manual
+annotation from Analyze, `/grammar` browser/detail, AI-assisted
+suggestion/explanation) already done. Before that: Phase 9 complete —
 Milestone 9 done; sentence translation and vocabulary meaning are now
 editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
 together; card issue reports ("report a problem with this card") added;
@@ -4197,3 +4198,139 @@ pre-existing skips (unrelated), 0 failed, run twice to confirm stability.
 Function itself (Deno, not part of the Vite/Vitest toolchain) was not run
 live — same untested-until-deployed status `invite-book-member` shipped
 with.
+
+**Deployed (2026-08-20)**: the user added `ANTHROPIC_API_KEY` as a
+Supabase function secret and ran `supabase functions deploy grammar-assist`
+(via `npx supabase`, since global npm install isn't supported by the
+Supabase CLI). Confirmed working live.
+
+## Grammar-learning system — Phase 5 (grammar evidence + SRS): done
+
+The smallest useful slice of design brief §11's exercise taxonomy, per the
+plan's own "start with contextual comprehension and contextual completion"
+scoping: two new `StudyActivityType`s, `grammar_comprehension` (§11A) and
+`grammar_completion` (§11E), both `grammarPattern`-subject, both reusing
+`StudyItem`/`Review`/FSRS/the due-queue/the session planner completely
+unchanged — no parallel scheduler, exactly as the architecture discussion
+required.
+
+**Key design decision**: unlike every other `ReviewPage` category
+(sentence/vocabulary/audio/confusion/transformation), grammar is **never
+lazily seeded by `ReviewPage` itself**. "Track" in `GrammarPicker.tsx`
+(Phase 2) is the *only* entry point into grammar's FSRS rotation — updated
+in this pass to seed both `grammar_comprehension` and `grammar_completion`
+together (previously only `grammar_comprehension`). `ReviewPage`'s
+generic descriptor mechanism (`ActivityDescriptor`, Phase 7.10) still
+applies its usual "missing activity type gets lazily seeded" logic, but
+since `candidates` for the grammar descriptor is built from *already-
+tracked* patterns (any pattern with an existing `grammarPattern` study
+item) rather than "every pattern in the corpus," that machinery only ever
+catches an older-Track pattern missing one of the two types (e.g. one
+tracked before this pass shipped) — it can't introduce a pattern that was
+never tracked at all. Global scope only (no `bookId`): a tracked pattern
+isn't "of" one book the way a sentence is, so grammar cards don't appear
+in `/books/:bookId/review`, only `/review`.
+
+Added:
+- `src/lib/grammarPatterns.ts` — two new pure functions, both unit-tested
+  independent of `ReviewPage`: `blankPatternInSentence` (best-effort
+  fill-in-the-blank — finds the pattern's tilde-stripped canonical name as
+  a literal substring of the sentence; returns `null` when it doesn't
+  appear verbatim, e.g. a colloquial variant like わけない for the
+  canonical わけがない, since there's no real span data yet to blank a
+  non-matching substring against — see the "deliberately not done" note
+  below) and `buildGrammarCompletionChoices` (the correct pattern plus up
+  to 3 distractors from the rest of the corpus, both the distractor pick
+  and the final display order deterministic from a hash of the pattern's
+  own id — same seeding approach as `ReviewPage.tsx`'s existing
+  `pickTransformationTarget` — so a pattern's choices don't reshuffle
+  across re-renders/reloads).
+- `src/db/repository.ts` — `pickContextSentenceForGrammarPattern` (most-
+  recently-linked sentence for a pattern, mirrors
+  `pickContextSentenceForVocabularyItem`'s shape exactly).
+- `src/lib/scheduling.ts` — `classifyReviewError` extended: a wrong
+  `grammar_completion` choice classifies as `grammar_misunderstanding`
+  (reusing the existing classification value already used for
+  `sentence_transformation` typed-answer mismatches — same "wrong evidence
+  source, same underlying error type" reasoning).
+- `src/pages/ReviewPage.tsx` — `GRAMMAR_ACTIVITY_TYPES`, a new
+  `GrammarReviewCandidate` shape (`{ pattern, sentence, choices }`, built
+  once per due-queue construction in the existing `scope` live query), a
+  new entry in `buildActivityDescriptors`, and two new card components:
+  - **`GrammarComprehensionCard`** — shows the context sentence, asks
+    "What does 〜X contribute here?", reveals the pattern's
+    `shortMeaning`/`explanation`/`structuralNotes` alongside the sentence
+    translation. Self-rated, no typed/selected answer — same "bare
+    self-rating, no auto-classification" shape as plain
+    `comprehension`/`reading_in_context`.
+  - **`GrammarCompletionCard`** — multiple choice among
+    `GrammarReviewCandidate.choices`; blanks the sentence when
+    `blankPatternInSentence` finds a match, otherwise shows the full
+    sentence and asks which construction it uses rather than guessing at
+    a blank. Auto-graded (the app already knows the right choice) but
+    still funnels through the same `onCheck`/`typedResponse`/self-rate
+    flow every other typed/selected card already uses (mirrors
+    `ReadingProductionCard`/`SentenceTransformationCard`'s `onCheck` shape
+    exactly), so `expectedAnswer`/`responseRaw` and the
+    `classifyReviewError` extension above both work for free. Degrades to
+    a plain reveal (no multiple choice) when fewer than 2 choices exist —
+    a fresh corpus with only one tracked pattern has nothing to contrast
+    against yet.
+  - `handleRate`'s `expectedReading` variable renamed
+    `expectedAnswerValue` and extended with a grammar branch
+    (`current.grammar.pattern.canonicalName`).
+- `src/components/GrammarPicker.tsx` — Track now seeds both activity
+  types in one action (see "Key design decision" above).
+- Tests: `tests/grammarPatterns.test.ts` (new `blankPatternInSentence`/
+  `buildGrammarCompletionChoices` describe blocks — verbatim match,
+  no-match, empty-name, distractor count/no-duplicates,
+  no-other-patterns-yet, and determinism-across-calls cases),
+  `tests/data.test.ts` (`pickContextSentenceForGrammarPattern`, mirroring
+  the existing vocabulary-item version's two cases),
+  `tests/scheduling.test.ts` (`classifyReviewError` with
+  `grammar_completion`, both wrong and correct, plus a
+  `grammar_comprehension` unclassified case), `tests/reviewPage.test.tsx`
+  (two new end-to-end cases: a `grammar_comprehension` card reveal → rate
+  → review recorded, and a `grammar_completion` card choice → grade →
+  reveal → rate → review recorded with the right `responseRaw`/
+  `expectedAnswer`), `tests/grammarPicker.test.tsx` (Track test updated to
+  expect both study items).
+
+**A real bug found by the new `reviewPage.test.tsx` completion test, fixed
+before this shipped**: `GrammarCompletionCard`'s first draft rendered the
+blanked sentence in an unconditional `<div>` *outside* the
+`revealed`/`!revealed` ternary, then rendered the answer-filled sentence
+*again* inside the `revealed` branch — so after answering, the page showed
+both the blank and the answer stacked on top of each other instead of the
+blank being replaced. The test's own assertion
+(`screen.queryByText('_____')).not.toBeInTheDocument()` after reveal)
+caught this immediately; fixed by moving the sentence display fully inside
+each branch of the ternary, matching every other card's existing shape
+(mnemonic: this is exactly the kind of thing "write the test, watch it
+fail against the real component" catches that reading the JSX back doesn't
+— the not-toBeInTheDocument style assertions earn their keep here).
+
+**Deliberately not done yet** (per the plan's own phasing): true span-based
+blanking (`blankPatternInSentence` degrades to "ask which construction,
+don't blank" whenever the canonical name isn't a literal substring — real
+blanking would need `SentenceGrammar.start`/`end` populated, which nothing
+writes yet, including the Phase 4 AI suggestion flow, whose tool schema
+doesn't currently ask the model for span offsets); relationship-based
+distractors (`buildGrammarCompletionChoices` draws from the whole corpus,
+not confusable pairs specifically — `GrammarRelationship` data doesn't
+exist yet, Phase 8); activity types C (Contrast), D (Prediction), F
+(Transformation), G (Production) from design brief §11; any
+learner-state-ladder UI surfacing "Recognized"/"Distinguished" derived from
+this new evidence (Phase 6/7).
+
+**Verified**: `npm run check` green — 663 tests passed (up from 650), 2
+pre-existing skips (unrelated), 0 failed. Run 7× total across the session
+(3 as part of `npm run check`/`test`, 4 standalone) to check for
+flakiness — one transient full-suite-only failure occurred once, but did
+not reproduce on immediate re-run, and the new test file alone ran clean
+across every isolated repeat; consistent with this codebase's
+already-documented history of occasional test-isolation flakiness under
+the full suite (see the Phase 5/9-era "Test-suite flakiness fix" entry
+above) rather than something newly introduced here — not chased further
+without a captured stack trace to diagnose against. `npm run build` and
+`npm run lint` green, no new warnings.

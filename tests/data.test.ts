@@ -37,6 +37,7 @@ import {
   materializeVocabularySelections,
   moveBookSentence,
   getStudyItemDebugInfo,
+  pickContextSentenceForGrammarPattern,
   pickContextSentenceForVocabularyItem,
   rateAttempt,
   recordConfusionObservation,
@@ -1506,6 +1507,27 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     const studyItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
     expect(studyItem.subjectType).toBe('grammarPattern');
     expect(studyItem.subjectId).toBe(pattern.id);
+  });
+
+  it('pickContextSentenceForGrammarPattern returns the most recently linked sentence', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
+    const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {});
+    const newLink = await ensureSentenceGrammar('sent-new', pattern.id, {});
+    await getDb().sentenceGrammar.update(oldLink.id, {
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await getDb().sentenceGrammar.update(newLink.id, {
+      createdAt: '2026-02-01T00:00:00.000Z',
+    });
+
+    const picked = await pickContextSentenceForGrammarPattern(pattern.id);
+    expect(picked?.sentence.id).toBe('sent-new');
+  });
+
+  it('pickContextSentenceForGrammarPattern returns undefined with no links', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    expect(await pickContextSentenceForGrammarPattern(pattern.id)).toBeUndefined();
   });
 
   it('computeGrammarPatternContextDiversity mirrors the vocabulary version, over sentenceGrammar', async () => {

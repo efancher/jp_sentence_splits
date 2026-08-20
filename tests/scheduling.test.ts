@@ -186,6 +186,40 @@ describe('classifyReviewError (evidence-based only)', () => {
     ).toBe('grammar_misunderstanding');
   });
 
+  it('classifies a wrong grammar_completion choice as grammar_misunderstanding', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'grammarPattern',
+        activityType: 'grammar_completion',
+        rating: 'again',
+        responseRaw: '〜はずがない',
+        expectedAnswer: '〜わけがない',
+      }),
+    ).toBe('grammar_misunderstanding');
+  });
+
+  it('does not classify a correct grammar_completion choice', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'grammarPattern',
+        activityType: 'grammar_completion',
+        rating: 'good',
+        responseRaw: '〜わけがない',
+        expectedAnswer: '〜わけがない',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('leaves grammar_comprehension (no typed answer) unclassified', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'grammarPattern',
+        activityType: 'grammar_comprehension',
+        rating: 'again',
+      }),
+    ).toBeUndefined();
+  });
+
   it('does not classify a matching typed answer', () => {
     expect(
       classifyReviewError({
