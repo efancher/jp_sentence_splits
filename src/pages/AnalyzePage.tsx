@@ -414,7 +414,15 @@ export function AnalyzePage() {
         }}
       />
 
-      <GrammarPicker sentenceId={sentenceId} />
+      <GrammarPicker
+        sentenceId={sentenceId}
+        japanese={sentence.japanese}
+        chunks={chunks.map((chunk) => ({
+          japanese: chunk.japanese,
+          role: chunk.role,
+          literalEnglish: chunk.literalEnglish,
+        }))}
+      />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Chunk entry</h3>

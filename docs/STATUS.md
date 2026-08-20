@@ -1,10 +1,11 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system Phase 3 — browser/detail
-UI — `/grammar` list and `/grammar/:patternId` detail page ("Your
-encounters", editable pattern fields, native audio playback). Phase 2
-(manual annotation from Analyze — the "Grammar noticed" panel) and Phase 1
-(corpus-model foundation, migration applied to the live Supabase project)
+Last updated: 2026-08-20 (Grammar-learning system Phase 4 — AI-assisted
+suggestion/explanation — a new `grammar-assist` Supabase Edge Function
+(Claude Haiku) wired into the "Grammar noticed" panel and pattern
+explanation form; suggestions are never auto-applied, only shown for the
+learner to Add/Dismiss or Save-after-editing. Phases 1-3 (corpus-model
+foundation, manual annotation from Analyze, `/grammar` browser/detail)
 already done. Before that: Phase 9 complete —
 Milestone 9 done; sentence translation and vocabulary meaning are now
 editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
@@ -4096,3 +4097,103 @@ brief's "do not build an enormous grammar ontology in v1" instruction).
 pre-existing skips (unrelated), 0 failed, run 3× to confirm no flakiness
 remains. `npm run build` (48 precache entries, up from 46 — the two new
 lazy-loaded routes) and `npm run lint` green, no new warnings.
+
+## Grammar-learning system — Phase 4 (AI-assisted suggestion/explanation): done
+
+First AI involvement in this codebase, period — verified via grep before
+starting that no LLM/AI provider integration existed anywhere prior to this
+pass. Scoped with the user via the architectural-analysis discussion:
+Anthropic (Claude Haiku, cheap/fast tier — good fit for short structured-
+output tasks) called from a new Supabase Edge Function, deliberately
+decoupled from the Hetzner/Tailscale forced-alignment box (a different kind
+of workload, already memory-tight per its own documented budget) rather
+than routed through it — sidesteps both the round-trip-latency concern and
+the memory-budget concern the user raised. Follows the `invite-book-member`
+Edge Function's exact shape (auth-gated via the caller's Supabase session,
+secret held server-side, never shipped to the browser) — a real template
+already existed, not a new pattern.
+
+Added:
+- `supabase/functions/grammar-assist/index.ts` — Deno Edge Function, two
+  actions dispatched by an `action` field (`'suggest'` for candidate-
+  pattern detection, `'explain'` for context-specific explanation) sharing
+  one small `callAnthropic` helper — one function, not two, to keep the
+  deployment surface (`supabase functions deploy`) minimal for two closely
+  related, small LLM calls. Uses raw `fetch` against
+  `https://api.anthropic.com/v1/messages` (no Node SDK import into Deno,
+  per the user's explicit ask), model `claude-haiku-4-5`, and a forced
+  single-tool `tool_choice` with `strict: true` on both tool schemas
+  (`suggest_grammar_patterns`/`explain_grammar_pattern`) — guarantees valid
+  JSON back every time instead of prompting for JSON in prose and
+  regex-parsing it. The suggest prompt is given the sentence, the existing
+  Cure-Dolly chunk analysis as read-only context (not to be repeated), and
+  every canonical pattern name/alias already in the learner's corpus so it
+  can propose `matchedExistingName` instead of minting a near-duplicate —
+  the canonicalization-assist half of design brief §15. The explain prompt
+  is instructed explicitly to keep structural mechanics, communicative
+  function, and natural English as distinct layers, matching this app's
+  existing Cure-Dolly philosophy rather than collapsing into one gloss.
+  Requires an `ANTHROPIC_API_KEY` function secret (**not yet added** — see
+  "Deliberately not done yet" below).
+- `src/lib/grammarAssist.ts` — client wrapper (`suggestGrammarPatterns`/
+  `explainGrammarPattern`), mirroring `sharing.ts`'s `inviteBookMember`
+  degrade-don't-throw shape exactly: not signed in, Supabase not
+  configured, network/server error, or a malformed response all resolve to
+  a typed `{ ok: false, reason }` rather than throwing or silently
+  pretending to succeed — matches this app's existing graceful-degradation
+  precedent for the forced-alignment service in `analysisApi.ts`.
+- `src/components/GrammarPicker.tsx` — two new, additive UI surfaces, both
+  strictly suggestions:
+  - **"Suggest grammar (AI)"** (panel header): calls `suggestGrammarPatterns`
+    with the sentence, chunk context, and existing pattern names; shows
+    each candidate (already-linked ones filtered out) with **Add**
+    (materializes via the same `ensureGrammarPattern`/`ensureSentenceGrammar`
+    path manual Add uses, tagged `provenance: 'ai_suggested'`/
+    `source: 'ai_suggested'`, preferring `matchedExistingName` over
+    `candidateName` when the model found a match) or **Dismiss** (removes
+    from local state only — no repository write, nothing to undo).
+  - **"Suggest explanation (AI)"** (inside a pattern's Explain panel): calls
+    `explainGrammarPattern` and pre-fills the *same* editable
+    `shortMeaning`/`structuralNotes`/`explanation` text fields Phase 2
+    already built — no new save path, no auto-apply. The learner reviews,
+    edits, and taps the existing Save button, or doesn't. AI output cannot
+    become canonical without that explicit action.
+  - Both surfaces render an inline unavailable-reason message instead of
+    erroring when AI is unreachable — the manual Add/Explain/Track/Got-it/
+    Remove flow from Phase 2 is completely unaffected either way.
+- `src/pages/AnalyzePage.tsx` — passes `japanese`/`chunks` down to
+  `GrammarPicker` (needed for both AI actions; not previously required
+  when `GrammarPicker` only read/wrote `SentenceGrammar`/`GrammarPattern`
+  rows via its own live query).
+- `tests/grammarAssist.test.ts` (new) — the one deterministically-testable
+  path in this test environment (no Supabase-mocking harness exists
+  anywhere in this codebase, documented precedent from `sync.test.ts`):
+  both functions resolve to a typed unavailable result without throwing,
+  whatever the local reason (not configured vs. configured-but-signed-out
+  — the test doesn't assume which, since that depends on the environment's
+  own `.env`, and asserts only the *shape* of degradation, which is what
+  actually matters). `tests/grammarPicker.test.tsx` updated for the new
+  required `japanese` prop.
+
+**Deliberately not done yet**: the `ANTHROPIC_API_KEY` secret has not been
+added to the Supabase project and the function has not been deployed
+(`supabase functions deploy grammar-assist`) — both require the user's
+action, same as every prior Postgres migration in this repo. Until then,
+both AI buttons render and degrade gracefully (network/server error) rather
+than doing anything, which is the intended offline-first behavior, not a
+bug. No automated tests exercise the real Anthropic API call itself — same
+testing boundary this codebase already has for the Supabase network path
+(`shouldApplyRemoteEvent` is unit-tested; `pushMutations`/`pullChanges`
+themselves are not). Canonicalization of true near-duplicates that differ
+in more than casing/tilde-placement (e.g. 訳がない vs わけがない, still
+distinct `normalizedKey`s) is only as good as the model's
+`matchedExistingName` guess — no server-side fuzzy-matching safety net
+beyond what `ensureGrammarPattern`'s exact-normalized-key dedup already
+provides from Phase 1.
+
+**Verified**: `npm run check` green — 650 tests passed (up from 648), 2
+pre-existing skips (unrelated), 0 failed, run twice to confirm stability.
+`npm run build` and `npm run lint` green, no new warnings. The Edge
+Function itself (Deno, not part of the Vite/Vitest toolchain) was not run
+live — same untested-until-deployed status `invite-book-member` shipped
+with.

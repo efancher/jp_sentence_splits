@@ -53,7 +53,7 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
-**Grammar-learning system** (additive, Phases 1-3 of its own plan, see
+**Grammar-learning system** (additive, Phases 1-4 of its own plan, see
 `docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
 structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1
 answers "how is this sentence assembled," the new layer answers "what
@@ -76,8 +76,14 @@ added the first UI writer — a "Grammar noticed" panel
 annotation only (search-existing-or-create-new, Got it/Explain/Track).
 Phase 3 added browsing — `/grammar` and `/grammar/:patternId`, mirroring
 `VocabularyListPage.tsx`/`KanjiDetailPage.tsx`, with "Your encounters"
-linking back to sentences/books/native audio. No AI-assisted suggestion
-and no dedicated review-card UI yet.
+linking back to sentences/books/native audio. Phase 4 added the first AI
+integration in this codebase — a `grammar-assist` Supabase Edge Function
+(Claude Haiku, forced structured tool output) for candidate-pattern
+suggestion and context-specific explanation, called from `GrammarPicker.tsx`
+via `src/lib/grammarAssist.ts`. AI output is never authoritative: a
+suggestion only materializes on explicit Add, and a drafted explanation only
+pre-fills the existing manual-edit form, saved by the same Save action. No
+dedicated review-card UI yet.
 
 ## Sync engine
 

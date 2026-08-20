@@ -11,19 +11,32 @@ import {
   updateGrammarPattern,
 } from '../db/repository';
 import type { GrammarPattern, SentenceGrammar } from '../domain/types';
+import {
+  explainGrammarPattern,
+  suggestGrammarPatterns,
+  type GrammarAssistChunkContext,
+  type GrammarSuggestionResult,
+} from '../lib/grammarAssist';
 
 /**
- * Manual grammar-pattern annotation for a sentence (grammar-learning system,
- * Phase 2 — see docs/STATUS.md). Deliberately *not* routed through
- * AnalyzePage's autosave/chunks state: each action here (add/confirm/track/
- * remove) is an immediate, deliberate repository write, not a draft field —
- * the "Grammar noticed" panel should stay fast and skippable, not gate on
- * the debounced save cycle. No AI suggestions yet (Phase 4); this is pure
- * search-existing-or-create-new, validating the domain model with real
- * annotations first.
+ * Grammar-pattern annotation for a sentence (grammar-learning system — see
+ * docs/STATUS.md). Deliberately *not* routed through AnalyzePage's
+ * autosave/chunks state: each action here (add/confirm/track/remove) is an
+ * immediate, deliberate repository write, not a draft field — the "Grammar
+ * noticed" panel should stay fast and skippable, not gate on the debounced
+ * save cycle.
+ *
+ * AI suggestion/explanation (Phase 4) is always non-authoritative: a
+ * suggestion only becomes a real GrammarPattern/SentenceGrammar row when the
+ * learner taps Add, and an AI-drafted explanation only saves when the
+ * learner taps Save on the (unchanged) manual form — see design brief §15.
+ * Degrades silently to manual-only if the AI service is unavailable
+ * (signed out, no Supabase, network/server error).
  */
 export interface GrammarPickerProps {
   sentenceId: string;
+  japanese: string;
+  chunks?: GrammarAssistChunkContext[];
 }
 
 interface LinkedPattern {
@@ -32,10 +45,14 @@ interface LinkedPattern {
   tracked: boolean;
 }
 
-export function GrammarPicker({ sentenceId }: GrammarPickerProps) {
+export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerProps) {
   const [newName, setNewName] = useState('');
   const [expandedPatternId, setExpandedPatternId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<GrammarSuggestionResult[]>([]);
+  const [suggestState, setSuggestState] = useState<
+    { status: 'idle' } | { status: 'loading' } | { status: 'error'; reason: string }
+  >({ status: 'idle' });
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -66,29 +83,128 @@ export function GrammarPicker({ sentenceId }: GrammarPickerProps) {
   const linked = data?.linked ?? [];
   const allPatterns = data?.allPatterns ?? [];
   const linkedPatternIds = new Set(linked.map((item) => item.pattern.id));
+  const linkedNames = new Set(
+    linked.flatMap(({ pattern }) => [pattern.canonicalName, ...pattern.aliases]),
+  );
+
+  async function addPattern(
+    name: string,
+    opts?: { shortMeaning?: string; provenance?: 'manual' | 'ai_suggested' },
+  ): Promise<void> {
+    const existing = allPatterns.find(
+      (pattern) => pattern.canonicalName === name || pattern.aliases.includes(name),
+    );
+    const pattern =
+      existing ??
+      (await ensureGrammarPattern(name, {
+        provenance: opts?.provenance ?? 'manual',
+        shortMeaning: opts?.shortMeaning,
+      }));
+    await ensureSentenceGrammar(sentenceId, pattern.id, {
+      source: opts?.provenance === 'ai_suggested' ? 'ai_suggested' : 'manual',
+    });
+    setExpandedPatternId(pattern.id);
+  }
 
   async function handleAdd() {
     const name = newName.trim();
     if (!name || busy) return;
     setBusy(true);
     try {
-      const existing = allPatterns.find(
-        (pattern) =>
-          pattern.canonicalName === name || pattern.aliases.includes(name),
-      );
-      const pattern =
-        existing ?? (await ensureGrammarPattern(name, { provenance: 'manual' }));
-      await ensureSentenceGrammar(sentenceId, pattern.id, { source: 'manual' });
+      await addPattern(name);
       setNewName('');
-      setExpandedPatternId(pattern.id);
     } finally {
       setBusy(false);
     }
   }
 
+  async function handleSuggest() {
+    setSuggestState({ status: 'loading' });
+    const result = await suggestGrammarPatterns({
+      sentence: japanese,
+      chunks,
+      existingPatternNames: allPatterns.flatMap((pattern) => [
+        pattern.canonicalName,
+        ...pattern.aliases,
+      ]),
+    });
+    if (!result.ok) {
+      setSuggestState({ status: 'error', reason: result.reason });
+      return;
+    }
+    setSuggestState({ status: 'idle' });
+    setSuggestions(
+      result.data.patterns.filter(
+        (item) =>
+          !linkedNames.has(item.candidateName) &&
+          !(item.matchedExistingName && linkedNames.has(item.matchedExistingName)),
+      ),
+    );
+  }
+
   return (
     <section className="panel stack">
-      <h3 style={{ margin: 0 }}>Grammar noticed</h3>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h3 style={{ margin: 0 }}>Grammar noticed</h3>
+        <button
+          type="button"
+          className="ghost"
+          disabled={suggestState.status === 'loading' || !japanese.trim()}
+          onClick={() => void handleSuggest()}
+        >
+          {suggestState.status === 'loading' ? 'Analyzing…' : 'Suggest grammar (AI)'}
+        </button>
+      </div>
+      {suggestState.status === 'error' ? (
+        <p className="muted" style={{ margin: 0 }}>
+          {suggestState.reason}
+        </p>
+      ) : null}
+      {suggestions.length > 0 ? (
+        <div className="stack">
+          {suggestions.map((suggestion) => (
+            <div
+              key={suggestion.candidateName}
+              className="row"
+              style={{ justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <span>
+                <span className="jp">
+                  {suggestion.matchedExistingName ?? suggestion.candidateName}
+                </span>
+                <span className="muted"> — {suggestion.shortMeaning}</span>
+              </span>
+              <span className="row" style={{ gap: '0.35rem' }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void (async () => {
+                      await addPattern(suggestion.matchedExistingName ?? suggestion.candidateName, {
+                        shortMeaning: suggestion.shortMeaning,
+                        provenance: 'ai_suggested',
+                      });
+                      setSuggestions((current) =>
+                        current.filter((item) => item !== suggestion),
+                      );
+                    })()
+                  }
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() =>
+                    setSuggestions((current) => current.filter((item) => item !== suggestion))
+                  }
+                >
+                  Dismiss
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {linked.length === 0 ? (
         <p className="muted" style={{ margin: 0 }}>
           No grammar patterns tagged for this sentence yet.
@@ -101,6 +217,8 @@ export function GrammarPicker({ sentenceId }: GrammarPickerProps) {
               link={link}
               pattern={pattern}
               tracked={tracked}
+              japanese={japanese}
+              chunks={chunks}
               expanded={expandedPatternId === pattern.id}
               onToggleExpand={() =>
                 setExpandedPatternId((current) =>
@@ -163,6 +281,8 @@ function GrammarPatternCard({
   link,
   pattern,
   tracked,
+  japanese,
+  chunks,
   expanded,
   onToggleExpand,
   onGotIt,
@@ -172,6 +292,8 @@ function GrammarPatternCard({
   link: SentenceGrammar;
   pattern: GrammarPattern;
   tracked: boolean;
+  japanese: string;
+  chunks?: GrammarAssistChunkContext[];
   expanded: boolean;
   onToggleExpand: () => void;
   onGotIt: () => void;
@@ -185,6 +307,9 @@ function GrammarPatternCard({
   const [occurrenceExplanation, setOccurrenceExplanation] = useState(
     link.occurrenceExplanation ?? '',
   );
+  const [explainAssistState, setExplainAssistState] = useState<
+    { status: 'idle' } | { status: 'loading' } | { status: 'error'; reason: string }
+  >({ status: 'idle' });
 
   // Re-sync local edit buffers when a different pattern expands, or the
   // underlying row changes from elsewhere (e.g. another device via sync).
@@ -194,6 +319,7 @@ function GrammarPatternCard({
     setExplanation(pattern.explanation ?? '');
     setFamily(pattern.family ?? '');
     setOccurrenceExplanation(link.occurrenceExplanation ?? '');
+    setExplainAssistState({ status: 'idle' });
     // Only re-sync on identity/expand changes, not on every local keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pattern.id, expanded]);
@@ -208,6 +334,24 @@ function GrammarPatternCard({
       }),
       ensureSentenceGrammar(link.sentenceId, pattern.id, { occurrenceExplanation }),
     ]);
+  }
+
+  async function suggestExplanation() {
+    setExplainAssistState({ status: 'loading' });
+    const result = await explainGrammarPattern({
+      sentence: japanese,
+      patternName: pattern.canonicalName,
+      chunks,
+    });
+    if (!result.ok) {
+      setExplainAssistState({ status: 'error', reason: result.reason });
+      return;
+    }
+    setExplainAssistState({ status: 'idle' });
+    // Pre-fills only — the learner still must tap Save for anything to persist.
+    setShortMeaning(result.data.shortMeaning);
+    setStructuralNotes(result.data.structuralNotes);
+    setExplanation(result.data.explanation);
   }
 
   return (
@@ -251,6 +395,26 @@ function GrammarPatternCard({
           className="stack"
           style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}
         >
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="muted" style={{ fontSize: '0.85rem' }}>
+              Fill in below, or draft with AI and edit before saving.
+            </span>
+            <button
+              type="button"
+              className="ghost"
+              disabled={explainAssistState.status === 'loading'}
+              onClick={() => void suggestExplanation()}
+            >
+              {explainAssistState.status === 'loading'
+                ? 'Drafting…'
+                : 'Suggest explanation (AI)'}
+            </button>
+          </div>
+          {explainAssistState.status === 'error' ? (
+            <p className="muted" style={{ margin: 0 }}>
+              {explainAssistState.reason}
+            </p>
+          ) : null}
           <label htmlFor={`grammar-meaning-${pattern.id}`} className="muted">
             Short meaning / communicative function
           </label>

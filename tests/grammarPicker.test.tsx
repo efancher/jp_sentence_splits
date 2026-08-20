@@ -13,11 +13,11 @@ import { createId } from '../src/lib/ids';
 import { GrammarPicker } from '../src/components/GrammarPicker';
 import { withAppProviders } from '../src/test/providers';
 
-function renderPicker(sentenceId = 'sent-1') {
+function renderPicker(sentenceId = 'sent-1', japanese = 'そんなこと言うわけないでしょ。') {
   return render(
     withAppProviders(
       <MemoryRouter>
-        <GrammarPicker sentenceId={sentenceId} />
+        <GrammarPicker sentenceId={sentenceId} japanese={japanese} />
       </MemoryRouter>,
     ),
   );

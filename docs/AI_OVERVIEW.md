@@ -147,11 +147,11 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phases 1-3 — schema/repository/sync/
-  backup foundation, manual annotation from Analyze, and the `/grammar`
-  browser/detail UI, see the Feature walkthrough below — are done;
-  AI-assisted suggestion and a dedicated review-card UI are not built
-  yet): a second layer on top of the Cure-Dolly structural analysis,
+- **Grammar-learning system** (new; Phases 1-4 — schema/repository/sync/
+  backup foundation, manual annotation from Analyze, the `/grammar`
+  browser/detail UI, and AI-assisted suggestion/explanation, see the
+  Feature walkthrough below — are done; a dedicated review-card UI is not
+  built yet): a second layer on top of the Cure-Dolly structural analysis,
   answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
@@ -245,11 +245,18 @@ per-occurrence actions — **Got it** (confirms the occurrence,
 (confirms *and* seeds a `grammarPattern`-subject `StudyItem`, entering the
 pattern into the same FSRS due-queue vocabulary/sentences use), and
 **Explain** (an inline, no-modal edit form for the pattern's meaning/
-structural notes and this occurrence's own context-specific explanation —
-currently the *only* way to fill those in, since AI-assisted suggestion
-hasn't shipped yet). Unlike `VocabularyPicker`, this panel is deliberately
-decoupled from the page's autosave/chunks state — every action is an
-immediate repository write, not a debounced draft.
+structural notes and this occurrence's own context-specific explanation).
+Unlike `VocabularyPicker`, this panel is deliberately decoupled from the
+page's autosave/chunks state — every action is an immediate repository
+write, not a debounced draft. A **"Suggest grammar (AI)"** button (panel
+header) and a **"Suggest explanation (AI)"** button (inside Explain) call a
+`grammar-assist` Supabase Edge Function (Claude Haiku, `src/lib/
+grammarAssist.ts`) — suggestions render as Add/Dismiss chips (never
+auto-materialized into a `GrammarPattern`/`SentenceGrammar` row), and a
+drafted explanation only pre-fills the same editable fields Explain already
+has, saved by the same button as a manual entry. Both degrade to an inline
+"unavailable" message (signed out, offline, function not deployed) with the
+manual flow completely unaffected.
 
 ### 3. Practice & Build modes (lightweight, non-SRS study)
 - **Practice** (`PracticePage.tsx`) — reveal-based drilling scoped to a
@@ -535,7 +542,22 @@ aren't JSON-serializable/aren't worth backing up).
   native/reference audio cloud sync). Shared with the now-mostly-retired
   `shadowing` repo via table-prefix isolation (`shadowing_*` tables
   coexist, unused going forward). Entirely optional — the app is fully
-  functional local-only without it.
+  functional local-only without it. Also hosts `supabase/functions/
+  invite-book-member/` and (new) `supabase/functions/grammar-assist/` —
+  Deno Edge Functions, the only server-side (non-browser, non-Dexie) code
+  in this app.
+- **Anthropic API** (new, via `supabase/functions/grammar-assist/`) — the
+  first and only LLM/AI integration anywhere in this codebase. Called
+  server-side only, from the Edge Function, using `claude-haiku-4-5` with
+  forced structured tool output (`strict: true`); the API key is an Edge
+  Function secret (`ANTHROPIC_API_KEY`), never shipped to the browser.
+  Deliberately not routed through `shadowing-analysis-api` below — a
+  different kind of workload on an already memory-constrained host.
+  Entirely optional and additive: every AI-assisted surface
+  (`src/lib/grammarAssist.ts`) degrades to an inline "unavailable" message
+  if the function isn't deployed, the key isn't configured, or the network
+  is unreachable — nothing in the grammar-learning system depends on it
+  being present.
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only
