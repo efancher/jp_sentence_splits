@@ -11,7 +11,8 @@ import {
   saveReferenceAlignment,
 } from '../db/repository';
 import type { AlignmentResult } from '../domain/types';
-import { alignAudio, transcribeAudio } from '../lib/analysisApi';
+import { loadOrComputeAlignment } from '../lib/alignmentCache';
+import { transcribeAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { extractPitch } from '../lib/pitch';
@@ -32,28 +33,7 @@ import {
   type WavePeak,
 } from '../lib/waveform';
 
-/**
- * Checks the Dexie cache before calling the (slow, server-side) forced-
- * alignment service, and saves a successful result back to it. Returns
- * `undefined` on any failure/unreachable-server case — never throws, since
- * an unavailable server is expected/ordinary here (docs/STATUS.md Phase 9,
- * Milestone 2b).
- */
-async function loadAlignment(
-  id: string,
-  blob: Blob,
-  transcript: string,
-  get: (id: string) => Promise<AlignmentResult | undefined>,
-  save: (id: string, result: AlignmentResult) => Promise<void>,
-): Promise<AlignmentResult | undefined> {
-  const cached = await get(id);
-  if (cached) return cached;
-  const fetched = await alignAudio(blob, transcript);
-  if (fetched) await save(id, fetched);
-  return fetched ?? undefined;
-}
-
-/** Same cache-then-fetch contract as `loadAlignment`, for ASR (Phase 9, Milestone 7). */
+/** Same cache-then-fetch contract as `loadOrComputeAlignment`, for ASR (Phase 9, Milestone 7). */
 async function loadTranscription(
   attemptId: string,
   blob: Blob,
@@ -295,14 +275,20 @@ export function AnalysisPanel({
     setServerAlignment(undefined);
     void (async () => {
       const [reference, learner] = await Promise.all([
-        loadAlignment(
+        loadOrComputeAlignment(
           referenceAudioId,
           referenceBlob,
           transcript,
           getReferenceAlignment,
           saveReferenceAlignment,
         ),
-        loadAlignment(attemptId, learnerBlob, transcript, getAttemptAlignment, saveAttemptAlignment),
+        loadOrComputeAlignment(
+          attemptId,
+          learnerBlob,
+          transcript,
+          getAttemptAlignment,
+          saveAttemptAlignment,
+        ),
       ]);
       if (!active) return;
       if (!reference && !learner) {
