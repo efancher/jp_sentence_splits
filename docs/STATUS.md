@@ -4705,3 +4705,49 @@ green. New tests: 8 cases in `tests/vocabularySuggestions.test.ts` covering
 kuru exclusion, idempotent rerun, no-op on unconjugated surface) and
 `combinedExpressionWarning` (particle+auxiliary combo, content-only combo,
 non-combined selection).
+
+## Listening card: playback speed + lazy karaoke highlighting (2026-08-20): done
+
+User feedback: full-sentence `listening` review audio plays at native speed
+with no way to slow it down, and with unfamiliar vocabulary the learner
+couldn't do anything useful with a pure blind-listen — no partial credit,
+no way to map sound to word. Two additive changes to
+`AudioComprehensionCard` (`src/pages/ReviewPage.tsx`), no schema changes.
+
+**Playback speed**: `NativeAudioButton` already accepted a `playbackRate`
+prop (used by ShadowPage) but `ReviewPage` never passed one. Added a
+session-only `audioSpeed` state (mirrors ShadowPage's own un-persisted
+`speed` state, not written to `Settings`) and a `<select>` next to the
+audio button reusing `PLAYBACK_SPEEDS` from `src/lib/recording.ts`.
+
+**Karaoke highlighting**: new `KaraokeSentenceText`
+(`src/components/KaraokeSentenceText.tsx`), swapped in for the plain
+`<div className="jp jp-lg">{sentence.japanese}</div>` once revealed. On
+mount it calls the forced-alignment cache-then-fetch helper (extracted from
+`AnalysisPanel.tsx`'s private `loadAlignment` into a new
+`src/lib/alignmentCache.ts#loadOrComputeAlignment`, now shared by both
+callers) against the existing `getReferenceAlignment`/`saveReferenceAlignment`
+Dexie cache — same `ReferenceAlignment` cache the shadowing-analysis flow
+already populates, so a sentence practiced via ShadowPage first needs no
+recomputation here, and vice versa. While the audio is playing, a
+`requestAnimationFrame` loop (via a new `NativeAudioController.getCurrentTime()`
+method, exposed through `useNativeAudio`) highlights whichever aligned word
+contains the current playhead position. Falls back to plain, unhighlighted
+text whenever alignment isn't cached and the tailnet-only alignment service
+is unreachable/cold — same "never throws, `undefined` means unavailable"
+contract `alignAudio` already had.
+
+The extraction was **not** left in `analysisApi.ts` itself: a test
+(`tests/shadowPage.test.tsx`) mocks that module's `alignAudio` export via
+`vi.mock`, which only intercepts *external* imports of it — a helper
+defined in the same file calling its neighbor directly would bypass the
+mock. Moving `loadOrComputeAlignment` to its own file keeps `alignAudio` as
+a genuinely external, mockable import for both call sites.
+
+**Verified**: `npm run typecheck`, `npm run lint` (no new warnings besides
+one pre-existing-pattern `exhaustive-deps` note, same shape as one already
+accepted elsewhere in `ReviewPage.tsx`), `npm run test` (full suite: 714
+passed, 2 pre-existing skips). New tests in `tests/reviewPage.test.tsx`:
+speed-select changes the played `Audio` element's `playbackRate`; karaoke
+spans render (and the plain single-text-node fallback disappears) once a
+`ReferenceAlignment` row is pre-cached.

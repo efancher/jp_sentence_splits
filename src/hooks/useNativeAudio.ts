@@ -14,5 +14,9 @@ export function useNativeAudio() {
     [],
   );
   const stop = useCallback(() => nativeAudioController.stop(), []);
-  return { ...snapshot, play, stop };
+  const getCurrentTime = useCallback(
+    () => nativeAudioController.getCurrentTime(),
+    [],
+  );
+  return { ...snapshot, play, stop, getCurrentTime };
 }

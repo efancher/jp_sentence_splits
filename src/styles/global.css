@@ -262,6 +262,16 @@ strong.jp {
   border: 1px dashed var(--border);
 }
 
+/* KaraokeSentenceText (ReviewPage listening card) — word-by-word playback highlight. */
+.karaoke-word {
+  transition: background-color 0.1s ease-out;
+  border-radius: 4px;
+}
+
+.karaoke-word-active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

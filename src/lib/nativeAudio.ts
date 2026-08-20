@@ -28,6 +28,11 @@ export class NativeAudioController {
 
   getSnapshot = (): NativeAudioSnapshot => this.snapshot;
 
+  /** Current playback position in seconds, for syncing UI (e.g. karaoke highlighting) to audio. */
+  getCurrentTime(): number {
+    return this.audio?.currentTime ?? 0;
+  }
+
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

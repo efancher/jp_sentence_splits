@@ -163,11 +163,14 @@ configurable FSRS-interval threshold).
   separate repo, Phase 9): a self-hosted forced-alignment service (Montreal
   Forced Aligner-backed), running as a `systemd --user` service on the
   user's Hetzner box, reachable only over their Tailscale tailnet (`tailscale
-  serve`). `src/lib/analysisApi.ts` calls it and Dexie-caches the alignment
-  result; the shadowing/pronunciation-feedback features degrade gracefully
-  (skip alignment-dependent feedback) when it's unreachable — there is no
-  fallback alignment path. Also runs `faster-whisper` (`base` model) for a
-  secondary, non-authoritative ASR signal.
+  serve`). `src/lib/analysisApi.ts` calls it; `src/lib/alignmentCache.ts`
+  wraps that call with the Dexie cache-then-fetch (shared by the shadowing
+  analysis panel and the `listening` review card's karaoke word
+  highlighting — both features degrade gracefully, falling back to no
+  alignment-dependent feedback/highlighting, when the service is
+  unreachable). There is no fallback alignment path. Also runs
+  `faster-whisper` (`base` model) for a secondary, non-authoritative ASR
+  signal.
 - **WaniKani API**: source of the kanji catalog (`scripts/import-wanikani-
   kanji.ts`), one-time/occasional bulk import, not a live per-user
   integration.

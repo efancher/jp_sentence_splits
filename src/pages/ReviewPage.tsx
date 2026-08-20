@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { VocabChips } from '../components/VocabChips';
 import {
@@ -47,6 +48,7 @@ import {
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { normalizeSentenceKey } from '../lib/normalize';
+import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -482,6 +484,8 @@ export function ReviewPage() {
    * remount (a fresh page load is a fresh session), not persisted.
    */
   const [newCardsIntroduced, setNewCardsIntroduced] = useState(0);
+  /** Listening-card playback speed (Phase 7.4 follow-up) — session-only, like ShadowPage's, not persisted. */
+  const [audioSpeed, setAudioSpeed] = useState(1);
 
   const settings = useLiveQuery(() => readSettings(), []);
 
@@ -1073,6 +1077,8 @@ export function ReviewPage() {
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onReplay={() => markAssistance('audio_replayed')}
+                playbackRate={audioSpeed}
+                onPlaybackRateChange={setAudioSpeed}
               />
             ) : current.confusionPair ? (
               <ContrastivePairCard
@@ -1366,6 +1372,13 @@ function SentenceTransformationCard({
  * the Japanese text hidden; reveal shows the sentence, translation, and
  * vocabulary together, same as the plain comprehension flow. The audio
  * button stays available (and replayable) both before and after reveal.
+ *
+ * Playback speed (follow-up) reuses the same rate-select ShadowPage already
+ * has, wired into NativeAudioButton's existing (previously unused here)
+ * playbackRate prop. Once revealed, the Japanese text is rendered via
+ * KaraokeSentenceText, which highlights words in sync with playback using
+ * lazily-computed forced alignment — falls back to plain text on its own
+ * when alignment isn't available, so no fallback branching is needed here.
  */
 function AudioComprehensionCard({
   sentence,
@@ -1373,6 +1386,8 @@ function AudioComprehensionCard({
   revealed,
   onReveal,
   onReplay,
+  playbackRate,
+  onPlaybackRateChange,
 }: {
   sentence: Sentence;
   audio: SentenceAudio;
@@ -1380,25 +1395,43 @@ function AudioComprehensionCard({
   onReveal: () => void;
   /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
   onReplay: () => void;
+  playbackRate: number;
+  onPlaybackRateChange: (value: number) => void;
 }) {
   const playCountRef = useRef(0);
   return (
     <>
-      <NativeAudioButton
-        audio={audio}
-        displayLabel="Play audio"
-        onPlay={() => {
-          playCountRef.current += 1;
-          if (playCountRef.current > 1) onReplay();
-        }}
-      />
+      <div className="row" style={{ alignItems: 'center' }}>
+        <NativeAudioButton
+          audio={audio}
+          displayLabel="Play audio"
+          playbackRate={playbackRate}
+          onPlay={() => {
+            playCountRef.current += 1;
+            if (playCountRef.current > 1) onReplay();
+          }}
+        />
+        <label>
+          Speed
+          <select
+            value={playbackRate}
+            onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
+          >
+            {PLAYBACK_SPEEDS.map((value) => (
+              <option key={value} value={value}>
+                {value === 1 ? '1× (normal)' : `${value}×`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {!revealed ? (
         <button type="button" onClick={onReveal}>
           Reveal
         </button>
       ) : (
         <>
-          <div className="jp jp-lg">{sentence.japanese}</div>
+          <KaraokeSentenceText audio={audio} japanese={sentence.japanese} />
           <div>{sentence.translation || '(no translation)'}</div>
           <VocabChips items={sentence.targetVocabulary} />
         </>

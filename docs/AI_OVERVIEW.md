@@ -142,7 +142,13 @@ built out Phases 1–9):
 - `ReferenceAlignment` / `AttemptAlignment` / `AttemptTranscription` /
   `AttemptAnalysisSummary` — cached, recomputable-on-demand derived data
   from the forced-alignment/ASR services (all local-only, keyed by version
-  numbers so stale caches can be invalidated).
+  numbers so stale caches can be invalidated). `ReferenceAlignment` is
+  shared between the shadowing-analysis flow (`AnalysisPanel.tsx`) and the
+  `listening` review card's karaoke highlighting
+  (`KaraokeSentenceText.tsx`) — both call the same
+  `loadOrComputeAlignment` (`src/lib/alignmentCache.ts`), so whichever
+  triggers alignment for a given `SentenceAudio` clip first, the other
+  reuses the cached result.
 - `CardIssueReport` — a learner-authored free-text flag on a review card
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
@@ -298,7 +304,14 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   "start small," real differentiation deferred).
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
-  stays hidden until reveal.
+  stays hidden until reveal. A playback-speed `<select>` (same
+  `PLAYBACK_SPEEDS` as ShadowPage) sits next to the play button. On reveal,
+  the sentence renders via `KaraokeSentenceText`
+  (`src/components/KaraokeSentenceText.tsx`): it lazily computes/caches a
+  `ReferenceAlignment` for the clip (via `loadOrComputeAlignment`, same
+  cache the shadowing-analysis flow uses) and highlights the word under the
+  playhead in sync with playback, falling back to plain unhighlighted text
+  whenever alignment isn't available yet or the service is unreachable.
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide
