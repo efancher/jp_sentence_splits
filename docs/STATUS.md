@@ -4749,5 +4749,20 @@ one pre-existing-pattern `exhaustive-deps` note, same shape as one already
 accepted elsewhere in `ReviewPage.tsx`), `npm run test` (full suite: 714
 passed, 2 pre-existing skips). New tests in `tests/reviewPage.test.tsx`:
 speed-select changes the played `Audio` element's `playbackRate`; karaoke
-spans render (and the plain single-text-node fallback disappears) once a
-`ReferenceAlignment` row is pre-cached.
+spans render once a `ReferenceAlignment` row is pre-cached.
+
+**Follow-up, same day**: user reported the aligner occasionally can't match
+a stretch of audio to its dictionary and emits a literal `<unk>` token,
+which rendered inline as garbled-looking Japanese (e.g.
+"<unk>容思い出して"). Two changes to `KaraokeSentenceText.tsx`: a `<unk>`
+word now renders as a dashed, `title`-annotated `?` placeholder
+(`.karaoke-word-unknown`) instead of the raw token; and — since this
+confirmed the karaoke line is *derived*, aligner-produced text that can
+diverge from the real sentence even when it doesn't emit `<unk>`
+(dictionary-normalized spellings, mis-segmentation) — the actual
+`sentence.japanese` text is now always shown on a second, muted line
+underneath, so the learner has a reliable line to cross-check against
+regardless of what the aligner does. Two new tests in
+`tests/reviewPage.test.tsx` cover the `<unk>` placeholder and the
+always-present reference line. `npm run typecheck`/`lint`/`test` all green
+(715 passed, 2 pre-existing skips, no new warnings).

@@ -970,7 +970,7 @@ describe('ReviewPage', () => {
     }
   });
 
-  it('renders word-by-word karaoke text once alignment is cached, instead of the plain sentence (follow-up)', async () => {
+  it('renders word-by-word karaoke text plus the original sentence once alignment is cached (follow-up)', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
@@ -1009,9 +1009,56 @@ describe('ReviewPage', () => {
     await screen.findByRole('button', { name: /Play native sentence recording/ });
     await user.click(screen.getByRole('button', { name: 'Reveal' }));
 
+    // Karaoke words render, and so does the original sentence text
+    // underneath (a cross-check reference, since the aligner's own tokens
+    // can diverge from/garble the real sentence — e.g. `<unk>` tokens).
     expect(await screen.findByText('本を')).toBeInTheDocument();
     expect(screen.getByText('読みます')).toBeInTheDocument();
-    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+  });
+
+  it('shows a flagged placeholder instead of a literal <unk> token from the aligner', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.sentenceAudio.add({
+      id: 'audio-1',
+      sentenceId: 'sent-1',
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+    await db.referenceAlignments.add({
+      id: 'audio-1',
+      alignmentVersion: ALIGNMENT_VERSION,
+      computedAt: now,
+      result: {
+        durationSeconds: 1.5,
+        words: [
+          { start: 0, end: 0.6, text: '<unk>', phones: [] },
+          { start: 0.6, end: 1.5, text: '読みます', phones: [] },
+        ],
+      },
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByRole('button', { name: /Play native sentence recording/ });
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+
+    await screen.findByText('読みます');
+    expect(screen.queryByText('<unk>')).not.toBeInTheDocument();
+    expect(screen.getByText('?')).toBeInTheDocument();
+    // The original sentence text is still shown in full, unaffected.
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
   });
 
   it('records audio_replayed assistance only on a genuine replay, not the first play (Phase 7.5)', async () => {

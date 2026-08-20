@@ -14,6 +14,15 @@ import { loadOrComputeAlignment } from '../lib/alignmentCache';
  * whenever alignment isn't available (server unreachable/cold, or not
  * finished loading yet), since it's just a reading aid, not the source of
  * truth for the sentence's text.
+ *
+ * The aligner occasionally can't match a stretch of audio to its dictionary
+ * and emits a literal `<unk>` token in that word's place — rendering it
+ * as-is reads as garbled Japanese (e.g. "<unk>容思い出して"), so it's shown
+ * as a flagged placeholder instead. Since the karaoke line is therefore
+ * *derived* text and can diverge from the real sentence (this way or more
+ * subtly — dictionary-normalized spellings, mis-segmented words), the
+ * actual sentence text is always shown underneath too, so the learner can
+ * cross-check rather than trust the aligner's transcript.
  */
 export function KaraokeSentenceText({
   audio,
@@ -73,15 +82,22 @@ export function KaraokeSentenceText({
   }
 
   return (
-    <div className="jp jp-lg">
-      {alignmentWords.map((word, index) => (
-        <span
-          key={`${word.text}-${index}`}
-          className={`karaoke-word${index === activeWordIndex ? ' karaoke-word-active' : ''}`}
-        >
-          {word.text}
-        </span>
-      ))}
+    <div className="stack" style={{ gap: '0.25rem' }}>
+      <div className="jp jp-lg">
+        {alignmentWords.map((word, index) => {
+          const isUnknown = word.text === '<unk>';
+          return (
+            <span
+              key={`${word.text}-${index}`}
+              className={`karaoke-word${index === activeWordIndex ? ' karaoke-word-active' : ''}${isUnknown ? ' karaoke-word-unknown' : ''}`}
+              title={isUnknown ? 'Not recognized by the alignment service' : undefined}
+            >
+              {isUnknown ? '?' : word.text}
+            </span>
+          );
+        })}
+      </div>
+      <div className="jp muted">{japanese}</div>
     </div>
   );
 }

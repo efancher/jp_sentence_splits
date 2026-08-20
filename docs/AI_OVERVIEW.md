@@ -312,6 +312,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   cache the shadowing-analysis flow uses) and highlights the word under the
   playhead in sync with playback, falling back to plain unhighlighted text
   whenever alignment isn't available yet or the service is unreachable.
+  Since the karaoke line is aligner-derived text (occasionally an `<unk>`
+  token for an unmatched word, shown as a flagged `?` placeholder rather
+  than the raw token; more subtly it can also diverge via dictionary
+  normalization/mis-segmentation), the real `sentence.japanese` text is
+  always shown on a second, muted line underneath as a cross-check.
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide
