@@ -147,11 +147,12 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phase 1 — schema/repository/sync/
-  backup foundation — and Phase 2 — manual annotation from Analyze, see
-  the Feature walkthrough below — are done; AI-assisted suggestion and a
-  dedicated review-card UI are not built yet): a second layer on top
-  of the Cure-Dolly structural analysis, answering "what reusable
+- **Grammar-learning system** (new; Phases 1-3 — schema/repository/sync/
+  backup foundation, manual annotation from Analyze, and the `/grammar`
+  browser/detail UI, see the Feature walkthrough below — are done;
+  AI-assisted suggestion and a dedicated review-card UI are not built
+  yet): a second layer on top of the Cure-Dolly structural analysis,
+  answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
   the canonical construction (e.g. ～わけがない), corpus-wide, deduped on a
@@ -336,6 +337,22 @@ and every confirmed word that contains it (via `VocabularyKanji`), i.e.
 "this kanji occurs in these words" — but not the reverse ("this reading
 occurs across these kanji") drill described in the original design brief,
 which remains unbuilt.
+
+### 5a. Grammar browsing — `GrammarListPage.tsx` (`/grammar`),
+`GrammarPatternDetailPage.tsx` (`/grammar/:patternId`)
+Same shape as vocabulary/kanji browsing, one layer up. The list sorts by
+encounter count (most-encountered-in-your-reading first, not alphabetical)
+— closer to "what's actually showing up" than a dictionary. The detail
+page is where "Your encounters" (design brief §5/§6 — "where else have I
+seen this?") actually lives: every sentence a pattern has been tagged in,
+via `listSentenceGrammarForPattern`, each linking into
+`/books/:bookId/analyze/:sentenceId` when a book membership exists (plain
+text otherwise), with native audio playback (`NativeAudioButton`) when the
+sentence has `SentenceAudio`. The pattern's own `shortMeaning`/
+`structuralNotes`/`explanation`/`family` are editable inline — currently
+the only way to fill them in, same caveat as `GrammarPicker`'s Explain
+panel (no AI yet). No `GrammarRelationship` (contrast/family) browsing UI
+yet — deliberately deferred (Phase 8 of the grammar-learning plan).
 
 ### 6. Shadowing & pronunciation feedback — `ShadowPage.tsx`
 (`/books/:bookId/shadow/:sentenceId`)

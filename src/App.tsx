@@ -80,6 +80,16 @@ const KanjiDetailPage = lazy(() =>
     default: module.KanjiDetailPage,
   })),
 );
+const GrammarListPage = lazy(() =>
+  import('./pages/GrammarListPage').then((module) => ({
+    default: module.GrammarListPage,
+  })),
+);
+const GrammarPatternDetailPage = lazy(() =>
+  import('./pages/GrammarPatternDetailPage').then((module) => ({
+    default: module.GrammarPatternDetailPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({
     default: module.SettingsPage,
@@ -114,6 +124,8 @@ export default function App() {
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />
+            <Route path="grammar" element={<GrammarListPage />} />
+            <Route path="grammar/:patternId" element={<GrammarPatternDetailPage />} />
             <Route
               path="import-batches/:batchId"
               element={<ImportBatchPage />}

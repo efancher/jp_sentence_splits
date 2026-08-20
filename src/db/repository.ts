@@ -2823,7 +2823,8 @@ export interface GrammarEncounter {
   sentenceGrammar: SentenceGrammar;
   sentence: Sentence;
   books: Book[];
-  hasAudio: boolean;
+  /** This sentence's native/reference audio clips, if any — playable via NativeAudioButton. */
+  audio: SentenceAudio[];
 }
 
 /**
@@ -2860,8 +2861,6 @@ export async function listSentenceGrammarForPattern(
   books.forEach((book, index) => {
     if (book) bookById.set(bookIds[index]!, book);
   });
-  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
-
   const encounters: GrammarEncounter[] = [];
   for (const link of links) {
     const sentence = sentenceById.get(link.sentenceId);
@@ -2874,12 +2873,47 @@ export async function listSentenceGrammarForPattern(
       sentenceGrammar: link,
       sentence,
       books: linkedBooks,
-      hasAudio: audioSentenceIds.has(link.sentenceId),
+      audio: audioRows.filter((row) => row.sentenceId === link.sentenceId),
     });
   }
   return encounters.sort((a, b) =>
     b.sentenceGrammar.createdAt.localeCompare(a.sentenceGrammar.createdAt),
   );
+}
+
+export interface GrammarPatternSummary {
+  pattern: GrammarPattern;
+  encounterCount: number;
+  tracked: boolean;
+}
+
+/**
+ * Every GrammarPattern with its encounter count (SentenceGrammar links) and
+ * whether it's currently tracked (has any grammarPattern-subject StudyItem)
+ * — the `/grammar` browser's list view. Batched (three whole-table reads
+ * regardless of pattern count), not N+1 — same shape as
+ * listStudyItemSummaries.
+ */
+export async function listGrammarPatternSummaries(): Promise<GrammarPatternSummary[]> {
+  const db = getDb();
+  const [patterns, links, studyItems] = await Promise.all([
+    db.grammarPatterns.toArray(),
+    db.sentenceGrammar.toArray(),
+    db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
+  ]);
+  const encounterCountByPatternId = new Map<string, number>();
+  for (const link of links) {
+    encounterCountByPatternId.set(
+      link.grammarPatternId,
+      (encounterCountByPatternId.get(link.grammarPatternId) ?? 0) + 1,
+    );
+  }
+  const trackedPatternIds = new Set(studyItems.map((item) => item.subjectId));
+  return patterns.map((pattern) => ({
+    pattern,
+    encounterCount: encounterCountByPatternId.get(pattern.id) ?? 0,
+    tracked: trackedPatternIds.has(pattern.id),
+  }));
 }
 
 /** Get-or-create a grammarPattern-subject study item for a given activityType — thin wrapper, mirrors ensureVocabularyStudyItem. */

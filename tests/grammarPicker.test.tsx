@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
@@ -13,7 +14,13 @@ import { GrammarPicker } from '../src/components/GrammarPicker';
 import { withAppProviders } from '../src/test/providers';
 
 function renderPicker(sentenceId = 'sent-1') {
-  return render(withAppProviders(<GrammarPicker sentenceId={sentenceId} />));
+  return render(
+    withAppProviders(
+      <MemoryRouter>
+        <GrammarPicker sentenceId={sentenceId} />
+      </MemoryRouter>,
+    ),
+  );
 }
 
 describe('GrammarPicker', () => {

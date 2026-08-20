@@ -1230,6 +1230,18 @@ describe('card issue reports', () => {
       activityType: 'comprehension',
       note: 'Second.',
     });
+    // Force distinct, well-separated createdAt values: both reports can
+    // land in the same millisecond under a fast/loaded test run, and
+    // Dexie/IndexedDB doesn't guarantee insertion order for a plain
+    // toArray() scan — sorting on createdAt alone would then be flaky
+    // (same class of bug fixed for listSentenceGrammarForPattern's own
+    // test, see the grammar patterns describe block above).
+    await getDb().cardIssueReports.update(first.id, {
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await getDb().cardIssueReports.update(second.id, {
+      createdAt: '2026-02-01T00:00:00.000Z',
+    });
     await resolveCardIssueReport(first.id);
 
     const open = await listCardIssueReports('open');
@@ -1483,10 +1495,10 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(encounters).toHaveLength(2);
     expect(encounters[0]?.sentence.id).toBe('sent-new');
     expect(encounters[0]?.books.map((b) => b.id)).toEqual([book.id]);
-    expect(encounters[0]?.hasAudio).toBe(true);
+    expect(encounters[0]?.audio.map((a) => a.id)).toEqual(['audio-1']);
     expect(encounters[1]?.sentence.id).toBe('sent-old');
     expect(encounters[1]?.books).toEqual([]);
-    expect(encounters[1]?.hasAudio).toBe(false);
+    expect(encounters[1]?.audio).toEqual([]);
   });
 
   it('ensureGrammarStudyItem creates a grammarPattern-subject study item', async () => {

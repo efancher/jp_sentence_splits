@@ -11,6 +11,7 @@ const NAV = [
   { to: '/issues', label: 'Issues' },
   { to: '/study-items', label: 'Study items' },
   { to: '/vocabulary', label: 'Words' },
+  { to: '/grammar', label: 'Grammar' },
   { to: '/search', label: 'Search' },
   { to: '/import', label: 'Import' },
   { to: '/settings', label: 'Settings' },

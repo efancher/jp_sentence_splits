@@ -53,7 +53,7 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
-**Grammar-learning system** (additive, Phases 1-2 of its own plan, see
+**Grammar-learning system** (additive, Phases 1-3 of its own plan, see
 `docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
 structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1
 answers "how is this sentence assembled," the new layer answers "what
@@ -73,8 +73,11 @@ parallel scheduler. `GrammarSuggestion` (embedded on
 pre-confirmation counterpart, mirroring `VocabularySuggestion`. Phase 2
 added the first UI writer — a "Grammar noticed" panel
 (`src/components/GrammarPicker.tsx`) in `AnalyzePage.tsx`, manual
-annotation only (search-existing-or-create-new, Got it/Explain/Track). No
-AI-assisted suggestion and no dedicated review-card UI yet.
+annotation only (search-existing-or-create-new, Got it/Explain/Track).
+Phase 3 added browsing — `/grammar` and `/grammar/:patternId`, mirroring
+`VocabularyListPage.tsx`/`KanjiDetailPage.tsx`, with "Your encounters"
+linking back to sentences/books/native audio. No AI-assisted suggestion
+and no dedicated review-card UI yet.
 
 ## Sync engine
 

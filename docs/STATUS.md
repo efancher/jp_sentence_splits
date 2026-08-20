@@ -1,12 +1,11 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system Phase 2 — manual
-annotation from Analyze — the "Grammar noticed" panel: search-existing-or-
-create-new pattern tagging, Got it/Explain/Track actions, no AI yet. Phase
-1 (corpus-model foundation — GrammarPattern/SentenceGrammar/
-GrammarRelationship, Dexie v13, Postgres migration + sync wiring, backup
-extension, repository primitives) landed and its migration has been
-applied to the live Supabase project. Before that: Phase 9 complete —
+Last updated: 2026-08-20 (Grammar-learning system Phase 3 — browser/detail
+UI — `/grammar` list and `/grammar/:patternId` detail page ("Your
+encounters", editable pattern fields, native audio playback). Phase 2
+(manual annotation from Analyze — the "Grammar noticed" panel) and Phase 1
+(corpus-model foundation, migration applied to the live Supabase project)
+already done. Before that: Phase 9 complete —
 Milestone 9 done; sentence translation and vocabulary meaning are now
 editable in the UI; a batch of small Phase 7.10/9 follow-ups landed
 together; card issue reports ("report a problem with this card") added;
@@ -4013,3 +4012,87 @@ pre-existing skips (unrelated), 0 failed, run 3× to confirm the fix above
 actually closed the flakiness (no failures across 3 consecutive runs of
 the affected files). `npm run build` and `npm run lint` green, no new
 warnings.
+
+## Grammar-learning system — Phase 3 (grammar browser/detail): done
+
+The browsing half of §5/§6 of the design brief ("Your encounters," "where
+else have I seen this?") — `GrammarPicker` (Phase 2) had nowhere to link
+to until this pass.
+
+Added:
+- `src/pages/GrammarListPage.tsx` (`/grammar`) — mirrors
+  `VocabularyListPage.tsx`'s shape exactly (search input, `list-card`
+  entries, empty state distinguishing "nothing tagged yet" from "no
+  matches"). Sorted by encounter count descending (most-encountered first)
+  rather than alphabetically — closer to "what's actually showing up in
+  your reading" than a dictionary-style list, matching the design brief's
+  anti-syllabus framing. Each card shows the pattern name, short meaning,
+  encounter count, family (if set), and a `Tracked` badge; links to the
+  detail page.
+- `src/pages/GrammarPatternDetailPage.tsx` (`/grammar/:patternId`) —
+  mirrors `KanjiDetailPage.tsx`'s shape (unknown-id empty state, editable
+  fields, a list of related rows below). Editable
+  `shortMeaning`/`structuralNotes`/`explanation`/`family` fields (single
+  explicit Save button, not per-field blur-autosave like
+  `VocabularyMeaningField` — these are multi-line fields where blur-per-
+  keystroke-navigation would be disruptive). **Your encounters** section:
+  every `SentenceGrammar` link for this pattern (via
+  `listSentenceGrammarForPattern`), each showing the sentence text (linked
+  into `/books/:bookId/analyze/:sentenceId` when a book membership exists,
+  plain text otherwise — "where possible," per the brief, not always
+  possible), translation, book title(s), a `Confirmed` badge, this
+  occurrence's own `occurrenceExplanation` if set, and — new — actual
+  **native audio playback** via `NativeAudioButton` for any linked
+  `SentenceAudio`.
+- `src/db/repository.ts` — `GrammarEncounter.hasAudio: boolean` widened to
+  `audio: SentenceAudio[]` (the actual rows, not just a flag) — needed for
+  the detail page to actually play a clip, not just know one exists;
+  `listSentenceGrammarForPattern`'s implementation already fetched the
+  audio rows to compute the old boolean, so this is a strict superset, not
+  a new query. New `listGrammarPatternSummaries()` — every `GrammarPattern`
+  with its encounter count and tracked status, batched (three whole-table
+  reads, not N+1 per pattern) the same way `listStudyItemSummaries`
+  already batches its own per-subject-type lookups; powers the list page.
+- `src/App.tsx` — `grammar`/`grammar/:patternId` routes, lazy-loaded like
+  every other route. `src/layouts/AppShell.tsx` — `Grammar` nav entry,
+  next to `Words`.
+- `src/components/GrammarPicker.tsx` — each tagged pattern's name is now a
+  link to its detail page (`/grammar/:patternId` — the "show me the
+  pattern" affordance from the design brief, §6), and a "Browse all
+  grammar patterns →" link appears once anything is tagged. Needed
+  wrapping in a `Link`, so `tests/grammarPicker.test.tsx` needed a
+  `MemoryRouter` it didn't need before (a real, if small, breaking change
+  to the test's own setup — not a production regression, since
+  `GrammarPicker` was already only ever rendered inside `AnalyzePage`,
+  which is already inside this app's one `HashRouter`).
+- `tests/grammarListPage.test.tsx`, `tests/grammarPatternDetailPage.test.tsx`
+  (new) — empty states, search filtering, Tracked badge, encounter
+  listing with/without book linkage, editable-field persistence.
+
+**Flakiness found and fixed** (test-only, not shipped-code): adding this
+pass's test files shifted full-suite scheduling enough that a *different*,
+genuinely pre-existing flaky test —
+`listCardIssueReports filters by status and sorts newest first`
+(`tests/data.test.ts`, unrelated to grammar, never touched by any of this
+work otherwise) — went from occasionally flaky to failing nearly every
+full-suite run. Same root cause as the `listSentenceGrammarForPattern`
+fix two entries above (two records created back-to-back can land in the
+same millisecond `createdAt`, and Dexie/IndexedDB doesn't guarantee scan
+order for equal keys) and the same fix (pin distinct `createdAt` values
+explicitly in the test). Confirmed via `git stash` that this test already
+existed and already had this exact bug before any grammar-learning work
+touched the repo — fixed here anyway since it was now reliably blocking a
+clean `npm run check`, not because this session's other changes caused it.
+
+**Deliberately not done yet**: AI-assisted suggestion/canonicalization
+(Phase 4); an actual `grammar_comprehension`/`grammar_completion` card in
+`ReviewPage` (Phase 5, so the detail page's `Tracked` badge currently means
+"has an FSRS-scheduled study item nothing surfaces yet," same caveat noted
+in the Phase 2 entry above); `GrammarRelationship` browsing UI (Phase 8 —
+the data model exists, nothing renders it yet, deliberately, per the
+brief's "do not build an enormous grammar ontology in v1" instruction).
+
+**Verified**: `npm run check` green — 648 tests passed (up from 638), 2
+pre-existing skips (unrelated), 0 failed, run 3× to confirm no flakiness
+remains. `npm run build` (48 precache entries, up from 46 — the two new
+lazy-loaded routes) and `npm run lint` green, no new warnings.

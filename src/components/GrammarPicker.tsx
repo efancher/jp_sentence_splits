@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   ensureGrammarPattern,
@@ -149,6 +150,11 @@ export function GrammarPicker({ sentenceId }: GrammarPickerProps) {
           Add
         </button>
       </form>
+      {linked.length > 0 ? (
+        <Link to="/grammar" className="muted" style={{ fontSize: '0.85rem' }}>
+          Browse all grammar patterns →
+        </Link>
+      ) : null}
     </section>
   );
 }
@@ -208,7 +214,9 @@ function GrammarPatternCard({
     <article className="panel stack" style={{ boxShadow: 'none' }}>
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <div>
-          <strong className="jp">{pattern.canonicalName}</strong>
+          <Link to={`/grammar/${encodeURIComponent(pattern.id)}`} className="jp">
+            <strong>{pattern.canonicalName}</strong>
+          </Link>
           {pattern.shortMeaning ? (
             <span className="muted"> — {pattern.shortMeaning}</span>
           ) : null}
