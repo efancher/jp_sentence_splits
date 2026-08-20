@@ -1803,6 +1803,24 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
     });
   });
 
+  it('buckets a tracked, contrast-proficient pattern as distinguished', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(comprehensionItem.id, {
+      fsrsState: { ...comprehensionItem.fsrsState, state: 'review' },
+    });
+    const contrastItem = await ensureGrammarStudyItem(pattern.id, 'grammar_contrast');
+    await getDb().studyItems.update(contrastItem.id, {
+      fsrsState: { ...contrastItem.fsrsState, state: 'review' },
+    });
+
+    const summaries = await listGrammarPatternSummaries();
+    expect(summaries[0]).toMatchObject({
+      state: 'distinguished',
+      priorityBucket: 'strong',
+    });
+  });
+
   it('reports needed-help counts from the last 7 grammar_comprehension reviews in the priority explanation', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');

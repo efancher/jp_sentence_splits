@@ -143,6 +143,23 @@ describe('GrammarPatternDetailPage', () => {
     expect(screen.getByText('Recognized')).toBeInTheDocument();
   });
 
+  it('shows Distinguished once tracked, comprehension-proficient, and contrast-proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(comprehensionItem.id, {
+      fsrsState: { ...comprehensionItem.fsrsState, state: 'review' },
+    });
+    const contrastItem = await ensureGrammarStudyItem(pattern.id, 'grammar_contrast');
+    await getDb().studyItems.update(contrastItem.id, {
+      fsrsState: { ...contrastItem.fsrsState, state: 'review' },
+    });
+
+    renderPage(pattern.id);
+
+    await screen.findByText('〜わけがない');
+    expect(screen.getByText('Distinguished')).toBeInTheDocument();
+  });
+
   it('shows an empty related-patterns state with no relationships', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     renderPage(pattern.id);

@@ -2990,12 +2990,18 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
         item.activityType === 'grammar_comprehension' &&
         isVocabularyItemProficient(item.fsrsState.state),
     );
+    const contrastProficient = patternStudyItems.some(
+      (item) =>
+        item.activityType === 'grammar_contrast' &&
+        isVocabularyItemProficient(item.fsrsState.state),
+    );
 
     const state = computeGrammarLearnerState({
       encounterCount,
       confirmedCount,
       tracked,
       proficient,
+      contrastProficient,
     });
     const priorityInput = {
       encounterCount,

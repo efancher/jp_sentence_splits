@@ -83,20 +83,26 @@ export type GrammarLearnerState =
 /**
  * Derives the design brief's Encountered -> Noticed -> Recognized ->
  * Distinguished -> Productive ladder (§9) from accumulated evidence —
- * never a manually-set field. The top two tiers are architecturally
- * reachable (the type exists, callers can add them) but nothing currently
- * produces the evidence they'd need: Distinguished wants a contrast-type
- * activity ("can you tell these two apart," not just "recall the right
- * one" — grammar_completion tests the latter), Productive wants a
- * production/transformation activity. Neither exists yet (design brief
- * §11 C/D/F/G, deliberately deferred past Phase 5) — see docs/STATUS.md.
+ * never a manually-set field. `contrastProficient` (grammar-learning
+ * system Phase 9 slice) reflects FSRS proficiency on the pattern's own
+ * `grammar_contrast` study item — "can you tell this apart from a pattern
+ * you actually confuse it with," not just "recall the right one from a
+ * pool" (grammar_completion tests the latter). Omitted/false simply means
+ * no contrast evidence exists yet (e.g. the pattern has no
+ * `GrammarRelationship` to contrast against), which is the common case and
+ * caps a pattern at `recognized`. The top tier, Productive, is still
+ * architecturally reachable (the type exists) but nothing produces its
+ * evidence yet — that needs a production/transformation activity (design
+ * brief §11 D/F/G), deliberately still deferred — see docs/STATUS.md.
  */
 export function computeGrammarLearnerState(input: {
   encounterCount: number;
   confirmedCount: number;
   tracked: boolean;
   proficient: boolean;
+  contrastProficient?: boolean;
 }): GrammarLearnerState {
+  if (input.tracked && input.proficient && input.contrastProficient) return 'distinguished';
   if (input.tracked && input.proficient) return 'recognized';
   if (input.confirmedCount > 0) return 'noticed';
   return 'encountered';
@@ -151,7 +157,8 @@ export interface GrammarPriorityInput {
 export function computeGrammarPriorityBucket(
   input: GrammarPriorityInput,
 ): GrammarPriorityBucket {
-  if (input.state === 'recognized' && input.recentAgainCount === 0) return 'strong';
+  const recognizedOrBetter = input.state === 'recognized' || input.state === 'distinguished';
+  if (recognizedOrBetter && input.recentAgainCount === 0) return 'strong';
   if (input.tracked) return 'developing';
   if (input.encounterCount >= 3) return 'worth_learning_now';
   return 'recently_encountered';

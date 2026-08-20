@@ -190,8 +190,8 @@ export function isSentenceReadyForFullReview(
  * domain/types.ts — and this codebase's repeated "don't overbuild for
  * unproven need" precedent). Two evidence sources:
  * - A typed answer/selected choice that doesn't match what was expected
- *   (`reading_production`/`sentence_transformation`/`grammar_completion`
- *   cards) — the specific comparison already happened in the UI to show
+ *   (`reading_production`/`sentence_transformation`/`grammar_completion`/
+ *   `grammar_contrast` cards) — the specific comparison already happened in the UI to show
  *   "✓/✗", this just reuses the same two strings to decide *why* it was
  *   wrong.
  * - A failed (`again`) contrastive-pair review — the card's entire premise
@@ -217,6 +217,7 @@ export function classifyReviewError(input: {
     if (input.activityType === 'reading_production') return 'incorrect_reading';
     if (input.activityType === 'sentence_transformation') return 'grammar_misunderstanding';
     if (input.activityType === 'grammar_completion') return 'grammar_misunderstanding';
+    if (input.activityType === 'grammar_contrast') return 'grammar_misunderstanding';
   }
   if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
     return 'vocabulary_confusion';

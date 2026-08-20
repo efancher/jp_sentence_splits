@@ -169,6 +169,41 @@ describe('computeGrammarLearnerState', () => {
       }),
     ).toBe('noticed');
   });
+
+  it('is distinguished once tracked, proficient, and contrast-proficient', () => {
+    expect(
+      computeGrammarLearnerState({
+        encounterCount: 5,
+        confirmedCount: 1,
+        tracked: true,
+        proficient: true,
+        contrastProficient: true,
+      }),
+    ).toBe('distinguished');
+  });
+
+  it('stays recognized (not distinguished) with no contrast evidence', () => {
+    expect(
+      computeGrammarLearnerState({
+        encounterCount: 5,
+        confirmedCount: 1,
+        tracked: true,
+        proficient: true,
+        contrastProficient: false,
+      }),
+    ).toBe('recognized');
+  });
+
+  it('defaults contrastProficient to false when omitted', () => {
+    expect(
+      computeGrammarLearnerState({
+        encounterCount: 5,
+        confirmedCount: 1,
+        tracked: true,
+        proficient: true,
+      }),
+    ).toBe('recognized');
+  });
 });
 
 describe('computeGrammarPriorityBucket', () => {
@@ -230,6 +265,18 @@ describe('computeGrammarPriorityBucket', () => {
         recentReviewCount: 5,
       }),
     ).toBe('developing');
+  });
+
+  it('is strong when distinguished with no recent again ratings', () => {
+    expect(
+      computeGrammarPriorityBucket({
+        encounterCount: 10,
+        tracked: true,
+        state: 'distinguished',
+        recentAgainCount: 0,
+        recentReviewCount: 5,
+      }),
+    ).toBe('strong');
   });
 });
 

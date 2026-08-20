@@ -89,19 +89,22 @@ machinery, entered only via "Track" (never lazily seeded by `ReviewPage`
 itself, unlike every other category), global scope only. Phases 6+7+8
 (shipped together) added a derived learner-state ladder
 (`computeGrammarLearnerState`: Encountered → Noticed → Recognized from
-existing evidence, never manually set — the top two tiers,
-Distinguished/Productive, are reachable in the type but nothing produces
-their evidence yet, since that needs the contrast/production activity
-types Phase 9 defers), a personalized `/grammar` dashboard that groups
-tagged patterns into explainable priority buckets instead of one
-encounter-count list (`computeGrammarPriorityBucket`/
+existing evidence, never manually set), a personalized `/grammar`
+dashboard that groups tagged patterns into explainable priority buckets
+instead of one encounter-count list (`computeGrammarPriorityBucket`/
 `explainGrammarPriority` — prose, not an opaque score), a "Related
 patterns" section on the detail page to view/create `GrammarRelationship`
 edges, a grammar natural-encounter panel on `PracticePage` mirroring the
 vocabulary one, and relationship-aware distractor ranking in
-`ReviewPage`'s `grammar_completion` cards. Phase 9 (production/
-transformation/contrast activity types) remains deliberately deferred —
-see `docs/STATUS.md`.
+`ReviewPage`'s `grammar_completion` cards. A subsequent Contrast slice of
+Phase 9 added `grammar_contrast` (design brief §11C, "can you tell these
+two apart"): unlike every other grammar activity type, this one **can**
+get lazily seeded by `ReviewPage`'s generic pending-seed pool, since its
+candidate only exists once an already-tracked pattern has a
+`GrammarRelationship` — reaching this tier surfaces as the ladder's
+`distinguished` state. Prediction/transformation/production (the rest of
+design brief §11 D/F/G) remain deliberately deferred — see
+`docs/STATUS.md`.
 
 ## Sync engine
 

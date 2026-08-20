@@ -134,6 +134,24 @@ const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = [
   'grammar_completion',
 ];
 
+/**
+ * Grammar contrast (grammar-learning system Phase 9 slice, design brief
+ * §11C — "can you tell these two apart," not just recall the right one
+ * from an open pool): a separate descriptor from GRAMMAR_ACTIVITY_TYPES
+ * above because its eligibility is narrower still — a candidate only
+ * exists for a tracked pattern that also has at least one
+ * `GrammarRelationship` (created via the detail page's "Related patterns"
+ * picker), not every tracked pattern. Unlike grammar_comprehension/
+ * grammar_completion, this genuinely *can* get lazily seeded by
+ * ReviewPage's generic pending-seed pool the first time a relationship
+ * makes a candidate available for an already-tracked pattern — that's
+ * intentional and mirrors the existing "catches an older-Track pattern
+ * missing one of the [other] types" backfill behavior GRAMMAR_ACTIVITY_
+ * TYPES's own doc comment describes, just triggered by a relationship
+ * appearing instead of a Track click.
+ */
+const GRAMMAR_CONTRAST_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_contrast'];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
@@ -145,6 +163,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sentence_transformation: 'Sentence transformation',
   grammar_comprehension: 'Grammar comprehension',
   grammar_completion: 'Grammar completion',
+  grammar_contrast: 'Grammar contrast',
 };
 
 interface SentenceTransformationCandidate {
@@ -326,6 +345,8 @@ interface ReviewScope {
   existingTransformationItems: StudyItem[];
   grammarCandidates: GrammarReviewCandidate[];
   existingGrammarItems: StudyItem[];
+  grammarContrastCandidates: GrammarReviewCandidate[];
+  existingGrammarContrastItems: StudyItem[];
 }
 
 function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
@@ -400,6 +421,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       activityTypes: GRAMMAR_ACTIVITY_TYPES,
       candidates: scope.grammarCandidates,
       existingItems: scope.existingGrammarItems,
+      subjectId: (candidate) => candidate.pattern.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        grammar: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureGrammarStudyItem(candidate.pattern.id, activityType),
+    }),
+    defineActivityDescriptor<GrammarReviewCandidate>({
+      key: 'grammarContrast',
+      activityTypes: GRAMMAR_CONTRAST_ACTIVITY_TYPES,
+      candidates: scope.grammarContrastCandidates,
+      existingItems: scope.existingGrammarContrastItems,
       subjectId: (candidate) => candidate.pattern.id,
       buildCard: (studyItem, candidate) => ({
         studyItem,
@@ -566,10 +601,21 @@ export function ReviewPage() {
     // pattern in the corpus" — see GRAMMAR_ACTIVITY_TYPES's doc comment.
     let grammarCandidates: GrammarReviewCandidate[] = [];
     let existingGrammarItems: StudyItem[] = [];
+    let grammarContrastCandidates: GrammarReviewCandidate[] = [];
+    let existingGrammarContrastItems: StudyItem[] = [];
     if (!bookId) {
-      const grammarStudyItems = (
-        await db.studyItems.where('activityType').anyOf(GRAMMAR_ACTIVITY_TYPES).toArray()
+      const allGrammarPatternStudyItems = (
+        await db.studyItems
+          .where('activityType')
+          .anyOf([...GRAMMAR_ACTIVITY_TYPES, ...GRAMMAR_CONTRAST_ACTIVITY_TYPES])
+          .toArray()
       ).filter((item) => item.subjectType === 'grammarPattern');
+      const grammarStudyItems = allGrammarPatternStudyItems.filter((item) =>
+        GRAMMAR_ACTIVITY_TYPES.includes(item.activityType),
+      );
+      const grammarContrastStudyItems = allGrammarPatternStudyItems.filter(
+        (item) => item.activityType === 'grammar_contrast',
+      );
       const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
       if (trackedPatternIds.length > 0) {
         const [trackedPatterns, allPatterns, relationships] = await Promise.all([
@@ -577,11 +623,15 @@ export function ReviewPage() {
           db.grammarPatterns.toArray(),
           db.grammarRelationships.toArray(),
         ]);
+        const patternsById = new Map(allPatterns.map((item) => [item.id, item]));
         // Rank GrammarRelationship-linked patterns first among completion
         // distractors (grammar-learning system Phase 8) — a distractor the
         // learner has actually flagged as confusable is more useful than a
         // random one from the corpus. See buildGrammarCompletionChoices's
-        // doc comment.
+        // doc comment. The same map also drives grammar_contrast candidates
+        // below (Phase 9 slice) — a contrast card only exists for a pattern
+        // with at least one relationship, quizzing specifically the linked
+        // pair rather than a pool of arbitrary corpus distractors.
         const relatedPatternIdsByPattern = new Map<string, Set<string>>();
         for (const relationship of relationships) {
           const addRelation = (id: string, otherId: string) => {
@@ -597,6 +647,7 @@ export function ReviewPage() {
           const context = await pickContextSentenceForGrammarPattern(pattern.id);
           if (!context) continue;
           const otherPatterns = allPatterns.filter((item) => item.id !== pattern.id);
+          const relatedPatternIds = relatedPatternIdsByPattern.get(pattern.id);
           grammarCandidates.push({
             pattern,
             sentence: context.sentence,
@@ -604,13 +655,29 @@ export function ReviewPage() {
               pattern,
               otherPatterns,
               undefined,
-              relatedPatternIdsByPattern.get(pattern.id),
+              relatedPatternIds,
             ),
           });
+          if (relatedPatternIds && relatedPatternIds.size > 0) {
+            const relatedPatterns = [...relatedPatternIds]
+              .map((id) => patternsById.get(id))
+              .filter((item): item is GrammarPattern => !!item);
+            grammarContrastCandidates.push({
+              pattern,
+              sentence: context.sentence,
+              choices: buildGrammarCompletionChoices(pattern, relatedPatterns, 2),
+            });
+          }
         }
         const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
         existingGrammarItems = grammarStudyItems.filter((item) =>
           grammarCandidateIds.has(item.subjectId),
+        );
+        const grammarContrastCandidateIds = new Set(
+          grammarContrastCandidates.map((c) => c.pattern.id),
+        );
+        existingGrammarContrastItems = grammarContrastStudyItems.filter((item) =>
+          grammarContrastCandidateIds.has(item.subjectId),
         );
       }
     }
@@ -629,6 +696,8 @@ export function ReviewPage() {
       existingTransformationItems,
       grammarCandidates,
       existingGrammarItems,
+      grammarContrastCandidates,
+      existingGrammarContrastItems,
     };
   }, [bookId]);
 
@@ -1015,6 +1084,16 @@ export function ReviewPage() {
               <SentenceTransformationCard
                 key={current.studyItem.id}
                 candidate={current.transformation}
+                revealed={revealed}
+                onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
+              />
+            ) : current.grammar && current.studyItem.activityType === 'grammar_contrast' ? (
+              <GrammarContrastCard
+                key={current.studyItem.id}
+                candidate={current.grammar}
                 revealed={revealed}
                 onCheck={(value) => {
                   setTypedResponse(value);
@@ -1528,6 +1607,70 @@ function GrammarCompletionCard({
           sentence.japanese
         )}
       </div>
+      {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+      {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+    </>
+  );
+}
+
+/**
+ * Grammar contrast (grammar-learning system Phase 9 slice, design brief
+ * §11C): "can you tell these two apart," specifically for a
+ * `GrammarRelationship`-linked pair the learner flagged as confusable via
+ * the detail page — not "recall the right construction from an open pool"
+ * (that's grammar_completion). Always exactly two choices by construction
+ * (see ReviewPage's scope-building: a candidate only exists for a pattern
+ * with at least one relationship), so unlike GrammarCompletionCard there's
+ * no "fewer than two choices" degrade branch. Deliberately never blanks
+ * the sentence — the point is recognizing which of two specific
+ * constructions is actually present, not filling in a gap, and blanking
+ * could erase the very distinction being tested (e.g. two patterns that
+ * differ only outside the matched span). Same typed-response/self-rate
+ * funnel as GrammarCompletionCard — `onCheck` sets `typedResponse` to the
+ * chosen pattern's name for classifyReviewError to compare.
+ */
+function GrammarContrastCard({
+  candidate,
+  revealed,
+  onCheck,
+}: {
+  candidate: GrammarReviewCandidate;
+  revealed: boolean;
+  onCheck: (chosenCanonicalName: string) => void;
+}) {
+  const { pattern, sentence, choices } = candidate;
+  const [selected, setSelected] = useState<string | null>(null);
+
+  if (!revealed) {
+    return (
+      <>
+        <div className="jp jp-lg">{sentence.japanese}</div>
+        <div className="muted">Which construction is used here?</div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          {choices.map((choice) => (
+            <button
+              key={choice.id}
+              type="button"
+              className="jp"
+              onClick={() => {
+                setSelected(choice.canonicalName);
+                onCheck(choice.canonicalName);
+              }}
+            >
+              {choice.canonicalName}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="muted">
+        {selected === pattern.canonicalName ? '✓ Correct' : '✗ Not quite'}
+      </div>
+      <div className="jp jp-lg">{sentence.japanese}</div>
       {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
       {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
     </>

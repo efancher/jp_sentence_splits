@@ -147,15 +147,16 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phases 1-8 — schema/repository/sync/
-  backup foundation, manual annotation from Analyze, the `/grammar`
-  browser/detail UI, AI-assisted suggestion/explanation,
-  `grammar_comprehension`/`grammar_completion` review cards, a derived
-  learner-state ladder, a personalized `/grammar` curriculum dashboard,
-  and a first slice of `GrammarRelationship` browsing/creation, see the
-  Feature walkthrough below — are all done; Phase 9 — contrast/
-  transformation/production activity types — deliberately not started,
-  see `docs/STATUS.md`): a second layer on top of the
+- **Grammar-learning system** (new; Phases 1-8 plus a Contrast slice of
+  Phase 9 — schema/repository/sync/backup foundation, manual annotation
+  from Analyze, the `/grammar` browser/detail UI, AI-assisted suggestion/
+  explanation, `grammar_comprehension`/`grammar_completion`/
+  `grammar_contrast` review cards, a derived learner-state ladder, a
+  personalized `/grammar` curriculum dashboard, and `GrammarRelationship`
+  browsing/creation, see the Feature walkthrough below — are all done;
+  prediction/transformation/production activity types deliberately not
+  started, a scope decision made explicitly when asked rather than an
+  oversight — see `docs/STATUS.md`): a second layer on top of the
   Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
@@ -324,7 +325,19 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   patterns first (Phase 8, `buildGrammarCompletionChoices`'s
   `relatedPatternIds` param) — a distractor the learner flagged as
   confusable via the detail page is a more useful contrast than a random
-  one from the corpus.
+  one from the corpus. `grammar_contrast` (Phase 9 Contrast slice, design
+  brief §11C): "can you tell these two apart," specifically for a
+  `GrammarRelationship`-linked pair — always exactly two choices, the
+  full unblanked sentence (blanking would risk erasing the very
+  distinction under test), auto-graded via the same typed-response funnel
+  as `grammar_completion`. Its eligibility is narrower than the other two
+  grammar activity types (needs a relationship, not just tracking), so
+  **it's the one grammar activity type that can get lazily seeded by
+  `ReviewPage`'s generic pending-seed pool** — the moment a relationship
+  makes a candidate available for an already-tracked pattern, no
+  `GrammarPicker.tsx` change needed. Reaching FSRS proficiency on this
+  study item is what lets `computeGrammarLearnerState` return
+  `'distinguished'`, one rung above `'recognized'`.
 
 **Gating and mnemonic/assistance tracking**: a sentence's full-sentence
 cards (`comprehension`/`reading_in_context`) are deliberately withheld
@@ -380,8 +393,10 @@ needed help on 1 of the last 5 reviews.") rather than a bare number or an
 opaque score — closer to "what's actually showing up, and how well do you
 know it" than a dictionary or a JLPT-ordered syllabus. The detail page
 shows a derived learner-state badge (`GrammarLearnerState` — Encountered /
-Noticed / Recognized, `computeGrammarLearnerState`, Phase 6; never
-manually set) alongside "Your encounters" (design brief §5/§6 — "where
+Noticed / Recognized / Distinguished (the last requires FSRS proficiency
+on the pattern's own `grammar_contrast` study item, Phase 9 Contrast
+slice), `computeGrammarLearnerState`, Phase 6; never manually set)
+alongside "Your encounters" (design brief §5/§6 — "where
 else have I seen this?"): every sentence a pattern has been tagged in, via
 `listSentenceGrammarForPattern`, each linking into
 `/books/:bookId/analyze/:sentenceId` when a book membership exists (plain

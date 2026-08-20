@@ -1,31 +1,32 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system Phases 6+7+8 — derived
-learner state, personalized curriculum dashboard, and a first slice of
-grammar relationships — landed together as one pass. `computeGrammarLearnerState`
-derives Encountered/Noticed/Recognized from existing evidence (no new
-manually-set field); `/grammar` now groups tagged patterns into
+Last updated: 2026-08-20 (Grammar-learning system — a Contrast-only slice
+of its own Phase 9: a new `grammar_contrast` review activity type,
+"can you tell these two apart" for a `GrammarRelationship`-linked pair —
+see the dedicated entry below. Production/transformation activities
+remain deliberately deferred, per user decision when asked to scope this
+pass. Before that: Phases 6+7+8 — derived learner state, personalized
+curriculum dashboard, and a first slice of grammar relationships — landed
+together as one pass. `computeGrammarLearnerState` derives Encountered/
+Noticed/Recognized(/now Distinguished, this pass) from existing evidence
+(no new manually-set field); `/grammar` now groups tagged patterns into
 explainable priority buckets (Worth learning now / Developing / Recently
 encountered / Strong) instead of one flat encounter-count list;
 `GrammarPatternDetailPage` shows the derived state badge and a new
 "Related patterns" section to view/create `GrammarRelationship` edges;
 `PracticePage` gained a grammar natural-encounter panel mirroring the
 existing vocabulary one; `ReviewPage`'s `grammar_completion` distractor
-pool now ranks relationship-linked patterns first. The grammar plan's own
-Phase 9 (production/transformation activity types, not to be confused with
-the unrelated general-roadmap "Phase 9" mentioned further below)
-deliberately still not started — see the dedicated entry below. Before
-that: Phase 5 shipped
-`grammar_comprehension`/`grammar_completion` review cards wired into
-`ReviewPage`, global scope only. Phase 4's `grammar-assist` Edge Function
-deployed live and confirmed working by the user. Phases 1-4 (corpus-model
-foundation, manual annotation from Analyze, `/grammar` browser/detail,
-AI-assisted suggestion/explanation) already done. Before that: Phase 9 (of
-the earlier, unrelated roadmap) complete — Milestone 9 done; sentence
-translation and vocabulary meaning are now editable in the UI; a batch of
-small Phase 7.10/9 follow-ups landed together; card issue reports ("report
-a problem with this card") added; two small Analyze-editor/Vocabulary-
-picker chunk-boundary bugs fixed).
+pool now ranks relationship-linked patterns first. Before that: Phase 5
+shipped `grammar_comprehension`/`grammar_completion` review cards wired
+into `ReviewPage`, global scope only. Phase 4's `grammar-assist` Edge
+Function deployed live and confirmed working by the user. Phases 1-4
+(corpus-model foundation, manual annotation from Analyze, `/grammar`
+browser/detail, AI-assisted suggestion/explanation) already done. Before
+that: Phase 9 (of the earlier, unrelated roadmap) complete — Milestone 9
+done; sentence translation and vocabulary meaning are now editable in the
+UI; a batch of small Phase 7.10/9 follow-ups landed together; card issue
+reports ("report a problem with this card") added; two small
+Analyze-editor/Vocabulary-picker chunk-boundary bugs fixed).
 
 ## Phase 0 — Repository analysis: done
 
@@ -4337,6 +4338,18 @@ exist yet, Phase 8); activity types C (Contrast), D (Prediction), F
 learner-state-ladder UI surfacing "Recognized"/"Distinguished" derived from
 this new evidence (Phase 6/7).
 
+**Verified**: `npm run check` green — 663 tests passed (up from 650), 2
+pre-existing skips (unrelated), 0 failed. Run 7× total across the session
+(3 as part of `npm run check`/`test`, 4 standalone) to check for
+flakiness — one transient full-suite-only failure occurred once, but did
+not reproduce on immediate re-run, and the new test file alone ran clean
+across every isolated repeat; consistent with this codebase's
+already-documented history of occasional test-isolation flakiness under
+the full suite (see the Phase 5/9-era "Test-suite flakiness fix" entry
+above) rather than something newly introduced here — not chased further
+without a captured stack trace to diagnose against. `npm run build` and
+`npm run lint` green, no new warnings.
+
 ## Grammar-learning system — Phases 6+7+8 (learner state, curriculum dashboard, relationships): done
 
 Shipped as one combined pass rather than three separate ones — the pure
@@ -4491,19 +4504,111 @@ surfaced honestly in that function's doc comment and in the dashboard
 corresponding label anywhere in the UI). Revisit if usage of the current
 system shows the two-activity-type v1 (`grammar_comprehension`/
 `grammar_completion`) isn't giving learners enough signal on its own.
+**Update**: the contrast-type activity shipped in the very next pass —
+see "Grammar-learning system — Contrast (Phase 9 slice)" below.
+Production/transformation remain deferred.
 
 **Verified**: `npm run typecheck`, `npm run test` (full suite: 693 passed,
 2 pre-existing skips, 0 failed — up from 663), `npm run lint` (no new
 warnings beyond the pre-existing ones), and `npm run build` all green.
 
-**Verified**: `npm run check` green — 663 tests passed (up from 650), 2
-pre-existing skips (unrelated), 0 failed. Run 7× total across the session
-(3 as part of `npm run check`/`test`, 4 standalone) to check for
-flakiness — one transient full-suite-only failure occurred once, but did
-not reproduce on immediate re-run, and the new test file alone ran clean
-across every isolated repeat; consistent with this codebase's
-already-documented history of occasional test-isolation flakiness under
-the full suite (see the Phase 5/9-era "Test-suite flakiness fix" entry
-above) rather than something newly introduced here — not chased further
-without a captured stack trace to diagnose against. `npm run build` and
-`npm run lint` green, no new warnings.
+## Grammar-learning system — Contrast (Phase 9 slice): done
+
+The user was asked how much of the remaining scope (Phase 9: contrast,
+prediction, transformation, production) to build, given the tradeoffs —
+contrast is auto-gradable and reuses `GrammarRelationship` data already
+shipped; prediction/transformation/production need free-text generation
+and grading, which either means extending `grammar-assist` for AI-graded
+scoring (ongoing per-review Anthropic API cost) or an ungraded self-report.
+Decision: **contrast only**. Prediction/transformation/production remain
+deliberately deferred.
+
+- `src/lib/grammarPatterns.ts` — `computeGrammarLearnerState` gained an
+  optional `contrastProficient` input: `distinguished` now requires
+  `tracked && proficient && contrastProficient` (design brief §9 — "can
+  you tell this apart from a pattern you actually confuse it with," not
+  just recall from a pool). Omitted/false simply caps a pattern at
+  `recognized`, the previous behavior — no existing caller broke.
+  `computeGrammarPriorityBucket` treats `distinguished` the same as
+  `recognized` for the `strong` bucket (both "recognized or better, no
+  recent again ratings"). No new choice-building function needed —
+  contrast reuses `buildGrammarCompletionChoices(pattern, relatedPatterns,
+  2)`, which already produces a deterministic, order-shuffled two-element
+  array from exactly the given pool.
+
+- `src/db/repository.ts` — `listGrammarPatternSummaries` computes
+  `contrastProficient` the same way it already computes `proficient`
+  (`isVocabularyItemProficient` on the pattern's own `grammar_contrast`
+  study item's FSRS state), no extra DB read — `patternStudyItems` already
+  included every `grammarPattern`-subject study item regardless of
+  activityType.
+
+- `src/pages/ReviewPage.tsx` — new `grammar_contrast` activity type and
+  descriptor (`GRAMMAR_CONTRAST_ACTIVITY_TYPES`), deliberately kept
+  separate from the `grammar` descriptor (`GRAMMAR_ACTIVITY_TYPES`, still
+  just comprehension/completion) because its eligibility is narrower: a
+  candidate only exists for an already-tracked pattern that *also* has at
+  least one `GrammarRelationship` (any type — the relationship itself,
+  not its specific type, is what marks "worth contrasting"). The
+  scope-building block now does one combined `studyItems` query across
+  all three grammar activity types, splits it into
+  `grammarStudyItems`/`grammarContrastStudyItems`, and — reusing the same
+  `relatedPatternIdsByPattern` map built for completion's distractor
+  ranking (Phase 8) — builds a `grammarContrastCandidates` entry only for
+  tracked patterns with at least one related pattern, picking exactly one
+  contrast partner via `buildGrammarCompletionChoices(pattern,
+  relatedPatterns, 2)`.
+  **Unlike grammar_comprehension/grammar_completion, `grammar_contrast`
+  genuinely can get lazily seeded by ReviewPage's generic pending-seed
+  pool** — the first time a relationship makes a candidate available for
+  an already-tracked pattern, the standard `PendingSeed` machinery picks
+  it up automatically (no change needed to `GrammarPicker.tsx`'s Track
+  handler, which still only seeds comprehension+completion). This mirrors
+  the existing "catches an older-Track pattern missing one of the [other]
+  types" backfill behavior `GRAMMAR_ACTIVITY_TYPES`'s own doc comment
+  already described, just triggered by a relationship appearing instead
+  of a Track click — a deliberate reuse of an existing mechanism, not a
+  new one.
+- `GrammarContrastCard` (new component): shows the **full, unblanked**
+  sentence (unlike `GrammarCompletionCard`, which blanks when possible) —
+  the point is recognizing which of two *specific* constructions is
+  actually present, not filling in a gap, and blanking risks erasing the
+  very distinction under test (two patterns that differ only outside the
+  matched span). Exactly two choice buttons by construction (no "fewer
+  than two choices" degrade branch, unlike completion — a contrast
+  candidate literally cannot exist without a relationship providing the
+  second choice). Same typed-response/self-rate funnel as every other
+  auto-graded card (`onCheck` sets `typedResponse` to the chosen pattern's
+  name, `handleRate`'s existing `current.grammar.pattern.canonicalName`
+  expected-answer branch already covers it — no changes needed there).
+
+- `src/lib/scheduling.ts` — `classifyReviewError` gained a
+  `grammar_contrast` branch (wrong choice → `grammar_misunderstanding`,
+  same as `grammar_completion`).
+
+- Tests: `tests/grammarPatterns.test.ts` (`distinguished` state cases —
+  reached, stays `recognized` with no contrast evidence, defaults to
+  `false` when the field is omitted; `strong` bucket reachable via
+  `distinguished`), `tests/scheduling.test.ts` (wrong/correct
+  `grammar_contrast` classification), `tests/data.test.ts`
+  (`listGrammarPatternSummaries` reaches `distinguished`/`strong` once
+  both the comprehension and contrast study items are FSRS-proficient),
+  `tests/grammarPatternDetailPage.test.tsx` (Distinguished badge renders),
+  `tests/reviewPage.test.tsx` (two new end-to-end cases: a pre-seeded
+  `grammar_contrast` card renders the full sentence, both pattern names as
+  buttons, grades correctly, and records the review with the right
+  `responseRaw`/`expectedAnswer`; and — the more important case — a
+  tracked pattern with **no** `grammar_contrast` study item pre-seeded
+  gets one created automatically by the generic pending-seed pool purely
+  because a `GrammarRelationship` exists, proving the lazy-seed wiring
+  works without touching `GrammarPicker.tsx`).
+
+**Deliberately still not done**: prediction/transformation/production
+(design brief §11 D/F/G) — per the user's explicit scope decision this
+pass, not a default/oversight. `computeGrammarLearnerState`'s top tier,
+`productive`, stays unreachable until one of those exists to supply its
+evidence.
+
+**Verified**: `npm run typecheck`, `npm run test` (full suite: 703 passed,
+2 pre-existing skips, 0 failed — up from 693), `npm run lint` (no new
+warnings), and `npm run build` all green.
