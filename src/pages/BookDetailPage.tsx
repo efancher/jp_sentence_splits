@@ -515,7 +515,7 @@ export function BookDetailPage() {
               );
               if (!ok) return;
               await deleteBook(bookId);
-              navigate('/');
+              navigate('/books');
             }}
           >
             Delete book

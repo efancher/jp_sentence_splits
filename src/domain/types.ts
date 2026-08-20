@@ -738,3 +738,82 @@ export interface GrammarRelationship {
   createdAt: string;
   updatedAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Learning Orchestrator (docs/AI_OVERVIEW.md) — additive, local-only (no sync
+// wiring, same precedent as Attempt/ReferenceAlignment). A scheduling/
+// recommendation layer on top of the existing StudyItem/Review/Attempt/
+// SentenceGrammar data, not a parallel content model: PlannerSession only
+// ever *references* existing subjects (sentences, vocabulary items, grammar
+// patterns, study items) by id, it never duplicates their data. Distinct
+// from AppSettings.newCardsPerSessionLimit's "session planner" (an existing,
+// unrelated per-sitting new-card cap on ReviewPage) — this is a separate
+// concept, deliberately named differently to avoid confusion.
+// ---------------------------------------------------------------------------
+
+/**
+ * The four conceptual study activities the Orchestrator schedules across
+ * (design brief, see docs/AI_OVERVIEW.md): Explore (encounter new material),
+ * Understand (investigate grammar/structure), Practice (active production —
+ * shadowing, cloze, transformation), Retain (spaced review). A scheduling/
+ * analytics taxonomy only — existing pages are unchanged, most already do
+ * work that spans more than one mode in a single visit.
+ */
+export type LearningMode = 'explore' | 'understand' | 'practice' | 'retain';
+
+export type SessionLength = 'quick' | 'normal' | 'deep';
+
+export type PlannerStepStatus = 'pending' | 'active' | 'completed' | 'skipped' | 'replaced';
+
+/**
+ * What a step's "Go" action opens. Deliberately deep-links into existing
+ * pages/flows rather than rebuilding their UI inside the runner — the
+ * Orchestrator sequences and tracks activities, it doesn't reimplement them.
+ */
+export type PlannerStepTargetKind =
+  | 'continue_book'
+  | 'grammar_detail'
+  | 'shadow'
+  | 'review'
+  | 'vocabulary_detail';
+
+export interface PlannerSessionStep {
+  id: string;
+  mode: LearningMode;
+  /** A real StudyActivityType for review-surface steps; a synthetic label (e.g. 'shadowing_practice', 'new_sentence', 'grammar_explore') for steps with no StudyItem of their own. */
+  activityType: string;
+  targetKind: PlannerStepTargetKind;
+  bookId?: string;
+  sentenceId?: string;
+  grammarPatternId?: string;
+  vocabularyItemId?: string;
+  label: string;
+  estimatedMinutes: number;
+  /** Short human-readable reason this specific step was chosen (design brief §7's "not opaque" requirement), e.g. "Encountered 3 times, not tracked yet." */
+  reason: string;
+  status: PlannerStepStatus;
+  startedAt?: string;
+  completedAt?: string;
+  /** Lightweight implicit-feedback signal (design brief §9) — set only when the learner explicitly flags it, never required. */
+  feedback?: 'too_easy' | 'difficult';
+}
+
+/**
+ * One generated (and, once started, executed/tracked) recommended session.
+ * `allocation`/`explanation` are a snapshot of the planner's reasoning at
+ * generation time — re-running the planner later may produce a different
+ * plan as underlying data changes, but this record preserves what was
+ * actually recommended and why.
+ */
+export interface PlannerSession {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  length: SessionLength;
+  targetMinutes: number;
+  allocation: Record<LearningMode, number>;
+  explanation: string[];
+  steps: PlannerSessionStep[];
+  status: 'in_progress' | 'completed' | 'ended_early';
+  endedAt?: string;
+}

@@ -426,6 +426,57 @@ export const grammarRelationshipSchema = z.object({
   updatedAt: z.string(),
 });
 
+// Learning Orchestrator (docs/AI_OVERVIEW.md) — additive, local-only. Moved
+// ahead of backupSchema for the same forward-reference reason as
+// vocabularyItemSchema/grammarPatternSchema above.
+export const learningModeSchema = z.enum(['explore', 'understand', 'practice', 'retain']);
+export const sessionLengthSchema = z.enum(['quick', 'normal', 'deep']);
+export const plannerStepStatusSchema = z.enum([
+  'pending',
+  'active',
+  'completed',
+  'skipped',
+  'replaced',
+]);
+export const plannerStepTargetKindSchema = z.enum([
+  'continue_book',
+  'grammar_detail',
+  'shadow',
+  'review',
+  'vocabulary_detail',
+]);
+
+export const plannerSessionStepSchema = z.object({
+  id: z.string(),
+  mode: learningModeSchema,
+  activityType: z.string().min(1),
+  targetKind: plannerStepTargetKindSchema,
+  bookId: z.string().optional(),
+  sentenceId: z.string().optional(),
+  grammarPatternId: z.string().optional(),
+  vocabularyItemId: z.string().optional(),
+  label: z.string(),
+  estimatedMinutes: z.number().nonnegative(),
+  reason: z.string(),
+  status: plannerStepStatusSchema,
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  feedback: z.enum(['too_easy', 'difficult']).optional(),
+});
+
+export const plannerSessionSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  length: sessionLengthSchema,
+  targetMinutes: z.number().positive(),
+  allocation: z.record(learningModeSchema, z.number()),
+  explanation: z.array(z.string()),
+  steps: z.array(plannerSessionStepSchema),
+  status: z.enum(['in_progress', 'completed', 'ended_early']),
+  endedAt: z.string().optional(),
+});
+
 export const backupSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
   appVersion: z.string(),
@@ -454,6 +505,8 @@ export const backupSchema = z.object({
     grammarPatterns: z.number().default(0),
     sentenceGrammar: z.number().default(0),
     grammarRelationships: z.number().default(0),
+    // Additive (Learning Orchestrator): same "missing key -> 0" reasoning.
+    plannerSessions: z.number().default(0),
   }),
   books: z.array(bookSchema),
   sentences: z.array(sentenceSchema),
@@ -474,6 +527,9 @@ export const backupSchema = z.object({
   grammarPatterns: z.array(grammarPatternSchema).default([]),
   sentenceGrammar: z.array(sentenceGrammarSchema).default([]),
   grammarRelationships: z.array(grammarRelationshipSchema).default([]),
+  // Additive (Learning Orchestrator): backups exported before this feature
+  // won't have this key — .default([]) so restoring one still succeeds.
+  plannerSessions: z.array(plannerSessionSchema).default([]),
   settings: settingsSchema,
 });
 

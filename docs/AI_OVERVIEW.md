@@ -195,11 +195,80 @@ built out Phases 1–9):
   (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
   rotation).
+- `PlannerSession` (new; Learning Orchestrator, local-only, no sync) — one
+  generated-and-executed recommended session: `length`/`targetMinutes`,
+  the mode `allocation` and prose `explanation` the planner produced, and
+  an embedded ordered `steps: PlannerSessionStep[]` (mirrors
+  `AnalysisChunk[]`'s "small list, not a join table" shape) tracking each
+  step's status (`pending`/`active`/`completed`/`skipped`/`replaced`) and
+  timestamps. Not to be confused with `AppSettings.newCardsPerSessionLimit`
+  — an older, unrelated "session planner" (the per-sitting new-card cap on
+  `ReviewPage`).
 
 Sync/queue-internal tables (`syncMeta`, `syncQueue`, `syncRecordMeta`,
 `syncConflicts`) are infrastructure, not domain data.
 
 ## Feature walkthrough
+
+### 0. Learning Orchestrator — `HomePage.tsx` (`/`, the index route),
+`SessionRunnerPage.tsx` (`/session/:sessionId`)
+Answers "what should I do?" instead of leaving the learner to notice the
+Review queue's due count and default to clearing it. Models study activity
+across four conceptual **learning modes** — **Explore** (encounter new
+Japanese), **Understand** (investigate grammar/structure), **Practice**
+(active production — shadowing, cloze, transformation), **Retain** (spaced
+review) — a scheduling/analytics lens layered on top of existing activity
+types (`ACTIVITY_TYPE_MODE`, `src/lib/sessionPlannerConfig.ts`), not a new
+content model or a forced re-categorization of every feature. This app has
+no continuous native-media player (audio is per-sentence clips, not a
+stream), so Explore steps point at the next not-yet-studied sentence in a
+recently-opened book instead of "continue watching."
+
+**Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
+convention as `scheduling.ts`/`maturity.ts`, so the whole decision process
+is inspectable and unit-tested (`tests/sessionPlanner.test.ts`) without a
+browser: recent-activity distribution over a rolling 14-day window ->
+per-mode **neglect scores** (linear, clamped, deliberately not an
+exponential decay curve) -> **review-priority ranking**
+(`scoreReviewPriority`, generalizing `grammarPatterns.ts`'s
+`computeGrammarPriorityBucket`/`explainGrammarPriority` explainable-bucket
+pattern across every subject type — forgetting risk x usefulness x
+re-encounter freshness, plus a standalone weakness term, additive rather
+than the source brief's literal product so a fresh single-context item
+never scores to zero) -> **time allocation** across the four modes (a
+35/20/20/25 baseline nudged toward neglected modes, clamped against how
+much each mode can actually absorb — e.g. Retain never gets padded with
+low-value reviews just because minutes are available) -> concrete step
+selection, bounded to the best 10-15 due items rather than the whole queue
+-> **coherent-chain grouping** (steps that share a sentence id, e.g. a
+grammar pattern and a shadowing candidate from the same sentence, run back
+to back) -> a short human-readable explanation
+("You haven't touched practice in 6 days, so this session emphasizes it.").
+`src/db/repository.ts`'s "Learning Orchestrator" section is the only
+Dexie-touching half — it adapts live `StudyItem`/`Review`/`Attempt`/
+`SentenceGrammar`/`bookSentences` data into the planner's plain input
+types, batched (not N+1) the same way `listGrammarPatternSummaries`
+already is.
+
+**`HomePage`** — the index route (`BooksPage` moved to `/books`). Shows one
+recommendation (Quick/Normal/Deep toggle, the explanation, a numbered step
+list, "Start Session") plus a compact rolling-14-day balance view (four
+`.progress-bar` meters — reusing the existing CSS component rather than a
+charting dependency — fill = how recently each mode was touched) and a
+direct-access shortcut row (Books/Grammar/Review/Words/Search), so the
+recommendation guides without gating. **`SessionRunnerPage`** sequences a
+started session's steps, deep-linking into the existing Analyze/
+Grammar-detail/Shadow/Review pages for the actual activity rather than
+reimplementing any of them — start/skip/end-early are real, tracked
+actions; a step is only ever marked complete by an explicit action on
+return, never inferred from navigation, so a step merely opened and left
+is never silently counted as done. "Replace an activity" was deliberately
+not built for v1 (Skip plus starting a fresh session covers the same
+need) — see `docs/STATUS.md`'s 2026-08-20 entry for this and other
+known limitations (no time-tracking infrastructure — Explore/Understand
+activity is inferred from existing row timestamps; no settings UI for the
+tuning constants in `sessionPlannerConfig.ts`; `PlannerSession` doesn't
+sync to Supabase, local-only like `Attempt`).
 
 ### 1. Content import & organization
 - **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses
@@ -603,6 +672,13 @@ aren't JSON-serializable/aren't worth backing up).
   sandbox.
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
+- **Learning Orchestrator known limitations** (see docs/STATUS.md's
+  2026-08-20 entry for full detail): no "replace this activity" action, no
+  "continue longer" extend-in-place action, no settings UI for the
+  planner's tuning constants, `PlannerSession` is local-only (no cloud
+  sync), and — same recurring gap as several items above — not yet
+  manually verified in a real browser (this sandbox's Playwright Chromium
+  and WebKit builds both fail to launch on missing system libraries).
 
 ## External services & dependencies
 

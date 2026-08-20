@@ -15,6 +15,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  PlannerSession,
   ReferenceAlignment,
   Review,
   Sentence,
@@ -101,6 +102,11 @@ export class GlossbookDatabase extends Dexie {
   grammarPatterns!: EntityTable<GrammarPattern, 'id'>;
   sentenceGrammar!: EntityTable<SentenceGrammar, 'id'>;
   grammarRelationships!: EntityTable<GrammarRelationship, 'id'>;
+  // Learning Orchestrator (docs/AI_OVERVIEW.md) — recommended-session history.
+  // Local-only, same precedent as `attempts`: this is execution history, not
+  // durable content, and re-planning always works from live StudyItem/Review
+  // data regardless of what's here.
+  plannerSessions!: EntityTable<PlannerSession, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -467,6 +473,51 @@ export class GlossbookDatabase extends Dexie {
         'id, sentenceId, grammarPatternId, [sentenceId+grammarPatternId], chunkId, updatedAt',
       grammarRelationships:
         'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
+    });
+
+    // Learning Orchestrator (recommended-session history) — purely
+    // additive, local-only (see plannerSessions field comment above).
+    this.version(14).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
+      attempts: 'id, sentenceId, createdAt, manualRating',
+      vocabularyConfusions:
+        'id, itemAId, itemBId, [itemAId+itemBId], updatedAt',
+      referenceAlignments: 'id',
+      attemptAlignments: 'id',
+      attemptTranscriptions: 'id',
+      attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+      cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
+      grammarPatterns: 'id, canonicalName, normalizedKey, updatedAt',
+      sentenceGrammar:
+        'id, sentenceId, grammarPatternId, [sentenceId+grammarPatternId], chunkId, updatedAt',
+      grammarRelationships:
+        'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
+      plannerSessions: 'id, status, createdAt',
     });
   }
 }

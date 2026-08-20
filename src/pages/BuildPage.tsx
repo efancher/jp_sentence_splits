@@ -167,7 +167,7 @@ export function BuildPage() {
     return (
       <div className="stack">
         <strong>Book not found.</strong>
-        <Link to="/">Back to books</Link>
+        <Link to="/books">Back to books</Link>
       </div>
     );
   }

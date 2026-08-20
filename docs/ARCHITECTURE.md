@@ -124,6 +124,22 @@ since the card-issue-reports feature, `grammar_patterns`/
 system's Phase 1 (schema-only — no UI writer yet). The one exception is
 `sources`: still no writer anywhere, so nothing to sync yet.
 
+## Learning Orchestrator
+
+A scheduling/recommendation layer on top of the existing SRS, not a parallel
+one — `src/lib/sessionPlanner.ts` is pure functions (no Dexie access, same
+convention as `scheduling.ts`/`maturity.ts`) that take already-fetched
+`StudyItem`/`Review`/`Attempt`/`SentenceGrammar` data and produce a
+recommended mixed session across four conceptual `LearningMode`s (explore/
+understand/practice/retain — `src/lib/sessionPlannerConfig.ts`'s
+`ACTIVITY_TYPE_MODE` maps existing activity types onto them). `src/db/
+repository.ts`'s "Learning Orchestrator" section (end of file) is the only
+Dexie-touching half. One new local-only table, `PlannerSession` (Dexie v14),
+records what was actually recommended/executed — see `docs/AI_OVERVIEW.md`
+for the full design and `docs/STATUS.md`'s 2026-08-20 entry for what shipped
+and what's deliberately deferred. `HomePage` (`src/pages/HomePage.tsx`) is
+now the index route; `BooksPage` moved to `/books`.
+
 ## Scheduling
 
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —

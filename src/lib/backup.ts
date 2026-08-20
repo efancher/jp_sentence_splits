@@ -9,6 +9,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  PlannerSession,
   Review,
   Sentence,
   SentenceAnalysis,
@@ -36,6 +37,7 @@ export interface BackupBundle {
   grammarPatterns: GrammarPattern[];
   sentenceGrammar: SentenceGrammar[];
   grammarRelationships: GrammarRelationship[];
+  plannerSessions: PlannerSession[];
   settings: AppSettings;
 }
 
@@ -60,6 +62,7 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
       grammarPatterns: bundle.grammarPatterns.length,
       sentenceGrammar: bundle.sentenceGrammar.length,
       grammarRelationships: bundle.grammarRelationships.length,
+      plannerSessions: bundle.plannerSessions.length,
     },
     books: bundle.books,
     sentences: bundle.sentences,
@@ -76,6 +79,7 @@ export function buildBackupPayload(bundle: BackupBundle): BackupPayload {
     grammarPatterns: bundle.grammarPatterns,
     sentenceGrammar: bundle.sentenceGrammar,
     grammarRelationships: bundle.grammarRelationships,
+    plannerSessions: bundle.plannerSessions,
     settings: bundle.settings,
   };
   const checksum = hashString(
@@ -183,6 +187,8 @@ export function filterBackupForBook(
     grammarPatterns,
     sentenceGrammar,
     grammarRelationships: [],
+    // Not book-scoped — a session's steps can span several books/modes.
+    plannerSessions: [],
     settings: payload.settings,
   });
   return bundle;

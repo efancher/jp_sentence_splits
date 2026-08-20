@@ -20,6 +20,16 @@ const BooksPage = lazy(() =>
     default: module.BooksPage,
   })),
 );
+const HomePage = lazy(() =>
+  import('./pages/HomePage').then((module) => ({
+    default: module.HomePage,
+  })),
+);
+const SessionRunnerPage = lazy(() =>
+  import('./pages/SessionRunnerPage').then((module) => ({
+    default: module.SessionRunnerPage,
+  })),
+);
 const ImportPage = lazy(() =>
   import('./pages/ImportPage').then((module) => ({
     default: module.ImportPage,
@@ -114,7 +124,9 @@ export default function App() {
       <Suspense fallback={<div className="route-loading">Loading…</div>}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<BooksPage />} />
+            <Route index element={<HomePage />} />
+            <Route path="books" element={<BooksPage />} />
+            <Route path="session/:sessionId" element={<SessionRunnerPage />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />

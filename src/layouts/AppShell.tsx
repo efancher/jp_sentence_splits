@@ -5,7 +5,8 @@ import { MigrationModal } from '../components/MigrationModal';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 
 const NAV = [
-  { to: '/', label: 'Books', end: true },
+  { to: '/', label: 'Home', end: true },
+  { to: '/books', label: 'Books' },
   { to: '/inbox', label: 'Inbox' },
   { to: '/review', label: 'Review' },
   { to: '/issues', label: 'Issues' },
@@ -23,7 +24,8 @@ export function AppShell() {
     location.pathname.includes('/analyze') ||
     location.pathname.includes('/practice') ||
     location.pathname.includes('/build') ||
-    location.pathname.includes('/review');
+    location.pathname.includes('/review') ||
+    location.pathname.includes('/session');
 
   return (
     <div className="app-shell">

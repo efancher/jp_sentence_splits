@@ -1,6 +1,15 @@
 # Status
 
-Last updated: 2026-08-20 (Grammar-learning system — a Contrast-only slice
+Last updated: 2026-08-20 (Learning Orchestrator — a new "what should I do?"
+recommended-session feature: four learning modes (Explore/Understand/
+Practice/Retain), a deterministic planner (`src/lib/sessionPlanner.ts`)
+that allocates a Quick/Normal/Deep session's time across them based on
+rolling-window neglect and a generalized review-priority score, a new
+`HomePage` dashboard (now the index route, replacing Books) and
+`SessionRunnerPage` that sequences the recommendation and tracks
+completion. Local-only, no schema migration to the cloud (see the
+dedicated entry below for the full design/scope). Before that: Grammar-
+learning system — a Contrast-only slice
 of its own Phase 9: a new `grammar_contrast` review activity type,
 "can you tell these two apart" for a `GrammarRelationship`-linked pair —
 see the dedicated entry below. Production/transformation activities
@@ -4789,3 +4798,121 @@ combined test extended with an assertion that the fixture's translation
 
 **Verified**: `npm run check` (typecheck + full vitest suite) green — 715
 tests passed, 2 pre-existing skips, no new warnings.
+
+## Learning Orchestrator (2026-08-20): done
+
+User request (via a ChatGPT-drafted prompt, reviewed and scoped down before
+implementing): the app makes it too easy to spend a whole session clearing
+the SRS due queue, since Review is the one feature with an obvious
+"N due" counter. Added a scheduling/recommendation layer that assembles a
+mixed session across four conceptual learning modes instead — see
+`docs/AI_OVERVIEW.md`'s "Learning Orchestrator" section for the full
+design. Summary of what shipped:
+
+- **Four learning modes** (`LearningMode`: explore/understand/practice/
+  retain) — a scheduling/analytics taxonomy layered on top of existing
+  activity types (`ACTIVITY_TYPE_MODE`, `src/lib/sessionPlannerConfig.ts`),
+  not a new content model. Deliberately doesn't force every feature into
+  the taxonomy (per the prompt's own instruction) — e.g. Explore has no
+  dedicated "native media player" to point at (this app never had one;
+  audio is per-sentence clips, not a continuous stream), so Explore steps
+  point at the next not-yet-studied sentence in a book instead
+  (`findExploreCandidates`, reusing `Book.lastOpenedAt`/`touchBookOpened`,
+  the same "continue where you left off" signal `BookDetailPage` already
+  maintains).
+- **Planner algorithm** (`src/lib/sessionPlanner.ts`) — pure functions
+  only, no Dexie access, same convention as `scheduling.ts`/`maturity.ts`:
+  recent-activity distribution -> neglect scores (linear, clamped to a
+  14-day window, not exponential decay — deliberately inspectable) ->
+  review-priority ranking (`scoreReviewPriority`, a generalization of
+  `grammarPatterns.ts`'s `computeGrammarPriorityBucket`/
+  `explainGrammarPriority` pattern across every subject type, additive not
+  literally multiplicative — the prompt's own formula would zero out a
+  fresh single-context item, which is wrong) -> time allocation across
+  modes (35/20/20/25 baseline nudged by neglect, clamped against how much
+  each mode can actually absorb so a thin due backlog doesn't get padded)
+  -> concrete step selection -> "same sentence, run back to back" chain
+  grouping -> a short human-readable explanation. `tests/sessionPlanner.test.ts`
+  (19 tests) covers every scenario from the design brief: review-heavy
+  history shifting allocation away from Retain, neglected shadowing
+  increasing Practice, no due backlog freeing time for other modes, a
+  large backlog only selecting the top N, a recently-encountered
+  untracked grammar pattern surfacing as an Understand step, Quick/Deep
+  session shape, budget never being exceeded, and sentence-based chain
+  grouping.
+- **Data layer** (`src/db/repository.ts`, new "Learning Orchestrator"
+  section at the end of the file) — the only Dexie-touching half, adapting
+  live `StudyItem`/`Review`/`Attempt`/`SentenceGrammar`/`bookSentences`
+  data into the pure module's plain input types, batched (not N+1) the
+  same way `listGrammarPatternSummaries` already is. One new table,
+  `PlannerSession` (Dexie v14, additive), embeds an ordered `steps[]`
+  array (same "small embedded list, not a join table" precedent as
+  `AnalysisChunk[]`) recording what was actually recommended, executed,
+  skipped, or ended early — `tests/sessionPlannerRepository.test.ts`
+  covers step completion/skip tracking (skipping one step never marks the
+  session complete while others remain pending; ending a session early
+  marks remaining steps skipped, never completed) and confirms the
+  balance view reflects real `Review`/`Attempt` activity, not the
+  planner's own bookkeeping (no feedback loop between "recommended" and
+  "counted as done").
+- **`PlannerSession` is local-only** (no sync wiring, no Supabase
+  migration) — same precedent as `Attempt`/the shadowing-analysis caches.
+  A deliberate scope cut for this first version: full sync wiring (a
+  migration + RLS + `mappers.ts`/`SyncEntity` entries) was judged not
+  worth the added risk/surface for what's currently just session
+  execution history, not durable content — re-planning always works from
+  live `StudyItem`/`Review` data regardless of what device you're on.
+  Included in the local JSON backup (`backupSchema`/`BackupBundle`) since
+  it's small and blob-free, unlike `Attempt`.
+- **UI**: `HomePage` (`src/pages/HomePage.tsx`) is the new index route
+  (`/`), replacing `BooksPage` — Books moved to `/books` with its own nav
+  entry (`BuildPage`'s stale "Back to books" link and
+  `BookDetailPage`'s post-delete redirect were updated to point at
+  `/books` explicitly, the two places that assumed "/" meant Books).
+  Shows one recommendation (explanation + a numbered step list + a
+  Quick/Normal/Deep toggle + "Start Session"), a compact rolling-14-day
+  balance view (four `.progress-bar` meters, reusing the existing CSS
+  component rather than adding a charting dependency — fill = how
+  recently each mode was touched), and a direct-access shortcut row
+  (Books/Grammar/Review/Words/Search) so the recommendation guides
+  without gating. `SessionRunnerPage` (`/session/:sessionId`) sequences
+  the steps, deep-linking into the existing Analyze/Grammar-detail/
+  Shadow/Review pages for the actual activity rather than reimplementing
+  any of them — start/skip/end-early are real actions; **"replace an
+  activity" was deliberately not built** (see Known limitations below).
+- **Naming**: called the Learning Orchestrator throughout code/docs,
+  specifically *not* "session planner" — that name was already taken by
+  `AppSettings.newCardsPerSessionLimit` (the existing per-sitting new-card
+  cap on `ReviewPage`, Phase 7.10b), an unrelated, older concept.
+
+**Known limitations of this first version** (several by deliberate scope
+cut, not oversight):
+- No "replace this activity with something else" action — Skip already
+  covers "don't want to do this one now," and starting a fresh
+  recommended session from Home covers "give me a different mix." A
+  `PlannerStepStatus` of `'replaced'` exists in the schema for forward
+  compatibility but nothing produces it yet.
+- No "continue longer" extend-in-place action — once a session's steps
+  are all settled, the runner just points back to Home, where a new
+  session can be started immediately.
+- Explore/Understand activity signals are derived from existing
+  timestamps (`bookSentences.addedAt`, `analyses.updatedAt`,
+  `sentenceGrammar.updatedAt`) rather than real time-tracking — this app
+  has never tracked page-visit duration, and adding that felt like more
+  new infrastructure than the recommendation quality currently needs. Per-
+  step `estimatedMinutes` are coarse constants
+  (`MODE_ACTIVITY_ESTIMATE_MINUTES`), not measured.
+- No settings UI for the planner's tuning constants — they're centralized
+  in `src/lib/sessionPlannerConfig.ts` (the prompt's "easy to tune"
+  requirement) but not yet exposed as editable `AppSettings` fields, same
+  as e.g. `MATURE_MIN_SCHEDULED_DAYS` isn't either.
+- Not yet manually verified in a real browser — this development sandbox
+  has no working browser-automation dependencies (confirmed directly: both
+  Playwright's Chromium and WebKit builds fail to launch here on missing
+  system libraries, `libnspr4.so` / `libgtk-4.so.1` and others), the same
+  gap repeatedly noted elsewhere in this file. Verified via `npm run check`
+  (typecheck + full vitest suite, 738 passed, 2 pre-existing skips, no new
+  lint warnings) and code review only.
+- Shadowing candidates require both `SentenceAudio` and the sentence
+  already being "in progress" in one of the 5 most-recently-opened books —
+  a brand-new import won't immediately surface shadowing suggestions.

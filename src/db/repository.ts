@@ -22,11 +22,15 @@ import type {
   InboxMembership,
   InitialOrderMode,
   Kanji,
+  LearningMode,
+  PlannerSession,
+  PlannerStepStatus,
   ReferenceAlignment,
   Review,
   ReviewAssistance,
   ReviewRating,
   ReviewSource,
+  SessionLength,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
@@ -80,6 +84,28 @@ import {
   parseShadowingPackage,
   type ShadowingImportPreview,
 } from '../lib/shadowingImport';
+import {
+  buildRecommendedSession,
+  computeNeglectScores,
+  computeRecentActivityDistribution,
+  type ExploreCandidate,
+  type RecentActivityEvent,
+  type RecommendedSession,
+  type ReviewPriorityInput,
+  type SessionPlannerInput,
+  type ShadowCandidate,
+  type UnderstandCandidate,
+} from '../lib/sessionPlanner';
+import {
+  ACTIVITY_TYPE_MODE,
+  EXPLORE_CANDIDATE_LIMIT,
+  NEGLECT_WINDOW_DAYS,
+  PRACTICE_ACTIVITY_TYPES,
+  RETAIN_ACTIVITY_TYPES,
+  SESSION_PLANNER_CANDIDATE_POOL_SIZE,
+  SHADOW_CANDIDATE_LIMIT,
+  UNDERSTAND_CANDIDATE_LIMIT,
+} from '../lib/sessionPlannerConfig';
 import { buildBackupPayload, type BackupBundle } from '../lib/backup';
 import {
   orderBookSentencesFromPaste,
@@ -93,7 +119,7 @@ import {
   curatedVocabForSourceKey,
   selectionsFromCuratedPicks,
 } from '../lib/curatedVocabulary';
-import { ensureSettings, getDb } from './database';
+import { ensureSettings, getDb, readSettings } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
 
 function sortSentences(
@@ -1134,6 +1160,7 @@ export async function exportFullBackup(): Promise<BackupPayload> {
     grammarPatterns: await db.grammarPatterns.toArray(),
     sentenceGrammar: await db.sentenceGrammar.toArray(),
     grammarRelationships: await db.grammarRelationships.toArray(),
+    plannerSessions: await db.plannerSessions.toArray(),
     settings,
   };
   return buildBackupPayload(bundle);
@@ -1190,6 +1217,8 @@ export async function exportBookBackup(bookId: string): Promise<BackupPayload> {
     grammarPatterns,
     sentenceGrammar,
     grammarRelationships: [],
+    // Not book-scoped, same reasoning as grammarRelationships above.
+    plannerSessions: [],
     settings: full.settings,
   });
 }
@@ -1215,6 +1244,7 @@ export async function restoreBackup(
     db.grammarPatterns,
     db.sentenceGrammar,
     db.grammarRelationships,
+    db.plannerSessions,
     db.settings,
     db.sentenceAudio,
   ] as const;
@@ -1237,6 +1267,7 @@ export async function restoreBackup(
         db.grammarPatterns.clear(),
         db.sentenceGrammar.clear(),
         db.grammarRelationships.clear(),
+        db.plannerSessions.clear(),
         db.sentenceAudio.clear(),
       ]);
       await db.books.bulkPut(payload.books);
@@ -1254,6 +1285,7 @@ export async function restoreBackup(
       await db.grammarPatterns.bulkPut(payload.grammarPatterns);
       await db.sentenceGrammar.bulkPut(payload.sentenceGrammar);
       await db.grammarRelationships.bulkPut(payload.grammarRelationships);
+      await db.plannerSessions.bulkPut(payload.plannerSessions);
       await db.settings.put(payload.settings);
     });
     return;
@@ -1349,6 +1381,10 @@ export async function restoreBackup(
         if (!existing || relationship.updatedAt >= existing.updatedAt) {
           await db.grammarRelationships.put(relationship);
         }
+      }
+      for (const session of payload.plannerSessions) {
+        const existing = await db.plannerSessions.get(session.id);
+        if (!existing) await db.plannerSessions.put(session);
       }
       const settings = await ensureSettings(db);
       await db.settings.put({ ...settings, ...payload.settings, id: 'settings' });
@@ -3202,6 +3238,453 @@ export async function recordGrammarRelationshipObservation(
   await db.grammarRelationships.put(updated);
   notifySync('grammar_relationships', updated.id, updated);
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Learning Orchestrator (docs/AI_OVERVIEW.md) — the only Dexie-querying half
+// of the feature. Everything decision-shaped (scoring, allocation, step
+// selection, explanation) lives in the pure src/lib/sessionPlanner.ts; this
+// section's job is purely "fetch real data, adapt it into that module's
+// plain input types." Local-only (see PlannerSession's field comment in
+// database.ts) — no notifySync/notifySyncMany calls here, same convention
+// as the shadowing Attempt section.
+// ---------------------------------------------------------------------------
+
+/**
+ * Batched (not N+1) conversion of already-fetched due StudyItems into
+ * scoreReviewPriority's input shape — one context-diversity query per
+ * subjectType touched, one reviews query for the whole batch, regardless of
+ * how many study items are in `studyItems` (mirrors listGrammarPatternSummaries's
+ * "batched" discipline above).
+ */
+async function buildReviewPriorityInputs(
+  studyItems: StudyItem[],
+  mode: LearningMode,
+  now: Date,
+): Promise<ReviewPriorityInput[]> {
+  if (studyItems.length === 0) return [];
+  const db = getDb();
+
+  const vocabIds = studyItems
+    .filter((item) => item.subjectType === 'vocabularyItem')
+    .map((item) => item.subjectId);
+  const grammarIds = studyItems
+    .filter((item) => item.subjectType === 'grammarPattern')
+    .map((item) => item.subjectId);
+
+  const [vocabLinks, grammarLinks] = await Promise.all([
+    vocabIds.length
+      ? db.sentenceVocabulary.where('vocabularyItemId').anyOf(vocabIds).toArray()
+      : Promise.resolve([]),
+    grammarIds.length
+      ? db.sentenceGrammar.where('grammarPatternId').anyOf(grammarIds).toArray()
+      : Promise.resolve([]),
+  ]);
+  const sentenceIdsByVocabId = new Map<string, string[]>();
+  for (const link of vocabLinks) {
+    const list = sentenceIdsByVocabId.get(link.vocabularyItemId);
+    if (list) list.push(link.sentenceId);
+    else sentenceIdsByVocabId.set(link.vocabularyItemId, [link.sentenceId]);
+  }
+  const sentenceIdsByGrammarId = new Map<string, string[]>();
+  for (const link of grammarLinks) {
+    const list = sentenceIdsByGrammarId.get(link.grammarPatternId);
+    if (list) list.push(link.sentenceId);
+    else sentenceIdsByGrammarId.set(link.grammarPatternId, [link.sentenceId]);
+  }
+
+  const directSentenceIds = studyItems
+    .filter((item) => item.subjectType === 'sentence')
+    .map((item) => item.subjectId);
+  const allReferencedSentenceIds = [
+    ...new Set([...directSentenceIds, ...vocabLinks.map((l) => l.sentenceId), ...grammarLinks.map((l) => l.sentenceId)]),
+  ];
+  const referencedBookSentences = allReferencedSentenceIds.length
+    ? await db.bookSentences.where('sentenceId').anyOf(allReferencedSentenceIds).toArray()
+    : [];
+  const bookIds = [...new Set(referencedBookSentences.map((item) => item.bookId))];
+  const books = await db.books.bulkGet(bookIds);
+  const sourceKeyByBookId = new Map<string, string>();
+  books.forEach((book, index) => {
+    if (book) sourceKeyByBookId.set(bookIds[index]!, book.sourceKey ?? book.id);
+  });
+  const sourceKeysBySentenceId = new Map<string, Set<string>>();
+  for (const membership of referencedBookSentences) {
+    const key = sourceKeyByBookId.get(membership.bookId);
+    if (!key) continue;
+    const existing = sourceKeysBySentenceId.get(membership.sentenceId);
+    if (existing) existing.add(key);
+    else sourceKeysBySentenceId.set(membership.sentenceId, new Set([key]));
+  }
+  function diversityFor(sentenceIds: string[]): { distinctSourceCount: number; distinctSentenceCount: number } {
+    const sources = new Set<string>();
+    for (const sentenceId of sentenceIds) {
+      for (const key of sourceKeysBySentenceId.get(sentenceId) ?? []) sources.add(key);
+    }
+    return { distinctSourceCount: sources.size, distinctSentenceCount: sentenceIds.length };
+  }
+
+  const studyItemIds = studyItems.map((item) => item.id);
+  const allReviews = await db.reviews.where('studyItemId').anyOf(studyItemIds).toArray();
+  const reviewsByStudyItemId = new Map<string, Review[]>();
+  for (const review of allReviews) {
+    const list = reviewsByStudyItemId.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByStudyItemId.set(review.studyItemId, [review]);
+  }
+
+  return studyItems.map((item) => {
+    const itemReviews = (reviewsByStudyItemId.get(item.id) ?? [])
+      .slice()
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const recent = itemReviews.slice(0, 7);
+    const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
+    const lastNaturalEncounter = itemReviews.find((review) => review.source === 'natural_encounter');
+
+    let sentenceIds: string[];
+    if (item.subjectType === 'sentence') sentenceIds = [item.subjectId];
+    else if (item.subjectType === 'vocabularyItem') sentenceIds = sentenceIdsByVocabId.get(item.subjectId) ?? [];
+    else if (item.subjectType === 'grammarPattern') sentenceIds = sentenceIdsByGrammarId.get(item.subjectId) ?? [];
+    else sentenceIds = [];
+    const diversity = diversityFor(sentenceIds);
+
+    return {
+      studyItemId: item.id,
+      subjectType: item.subjectType,
+      activityType: item.activityType,
+      mode,
+      due: item.fsrsState.due,
+      scheduledDays: item.fsrsState.scheduledDays,
+      state: item.fsrsState.state,
+      distinctSourceCount: diversity.distinctSourceCount,
+      distinctSentenceCount: diversity.distinctSentenceCount,
+      recentAgainCount,
+      recentReviewCount: recent.length,
+      daysSinceLastEncounter: lastNaturalEncounter
+        ? (now.getTime() - new Date(lastNaturalEncounter.timestamp).getTime()) / (24 * 60 * 60 * 1000)
+        : null,
+      now,
+    } satisfies ReviewPriorityInput;
+  });
+}
+
+/** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
+async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]> {
+  const db = getDb();
+  const books = (await db.books.toArray())
+    .filter((book) => !book.archived)
+    .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
+    .slice(0, 30);
+
+  const candidates: ExploreCandidate[] = [];
+  for (const book of books) {
+    if (candidates.length >= limit) break;
+    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    const unstarted = memberships
+      .filter((item) => item.status === 'unstarted')
+      .sort((a, b) => a.position - b.position);
+    if (unstarted.length === 0) continue;
+    candidates.push({
+      bookId: book.id,
+      sentenceId: unstarted[0]!.sentenceId,
+      label: book.title,
+      reason: `${unstarted.length} new sentence${unstarted.length === 1 ? '' : 's'} waiting`,
+      remainingCount: unstarted.length,
+    });
+  }
+  return candidates;
+}
+
+/**
+ * Understand candidates: grammar patterns the corpus has flagged as "worth
+ * learning now" (encountered >= 3 times, never tracked — see
+ * computeGrammarPriorityBucket) — reuses listGrammarPatternSummaries rather
+ * than re-deriving the same bucket logic, so this stays consistent with
+ * what /grammar itself shows in that section.
+ */
+async function findUnderstandCandidates(limit: number): Promise<UnderstandCandidate[]> {
+  const db = getDb();
+  const summaries = (await listGrammarPatternSummaries())
+    .filter((summary) => summary.priorityBucket === 'worth_learning_now')
+    .sort((a, b) => b.encounterCount - a.encounterCount)
+    .slice(0, limit);
+  if (summaries.length === 0) return [];
+
+  const patternIds = summaries.map((summary) => summary.pattern.id);
+  const links = await db.sentenceGrammar.where('grammarPatternId').anyOf(patternIds).toArray();
+  const latestSentenceIdByPatternId = new Map<string, string>();
+  for (const link of links.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    latestSentenceIdByPatternId.set(link.grammarPatternId, link.sentenceId);
+  }
+
+  return summaries.map((summary) => ({
+    grammarPatternId: summary.pattern.id,
+    label: summary.pattern.canonicalName,
+    reason: summary.priorityExplanation,
+    sentenceId: latestSentenceIdByPatternId.get(summary.pattern.id),
+  }));
+}
+
+/** Sentences from the learner's most-recently-opened, non-archived books that have actually been started — the pool shadowing candidates are drawn from, so a fresh import doesn't immediately dominate the shadow queue. */
+async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<string>> {
+  const db = getDb();
+  const books = (await db.books.toArray())
+    .filter((book) => !book.archived)
+    .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
+    .slice(0, bookLimit);
+  const ids = new Set<string>();
+  for (const book of books) {
+    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    for (const membership of memberships) {
+      if (membership.status !== 'unstarted') ids.add(membership.sentenceId);
+    }
+  }
+  return ids;
+}
+
+/** Practice(shadowing) candidates: sentences with reference audio and the fewest existing attempts, scoped to sentences actually in progress. */
+async function findShadowCandidates(limit: number, activeSentenceIds: Set<string>): Promise<ShadowCandidate[]> {
+  if (activeSentenceIds.size === 0) return [];
+  const db = getDb();
+  const activeIds = [...activeSentenceIds];
+  const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray();
+  if (audioRows.length === 0) return [];
+  const sentenceIdsWithAudio = [...new Set(audioRows.map((audio) => audio.sentenceId))];
+
+  const [attempts, sentences, bookSentences] = await Promise.all([
+    db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
+    db.sentences.bulkGet(sentenceIdsWithAudio),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
+  ]);
+  const attemptCountBySentenceId = new Map<string, number>();
+  for (const attempt of attempts) {
+    attemptCountBySentenceId.set(attempt.sentenceId, (attemptCountBySentenceId.get(attempt.sentenceId) ?? 0) + 1);
+  }
+  const bookIdBySentenceId = new Map(bookSentences.map((item) => [item.sentenceId, item.bookId]));
+
+  return sentenceIdsWithAudio
+    .map((sentenceId, index) => ({
+      sentenceId,
+      sentence: sentences[index],
+      attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
+    }))
+    .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
+    .sort((a, b) => a.attemptCount - b.attemptCount)
+    .slice(0, limit)
+    .map((candidate) => ({
+      sentenceId: candidate.sentenceId,
+      bookId: bookIdBySentenceId.get(candidate.sentenceId),
+      label: candidate.sentence.japanese.slice(0, 24),
+      reason: candidate.attemptCount === 0 ? 'Not shadowed yet' : `Shadowed ${candidate.attemptCount}x so far`,
+    }));
+}
+
+/** Recent-activity events for the rolling-window balance/neglect calculation (used by both the planner and the dashboard's balance display, so they always agree). */
+async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
+  const db = getDb();
+  const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const [recentReviews, recentAttempts, allBookSentences, recentAnalyses, recentSentenceGrammar] =
+    await Promise.all([
+      db.reviews.where('timestamp').above(cutoffIso).toArray(),
+      db.attempts.where('createdAt').above(cutoffIso).toArray(),
+      db.bookSentences.toArray(),
+      db.analyses.where('updatedAt').above(cutoffIso).toArray(),
+      db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray(),
+    ]);
+
+  const reviewStudyItemIds = [...new Set(recentReviews.map((review) => review.studyItemId))];
+  const reviewStudyItems = reviewStudyItemIds.length ? await db.studyItems.bulkGet(reviewStudyItemIds) : [];
+  const activityTypeByStudyItemId = new Map<string, string>();
+  reviewStudyItems.forEach((item, index) => {
+    if (item) activityTypeByStudyItemId.set(reviewStudyItemIds[index]!, item.activityType);
+  });
+
+  const events: RecentActivityEvent[] = [];
+  for (const review of recentReviews) {
+    const activityType = activityTypeByStudyItemId.get(review.studyItemId);
+    const mode = activityType ? ACTIVITY_TYPE_MODE[activityType] : undefined;
+    if (mode) events.push({ mode, timestamp: review.timestamp });
+  }
+  for (const attempt of recentAttempts) events.push({ mode: 'practice', timestamp: attempt.createdAt });
+  for (const membership of allBookSentences) {
+    if (membership.addedAt >= cutoffIso) events.push({ mode: 'explore', timestamp: membership.addedAt });
+  }
+  for (const analysis of recentAnalyses) events.push({ mode: 'understand', timestamp: analysis.updatedAt });
+  for (const link of recentSentenceGrammar) events.push({ mode: 'understand', timestamp: link.updatedAt });
+  return events;
+}
+
+/** Gathers everything buildRecommendedSession needs — the only Dexie-touching step of the planning pipeline. */
+export async function getSessionPlannerInput(
+  length: SessionLength,
+  now: Date = new Date(),
+): Promise<SessionPlannerInput> {
+  const db = getDb();
+  const settings = await readSettings(db);
+
+  const [recentActivity, retainDueItems, practiceDueItems, exploreCandidates, understandCandidates] =
+    await Promise.all([
+      getRecentActivityEvents(now),
+      getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
+        now,
+        limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
+        graduationMinScheduledDays: settings.graduationMinScheduledDays,
+      }),
+      getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
+        now,
+        limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
+        graduationMinScheduledDays: settings.graduationMinScheduledDays,
+      }),
+      findExploreCandidates(EXPLORE_CANDIDATE_LIMIT),
+      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT),
+    ]);
+
+  const [retainDue, practiceDue] = await Promise.all([
+    buildReviewPriorityInputs(retainDueItems, 'retain', now),
+    buildReviewPriorityInputs(practiceDueItems, 'practice', now),
+  ]);
+
+  const activeSentenceIds = await activeSentenceIdsForShadowing(5);
+  const shadowCandidates = await findShadowCandidates(SHADOW_CANDIDATE_LIMIT, activeSentenceIds);
+
+  return {
+    now,
+    length,
+    recentActivity,
+    retainDue,
+    practiceDue,
+    exploreCandidates,
+    understandCandidates,
+    shadowCandidates,
+  };
+}
+
+/** Runs the full pipeline for a not-yet-started session — a preview, not persisted until startPlannerSession. */
+export async function planRecommendedSession(
+  length: SessionLength,
+  now: Date = new Date(),
+): Promise<RecommendedSession> {
+  const input = await getSessionPlannerInput(length, now);
+  return buildRecommendedSession(input);
+}
+
+/** Persists a previewed recommendation as an in-progress session — real ids assigned here rather than reusing the draft ids buildRecommendedSession generated, since those are only unique within one planning call. */
+export async function startPlannerSession(
+  recommended: RecommendedSession,
+  length: SessionLength,
+): Promise<PlannerSession> {
+  const db = getDb();
+  const timestamp = nowIso();
+  const session: PlannerSession = {
+    id: createId('planner_session'),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    length,
+    targetMinutes: recommended.targetMinutes,
+    allocation: recommended.allocation,
+    explanation: recommended.explanation,
+    steps: recommended.steps.map((step) => ({
+      ...step,
+      id: createId('planner_step'),
+      status: 'pending',
+    })),
+    status: 'in_progress',
+  };
+  await db.plannerSessions.put(session);
+  return session;
+}
+
+export async function getPlannerSession(sessionId: string): Promise<PlannerSession | undefined> {
+  return getDb().plannerSessions.get(sessionId);
+}
+
+export async function listRecentPlannerSessions(limit = 10): Promise<PlannerSession[]> {
+  const sessions = await getDb().plannerSessions.toArray();
+  return sessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+}
+
+/**
+ * Marks one step's outcome (start/complete/skip) — never implicitly, only
+ * on an explicit call from the runner UI, so a skipped step can never be
+ * mistaken for completed practice (prompt point 9/§13's own test
+ * requirement). Once every step is completed/skipped/replaced, the session
+ * itself is marked complete.
+ */
+export async function updatePlannerSessionStep(
+  sessionId: string,
+  stepId: string,
+  update: { status: PlannerStepStatus; feedback?: 'too_easy' | 'difficult' },
+): Promise<PlannerSession | undefined> {
+  const db = getDb();
+  const session = await db.plannerSessions.get(sessionId);
+  if (!session) return undefined;
+  const timestamp = nowIso();
+  const steps = session.steps.map((step) => {
+    if (step.id !== stepId) return step;
+    return {
+      ...step,
+      status: update.status,
+      feedback: update.feedback ?? step.feedback,
+      startedAt: step.startedAt ?? timestamp,
+      completedAt:
+        update.status === 'completed' || update.status === 'skipped' ? timestamp : step.completedAt,
+    };
+  });
+  const allSettled = steps.every(
+    (step) => step.status === 'completed' || step.status === 'skipped' || step.status === 'replaced',
+  );
+  const updated: PlannerSession = {
+    ...session,
+    steps,
+    status: allSettled ? 'completed' : session.status,
+    endedAt: allSettled ? timestamp : session.endedAt,
+    updatedAt: timestamp,
+  };
+  await db.plannerSessions.put(updated);
+  return updated;
+}
+
+/** Ends a session before every step is settled — any still-pending steps count as skipped, not completed. */
+export async function endPlannerSessionEarly(sessionId: string): Promise<PlannerSession | undefined> {
+  const db = getDb();
+  const session = await db.plannerSessions.get(sessionId);
+  if (!session) return undefined;
+  const timestamp = nowIso();
+  const updated: PlannerSession = {
+    ...session,
+    status: 'ended_early',
+    endedAt: timestamp,
+    updatedAt: timestamp,
+    steps: session.steps.map((step) =>
+      step.status === 'pending' || step.status === 'active'
+        ? { ...step, status: 'skipped', completedAt: timestamp }
+        : step,
+    ),
+  };
+  await db.plannerSessions.put(updated);
+  return updated;
+}
+
+export interface LearningBalanceEntry {
+  mode: LearningMode;
+  /** Number of distinct activity events observed in this mode within the rolling window. */
+  count: number;
+  daysSinceLast: number | null;
+  neglectScore: number;
+}
+
+/** The dashboard's compact rolling-window balance view — shares getRecentActivityEvents/computeNeglectScores with the planner itself, so the bars and the recommendation are always telling the same story. */
+export async function computeLearningBalance(now: Date = new Date()): Promise<LearningBalanceEntry[]> {
+  const events = await getRecentActivityEvents(now);
+  const distribution = computeRecentActivityDistribution(events, now);
+  const neglectScores = computeNeglectScores(distribution);
+  return (Object.keys(distribution) as LearningMode[]).map((mode) => ({
+    mode,
+    count: distribution[mode].count,
+    daysSinceLast: distribution[mode].daysSinceLast,
+    neglectScore: neglectScores[mode],
+  }));
 }
 
 export { DEFAULT_SETTINGS, ensureSettings, getDb, readSettings } from './database';
