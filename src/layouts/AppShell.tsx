@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
@@ -18,22 +19,49 @@ const NAV = [
   { to: '/settings', label: 'Settings' },
 ] as const;
 
+/**
+ * Primary navigation, opened from a header button rather than a persistent
+ * bottom bar — the header is `position: sticky`, so the menu stays reachable
+ * from anywhere on a long page (Analyze/Practice/Build/Review/Session used
+ * to hide the old bottom nav entirely for exactly this reason; this menu
+ * has no such exception, it's available on every route).
+ */
 export function AppShell() {
   const location = useLocation();
-  const hideNav =
-    location.pathname.includes('/analyze') ||
-    location.pathname.includes('/practice') ||
-    location.pathname.includes('/build') ||
-    location.pathname.includes('/review') ||
-    location.pathname.includes('/session');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [menuOpen]);
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
-          <h1>{APP_NAME}</h1>
-          <div className="muted" style={{ fontSize: '0.8rem' }}>
-            {APP_SHORT_NAME} · offline-first study workspace
+        <div className="row" style={{ gap: '0.6rem' }}>
+          <button
+            type="button"
+            className="ghost nav-menu-button"
+            aria-label="Open navigation menu"
+            aria-expanded={menuOpen}
+            aria-controls="nav-menu-panel"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+          <div>
+            <h1>{APP_NAME}</h1>
+            <div className="muted" style={{ fontSize: '0.8rem' }}>
+              {APP_SHORT_NAME} · offline-first study workspace
+            </div>
           </div>
         </div>
         <SyncStatusBadge />
@@ -42,21 +70,27 @@ export function AppShell() {
         <Outlet />
       </main>
       <MigrationModal />
-      {!hideNav && (
-        <nav className="bottom-nav" aria-label="Primary">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={'end' in item ? item.end : false}
-              className={({ isActive }) => (isActive ? 'active' : undefined)}
-            >
-              <span aria-hidden="true">•</span>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      )}
+      {menuOpen ? (
+        <div className="nav-menu-backdrop" onClick={() => setMenuOpen(false)}>
+          <nav
+            id="nav-menu-panel"
+            className="nav-menu-panel"
+            aria-label="Primary"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {NAV.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={'end' in item ? item.end : false}
+                className={({ isActive }) => (isActive ? 'active' : undefined)}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+      ) : null}
     </div>
   );
 }

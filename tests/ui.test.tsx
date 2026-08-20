@@ -19,6 +19,11 @@ function fileFromCsv(name: string, contents: string): File {
   return new File([contents], name, { type: 'text/csv' });
 }
 
+/** Navigation now lives behind a header menu button rather than an always-visible bottom nav — open it before a test can see/click a nav link. */
+async function openNavMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
+}
+
 function shadowingZip(): File {
   const audioPath = 'audio/sentence-001.m4a';
   const files = {
@@ -75,6 +80,7 @@ describe('UI flows', () => {
     const user = userEvent.setup();
     render(withAppProviders(<App />));
 
+    await openNavMenu(user);
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     const input = await screen.findByLabelText(/CSV file/i);
     await user.upload(input, fileFromCsv('little-birds.csv', littleBirds));
@@ -151,6 +157,7 @@ describe('UI flows', () => {
   it('reorders with explicit buttons and reveals practice stages', async () => {
     const user = userEvent.setup();
     render(withAppProviders(<App />));
+    await openNavMenu(user);
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -197,6 +204,7 @@ describe('UI flows', () => {
   it('assigns selected Inbox sentences to a newly created book', async () => {
     const user = userEvent.setup();
     render(withAppProviders(<App />));
+    await openNavMenu(user);
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -216,6 +224,7 @@ describe('UI flows', () => {
     await user.click(screen.getByRole('button', { name: 'Add to book' }));
 
     await screen.findByText('Added 1 sentence(s) to a book.');
+    await openNavMenu(user);
     await user.click(screen.getByRole('link', { name: 'Books' }));
     expect(
       await screen.findByText('Inbox Book', { selector: 'strong' }),
@@ -225,6 +234,7 @@ describe('UI flows', () => {
   it('opens an import batch and performs a bulk Search action', async () => {
     const user = userEvent.setup();
     render(withAppProviders(<App />));
+    await openNavMenu(user);
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText(/CSV file/i),
@@ -242,6 +252,7 @@ describe('UI flows', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Sentences in this batch')).toBeInTheDocument();
 
+    await openNavMenu(user);
     await user.click(screen.getByRole('link', { name: 'Search' }));
     const search = await screen.findByLabelText('Search');
     await user.type(search, '小鳥');
@@ -257,6 +268,7 @@ describe('UI flows', () => {
   it('imports a complete shadowing ZIP into an ordered book with native audio', async () => {
     const user = userEvent.setup();
     render(withAppProviders(<App />));
+    await openNavMenu(user);
     await user.click(await screen.findByRole('link', { name: 'Import' }));
     await user.upload(
       await screen.findByLabelText('Shadowing project ZIP'),

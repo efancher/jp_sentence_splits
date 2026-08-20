@@ -10,7 +10,7 @@ html,
 body,
 #root {
   min-height: 100%;
-  scroll-padding-bottom: calc(var(--nav-height) + 7rem);
+  scroll-padding-bottom: 7rem;
 }
 
 body {
@@ -132,7 +132,7 @@ strong.jp {
 
 .app-shell {
   min-height: 100dvh;
-  padding-bottom: var(--nav-height);
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
 .app-header {
@@ -169,41 +169,56 @@ strong.jp {
     max(1rem, env(safe-area-inset-left, 0px));
 }
 
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 30;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.15rem;
-  min-height: var(--nav-height);
-  padding:
-    0.35rem max(0.35rem, env(safe-area-inset-right, 0px))
-    calc(0.35rem + env(safe-area-inset-bottom, 0px))
-    max(0.35rem, env(safe-area-inset-left, 0px));
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(14px);
+.nav-menu-button {
+  min-width: var(--touch);
+  min-height: var(--touch);
+  padding: 0 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  border-color: transparent;
+  background: transparent;
 }
 
-.bottom-nav a {
+.nav-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: color-mix(in srgb, #000 35%, transparent);
+}
+
+.nav-menu-panel {
+  position: absolute;
+  top: calc(var(--header-height) + 0.5rem);
+  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  z-index: 81;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 0.15rem;
-  min-height: var(--touch);
-  text-decoration: none;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  border-radius: 12px;
+  width: min(90vw, 16rem);
+  max-height: min(80vh, 32rem);
+  overflow: auto;
+  padding: 0.5rem;
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
 }
 
-.bottom-nav a.active {
+.nav-menu-panel a {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.nav-menu-panel a.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
 }
 
 .panel {
@@ -409,7 +424,7 @@ strong.jp {
 .snackbar {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--nav-height) + 0.75rem);
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 40;
   display: flex;
@@ -888,13 +903,6 @@ strong.jp {
     padding-top: 1.25rem;
   }
 
-  .bottom-nav {
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(100%, var(--content-max));
-    border-radius: 18px 18px 0 0;
-  }
-
   .practice-session-controls {
     grid-template-columns: minmax(12rem, 1fr) auto auto;
     align-items: end;
@@ -907,7 +915,7 @@ strong.jp {
   }
 
   .app-main {
-    padding-bottom: calc(var(--nav-height) + 8rem);
+    padding-bottom: 8rem;
   }
 }
 
