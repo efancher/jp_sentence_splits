@@ -1,6 +1,25 @@
 # Status
 
-Last updated: 2026-08-21 (Learning Orchestrator: shadowing now gets a
+Last updated: 2026-08-21 (Learning Orchestrator: a persistent `SessionBar`
+(`src/components/SessionBar.tsx`, mounted once in `AppShell.tsx`) now shows
+on every route whenever a `PlannerSession` is `in_progress` — the current
+step's label, progress, a link back to `/session/:id`, and inline "Mark
+complete"/"Skip" actions (`updatePlannerSessionStep`, same as
+`SessionRunnerPage`'s own buttons). Fixes a real gap: session steps
+deep-link into existing pages (Analyze/Review/Shadow/...) that had zero
+awareness a session was running, so there was no way back to the session
+list short of the browser back button. New repo helper
+`getActiveInProgressPlannerSession` / hook `useActiveSession` back it.
+Alongside this, split two forced "confirm and advance" controls into
+separate actions so confirming doesn't force navigation away from wherever
+the learner wants to stop: `VocabularyPicker`'s single "Confirm vocabulary
+and next" button is now "Confirm vocabulary" (always) plus a separate
+"Confirm and next →" (only when `hasNext`); `PracticePage` gained a plain
+"Needs review" button alongside its existing "Needs review & next" (mirrors
+the "Complete"/"Complete & next" pair it already had). `ReviewPage`'s
+rating-button-driven card queue was deliberately left unchanged — that's
+normal review-flow behavior, not a session-tracking gap. Before that:
+shadowing now gets a
 reserved minimum share of the Practice allocation
 (`SHADOW_MIN_SHARE_OF_PRACTICE`, `src/lib/sessionPlannerConfig.ts`), claimed
 before the due-practice batch — previously a large cloze/production due

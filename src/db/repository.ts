@@ -3614,6 +3614,18 @@ export async function listRecentPlannerSessions(limit = 10): Promise<PlannerSess
 }
 
 /**
+ * The one session, if any, the learner is currently mid-way through — backs
+ * a global "back to session" affordance (SessionBar) so any page can surface
+ * it without threading a session id through every deep-link target. Most
+ * recently updated wins in the (should be rare) case more than one is
+ * somehow `in_progress` at once.
+ */
+export async function getActiveInProgressPlannerSession(): Promise<PlannerSession | undefined> {
+  const sessions = await getDb().plannerSessions.where('status').equals('in_progress').toArray();
+  return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
+/**
  * Marks one step's outcome (start/complete/skip) — never implicitly, only
  * on an explicit call from the runner UI, so a skipped step can never be
  * mistaken for completed practice (prompt point 9/§13's own test

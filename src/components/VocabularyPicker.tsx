@@ -48,6 +48,12 @@ export interface VocabularyPickerProps {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
+  /** Saves the confirmed selections without navigating anywhere — the only action always available, regardless of hasNext. */
+  onConfirm?: (payload: {
+    selections: VocabularySelection[];
+    reviewStatus: VocabularyReviewStatus;
+  }) => void;
+  /** Saves and advances to the next sentence — a separate action from onConfirm (not the same click) so confirming doesn't force navigation, e.g. mid-session when the learner wants to stop here and go back to the session list instead. */
   onConfirmAndNext?: (payload: {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
@@ -430,6 +436,7 @@ export function VocabularyPicker({
   selections,
   reviewStatus,
   onChange,
+  onConfirm,
   onConfirmAndNext,
   hasNext = false,
 }: VocabularyPickerProps) {
@@ -611,17 +618,18 @@ export function VocabularyPicker({
     setEditingId(null);
   }
 
-  function confirm() {
+  /** Validates + saves; returns false (having already alerted) if the selections aren't ready to confirm. */
+  function validateAndSave(): boolean {
     for (const item of selections) {
       if (!validateSpan(japanese, item.start, item.end, item.surface)) {
         window.alert(
           `Selection "${item.expression}" no longer matches the sentence text.`,
         );
-        return;
+        return false;
       }
       if (!item.expression.trim()) {
         window.alert('Every selection needs a dictionary expression.');
-        return;
+        return false;
       }
     }
     // Non-blocking heads-up, not a confirm/cancel gate — window.confirm
@@ -636,10 +644,17 @@ export function VocabularyPicker({
       );
     }
     onChange({ selections, reviewStatus: 'confirmed' });
-    onConfirmAndNext?.({
-      selections,
-      reviewStatus: 'confirmed',
-    });
+    return true;
+  }
+
+  function confirm() {
+    if (!validateAndSave()) return;
+    onConfirm?.({ selections, reviewStatus: 'confirmed' });
+  }
+
+  function confirmAndNext() {
+    if (!validateAndSave()) return;
+    onConfirmAndNext?.({ selections, reviewStatus: 'confirmed' });
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -914,8 +929,13 @@ export function VocabularyPicker({
 
       <div className="row">
         <button type="button" onClick={confirm}>
-          {hasNext ? 'Confirm vocabulary and next' : 'Confirm vocabulary'}
+          Confirm vocabulary
         </button>
+        {hasNext ? (
+          <button type="button" className="ghost" onClick={confirmAndNext}>
+            Confirm and next →
+          </button>
+        ) : null}
       </div>
     </section>
   );

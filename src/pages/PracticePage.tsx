@@ -562,6 +562,9 @@ export function PracticePage() {
           >
             Complete & next
           </button>
+          <button type="button" onClick={() => void mark('needs_review')}>
+            Needs review
+          </button>
           <button type="button" onClick={() => void mark('needs_review', true)}>
             Needs review & next
           </button>

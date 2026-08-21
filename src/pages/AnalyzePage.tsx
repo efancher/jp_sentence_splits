@@ -446,6 +446,17 @@ export function AnalyzePage() {
           setVocabularySelections(selections);
           setVocabularyReviewStatus(reviewStatus);
         }}
+        onConfirm={(payload) => {
+          setVocabularySelections(payload.selections);
+          setVocabularyReviewStatus(payload.reviewStatus);
+          void (async () => {
+            await saveAnalysis(sentenceId, chunks, notes, {
+              reviewStatus: payload.reviewStatus,
+              selections: payload.selections,
+            });
+            await materializeVocabularySelections(sentenceId, payload.selections);
+          })();
+        }}
         onConfirmAndNext={(payload) => {
           setVocabularySelections(payload.selections);
           setVocabularyReviewStatus(payload.reviewStatus);

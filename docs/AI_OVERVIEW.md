@@ -275,7 +275,21 @@ need) — see `docs/STATUS.md`'s 2026-08-20 entry for this and other
 known limitations (no time-tracking infrastructure — Explore/Understand
 activity is inferred from existing row timestamps; no settings UI for the
 tuning constants in `sessionPlannerConfig.ts`; `PlannerSession` doesn't
-sync to Supabase, local-only like `Attempt`).
+sync to Supabase, local-only like `Attempt`). Since the deep-linked pages
+themselves have no idea a session is running, a persistent **`SessionBar`**
+(`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
+`layouts/AppShell.tsx`) shows on every route whenever a session is
+`in_progress` — current step, progress, a link back to `/session/:id`, and
+inline "Mark complete"/"Skip" reusing `updatePlannerSessionStep` — so the
+learner is never stranded on Analyze/Review/Shadow with no way back.
+Relatedly, two "confirm and advance" controls that used to bake navigation
+into the save action were split so confirming never forces a page change:
+`VocabularyPicker`'s "Confirm vocabulary and next" is now a plain "Confirm
+vocabulary" plus a separate "Confirm and next →"; `PracticePage` gained a
+plain "Needs review" alongside "Needs review & next". `ReviewPage`'s
+rating-button-driven due-card queue is unchanged by design — advancing to
+the next due card on rating is normal review-flow behavior, not a
+session-tracking gap.
 
 ### 1. Content import & organization
 - **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses

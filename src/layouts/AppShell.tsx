@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
 import { MigrationModal } from '../components/MigrationModal';
+import { SessionBar } from '../components/SessionBar';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 
 const NAV = [
@@ -69,6 +70,7 @@ export function AppShell() {
       <main className="app-main">
         <Outlet />
       </main>
+      <SessionBar />
       <MigrationModal />
       {menuOpen ? (
         <div className="nav-menu-backdrop" onClick={() => setMenuOpen(false)}>

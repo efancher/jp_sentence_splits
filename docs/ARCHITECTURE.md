@@ -138,7 +138,12 @@ Dexie-touching half. One new local-only table, `PlannerSession` (Dexie v14),
 records what was actually recommended/executed — see `docs/AI_OVERVIEW.md`
 for the full design and `docs/STATUS.md`'s 2026-08-20 entry for what shipped
 and what's deliberately deferred. `HomePage` (`src/pages/HomePage.tsx`) is
-now the index route; `BooksPage` moved to `/books`.
+now the index route; `BooksPage` moved to `/books`. A persistent
+`SessionBar` (`src/components/SessionBar.tsx`, mounted in `layouts/
+AppShell.tsx`) surfaces on every route whenever a session is `in_progress`
+— the always-available way back to `/session/:id` and to close out a step,
+since the deep-linked pages themselves (Analyze, Review, Shadow, ...) stay
+unaware a session exists.
 
 ## Scheduling
 
