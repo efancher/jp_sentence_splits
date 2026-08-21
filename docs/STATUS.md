@@ -4955,3 +4955,97 @@ vocabulary meaning are now editable" note above).
 passed, 2 pre-existing skips) all green — no new tests added since this
 is a close pattern-match extension of the already-tested translation-edit
 autosave path. Not exercised in an actual browser this session.
+
+## New: ground-truth pitch-accent scoring for shadowing (2026-08-21): done
+
+User request: practice pronunciation (mora length, pitch accent, sound)
+outside of a full shadowing session, with feedback that's actually
+ranked/scored, not just a comparison to one reference recording. Traced
+this back to a real gap — the existing `pitchTimingObservations.ts` signal
+is deliberately hedged ("acoustic pitch differences are NOT claimed as
+linguistic pitch-accent errors") because it only ever compares two
+recordings, neither guaranteed to be linguistically correct. Discovered
+that `~/projects/anki/kanjium_pitch_accents.zip` (Kanjium pitch-accent
+data, Yomitan format, already downloaded, already used by that repo's
+`immersion_pitch.py`) is real ground truth this app didn't have. This
+pass ports that data and wires a new observation kind into the existing
+shadowing `AnalysisPanel` — the standalone audio-less pronunciation-drill
+mode discussed alongside this (for Satori-imported sentences, which have
+no reference audio) is a deliberately separate, not-yet-started follow-up.
+
+Added:
+- `src/domain/types.ts`/`schemas.ts`/`sync/mappers.ts` — new
+  `VocabularyItem.pitchAccentPositions?: number[]` (array — Kanjium can
+  list more than one accepted accent), synced like `meaning` (small,
+  deterministic reference data, not local-only). New migration
+  `supabase/migrations/20260821000000_vocabulary_pitch_accent.sql`. No
+  Dexie schema version bump needed — unindexed fields (`notes`/
+  `partOfSpeech` already prove this) are free.
+- `scripts/lib/kanjiumPitch.ts` — TS port of
+  `~/projects/anki/wk_decks.py`'s `load_yomitan_pitch`: parses the
+  Yomitan `term_meta_bank_*.json` rows into an expression+reading (both
+  hiragana-normalized) -> accent-position(s) index. Sources the zip from
+  the existing local `~/projects/anki` checkout (copied into
+  `scripts/.cache/`, gitignored) rather than a fetched URL — no verified
+  stable download URL was found, and the data was already vetted/in use
+  there. Verified end-to-end against the real file: 124,134 entries
+  indexed; the classic 雨(1)/飴(0) and 箸(1)/橋(2)/端(0) minimal-pair
+  triples all resolve correctly.
+- `scripts/backfill-pitch-accent.ts` — same dry-run/`--apply` shape as
+  `backfill-vocabulary-meanings.ts`; `npm run backfill:pitch-accent`.
+  Not yet run with `--apply` against production data (dry-run only, this
+  session) — that's a follow-up action for the user to trigger.
+- `src/lib/pitchAccentShape.ts` — pure port of
+  `immersion_pitch.py`'s `pitch_graph_html`/`pitch_pattern_label`
+  classification logic (heiban/atamadaka/nakadaka/odaka -> expected
+  per-mora high/low), plus a new `detectedDropPosition` (no Python
+  equivalent — the source only ever renders a *known* position, never
+  detects one from audio). **Documented, deliberate simplification**:
+  odaka and heiban produce the *identical* shape within a word's own
+  span (both differ only in whether a following particle drops, which is
+  outside any single word's frames) — `detectedDropPosition` therefore
+  can never report "detected odaka," and the observation builder compares
+  through this same function on both sides so an odaka target is never
+  scored as a false mismatch against a correctly-produced heiban-shaped
+  attempt.
+- `src/lib/pitchAccentObservations.ts` — the actual scoring: for each
+  sentence's confirmed vocabulary with pitch data, finds the matching
+  word in the *learner's own* alignment (no reference alignment needed at
+  all — `alignAudio(blob, transcript)` aligns any audio against known
+  text), slices its span into equal-width mora buckets (a known
+  approximation), classifies each relative to the word's own mean pitch,
+  and compares the detected drop position against the dictionary's. This
+  is structurally different from `wordTimingObservations.ts`/
+  `pitchTimingObservations.ts`, which both require a reference clip to
+  exist — a step toward eventually scoring pronunciation on
+  Satori-imported sentences that have no native audio at all (not built
+  this pass). New `kind: 'pitch_accent_shape'` — `feedbackRanking.ts`'s
+  ranking/rendering pipeline is fully generic on `kind`, so no changes
+  needed there; added to `pronunciationHistory.ts`'s `PITCH_KINDS` so the
+  per-sentence trend view picks it up too.
+- `AnalysisPanel.tsx` — fetches confirmed-vocabulary pitch targets
+  (`getVocabularyTargetCandidates`), computes the new observations, merges
+  them into every existing ranking/history/summary array, and renders
+  them in their own "Pitch accent (dictionary)" section so the
+  ground-truth signal stays visible even on attempts where it doesn't win
+  the "Focus on this" ranking.
+- Confidence is deliberately higher-floored than the acoustic-only
+  `pitch_timing`/`pitch_shape` kinds (`'medium'` default, since this is
+  ground-truth-backed) but still caps below `'high'` except for a stark
+  (≥2 mora) mismatch with full voiced-bucket coverage — still a rough,
+  single-mic/YIN-derived estimate, not a lab measurement.
+
+Tests: `tests/kanjiumPitch.test.ts` (10), `tests/pitchAccentShape.test.ts`
+(12), `tests/pitchAccentObservations.test.ts` (8) — new, all passing.
+Full suite: `npm run check` (typecheck + vitest) green, 769 passed / 2
+pre-existing skips, no new lint warnings.
+
+**Not done this pass / open follow-ups**: `--apply` backfill run against
+real production `vocabulary_items` (dry-run verified the pipeline only);
+the standalone audio-less pronunciation-drill mode for Satori sentences
+(a separate, larger feature, out of scope by design — see the sketch
+discussed in this session); not exercised in a real browser (this
+sandbox has no working Playwright, same recurring gap noted throughout
+this file) — the UI round-trip (open Shadow, record, Analyze, see the new
+"Pitch accent (dictionary)" section) still needs a real-browser check
+before considered fully proven.

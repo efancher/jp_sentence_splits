@@ -107,7 +107,10 @@ built out Phases 1–9):
 - `VocabularyItem` — a normalized word, unique on `(expression, reading)`
   (deliberately not unique on expression alone, so homophones like
   週間/習慣 stay distinct). Has `meaning`, `partOfSpeech`, optional
-  `externalId` (`wk:{id}`/`jmdict:{id}`) for idempotent re-import.
+  `externalId` (`wk:{id}`/`jmdict:{id}`) for idempotent re-import, and
+  optional `pitchAccentPositions` (mora index of the dictionary accent
+  drop, from Kanjium via `scripts/backfill-pitch-accent.ts`) feeding the
+  shadowing feature's ground-truth pitch-accent scoring (§6).
 - `SentenceVocabulary` — join table linking a sentence (optionally a
   specific chunk) to a canonical `VocabularyItem`, carrying `surfaceForm`
   (the exact inflected text as it appeared, e.g. 表れていた for
@@ -532,6 +535,18 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     below) → phone/word timing feedback (`wordTimingObservations.ts` —
     っ/long-vowel/word-pace) and pitch-movement timing feedback
     (`pitchTimingObservations.ts`), cached per-sentence/per-attempt.
+  - **Ground-truth pitch-accent feedback** (`pitchAccentShape.ts`/
+    `pitchAccentObservations.ts`) — unlike every other signal above, this
+    compares the learner's own recording against a dictionary-predicted
+    pitch shape (Kanjium data, via `scripts/backfill-pitch-accent.ts` →
+    `VocabularyItem.pitchAccentPositions`) rather than a reference
+    recording, so it needs no reference clip/`SentenceAudio` at all —
+    only the sentence's confirmed vocabulary and the learner's own
+    alignment. Deliberately collapses the odaka/heiban distinction (both
+    produce an identical shape within a single word's own span) rather
+    than guessing at it. Renders as its own "Pitch accent (dictionary)"
+    section in `AnalysisPanel.tsx` and feeds the same ranking as every
+    other observation kind.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - Cross-recording "Focus on this" comparison — a re-record can say

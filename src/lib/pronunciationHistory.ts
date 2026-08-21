@@ -14,7 +14,7 @@ import type { TimingObservation } from './timingObservations';
 export const ANALYSIS_SUMMARY_VERSION = 1;
 
 const TIMING_KINDS = new Set(['duration', 'word-duration', 'sokuon_timing', 'long_vowel_timing']);
-const PITCH_KINDS = new Set(['pitch', 'pitch_timing', 'pitch_shape']);
+const PITCH_KINDS = new Set(['pitch', 'pitch_timing', 'pitch_shape', 'pitch_accent_shape']);
 
 function maxSeverity(observations: TimingObservation[], kinds: Set<string>): number {
   let max = 0;

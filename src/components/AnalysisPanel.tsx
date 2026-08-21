@@ -4,6 +4,7 @@ import {
   getAttemptAlignment,
   getAttemptTranscription,
   getReferenceAlignment,
+  getVocabularyTargetCandidates,
   listAttemptAnalysisSummariesForSentence,
   saveAttemptAlignment,
   saveAttemptAnalysisSummary,
@@ -19,6 +20,7 @@ import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import type { TimingObservation } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
+import { buildPitchAccentShapeObservations, type PitchAccentTarget } from '../lib/pitchAccentObservations';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
@@ -218,6 +220,28 @@ export function AnalysisPanel({
     };
   }, [sentenceId, attemptId, attemptCreatedAt]);
 
+  /** Confirmed vocabulary for this sentence with dictionary pitch-accent data — targets for pitchAccentObservations below. */
+  const [pitchAccentTargets, setPitchAccentTargets] = useState<PitchAccentTarget[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void getVocabularyTargetCandidates([sentenceId]).then((candidates) => {
+      if (!active) return;
+      setPitchAccentTargets(
+        candidates
+          .filter((candidate) => candidate.vocabularyItem.pitchAccentPositions?.length)
+          .map((candidate) => ({
+            surfaceForm: candidate.surfaceForm,
+            reading: candidate.vocabularyItem.reading,
+            pitchAccentPositions: candidate.vocabularyItem.pitchAccentPositions!,
+          })),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [sentenceId]);
+
   useEffect(() => {
     let active = true;
     setBusy(true);
@@ -366,20 +390,34 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, transcribedText]);
 
+  // Ground-truth pitch-accent scoring (dictionary-predicted shape, not a
+  // reference recording) — only needs the learner's own alignment/pitch,
+  // unlike every other server-alignment-derived observation source above.
+  const pitchAccentObservations = useMemo(() => {
+    if (!serverAlignment?.learner || !learnerPitch || !pitchAccentTargets.length) return [];
+    return buildPitchAccentShapeObservations({
+      learnerWords: serverAlignment.learner.words,
+      learnerPitch,
+      targets: pitchAccentTargets,
+    });
+  }, [serverAlignment, learnerPitch, pitchAccentTargets]);
+
   const primaryObservation = useMemo(
     () =>
       selectPrimaryObservation([
         ...observations,
         ...segmentObservations,
         ...pitchTimingObservations,
+        ...pitchAccentObservations,
         ...asrObservations,
       ]),
-    [observations, segmentObservations, pitchTimingObservations, asrObservations],
+    [observations, segmentObservations, pitchTimingObservations, pitchAccentObservations, asrObservations],
   );
   const hasComputedAnyObservations =
     observations.length > 0 ||
     segmentObservations.length > 0 ||
     pitchTimingObservations.length > 0 ||
+    pitchAccentObservations.length > 0 ||
     asrObservations.length > 0;
 
   /**
@@ -395,9 +433,10 @@ export function AnalysisPanel({
         ...observations,
         ...segmentObservations,
         ...pitchTimingObservations,
+        ...pitchAccentObservations,
         ...asrObservations,
       ]),
-    [observations, segmentObservations, pitchTimingObservations, asrObservations],
+    [observations, segmentObservations, pitchTimingObservations, pitchAccentObservations, asrObservations],
   );
 
   // Once every source has settled (not just local analysis — the server
@@ -408,7 +447,13 @@ export function AnalysisPanel({
     !busy && serverAlignmentStatus !== 'idle' && serverAlignmentStatus !== 'loading' && asrSettled;
   useEffect(() => {
     if (!analysisSettled) return;
-    const all = [...observations, ...segmentObservations, ...pitchTimingObservations, ...asrObservations];
+    const all = [
+      ...observations,
+      ...segmentObservations,
+      ...pitchTimingObservations,
+      ...pitchAccentObservations,
+      ...asrObservations,
+    ];
     const { timingSeverity, pitchSeverity } = categorizeObservations(all);
     const primary = selectPrimaryObservation(all);
     void saveAttemptAnalysisSummary({
@@ -569,6 +614,17 @@ export function AnalysisPanel({
         <div className="stack">
           <strong>Pitch movement</strong>
           {pitchTimingObservations.map((item) => (
+            <article key={item.id} className="stack" style={{ gap: 0 }}>
+              <strong>{item.confidence} confidence:</strong> {item.message}
+              {item.detail ? <p className="muted">{item.detail}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {pitchAccentObservations.length > 0 ? (
+        <div className="stack">
+          <strong>Pitch accent (dictionary)</strong>
+          {pitchAccentObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>
               <strong>{item.confidence} confidence:</strong> {item.message}
               {item.detail ? <p className="muted">{item.detail}</p> : null}

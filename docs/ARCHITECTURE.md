@@ -169,12 +169,17 @@ configurable FSRS-interval threshold).
   `shadowing` checkout's fugashi/UniDic tokenizer for the vocabulary-
   suggestion backfill script, since a browser-side JS tokenizer was
   deliberately rejected (bundle size, second engine).
-- **`anki` repo**: archived (Phase 6, read-only on GitHub) — its one useful
-  content, existing Satori/Shadowing sentence notes, was imported once via
-  `anki_headless/` and verified (Phase 2). WaniKani-catalog and JMDict
-  vocabulary/kanji content is ingested natively (`scripts/import-wanikani-
-  kanji.ts`, `scripts/lib/jmdict.ts`), independent of Anki. No ongoing Anki
-  sync, no export-back-to-Anki path.
+- **`anki` repo**: archived (Phase 6, read-only on GitHub) — existing
+  Satori/Shadowing sentence notes were imported once via `anki_headless/`
+  and verified (Phase 2). WaniKani-catalog and JMDict vocabulary/kanji
+  content is ingested natively (`scripts/import-wanikani-kanji.ts`,
+  `scripts/lib/jmdict.ts`), independent of Anki. No ongoing Anki sync, no
+  export-back-to-Anki path. One further thing has since been sourced from
+  it: the Kanjium pitch-accent dictionary
+  (`kanjium_pitch_accents.zip`) and its loader logic
+  (`immersion_pitch.py`/`wk_decks.py`), ported to
+  `scripts/lib/kanjiumPitch.ts` for `scripts/backfill-pitch-accent.ts` —
+  a one-time data/logic port, not a live dependency on the repo.
 - **`shadowing-analysis-api`** (`~/projects/shadowing-analysis-api`, a
   separate repo, Phase 9): a self-hosted forced-alignment service (Montreal
   Forced Aligner-backed), running as a `systemd --user` service on the
