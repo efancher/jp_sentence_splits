@@ -293,6 +293,25 @@ strong.jp {
   cursor: help;
 }
 
+.karaoke-line {
+  position: relative;
+}
+
+.karaoke-gloss {
+  position: absolute;
+  z-index: 5;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

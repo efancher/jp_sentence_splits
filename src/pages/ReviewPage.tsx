@@ -1637,7 +1637,11 @@ function AudioComprehensionCard({
         </>
       ) : (
         <>
-          <KaraokeSentenceText audio={audio} japanese={sentence.japanese} />
+          <KaraokeSentenceText
+            audio={audio}
+            japanese={sentence.japanese}
+            vocabularySuggestions={sentence.vocabularySuggestions}
+          />
           {!revealed ? (
             <button type="button" onClick={onReveal}>
               Reveal translation

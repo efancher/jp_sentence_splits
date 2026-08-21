@@ -397,7 +397,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   token for an unmatched word, shown as a flagged `?` placeholder rather
   than the raw token; more subtly it can also diverge via dictionary
   normalization/mis-segmentation), the real `sentence.japanese` text is
-  always shown on a second, muted line underneath as a cross-check.
+  always shown on a second, muted line underneath as a cross-check. While a
+  word is highlighted, a small popup shows its English gloss, sourced from
+  `sentence.vocabularySuggestions` (the same offline-backfilled glosses the
+  vocabulary picker uses) by matching aligner word text against suggestion
+  `surface` text in reading order (`attachGlosses`, exported from
+  `KaraokeSentenceText.tsx` and unit-tested in
+  `tests/karaokeSentenceText.test.ts`); the two tokenizers don't align
+  index-for-index, so matching uses a small lookahead window rather than
+  strict pairing. Only tokenized-and-glossed content words get a popup —
+  particles and anything the aligner couldn't match get none.
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide

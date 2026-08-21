@@ -5147,3 +5147,50 @@ reset per card.
 `npm run test` (full suite: 779 passed, 2 pre-existing skips). Updated
 `tests/reviewPage.test.tsx` listening-card cases to click through
 "Reveal text" then "Reveal translation" instead of a single "Reveal".
+
+## Listening card: per-word English gloss popup on karaoke highlight (2026-08-21): done
+
+User feedback: while a word is playhead-highlighted in the listening
+card's karaoke text, there's no quick way to see what it means without
+waiting for the translation reveal. Added a small popup showing the
+active word's English gloss, in `KaraokeSentenceText.tsx`
+(`src/components/`), no schema changes.
+
+**Gloss source**: `sentence.vocabularySuggestions` (already carries
+offline-backfilled `english` glosses for content words, keyed by
+character-offset `surface` spans — see the two-stage-reveal entry above
+for how this list differs from `vocabularySuggestions`' sibling
+`targetVocabulary`). New `attachGlosses(words, suggestions)` walks the
+aligner's word list and the suggestion list in reading order, matching by
+exact `surface` text with a 4-token lookahead — the two tokenizers
+(forced-aligner vs. morphology) don't produce 1:1 aligned tokens, so
+strict pairing would break on the first split/merge mismatch. Matching a
+suggestion advances the cursor even when it has no `english` (particles),
+so alignment stays in sync with the tokenizer's own segmentation instead
+of drifting. Words with no match (most function words, or a genuine
+aligner/tokenizer divergence) simply get no popup — there's no live
+dictionary lookup in the browser bundle (only offline JMDict scripts), so
+coverage is limited to whatever the sentence was already glossed with at
+import/backfill time.
+
+**Popup positioning**: no existing tooltip/popover component in the
+codebase, so this is a small bespoke one — a `position: relative` wrapper
+around the word row, each word span holds a ref, and on `activeWordIndex`
+change the popup is placed via that span's `offsetLeft`/`offsetTop`
+(relative to the wrapper, so correct across line wraps without any
+viewport/scroll math).
+
+**Verified**: `npm run typecheck`, `npm run lint` (no new warnings beyond
+one pre-existing-pattern `only-export-components` note — `attachGlosses`
+is now a second, non-component export from the file, same shape as
+already-accepted cases in `roleGuide.tsx`/`auth.tsx`/`SyncProvider.tsx`),
+`npm run test` (full suite: 783 passed, 2 pre-existing skips). New
+`tests/karaokeSentenceText.test.ts` unit-tests `attachGlosses` directly
+(exact match, no match within lookahead, resync after a split-token
+mismatch, ungliossed suggestion still consumed so it isn't reused).
+
+**Not done this pass**: not exercised in a real browser — the popup's
+DOM-offset positioning can't be meaningfully verified under jsdom (offsets
+are always 0), and reaching a live-highlighted word requires real audio
+playback plus a reachable forced-alignment service, neither available in
+this sandbox (same recurring gap noted throughout this file).
