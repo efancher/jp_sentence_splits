@@ -5049,3 +5049,70 @@ sandbox has no working Playwright, same recurring gap noted throughout
 this file) — the UI round-trip (open Shadow, record, Analyze, see the new
 "Pitch accent (dictionary)" section) still needs a real-browser check
 before considered fully proven.
+
+## New: `pitch_accent` SRS review activity type (2026-08-21): done
+
+Follow-up to the ground-truth pitch-accent scoring above: the same
+Kanjium-backfilled `VocabularyItem.pitchAccentPositions` data now also
+seeds active-recall flashcards in the existing FSRS review queue
+(`ReviewPage.tsx`), not just passive feedback inside shadowing. This is
+the "SRS flashcard" half of the follow-up flagged in ROADMAP.md's
+2026-08-21 note — explicitly *not* the standalone audio-less
+pronunciation-drill mode also flagged there (that's a
+recording/production exercise for Satori-imported sentences with no
+reference audio; this is a passive multiple-choice recall card, still
+requires nothing beyond text).
+
+- New `PITCH_ACCENT_ACTIVITY_TYPES = ['pitch_accent']`, subjectType
+  `vocabularyItem`, following the exact `ActivityDescriptor` shape
+  `sentence_transformation` established: same base candidate pool
+  (`VocabularyTargetCandidate[]`), its own narrower eligibility filter
+  (`getPitchAccentReviewCandidates`, `ReviewPage.tsx`) — only words with
+  `pitchAccentPositions` data.
+- New `src/lib/pitchAccentShape.ts` export,
+  `possiblePitchPatternsForMoraCount(moraCount)`: which of the four
+  pitch-accent category labels are actually distinguishable at a given
+  mora count, reasoned directly from `pitchPatternLabel`'s own branch
+  order — 1-mora words can only be heiban/atamadaka (odaka is
+  unreachable, since `position === 1` hits the atamadaka branch before
+  the odaka check), 2-mora words add odaka but not nakadaka (no interior
+  mora to drop after), 3+-mora words allow all four. The multiple-choice
+  card uses this instead of a fixed 4-way choice — an unreachable label
+  would be an unfair/unwinnable distractor, not a legitimate wrong
+  answer.
+- `PitchAccentCard` (`ReviewPage.tsx`): multiple choice among
+  moraCount-gated labels, choice order shuffled by a stable per-word hash
+  (same sort-key mechanic `buildGrammarCompletionChoices` already uses,
+  ported standalone since there's no distractor *selection* needed here,
+  only *ordering*, of an already-fully-determined small set). Shows the
+  word's reading up front (deliberately different from
+  reading_retrieval/reading_production — this card tests *how to say* a
+  known reading, not recall of the reading itself). Auto-graded through
+  the same typed-response/self-rate funnel every other selected-answer
+  card uses.
+- **Deliberately left out of v1**: mnemonic scaffolding. The existing
+  mnemonic `useEffect` is keyed on `current.target` and tuned for
+  reading/meaning recall fragility — piggybacking it here (by also
+  setting `current.target`) would show an unrelated reading/meaning
+  mnemonic on a card that tests neither. A decision, not an oversight.
+- This is also the first thing to ever populate `ErrorClassification`'s
+  `'pronunciation_difficulty'` value — it's existed in the schema since
+  Phase 4 (`src/domain/types.ts`/`schemas.ts`) but nothing set it until
+  now. `src/lib/scheduling.ts`'s `classifyReviewError` gained one branch:
+  a wrong `pitch_accent` answer classifies as `pronunciation_difficulty`.
+
+Tests: 5 new cases in `tests/reviewPage.test.tsx` (correct-answer
+grading + review record, wrong-answer → `pronunciation_difficulty`
+classification, a negative "no pitch data, no card" test, and two
+mora-count-boundary tests confirming 1-mora words exclude odaka/nakadaka
+and 2-mora words exclude nakadaka) plus 5 new cases in
+`tests/pitchAccentShape.test.ts` for `possiblePitchPatternsForMoraCount`
+(including a round-trip cross-check against `pitchPatternLabel`). Full
+suite: `npm run check` green — 779 passed, 2 pre-existing skips (one
+`vocabularyListPage.test.tsx` failure seen once under full-suite load
+was confirmed flaky/unrelated — passes in isolation and on a full-suite
+rerun), no new lint warnings.
+
+**Not done this pass**: not exercised in a real browser (this sandbox
+still has no working Playwright, same recurring gap noted throughout
+this file).

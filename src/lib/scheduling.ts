@@ -218,6 +218,7 @@ export function classifyReviewError(input: {
     if (input.activityType === 'sentence_transformation') return 'grammar_misunderstanding';
     if (input.activityType === 'grammar_completion') return 'grammar_misunderstanding';
     if (input.activityType === 'grammar_contrast') return 'grammar_misunderstanding';
+    if (input.activityType === 'pitch_accent') return 'pronunciation_difficulty';
   }
   if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
     return 'vocabulary_confusion';

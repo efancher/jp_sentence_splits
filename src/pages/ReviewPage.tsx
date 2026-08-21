@@ -47,7 +47,13 @@ import {
 } from '../lib/grammarPatterns';
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
+import { segmentIntoMorae } from '../lib/mora';
 import { normalizeSentenceKey } from '../lib/normalize';
+import {
+  pitchPatternLabel,
+  possiblePitchPatternsForMoraCount,
+  type PitchAccentPattern,
+} from '../lib/pitchAccentShape';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -119,6 +125,22 @@ const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
 const TRANSFORMATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
 
 /**
+ * Pitch-accent review (docs/STATUS.md): subjectType stays `vocabularyItem`,
+ * like reading_retrieval/cloze/reading_production/sentence_transformation —
+ * but eligibility is narrower still: only words with dictionary-backed
+ * `pitchAccentPositions` data (Kanjium, via
+ * scripts/backfill-pitch-accent.ts — a subset of confirmed vocabulary, not
+ * all of it). Multiple choice among the pitch-accent categories
+ * (heiban/atamadaka/nakadaka/odaka) that are actually distinguishable for
+ * the word's own mora count (possiblePitchPatternsForMoraCount,
+ * src/lib/pitchAccentShape.ts) — not a fixed 4-way choice, since e.g.
+ * nakadaka/odaka are structurally impossible for a 1-mora word and
+ * offering them would be an unfair distractor. See
+ * getPitchAccentReviewCandidates below.
+ */
+const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
+
+/**
  * Grammar-pattern review (grammar-learning system Phase 5, docs/STATUS.md):
  * subjectType `grammarPattern`, subjectId a GrammarPattern.id. Unlike every
  * other category above, this one is never lazily seeded by ReviewPage
@@ -163,6 +185,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   listening: 'Listening',
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Sentence transformation',
+  pitch_accent: 'Pitch accent',
   grammar_comprehension: 'Grammar comprehension',
   grammar_completion: 'Grammar completion',
   grammar_contrast: 'Grammar contrast',
@@ -232,6 +255,46 @@ function getSentenceTransformationCandidates(
   return result;
 }
 
+interface PitchAccentReviewCandidate {
+  vocabularyItem: VocabularyItem;
+  sentence: Sentence;
+  surfaceForm: string;
+  moraCount: number;
+  correctLabel: PitchAccentPattern;
+  /** Every pattern distinguishable at this word's mora count, in a per-word-stable shuffled order (see below) — not the raw fixed enum order, so the correct answer isn't always in the same button position. */
+  choices: PitchAccentPattern[];
+}
+
+/**
+ * Pure filter over already-fetched vocabulary-target candidates (no DB
+ * access needed), mirroring getSentenceTransformationCandidates's shape —
+ * a word is a candidate only if it has dictionary pitch-accent data and a
+ * segmentable reading. Choice order is shuffled by a stable per-word hash
+ * (same sort-key mechanic buildGrammarCompletionChoices uses for its own
+ * final ordering step) rather than ranked/sliced the way grammar's
+ * corpus-scale distractor pool needs — here the choice set is already
+ * small and fully determined by moraCount, so only ordering varies.
+ */
+function getPitchAccentReviewCandidates(
+  candidates: VocabularyTargetCandidate[],
+): PitchAccentReviewCandidate[] {
+  const result: PitchAccentReviewCandidate[] = [];
+  for (const candidate of candidates) {
+    const positions = candidate.vocabularyItem.pitchAccentPositions;
+    if (!positions?.length) continue;
+    const moraCount = segmentIntoMorae(candidate.vocabularyItem.reading).length;
+    if (moraCount === 0) continue;
+    const correctLabel = pitchPatternLabel(positions[0]!, moraCount);
+    const choices = [...possiblePitchPatternsForMoraCount(moraCount)].sort((a, b) => {
+      const ha = Number.parseInt(hashString(`${candidate.vocabularyItem.id}:order:${a}`), 16);
+      const hb = Number.parseInt(hashString(`${candidate.vocabularyItem.id}:order:${b}`), 16);
+      return ha - hb;
+    });
+    result.push({ ...candidate, moraCount, correctLabel, choices });
+  }
+  return result;
+}
+
 /** Same normalization `normalizeSentenceKey` uses for sentence-identity matching (NFC, whitespace-insensitive) — reused here for typed-reading comparison since the requirements coincide. */
 function isReadingAnswerCorrect(typed: string, expected: string): boolean {
   const normalizedTyped = normalizeSentenceKey(typed);
@@ -268,6 +331,8 @@ interface QueueCard {
   confusionPair?: ConfusionPairCandidate;
   /** Set only for sentence-transformation cards (Phase 7.9). */
   transformation?: SentenceTransformationCandidate;
+  /** Set only for pitch-accent cards. */
+  pitchAccent?: PitchAccentReviewCandidate;
   /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
   grammar?: GrammarReviewCandidate;
 }
@@ -345,6 +410,8 @@ interface ReviewScope {
   existingConfusionItems: StudyItem[];
   sentenceTransformationCandidates: SentenceTransformationCandidate[];
   existingTransformationItems: StudyItem[];
+  pitchAccentCandidates: PitchAccentReviewCandidate[];
+  existingPitchAccentItems: StudyItem[];
   grammarCandidates: GrammarReviewCandidate[];
   existingGrammarItems: StudyItem[];
   grammarContrastCandidates: GrammarReviewCandidate[];
@@ -414,6 +481,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         studyItem,
         sentence: candidate.sentence,
         transformation: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+    }),
+    defineActivityDescriptor<PitchAccentReviewCandidate>({
+      key: 'pitchAccent',
+      activityTypes: PITCH_ACCENT_ACTIVITY_TYPES,
+      candidates: scope.pitchAccentCandidates,
+      existingItems: scope.existingPitchAccentItems,
+      subjectId: (candidate) => candidate.vocabularyItem.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        pitchAccent: candidate,
       }),
       ensure: (candidate, activityType) =>
         ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
@@ -597,6 +678,21 @@ export function ReviewPage() {
         transformationVocabularyItemIdSet.has(item.subjectId),
     );
 
+    const pitchAccentCandidates = getPitchAccentReviewCandidates(vocabularyTargetCandidates);
+    const pitchAccentVocabularyItemIdSet = new Set(
+      pitchAccentCandidates.map((candidate) => candidate.vocabularyItem.id),
+    );
+    const existingPitchAccentItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(PITCH_ACCENT_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'vocabularyItem' &&
+        pitchAccentVocabularyItemIdSet.has(item.subjectId),
+    );
+
     // Grammar patterns (grammar-learning system Phase 5): global scope
     // only (bookId unset) — a tracked pattern isn't scoped to one book the
     // way a sentence is, and its "context sentence" may come from any book
@@ -698,6 +794,8 @@ export function ReviewPage() {
       existingConfusionItems,
       sentenceTransformationCandidates,
       existingTransformationItems,
+      pitchAccentCandidates,
+      existingPitchAccentItems,
       grammarCandidates,
       existingGrammarItems,
       grammarContrastCandidates,
@@ -899,9 +997,11 @@ export function ReviewPage() {
     try {
       const expectedAnswerValue = current.transformation
         ? current.transformation.target.reading
-        : current.grammar
-          ? current.grammar.pattern.canonicalName
-          : current.target?.vocabularyItem.reading;
+        : current.pitchAccent
+          ? current.pitchAccent.correctLabel
+          : current.grammar
+            ? current.grammar.pattern.canonicalName
+            : current.target?.vocabularyItem.reading;
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
@@ -1090,6 +1190,16 @@ export function ReviewPage() {
               <SentenceTransformationCard
                 key={current.studyItem.id}
                 candidate={current.transformation}
+                revealed={revealed}
+                onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
+              />
+            ) : current.pitchAccent ? (
+              <PitchAccentCard
+                key={current.studyItem.id}
+                candidate={current.pitchAccent}
                 revealed={revealed}
                 onCheck={(value) => {
                   setTypedResponse(value);
@@ -1367,6 +1477,81 @@ function SentenceTransformationCard({
           <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
           <div className="jp">{target.expression}</div>
           <div className="jp">{target.reading}</div>
+          {vocabularyItem.meaning ? (
+            <div className="muted">{vocabularyItem.meaning}</div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+const PITCH_ACCENT_PATTERN_LABELS: Record<PitchAccentPattern, string> = {
+  heiban: 'Heiban (平板)',
+  atamadaka: 'Atamadaka (頭高)',
+  nakadaka: 'Nakadaka (中高)',
+  odaka: 'Odaka (尾高)',
+};
+
+/**
+ * Pitch accent: multiple choice among the categories
+ * (getPitchAccentReviewCandidates's own doc comment covers eligibility and
+ * choice-set construction). Shows the reading up front, unlike
+ * reading_retrieval/reading_production — this card tests *how* to say a
+ * known reading, not recall of the reading itself. Auto-graded (the app
+ * knows the right choice), same typed-response/self-rate funnel every
+ * other selected-answer card uses — `onCheck` sets `typedResponse` to the
+ * chosen label, which classifyReviewError compares against
+ * `expectedAnswer` (candidate.correctLabel) the same way it already does
+ * for reading_production/sentence_transformation/grammar_completion.
+ * Deliberately does not feed the mnemonic-scaffolding effect (that
+ * signal is tuned for reading/meaning recall fragility, not
+ * pitch-accent-category recall — reusing it would show an unrelated
+ * mnemonic on a card that tests neither).
+ */
+function PitchAccentCard({
+  candidate,
+  revealed,
+  onCheck,
+}: {
+  candidate: PitchAccentReviewCandidate;
+  revealed: boolean;
+  onCheck: (chosenLabel: string) => void;
+}) {
+  const { vocabularyItem, sentence, surfaceForm, correctLabel, choices } = candidate;
+  const [selected, setSelected] = useState<PitchAccentPattern | null>(null);
+  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+
+  return (
+    <>
+      <div className="jp jp-lg">
+        {before}
+        <mark>{target || surfaceForm}</mark>
+        {after}
+      </div>
+      <div className="jp">{vocabularyItem.reading}</div>
+      {!revealed ? (
+        <>
+          <div className="muted">Which pitch pattern?</div>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            {choices.map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                onClick={() => {
+                  setSelected(choice);
+                  onCheck(choice);
+                }}
+              >
+                {PITCH_ACCENT_PATTERN_LABELS[choice]}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="muted">{selected === correctLabel ? '✓ Correct' : '✗ Not quite'}</div>
+          <div>{PITCH_ACCENT_PATTERN_LABELS[correctLabel]}</div>
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}

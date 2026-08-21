@@ -20,7 +20,13 @@ import {
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId, hashString } from '../src/lib/ids';
+import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
+import {
+  pitchPatternLabel,
+  possiblePitchPatternsForMoraCount,
+  type PitchAccentPattern,
+} from '../src/lib/pitchAccentShape';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
 
@@ -47,6 +53,31 @@ function expectedTransformation(
     return { formLabel: form.label, target };
   }
   throw new Error('No usable conjugation form found for test fixture');
+}
+
+// Mirrors ReviewPage's private PITCH_ACCENT_PATTERN_LABELS (not exported,
+// same "this file only imports the page component" convention noted above).
+const PITCH_ACCENT_DISPLAY_LABELS: Record<PitchAccentPattern, string> = {
+  heiban: 'Heiban (平板)',
+  atamadaka: 'Atamadaka (頭高)',
+  nakadaka: 'Nakadaka (中高)',
+  odaka: 'Odaka (尾高)',
+};
+
+/** Mirrors ReviewPage's private getPitchAccentReviewCandidates's per-candidate computation, for asserting against whichever label/choice order it actually produces. */
+function expectedPitchAccentCandidate(
+  reading: string,
+  position: number,
+  vocabularyItemId: string,
+) {
+  const moraCount = segmentIntoMorae(reading).length;
+  const correctLabel = pitchPatternLabel(position, moraCount);
+  const choices = [...possiblePitchPatternsForMoraCount(moraCount)].sort((a, b) => {
+    const ha = Number.parseInt(hashString(`${vocabularyItemId}:order:${a}`), 16);
+    const hb = Number.parseInt(hashString(`${vocabularyItemId}:order:${b}`), 16);
+    return ha - hb;
+  });
+  return { moraCount, correctLabel, choices };
 }
 
 // Minimal fake <audio> so listening-card tests can drive playback/`onended`
@@ -656,6 +687,233 @@ describe('ReviewPage', () => {
         studyItems.some((item) => item.activityType === 'sentence_transformation'),
       ).toBe(false);
     });
+  });
+
+  it('renders a pitch-accent card, grades the chosen pattern, and records the review', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hana');
+
+    const { correctLabel } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana');
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Which pitch pattern?');
+    expect(screen.getByText('はな')).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS[correctLabel] }),
+    );
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    expect(screen.getByText('flower')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe(correctLabel);
+    expect(review?.expectedAnswer).toBe(correctLabel);
+    expect(review?.errorClassification).toBeUndefined();
+
+    const studyItems = await db.studyItems
+      .where('subjectId')
+      .equals('vocab-hana')
+      .toArray();
+    const pitchAccentItem = studyItems.find((item) => item.activityType === 'pitch_accent');
+    expect(pitchAccentItem?.subjectType).toBe('vocabularyItem');
+  });
+
+  it('classifies a wrong pitch-accent answer as pronunciation_difficulty', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana2',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana2',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana2',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hana2');
+
+    const { correctLabel, choices } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana2');
+    const wrongLabel = choices.find((choice) => choice !== correctLabel)!;
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Which pitch pattern?');
+    await user.click(
+      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS[wrongLabel] }),
+    );
+
+    expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Again' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe(wrongLabel);
+    expect(review?.expectedAnswer).toBe(correctLabel);
+    expect(review?.errorClassification).toBe('pronunciation_difficulty');
+  });
+
+  it('does not seed a pitch-accent card for a vocabulary item with no dictionary pitch-accent data', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-mizu',
+      expression: '水',
+      reading: 'みず',
+      meaning: 'water',
+      partOfSpeech: 'n',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-mizu',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-mizu',
+      surfaceForm: '水',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-mizu')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+    });
+  });
+
+  it('excludes odaka/nakadaka as choices for a 1-mora word', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    // 目 (め) — 1 mora: only heiban/atamadaka are reachable.
+    await db.vocabularyItems.add({
+      id: 'vocab-me',
+      expression: '目',
+      reading: 'め',
+      meaning: 'eye',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-me',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-me',
+      surfaceForm: '目',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-me');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Which pitch pattern?');
+    expect(
+      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.heiban }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.atamadaka }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.nakadaka }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.odaka }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('excludes nakadaka but includes odaka as a choice for a 2-mora word', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    // 花 (はな) — 2 morae: heiban/atamadaka/odaka reachable, not nakadaka.
+    await db.vocabularyItems.add({
+      id: 'vocab-hana3',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana3',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana3',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hana3');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Which pitch pattern?');
+    expect(
+      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.odaka }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.nakadaka }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {

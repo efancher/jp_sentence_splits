@@ -403,7 +403,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   checked via `isReadingAnswerCorrect`), `sentence_transformation`
   (conjugate a word to a per-word-hashed target form — 13 verb/10
   adjective forms via `src/lib/conjugation.ts`, a ported/validated
-  engine).
+  engine), `pitch_accent` (narrower eligibility than the other four — only
+  words with dictionary pitch-accent data, `VocabularyItem.pitchAccentPositions`
+  — multiple choice among the pitch-accent categories actually
+  distinguishable at the word's own mora count,
+  `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts`).
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.
@@ -546,7 +550,10 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     produce an identical shape within a single word's own span) rather
     than guessing at it. Renders as its own "Pitch accent (dictionary)"
     section in `AnalysisPanel.tsx` and feeds the same ranking as every
-    other observation kind.
+    other observation kind. The same `pitchAccentPositions` data also
+    feeds a second, independent consumer — the `pitch_accent` SRS review
+    activity type (§4) — so a word's pitch-accent data backs both passive
+    shadowing feedback and an active-recall flashcard.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - Cross-recording "Focus on this" comparison — a re-record can say
