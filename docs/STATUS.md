@@ -1,6 +1,13 @@
 # Status
 
-Last updated: 2026-08-20 (Learning Orchestrator — a new "what should I do?"
+Last updated: 2026-08-21 (Learning Orchestrator: shadowing now gets a
+reserved minimum share of the Practice allocation
+(`SHADOW_MIN_SHARE_OF_PRACTICE`, `src/lib/sessionPlannerConfig.ts`), claimed
+before the due-practice batch — previously a large cloze/production due
+backlog could consume the entire Practice budget and leave shadow
+candidates with zero minutes, so shadowing rarely appeared in recommended
+sessions despite the planner supporting it. Before that: 2026-08-20 —
+Learning Orchestrator — a new "what should I do?"
 recommended-session feature: four learning modes (Explore/Understand/
 Practice/Retain), a deterministic planner (`src/lib/sessionPlanner.ts`)
 that allocates a Quick/Normal/Deep session's time across them based on

@@ -107,5 +107,16 @@ export const UNDERSTAND_CANDIDATE_LIMIT = 8;
 /** How many shadowing candidates to consider. */
 export const SHADOW_CANDIDATE_LIMIT = 10;
 
+/**
+ * Minimum share of the Practice allocation reserved for shadowing, claimed
+ * before the due-practice batch (cloze/production/etc reviews) gets its cut
+ * — without a reserve, a due-practice backlog can crowd shadowing out of
+ * every session's recommendation, since the batch step was built first and
+ * shadowing only got whatever minutes were left. Still leftover-friendly:
+ * if the due batch doesn't use its capped share, the unused time still
+ * rolls over to shadowing rather than sitting idle.
+ */
+export const SHADOW_MIN_SHARE_OF_PRACTICE = 1 / 3;
+
 /** How many of a learner's most-recently-opened, non-archived books count as "in scope" for shadowing candidates. */
 export const SHADOW_ACTIVE_BOOK_LIMIT = 5;

@@ -281,6 +281,24 @@ describe('buildRecommendedSession', () => {
     expect(total).toBeLessThanOrEqual(60 + 1);
   });
 
+  it('a large due-practice backlog does not crowd shadow candidates out entirely', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        length: 'normal',
+        practiceDue: Array.from({ length: 50 }, (_, i) =>
+          dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
+        ),
+        shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
+          sentenceId: `sh_${i}`,
+          label: `Sentence ${i}`,
+          reason: 'Not yet shadowed',
+        })),
+      }),
+    );
+    const shadowSteps = session.steps.filter((step) => step.targetKind === 'shadow');
+    expect(shadowSteps.length).toBeGreaterThan(0);
+  });
+
   it('never exceeds the requested time budget by an unreasonable amount, across all lengths', () => {
     for (const length of ['quick', 'normal', 'deep'] as const) {
       const session = buildRecommendedSession(

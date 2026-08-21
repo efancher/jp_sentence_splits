@@ -240,7 +240,11 @@ never scores to zero) -> **time allocation** across the four modes (a
 much each mode can actually absorb — e.g. Retain never gets padded with
 low-value reviews just because minutes are available) -> concrete step
 selection, bounded to the best 10-15 due items rather than the whole queue
--> **coherent-chain grouping** (steps that share a sentence id, e.g. a
+(within Practice, shadowing gets a reserved minimum share —
+`SHADOW_MIN_SHARE_OF_PRACTICE` — claimed before the due-practice batch, so a
+large cloze/production backlog can't crowd shadow candidates out of the
+recommendation entirely) -> **coherent-chain grouping** (steps that share a
+sentence id, e.g. a
 grammar pattern and a shadowing candidate from the same sentence, run back
 to back) -> a short human-readable explanation
 ("You haven't touched practice in 6 days, so this session emphasizes it.").

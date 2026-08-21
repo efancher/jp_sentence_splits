@@ -14,6 +14,7 @@ import {
   NEGLECT_WINDOW_DAYS,
   REVIEW_PRIORITY_DEFAULT_LIMIT,
   SESSION_LENGTH_MINUTES,
+  SHADOW_MIN_SHARE_OF_PRACTICE,
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
   SYNTHETIC_ACTIVITY_TYPES,
@@ -579,10 +580,21 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   });
 
   const practiceEstimate = MODE_ACTIVITY_ESTIMATE_MINUTES.practice;
+  // Reserve shadowing's cut of Practice before the due-practice batch is
+  // built, so a large due-practice backlog can't claim the whole budget and
+  // squeeze shadow candidates out entirely (floored at one item's worth, so
+  // the reserve is never too small to actually produce a step).
+  const shadowReserve =
+    input.shadowCandidates.length > 0
+      ? Math.min(
+          allocation.practice,
+          Math.max(practiceEstimate, allocation.practice * SHADOW_MIN_SHARE_OF_PRACTICE),
+        )
+      : 0;
   const dueBatchStep = buildDueBatchStep(
     'practice',
     rankedPractice,
-    allocation.practice,
+    allocation.practice - shadowReserve,
     practiceEstimate,
     'due_practice_batch',
   );
