@@ -5116,3 +5116,34 @@ rerun), no new lint warnings.
 **Not done this pass**: not exercised in a real browser (this sandbox
 still has no working Playwright, same recurring gap noted throughout
 this file).
+
+## Listening card: staged reveal + user hint (2026-08-21): done
+
+User feedback: the `listening` review card gave no indication of what the
+learner was supposed to be doing — listen for gist, listen for words, or
+mentally translate? — and one undifferentiated reveal (Japanese text,
+translation, and vocab all at once) meant a wrong self-rating couldn't
+distinguish "I couldn't parse the audio" from "I heard it fine but didn't
+know that word." Two changes to `AudioComprehensionCard`
+(`src/pages/ReviewPage.tsx`), no schema changes:
+
+**Hint text**: a muted line ("Listen and see how much you understand
+before revealing.") above the reveal button, so the blind-listen intent is
+stated in the UI instead of only living in code comments/docs.
+
+**Staged reveal**: reveal is now two steps instead of one. "Reveal text"
+shows only the karaoke-highlighted Japanese (checks audio segmentation);
+"Reveal translation" then shows the translation and vocab chips (checks
+meaning). The parent `revealed` state — which gates the FSRS rating
+buttons — only flips true on the second step, so rating still reflects
+whole-exercise comprehension, just informed by a two-step self-check
+instead of one. Added a missing `key={current.studyItem.id}` on the
+card's call site so the new local `textRevealed` state (and the
+pre-existing `playCountRef` play-count tracker, which had been silently
+carrying over between consecutive listening cards without a key) both
+reset per card.
+
+**Verified**: `npm run typecheck`, `npm run lint` (no new warnings),
+`npm run test` (full suite: 779 passed, 2 pre-existing skips). Updated
+`tests/reviewPage.test.tsx` listening-card cases to click through
+"Reveal text" then "Reveal translation" instead of a single "Reveal".

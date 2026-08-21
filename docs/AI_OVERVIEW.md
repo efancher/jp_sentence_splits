@@ -381,8 +381,13 @@ subject. Activity types currently wired, grouped by subject/eligibility:
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
-  `PLAYBACK_SPEEDS` as ShadowPage) sits next to the play button. On reveal,
-  the sentence renders via `KaraokeSentenceText`
+  `PLAYBACK_SPEEDS` as ShadowPage) sits next to the play button. Reveal is
+  staged in two steps, not one: "Reveal text" shows only the Japanese (so
+  the learner can check whether they parsed the audio correctly, separate
+  from whether they know the vocabulary), then "Reveal translation" shows
+  the translation and vocab chips; only the second step satisfies the
+  parent `revealed` gate that unlocks the FSRS rating buttons. On text
+  reveal, the sentence renders via `KaraokeSentenceText`
   (`src/components/KaraokeSentenceText.tsx`): it lazily computes/caches a
   `ReferenceAlignment` for the clip (via `loadOrComputeAlignment`, same
   cache the shadowing-analysis flow uses) and highlights the word under the

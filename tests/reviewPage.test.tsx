@@ -1184,8 +1184,11 @@ describe('ReviewPage', () => {
       expect(seeded[0]?.subjectType).toBe('sentence');
     });
 
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal text' }));
     expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    expect(screen.queryByText('I read a book.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal translation' }));
     expect(screen.getByText('I read a book.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Good' }));
@@ -1268,7 +1271,7 @@ describe('ReviewPage', () => {
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByRole('button', { name: /Play native sentence recording/ });
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal text' }));
 
     // Karaoke words render, and so does the original sentence text
     // underneath (a cross-check reference, since the aligner's own tokens
@@ -1313,7 +1316,7 @@ describe('ReviewPage', () => {
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByRole('button', { name: /Play native sentence recording/ });
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal text' }));
 
     await screen.findByText('読みます');
     expect(screen.queryByText('<unk>')).not.toBeInTheDocument();
@@ -1358,7 +1361,8 @@ describe('ReviewPage', () => {
       await user.click(await screen.findByRole('button', { name: playButtonName }));
       expect(MockAudio.instances).toHaveLength(2);
 
-      await user.click(screen.getByRole('button', { name: 'Reveal' }));
+      await user.click(screen.getByRole('button', { name: 'Reveal text' }));
+      await user.click(screen.getByRole('button', { name: 'Reveal translation' }));
       await user.click(screen.getByRole('button', { name: 'Good' }));
 
       await waitFor(async () => {
@@ -1398,7 +1402,8 @@ describe('ReviewPage', () => {
       await user.click(
         await screen.findByRole('button', { name: /Play native sentence recording/ }),
       );
-      await user.click(screen.getByRole('button', { name: 'Reveal' }));
+      await user.click(screen.getByRole('button', { name: 'Reveal text' }));
+      await user.click(screen.getByRole('button', { name: 'Reveal translation' }));
       await user.click(screen.getByRole('button', { name: 'Good' }));
 
       await waitFor(async () => {

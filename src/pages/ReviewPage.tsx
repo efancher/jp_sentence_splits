@@ -1172,6 +1172,7 @@ export function ReviewPage() {
               />
             ) : current.audio ? (
               <AudioComprehensionCard
+                key={current.studyItem.id}
                 sentence={current.sentence}
                 audio={current.audio}
                 revealed={revealed}
@@ -1563,13 +1564,20 @@ function PitchAccentCard({
 
 /**
  * Audio comprehension (Phase 7.4, docs brief §5D): audio plays first with
- * the Japanese text hidden; reveal shows the sentence, translation, and
- * vocabulary together, same as the plain comprehension flow. The audio
- * button stays available (and replayable) both before and after reveal.
+ * the Japanese text hidden. Reveal is staged in two steps rather than one:
+ * "Reveal text" first shows only the (karaoke-highlighted) Japanese, so the
+ * learner can check whether they parsed the *audio* correctly before
+ * meaning enters the picture; "Reveal translation" then shows the
+ * translation and vocabulary together. Splitting these lets a learner tell
+ * "I couldn't segment the audio" apart from "I heard it fine but didn't
+ * know that word" instead of one undifferentiated self-rating — the parent
+ * `revealed`/rating-buttons gate only fires at the second step, since the
+ * exercise isn't done until meaning has been checked too. The audio button
+ * stays available (and replayable) throughout.
  *
  * Playback speed (follow-up) reuses the same rate-select ShadowPage already
  * has, wired into NativeAudioButton's existing (previously unused here)
- * playbackRate prop. Once revealed, the Japanese text is rendered via
+ * playbackRate prop. Once text is revealed, it's rendered via
  * KaraokeSentenceText, which highlights words in sync with playback using
  * lazily-computed forced alignment — falls back to plain text on its own
  * when alignment isn't available, so no fallback branching is needed here.
@@ -1593,6 +1601,7 @@ function AudioComprehensionCard({
   onPlaybackRateChange: (value: number) => void;
 }) {
   const playCountRef = useRef(0);
+  const [textRevealed, setTextRevealed] = useState(false);
   return (
     <>
       <div className="row" style={{ alignItems: 'center' }}>
@@ -1619,15 +1628,26 @@ function AudioComprehensionCard({
           </select>
         </label>
       </div>
-      {!revealed ? (
-        <button type="button" onClick={onReveal}>
-          Reveal
-        </button>
+      {!textRevealed ? (
+        <>
+          <p className="muted">Listen and see how much you understand before revealing.</p>
+          <button type="button" onClick={() => setTextRevealed(true)}>
+            Reveal text
+          </button>
+        </>
       ) : (
         <>
           <KaraokeSentenceText audio={audio} japanese={sentence.japanese} />
-          <div>{sentence.translation || '(no translation)'}</div>
-          <VocabChips items={sentence.targetVocabulary} />
+          {!revealed ? (
+            <button type="button" onClick={onReveal}>
+              Reveal translation
+            </button>
+          ) : (
+            <>
+              <div>{sentence.translation || '(no translation)'}</div>
+              <VocabChips items={sentence.targetVocabulary} />
+            </>
+          )}
         </>
       )}
     </>
