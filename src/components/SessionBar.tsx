@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { updatePlannerSessionStep } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
@@ -11,16 +11,16 @@ import { useActiveSession } from '../hooks/useActiveSession';
  * exists. Lets the learner get back to the session list, or close out the
  * current step, from wherever a page's own navigation (e.g. "confirm and
  * next") happened to carry them — that gap, not the review/practice pages
- * themselves, was the actual bug.
+ * themselves, was the actual bug. AppShell only mounts this when it should
+ * actually be visible (there's an active session, and we're not already on
+ * its own /session/:id page), so no visibility check is needed here.
  */
 export function SessionBar() {
-  const location = useLocation();
   const active = useActiveSession();
   const [updating, setUpdating] = useState(false);
 
   if (!active) return null;
   const { session, currentStep } = active;
-  if (location.pathname === `/session/${session.id}`) return null;
 
   const settledCount = session.steps.filter(
     (step) => step.status === 'completed' || step.status === 'skipped' || step.status === 'replaced',

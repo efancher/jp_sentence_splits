@@ -5,6 +5,7 @@ import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
 import { MigrationModal } from '../components/MigrationModal';
 import { SessionBar } from '../components/SessionBar';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
+import { useActiveSession } from '../hooks/useActiveSession';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -30,6 +31,14 @@ const NAV = [
 export function AppShell() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const activeSession = useActiveSession();
+  // Sticky-positioned SessionBar doesn't reserve layout space the way a
+  // normal-flow footer would, so without this a page whose content ends
+  // right at the viewport edge would have its last inch permanently covered
+  // once scrolled to the bottom — reserve room for it whenever it'll render
+  // (see SessionBar's own matching route check).
+  const showSessionBar =
+    !!activeSession && location.pathname !== `/session/${activeSession.session.id}`;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -67,10 +76,10 @@ export function AppShell() {
         </div>
         <SyncStatusBadge />
       </header>
-      <main className="app-main">
+      <main className={showSessionBar ? 'app-main has-session-bar' : 'app-main'}>
         <Outlet />
       </main>
-      <SessionBar />
+      {showSessionBar ? <SessionBar /> : null}
       <MigrationModal />
       {menuOpen ? (
         <div className="nav-menu-backdrop" onClick={() => setMenuOpen(false)}>

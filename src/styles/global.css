@@ -169,6 +169,15 @@ strong.jp {
     max(1rem, env(safe-area-inset-left, 0px));
 }
 
+/* Reserves room for the sticky-bottom SessionBar so it can never permanently
+   cover a page's trailing content once scrolled all the way down — a sticky
+   element doesn't otherwise claim layout space for the room it occupies once
+   "stuck". Height is a deliberate overestimate of SessionBar's actual
+   rendered height (comfortably covers one or two lines of step label). */
+.app-main.has-session-bar {
+  padding-bottom: max(5.5rem, calc(3.5rem + env(safe-area-inset-bottom, 0px)));
+}
+
 .nav-menu-button {
   min-width: var(--touch);
   min-height: var(--touch);
