@@ -64,6 +64,29 @@ export function pitchPatternLabel(position: number, moraCount: number): PitchAcc
 }
 
 /**
+ * Which pitch-accent categories are actually distinguishable for a word
+ * with `moraCount` morae — for building a fair multiple-choice review
+ * card, not just labeling a known position. Reasoned directly from
+ * `pitchPatternLabel`'s own branch order over every real position
+ * `0..moraCount`:
+ * - 1 mora: only positions 0 and 1 exist. Position 1 hits the
+ *   `position === 1` branch *before* the odaka check ever runs, so odaka
+ *   is unreachable — only heiban/atamadaka are real choices.
+ * - 2 morae: positions 0, 1, 2. Position 2 (`>= moraCount`) is odaka; there
+ *   is no integer strictly between 1 and moraCount for nakadaka to occupy.
+ * - 3+ morae: all four are reachable.
+ * Offering an unreachable label as a distractor would be an unfair (or
+ * literally unwinnable, if it were somehow the "correct" one) choice, not
+ * a legitimate wrong answer.
+ */
+export function possiblePitchPatternsForMoraCount(moraCount: number): PitchAccentPattern[] {
+  if (moraCount <= 0) return [];
+  if (moraCount === 1) return ['heiban', 'atamadaka'];
+  if (moraCount === 2) return ['heiban', 'atamadaka', 'odaka'];
+  return ['heiban', 'atamadaka', 'nakadaka', 'odaka'];
+}
+
+/**
  * The 1-based mora index of the first h->l transition in `classes` (i.e.
  * the last high mora before the drop), or 0 if the sequence never drops
  * (heiban- and odaka-shaped alike — see module doc). This is the

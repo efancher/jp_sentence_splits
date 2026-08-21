@@ -4,6 +4,7 @@ import {
   detectedDropPosition,
   expectedPitchShape,
   pitchPatternLabel,
+  possiblePitchPatternsForMoraCount,
 } from '../src/lib/pitchAccentShape';
 
 describe('expectedPitchShape', () => {
@@ -40,6 +41,56 @@ describe('pitchPatternLabel', () => {
     expect(pitchPatternLabel(1, 4)).toBe('atamadaka');
     expect(pitchPatternLabel(2, 4)).toBe('nakadaka');
     expect(pitchPatternLabel(4, 4)).toBe('odaka');
+  });
+});
+
+describe('possiblePitchPatternsForMoraCount', () => {
+  it('returns nothing for a zero mora count', () => {
+    expect(possiblePitchPatternsForMoraCount(0)).toEqual([]);
+  });
+
+  it('excludes odaka for a 1-mora word (unreachable — position 1 is atamadaka)', () => {
+    expect(possiblePitchPatternsForMoraCount(1)).toEqual(['heiban', 'atamadaka']);
+  });
+
+  it('includes odaka but excludes nakadaka for a 2-mora word', () => {
+    expect(possiblePitchPatternsForMoraCount(2)).toEqual(['heiban', 'atamadaka', 'odaka']);
+  });
+
+  it('includes all four patterns for words with 3+ morae', () => {
+    expect(possiblePitchPatternsForMoraCount(3)).toEqual([
+      'heiban',
+      'atamadaka',
+      'nakadaka',
+      'odaka',
+    ]);
+    expect(possiblePitchPatternsForMoraCount(4)).toEqual([
+      'heiban',
+      'atamadaka',
+      'nakadaka',
+      'odaka',
+    ]);
+    expect(possiblePitchPatternsForMoraCount(5)).toEqual([
+      'heiban',
+      'atamadaka',
+      'nakadaka',
+      'odaka',
+    ]);
+  });
+
+  it('round-trips every returned label through pitchPatternLabel for a representative position', () => {
+    for (const moraCount of [1, 2, 3, 4, 5]) {
+      const possible = possiblePitchPatternsForMoraCount(moraCount);
+      const representativePosition: Record<string, number> = {
+        heiban: 0,
+        atamadaka: 1,
+        nakadaka: Math.max(2, Math.floor(moraCount / 2)),
+        odaka: moraCount,
+      };
+      for (const label of possible) {
+        expect(pitchPatternLabel(representativePosition[label]!, moraCount)).toBe(label);
+      }
+    }
   });
 });
 
