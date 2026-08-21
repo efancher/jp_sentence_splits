@@ -2,28 +2,23 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import {
-  computeLearningBalance,
-  planRecommendedSession,
-  startPlannerSession,
-} from '../db/repository';
-import type { LearningMode, SessionLength } from '../domain/types';
-import { SESSION_LENGTH_MINUTES } from '../lib/sessionPlannerConfig';
+import { addMinutesToTodaySession, computeLearningBalance, getTodayPlannerSession } from '../db/repository';
+import type { LearningMode, PlannerStepStatus } from '../domain/types';
+import { DEFAULT_DAILY_BUDGET_MINUTES, TOP_UP_INCREMENTS_MINUTES } from '../lib/sessionPlannerConfig';
 
 /**
  * The Learning Orchestrator's home screen (docs/AI_OVERVIEW.md) — the "what
- * should I do?" landing experience, replacing Books as the index route.
- * One strong recommendation plus a compact rolling-window balance view,
- * deliberately not a dashboard of numbers (design brief §11's "don't
- * clutter" instruction) — direct links to every area stay one tap away
- * below it, so the recommendation guides rather than gates.
+ * should I do?" landing experience, replacing Books as the index route. One
+ * growing **daily** list (`PlannerSession`, keyed one-per-local-day) rather
+ * than a fixed-length Quick/Normal/Deep sitting, since real usage is a
+ * roughly hour-a-day budget picked up in small pieces throughout the day —
+ * "Start"/"+more time" are both just `addMinutesToTodaySession`, so the
+ * first tap of the day creates the session and every later tap tops it up.
+ * A compact rolling-window balance view sits below it, and direct links to
+ * every area stay one tap away, so the recommendation guides without
+ * gating (design brief §11's "don't clutter" instruction, unchanged from
+ * the original version of this page).
  */
-
-const LENGTH_OPTIONS: { value: SessionLength; label: string }[] = [
-  { value: 'quick', label: `Quick (${SESSION_LENGTH_MINUTES.quick} min)` },
-  { value: 'normal', label: `Normal (${SESSION_LENGTH_MINUTES.normal} min)` },
-  { value: 'deep', label: `Deep (${SESSION_LENGTH_MINUTES.deep} min)` },
-];
 
 const MODE_LABELS: Record<LearningMode, string> = {
   explore: 'Explore',
@@ -33,6 +28,14 @@ const MODE_LABELS: Record<LearningMode, string> = {
 };
 
 const MODE_ORDER: LearningMode[] = ['explore', 'understand', 'practice', 'retain'];
+
+const STEP_STATUS_LABELS: Record<PlannerStepStatus, string> = {
+  pending: 'Up next',
+  active: 'In progress',
+  completed: 'Done',
+  skipped: 'Skipped',
+  replaced: 'Replaced',
+};
 
 const SHORTCUTS = [
   { to: '/books', label: 'Books' },
@@ -51,80 +54,97 @@ function formatDaysSince(days: number | null): string {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [length, setLength] = useState<SessionLength>('normal');
-  const [starting, setStarting] = useState(false);
+  const [addingMinutes, setAddingMinutes] = useState<number | null>(null);
 
-  const recommendation = useLiveQuery(() => planRecommendedSession(length), [length]);
+  const session = useLiveQuery(() => getTodayPlannerSession(), []);
   const balance = useLiveQuery(() => computeLearningBalance(), []);
 
-  async function handleStart() {
-    if (!recommendation || recommendation.steps.length === 0) return;
-    setStarting(true);
+  async function handleAdd(minutes: number) {
+    setAddingMinutes(minutes);
     try {
-      const session = await startPlannerSession(recommendation, length);
-      navigate(`/session/${session.id}`);
+      await addMinutesToTodaySession(minutes);
     } finally {
-      setStarting(false);
+      setAddingMinutes(null);
     }
   }
+
+  const hasUnsettledStep = session?.steps.some(
+    (step) => step.status === 'pending' || step.status === 'active',
+  );
 
   return (
     <div className="stack">
       <section className="panel stack">
-        <h2 style={{ margin: 0 }}>Continue Learning</h2>
-        <div className="row" role="group" aria-label="Session length">
-          {LENGTH_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={option.value === length ? 'primary' : 'ghost'}
-              onClick={() => setLength(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <h2 style={{ margin: 0 }}>Today</h2>
 
-        {recommendation === undefined ? (
-          <p className="muted">Planning your session…</p>
+        {session === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !session ? (
+          <p className="muted">Nothing planned yet today — add some time to get a recommendation.</p>
         ) : (
           <>
+            <p className="muted" style={{ margin: 0 }}>
+              {session.targetMinutes} min planned today
+            </p>
             <div className="stack" style={{ gap: '0.25rem' }}>
-              {recommendation.explanation.map((line, index) => (
+              {session.explanation.map((line, index) => (
                 <p key={index} className="muted" style={{ margin: 0 }}>
                   {line}
                 </p>
               ))}
             </div>
 
-            {recommendation.steps.length === 0 ? (
-              <p className="muted">
-                Nothing to recommend right now — try Quick/Normal/Deep, or use one of the areas
-                below directly.
-              </p>
-            ) : (
+            {session.steps.length > 0 ? (
               <ol className="stack" style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                {recommendation.steps.map((step) => (
+                {session.steps.map((step) => (
                   <li key={step.id}>
                     <strong>{step.label}</strong> — {Math.round(step.estimatedMinutes)} min
+                    <span className="status-pill" style={{ marginLeft: '0.5rem' }}>
+                      {STEP_STATUS_LABELS[step.status]}
+                    </span>
                     <div className="muted" style={{ fontSize: '0.85rem' }}>
                       {step.reason}
                     </div>
                   </li>
                 ))}
               </ol>
-            )}
+            ) : null}
 
-            <button
-              type="button"
-              className="primary"
-              disabled={starting || recommendation.steps.length === 0}
-              onClick={handleStart}
-            >
-              {starting ? 'Starting…' : 'Start Session'}
-            </button>
+            {hasUnsettledStep ? (
+              <button type="button" className="primary" onClick={() => navigate(`/session/${session.id}`)}>
+                Continue today's session
+              </button>
+            ) : (
+              <p className="muted">All done for now — add more time below whenever you have it.</p>
+            )}
           </>
         )}
+
+        <div className="row" role="group" aria-label="Add time to today's session">
+          <button
+            type="button"
+            className="primary"
+            disabled={addingMinutes !== null}
+            onClick={() => handleAdd(DEFAULT_DAILY_BUDGET_MINUTES)}
+          >
+            {addingMinutes === DEFAULT_DAILY_BUDGET_MINUTES
+              ? 'Adding…'
+              : session
+                ? `+${DEFAULT_DAILY_BUDGET_MINUTES} min`
+                : `Start (${DEFAULT_DAILY_BUDGET_MINUTES} min)`}
+          </button>
+          {TOP_UP_INCREMENTS_MINUTES.map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              className="ghost"
+              disabled={addingMinutes !== null}
+              onClick={() => handleAdd(minutes)}
+            >
+              {addingMinutes === minutes ? 'Adding…' : `+${minutes} min`}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="panel stack">

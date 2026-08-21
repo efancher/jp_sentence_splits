@@ -519,7 +519,74 @@ export class GlossbookDatabase extends Dexie {
         'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
       plannerSessions: 'id, status, createdAt',
     });
+
+    // PlannerSession becomes a per-day, growable list (one session per
+    // local calendar day, found by `date`, topped up in place) rather than
+    // one fixed-length record per "Start Session" click — see PlannerSession's
+    // field comment in ../domain/types.ts. Backfills `date` on any
+    // already-existing local sessions from `createdAt` (best-effort — the
+    // original local timezone isn't recorded, so this is an approximation
+    // for pre-migration rows only).
+    this.version(15)
+      .stores({
+        books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+        sentences:
+          'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+        bookSentences:
+          'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+        analyses: 'sentenceId, status, updatedAt',
+        importBatches: 'id, importedAt, batchName',
+        inbox: 'sentenceId, importBatchId, addedAt',
+        settings: 'id',
+        sentenceAudio:
+          'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+        syncMeta: 'id',
+        syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+        syncRecordMeta: 'key, entity, recordId, updatedAt',
+        syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+        sources: 'id, type, externalId, updatedAt',
+        vocabularyItems:
+          'id, expression, [expression+reading], externalId, updatedAt',
+        sentenceVocabulary:
+          'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+        kanji: 'id, character, externalId, updatedAt',
+        vocabularyKanji:
+          'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+        studyItems:
+          'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+        reviews: 'id, studyItemId, timestamp',
+        attempts: 'id, sentenceId, createdAt, manualRating',
+        vocabularyConfusions:
+          'id, itemAId, itemBId, [itemAId+itemBId], updatedAt',
+        referenceAlignments: 'id',
+        attemptAlignments: 'id',
+        attemptTranscriptions: 'id',
+        attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+        cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
+        grammarPatterns: 'id, canonicalName, normalizedKey, updatedAt',
+        sentenceGrammar:
+          'id, sentenceId, grammarPatternId, [sentenceId+grammarPatternId], chunkId, updatedAt',
+        grammarRelationships:
+          'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
+        plannerSessions: 'id, status, createdAt, date',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<PlannerSession>('plannerSessions')
+          .toCollection()
+          .modify((session) => {
+            session.date ??= localDateKey(new Date(session.createdAt));
+          });
+      });
   }
+}
+
+/** Local (not UTC) calendar-day key, `YYYY-MM-DD` — the natural key for "today's" PlannerSession. */
+export function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 async function migrateSettingsV2(tx: Transaction): Promise<void> {

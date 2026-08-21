@@ -1,6 +1,9 @@
 # Status
 
-Last updated: 2026-08-21 (Learning Orchestrator: a persistent `SessionBar`
+Last updated: 2026-08-21 (Learning Orchestrator: `PlannerSession` switched
+from a fixed-length Quick/Normal/Deep sitting to one growing **daily**
+session — see the dedicated entry below for full detail. Before that: a
+persistent `SessionBar`
 (`src/components/SessionBar.tsx`, mounted once in `AppShell.tsx`) now shows
 on every route whenever a `PlannerSession` is `in_progress` — the current
 step's label, progress, a link back to `/session/:id`, and inline "Mark
@@ -5213,3 +5216,102 @@ DOM-offset positioning can't be meaningfully verified under jsdom (offsets
 are always 0), and reaching a live-highlighted word requires real audio
 playback plus a reachable forced-alignment service, neither available in
 this sandbox (same recurring gap noted throughout this file).
+
+## Learning Orchestrator: daily session instead of fixed Quick/Normal/Deep (2026-08-21): done
+
+User request: real usage is closer to "about an hour a day, picked up in
+20-30 minute pieces whenever there's free time" than one uninterrupted
+Quick(10)/Normal(30)/Deep(60)-minute sitting — the fixed-length model
+forced starting over each time instead of building on what was already
+recommended for today. Also discussed restricting shadowing recommendations
+to "at home" (quiet room, mic access), but the user clarified that's
+unnecessary — shadowing should just stay in the normal candidate pool like
+everything else; the only real ask was the daily/incremental model.
+
+**Data model** (`src/domain/types.ts`, `src/domain/schemas.ts`): removed
+`SessionLength` (`'quick' | 'normal' | 'deep'`) entirely, including
+`sessionLengthSchema`. `PlannerSession.length` replaced with `date` (local
+`YYYY-MM-DD`, via new `localDateKey()` in `src/db/database.ts`) — at most
+one `PlannerSession` per local calendar day now, found by `date` instead of
+always creating a new row. Dexie schema v14 -> v15 (`plannerSessions: 'id,
+status, createdAt, date'`), with an `.upgrade()` that backfills `date` on
+any already-existing local session from `createdAt` (best-effort — original
+local timezone isn't recorded, so this is an approximation for
+pre-migration rows only; matches the existing `book.chapters ??= []`
+backfill precedent at schema v3).
+
+**Planner** (`src/lib/sessionPlanner.ts`): `SessionPlannerInput.length`
+replaced with a plain required `totalMinutes: number` — on first plan of
+the day this is the starting budget, on a top-up it's just the newly added
+minutes, not the day's running total. `sessionPlannerConfig.ts`'s
+`SESSION_LENGTH_MINUTES` replaced with `DEFAULT_DAILY_BUDGET_MINUTES` (60,
+"about an hour a day") and `TOP_UP_INCREMENTS_MINUTES` (`[20, 30]`). No
+other change to the pure allocation/ranking/step-selection pipeline.
+
+**Repository** (`src/db/repository.ts`): the old two-step
+`planRecommendedSession` (preview) + `startPlannerSession` (persist,
+always a new row) replaced by a single new function,
+`addMinutesToTodaySession(minutes, now)`, that is both "start" (first call
+of the day, creates the row) and "top up" (every later call, appends to
+it):
+- Gathers exclusion sets (`sentenceIds`/`bookIds`/`grammarPatternIds`) from
+  every step already in today's session, *regardless of status* — a
+  top-up re-plans only the added minutes via a new `exclude` param on
+  `getSessionPlannerInput`, which filters Explore/Understand/Shadow
+  candidates against those sets (over-fetching the raw candidate pool by
+  the exclusion count first, so filtering still leaves a full page) so the
+  same book/sentence/grammar pattern doesn't get recommended a second time
+  while its first recommendation is still sitting there.
+- Due-review batch steps (`due_retain_batch`/`due_practice_batch`) need no
+  such exclusion — they always score against the live due queue, which
+  itself shrinks as reviews are actually completed via `ReviewPage` — with
+  one exception: if a `pending` (unstarted) batch step for that mode
+  already exists, a fresh one is dropped rather than shown twice; the
+  existing step's link to the live due queue already reflects the larger
+  time budget in practice even though its own displayed count doesn't
+  retroactively grow. This was a deliberate simplification over resizing
+  the existing step in place, judged not worth the complexity for a
+  single-user app.
+- A settled (`completed`/`ended_early`) session only reopens to
+  `in_progress` if the top-up actually produced at least one new step —
+  topping up a fully-done day that has nothing new to recommend leaves
+  "all done" standing rather than flipping back to `in_progress` with zero
+  pending steps.
+- New `getTodayPlannerSession(now)` — read-only lookup by `date`, never
+  creates. `getActiveInProgressPlannerSession` (backing `SessionBar`) is
+  unchanged and, in practice, now always resolves to today's session.
+
+**UI**: `HomePage.tsx` — the Quick/Normal/Deep toggle and separate
+preview-then-"Start Session" flow are gone. Shows today's session if one
+exists (minutes planned so far, the accumulated `explanation` — one block
+per top-up, e.g. "Added 20 more minutes: ..." — and the full step list
+with a status badge per step, since a day's list can now contain a mix of
+settled and pending steps at once, unlike the old always-all-pending
+preview) plus a button row: the default-minutes button (labeled "Start (60
+min)" or "+60 min" depending on whether a session exists yet) and two
+smaller "+20 min"/"+30 min" top-up buttons, all calling
+`addMinutesToTodaySession` directly — no separate preview step, since Skip
+is always available on the runner as the low-stakes undo. A "Continue
+today's session" button appears whenever a step is still pending/active.
+`SessionRunnerPage.tsx` — copy updated ("Today's session — N min planned" /
+"all settled for now, add more from Home") but sequencing/complete/skip/
+end-early logic is otherwise unchanged.
+
+**Tests**: `tests/sessionPlanner.test.ts` — every `length: 'quick'/'normal'/
+'deep'` override replaced with the equivalent `totalMinutes: 10/30/60`
+(mechanical, no behavior change to what's tested). `tests/
+sessionPlannerRepository.test.ts` — replaced `startPlannerSession` calls
+with `addMinutesToTodaySession`; added three new cases: (1) two calls on
+the same day produce one row, not two, with the second's `targetMinutes`
+equal to the sum and every first-call step surviving untouched; (2) a
+top-up doesn't add a second Explore step for a book that already has one
+pending; (3) a top-up reopens a fully-settled session once it finds
+something new to recommend (verified with a second book added between
+calls so the top-up has something new; also implicitly confirms a top-up
+that finds *nothing* new would leave `status` alone, since that's the
+`reopens` condition being exercised).
+
+**Verified**: `npm run check` (typecheck + full vitest suite, 786 passed, 2
+pre-existing skips, no new failures) and `npm run lint` (no new warnings).
+Not exercised in a real browser — same recurring Playwright-launch gap
+noted throughout this file.

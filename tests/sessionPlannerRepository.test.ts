@@ -2,15 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
 import {
+  addMinutesToTodaySession,
   addSentencesToBook,
   computeLearningBalance,
   createBook,
   endPlannerSessionEarly,
   ensureStudyItem,
   getDb,
+  getTodayPlannerSession,
   planRecommendedSession,
   recordReview,
-  startPlannerSession,
   updatePlannerSessionStep,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
@@ -53,7 +54,7 @@ describe('Learning Orchestrator repository layer', () => {
       sentences.map((s) => s.id),
     );
 
-    const recommended = await planRecommendedSession('normal');
+    const recommended = await planRecommendedSession(30);
     expect(recommended.allocation.retain).toBe(0);
     const exploreStep = recommended.steps.find((step) => step.mode === 'explore');
     expect(exploreStep).toBeDefined();
@@ -69,10 +70,8 @@ describe('Learning Orchestrator repository layer', () => {
     // A brand-new StudyItem is immediately due, giving a second (retain) step.
     await ensureStudyItem('sentence', sentence.id, 'comprehension');
 
-    const recommended = await planRecommendedSession('normal');
-    expect(recommended.steps.length).toBeGreaterThanOrEqual(2);
-
-    const session = await startPlannerSession(recommended, 'normal');
+    const session = await addMinutesToTodaySession(30);
+    expect(session.steps.length).toBeGreaterThanOrEqual(2);
     expect(session.status).toBe('in_progress');
     expect(session.steps.every((step) => step.status === 'pending')).toBe(true);
     // Real, freshly-minted ids — not the pure algorithm's draft_N placeholders.
@@ -98,13 +97,82 @@ describe('Learning Orchestrator repository layer', () => {
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
 
-    const recommended = await planRecommendedSession('normal');
-    const session = await startPlannerSession(recommended, 'normal');
+    const session = await addMinutesToTodaySession(30);
     const ended = await endPlannerSessionEarly(session.id);
 
     expect(ended!.status).toBe('ended_early');
     expect(ended!.steps.every((step) => step.status !== 'completed')).toBe(true);
     expect(ended!.steps.every((step) => step.status === 'skipped')).toBe(true);
+  });
+
+  it('addMinutesToTodaySession creates one session per day and tops it up rather than creating a second', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentences = [makeSentence(), makeSentence()];
+    await db.sentences.bulkPut(sentences);
+    await addSentencesToBook(book.id, sentences.map((s) => s.id));
+
+    const first = await addMinutesToTodaySession(30);
+    expect(first.targetMinutes).toBe(30);
+
+    const second = await addMinutesToTodaySession(20);
+    expect(second.id).toBe(first.id);
+    expect(second.targetMinutes).toBe(50);
+    expect(second.steps.length).toBeGreaterThanOrEqual(first.steps.length);
+    // Every step from the first pass survives untouched in the topped-up session.
+    for (const step of first.steps) {
+      expect(second.steps.find((s) => s.id === step.id)).toBeDefined();
+    }
+
+    const today = await getTodayPlannerSession();
+    expect(today!.id).toBe(first.id);
+
+    const all = await db.plannerSessions.toArray();
+    expect(all).toHaveLength(1);
+  });
+
+  it('a top-up does not re-suggest a book already given a pending Explore step', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentences = [makeSentence(), makeSentence(), makeSentence()];
+    await db.sentences.bulkPut(sentences);
+    await addSentencesToBook(book.id, sentences.map((s) => s.id));
+
+    const first = await addMinutesToTodaySession(30);
+    const exploreStepsAfterFirst = first.steps.filter((step) => step.mode === 'explore');
+    expect(exploreStepsAfterFirst.length).toBeGreaterThan(0);
+
+    const second = await addMinutesToTodaySession(30);
+    const exploreStepsAfterSecond = second.steps.filter((step) => step.mode === 'explore');
+    // No second "continue this book" step for the same still-unstarted book.
+    expect(exploreStepsAfterSecond.length).toBe(exploreStepsAfterFirst.length);
+  });
+
+  it('a top-up reopens a session that had already settled all its steps, once it finds something new', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const first = await addMinutesToTodaySession(30);
+    for (const step of first.steps) {
+      await updatePlannerSessionStep(first.id, step.id, { status: 'completed' });
+    }
+    const settled = await getTodayPlannerSession();
+    expect(settled!.status).toBe('completed');
+
+    // A second book gives the top-up something new to recommend.
+    const otherBook = await createBook({ title: 'Another Book' });
+    const otherSentence = makeSentence();
+    await db.sentences.put(otherSentence);
+    await addSentencesToBook(otherBook.id, [otherSentence.id]);
+
+    const topped = await addMinutesToTodaySession(20);
+    expect(topped.id).toBe(first.id);
+    expect(topped.status).toBe('in_progress');
+    expect(topped.endedAt).toBeUndefined();
+    expect(topped.steps.length).toBeGreaterThan(first.steps.length);
   });
 
   it('learning balance reflects real recent Review activity, not the planner\'s own bookkeeping', async () => {

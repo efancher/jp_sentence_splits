@@ -1,4 +1,4 @@
-import type { LearningMode, SessionLength, StudyActivityType } from '../domain/types';
+import type { LearningMode, StudyActivityType } from '../domain/types';
 
 /**
  * Tunable constants for the Learning Orchestrator (docs/AI_OVERVIEW.md).
@@ -7,11 +7,11 @@ import type { LearningMode, SessionLength, StudyActivityType } from '../domain/t
  * Orchestrator section for what each one does to the recommendation.
  */
 
-export const SESSION_LENGTH_MINUTES: Record<SessionLength, number> = {
-  quick: 10,
-  normal: 30,
-  deep: 60,
-};
+/** Starting budget for a brand-new daily session, before any top-up (design: "assume about an hour a day"). */
+export const DEFAULT_DAILY_BUDGET_MINUTES = 60;
+
+/** "I have a bit more time" top-up amounts offered on Home, smallest first. */
+export const TOP_UP_INCREMENTS_MINUTES = [20, 30] as const;
 
 /** Prompt's own starting heuristic for a Normal session — a guideline, not a quota (see allocateTimeAcrossModes). */
 export const BASELINE_MODE_ALLOCATION: Record<LearningMode, number> = {

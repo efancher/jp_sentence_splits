@@ -81,13 +81,13 @@ export function SessionRunnerPage() {
     <div className="stack">
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>
-          {finished ? 'Session complete' : `Recommended session — ${session.targetMinutes} min`}
+          {finished ? "Today's session — all settled for now" : `Today's session — ${session.targetMinutes} min planned`}
         </h2>
         {finished ? (
           <>
             <p className="muted">
               {session.steps.filter((step) => step.status === 'completed').length} of{' '}
-              {session.steps.length} activities completed.
+              {session.steps.length} activities completed. Add more time from Home whenever you have it.
             </p>
             <button type="button" className="primary" onClick={() => navigate('/')}>
               Back to Home

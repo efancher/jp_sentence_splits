@@ -768,8 +768,6 @@ export interface GrammarRelationship {
  */
 export type LearningMode = 'explore' | 'understand' | 'practice' | 'retain';
 
-export type SessionLength = 'quick' | 'normal' | 'deep';
-
 export type PlannerStepStatus = 'pending' | 'active' | 'completed' | 'skipped' | 'replaced';
 
 /**
@@ -806,17 +804,24 @@ export interface PlannerSessionStep {
 }
 
 /**
- * One generated (and, once started, executed/tracked) recommended session.
- * `allocation`/`explanation` are a snapshot of the planner's reasoning at
- * generation time — re-running the planner later may produce a different
- * plan as underlying data changes, but this record preserves what was
- * actually recommended and why.
+ * One calendar day's recommended session — a single growing list the
+ * learner can pick up in small pieces throughout the day rather than a
+ * fixed-length sitting. `date` (local `YYYY-MM-DD`) is the natural key: at
+ * most one `PlannerSession` per day, found via `date` rather than always
+ * creating a new record. `targetMinutes`/`allocation`/`steps` grow each
+ * time more time is added (`addMinutesToTodaySession`); `explanation`
+ * accumulates one entry per top-up, so it reads as the story of the whole
+ * day rather than being overwritten. `steps` already-settled
+ * (completed/skipped) are never touched by a later top-up — only new steps
+ * are appended, or an unstarted due-batch step is left alone rather than
+ * duplicated (see `addMinutesToTodaySession`'s own comment).
  */
 export interface PlannerSession {
   id: string;
   createdAt: string;
   updatedAt: string;
-  length: SessionLength;
+  /** Local calendar day this session belongs to, `YYYY-MM-DD` — see `localDateKey`. */
+  date: string;
   targetMinutes: number;
   allocation: Record<LearningMode, number>;
   explanation: string[];

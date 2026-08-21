@@ -431,7 +431,6 @@ export const grammarRelationshipSchema = z.object({
 // ahead of backupSchema for the same forward-reference reason as
 // vocabularyItemSchema/grammarPatternSchema above.
 export const learningModeSchema = z.enum(['explore', 'understand', 'practice', 'retain']);
-export const sessionLengthSchema = z.enum(['quick', 'normal', 'deep']);
 export const plannerStepStatusSchema = z.enum([
   'pending',
   'active',
@@ -469,7 +468,7 @@ export const plannerSessionSchema = z.object({
   id: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  length: sessionLengthSchema,
+  date: z.string(),
   targetMinutes: z.number().positive(),
   allocation: z.record(learningModeSchema, z.number()),
   explanation: z.array(z.string()),

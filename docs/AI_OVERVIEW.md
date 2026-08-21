@@ -199,14 +199,16 @@ built out Phases 1–9):
   `graduationMinScheduledDays` (retirement threshold from the due
   rotation).
 - `PlannerSession` (new; Learning Orchestrator, local-only, no sync) — one
-  generated-and-executed recommended session: `length`/`targetMinutes`,
-  the mode `allocation` and prose `explanation` the planner produced, and
-  an embedded ordered `steps: PlannerSessionStep[]` (mirrors
-  `AnalysisChunk[]`'s "small list, not a join table" shape) tracking each
-  step's status (`pending`/`active`/`completed`/`skipped`/`replaced`) and
-  timestamps. Not to be confused with `AppSettings.newCardsPerSessionLimit`
-  — an older, unrelated "session planner" (the per-sitting new-card cap on
-  `ReviewPage`).
+  **calendar day's** recommended session, keyed by local `date`
+  (`YYYY-MM-DD`, at most one per day, found via `getTodayPlannerSession`):
+  `targetMinutes` (grows with each top-up), the mode `allocation` and prose
+  `explanation` the planner produced (one entry appended per top-up, not
+  overwritten), and an embedded ordered `steps: PlannerSessionStep[]`
+  (mirrors `AnalysisChunk[]`'s "small list, not a join table" shape)
+  tracking each step's status (`pending`/`active`/`completed`/`skipped`/
+  `replaced`) and timestamps. Not to be confused with
+  `AppSettings.newCardsPerSessionLimit` — an older, unrelated "session
+  planner" (the per-sitting new-card cap on `ReviewPage`).
 
 Sync/queue-internal tables (`syncMeta`, `syncQueue`, `syncRecordMeta`,
 `syncConflicts`) are infrastructure, not domain data.
@@ -257,25 +259,54 @@ Dexie-touching half — it adapts live `StudyItem`/`Review`/`Attempt`/
 types, batched (not N+1) the same way `listGrammarPatternSummaries`
 already is.
 
-**`HomePage`** — the index route (`BooksPage` moved to `/books`). Shows one
-recommendation (Quick/Normal/Deep toggle, the explanation, a numbered step
-list, "Start Session") plus a compact rolling-14-day balance view (four
+**One growing daily session, not fixed Quick/Normal/Deep sittings**
+(follow-up, 2026-08-21): `PlannerSession` is keyed one-per-local-day
+(`date`), not one-per-"Start Session"-click — real usage is closer to "an
+hour or so a day, picked up in small pieces" than one uninterrupted
+sitting, and shadowing in particular is often only practical at certain
+times (quiet room, mic). `addMinutesToTodaySession(minutes)` is the single
+action behind both starting today's list (first call of the day) and
+topping it up ("+20 min"/"+30 min" on Home, or the same default-minutes
+button again) — it re-plans only against the newly added minutes, excludes
+any sentence/book/grammar pattern already sitting anywhere in today's step
+list (regardless of status) so a top-up doesn't re-suggest the same thing,
+and leaves an already-`pending` due-review batch step alone rather than
+duplicating it (its own live due-queue link already reflects the larger
+budget in practice). A settled (`completed`/`ended_early`) session reopens
+to `in_progress` only if a top-up actually finds something new to
+recommend — finding nothing just leaves "all done for now" standing.
+`explanation` accumulates one block per top-up ("Added 20 more minutes:
+...") rather than being overwritten, so it reads as the day's story.
+`getSessionPlannerInput`'s `exclude` param (sentence/book/grammar-pattern
+id sets, derived from the existing session's steps) is the only new
+surface on the otherwise-unchanged pure planner — `buildRecommendedSession`
+itself just takes a plain `totalMinutes: number` now (the old
+`SessionLength`/`SESSION_LENGTH_MINUTES` quick/normal/deep enum is gone).
+
+**`HomePage`** — the index route (`BooksPage` moved to `/books`). Shows
+today's session if one exists (`targetMinutes` so far, the accumulated
+explanation, the full step list with a status badge per step) plus
+"Start"/"+more time" buttons (`DEFAULT_DAILY_BUDGET_MINUTES` = 60 as the
+default add amount, `TOP_UP_INCREMENTS_MINUTES` = [20, 30] for smaller
+top-ups, both in `sessionPlannerConfig.ts`) and a "Continue today's
+session" link to the runner whenever a step is still pending/active. Below
+that, the same compact rolling-14-day balance view as before (four
 `.progress-bar` meters — reusing the existing CSS component rather than a
 charting dependency — fill = how recently each mode was touched) and a
 direct-access shortcut row (Books/Grammar/Review/Words/Search), so the
-recommendation guides without gating. **`SessionRunnerPage`** sequences a
-started session's steps, deep-linking into the existing Analyze/
-Grammar-detail/Shadow/Review pages for the actual activity rather than
-reimplementing any of them — start/skip/end-early are real, tracked
-actions; a step is only ever marked complete by an explicit action on
-return, never inferred from navigation, so a step merely opened and left
-is never silently counted as done. "Replace an activity" was deliberately
-not built for v1 (Skip plus starting a fresh session covers the same
-need) — see `docs/STATUS.md`'s 2026-08-20 entry for this and other
-known limitations (no time-tracking infrastructure — Explore/Understand
-activity is inferred from existing row timestamps; no settings UI for the
-tuning constants in `sessionPlannerConfig.ts`; `PlannerSession` doesn't
-sync to Supabase, local-only like `Attempt`). Since the deep-linked pages
+recommendation guides without gating. **`SessionRunnerPage`** sequences
+today's steps, deep-linking into the existing Analyze/Grammar-detail/
+Shadow/Review pages for the actual activity rather than reimplementing any
+of them — start/skip/end-early are real, tracked actions; a step is only
+ever marked complete by an explicit action on return, never inferred from
+navigation, so a step merely opened and left is never silently counted as
+done. "Replace an activity" was deliberately not built for v1 (Skip plus a
+later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
+2026-08-21 entries for this and other known limitations (no time-tracking
+infrastructure — Explore/Understand activity is inferred from existing row
+timestamps; no settings UI for the tuning constants in
+`sessionPlannerConfig.ts`; `PlannerSession` doesn't sync to Supabase,
+local-only like `Attempt`). Since the deep-linked pages
 themselves have no idea a session is running, a persistent **`SessionBar`**
 (`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
 `layouts/AppShell.tsx`) shows on every route whenever a session is
@@ -727,12 +758,17 @@ aren't JSON-serializable/aren't worth backing up).
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
 - **Learning Orchestrator known limitations** (see docs/STATUS.md's
-  2026-08-20 entry for full detail): no "replace this activity" action, no
-  "continue longer" extend-in-place action, no settings UI for the
-  planner's tuning constants, `PlannerSession` is local-only (no cloud
-  sync), and — same recurring gap as several items above — not yet
-  manually verified in a real browser (this sandbox's Playwright Chromium
-  and WebKit builds both fail to launch on missing system libraries).
+  2026-08-20 and 2026-08-21 entries for full detail): no "replace this
+  activity" action, no settings UI for the planner's tuning constants
+  (including the new `DEFAULT_DAILY_BUDGET_MINUTES`/
+  `TOP_UP_INCREMENTS_MINUTES`), `PlannerSession` is local-only (no cloud
+  sync — a top-up on a second device starts its own separate daily session
+  rather than continuing the first device's), and — same recurring gap as
+  several items above — not yet manually verified in a real browser (this
+  sandbox's Playwright Chromium and WebKit builds both fail to launch on
+  missing system libraries). The old "no 'continue longer' extend-in-place
+  action" limitation is now resolved — that's what the daily top-up model
+  *is*.
 
 ## External services & dependencies
 

@@ -3,7 +3,6 @@ import type {
   LearningMode,
   PlannerStepStatus,
   PlannerStepTargetKind,
-  SessionLength,
   StudyActivityType,
   StudySubjectType,
 } from '../domain/types';
@@ -13,7 +12,6 @@ import {
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
   REVIEW_PRIORITY_DEFAULT_LIMIT,
-  SESSION_LENGTH_MINUTES,
   SHADOW_MIN_SHARE_OF_PRACTICE,
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
@@ -340,9 +338,8 @@ export interface ShadowCandidate {
 
 export interface SessionPlannerInput {
   now: Date;
-  length: SessionLength;
-  /** Override for SESSION_LENGTH_MINUTES[length] — tests only. */
-  totalMinutes?: number;
+  /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
+  totalMinutes: number;
   recentActivity: RecentActivityEvent[];
   /** Due StudyItems eligible for Retain-mode steps (comprehension/reading_retrieval/listening/etc), already scoring-ready. */
   retainDue: ReviewPriorityInput[];
@@ -561,7 +558,7 @@ function explainNeglect(neglectScores: NeglectScores, distribution: ActivityDist
  * may be zero steps for a mode), not an error.
  */
 export function buildRecommendedSession(input: SessionPlannerInput): RecommendedSession {
-  const totalMinutes = input.totalMinutes ?? SESSION_LENGTH_MINUTES[input.length];
+  const totalMinutes = input.totalMinutes;
   const reviewLimit = input.reviewLimit ?? REVIEW_PRIORITY_DEFAULT_LIMIT;
 
   const distribution = computeRecentActivityDistribution(input.recentActivity, input.now);

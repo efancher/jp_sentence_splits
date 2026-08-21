@@ -24,13 +24,13 @@ import type {
   Kanji,
   LearningMode,
   PlannerSession,
+  PlannerSessionStep,
   PlannerStepStatus,
   ReferenceAlignment,
   Review,
   ReviewAssistance,
   ReviewRating,
   ReviewSource,
-  SessionLength,
   Sentence,
   SentenceAudio,
   SentenceAnalysis,
@@ -119,7 +119,7 @@ import {
   curatedVocabForSourceKey,
   selectionsFromCuratedPicks,
 } from '../lib/curatedVocabulary';
-import { ensureSettings, getDb, readSettings } from './database';
+import { ensureSettings, getDb, localDateKey, readSettings } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
 
 function sortSentences(
@@ -3524,15 +3524,41 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
   return events;
 }
 
-/** Gathers everything buildRecommendedSession needs — the only Dexie-touching step of the planning pipeline. */
+/** Which sentences/books/grammar patterns are already spoken for by today's existing steps — so a top-up doesn't recommend the same thing twice while it's still pending. */
+interface SessionPlannerExclusions {
+  sentenceIds: Set<string>;
+  bookIds: Set<string>;
+  grammarPatternIds: Set<string>;
+}
+
+function exclusionsFromSteps(steps: PlannerSessionStep[]): SessionPlannerExclusions {
+  const sentenceIds = new Set<string>();
+  const bookIds = new Set<string>();
+  const grammarPatternIds = new Set<string>();
+  for (const step of steps) {
+    if (step.sentenceId) sentenceIds.add(step.sentenceId);
+    if (step.bookId && step.targetKind === 'continue_book') bookIds.add(step.bookId);
+    if (step.grammarPatternId) grammarPatternIds.add(step.grammarPatternId);
+  }
+  return { sentenceIds, bookIds, grammarPatternIds };
+}
+
+const NO_EXCLUSIONS: SessionPlannerExclusions = {
+  sentenceIds: new Set(),
+  bookIds: new Set(),
+  grammarPatternIds: new Set(),
+};
+
+/** Gathers everything buildRecommendedSession needs — the only Dexie-touching step of the planning pipeline. `exclude` keeps a top-up from re-suggesting a book/sentence/grammar pattern already sitting in today's step list. */
 export async function getSessionPlannerInput(
-  length: SessionLength,
+  totalMinutes: number,
   now: Date = new Date(),
+  exclude: SessionPlannerExclusions = NO_EXCLUSIONS,
 ): Promise<SessionPlannerInput> {
   const db = getDb();
   const settings = await readSettings(db);
 
-  const [recentActivity, retainDueItems, practiceDueItems, exploreCandidates, understandCandidates] =
+  const [recentActivity, retainDueItems, practiceDueItems, exploreCandidatesRaw, understandCandidatesRaw] =
     await Promise.all([
       getRecentActivityEvents(now),
       getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
@@ -3545,8 +3571,9 @@ export async function getSessionPlannerInput(
         limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
         graduationMinScheduledDays: settings.graduationMinScheduledDays,
       }),
-      findExploreCandidates(EXPLORE_CANDIDATE_LIMIT),
-      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT),
+      // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
+      findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
+      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     ]);
 
   const [retainDue, practiceDue] = await Promise.all([
@@ -3555,11 +3582,24 @@ export async function getSessionPlannerInput(
   ]);
 
   const activeSentenceIds = await activeSentenceIdsForShadowing(5);
-  const shadowCandidates = await findShadowCandidates(SHADOW_CANDIDATE_LIMIT, activeSentenceIds);
+  const shadowCandidatesRaw = await findShadowCandidates(
+    SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
+    activeSentenceIds,
+  );
+
+  const exploreCandidates = exploreCandidatesRaw
+    .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
+    .slice(0, EXPLORE_CANDIDATE_LIMIT);
+  const understandCandidates = understandCandidatesRaw
+    .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
+    .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
+  const shadowCandidates = shadowCandidatesRaw
+    .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
+    .slice(0, SHADOW_CANDIDATE_LIMIT);
 
   return {
     now,
-    length,
+    totalMinutes,
     recentActivity,
     retainDue,
     practiceDue,
@@ -3569,39 +3609,107 @@ export async function getSessionPlannerInput(
   };
 }
 
-/** Runs the full pipeline for a not-yet-started session — a preview, not persisted until startPlannerSession. */
+/** Previews what `addMinutesToTodaySession(minutes)` would add right now, without persisting anything. */
 export async function planRecommendedSession(
-  length: SessionLength,
+  minutes: number,
   now: Date = new Date(),
 ): Promise<RecommendedSession> {
-  const input = await getSessionPlannerInput(length, now);
+  const input = await getSessionPlannerInput(minutes, now);
   return buildRecommendedSession(input);
 }
 
-/** Persists a previewed recommendation as an in-progress session — real ids assigned here rather than reusing the draft ids buildRecommendedSession generated, since those are only unique within one planning call. */
-export async function startPlannerSession(
-  recommended: RecommendedSession,
-  length: SessionLength,
+/** Today's (local calendar day) PlannerSession, if one has been started yet — read-only, never creates one. */
+export async function getTodayPlannerSession(now: Date = new Date()): Promise<PlannerSession | undefined> {
+  return getDb().plannerSessions.where('date').equals(localDateKey(now)).first();
+}
+
+/**
+ * The single action behind both "start today's session" (first call of the
+ * day) and "I've got a bit more time" top-ups (every later call) — replacing
+ * the old fixed-length Quick/Normal/Deep "Start Session" with one growing
+ * daily list. Re-plans only against the newly added minutes, excluding
+ * sentences/books/grammar patterns already present anywhere in today's step
+ * list (regardless of status) so a top-up doesn't re-suggest something
+ * already recommended. Due-batch steps (`due_retain_batch`/
+ * `due_practice_batch`) need no such exclusion — they always score against
+ * the live due queue, which itself shrinks as reviews actually get done via
+ * ReviewPage — except that a due-batch step still sitting `pending`
+ * (unstarted) is left alone rather than duplicated; its own live due-queue
+ * link already reflects the larger budget in practice even though its
+ * displayed count doesn't retroactively grow.
+ */
+export async function addMinutesToTodaySession(
+  minutes: number,
+  now: Date = new Date(),
 ): Promise<PlannerSession> {
   const db = getDb();
+  const date = localDateKey(now);
   const timestamp = nowIso();
-  const session: PlannerSession = {
-    id: createId('planner_session'),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    length,
-    targetMinutes: recommended.targetMinutes,
-    allocation: recommended.allocation,
-    explanation: recommended.explanation,
-    steps: recommended.steps.map((step) => ({
-      ...step,
-      id: createId('planner_step'),
-      status: 'pending',
-    })),
-    status: 'in_progress',
+
+  const existing = await db.plannerSessions.where('date').equals(date).first();
+  const exclude = exclusionsFromSteps(existing?.steps ?? []);
+  const hasPendingDueBatch = {
+    retain: (existing?.steps ?? []).some(
+      (step) => step.activityType === 'due_retain_batch' && step.status === 'pending',
+    ),
+    practice: (existing?.steps ?? []).some(
+      (step) => step.activityType === 'due_practice_batch' && step.status === 'pending',
+    ),
   };
-  await db.plannerSessions.put(session);
-  return session;
+
+  const input = await getSessionPlannerInput(minutes, now, exclude);
+  const recommended = buildRecommendedSession(input);
+
+  const newSteps: PlannerSessionStep[] = recommended.steps
+    .filter((step) => {
+      if (step.activityType === 'due_retain_batch' && hasPendingDueBatch.retain) return false;
+      if (step.activityType === 'due_practice_batch' && hasPendingDueBatch.practice) return false;
+      return true;
+    })
+    .map((step) => ({ ...step, id: createId('planner_step'), status: 'pending' as const }));
+
+  if (!existing) {
+    const session: PlannerSession = {
+      id: createId('planner_session'),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      date,
+      targetMinutes: minutes,
+      allocation: recommended.allocation,
+      explanation: recommended.explanation,
+      steps: newSteps,
+      status: 'in_progress',
+    };
+    await db.plannerSessions.put(session);
+    return session;
+  }
+
+  const allocation = { ...existing.allocation };
+  for (const mode of Object.keys(recommended.allocation) as LearningMode[]) {
+    allocation[mode] = (allocation[mode] ?? 0) + recommended.allocation[mode];
+  }
+
+  // Only reopen a settled (completed/ended-early) session if this top-up
+  // actually produced something new to do — a top-up that finds nothing new
+  // to recommend (e.g. everything's already covered by existing steps)
+  // should leave "all done" standing, not silently flip back to in_progress
+  // with nothing pending.
+  const reopens = newSteps.length > 0 && existing.status !== 'in_progress';
+  const updated: PlannerSession = {
+    ...existing,
+    updatedAt: timestamp,
+    targetMinutes: existing.targetMinutes + minutes,
+    allocation,
+    explanation:
+      newSteps.length > 0
+        ? [...existing.explanation, `Added ${minutes} more minutes:`, ...recommended.explanation]
+        : existing.explanation,
+    steps: [...existing.steps, ...newSteps],
+    status: reopens ? 'in_progress' : existing.status,
+    endedAt: reopens ? undefined : existing.endedAt,
+  };
+  await db.plannerSessions.put(updated);
+  return updated;
 }
 
 export async function getPlannerSession(sessionId: string): Promise<PlannerSession | undefined> {
@@ -3618,7 +3726,9 @@ export async function listRecentPlannerSessions(limit = 10): Promise<PlannerSess
  * a global "back to session" affordance (SessionBar) so any page can surface
  * it without threading a session id through every deep-link target. Most
  * recently updated wins in the (should be rare) case more than one is
- * somehow `in_progress` at once.
+ * somehow `in_progress` at once — in practice this is always today's
+ * session, since `addMinutesToTodaySession` is the only writer and it's
+ * keyed one-per-day.
  */
 export async function getActiveInProgressPlannerSession(): Promise<PlannerSession | undefined> {
   const sessions = await getDb().plannerSessions.where('status').equals('in_progress').toArray();

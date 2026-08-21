@@ -45,7 +45,7 @@ function dueCandidate(overrides: Partial<ReviewPriorityInput> = {}): ReviewPrior
 function emptyPlannerInput(overrides: Partial<SessionPlannerInput> = {}): SessionPlannerInput {
   return {
     now: NOW,
-    length: 'normal',
+    totalMinutes: 30,
     recentActivity: [],
     retainDue: [],
     practiceDue: [],
@@ -145,7 +145,7 @@ describe('allocateTimeAcrossModes', () => {
 
 describe('buildRecommendedSession', () => {
   it('a brand-new user with no history gets a non-crashing baseline plan', () => {
-    const session = buildRecommendedSession(emptyPlannerInput({ length: 'normal' }));
+    const session = buildRecommendedSession(emptyPlannerInput());
     expect(session.targetMinutes).toBe(30);
     expect(session.steps).toEqual([]);
     expect(session.explanation.length).toBeGreaterThan(0);
@@ -181,7 +181,7 @@ describe('buildRecommendedSession', () => {
       reason: 'Recently studied, not yet shadowed',
     }));
     const session = buildRecommendedSession(
-      emptyPlannerInput({ recentActivity, shadowCandidates, length: 'deep' }),
+      emptyPlannerInput({ recentActivity, shadowCandidates, totalMinutes: 60 }),
     );
     expect(session.neglectScores.practice).toBeGreaterThan(0.4);
     const shadowSteps = session.steps.filter((step) => step.targetKind === 'shadow');
@@ -193,7 +193,7 @@ describe('buildRecommendedSession', () => {
       { bookId: 'book_1', sentenceId: 'sent_1', label: 'Episode 4', reason: 'Continue', remainingCount: 20 },
     ];
     const session = buildRecommendedSession(
-      emptyPlannerInput({ exploreCandidates, length: 'normal' }),
+      emptyPlannerInput({ exploreCandidates }),
     );
     expect(session.allocation.retain).toBe(0);
     expect(session.explanation.some((line) => line.toLowerCase().includes('backlog'))).toBe(true);
@@ -206,11 +206,11 @@ describe('buildRecommendedSession', () => {
       dueCandidate({ studyItemId: `card_${index}`, due: daysAgo(index) }),
     );
     const session = buildRecommendedSession(
-      emptyPlannerInput({ retainDue, length: 'deep', reviewLimit: 15 }),
+      emptyPlannerInput({ retainDue, totalMinutes: 60, reviewLimit: 15 }),
     );
     const retainStep = session.steps.find((step) => step.mode === 'retain');
     expect(retainStep).toBeDefined();
-    // A "deep" (60-minute) session can't fit more than the reviewLimit of
+    // A 60-minute planning pass can't fit more than the reviewLimit of
     // 15 items even if the whole budget went to retain — the batch step's
     // count is derived from the ranked (already-capped) list.
     expect(retainStep!.label).not.toMatch(/2\d\d|1[6-9]\d|[3-9]\d/);
@@ -226,7 +226,7 @@ describe('buildRecommendedSession', () => {
       },
     ];
     const session = buildRecommendedSession(
-      emptyPlannerInput({ understandCandidates, length: 'normal' }),
+      emptyPlannerInput({ understandCandidates }),
     );
     const step = session.steps.find((s) => s.grammarPatternId === 'pattern_temo');
     expect(step).toBeDefined();
@@ -234,10 +234,10 @@ describe('buildRecommendedSession', () => {
     expect(step!.reason).toContain('Encountered 3 times');
   });
 
-  it('a Quick session produces a small, sensible mix that fits within budget', () => {
+  it('a small (10-minute) planning pass produces a small, sensible mix that fits within budget', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
-        length: 'quick',
+        totalMinutes: 10,
         retainDue: Array.from({ length: 20 }, (_, i) => dueCandidate({ studyItemId: `q_${i}` })),
         exploreCandidates: [
           { bookId: 'b1', sentenceId: 's1', label: 'Book', reason: 'Continue', remainingCount: 10 },
@@ -253,10 +253,10 @@ describe('buildRecommendedSession', () => {
     expect(total).toBeLessThanOrEqual(10 + 1);
   });
 
-  it('a Deep session covers all four modes when candidates exist for each', () => {
+  it('a large (60-minute) planning pass covers all four modes when candidates exist for each', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
-        length: 'deep',
+        totalMinutes: 60,
         retainDue: Array.from({ length: 20 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
         practiceDue: Array.from({ length: 20 }, (_, i) =>
           dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
@@ -284,7 +284,6 @@ describe('buildRecommendedSession', () => {
   it('a large due-practice backlog does not crowd shadow candidates out entirely', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
-        length: 'normal',
         practiceDue: Array.from({ length: 50 }, (_, i) =>
           dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
         ),
@@ -299,14 +298,14 @@ describe('buildRecommendedSession', () => {
     expect(shadowSteps.length).toBeGreaterThan(0);
   });
 
-  it('never exceeds the requested time budget by an unreasonable amount, across all lengths', () => {
-    for (const length of ['quick', 'normal', 'deep'] as const) {
+  it('never exceeds the requested time budget by an unreasonable amount, across all sizes', () => {
+    for (const totalMinutes of [10, 30, 60] as const) {
       const session = buildRecommendedSession(
         emptyPlannerInput({
-          length,
-          retainDue: Array.from({ length: 50 }, (_, i) => dueCandidate({ studyItemId: `${length}_${i}` })),
+          totalMinutes,
+          retainDue: Array.from({ length: 50 }, (_, i) => dueCandidate({ studyItemId: `${totalMinutes}_${i}` })),
           practiceDue: Array.from({ length: 50 }, (_, i) =>
-            dueCandidate({ studyItemId: `${length}p_${i}`, mode: 'practice' }),
+            dueCandidate({ studyItemId: `${totalMinutes}p_${i}`, mode: 'practice' }),
           ),
           exploreCandidates: [
             { bookId: 'b1', sentenceId: 's1', label: 'Book', reason: 'Continue', remainingCount: 50 },
@@ -331,7 +330,7 @@ describe('buildRecommendedSession', () => {
   it('groups steps that share a sentenceId back to back (coherent chains)', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
-        length: 'deep',
+        totalMinutes: 60,
         understandCandidates: [
           { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently', sentenceId: 'shared_sentence' },
         ],

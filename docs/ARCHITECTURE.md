@@ -134,10 +134,14 @@ recommended mixed session across four conceptual `LearningMode`s (explore/
 understand/practice/retain — `src/lib/sessionPlannerConfig.ts`'s
 `ACTIVITY_TYPE_MODE` maps existing activity types onto them). `src/db/
 repository.ts`'s "Learning Orchestrator" section (end of file) is the only
-Dexie-touching half. One new local-only table, `PlannerSession` (Dexie v14),
-records what was actually recommended/executed — see `docs/AI_OVERVIEW.md`
-for the full design and `docs/STATUS.md`'s 2026-08-20 entry for what shipped
-and what's deliberately deferred. `HomePage` (`src/pages/HomePage.tsx`) is
+Dexie-touching half. One new local-only table, `PlannerSession` (Dexie v14,
+schema-adjusted v15), records what was actually recommended/executed — one
+row per local calendar day (`date`, at most one `in_progress`/settled
+session per day, topped up in place via `addMinutesToTodaySession` rather
+than a new row per "Start Session" click) — see `docs/AI_OVERVIEW.md` for
+the full design and `docs/STATUS.md`'s 2026-08-20 and 2026-08-21 entries
+for what shipped and what's deliberately deferred. `HomePage`
+(`src/pages/HomePage.tsx`) is
 now the index route; `BooksPage` moved to `/books`. A persistent
 `SessionBar` (`src/components/SessionBar.tsx`, mounted in `layouts/
 AppShell.tsx`) surfaces on every route whenever a session is `in_progress`
