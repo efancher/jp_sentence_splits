@@ -201,16 +201,25 @@ export async function updateBook(
   return updated;
 }
 
-export async function updateSentenceTranslation(
+/**
+ * Corrects a sentence's translation and/or kana reading fields
+ * (`readingOnly`/`inlineReading`) — e.g. fixing a transcription that's
+ * missing the reading for a numeral or other non-kanji token (see
+ * AnalyzePage's "Edit reading" panel). Deliberately excludes `japanese`
+ * itself: chunk boundaries, vocabulary selection spans, and audio
+ * alignment all key off the exact existing string, so changing it needs a
+ * re-analysis pass, not a plain field edit.
+ */
+export async function updateSentenceText(
   sentenceId: string,
-  translation: string,
+  patch: Partial<Pick<Sentence, 'translation' | 'readingOnly' | 'inlineReading'>>,
 ): Promise<Sentence> {
   const db = getDb();
   const existing = await db.sentences.get(sentenceId);
   if (!existing) throw new Error('Sentence not found');
   const updated: Sentence = {
     ...existing,
-    translation,
+    ...patch,
     updatedAt: nowIso(),
   };
   await db.sentences.put(updated);

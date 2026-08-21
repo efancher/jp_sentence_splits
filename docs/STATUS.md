@@ -4923,3 +4923,35 @@ cut, not oversight):
 - Shadowing candidates require both `SentenceAudio` and the sentence
   already being "in progress" in one of the 5 most-recently-opened books —
   a brand-new import won't immediately surface shadowing suggestions.
+
+## New: sentence reading/transcription is now correctable (2026-08-21): done
+
+User report: a shadowing sentence's kana reading was missing a numeral's
+reading entirely — 「22歳だよ。」's `readingOnly`/`inlineReading` both kept
+the literal digits "22" instead of spelling them out, so mora segmentation
+(`segmentIntoMorae`'s `isKana` filter) silently dropped them and
+ShadowPage's mora breakdown displayed as if the sentence were just
+「さいだよ」. There was no in-app way to fix a wrong reading once imported
+— only `translation` had an edit path (see the "sentence translation and
+vocabulary meaning are now editable" note above).
+
+- `src/db/repository.ts` — generalized `updateSentenceTranslation` into
+  `updateSentenceText(sentenceId, patch)`, accepting any of
+  `translation`/`readingOnly`/`inlineReading`. Deliberately excludes
+  `japanese` itself: chunk boundaries, vocabulary-selection spans, and
+  audio alignment all key off the exact existing string, so changing it
+  needs a re-analysis pass, not a plain field edit.
+- `AnalyzePage.tsx` — new "Edit reading" toggle next to "Show Satori
+  English", revealing two textareas (`Reading-only (kana)`, `Inline
+  reading (word[reading] markup)`) folded into the existing autosave bag,
+  identical save-on-blur wiring to the translation field.
+- One-off data fix applied directly via a scripted Supabase update (same
+  signed-in-as-real-user pattern as `scripts/fix-*.ts`, not committed —
+  ad hoc and single-row): the reported sentence (`sent_2561ceb8`) now
+  reads `readingOnly: "にじゅうにさいだよ。"`,
+  `inlineReading: "22[にじゅうに]歳[さい]だよ。"`.
+
+**Verified**: `tsc --noEmit`, `npm run lint`, full vitest suite (739
+passed, 2 pre-existing skips) all green — no new tests added since this
+is a close pattern-match extension of the already-tested translation-edit
+autosave path. Not exercised in an actual browser this session.

@@ -15,7 +15,7 @@ import {
   materializeVocabularySelections,
   saveAnalysis,
   setBookSentenceStatus,
-  updateSentenceTranslation,
+  updateSentenceText,
 } from '../db/repository';
 import type {
   AnalysisChunk,
@@ -75,6 +75,9 @@ export function AnalyzePage() {
   const [chunks, setChunks] = useState<AnalysisChunk[]>([]);
   const [notes, setNotes] = useState('');
   const [translation, setTranslation] = useState('');
+  const [readingOnly, setReadingOnly] = useState('');
+  const [inlineReading, setInlineReading] = useState('');
+  const [showReadingEdit, setShowReadingEdit] = useState(false);
   const [vocabularySelections, setVocabularySelections] = useState<
     VocabularySelection[]
   >([]);
@@ -129,6 +132,8 @@ export function AnalyzePage() {
     setHeuristicPreview(null);
     setNotes(data.analysis?.notes ?? '');
     setTranslation(data.sentence.translation ?? '');
+    setReadingOnly(data.sentence.readingOnly ?? '');
+    setInlineReading(data.sentence.inlineReading ?? '');
     setSpaced(initialSpacedText(data.sentence.japanese, existing));
     const suggestions = data.sentence.vocabularySuggestions ?? [];
     const savedSelections = data.analysis?.vocabularySelections ?? [];
@@ -177,6 +182,8 @@ export function AnalyzePage() {
       chunks,
       notes,
       translation,
+      readingOnly,
+      inlineReading,
       vocabularySelections,
       vocabularyReviewStatus,
     },
@@ -186,7 +193,11 @@ export function AnalyzePage() {
           reviewStatus: value.vocabularyReviewStatus,
           selections: value.vocabularySelections,
         }),
-        updateSentenceTranslation(sentenceId, value.translation),
+        updateSentenceText(sentenceId, {
+          translation: value.translation,
+          readingOnly: value.readingOnly,
+          inlineReading: value.inlineReading,
+        }),
       ]);
     },
     { enabled: hydrated },
@@ -324,6 +335,9 @@ export function AnalyzePage() {
           <button type="button" onClick={() => setShowEnglish((value) => !value)}>
             {showEnglish ? 'Hide' : 'Show'} Satori English
           </button>
+          <button type="button" onClick={() => setShowReadingEdit((value) => !value)}>
+            {showReadingEdit ? 'Hide' : 'Edit'} reading
+          </button>
           <a href={ichiMoeUrl(sentence.japanese)} target="_blank" rel="noreferrer">
             ichi.moe
           </a>
@@ -382,6 +396,40 @@ export function AnalyzePage() {
               onChange={(event) => setTranslation(event.target.value)}
               onBlur={() => void saveNow()}
               placeholder="English translation…"
+              rows={2}
+            />
+          </div>
+        ) : null}
+        {showReadingEdit ? (
+          <div className="panel stack" style={{ boxShadow: 'none' }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Correct the kana reading used for Reading-only display, furigana,
+              and shadowing's mora breakdown — e.g. when a numeral like "22"
+              is missing its reading (にじゅうに). Leave a field blank to fall
+              back to the other one.
+            </p>
+            <label className="muted" htmlFor="sentence-reading-only">
+              Reading-only (kana)
+            </label>
+            <textarea
+              id="sentence-reading-only"
+              className="jp"
+              value={readingOnly}
+              onChange={(event) => setReadingOnly(event.target.value)}
+              onBlur={() => void saveNow()}
+              placeholder="Whole-sentence kana reading…"
+              rows={2}
+            />
+            <label className="muted" htmlFor="sentence-inline-reading">
+              Inline reading ({'word[reading]'} markup)
+            </label>
+            <textarea
+              id="sentence-inline-reading"
+              className="jp"
+              value={inlineReading}
+              onChange={(event) => setInlineReading(event.target.value)}
+              onBlur={() => void saveNow()}
+              placeholder="例[れい]の様[よう]に単語[たんご]ごとに読み方[よみかた]を付ける…"
               rows={2}
             />
           </div>
