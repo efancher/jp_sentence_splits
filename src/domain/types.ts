@@ -417,6 +417,13 @@ export interface VocabularyItem {
   notes?: string;
   /** Stable id from an ingestion source (e.g. `wk:{subjectId}`, `jmdict:{entryId}`) for idempotent re-import. */
   externalId?: string;
+  /**
+   * Mora index of the pitch-accent drop, from the Kanjium dictionary
+   * (0 = heiban, 1 = atamadaka, N = nakadaka/odaka). Array because a word
+   * can have more than one accepted accent. Absent/empty means not yet
+   * backfilled or no dictionary match (`scripts/backfill-pitch-accent.ts`).
+   */
+  pitchAccentPositions?: number[];
   createdAt: string;
   updatedAt: string;
 }

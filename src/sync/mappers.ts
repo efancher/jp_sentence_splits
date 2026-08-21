@@ -439,6 +439,7 @@ export function vocabularyItemToRemote(
     part_of_speech: item.partOfSpeech ?? null,
     notes: item.notes ?? null,
     external_id: item.externalId ?? null,
+    pitch_accent_positions: item.pitchAccentPositions ?? null,
     created_at: item.createdAt,
     updated_at: item.updatedAt,
     deleted_at: null,
@@ -457,6 +458,8 @@ export function remoteToVocabularyItem(
     partOfSpeech: (row.part_of_speech as string | null) ?? undefined,
     notes: (row.notes as string | null) ?? undefined,
     externalId: (row.external_id as string | null) ?? undefined,
+    pitchAccentPositions:
+      (row.pitch_accent_positions as number[] | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
