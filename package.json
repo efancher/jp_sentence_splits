@@ -25,6 +25,7 @@
     "backfill:confirmed-vocabulary-links": "tsx scripts/backfill-confirmed-vocabulary-links.ts",
     "backfill:verb-pair-confusions": "tsx scripts/backfill-verb-pair-confusions.ts",
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
+    "backfill:pitch-accent": "tsx scripts/backfill-pitch-accent.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts",
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
     "merge:duplicate-vocabulary-items": "tsx scripts/merge-duplicate-vocabulary-items.ts",
