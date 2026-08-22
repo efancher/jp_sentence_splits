@@ -5364,3 +5364,83 @@ Playwright but `chrome-headless-shell` fails to launch in this sandbox
 (missing `libnspr4.so`), and `playwright install-deps` needs a sudo
 password not available non-interactively — same recurring
 Playwright-launch gap noted throughout this file.
+
+## Learning Orchestrator: per-sentence Explore steps, standalone Vocabulary page, real-completion auto-complete (2026-08-22): done
+
+User request: Explore steps used to bundle a book's unstarted sentences
+into one step ("Continue X — N new sentences"), and marking that step done
+in the session runner was a UI-only click on `PlannerSessionStep.status`
+with no connection to whether the sentence's analysis/vocabulary work was
+actually finished. Three related changes, landed together:
+
+**Per-sentence Explore steps** (`src/lib/sessionPlanner.ts`,
+`src/db/repository.ts`): `ExploreCandidate` now carries an ordered list of
+a book's next unstarted sentences (id + short preview), capped by the new
+`EXPLORE_SENTENCE_PREVIEW_LIMIT` (20) in `sessionPlannerConfig.ts`, instead
+of just the first one + a count. `findExploreCandidates` `bulkGet`s the
+preview text the same way `findShadowCandidates` already did.
+`buildExploreSteps` drafts one step per sentence instead of one
+`packCount`-sized step per book — book-level exclusion in
+`exclusionsFromSteps`/top-up dedup needed no change, it was already keyed
+by `bookId` as a `Set`, independent of step cardinality.
+
+**Standalone Vocabulary page** (`src/pages/VocabularyReviewPage.tsx`, new;
+route `books/:bookId/vocabulary/:sentenceId` in `src/App.tsx`):
+`VocabularyPicker` — already fully self-contained, no dependency on
+`AnalyzePage`'s chunk/notes state — moved out of `AnalyzePage.tsx` into its
+own page with its own header/audio/nav (duplicated from AnalyzePage's
+pattern rather than extracted into a shared component, matching the
+existing per-page-duplication convention `AnalyzePage`/`BuildPage`/
+`PracticePage` already use for this). `AnalyzePage` lost the
+`vocabularySelections`/`vocabularyReviewStatus` state, the embedded
+`<VocabularyPicker>` block, and the two fields riding along on its
+autosave — `saveAnalysis` already defaults vocab fields from the existing
+row when its `vocabulary` argument is omitted, so this is a no-op on those
+fields, not a data loss. Both pages now link to each other (AnalyzePage's
+header gained a "Vocabulary" link; `BookDetailPage`'s sentence rows gained
+a second "Vocabulary" button next to "Analyze"). New repository helper
+`confirmSentenceVocabulary(sentenceId, selections)` centralizes the
+confirm write path (`saveAnalysis` + `materializeVocabularySelections`)
+that was previously inlined twice in `AnalyzePage`.
+
+This is a deliberate revisit of the "SessionBar scope decision" (see
+project memory) that previously rejected decomposing study pages into
+per-item components in favor of the lighter global `SessionBar` — kept as
+surgical as possible by reusing `VocabularyPicker` unchanged rather than
+rewriting it.
+
+**Real-completion auto-complete** (`src/db/repository.ts`): new
+`autoCompleteSessionSteps(matches)` helper settles any pending/active step
+of the single active-in-progress `PlannerSession` matching a predicate —
+called from `setBookSentenceStatus` when a sentence is marked `'complete'`
+(matching `continue_book` steps by bookId+sentenceId; fires from all three
+existing callers — `AnalyzePage`, `BuildPage`, `PracticePage` — since it's
+the same real signal regardless of which page flipped it) and from
+`confirmSentenceVocabulary` (matching `vocabulary_review` steps by
+sentenceId). Purely additive on top of the existing manual
+"Mark complete"/"Skip" buttons in `SessionRunnerPage`/`SessionBar`, which
+still work unchanged as an explicit override. New `vocabulary_review`
+`PlannerStepTargetKind` (`src/domain/types.ts`, `src/domain/schemas.ts`)
+routes `SessionRunnerPage.targetPath` at the new page.
+`buildExploreSteps` now emits a paired `vocabulary_review` step alongside
+each `continue_book` step (same `sentenceId`, so the existing
+`preferCoherentChains` already chains them back-to-back with no changes
+needed there) — the per-sentence Explore estimate (`MODE_ACTIVITY_ESTIMATE_MINUTES.explore`,
+2.5 min) is split across the pair via new `EXPLORE_STEP_MINUTES` (`{ analyze: 1.5, vocabulary: 1 }`).
+
+**Verified**: `npm run typecheck` and full `vitest run` (787 passed, 2
+pre-existing skips, no new failures), including a new
+`tests/sessionPlannerRepository.test.ts` case exercising both
+auto-complete paths end to end. Also exercised in a real headless-Chromium
+browser this session (worked around the usual sandbox gap noted elsewhere
+in this file via a pre-extracted `libnspr4`/`libnss3` lib directory found
+under `/tmp/chromium-libs`, `LD_LIBRARY_PATH`-injected rather than
+system-installed): imported a CSV into a fresh book, started a session,
+confirmed the two adjacent per-sentence steps render, clicked into
+`AnalyzePage`, clicked its real "Mark complete" button (not the session
+runner's manual one), and confirmed the paired `continue_book` step
+auto-showed as Done back on `/session/:id` with zero manual click on the
+session page; confirmed the new Vocabulary page's header/nav/audio/
+`VocabChips`/`VocabularyPicker` render correctly and that navigating there
+without confirming anything correctly leaves its step `in_progress` (no
+false-positive auto-complete on mere navigation).

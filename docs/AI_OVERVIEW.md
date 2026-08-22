@@ -226,8 +226,13 @@ review) — a scheduling/analytics lens layered on top of existing activity
 types (`ACTIVITY_TYPE_MODE`, `src/lib/sessionPlannerConfig.ts`), not a new
 content model or a forced re-categorization of every feature. This app has
 no continuous native-media player (audio is per-sentence clips, not a
-stream), so Explore steps point at the next not-yet-studied sentence in a
-recently-opened book instead of "continue watching."
+stream), so Explore steps point at the next not-yet-studied sentences in a
+recently-opened book instead of "continue watching." Each unstarted
+sentence gets its own pair of chained steps — one `continue_book` step
+(structural analysis, `AnalyzePage`) and one `vocabulary_review` step
+(`VocabularyReviewPage`) — rather than one step bundling a whole book's
+worth of new sentences into a single "N new sentences" line (follow-up,
+2026-08-22).
 
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process
@@ -299,17 +304,22 @@ that, the same compact rolling-14-day balance view as before (four
 charting dependency — fill = how recently each mode was touched) and a
 direct-access shortcut row (Books/Grammar/Review/Words/Search), so the
 recommendation guides without gating. **`SessionRunnerPage`** sequences
-today's steps, deep-linking into the existing Analyze/Grammar-detail/
-Shadow/Review pages for the actual activity rather than reimplementing any
-of them — start/skip/end-early are real, tracked actions; a step is only
-ever marked complete by an explicit action on return, never inferred from
-navigation, so a step merely opened and left is never silently counted as
-done. "Replace an activity" was deliberately not built for v1 (Skip plus a
+today's steps, deep-linking into the existing Analyze/Vocabulary/
+Grammar-detail/Shadow/Review pages for the actual activity rather than
+reimplementing any of them — start/skip/end-early are real, tracked
+actions. A step settles either by an explicit action (the runner's own
+"Mark complete"/"Skip", or `SessionBar`'s equivalents) or by real
+completion of the underlying work — `setBookSentenceStatus('complete')`
+auto-completes the matching `continue_book` step and
+`confirmSentenceVocabulary` auto-completes the matching `vocabulary_review`
+step (`autoCompleteSessionSteps` in `repository.ts`, follow-up,
+2026-08-22) — but never by mere navigation, so a step merely opened and
+left (without either) is never silently counted as done. "Replace an
+activity" was deliberately not built for v1 (Skip plus a
 later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
 2026-08-21 entries for this and other known limitations (no time-tracking
 infrastructure — Explore/Understand activity is inferred from existing row
-timestamps; no settings UI for the tuning constants in
-`sessionPlannerConfig.ts`; `PlannerSession` doesn't sync to Supabase,
+timestamps; `PlannerSession` doesn't sync to Supabase,
 local-only like `Attempt`). Since the deep-linked pages
 themselves have no idea a session is running, a persistent **`SessionBar`**
 (`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
@@ -363,16 +373,8 @@ frequent implicit subject. Chunks render as visually distinct "puzzle
 piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge shape
 encodes grammatical fit, so structure is visually scannable.
 `lintAnalysis` (`analysisSuggestions.ts`) flags likely mistakes (e.g.
-discarded annotations, chunk/source mismatches). This is where
-**vocabulary confirmation** also happens — the `VocabularyPicker`
-component lets the user tap tokenizer-derived `vocabularySuggestions` (or
-add manually) and "confirm" them, which is the single UI action that
-materializes real `VocabularyItem`/`SentenceVocabulary`/`Kanji`/
-`VocabularyKanji` rows (`materializeVocabularySelections` in
-`repository.ts`) — this is the load-bearing bridge between the
-sentence-analysis world and the SRS world. Sentence translation and
-confirmed vocabulary meanings are directly editable inline (textarea/
-input, autosave). Just below it, a **"Grammar noticed" panel**
+discarded annotations, chunk/source mismatches). Sentence translation is
+directly editable inline (textarea, autosave). A **"Grammar noticed" panel**
 (`GrammarPicker.tsx`) is the entry point for the grammar-learning system's
 second layer: search-existing-or-create-new pattern tagging (autocomplete
 against every `GrammarPattern` already in the corpus), with three
@@ -393,6 +395,21 @@ drafted explanation only pre-fills the same editable fields Explain already
 has, saved by the same button as a manual entry. Both degrade to an inline
 "unavailable" message (signed out, offline, function not deployed) with the
 manual flow completely unaffected.
+
+**Vocabulary confirmation — `VocabularyReviewPage.tsx`** (`/books/:bookId/
+vocabulary/:sentenceId`, follow-up, 2026-08-22): split out of `AnalyzePage`
+into its own page so the Learning Orchestrator can sequence/track it
+independently of structural analysis (see below). The `VocabularyPicker`
+component itself is unchanged and fully self-contained (no dependency on
+`AnalyzePage`'s chunk/notes state) — it just moved pages. It lets the user
+tap tokenizer-derived `vocabularySuggestions` (or add manually) and
+"confirm" them via the new `confirmSentenceVocabulary` repository helper,
+which materializes real `VocabularyItem`/`SentenceVocabulary`/`Kanji`/
+`VocabularyKanji` rows (`materializeVocabularySelections`) — this is the
+load-bearing bridge between the sentence-analysis world and the SRS world.
+`AnalyzePage` and `VocabularyReviewPage` cross-link (a "Vocabulary" button
+on `AnalyzePage`'s header and on each `BookDetailPage` sentence row; an
+"Analyze" link back from the vocabulary page).
 
 ### 3. Practice & Build modes (lightweight, non-SRS study)
 - **Practice** (`PracticePage.tsx`) — reveal-based drilling scoped to a
@@ -762,17 +779,22 @@ aren't JSON-serializable/aren't worth backing up).
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
 - **Learning Orchestrator known limitations** (see docs/STATUS.md's
-  2026-08-20 and 2026-08-21 entries for full detail): no "replace this
-  activity" action, no settings UI for the planner's tuning constants
-  (including the new `DEFAULT_DAILY_BUDGET_MINUTES`/
-  `TOP_UP_INCREMENTS_MINUTES`), `PlannerSession` is local-only (no cloud
+  2026-08-20, 2026-08-21, and 2026-08-22 entries for full detail): no
+  "replace this activity" action; `dailyBudgetMinutes`/`modeAllocation`
+  are user-editable on the Settings page (2026-08-22), but
+  `TOP_UP_INCREMENTS_MINUTES` and the rest of `sessionPlannerConfig.ts`'s
+  tuning constants (neglect window, review-priority weights, per-item time
+  estimates) are still code-only; `PlannerSession` is local-only (no cloud
   sync — a top-up on a second device starts its own separate daily session
-  rather than continuing the first device's), and — same recurring gap as
-  several items above — not yet manually verified in a real browser (this
-  sandbox's Playwright Chromium and WebKit builds both fail to launch on
-  missing system libraries). The old "no 'continue longer' extend-in-place
-  action" limitation is now resolved — that's what the daily top-up model
-  *is*.
+  rather than continuing the first device's). The old "no 'continue longer'
+  extend-in-place action" limitation is now resolved — that's what the
+  daily top-up model *is*. Browser automation is usually unavailable in
+  this sandbox (Playwright Chromium/WebKit fail to launch on missing
+  system libraries, no passwordless sudo to install them) — occasionally
+  worked around per-session by pointing `LD_LIBRARY_PATH` at a manually
+  pre-extracted lib directory when one happens to already exist, but that's
+  not a standing dependency, so most features are still verified only via
+  unit/component tests plus code review.
 
 ## External services & dependencies
 
