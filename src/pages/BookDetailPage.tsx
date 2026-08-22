@@ -228,6 +228,9 @@ function SortableRow({
               Analyze
             </button>
           </Link>
+          <Link to={`/books/${bookId}/vocabulary/${sentence.id}`}>
+            <button type="button">Vocabulary</button>
+          </Link>
         </div>
       )}
     </article>

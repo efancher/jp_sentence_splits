@@ -85,6 +85,11 @@ const VocabularyListPage = lazy(() =>
     default: module.VocabularyListPage,
   })),
 );
+const VocabularyReviewPage = lazy(() =>
+  import('./pages/VocabularyReviewPage').then((module) => ({
+    default: module.VocabularyReviewPage,
+  })),
+);
 const KanjiDetailPage = lazy(() =>
   import('./pages/KanjiDetailPage').then((module) => ({
     default: module.KanjiDetailPage,
@@ -148,6 +153,10 @@ export default function App() {
             <Route
               path="books/:bookId/analyze/:sentenceId"
               element={<AnalyzePage />}
+            />
+            <Route
+              path="books/:bookId/vocabulary/:sentenceId"
+              element={<VocabularyReviewPage />}
             />
             <Route path="books/:bookId/practice" element={<PracticePage />} />
             <Route
