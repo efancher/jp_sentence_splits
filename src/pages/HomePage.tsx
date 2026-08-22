@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { readSettings } from '../db/database';
 import { addMinutesToTodaySession, computeLearningBalance, getTodayPlannerSession } from '../db/repository';
 import type { LearningMode, PlannerStepStatus } from '../domain/types';
 import { DEFAULT_DAILY_BUDGET_MINUTES, TOP_UP_INCREMENTS_MINUTES } from '../lib/sessionPlannerConfig';
@@ -58,6 +59,8 @@ export function HomePage() {
 
   const session = useLiveQuery(() => getTodayPlannerSession(), []);
   const balance = useLiveQuery(() => computeLearningBalance(), []);
+  const settings = useLiveQuery(() => readSettings(), []);
+  const dailyBudgetMinutes = settings?.dailyBudgetMinutes ?? DEFAULT_DAILY_BUDGET_MINUTES;
 
   async function handleAdd(minutes: number) {
     setAddingMinutes(minutes);
@@ -125,13 +128,13 @@ export function HomePage() {
             type="button"
             className="primary"
             disabled={addingMinutes !== null}
-            onClick={() => handleAdd(DEFAULT_DAILY_BUDGET_MINUTES)}
+            onClick={() => handleAdd(dailyBudgetMinutes)}
           >
-            {addingMinutes === DEFAULT_DAILY_BUDGET_MINUTES
+            {addingMinutes === dailyBudgetMinutes
               ? 'Adding…'
               : session
-                ? `+${DEFAULT_DAILY_BUDGET_MINUTES} min`
-                : `Start (${DEFAULT_DAILY_BUDGET_MINUTES} min)`}
+                ? `+${dailyBudgetMinutes} min`
+                : `Start (${dailyBudgetMinutes} min)`}
           </button>
           {TOP_UP_INCREMENTS_MINUTES.map((minutes) => (
             <button

@@ -349,6 +349,8 @@ export interface SessionPlannerInput {
   understandCandidates: UnderstandCandidate[];
   shadowCandidates: ShadowCandidate[];
   reviewLimit?: number;
+  /** User-adjustable override for BASELINE_MODE_ALLOCATION (Settings page) — see AllocateTimeInput.baseline. */
+  baseline?: Record<LearningMode, number>;
 }
 
 export interface PlannerStepDraft {
@@ -573,6 +575,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const allocation = allocateTimeAcrossModes({
     totalMinutes,
     neglectScores,
+    baseline: input.baseline,
     availableMinutesByMode: { retain: retainCeiling },
   });
 

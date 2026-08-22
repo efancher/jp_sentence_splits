@@ -5315,3 +5315,52 @@ that finds *nothing* new would leave `status` alone, since that's the
 pre-existing skips, no new failures) and `npm run lint` (no new warnings).
 Not exercised in a real browser — same recurring Playwright-launch gap
 noted throughout this file.
+
+## Learning Orchestrator: expose daily session length and activity mix on Settings (2026-08-22): done
+
+User request: adjust `DEFAULT_DAILY_BUDGET_MINUTES` and
+`BASELINE_MODE_ALLOCATION` — previously hardcoded constants in
+`sessionPlannerConfig.ts` — from the Settings page instead of editing code.
+
+**Data model** (`src/domain/types.ts`, `src/domain/schemas.ts`,
+`src/db/database.ts`): two additive `AppSettings` fields,
+`dailyBudgetMinutes: number` (default `DEFAULT_DAILY_BUDGET_MINUTES` = 60)
+and `modeAllocation: Record<LearningMode, number>` (default a copy of
+`BASELINE_MODE_ALLOCATION`, 35/20/20/25). Both get zod defaults in
+`settingsSchema` so older JSON backups without them still validate
+(same pattern as `newCardsPerSessionLimit`/`graduationMinScheduledDays`).
+The `sessionPlannerConfig.ts` constants are unchanged and remain the
+shipped defaults — `database.ts`'s `DEFAULT_SETTINGS` just seeds from them.
+
+**Planner** (`src/lib/sessionPlanner.ts`): `SessionPlannerInput` gained an
+optional `baseline?: Record<LearningMode, number>`, threaded into the
+existing `allocateTimeAcrossModes({ baseline })` call inside
+`buildRecommendedSession` (that function already supported an override,
+just nothing was passing one). Shares don't need to sum to 1 — the
+allocator already renormalizes by the sum of open-mode weights each pass,
+so this needed no change to the allocation math itself.
+
+**Repository** (`src/db/repository.ts`): `getSessionPlannerInput` now reads
+`settings.modeAllocation` (settings were already being read there for
+`graduationMinScheduledDays`) and passes it through as `baseline` on the
+returned `SessionPlannerInput`.
+
+**UI**: `HomePage.tsx`'s "Start"/"+more time" primary button now reads
+`settings.dailyBudgetMinutes` (falling back to
+`DEFAULT_DAILY_BUDGET_MINUTES` while settings are still loading) instead of
+the constant directly; the two smaller top-up buttons stay fixed at
+`TOP_UP_INCREMENTS_MINUTES` ([20, 30]), unchanged. `SettingsPage.tsx` gained
+a new "Learning Orchestrator" panel: a number input for
+`dailyBudgetMinutes` and four number inputs (Explore/Understand/Practice/
+Retain, 0-100 each) for `modeAllocation`, following the existing
+number-input-plus-muted-explanation pattern used by `newCardsPerSessionLimit`/
+`graduationMinScheduledDays`, plus a "Reset activity mix to defaults" button
+mirroring the TTS panel's "Reset to defaults".
+
+**Verified**: `npm run check` (typecheck + full vitest suite, 786 passed, 2
+pre-existing skips, no new failures) and `npm run lint` (no new warnings).
+Not exercised in a real browser: headless Chromium is present via
+Playwright but `chrome-headless-shell` fails to launch in this sandbox
+(missing `libnspr4.so`), and `playwright install-deps` needs a sudo
+password not available non-interactively — same recurring
+Playwright-launch gap noted throughout this file.

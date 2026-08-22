@@ -367,6 +367,22 @@ export interface AppSettings {
    * entirely (nothing ever retires from rotation).
    */
   graduationMinScheduledDays: number;
+  /**
+   * Learning Orchestrator (docs/AI_OVERVIEW.md): starting budget (minutes)
+   * for a brand-new daily session, before any top-up. Mirrors
+   * DEFAULT_DAILY_BUDGET_MINUTES in sessionPlannerConfig.ts, which remains
+   * the shipped default.
+   */
+  dailyBudgetMinutes: number;
+  /**
+   * Learning Orchestrator (docs/AI_OVERVIEW.md): user-adjustable starting
+   * heuristic for how a session's time splits across the four modes before
+   * neglect-based nudging — a guideline, not a quota (see
+   * allocateTimeAcrossModes). Shares don't need to sum to 1; they're
+   * renormalized proportionally each time. Mirrors BASELINE_MODE_ALLOCATION
+   * in sessionPlannerConfig.ts, which remains the shipped default.
+   */
+  modeAllocation: Record<LearningMode, number>;
 }
 
 export interface InboxMembership {

@@ -35,6 +35,10 @@ import type {
   SyncQueueItem,
   SyncRecordMeta,
 } from '../sync/types';
+import {
+  BASELINE_MODE_ALLOCATION,
+  DEFAULT_DAILY_BUDGET_MINUTES,
+} from '../lib/sessionPlannerConfig';
 
 export const DEFAULT_TTS_SETTINGS = {
   rate: 0.9,
@@ -52,6 +56,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tts: { ...DEFAULT_TTS_SETTINGS },
   newCardsPerSessionLimit: 20,
   graduationMinScheduledDays: 180,
+  dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,
+  modeAllocation: { ...BASELINE_MODE_ALLOCATION },
 };
 
 export class GlossbookDatabase extends Dexie {

@@ -198,6 +198,17 @@ export const settingsSchema = z.object({
   newCardsPerSessionLimit: z.number().int().nonnegative().default(20),
   // Additive (Phase 7.10): absent in older backups.
   graduationMinScheduledDays: z.number().int().nonnegative().default(180),
+  // Additive (Learning Orchestrator settings): absent in older backups.
+  dailyBudgetMinutes: z.number().int().positive().default(60),
+  // Additive (Learning Orchestrator settings): absent in older backups.
+  modeAllocation: z
+    .object({
+      explore: z.number().nonnegative(),
+      understand: z.number().nonnegative(),
+      practice: z.number().nonnegative(),
+      retain: z.number().nonnegative(),
+    })
+    .default({ explore: 0.35, understand: 0.2, practice: 0.2, retain: 0.25 }),
 });
 
 export const inboxMembershipSchema = z.object({

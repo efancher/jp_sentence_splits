@@ -244,7 +244,9 @@ never scores to zero) -> **time allocation** across the four modes (a
 35/20/20/25 baseline nudged toward neglected modes, clamped against how
 much each mode can actually absorb — e.g. Retain never gets padded with
 low-value reviews just because minutes are available) -> concrete step
-selection, bounded to the best 10-15 due items rather than the whole queue
+selection (the baseline itself is `settings.modeAllocation`, defaulting to
+`BASELINE_MODE_ALLOCATION` but user-editable on the Settings page's
+"Learning Orchestrator" panel), bounded to the best 10-15 due items rather than the whole queue
 (within Practice, shadowing gets a reserved minimum share —
 `SHADOW_MIN_SHARE_OF_PRACTICE` — claimed before the due-practice batch, so a
 large cloze/production backlog can't crowd shadow candidates out of the
@@ -286,9 +288,11 @@ itself just takes a plain `totalMinutes: number` now (the old
 **`HomePage`** — the index route (`BooksPage` moved to `/books`). Shows
 today's session if one exists (`targetMinutes` so far, the accumulated
 explanation, the full step list with a status badge per step) plus
-"Start"/"+more time" buttons (`DEFAULT_DAILY_BUDGET_MINUTES` = 60 as the
-default add amount, `TOP_UP_INCREMENTS_MINUTES` = [20, 30] for smaller
-top-ups, both in `sessionPlannerConfig.ts`) and a "Continue today's
+"Start"/"+more time" buttons (`settings.dailyBudgetMinutes`, defaulting to
+`DEFAULT_DAILY_BUDGET_MINUTES` = 60 and user-editable on the Settings page,
+as the default add amount; `TOP_UP_INCREMENTS_MINUTES` = [20, 30], fixed,
+for the smaller top-ups; both constants live in `sessionPlannerConfig.ts`)
+and a "Continue today's
 session" link to the runner whenever a step is still pending/active. Below
 that, the same compact rolling-14-day balance view as before (four
 `.progress-bar` meters — reusing the existing CSS component rather than a

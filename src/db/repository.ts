@@ -3606,6 +3606,7 @@ export async function getSessionPlannerInput(
     exploreCandidates,
     understandCandidates,
     shadowCandidates,
+    baseline: settings.modeAllocation,
   };
 }
 
