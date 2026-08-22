@@ -1,6 +1,40 @@
 # Status
 
-Last updated: 2026-08-21 (Learning Orchestrator: `PlannerSession` switched
+Last updated: 2026-08-22 (Listening review card gained a third, smaller
+line under the karaoke/actual-text pair: the precomputed all-kana
+`sentence.readingOnly` (`KaraokeSentenceText.tsx`, gated on the field being
+non-empty), purely as an audio-to-kana mapping aid — requested directly
+after clarifying why the existing two lines already differ (aligner-derived
+karaoke transcript vs. verbatim original text). While triaging open card
+issue reports (`npm run issues:list`) that prompted this, found and fixed
+two real bugs: (1) `scripts/lib/jmdict.ts`'s JMDict lookup only ever
+indexed an entry by its *kanji* expression when one existed, so a tokenizer
+lemma that came back in kana (common — many verbs/adjectives are
+more-often-kana, and the tokenizer can't always resolve to a kanji
+headword) found nothing; fixed by also indexing kana-only self-entries,
+guarded by a new `isGenuinelyAmbiguous` check that declines to guess when
+2+ distinct common JMDict entries share that reading (e.g. たつ: 経つ/立つ/
+絶つ/...) — verified via `npm run backfill:vocabulary-suggestion-glosses`
+dry run going from 0 matches to 113 safe ones, then applied. (2) Even with
+that fixed, genuinely ambiguous kana-only tokenizer output (like the たつ
+in 経つ) still won't get a JMDict gloss — but `sentence.targetVocabulary`
+(the curated chips already shown below the card) had often already
+resolved the same word correctly via a linked source deck. `attachGlosses`
+(`KaraokeSentenceText.tsx`) now falls back to a `targetVocabulary` lookup
+by dictionary *reading* (not surface text, which for these words is bare
+conjugated kana with no kanji to substring-match against) when the
+morphology suggestion has no English of its own. Separately, a corpus
+sweep for the reported それより2人とも家どこなの? issue found 13
+sentences total with a raw digit left in `reading_only`/`inline_reading`
+instead of being converted to kana (and, for 1人/2人/1つ/2つ, the correct
+irregular native reading rather than a generic on'yomi-counter guess) —
+corrected via a new one-off `scripts/fix-numeral-readings.ts`
+(`npm run fix:numeral-readings -- --apply`, hardcoded per-sentence
+corrections, not a general numeral converter). The third target_vocabulary
+duplication in that same report (使用期間 showing alongside its own parts
+使用/期間) looks like intentional multi-deck coverage rather than a bug —
+left as-is pending a product call. Before that: Learning Orchestrator:
+`PlannerSession` switched
 from a fixed-length Quick/Normal/Deep sitting to one growing **daily**
 session — see the dedicated entry below for full detail. Before that: a
 persistent `SessionBar`
