@@ -1,6 +1,20 @@
 # Status
 
-Last updated: 2026-08-22 (Listening review card gained a third, smaller
+Last updated: 2026-08-22 (Fixed AnalyzePage's "Suggest sticky English"
+button echoing the raw Japanese chunk instead of a gloss, reported as "just
+copying the japanese." Root cause: `stickyEnglish.ts`'s vocabulary matcher
+required the chunk text to contain a `targetVocabulary` entry's
+*dictionary-form* spelling verbatim, so any conjugated verb/adjective stem
+(食べ vs the entry's 食べる, 話し vs 話す) never matched and fell through
+to the bare-Japanese fallback — which is most content words in real
+sentences. `contentFromVocabulary` now matches on a shared kanji-rooted
+prefix, tolerating the one-kana tail difference conjugation produces.
+Separately, `stickyEnglish.ts` carried its own older, simpler
+`normalizeTeFormParticle` (only handled んで/いで) instead of
+`chunking.ts`'s fuller version, so て-form って (走って) glossed as the
+literal quotative particle って instead of "and" — exported `chunking.ts`'s
+version and switched `stickyEnglish.ts` to reuse it instead of duplicating.
+Before that: Listening review card gained a third, smaller
 line under the karaoke/actual-text pair: the precomputed all-kana
 `sentence.readingOnly` (`KaraokeSentenceText.tsx`, gated on the field being
 non-empty), purely as an audio-to-kana mapping aid — requested directly
