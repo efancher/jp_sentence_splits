@@ -1699,6 +1699,12 @@ function ContrastivePairCard({
                 {item.vocabularyItem.meaning ? (
                   <div className="muted">{item.vocabularyItem.meaning}</div>
                 ) : null}
+                {item.sentence.readingOnly ? (
+                  <div className="jp muted">{item.sentence.readingOnly}</div>
+                ) : null}
+                {item.sentence.translation ? (
+                  <div className="muted">{item.sentence.translation}</div>
+                ) : null}
               </>
             ) : null}
           </div>
