@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { attachGlosses } from '../src/components/KaraokeSentenceText';
-import type { VocabularySuggestion } from '../src/domain/types';
+import type { TargetVocabulary, VocabularySuggestion } from '../src/domain/types';
 
 function suggestion(overrides: Partial<VocabularySuggestion>): VocabularySuggestion {
   return {
@@ -14,6 +14,19 @@ function suggestion(overrides: Partial<VocabularySuggestion>): VocabularySuggest
     pos: '',
     source: 'morphology',
     selectedByDefault: true,
+    ...overrides,
+  };
+}
+
+function targetVocab(overrides: Partial<TargetVocabulary>): TargetVocabulary {
+  return {
+    expression: '',
+    reading: '',
+    english: '',
+    furigana: '',
+    partsOfSpeech: '',
+    cardTypes: [],
+    sourceCardIds: [],
     ...overrides,
   };
 }
@@ -76,5 +89,31 @@ describe('attachGlosses', () => {
     const result = attachGlosses(words, suggestions);
     expect(result[0]!.gloss).toBeUndefined();
     expect(result[1]!.gloss).toBe('object marker');
+  });
+
+  it('falls back to a targetVocabulary gloss, matched by dictionary reading, when the suggestion has none', () => {
+    // The morphology suggestion's surface is bare kana ("たっ") with no
+    // English — the offline JMDict backfill declines to guess among 経つ/
+    // 立つ/絶つ homophones. targetVocabulary already resolved that
+    // ambiguity for this sentence via a curated deck entry.
+    const words = [{ text: 'たっ', start: 0, end: 0.3 }];
+    const suggestions = [suggestion({ surface: 'たっ', expression: 'たつ', reading: 'たつ' })];
+    const targetVocabulary = [
+      targetVocab({ expression: '経つ', reading: 'たつ', english: 'to pass (of time)' }),
+    ];
+
+    expect(attachGlosses(words, suggestions, targetVocabulary)[0]!.gloss).toBe('to pass (of time)');
+  });
+
+  it('prefers the suggestion english over targetVocabulary when both are present', () => {
+    const words = [{ text: '終わっ', start: 0, end: 0.3 }];
+    const suggestions = [
+      suggestion({ surface: '終わっ', reading: 'おわる', english: 'to end (from JMDict)' }),
+    ];
+    const targetVocabulary = [
+      targetVocab({ expression: '終わる', reading: 'おわる', english: 'To End; To Be Over' }),
+    ];
+
+    expect(attachGlosses(words, suggestions, targetVocabulary)[0]!.gloss).toBe('to end (from JMDict)');
   });
 });

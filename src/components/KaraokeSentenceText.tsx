@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
-import type { SentenceAudio, VocabularySuggestion } from '../domain/types';
+import type { SentenceAudio, TargetVocabulary, VocabularySuggestion } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 
@@ -17,19 +17,36 @@ type AlignedWord = { text: string; start: number; end: number; gloss?: string };
  * matching backwards. Words with no exact match (most function words, since
  * the offline backfill only glosses content words, or a genuine mismatch)
  * simply get no popup.
+ *
+ * `vocabularySuggestions.english` is only populated when the offline JMDict
+ * backfill found an unambiguous match — a word written in kana whose lemma
+ * has several equally-common kanji homophones (e.g. たつ: 経つ "to pass",
+ * 立つ "to stand", 絶つ "to sever"...) is deliberately left unglossed there
+ * rather than guessing. `targetVocabulary` (the curated chips shown below,
+ * from linked source decks) already resolved that ambiguity for this
+ * specific sentence, so it's consulted as a fallback, matched by dictionary
+ * reading rather than surface text — the surface here is still the bare
+ * conjugated kana (e.g. "たっ"), which can't be substring-matched against a
+ * kanji expression like "経つ".
  */
 export function attachGlosses(
   words: { text: string; start: number; end: number }[],
   suggestions: VocabularySuggestion[],
+  targetVocabulary: TargetVocabulary[] = [],
 ): AlignedWord[] {
   const LOOKAHEAD = 4;
+  const englishByReading = new Map(
+    targetVocabulary.filter((item) => item.english).map((item) => [item.reading, item.english]),
+  );
   let cursor = 0;
   return words.map((word) => {
     const limit = Math.min(suggestions.length, cursor + LOOKAHEAD);
     for (let i = cursor; i < limit; i++) {
-      if (suggestions[i]!.surface === word.text) {
+      const suggestion = suggestions[i]!;
+      if (suggestion.surface === word.text) {
         cursor = i + 1;
-        return { ...word, gloss: suggestions[i]!.english };
+        const gloss = suggestion.english || englishByReading.get(suggestion.reading);
+        return { ...word, gloss };
       }
     }
     return word;
@@ -53,7 +70,10 @@ export function attachGlosses(
  * *derived* text and can diverge from the real sentence (this way or more
  * subtly — dictionary-normalized spellings, mis-segmented words), the
  * actual sentence text is always shown underneath too, so the learner can
- * cross-check rather than trust the aligner's transcript.
+ * cross-check rather than trust the aligner's transcript. A third, smaller
+ * line shows the precomputed all-kana reading (`sentence.readingOnly`) when
+ * present, purely as a mapping aid from audio to kana — it's optional
+ * because not every sentence has one populated.
  *
  * While a word is highlighted, a small popup shows its English gloss (from
  * `vocabularySuggestions`, the same offline-backfilled glosses the
@@ -67,11 +87,15 @@ export function attachGlosses(
 export function KaraokeSentenceText({
   audio,
   japanese,
+  readingOnly,
   vocabularySuggestions,
+  targetVocabulary,
 }: {
   audio: SentenceAudio;
   japanese: string;
+  readingOnly?: string;
   vocabularySuggestions: VocabularySuggestion[];
+  targetVocabulary?: TargetVocabulary[];
 }) {
   const native = useNativeAudio();
   const [alignmentWords, setAlignmentWords] = useState<AlignedWord[]>([]);
@@ -96,13 +120,14 @@ export function KaraokeSentenceText({
         attachGlosses(
           result.words.filter((word) => word.text && word.text !== '<eps>'),
           vocabularySuggestions,
+          targetVocabulary,
         ),
       );
     });
     return () => {
       cancelled = true;
     };
-  }, [audio.id, audio.blob, japanese, vocabularySuggestions]);
+  }, [audio.id, audio.blob, japanese, vocabularySuggestions, targetVocabulary]);
 
   const active = native.isPlaying && native.activeItemId === audio.id;
 
@@ -135,7 +160,12 @@ export function KaraokeSentenceText({
   }, [activeWordIndex, alignmentWords]);
 
   if (alignmentWords.length === 0) {
-    return <div className="jp jp-lg">{japanese}</div>;
+    return (
+      <div className="stack" style={{ gap: '0.25rem' }}>
+        <div className="jp jp-lg">{japanese}</div>
+        {readingOnly && <div className="jp muted jp-sm">{readingOnly}</div>}
+      </div>
+    );
   }
 
   return (
@@ -166,6 +196,7 @@ export function KaraokeSentenceText({
         )}
       </div>
       <div className="jp muted">{japanese}</div>
+      {readingOnly && <div className="jp muted jp-sm">{readingOnly}</div>}
     </div>
   );
 }

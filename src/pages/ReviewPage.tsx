@@ -1640,7 +1640,9 @@ function AudioComprehensionCard({
           <KaraokeSentenceText
             audio={audio}
             japanese={sentence.japanese}
+            readingOnly={sentence.readingOnly}
             vocabularySuggestions={sentence.vocabularySuggestions}
+            targetVocabulary={sentence.targetVocabulary}
           />
           {!revealed ? (
             <button type="button" onClick={onReveal}>

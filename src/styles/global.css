@@ -119,6 +119,10 @@ strong.jp {
   font-size: clamp(1.55rem, 4.5vw, 2.1rem);
 }
 
+.jp-sm {
+  font-size: 0.85em;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
