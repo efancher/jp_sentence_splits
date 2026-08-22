@@ -21,8 +21,28 @@ describe('glossEntriesFromJmdictEntry', () => {
       sense: [{ partOfSpeech: ['n'], gloss: [{ lang: 'eng', text: 'life' }] }],
     };
     const result = glossEntriesFromJmdictEntry(entry);
-    expect(result.map((r) => r.reading)).toEqual(['せい', 'なま']);
+    expect(result.map((r) => [r.expression, r.reading])).toEqual([
+      ['生', 'せい'],
+      ['生', 'なま'],
+      ['せい', 'せい'],
+      ['なま', 'なま'],
+      ['よみ', 'よみ'],
+    ]);
     expect(result[0]).toMatchObject({ expression: '生', gloss: 'life', pos: 'n', common: true });
+  });
+
+  it('also indexes kana-only self-entries for kanji-bearing words, for kana-lemma lookups', () => {
+    const entry: JmdictEntry = {
+      id: '5',
+      kanji: [{ text: '皆', common: true }],
+      kana: [{ text: 'みんな', common: true, appliesToKanji: ['*'] }],
+      sense: [{ partOfSpeech: ['n'], gloss: [{ lang: 'eng', text: 'everyone' }] }],
+    };
+    const result = glossEntriesFromJmdictEntry(entry);
+    expect(result).toEqual([
+      { expression: '皆', reading: 'みんな', gloss: 'everyone', pos: 'n', common: true, entryId: '5' },
+      { expression: 'みんな', reading: 'みんな', gloss: 'everyone', pos: 'n', common: true, entryId: '5' },
+    ]);
   });
 
   it('falls back to kana-only entries when there is no kanji', () => {

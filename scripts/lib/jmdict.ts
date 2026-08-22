@@ -120,34 +120,84 @@ export function glossEntriesFromJmdictEntry(entry: JmdictEntry): GlossEntry[] {
       });
     }
   }
+  // Also index by kana-only expression: many words with kanji forms are
+  // still frequently written (and lemmatized by the tokenizer) in kana —
+  // e.g. みんな/皆, たつ/経つ — and would otherwise never resolve since the
+  // loop above only keys entries by kanji.text.
+  for (const kana of kanaList) {
+    results.push({
+      expression: kana.text,
+      reading: kana.text,
+      gloss,
+      pos,
+      common: Boolean(kana.common),
+      entryId: entry.id,
+    });
+  }
   return results;
+}
+
+/**
+ * Same "common first, then shortest gloss" preference used for both the
+ * exact-key and by-expression indexes, so a homophone match doesn't depend
+ * on which JMDict entry happened to be inserted first (file order is
+ * otherwise arbitrary from this codebase's perspective).
+ */
+function isBetterCandidate(candidate: GlossEntry, existing: GlossEntry): boolean {
+  if (candidate.common !== existing.common) return candidate.common;
+  return candidate.gloss.length < existing.gloss.length;
+}
+
+/**
+ * True when `candidates` span 2+ distinct JMDict entries (different words,
+ * not just different kanji/kana spellings of the same one) that are each
+ * marked common — e.g. たつ collides 経つ "to pass (of time)", 立つ "to
+ * stand", 絶つ "to sever", etc. Picking any one of those with confidence
+ * would be a guess dressed up as a match, worse than surfacing no gloss —
+ * this is especially true for kana-only lookups (this codebase's tokenizer
+ * frequently lemmatizes to kana), which is exactly where JMDict's dense
+ * homophone clusters live.
+ */
+function isGenuinelyAmbiguous(candidates: GlossEntry[]): boolean {
+  const distinctCommonEntries = new Set(
+    candidates.filter((c) => c.common).map((c) => c.entryId),
+  );
+  return distinctCommonEntries.size > 1;
 }
 
 /** Pure parse: the full JMDict file -> exact-key and by-expression lookup indexes. */
 export function buildJmdictIndex(file: JmdictFile): JmdictIndex {
-  const byKey = new Map<string, GlossEntry>();
-  const byExpression = new Map<string, GlossEntry[]>();
+  const keyCandidates = new Map<string, GlossEntry[]>();
+  const expressionCandidates = new Map<string, GlossEntry[]>();
 
   for (const entry of file.words) {
     for (const glossEntry of glossEntriesFromJmdictEntry(entry)) {
       const key = `${glossEntry.expression}|${glossEntry.reading}`;
-      const existing = byKey.get(key);
-      if (!existing || (glossEntry.common && !existing.common)) {
-        byKey.set(key, glossEntry);
-      }
+      const keyList = keyCandidates.get(key);
+      if (keyList) keyList.push(glossEntry);
+      else keyCandidates.set(key, [glossEntry]);
 
-      const list = byExpression.get(glossEntry.expression);
+      const list = expressionCandidates.get(glossEntry.expression);
       if (list) list.push(glossEntry);
-      else byExpression.set(glossEntry.expression, [glossEntry]);
+      else expressionCandidates.set(glossEntry.expression, [glossEntry]);
     }
   }
 
-  for (const list of byExpression.values()) {
-    list.sort((a, b) => {
+  const byKey = new Map<string, GlossEntry>();
+  for (const [key, candidates] of keyCandidates) {
+    if (isGenuinelyAmbiguous(candidates)) continue;
+    byKey.set(key, candidates.reduce((best, c) => (isBetterCandidate(c, best) ? c : best)));
+  }
+
+  const byExpression = new Map<string, GlossEntry[]>();
+  for (const [expression, candidates] of expressionCandidates) {
+    if (isGenuinelyAmbiguous(candidates)) continue;
+    candidates.sort((a, b) => {
       if (a.common !== b.common) return a.common ? -1 : 1;
       return a.gloss.length - b.gloss.length;
     });
-    list.length = Math.min(list.length, MAX_CANDIDATES_PER_EXPRESSION);
+    candidates.length = Math.min(candidates.length, MAX_CANDIDATES_PER_EXPRESSION);
+    byExpression.set(expression, candidates);
   }
 
   return { byKey, byExpression };
