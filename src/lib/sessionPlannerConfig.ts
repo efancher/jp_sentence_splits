@@ -68,6 +68,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for Explore/Understand/shadowing steps. */
 export const SYNTHETIC_ACTIVITY_TYPES = {
   newSentence: 'new_sentence',
+  vocabularyReview: 'vocabulary_review',
   grammarExplore: 'grammar_explore',
   shadowingPractice: 'shadowing_practice',
 } as const;
@@ -79,6 +80,9 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES: Record<LearningMode, number> = {
   practice: 1.5,
   retain: 0.75,
 };
+
+/** Per-sentence Explore time split across its two paired steps (continue_book + vocabulary_review) — sums to MODE_ACTIVITY_ESTIMATE_MINUTES.explore so total Explore budget math is unaffected by the split into two chained steps. */
+export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
 
 /** Rolling window (days) recent-activity distribution and neglect are computed over — prompt point 6's "7- or 14-day view." */
 export const NEGLECT_WINDOW_DAYS = 14;
@@ -100,6 +104,9 @@ export const SESSION_PLANNER_CANDIDATE_POOL_SIZE = 60;
 
 /** How many books' "continue reading" Explore candidates to consider. */
 export const EXPLORE_CANDIDATE_LIMIT = 5;
+
+/** Cap on how many of a book's next unstarted sentences findExploreCandidates previews per book — generous relative to any realistic single day's Explore budget (MODE_ACTIVITY_ESTIMATE_MINUTES.explore is 2.5 min/item, so 20 covers 50 min of Explore alone). */
+export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
 
 /** How many not-yet-tracked grammar patterns to consider as Understand candidates. */
 export const UNDERSTAND_CANDIDATE_LIMIT = 8;

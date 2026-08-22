@@ -99,6 +99,7 @@ import {
 import {
   ACTIVITY_TYPE_MODE,
   EXPLORE_CANDIDATE_LIMIT,
+  EXPLORE_SENTENCE_PREVIEW_LIMIT,
   NEGLECT_WINDOW_DAYS,
   PRACTICE_ACTIVITY_TYPES,
   RETAIN_ACTIVITY_TYPES,
@@ -799,6 +800,12 @@ export async function setBookSentenceStatus(
   });
   const updated = await db.bookSentences.get(item.id);
   if (updated) notifySync('book_sentences', updated.id, updated);
+  if (status === 'complete') {
+    await autoCompleteSessionSteps(
+      (step) =>
+        step.targetKind === 'continue_book' && step.bookId === bookId && step.sentenceId === sentenceId,
+    );
+  }
 }
 
 export async function saveAnalysis(
@@ -2149,6 +2156,31 @@ export async function materializeVocabularySelections(
   ]);
 }
 
+/**
+ * Centralizes the VocabularyPicker confirm write path (VocabularyReviewPage):
+ * flips vocabularyReviewStatus to 'confirmed', materializes selections into
+ * real VocabularyItem/SentenceVocabulary rows, and auto-completes any
+ * matching 'vocabulary_review' session step — without touching this
+ * sentence's structural (chunk/notes) analysis state, which this function
+ * has no input for and simply passes through unchanged from the existing row.
+ */
+export async function confirmSentenceVocabulary(
+  sentenceId: string,
+  selections: VocabularySelection[],
+): Promise<SentenceAnalysis> {
+  const db = getDb();
+  const existing = await db.analyses.get(sentenceId);
+  const analysis = await saveAnalysis(sentenceId, existing?.chunks ?? [], existing?.notes ?? '', {
+    reviewStatus: 'confirmed',
+    selections,
+  });
+  await materializeVocabularySelections(sentenceId, selections);
+  await autoCompleteSessionSteps(
+    (step) => step.targetKind === 'vocabulary_review' && step.sentenceId === sentenceId,
+  );
+  return analysis;
+}
+
 // ---------------------------------------------------------------------------
 // Evidence-model foundation (Phase 7.1, docs/STATUS.md). Additive only — no
 // existing review flow is touched. StudyItem.subjectType already supports
@@ -3393,12 +3425,16 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
       .filter((item) => item.status === 'unstarted')
       .sort((a, b) => a.position - b.position);
     if (unstarted.length === 0) continue;
+    const preview = unstarted.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+    const sentenceRows = await db.sentences.bulkGet(preview.map((item) => item.sentenceId));
     candidates.push({
       bookId: book.id,
-      sentenceId: unstarted[0]!.sentenceId,
       label: book.title,
       reason: `${unstarted.length} new sentence${unstarted.length === 1 ? '' : 's'} waiting`,
-      remainingCount: unstarted.length,
+      sentences: preview.map((item, index) => ({
+        sentenceId: item.sentenceId,
+        preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
+      })),
     });
   }
   return candidates;
@@ -3737,11 +3773,37 @@ export async function getActiveInProgressPlannerSession(): Promise<PlannerSessio
 }
 
 /**
- * Marks one step's outcome (start/complete/skip) — never implicitly, only
- * on an explicit call from the runner UI, so a skipped step can never be
- * mistaken for completed practice (prompt point 9/§13's own test
- * requirement). Once every step is completed/skipped/replaced, the session
- * itself is marked complete.
+ * Auto-settles any pending/active step(s) of today's in-progress session
+ * matching `matches` — the "real completion" counterpart to the runner UI's
+ * explicit Mark-complete button (updatePlannerSessionStep below). Scoped to
+ * only the single currently active-in-progress PlannerSession, never
+ * historical/settled sessions, and only ever moves a step to 'completed',
+ * never 'skipped' — so it's additive on top of, not a replacement for, the
+ * manual path. No-ops if there's no in-progress session or nothing matches.
+ */
+async function autoCompleteSessionSteps(
+  matches: (step: PlannerSessionStep) => boolean,
+): Promise<void> {
+  const session = await getActiveInProgressPlannerSession();
+  if (!session) return;
+  const ids = session.steps
+    .filter((step) => (step.status === 'pending' || step.status === 'active') && matches(step))
+    .map((step) => step.id);
+  for (const id of ids) {
+    await updatePlannerSessionStep(session.id, id, { status: 'completed' });
+  }
+}
+
+/**
+ * Marks one step's outcome (start/complete/skip). The runner UI/SessionBar
+ * still call this directly for start/skip/manual-complete; real-completion
+ * signals (setBookSentenceStatus('complete'), confirmSentenceVocabulary)
+ * also call it indirectly via autoCompleteSessionSteps above once the
+ * underlying sentence/vocabulary work is genuinely done — so a step is
+ * never settled by mere navigation/visiting a page, only by an explicit
+ * user action of some kind (prompt point 9/§13's own test requirement).
+ * Once every step is completed/skipped/replaced, the session itself is
+ * marked complete.
  */
 export async function updatePlannerSessionStep(
   sessionId: string,

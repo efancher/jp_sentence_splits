@@ -455,6 +455,7 @@ export const plannerStepTargetKindSchema = z.enum([
   'shadow',
   'review',
   'vocabulary_detail',
+  'vocabulary_review',
 ]);
 
 export const plannerSessionStepSchema = z.object({

@@ -7,11 +7,12 @@ import type { PlannerSessionStep } from '../domain/types';
 /**
  * Executes a recommended session as a sequence (design brief §8): each step
  * deep-links into the existing page that actually does the work (Analyze,
- * Grammar detail, Shadow, Review) rather than reimplementing any of them
- * here — this page only sequences and tracks. Completion is always an
- * explicit action on return, never inferred from navigation alone, so a
- * step the learner merely opened and left is never silently counted as
- * done (see updatePlannerSessionStep's own doc comment).
+ * Vocabulary, Grammar detail, Shadow, Review) rather than reimplementing any
+ * of them here — this page only sequences and tracks. A step is never
+ * silently counted as done just because the learner opened and left it —
+ * it's settled either by an explicit action here/in SessionBar, or by real
+ * completion of the underlying work (see updatePlannerSessionStep's and
+ * autoCompleteSessionSteps's own doc comments in repository.ts).
  */
 
 function targetPath(step: PlannerSessionStep): string | null {
@@ -19,6 +20,10 @@ function targetPath(step: PlannerSessionStep): string | null {
     case 'continue_book':
       return step.bookId && step.sentenceId
         ? `/books/${step.bookId}/analyze/${step.sentenceId}`
+        : null;
+    case 'vocabulary_review':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/vocabulary/${step.sentenceId}`
         : null;
     case 'grammar_detail':
       return step.grammarPatternId ? `/grammar/${encodeURIComponent(step.grammarPatternId)}` : null;

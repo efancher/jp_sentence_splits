@@ -5,13 +5,16 @@ import {
   addMinutesToTodaySession,
   addSentencesToBook,
   computeLearningBalance,
+  confirmSentenceVocabulary,
   createBook,
   endPlannerSessionEarly,
   ensureStudyItem,
   getDb,
+  getPlannerSession,
   getTodayPlannerSession,
   planRecommendedSession,
   recordReview,
+  setBookSentenceStatus,
   updatePlannerSessionStep,
 } from '../src/db/repository';
 import type { Sentence } from '../src/domain/types';
@@ -77,17 +80,47 @@ describe('Learning Orchestrator repository layer', () => {
     // Real, freshly-minted ids — not the pure algorithm's draft_N placeholders.
     expect(session.steps.every((step) => step.id.startsWith('planner_step_'))).toBe(true);
 
-    const [first, second] = session.steps;
+    const [first, ...rest] = session.steps;
     const afterSkip = await updatePlannerSessionStep(session.id, first!.id, { status: 'skipped' });
     expect(afterSkip!.steps.find((step) => step.id === first!.id)!.status).toBe('skipped');
-    // One step settled, one still pending — the session as a whole isn't done yet.
+    // One step settled, others still pending — the session as a whole isn't done yet.
     expect(afterSkip!.status).toBe('in_progress');
 
-    const afterComplete = await updatePlannerSessionStep(session.id, second!.id, {
-      status: 'completed',
-    });
+    let afterComplete = afterSkip;
+    for (const step of rest) {
+      afterComplete = await updatePlannerSessionStep(session.id, step!.id, {
+        status: 'completed',
+      });
+    }
     expect(afterComplete!.status).toBe('completed');
     expect(afterComplete!.endedAt).toBeDefined();
+  });
+
+  it('real completion (finishing the sentence, confirming vocabulary) auto-settles the matching session step', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const continueStep = session.steps.find((step) => step.targetKind === 'continue_book');
+    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
+    expect(continueStep).toBeDefined();
+    expect(vocabStep).toBeDefined();
+    expect(continueStep!.sentenceId).toBe(sentence.id);
+    expect(vocabStep!.sentenceId).toBe(sentence.id);
+
+    // Finishing the sentence auto-completes only the continue_book step.
+    await setBookSentenceStatus(book.id, sentence.id, 'complete');
+    let updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).toBe('completed');
+    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).toBe('pending');
+
+    // Confirming vocabulary auto-completes only the vocabulary_review step.
+    await confirmSentenceVocabulary(sentence.id, []);
+    updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).toBe('completed');
   });
 
   it('ending a session early marks remaining steps skipped, never completed', async () => {

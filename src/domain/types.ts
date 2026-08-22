@@ -796,7 +796,8 @@ export type PlannerStepTargetKind =
   | 'grammar_detail'
   | 'shadow'
   | 'review'
-  | 'vocabulary_detail';
+  | 'vocabulary_detail'
+  | 'vocabulary_review';
 
 export interface PlannerSessionStep {
   id: string;

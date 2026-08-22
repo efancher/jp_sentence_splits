@@ -190,7 +190,12 @@ describe('buildRecommendedSession', () => {
 
   it('with no due reviews, retain gets 0 minutes and the rest is spent elsewhere', () => {
     const exploreCandidates: ExploreCandidate[] = [
-      { bookId: 'book_1', sentenceId: 'sent_1', label: 'Episode 4', reason: 'Continue', remainingCount: 20 },
+      {
+        bookId: 'book_1',
+        label: 'Episode 4',
+        reason: 'Continue',
+        sentences: Array.from({ length: 20 }, (_, i) => ({ sentenceId: `sent_${i}`, preview: 'x' })),
+      },
     ];
     const session = buildRecommendedSession(
       emptyPlannerInput({ exploreCandidates }),
@@ -240,7 +245,12 @@ describe('buildRecommendedSession', () => {
         totalMinutes: 10,
         retainDue: Array.from({ length: 20 }, (_, i) => dueCandidate({ studyItemId: `q_${i}` })),
         exploreCandidates: [
-          { bookId: 'b1', sentenceId: 's1', label: 'Book', reason: 'Continue', remainingCount: 10 },
+          {
+            bookId: 'b1',
+            label: 'Book',
+            reason: 'Continue',
+            sentences: Array.from({ length: 10 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+          },
         ],
         understandCandidates: [
           { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
@@ -262,7 +272,12 @@ describe('buildRecommendedSession', () => {
           dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
         ),
         exploreCandidates: [
-          { bookId: 'b1', sentenceId: 's1', label: 'Book', reason: 'Continue', remainingCount: 30 },
+          {
+            bookId: 'b1',
+            label: 'Book',
+            reason: 'Continue',
+            sentences: Array.from({ length: 30 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+          },
         ],
         understandCandidates: [
           { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
@@ -308,7 +323,12 @@ describe('buildRecommendedSession', () => {
             dueCandidate({ studyItemId: `${totalMinutes}p_${i}`, mode: 'practice' }),
           ),
           exploreCandidates: [
-            { bookId: 'b1', sentenceId: 's1', label: 'Book', reason: 'Continue', remainingCount: 50 },
+            {
+              bookId: 'b1',
+              label: 'Book',
+              reason: 'Continue',
+              sentences: Array.from({ length: 50 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+            },
           ],
           understandCandidates: Array.from({ length: 10 }, (_, i) => ({
             grammarPatternId: `p_${i}`,

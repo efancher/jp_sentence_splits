@@ -8,6 +8,7 @@ import type {
 } from '../domain/types';
 import {
   BASELINE_MODE_ALLOCATION,
+  EXPLORE_STEP_MINUTES,
   MAX_NEGLECT_BOOST,
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
@@ -314,11 +315,10 @@ export interface DueBatchCandidate {
 
 export interface ExploreCandidate {
   bookId: string;
-  sentenceId: string;
   label: string;
   reason: string;
-  /** How many not-yet-studied sentences remain in this book, for scaling the step's size to the time budget. */
-  remainingCount: number;
+  /** Ordered next unstarted sentences in this book, capped at EXPLORE_SENTENCE_PREVIEW_LIMIT — one step drafted per entry until the shared Explore budget runs out. */
+  sentences: { sentenceId: string; preview: string }[];
 }
 
 export interface UnderstandCandidate {
@@ -419,24 +419,35 @@ function buildExploreSteps(
 ): PlannerStepDraft[] {
   const steps: PlannerStepDraft[] = [];
   let remaining = budgetMinutes;
-  for (const candidate of candidates) {
-    if (remaining < perItemMinutes) break;
-    const count = packCount(remaining, perItemMinutes, candidate.remainingCount);
-    if (count === 0) continue;
-    const minutes = count * perItemMinutes;
-    steps.push({
-      id: draftStepId(),
-      mode: 'explore',
-      activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
-      targetKind: 'continue_book',
-      bookId: candidate.bookId,
-      sentenceId: candidate.sentenceId,
-      label: `Continue ${candidate.label} — ${count} new sentence${count === 1 ? '' : 's'}`,
-      estimatedMinutes: minutes,
-      reason: candidate.reason,
-      status: 'pending',
-    });
-    remaining -= minutes;
+  outer: for (const candidate of candidates) {
+    for (const sentence of candidate.sentences) {
+      if (remaining < perItemMinutes) break outer;
+      steps.push({
+        id: draftStepId(),
+        mode: 'explore',
+        activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
+        targetKind: 'continue_book',
+        bookId: candidate.bookId,
+        sentenceId: sentence.sentenceId,
+        label: `Continue ${candidate.label}: ${sentence.preview}`,
+        estimatedMinutes: EXPLORE_STEP_MINUTES.analyze,
+        reason: candidate.reason,
+        status: 'pending',
+      });
+      steps.push({
+        id: draftStepId(),
+        mode: 'explore',
+        activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
+        targetKind: 'vocabulary_review',
+        bookId: candidate.bookId,
+        sentenceId: sentence.sentenceId,
+        label: `Vocabulary: ${sentence.preview}`,
+        estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
+        reason: candidate.reason,
+        status: 'pending',
+      });
+      remaining -= perItemMinutes;
+    }
   }
   return steps;
 }
