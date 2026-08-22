@@ -323,7 +323,7 @@ export function splitTrailingEngine(chunk: string): [string, string] {
   return [chunk, ''];
 }
 
-function normalizeTeFormParticle(
+export function normalizeTeFormParticle(
   originalChunk: string,
   bare: string,
   stem: string,

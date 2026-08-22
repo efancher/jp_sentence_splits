@@ -46,4 +46,56 @@ describe('suggestStickyEnglish', () => {
   it('uses lexicon for common standalone content', () => {
     expect(suggestStickyEnglish('ある')).toBe('a-certain');
   });
+
+  it('matches conjugated verbs against a dictionary-form vocabulary entry', () => {
+    expect(
+      suggestStickyEnglish('食べました', {
+        vocabulary: [
+          {
+            expression: '食べる',
+            reading: 'たべる',
+            furigana: '',
+            english: 'to eat',
+            partsOfSpeech: 'v',
+            sourceCardIds: [],
+            cardTypes: [],
+          },
+        ],
+      }),
+    ).toBe('eat-POLITE.PAST');
+
+    expect(
+      suggestStickyEnglish('話しました', {
+        vocabulary: [
+          {
+            expression: '話す',
+            reading: 'はなす',
+            furigana: '',
+            english: 'to speak',
+            partsOfSpeech: 'v',
+            sourceCardIds: [],
+            cardTypes: [],
+          },
+        ],
+      }),
+    ).toBe('speak-POLITE.PAST');
+  });
+
+  it('treats verb-stem って as te-form (and), not literal quotative って', () => {
+    expect(
+      suggestStickyEnglish('走って', {
+        vocabulary: [
+          {
+            expression: '走る',
+            reading: 'はしる',
+            furigana: '',
+            english: 'to run',
+            partsOfSpeech: 'v',
+            sourceCardIds: [],
+            cardTypes: [],
+          },
+        ],
+      }),
+    ).toBe('run-and');
+  });
 });

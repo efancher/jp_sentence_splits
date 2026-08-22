@@ -1,5 +1,6 @@
 import type { TargetVocabulary } from '../domain/types';
 import {
+  normalizeTeFormParticle,
   splitTrailingEngine,
   splitTrailingParticle,
 } from './chunking';
@@ -155,16 +156,6 @@ function stripClausePunctuation(chunk: string): string {
   return chunk.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
 }
 
-function normalizeTeFormParticle(
-  bare: string,
-  stem: string,
-  particle: string,
-): [string, string] {
-  if (particle === 'で' && bare.endsWith('んで')) return [bare.slice(0, -2), 'んで'];
-  if (particle === 'で' && bare.endsWith('いで')) return [bare.slice(0, -2), 'いで'];
-  return [stem, particle];
-}
-
 function hyphenateContent(words: string[]): string {
   return words
     .map((word) => word.trim().toLowerCase().replace(/\s+/g, '-'))
@@ -189,13 +180,32 @@ function vocabGloss(english: string): string {
   return hyphenateContent(words.length ? words : first.split(/\s+/));
 }
 
+const KANJI_RE = /[一-鿿]/;
+
+/**
+ * True if `stem` (post particle/engine stripping) is the same word as
+ * `expression` (a vocabulary entry's dictionary form). Handles verbatim
+ * containment (nouns, compounds) and conjugation: godan sound-shifts
+ * (話す/話し), ichidan stem drop (食べる/食べ), and i-adjective inflection
+ * (大きい/大きかった) all share every character up to the last kana of the
+ * shorter form, so only the trailing kana is allowed to differ.
+ */
+function stemMatchesExpression(stem: string, expression: string): boolean {
+  if (stem.includes(expression) || expression.includes(stem)) return true;
+  let shared = 0;
+  const limit = Math.min(stem.length, expression.length);
+  while (shared < limit && stem[shared] === expression[shared]) shared++;
+  if (shared === 0) return false;
+  return KANJI_RE.test(stem.slice(0, shared)) && shared >= expression.length - 1;
+}
+
 function contentFromVocabulary(
   japanese: string,
   vocabulary: TargetVocabulary[] | undefined,
 ): string {
   if (!vocabulary?.length || !japanese) return '';
   const matches = vocabulary
-    .filter((item) => item.expression && japanese.includes(item.expression))
+    .filter((item) => item.expression && stemMatchesExpression(japanese, item.expression))
     .sort((a, b) => b.expression.length - a.expression.length);
   const seen = new Set<string>();
   const parts: string[] = [];
@@ -277,7 +287,7 @@ export function suggestStickyEnglish(
   if (!bare) return '';
 
   let [stem, particle] = splitTrailingParticle(bare);
-  [stem, particle] = normalizeTeFormParticle(bare, stem, particle);
+  [stem, particle] = normalizeTeFormParticle(chunkJapanese, bare, stem, particle);
   if (particle) {
     const sticky = PARTICLE_STICKY[particle] ?? particle;
     if (!stem) return sticky;
