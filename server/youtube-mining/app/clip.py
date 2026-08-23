@@ -1,0 +1,95 @@
+"""ffmpeg audio clipping, ported unchanged from shadowmine/clip.py's
+probe_duration_ms/compute_boundaries/clip_audio (pure functions over file
+paths — no changes needed for the HTTP-service context; orchestration
+lives in app/jobs.py, replacing the original add_clip's JSON-file
+persistence).
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from app.constants import DEFAULT_END_PAD_MS, DEFAULT_FADE_MS, DEFAULT_START_PAD_MS
+
+
+def probe_duration_ms(path: Path) -> int:
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    duration = float(payload["format"]["duration"])
+    return max(1, int(round(duration * 1000)))
+
+
+def compute_boundaries(
+    start_ms: int,
+    end_ms: int,
+    *,
+    start_pad_ms: int = DEFAULT_START_PAD_MS,
+    end_pad_ms: int = DEFAULT_END_PAD_MS,
+    media_duration_ms: int | None = None,
+) -> tuple[int, int, int, int]:
+    if end_ms <= start_ms:
+        raise ValueError("end must be after start")
+    adjusted_start = max(0, start_ms - start_pad_ms)
+    adjusted_end = end_ms + end_pad_ms
+    if media_duration_ms is not None:
+        adjusted_end = min(adjusted_end, media_duration_ms)
+    if adjusted_end <= adjusted_start:
+        raise ValueError("adjusted clip range is empty")
+    return start_ms, end_ms, adjusted_start, adjusted_end
+
+
+def clip_audio(
+    source_path: Path,
+    output_path: Path,
+    *,
+    start_ms: int,
+    end_ms: int,
+    fade_ms: int = DEFAULT_FADE_MS,
+) -> int:
+    duration_ms = end_ms - start_ms
+    if duration_ms <= 0:
+        raise ValueError("clip duration must be positive")
+    start_s = start_ms / 1000
+    duration_s = duration_ms / 1000
+    fade_s = min(fade_ms / 1000, duration_s / 4) if fade_ms > 0 else 0
+    af_parts: list[str] = []
+    # Fade out only — an in-fade can erase short sentence-initial vowels.
+    if fade_s > 0:
+        af_parts.append(f"afade=t=out:st={max(0.0, duration_s - fade_s):.3f}:d={fade_s:.3f}")
+    # -ss after -i for accurate audio cuts (pre-input -ss can skip the opener on AAC).
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source_path),
+        "-ss",
+        f"{start_s:.3f}",
+        "-t",
+        f"{duration_s:.3f}",
+        "-vn",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+    ]
+    if af_parts:
+        command.extend(["-af", ",".join(af_parts)])
+    command.append(str(output_path))
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    return probe_duration_ms(output_path)

@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+yt-dlp>=2024.8.6
+# Kana reading generation and morphology tokens degrade gracefully to
+# "unavailable" if these fail to import/initialize (see app/readings.py) —
+# they're not hard requirements, but install them for full functionality.
+fugashi>=1.3
+unidic-lite>=1.0.8
+jaconv>=0.3

@@ -1,0 +1,13 @@
+[Unit]
+Description=YouTube shadowing-sentence mining API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/jp_sentence_splits/server/youtube-mining
+ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
