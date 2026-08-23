@@ -34,6 +34,25 @@ warning in the preview.
 On Analyze and Practice, **🎧 Native** plays the imported source clip. **🔊**
 remains available for device TTS, and chunk audio continues to use TTS.
 
+## Import directly from a YouTube URL
+
+No `shadowmine` export step needed for this path:
+
+1. Open **Import from YouTube** and paste a video URL.
+2. Wait while it downloads and splits the video into sentences (shown as a
+   status message).
+3. Review each sentence one at a time — edit the Japanese/English text if
+   needed, then **Keep & clip** to save its audio, or **Skip**. **Prev** goes
+   back a sentence; **Finish now** stops early and keeps whatever you've
+   already confirmed.
+4. Once done, review the same source/sentence/clip summary as the ZIP flow
+   above and tap **Import complete project**.
+
+This produces the same kind of book as a `.shadowing.zip` import (same
+reimport/refresh behavior, same native-audio playback), just without needing
+a separate CLI run first. It requires a mining service to be deployed and
+reachable — if it isn't, the page will show an error when you try to start.
+
 ## Import a Satori Reader CSV
 
 1. Export vocabulary from Satori Reader and save the CSV in Files.

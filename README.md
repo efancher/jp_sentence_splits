@@ -25,6 +25,16 @@ No changes to the shadowing project or CLI are required. Imported audio lives
 in browser storage and is intentionally excluded from lightweight JSON
 backups; retain the original ZIP for audio restoration.
 
+### Importing directly from a YouTube URL
+
+**Import from YouTube** does the same thing without a separate `shadowmine`
+CLI run: paste a URL, and a self-hosted mining service
+([`server/youtube-mining/`](server/youtube-mining/)) downloads the audio and
+subtitles, splits them into sentence-sized cues, and lets you review/edit/skip
+each one — with its own audio clip — before it's added to a book. Requires
+that service to be deployed and reachable (see its README); the `.shadowing.zip`
+upload above still works independently of it.
+
 ## Organizing sentences
 
 - During import, send selected sentences to Inbox, a new book, or an existing
