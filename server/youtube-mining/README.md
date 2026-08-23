@@ -80,6 +80,16 @@ file present, mining jobs from this host will fail at the download step.
 Cookies expire periodically — re-export and re-copy when jobs start
 failing with the same bot-check error again.
 
+**Use a secondary/throwaway Google account for this, not your primary
+one.** YouTube sees requests carrying that account's session cookie
+arriving from a datacenter IP via yt-dlp — not a real browser's
+fingerprint/TLS handshake — which is exactly the pattern abuse detection
+watches for, regardless of whether the cookies came from a one-off manual
+export (as above) or a persistently logged-in browser. A one-off export
+used sporadically is lower-risk than continuous automated use, but if the
+account does get flagged, the worst case is a lock on that account, not
+just expired cookies.
+
 ## Configuration (env vars, all optional)
 
 - `MINING_API_HOST` / `MINING_API_PORT` — bind address (default
