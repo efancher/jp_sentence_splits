@@ -6,10 +6,14 @@ import type { PlannerSessionStep } from '../domain/types';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 
 /**
- * Executes a recommended session as a sequence (design brief §8): each step
- * deep-links into the existing page that actually does the work (Analyze,
- * Vocabulary, Grammar detail, Shadow, Review) rather than reimplementing any
- * of them here — this page only sequences and tracks. A step is never
+ * Executes a recommended session (design brief §8): each step deep-links
+ * into the existing page that actually does the work (Analyze, Vocabulary,
+ * Grammar detail, Shadow, Review) rather than reimplementing any of them
+ * here — this page only sequences and tracks. The list is priority-ordered,
+ * but every pending/active step gets its own Go/Complete/Skip so the
+ * learner can knock out an easy one now and save the rest for later,
+ * rather than being forced through in order — SessionBar's "current step"
+ * shortcut still always means the oldest unsettled one. A step is never
  * silently counted as done just because the learner opened and left it —
  * it's settled either by an explicit action here/in SessionBar, or by real
  * completion of the underlying work (see updatePlannerSessionStep's and
@@ -34,10 +38,6 @@ export function SessionRunnerPage() {
 
   if (!sessionId) return null;
   if (!session) return <p className="muted">Loading…</p>;
-
-  const activeIndex = session.steps.findIndex(
-    (step) => step.status === 'pending' || step.status === 'active',
-  );
 
   async function handleGo(step: PlannerSessionStep) {
     const path = sessionStepTargetPath(step);
@@ -84,8 +84,8 @@ export function SessionRunnerPage() {
       </section>
 
       <ol className="stack" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {session.steps.map((step, index) => {
-          const isActive = index === activeIndex;
+        {session.steps.map((step) => {
+          const isUnsettled = step.status === 'pending' || step.status === 'active';
           const path = sessionStepTargetPath(step);
           return (
             <li key={step.id} className="list-card">
@@ -96,7 +96,7 @@ export function SessionRunnerPage() {
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 {step.reason} · {Math.round(step.estimatedMinutes)} min
               </div>
-              {isActive && !finished ? (
+              {isUnsettled && !finished ? (
                 <div className="row" style={{ marginTop: '0.5rem' }}>
                   <button type="button" className="primary" disabled={!path} onClick={() => handleGo(step)}>
                     {step.status === 'active' ? 'Continue' : 'Go'}

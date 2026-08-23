@@ -1,6 +1,15 @@
 # Status
 
-Last updated: 2026-08-23 (Added "Import from YouTube" — mining a
+Last updated: 2026-08-23 (`SessionRunnerPage` now gives every pending/active
+step its own Go/Complete/Skip buttons, not just the first — previously the
+list was strictly sequential, so a learner who only had time for a couple of
+easy steps in the morning couldn't touch anything past the first one until
+it was settled. `SessionBar`'s "current step" shortcut is unchanged — it
+still always means the oldest unsettled step in the list — but the full
+`/session/:id` view now lets any pending step be started/completed/skipped
+independently, so the rest can wait for later in the day.
+
+Before that: Added "Import from YouTube" — mining a
 `.shadowing.zip`-equivalent project directly in the app UI, closing the one
 piece of the old `~/projects/shadowing` toolchain that had never been
 ported: `shadowmine`, a separate Python CLI, was previously the only way
