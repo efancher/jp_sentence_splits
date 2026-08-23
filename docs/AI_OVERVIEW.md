@@ -327,6 +327,14 @@ themselves have no idea a session is running, a persistent **`SessionBar`**
 `in_progress` — current step, progress, a link back to `/session/:id`, and
 inline "Mark complete"/"Skip" reusing `updatePlannerSessionStep` — so the
 learner is never stranded on Analyze/Review/Shadow with no way back.
+`SessionBar`'s "Mark complete"/"Skip" also auto-advance: after settling the
+current step they look up the next pending/active step in `session.steps`,
+mark it `active`, and navigate straight to its `sessionStepTargetPath`
+(shared with `SessionRunnerPage`'s own "Go", both now sourced from
+`lib/sessionPlanner.ts`), so the learner doesn't have to return to
+`/session/:id` and click "Go" between every step. `SessionRunnerPage`'s
+list-row "Mark complete" is unchanged (stays on the list; the reactive
+`activeIndex` just shifts to the next row).
 Relatedly, two "confirm and advance" controls that used to bake navigation
 into the save action were split so confirming never forces a page change:
 `VocabularyPicker`'s "Confirm vocabulary and next" is now a plain "Confirm

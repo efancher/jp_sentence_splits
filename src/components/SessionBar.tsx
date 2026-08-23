@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { updatePlannerSessionStep } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
+import { sessionStepTargetPath } from '../lib/sessionPlanner';
 
 /**
  * Persistent "you're mid-session" affordance, mounted once in AppShell so it
@@ -18,6 +19,7 @@ import { useActiveSession } from '../hooks/useActiveSession';
 export function SessionBar() {
   const active = useActiveSession();
   const [updating, setUpdating] = useState(false);
+  const navigate = useNavigate();
 
   if (!active) return null;
   const { session, currentStep } = active;
@@ -31,6 +33,18 @@ export function SessionBar() {
     setUpdating(true);
     try {
       await updatePlannerSessionStep(session.id, currentStep.id, { status });
+
+      // currentStep is always the first pending/active step, so once it's
+      // settled the next one to run is the first pending/active step after it.
+      const currentIndex = session.steps.findIndex((step) => step.id === currentStep.id);
+      const nextStep = session.steps
+        .slice(currentIndex + 1)
+        .find((step) => step.status === 'pending' || step.status === 'active');
+      const nextPath = nextStep ? sessionStepTargetPath(nextStep) : null;
+      if (nextStep && nextPath) {
+        await updatePlannerSessionStep(session.id, nextStep.id, { status: 'active' });
+        navigate(nextPath);
+      }
     } finally {
       setUpdating(false);
     }

@@ -1,6 +1,7 @@
 import type {
   FsrsState,
   LearningMode,
+  PlannerSessionStep,
   PlannerStepStatus,
   PlannerStepTargetKind,
   StudyActivityType,
@@ -570,6 +571,30 @@ function explainNeglect(neglectScores: NeglectScores, distribution: ActivityDist
  * gets the plain baseline allocation and whatever candidates exist (which
  * may be zero steps for a mode), not an error.
  */
+/** Maps a session step to the page that actually does the work, so runners can deep-link into it. */
+export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
+  switch (step.targetKind) {
+    case 'continue_book':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/analyze/${step.sentenceId}`
+        : null;
+    case 'vocabulary_review':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/vocabulary/${step.sentenceId}`
+        : null;
+    case 'grammar_detail':
+      return step.grammarPatternId ? `/grammar/${encodeURIComponent(step.grammarPatternId)}` : null;
+    case 'shadow':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/shadow/${step.sentenceId}`
+        : null;
+    case 'review':
+      return step.bookId ? `/books/${step.bookId}/review` : '/review';
+    case 'vocabulary_detail':
+      return '/vocabulary';
+  }
+}
+
 export function buildRecommendedSession(input: SessionPlannerInput): RecommendedSession {
   const totalMinutes = input.totalMinutes;
   const reviewLimit = input.reviewLimit ?? REVIEW_PRIORITY_DEFAULT_LIMIT;

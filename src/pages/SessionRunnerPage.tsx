@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { endPlannerSessionEarly, getPlannerSession, updatePlannerSessionStep } from '../db/repository';
 import type { PlannerSessionStep } from '../domain/types';
+import { sessionStepTargetPath } from '../lib/sessionPlanner';
 
 /**
  * Executes a recommended session as a sequence (design brief §8): each step
@@ -14,29 +15,6 @@ import type { PlannerSessionStep } from '../domain/types';
  * completion of the underlying work (see updatePlannerSessionStep's and
  * autoCompleteSessionSteps's own doc comments in repository.ts).
  */
-
-function targetPath(step: PlannerSessionStep): string | null {
-  switch (step.targetKind) {
-    case 'continue_book':
-      return step.bookId && step.sentenceId
-        ? `/books/${step.bookId}/analyze/${step.sentenceId}`
-        : null;
-    case 'vocabulary_review':
-      return step.bookId && step.sentenceId
-        ? `/books/${step.bookId}/vocabulary/${step.sentenceId}`
-        : null;
-    case 'grammar_detail':
-      return step.grammarPatternId ? `/grammar/${encodeURIComponent(step.grammarPatternId)}` : null;
-    case 'shadow':
-      return step.bookId && step.sentenceId
-        ? `/books/${step.bookId}/shadow/${step.sentenceId}`
-        : null;
-    case 'review':
-      return step.bookId ? `/books/${step.bookId}/review` : '/review';
-    case 'vocabulary_detail':
-      return '/vocabulary';
-  }
-}
 
 const STATUS_LABELS: Record<PlannerSessionStep['status'], string> = {
   pending: 'Up next',
@@ -62,7 +40,7 @@ export function SessionRunnerPage() {
   );
 
   async function handleGo(step: PlannerSessionStep) {
-    const path = targetPath(step);
+    const path = sessionStepTargetPath(step);
     if (!path) return;
     await updatePlannerSessionStep(sessionId!, step.id, { status: 'active' });
     navigate(path);
@@ -108,7 +86,7 @@ export function SessionRunnerPage() {
       <ol className="stack" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {session.steps.map((step, index) => {
           const isActive = index === activeIndex;
-          const path = targetPath(step);
+          const path = sessionStepTargetPath(step);
           return (
             <li key={step.id} className="list-card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
