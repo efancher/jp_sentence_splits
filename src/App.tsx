@@ -35,6 +35,11 @@ const ImportPage = lazy(() =>
     default: module.ImportPage,
   })),
 );
+const YouTubeMinePage = lazy(() =>
+  import('./pages/YouTubeMinePage').then((module) => ({
+    default: module.YouTubeMinePage,
+  })),
+);
 const HelpPage = lazy(() =>
   import('./pages/HelpPage').then((module) => ({
     default: module.HelpPage,
@@ -135,6 +140,7 @@ export default function App() {
             <Route path="inbox" element={<InboxPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="import/youtube" element={<YouTubeMinePage />} />
             <Route path="review" element={<ReviewPage />} />
             <Route path="issues" element={<CardIssuesPage />} />
             <Route path="study-items" element={<StudyItemsListPage />} />

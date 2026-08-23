@@ -18,6 +18,7 @@ const NAV = [
   { to: '/grammar', label: 'Grammar' },
   { to: '/search', label: 'Search' },
   { to: '/import', label: 'Import' },
+  { to: '/import/youtube', label: 'Import from YouTube' },
   { to: '/settings', label: 'Settings' },
 ] as const;
 

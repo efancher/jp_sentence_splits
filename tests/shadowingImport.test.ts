@@ -10,7 +10,13 @@ import {
   setBookSentenceStatus,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
-import { parseShadowingPackage } from '../src/lib/shadowingImport';
+import { normalizeSentenceKey } from '../src/lib/normalize';
+import {
+  buildShadowingPreview,
+  parseShadowingPackage,
+  type ShadowingAudioDraft,
+  type ShadowingSentenceInput,
+} from '../src/lib/shadowingImport';
 
 const SOURCE_ID = 'source-video-1';
 const FIRST_SENTENCE_ID = 'source-sentence-1';
@@ -294,5 +300,74 @@ describe('shadowing project import', () => {
     expect((await db.analyses.get(firstMembership.sentenceId))?.notes).toBe(
       'Keep this analysis',
     );
+  });
+
+  it('builds and commits a preview without a zip (YouTube-mining flow)', async () => {
+    const sentences: ShadowingSentenceInput[] = [
+      {
+        id: 'sentence-001-mined',
+        japanese: '今日は晴れです。',
+        reading: 'きょうははれです。',
+        english: 'It is sunny today.',
+        startMs: 0,
+        endMs: 1500,
+        tags: [],
+        transcriptStatus: 'manually-corrected',
+      },
+    ];
+    const audioDrafts: ShadowingAudioDraft[] = [
+      {
+        sourceSentenceId: 'sentence-001-mined',
+        normalizedKey: normalizeSentenceKey('今日は晴れです。'),
+        path: 'clips/sentence-001-mined.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 1800,
+        startMs: 0,
+        endMs: 1500,
+        blob: new Blob(['fake-clip'], { type: 'audio/mp4' }),
+      },
+    ];
+
+    const preview = buildShadowingPreview(
+      {
+        id: 'source-vid999',
+        type: 'youtube',
+        url: 'https://www.youtube.com/watch?v=vid999',
+        videoId: 'vid999',
+        title: 'Mined Video',
+        channel: 'Mined Channel',
+      },
+      {
+        format: 'japanese-shadowing-package',
+        version: 2,
+        createdAt: '2026-08-23T00:00:00Z',
+        generator: { name: 'jp-sentence-splits-youtube-mining', version: '1' },
+      },
+      sentences,
+      audioDrafts,
+      [],
+    );
+
+    expect(preview.counts.newSentences).toBe(1);
+    expect(preview.drafts[0]?.draft.japanese).toBe('今日は晴れです。');
+
+    const result = await commitShadowingPackageImport(preview);
+    expect(result.bookId).toBeTruthy();
+
+    const book = await getDb().books.get(result.bookId);
+    expect(book?.title).toBe('Mined Video');
+
+    const storedSentence = await getDb().sentences
+      .where('normalizedKey')
+      .equals(audioDrafts[0]!.normalizedKey)
+      .first();
+    expect(storedSentence?.translation).toBe('It is sunny today.');
+
+    const audioRows = await getDb().sentenceAudio
+      .where('sourceId')
+      .equals('source-vid999')
+      .toArray();
+    expect(audioRows).toHaveLength(1);
+    expect(audioRows[0]?.sentenceId).toBe(storedSentence?.id);
   });
 });

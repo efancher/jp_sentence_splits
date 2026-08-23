@@ -1,9 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import {
-  commitShadowingPackageImport,
   commitImport,
   getDb,
   previewShadowingPackageFile,
@@ -11,16 +10,11 @@ import {
 } from '../db/repository';
 import type { ImportPreview } from '../lib/csvImport';
 import type { ImportDestination, InitialOrderMode } from '../domain/types';
+import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { VocabChips } from '../components/VocabChips';
 import type { ShadowingImportPreview } from '../lib/shadowingImport';
 
-const BYTES_PER_MEBIBYTE = 1024 * 1024;
-
 type ChapterDestination = 'none' | 'existing' | 'new';
-
-function formatAudioSize(bytes: number): string {
-  return `${(bytes / BYTES_PER_MEBIBYTE).toFixed(1)} MB`;
-}
 
 export function ImportPage() {
   const navigate = useNavigate();
@@ -117,7 +111,9 @@ export function ImportPage() {
         <p className="muted" style={{ margin: 0 }}>
           Choose a <code>.shadowing.zip</code>. Glossbook creates or refreshes
           one book in the original video order and imports its native sentence
-          recordings. Audio stays in this browser.
+          recordings. Audio stays in this browser. Mining a project from a
+          YouTube URL directly is on the{' '}
+          <Link to="/import/youtube">Import from YouTube</Link> page.
         </p>
         <label>
           Shadowing project ZIP
@@ -130,75 +126,11 @@ export function ImportPage() {
           />
         </label>
         {shadowingPreview ? (
-          <div className="stack">
-            <div>
-              <strong>{shadowingPreview.source.title}</strong>
-              {shadowingPreview.source.channel ? (
-                <span className="muted">
-                  {' '}
-                  · {shadowingPreview.source.channel}
-                </span>
-              ) : null}
-            </div>
-            <ul className="muted" style={{ margin: 0, paddingLeft: '1.2rem' }}>
-              <li>
-                {shadowingPreview.totalRows} video sentence occurrences ·{' '}
-                {shadowingPreview.counts.uniqueSentences} unique sentences
-              </li>
-              <li>
-                {shadowingPreview.audioDrafts.length} native audio clips ·{' '}
-                {formatAudioSize(shadowingPreview.audioBytes)}
-              </li>
-              <li>
-                {shadowingPreview.counts.newSentences} new ·{' '}
-                {shadowingPreview.counts.updatedSentences} updated/existing
-              </li>
-            </ul>
-            {shadowingPreview.warnings.map((warning) => (
-              <div
-                key={warning.message}
-                className="status-pill needs_review"
-              >
-                {warning.message}
-              </div>
-            ))}
-            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-              Native clips are not included in Glossbook JSON backups. Keep
-              the project ZIP so they can be restored by reimporting it.
-            </p>
-            <div className="row">
-              <button
-                type="button"
-                className="primary"
-                disabled={shadowingBusy}
-                onClick={async () => {
-                  setShadowingBusy(true);
-                  try {
-                    const result =
-                      await commitShadowingPackageImport(shadowingPreview);
-                    navigate(`/books/${result.bookId}`);
-                  } catch (err) {
-                    setShadowingError(
-                      err instanceof Error
-                        ? err.message
-                        : 'Failed to import shadowing project',
-                    );
-                  } finally {
-                    setShadowingBusy(false);
-                  }
-                }}
-              >
-                Import complete project
-              </button>
-              <button
-                type="button"
-                disabled={shadowingBusy}
-                onClick={() => setShadowingPreview(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          <ShadowingPreviewCard
+            preview={shadowingPreview}
+            onImported={(result) => navigate(`/books/${result.bookId}`)}
+            onCancel={() => setShadowingPreview(null)}
+          />
         ) : null}
         {shadowingBusy ? (
           <div className="muted">Reading package…</div>

@@ -1,0 +1,166 @@
+import { z } from 'zod';
+
+import { YOUTUBE_MINING_API_BASE } from '../appConfig';
+
+/**
+ * Client for the tailnet-only YouTube-mining service
+ * (server/youtube-mining in this repo, docs/STATUS.md "YouTube mining"
+ * phase). Unlike analysisApi.ts's "never throws, null on failure"
+ * contract (an optional enhancement elsewhere in the app), this is the
+ * entire feature src/pages/YouTubeMinePage.tsx is actively driving —
+ * failures throw with a message the page can show directly.
+ */
+
+// import.meta.env is unavailable to vite.config.ts (see appConfig.ts's
+// comment on YOUTUBE_MINING_API_BASE), but this module is browser-only.
+const API_BASE: string =
+  import.meta.env.VITE_YOUTUBE_MINING_API_BASE || YOUTUBE_MINING_API_BASE;
+
+const morphemeTokenSchema = z.object({
+  surface: z.string(),
+  start: z.number(),
+  end: z.number(),
+  lemma: z.string(),
+  reading: z.string().optional(),
+  pos: z.string().optional(),
+});
+
+const sourceInfoSchema = z.object({
+  id: z.string(),
+  type: z.literal('youtube'),
+  url: z.string(),
+  videoId: z.string(),
+  title: z.string(),
+  channel: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+});
+
+const cueSchema = z.object({
+  index: z.number(),
+  startMs: z.number(),
+  endMs: z.number(),
+  japanese: z.string(),
+  isAuto: z.boolean(),
+  englishGuess: z.string().nullable().optional(),
+});
+
+const jobStatusSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(['pending', 'fetching', 'parsing', 'ready', 'error']),
+  stage: z.string(),
+  error: z.string().nullable().optional(),
+  source: sourceInfoSchema.nullable().optional(),
+  cues: z.array(cueSchema).nullable().optional(),
+});
+
+const clipResponseSchema = z.object({
+  sentenceId: z.string(),
+  japanese: z.string(),
+  reading: z.string().nullable().optional(),
+  english: z.string().nullable().optional(),
+  startMs: z.number(),
+  endMs: z.number(),
+  subtitleStartMs: z.number(),
+  subtitleEndMs: z.number(),
+  adjustedStartMs: z.number(),
+  adjustedEndMs: z.number(),
+  transcriptStatus: z.enum([
+    'unverified',
+    'auto-caption',
+    'manually-corrected',
+    'verified',
+  ]),
+  tokens: z.array(morphemeTokenSchema).nullable().optional(),
+  audio: z.object({
+    mimeType: z.literal('audio/mp4'),
+    durationMs: z.number(),
+  }),
+});
+
+export type MiningSourceInfo = z.infer<typeof sourceInfoSchema>;
+export type MiningCue = z.infer<typeof cueSchema>;
+export type MiningJobStatus = z.infer<typeof jobStatusSchema>;
+export type MiningClipResult = z.infer<typeof clipResponseSchema>;
+
+export interface ClipCueOptions {
+  japanese: string;
+  english?: string;
+  startMs?: number;
+  endMs?: number;
+  generateKana?: boolean;
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === 'string') return body.detail;
+  } catch {
+    // fall through to the generic message below
+  }
+  return `${response.status} ${response.statusText}`;
+}
+
+export async function createMiningJob(url: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to start mining job: ${await readErrorDetail(response)}`);
+  }
+  const data = (await response.json()) as { jobId: string };
+  return data.jobId;
+}
+
+export async function getMiningJob(jobId: string): Promise<MiningJobStatus> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch mining job status: ${await readErrorDetail(response)}`);
+  }
+  return jobStatusSchema.parse(await response.json());
+}
+
+export async function clipMiningCue(
+  jobId: string,
+  cueIndex: number,
+  options: ClipCueOptions,
+): Promise<MiningClipResult> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/cues/${cueIndex}/clip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      japanese: options.japanese,
+      english: options.english,
+      startMs: options.startMs,
+      endMs: options.endMs,
+      generateKana: options.generateKana ?? true,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clip sentence: ${await readErrorDetail(response)}`);
+  }
+  return clipResponseSchema.parse(await response.json());
+}
+
+export async function fetchMiningClipAudio(
+  jobId: string,
+  sentenceId: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE}/jobs/${jobId}/clips/${sentenceId}/audio`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch clip audio: ${await readErrorDetail(response)}`);
+  }
+  return response.blob();
+}
+
+/** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */
+export async function deleteMiningJob(jobId: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
+  } catch {
+    // best-effort only
+  }
+}

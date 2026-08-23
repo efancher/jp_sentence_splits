@@ -33,6 +33,16 @@ export const ICHI_MOE_BASE = 'https://ichi.moe/cl/qr/';
 export const SHADOWING_ANALYSIS_API_BASE =
   'https://codex-dev.tailfbd89c.ts.net/shadowing-analysis';
 
+/**
+ * Tailnet-only YouTube-mining service (server/youtube-mining in this
+ * repo) — same "not a secret" reasoning as SHADOWING_ANALYSIS_API_BASE
+ * above. This file is also imported by vite.config.ts under plain Node
+ * (no `import.meta.env`), so the local-dev override lives in
+ * src/lib/miningApi.ts instead of here.
+ */
+export const YOUTUBE_MINING_API_BASE =
+  'https://codex-dev.tailfbd89c.ts.net/youtube-mining';
+
 /** Speaking-rate presets for the device text-to-speech settings. */
 export const TTS_RATE_PRESETS = [
   { value: 0.6, label: 'Very slow (0.6×)' },

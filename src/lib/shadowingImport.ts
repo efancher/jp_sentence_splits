@@ -97,6 +97,29 @@ type ShadowingManifest = z.infer<typeof manifestSchema>;
 type ShadowingSource = z.infer<typeof sourceSchema>;
 type ShadowingPackageSentence = z.infer<typeof packageSentenceSchema>;
 
+/**
+ * The subset of a package sentence that preview-building actually reads.
+ * `buildDrafts` doesn't touch `audio` — narrowing the parameter to this
+ * type lets callers that never had a zip's `audio` entry (e.g. the
+ * YouTube-mining flow in src/pages/YouTubeMinePage.tsx, which clips audio
+ * per-sentence directly from a server job rather than unzipping a
+ * package) build a preview without inventing a fake one.
+ */
+export type ShadowingSentenceInput = Pick<
+  ShadowingPackageSentence,
+  | 'id'
+  | 'japanese'
+  | 'reading'
+  | 'english'
+  | 'startMs'
+  | 'endMs'
+  | 'speaker'
+  | 'tags'
+  | 'notes'
+  | 'transcriptStatus'
+  | 'tokens'
+>;
+
 export interface ShadowingAudioDraft {
   sourceSentenceId: string;
   normalizedKey: string;
@@ -181,7 +204,7 @@ function parseJsonFile(
 
 function describeSourceReference(
   source: ShadowingSource,
-  sentence: ShadowingPackageSentence,
+  sentence: ShadowingSentenceInput,
 ): string {
   const details = [
     `Shadowing project: ${source.title}`,
@@ -222,7 +245,7 @@ function addConflict(
 
 function sourceReference(
   source: ShadowingSource,
-  sentence: ShadowingPackageSentence,
+  sentence: ShadowingSentenceInput,
 ): SourceReference {
   return {
     cardId: `${source.id}:${sentence.id}`,
@@ -235,7 +258,7 @@ function sourceReference(
 
 function buildDrafts(
   source: ShadowingSource,
-  sentences: ShadowingPackageSentence[],
+  sentences: ShadowingSentenceInput[],
 ): {
   drafts: ParsedSentenceDraft[];
   repeatedOccurrenceCount: number;
@@ -431,6 +454,27 @@ export async function parseShadowingPackage(
     };
   });
 
+  return {
+    ...buildShadowingPreview(source, manifest, sentences, audioDrafts, existing),
+    filename: file.name,
+  };
+}
+
+/**
+ * Build a ShadowingImportPreview directly from already-known sentences +
+ * audio clips, without a `.shadowing.zip` — used by the YouTube-mining
+ * flow (src/pages/YouTubeMinePage.tsx), which gets sentences/clips one at
+ * a time from a mining-job server rather than unzipping a package.
+ * `parseShadowingPackage` above is a thin wrapper over this for the
+ * zip-upload path.
+ */
+export function buildShadowingPreview(
+  source: ShadowingSource,
+  manifest: ShadowingManifest,
+  sentences: ShadowingSentenceInput[],
+  audioDrafts: ShadowingAudioDraft[],
+  existing: ExistingSentenceLookup[] = [],
+): ShadowingImportPreview {
   const { drafts, repeatedOccurrenceCount } = buildDrafts(source, sentences);
   const previewSentences = toPreviewSentences(drafts, existing);
   const conflictCount = drafts.reduce(
@@ -450,7 +494,7 @@ export async function parseShadowingPackage(
   }
 
   return {
-    filename: file.name,
+    filename: `${source.title}.shadowing.zip`,
     batchName: source.title,
     totalRows: sentences.length,
     drafts: previewSentences,
