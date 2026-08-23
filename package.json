@@ -32,7 +32,8 @@
     "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",
     "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",
     "fix:numeral-readings": "tsx scripts/fix-numeral-readings.ts",
-    "issues:list": "tsx scripts/list-card-issues.ts"
+    "issues:list": "tsx scripts/list-card-issues.ts",
+    "check:duplicate-books": "tsx scripts/check-duplicate-books.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

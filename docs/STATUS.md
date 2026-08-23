@@ -1,6 +1,44 @@
 # Status
 
-Last updated: 2026-08-22 (Fixed AnalyzePage's "Suggest sticky English"
+Last updated: 2026-08-23 (Investigated a report that a book's "N sentences
+waiting" figure in Explore/session recommendations never seemed to go down.
+Root cause: four separate `books` rows all titled "Easy Japanese Drama:
+After Work" existed for the same owner — a CSV re-import apparently chose
+"New book" three extra times on 2026-07-25 instead of "Add to existing
+book," each creating its own fully separate `book_sentences` pool (90 rows
+apiece). Only one of the four had any study progress (12/90 complete); the
+other three sat permanently untouched, and `findExploreCandidates`
+(`repository.ts`) has no dedup-by-title, so it could recommend any of them
+interchangeably — fragmenting the user's actual progress across up to four
+identical-looking "waiting" counts, three of which could never move.
+Cleaned up live Supabase data: deleted the 3 empty duplicates. First pass
+used a raw `DELETE`, which turned out to bypass
+`sync_private.append_sync_event` (that trigger is a no-op on `tg_op =
+'DELETE'`, only firing on the `deleted_at` null→non-null UPDATE path) —
+so connected clients would never have received a delete event and the
+zombie books would have lingered forever in local IndexedDB. Corrected by
+re-inserting minimal placeholder rows for the 3 ids and soft-deleting them
+properly (`deleted_at = now()`), confirmed via `sync_events` that legitimate
+`delete` rows now exist for all three. The 270 already-hard-deleted
+`book_sentences` rows couldn't be retroactively given delete events (their
+original ids weren't preserved) — accepted as harmless orphaned local rows
+since every read path reaches `book_sentences` through its parent `books`
+row first, and the parent is now gone.
+
+Added `scripts/check-duplicate-books.ts` (`npm run check:duplicate-books`)
+to catch a recurrence: read-only, lists any non-archived books sharing a
+normalized title for the signed-in owner, with each copy's `book_sentences`
+status breakdown, exit code 1 if any found. Wired to
+`.github/workflows/check-duplicate-books.yml`, `workflow_dispatch`-only
+(same rationale as `backfill-vocabulary-suggestions.yml`: a real account
+password is a secret, so every run should be an explicit logged action, not
+a cron job). Not added to `npm run check`/CI, since it needs Supabase
+credentials that plain `tsc`/`vitest` runs don't have — same isolation as
+the existing backfill scripts. Not documented in README.md's script list,
+matching `issues:list`'s precedent (an internal triage tool, not an
+end-user workflow).
+
+Before that: Fixed AnalyzePage's "Suggest sticky English"
 button echoing the raw Japanese chunk instead of a gloss, reported as "just
 copying the japanese." Root cause: `stickyEnglish.ts`'s vocabulary matcher
 required the chunk text to contain a `targetVocabulary` entry's

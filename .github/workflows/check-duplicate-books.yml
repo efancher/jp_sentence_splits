@@ -1,0 +1,34 @@
+name: Check for duplicate books
+
+# Manual-only, on purpose (same rationale as backfill-vocabulary-suggestions.yml
+# in docs/STATUS.md): touches production Supabase with a real account
+# password stored as a secret, so every run is an explicit, logged human
+# action from the Actions tab or `gh workflow run` — never a push/schedule
+# trigger.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run check
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SCRIPT_SUPABASE_EMAIL: ${{ secrets.SCRIPT_SUPABASE_EMAIL }}
+          SCRIPT_SUPABASE_PASSWORD: ${{ secrets.SCRIPT_SUPABASE_PASSWORD }}
+        run: npm run check:duplicate-books
