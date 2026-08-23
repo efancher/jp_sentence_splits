@@ -348,6 +348,19 @@ session-tracking gap.
   this codebase). Creates/refreshes one book per source, imports Japanese/
   reading/English/native audio clips per sentence, idempotent on re-import
   (matches by source ID, doesn't duplicate the book).
+- **Import from YouTube** (`YouTubeMinePage.tsx`, route
+  `/import/youtube`) — an in-app alternative to the `.shadowing.zip`
+  upload above that needs no separate CLI: paste a YouTube URL, and the
+  self-hosted `server/youtube-mining/` service downloads audio +
+  subtitles, resegments captions onto real sentence boundaries (fixing
+  cues that get cut off mid-sentence or bundle several sentences
+  together), and lets you review/edit/skip each sentence one at a time
+  before clipping its audio. Finishing assembles the same
+  `ShadowingImportPreview` shape as the zip path
+  (`buildShadowingPreview()`) and commits through the identical
+  `commitShadowingPackageImport()` — same book-per-source,
+  idempotent-on-reimport behavior as above; only how the preview gets
+  built differs.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori
@@ -804,9 +817,9 @@ aren't JSON-serializable/aren't worth backing up).
   `shadowing` repo via table-prefix isolation (`shadowing_*` tables
   coexist, unused going forward). Entirely optional — the app is fully
   functional local-only without it. Also hosts `supabase/functions/
-  invite-book-member/` and (new) `supabase/functions/grammar-assist/` —
-  Deno Edge Functions, the only server-side (non-browser, non-Dexie) code
-  in this app.
+  invite-book-member/` and `supabase/functions/grammar-assist/` — Deno
+  Edge Functions, one of two kinds of server-side (non-browser, non-Dexie)
+  code in this app (the other is `server/youtube-mining/`, below).
 - **Anthropic API** (new, via `supabase/functions/grammar-assist/`) — the
   first and only LLM/AI integration anywhere in this codebase. Called
   server-side only, from the Edge Function, using `claude-haiku-4-5` with
@@ -830,6 +843,17 @@ aren't JSON-serializable/aren't worth backing up).
   budget (~1–1.5 GB free even before ASR was added; the alignment service
   alone runs ~2.4 GB RSS warm). The frontend (`src/lib/analysisApi.ts`)
   requires a working fallback path when this service is unreachable.
+- **`server/youtube-mining/`** — unlike everything else in this section,
+  this one *is* part of this codebase (Python + FastAPI), not a sibling
+  repo — see the "Import from YouTube" feature section above. Deployed
+  the same tailnet-only way as `shadowing-analysis-api` (own systemd unit
+  + tailscale path, separate process/port), called from
+  `src/lib/miningApi.ts`. Given a YouTube URL, downloads audio + subtitles
+  (yt-dlp), splits/resegments into sentence-sized cues, and clips
+  per-sentence audio on demand (ffmpeg) as the user reviews cues in
+  `YouTubeMinePage.tsx`. Ported from the sibling `shadowmine` CLI below —
+  copied, not imported, so this app has no runtime dependency on that
+  repo for this feature.
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`) of
   the full non-hidden kanji catalog (readings/meanings) into Supabase
@@ -841,13 +865,16 @@ aren't JSON-serializable/aren't worth backing up).
   never bulk-uploaded wholesale to Supabase.
 - **`~/projects/shadowing` (CLI, `shadowmine`)** — a separate Python tool
   (Typer CLI, fugashi/UniDic, yt-dlp, ffmpeg) that mines YouTube/podcast
-  sources into `.shadowing.zip` packages; invoked externally, its output
-  consumed by this app's importer. Its own web practice UI has been ported
-  into this app and the standalone deployment retired. Its morphology
-  tokenizer (fugashi/UniDic) is also invoked directly by
-  `scripts/backfill-vocabulary-suggestions.ts` (via a local Python venv or
-  GitHub Actions) to backfill `vocabularySuggestions` for CSV-imported
-  sentences, which the CSV import path itself never populates.
+  sources into `.shadowing.zip` packages. Its own web practice UI was
+  already ported into this app (Phase 8); the mining pipeline itself has
+  now also been ported (`server/youtube-mining/`, above) — this CLI is no
+  longer the primary way to mine a video, but is untouched and still
+  works standalone if needed. Its morphology tokenizer (fugashi/UniDic)
+  is also invoked directly by `scripts/backfill-vocabulary-suggestions.ts`
+  (via a local Python venv or GitHub Actions) to backfill
+  `vocabularySuggestions` for CSV-imported sentences, which the CSV import
+  path itself never populates — that script still shells out to this
+  sibling repo rather than `server/youtube-mining/`'s copy.
 - **`~/projects/anki`** (archived on GitHub) — used exactly once,
   historically, via `anki_headless/` (an official-API-based headless
   AnkiWeb sync bridge built in that repo) to pull already-mined `WK Satori

@@ -168,9 +168,12 @@ configurable FSRS-interval threshold).
 
 ## External interop
 
-- **`shadowing` repo**: CLI (`shadowmine`, Python) stays separate — mines
-  YouTube/source material into `.shadowing.zip`, importable via
-  `src/lib/shadowingImport.ts`. The standalone web app's practice UI
+- **`shadowing` repo**: CLI (`shadowmine`, Python) stays separate as a
+  standalone tool, but is no longer this app's only way to mine a video —
+  `server/youtube-mining/` (below) copies its pipeline in-repo for the
+  in-app "Import from YouTube" page. `.shadowing.zip` upload
+  (`src/lib/shadowingImport.ts`) still works too, for packages produced
+  externally by the CLI. The standalone web app's practice UI
   (record/compare/pitch-analysis, plus new pronunciation-feedback work not
   in the original) has been fully ported in (Phases 3, 8, 9) and the
   standalone app is retired — see the memory note "Shadowing repo
@@ -178,6 +181,16 @@ configurable FSRS-interval threshold).
   `shadowing` checkout's fugashi/UniDic tokenizer for the vocabulary-
   suggestion backfill script, since a browser-side JS tokenizer was
   deliberately rejected (bundle size, second engine).
+- **`server/youtube-mining/`** (in this repo, Python + FastAPI): given a
+  YouTube URL, downloads audio/subtitles (yt-dlp), resegments captions
+  onto real sentence boundaries, and clips per-sentence audio on demand
+  (ffmpeg) as `YouTubeMinePage.tsx` steps through cues for review. Ported
+  from `shadowmine` above (copied, not imported — no runtime dependency on
+  that repo), deployed the same tailnet-only way as
+  `shadowing-analysis-api` below (own systemd unit + tailscale path).
+  `src/lib/miningApi.ts` is the frontend client; unlike `analysisApi.ts`,
+  failures throw rather than degrading silently, since this is the whole
+  feature the page is driving, not an optional enhancement.
 - **`anki` repo**: archived (Phase 6, read-only on GitHub) — existing
   Satori/Shadowing sentence notes were imported once via `anki_headless/`
   and verified (Phase 2). WaniKani-catalog and JMDict vocabulary/kanji

@@ -1,42 +1,36 @@
 # Status
 
-Last updated: 2026-08-23 (Investigated a report that a book's "N sentences
-waiting" figure in Explore/session recommendations never seemed to go down.
-Root cause: four separate `books` rows all titled "Easy Japanese Drama:
-After Work" existed for the same owner — a CSV re-import apparently chose
-"New book" three extra times on 2026-07-25 instead of "Add to existing
-book," each creating its own fully separate `book_sentences` pool (90 rows
+Last updated: 2026-08-23 (Added "Import from YouTube" — mining a
+`.shadowing.zip`-equivalent project directly in the app UI, closing the one
+piece of the old `~/projects/shadowing` toolchain that had never been
+ported: `shadowmine`, a separate Python CLI, was previously the only way
+to turn a YouTube URL into sentences + timed audio clips, run by hand
+outside this app. See "New: Import from YouTube — in-app mining pipeline
+(2026-08-23)" below for the full writeup, including a new
+`server/youtube-mining/` FastAPI service (ported from `shadowmine`, no
+runtime dependency on that sibling repo) and a general subtitle
+resegmentation pass fixing a real quality complaint — caption cues cut off
+mid-sentence or bundling several sentences together.
+
+Before that: Investigated a report that a book's "N sentences waiting"
+figure in Explore/session recommendations never seemed to go down. Root
+cause: four separate `books` rows all titled "Easy Japanese Drama: After
+Work" existed for the same owner — a CSV re-import apparently chose "New
+book" three extra times on 2026-07-25 instead of "Add to existing book,"
+each creating its own fully separate `book_sentences` pool (90 rows
 apiece). Only one of the four had any study progress (12/90 complete); the
 other three sat permanently untouched, and `findExploreCandidates`
 (`repository.ts`) has no dedup-by-title, so it could recommend any of them
-interchangeably — fragmenting the user's actual progress across up to four
-identical-looking "waiting" counts, three of which could never move.
-Cleaned up live Supabase data: deleted the 3 empty duplicates. First pass
-used a raw `DELETE`, which turned out to bypass
-`sync_private.append_sync_event` (that trigger is a no-op on `tg_op =
-'DELETE'`, only firing on the `deleted_at` null→non-null UPDATE path) —
-so connected clients would never have received a delete event and the
-zombie books would have lingered forever in local IndexedDB. Corrected by
-re-inserting minimal placeholder rows for the 3 ids and soft-deleting them
-properly (`deleted_at = now()`), confirmed via `sync_events` that legitimate
-`delete` rows now exist for all three. The 270 already-hard-deleted
-`book_sentences` rows couldn't be retroactively given delete events (their
-original ids weren't preserved) — accepted as harmless orphaned local rows
-since every read path reaches `book_sentences` through its parent `books`
-row first, and the parent is now gone.
-
-Added `scripts/check-duplicate-books.ts` (`npm run check:duplicate-books`)
-to catch a recurrence: read-only, lists any non-archived books sharing a
-normalized title for the signed-in owner, with each copy's `book_sentences`
-status breakdown, exit code 1 if any found. Wired to
-`.github/workflows/check-duplicate-books.yml`, `workflow_dispatch`-only
-(same rationale as `backfill-vocabulary-suggestions.yml`: a real account
-password is a secret, so every run should be an explicit logged action, not
-a cron job). Not added to `npm run check`/CI, since it needs Supabase
-credentials that plain `tsc`/`vitest` runs don't have — same isolation as
-the existing backfill scripts. Not documented in README.md's script list,
-matching `issues:list`'s precedent (an internal triage tool, not an
-end-user workflow).
+interchangeably. Cleaned up live Supabase data: deleted the 3 empty
+duplicates, correcting a first-pass raw `DELETE` (which bypasses
+`sync_private.append_sync_event`, so connected clients would never learn
+of the delete) by re-inserting minimal placeholder rows for the 3 ids and
+soft-deleting them properly instead. Added
+`scripts/check-duplicate-books.ts` (`npm run check:duplicate-books`) to
+catch a recurrence: read-only, lists any non-archived books sharing a
+normalized title for the signed-in owner, exit code 1 if any found. Wired
+to `.github/workflows/check-duplicate-books.yml`,
+`workflow_dispatch`-only.
 
 Before that: Fixed AnalyzePage's "Suggest sticky English"
 button echoing the raw Japanese chunk instead of a gloss, reported as "just
@@ -5530,3 +5524,102 @@ session page; confirmed the new Vocabulary page's header/nav/audio/
 `VocabChips`/`VocabularyPicker` render correctly and that navigating there
 without confirming anything correctly leaves its step `in_progress` (no
 false-positive auto-complete on mere navigation).
+
+## New: Import from YouTube — in-app mining pipeline (2026-08-23): done
+
+Closes the last gap between this app and the retired `~/projects/shadowing`
+toolchain: mining (YouTube URL → sentences + timed native audio clips) had
+never been ported, only the practice UI had (Phase 8). Mining only existed
+as `shadowmine`, a separate Python CLI in that sibling repo, run by hand
+outside this app to produce a `.shadowing.zip` the user then uploaded on
+the Import page. The user asked for it in-app, as its own page, with no
+ongoing dependency on the sibling repo — and separately flagged a real
+quality problem worth fixing at the same time: caption-derived sentences
+often don't line up with actual sentence boundaries (a cue cut off
+mid-sentence, or several sentences bundled into one caption box).
+
+**New server component — `server/youtube-mining/`** (Python + FastAPI,
+new directory in this repo, not a new sibling repo): the mining pipeline
+itself — yt-dlp download, subtitle parsing, ffmpeg clipping,
+fugashi/UniDic tokenization/readings — is copied and adapted from
+`shadowmine`'s modules (`youtube.py`, `subtitles.py`, `clip.py`,
+`morphology.py`, `readings.py`), not imported, so this app has no runtime
+dependency on that repo going forward. Deployed the same way the existing
+`~/projects/shadowing-analysis-api` service is (`systemd --user` +
+`uvicorn` + `tailscale serve --set-path`, tailnet-only, no public
+exposure) — see `server/youtube-mining/README.md` and
+`deploy/youtube-mining-api.service`.
+
+- **New: `app/resegment.py`** — a general sentence-boundary pass
+  (`merge_incomplete_cues` + `split_multi_sentence_cues`) that runs on any
+  parsed cue stream, not just the YouTube auto-caption "rolling captions"
+  artifact `shadowmine` already special-cased. Merges consecutive cues
+  that don't end on Japanese sentence-final punctuation (accounting for
+  trailing closing brackets/quotes) into one cue spanning their combined
+  time range; splits a cue bundling multiple complete sentences into one
+  cue per sentence, dividing the original time range proportionally by
+  character count. This is the direct fix for the "cut off / bundled
+  sentences" complaint — it runs before English-subtitle alignment, so
+  matching operates on sentence-complete spans.
+- Job model: `POST /jobs {url}` kicks off a background pipeline
+  (download → subtitles → resegment → align) on a plain daemon thread per
+  job (not `asyncio.create_task` — a task tied to one request's event
+  loop isn't guaranteed to outlive that request, which broke under
+  Starlette's `TestClient` during development); `GET /jobs/{id}` is
+  polled for status/stage and, once `ready`, the resegmented cue list.
+  `POST /jobs/{id}/cues/{index}/clip` clips one approved cue synchronously
+  (fast local ffmpeg trim on the already-downloaded audio) and returns
+  sentence data + reading + tokens; `GET /jobs/{id}/clips/{sentenceId}/audio`
+  serves the clipped bytes. Scratch directories are swept after a TTL
+  regardless of client cleanup.
+- Tests: `pytest` (24 cases) covering resegmentation (the new logic),
+  ported subtitle-parsing/alignment cases from `shadowmine`'s test suite,
+  morphology (skipped if fugashi/unidic-lite aren't installed, same
+  soft-dependency contract as the original), and a full FastAPI
+  `TestClient` job-lifecycle test with yt-dlp/ffmpeg calls monkeypatched
+  out.
+
+**Client side** — the key simplification: the server never builds a
+`.shadowing.zip`. `buildDrafts`/`toPreviewSentences` in
+`src/lib/shadowingImport.ts` were already pure functions operating on
+parsed sentence data, not the zip itself — only `parseShadowingPackage`
+did the unzip/schema-validate/audio-extract part. Extracted a new exported
+`buildShadowingPreview(source, manifest, sentences, audioDrafts,
+existing)` (narrowed sentence input type `ShadowingSentenceInput`, since
+callers without a zip have no `audio` package entry to fabricate) that
+`parseShadowingPackage` now also calls internally, so both import paths
+share one code path after their respective sentence data is assembled.
+
+- `src/lib/miningApi.ts` — zod-validated fetch client for the job API
+  above. Unlike `analysisApi.ts`'s "never throws, null on failure"
+  contract (an optional enhancement elsewhere), this is the entire
+  feature the new page is driving, so failures throw with a message the
+  page displays.
+- `src/components/ShadowingPreviewCard.tsx` — extracted the
+  preview-stats + "Import complete project" commit block out of
+  `ImportPage.tsx` (previously inline there) so both the manual
+  `.shadowing.zip` upload flow and the new mining flow share one commit
+  UI against `commitShadowingPackageImport` — unchanged in
+  `db/repository.ts`. Takes an optional `retentionNote` override since
+  the "keep the ZIP to restore it" message doesn't apply when there was
+  never a zip.
+- `src/pages/YouTubeMinePage.tsx` (route `/import/youtube`, linked from
+  both the nav menu and the Import page) — paste a URL, poll job status
+  with stage text, then review cues one at a time (keep/edit/skip/prev,
+  editable Japanese/English/kana-toggle) mirroring `shadowmine`'s
+  interactive CLI loop; each "Keep & clip" hits the server, fetches the
+  resulting audio blob, and accumulates it client-side. On finishing,
+  assembles a `ShadowingImportPreview` via `buildShadowingPreview` and
+  hands off to `ShadowingPreviewCard` for the existing review/commit UI.
+
+**Verified**: `npm run check` (typecheck + full `vitest run`, 803 passed,
+2 pre-existing skips, no new failures) including new
+`tests/miningApi.test.ts`, a new `buildShadowingPreview` case in
+`tests/shadowingImport.test.ts` (build-and-commit without a zip, checked
+through to `db.sentenceAudio`), and a new `tests/youtubeMine.test.tsx`
+full-app integration test (navigate → mine → review both cues → commit →
+book page) with the mining server mocked at the `miningApi` boundary. Not
+yet exercised against a real deployed server/real YouTube video — that
+requires the Hetzner deployment step in `server/youtube-mining/README.md`,
+which is an infrastructure action for the user to run, not something this
+session could do.
