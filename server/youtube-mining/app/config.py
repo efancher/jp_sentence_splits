@@ -20,3 +20,11 @@ JOB_TTL_SECONDS = int(os.environ.get("MINING_JOB_TTL_SECONDS", str(2 * 60 * 60))
 JOB_SWEEP_INTERVAL_SECONDS = int(
     os.environ.get("MINING_JOB_SWEEP_INTERVAL_SECONDS", "600")
 )
+
+# YouTube blocks datacenter/cloud IPs (this box included) with a bot-check
+# unless yt-dlp presents cookies from a real logged-in browser session —
+# export a cookies.txt (e.g. the "Get cookies.txt LOCALLY" browser
+# extension, or `yt-dlp --cookies-from-browser <browser> --cookies -`) and
+# point this at it. Unset by default: most local-dev machines don't need
+# it, only cloud-hosted deployments do.
+YTDLP_COOKIES_FILE = os.environ.get("MINING_YTDLP_COOKIES_FILE") or None

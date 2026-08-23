@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h/projects/jp_sentence_splits/server/youtube-mining
+Environment=MINING_YTDLP_COOKIES_FILE=%h/projects/jp_sentence_splits/server/youtube-mining/youtube-cookies.txt
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5

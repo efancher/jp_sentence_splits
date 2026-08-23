@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app import config
 from app.models import SourceInfo
 
 YOUTUBE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
@@ -42,6 +43,8 @@ def _ydl(opts: dict[str, Any] | None = None):
         "noprogress": True,
         "noplaylist": True,
     }
+    if config.YTDLP_COOKIES_FILE:
+        base["cookiefile"] = config.YTDLP_COOKIES_FILE
     if opts:
         base.update(opts)
     return YoutubeDL(base)

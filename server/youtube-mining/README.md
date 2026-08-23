@@ -64,6 +64,22 @@ Requires root or the tailscale operator
 `funnel` — tailnet-only, matching this whole app ecosystem's privacy
 posture.
 
+### YouTube's bot-check (cloud/datacenter IPs)
+
+YouTube blocks yt-dlp requests from most cloud/datacenter IPs (this box
+included) with "Sign in to confirm you're not a bot" unless yt-dlp
+presents cookies from a real logged-in browser session. Export one from
+your own browser (already signed into YouTube) — e.g. the "Get
+cookies.txt LOCALLY" extension, or on a machine with a real browser
+profile: `yt-dlp --cookies-from-browser chrome --cookies -
+https://www.youtube.com > youtube-cookies.txt` — and copy it to
+`server/youtube-mining/youtube-cookies.txt` on this host (gitignored,
+never commit it — it's equivalent to a session credential). The systemd
+unit already points `MINING_YTDLP_COOKIES_FILE` at that path; without the
+file present, mining jobs from this host will fail at the download step.
+Cookies expire periodically — re-export and re-copy when jobs start
+failing with the same bot-check error again.
+
 ## Configuration (env vars, all optional)
 
 - `MINING_API_HOST` / `MINING_API_PORT` — bind address (default
@@ -75,3 +91,5 @@ posture.
 - `MINING_JOB_TTL_SECONDS` / `MINING_JOB_SWEEP_INTERVAL_SECONDS` — how
   long an abandoned job's scratch directory (downloaded audio, clips)
   survives before automatic cleanup, and how often the sweep runs.
+- `MINING_YTDLP_COOKIES_FILE` — path to a cookies.txt for yt-dlp; see
+  "YouTube's bot-check" above. Unset by default.
