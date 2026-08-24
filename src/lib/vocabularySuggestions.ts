@@ -420,16 +420,34 @@ export function buildMorphStrip(
   return pieces;
 }
 
+/**
+ * Merge two suggestion lists, keyed by span, dropping any entry whose
+ * start/end no longer matches `japanese` (the sentence text that will
+ * actually be kept). Suggestions carry offsets from whichever text they
+ * were originally tokenized against; when two imports of "the same"
+ * sentence differ by even a little whitespace/punctuation before this
+ * span, a merged-in offset can point to the wrong place in the kept text
+ * while still showing the right surface string — silently breaking
+ * adjacency checks downstream. Re-validating here is the one point where
+ * both texts are in scope.
+ */
 export function mergeVocabularySuggestions(
   existing: VocabularySuggestion[],
   incoming: VocabularySuggestion[],
+  japanese: string,
 ): VocabularySuggestion[] {
-  if (!incoming.length) return existing;
-  if (!existing.length) return incoming;
-  const bySpan = new Map(
-    existing.map((item) => [`${item.start}:${item.end}:${item.surface}`, item]),
+  const validExisting = existing.filter((item) =>
+    validateSpan(japanese, item.start, item.end, item.surface),
   );
-  for (const item of incoming) {
+  const validIncoming = incoming.filter((item) =>
+    validateSpan(japanese, item.start, item.end, item.surface),
+  );
+  if (!validIncoming.length) return validExisting;
+  if (!validExisting.length) return validIncoming;
+  const bySpan = new Map(
+    validExisting.map((item) => [`${item.start}:${item.end}:${item.surface}`, item]),
+  );
+  for (const item of validIncoming) {
     const key = `${item.start}:${item.end}:${item.surface}`;
     const previous = bySpan.get(key);
     if (!previous) {

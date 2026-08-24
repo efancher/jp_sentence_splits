@@ -498,9 +498,11 @@ export function mergeSentenceOnReimport(
     ...draft.sourceReferences.map((ref) => ({ ...ref, importBatchId })),
   ]);
 
+  const japanese = existing.japanese || draft.japanese;
+
   return {
     ...existing,
-    japanese: existing.japanese || draft.japanese,
+    japanese,
     readingOnly,
     inlineReading,
     translation,
@@ -508,6 +510,7 @@ export function mergeSentenceOnReimport(
     vocabularySuggestions: mergeVocabularySuggestions(
       existing.vocabularySuggestions ?? [],
       draft.vocabularySuggestions ?? [],
+      japanese,
     ),
     sourceReferences,
     conflicts,

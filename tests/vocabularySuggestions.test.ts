@@ -10,6 +10,7 @@ import {
   isContentPos,
   mergeSelections,
   mergeSuggestionIntoSelection,
+  mergeVocabularySuggestions,
   selectionFromSuggestion,
   suggestionFromToken,
   suggestionsFromTokens,
@@ -184,6 +185,35 @@ describe('vocabularySuggestions', () => {
   it('rejects invalid spans', () => {
     expect(validateSpan('abc', 0, 2, 'ab')).toBe(true);
     expect(validateSpan('abc', 0, 2, 'xx')).toBe(false);
+  });
+
+  describe('mergeVocabularySuggestions', () => {
+    it('drops incoming suggestions whose offsets no longer match the kept sentence text', () => {
+      const japanese = '穴が空いている木を見つけました。';
+      const existing = suggestionsFromTokens(japanese, [
+        { surface: '空い', start: 2, end: 4, lemma: '空く', reading: 'あい', pos: '動詞' },
+      ]);
+      // Tokenized against a slightly different (e.g. extra-space) copy of the
+      // sentence, so these offsets are shifted relative to `japanese`.
+      const incoming = suggestionsFromTokens('穴が 空いている木を見つけました。', [
+        { surface: 'て', start: 5, end: 6, lemma: 'て', reading: 'て', pos: '助詞' },
+      ]);
+      const merged = mergeVocabularySuggestions(existing, incoming, japanese);
+      expect(merged.map((item) => item.surface)).toEqual(['空い']);
+    });
+
+    it('keeps suggestions from both sides when offsets still match the kept text', () => {
+      const japanese = '空いている木';
+      const [a] = suggestionsFromTokens(japanese, [
+        { surface: '空い', start: 0, end: 2, lemma: '空く', reading: 'あい', pos: '動詞' },
+      ]);
+      const [b] = suggestionsFromTokens(japanese, [
+        { surface: 'て', start: 2, end: 3, lemma: 'て', reading: 'て', pos: '助詞' },
+      ]);
+      const merged = mergeVocabularySuggestions([a], [b], japanese);
+      expect(merged.map((item) => item.surface)).toEqual(['空い', 'て']);
+      expect(combineSuggestions(merged, japanese)?.surface).toBe('空いて');
+    });
   });
 
   describe('combinedExpressionWarning', () => {
