@@ -70,7 +70,11 @@ describe('VocabularyListPage', () => {
     await user.type(input, 'cat');
     await user.tab();
 
-    await screen.findByText('Saved');
+    // updateVocabularyItem does a real get+put through fake-indexeddb; the
+    // default 1s findBy window is tight enough that this flakes under full-
+    // suite CPU contention (confirmed pre-existing, docs/STATUS.md) even
+    // though nothing is actually slow in isolation. Give it more room.
+    await screen.findByText('Saved', {}, { timeout: 5_000 });
     const { getDb } = await import('../src/db/repository');
     const updated = await getDb().vocabularyItems.get(item.id);
     expect(updated?.meaning).toBe('cat');
