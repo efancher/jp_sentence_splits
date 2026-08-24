@@ -606,6 +606,20 @@ export class PlaybackCoordinator {
     await playDualEar(referenceBlob, learnerBlob, options, this.controller.signal);
   }
 
+  /** Plays `audio` once, optionally bounded to `range`, then resolves. */
+  async playRange(
+    audio: HTMLAudioElement,
+    range?: TimeRangeMs,
+    playbackRate = 1,
+  ): Promise<void> {
+    this.cancel();
+    this.controller = new AbortController();
+    const { signal } = this.controller;
+    audio.playbackRate = playbackRate;
+    audio.preservesPitch = true;
+    await playUntilEnded(audio, signal, range);
+  }
+
   /** Loops `audio` within `range` until `cancel()` is called. */
   async loopRange(
     audio: HTMLAudioElement,

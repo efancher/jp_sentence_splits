@@ -4,6 +4,8 @@ import { Link, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
+import { ProgressiveShadowingPanel } from '../components/ProgressiveShadowingPanel';
+import { RecordToggleButton } from '../components/RecordToggleButton';
 import {
   deleteAttempt,
   getDb,
@@ -88,6 +90,7 @@ export function ShadowPage() {
   const [speed, setSpeed] = useState(1);
   const [targetRange, setTargetRange] = useState<TimeRangeMs | null>(null);
   const [isLoopingTarget, setIsLoopingTarget] = useState(false);
+  const [guidedMode, setGuidedMode] = useState(false);
   const [shadowMode, setShadowMode] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
@@ -159,6 +162,7 @@ export function ShadowPage() {
     setTargetRange(null);
     setAnalyzingAttemptId(null);
     setReferenceError(null);
+    setGuidedMode(false);
     referenceRepairAttempted.current = false;
   }, [sentenceId]);
 
@@ -459,142 +463,151 @@ export function ShadowPage() {
           </div>
         )}
 
-        <div className="row" style={{ alignItems: 'center' }}>
-          <label className="row" style={{ alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={shadowMode}
-              disabled={!referenceAudio || isRecording || isRequestingMic}
-              onChange={(event) => setShadowMode(event.target.checked)}
-            />
-            Shadow mode (play reference while recording)
-          </label>
-          <button
-            type="button"
-            disabled={calibrating || isRecording || isRequestingMic}
-            onClick={() => void handleCalibrate()}
-          >
-            {calibrating ? 'Calibrating…' : 'Calibrate mic'}
-          </button>
-        </div>
-        {calibration ? (
-          <ul className="stack" style={{ margin: 0 }}>
-            {calibration.guidance.map((line) => (
-              <li key={line} className="muted">
-                {line}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {calibrationError ? <p className="muted">{calibrationError}</p> : null}
-
-        <div className="row" style={{ alignItems: 'center' }}>
-          <label>
-            Delay before recording
-            <select
-              value={delayMs}
-              disabled={delayedRecordPending || isRecording || isRequestingMic}
-              onChange={(event) => setDelayMs(Number(event.target.value))}
-            >
-              {[500, 750, 1000, 1500, 2000].map((value) => (
-                <option key={value} value={value}>
-                  {(value / 1000).toFixed(1)}s
-                </option>
-              ))}
-            </select>
-          </label>
-          {delayedRecordPending ? (
-            <>
-              <span className="muted">Listen, then get ready…</span>
-              <button type="button" onClick={cancelDelayedShadow}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              disabled={!referenceAudio || isRecording || isRequestingMic}
-              onClick={() => void handleDelayedShadow()}
-            >
-              Delayed shadow
+        {referenceAudio && !guidedMode ? (
+          <div className="row" style={{ alignItems: 'center' }}>
+            <button type="button" disabled={isRecording || isRequestingMic} onClick={() => setGuidedMode(true)}>
+              Start guided practice
             </button>
-          )}
-        </div>
-
-        <div className="row" style={{ alignItems: 'center' }}>
-          <button
-            type="button"
-            className="primary"
-            disabled={isRecording || isRequestingMic}
-            onClick={() =>
-              void shadowing.startRecording(
-                shadowMode && referenceAudio ? 'shadow' : undefined,
-                shadowMode && referenceAudio
-                  ? { blob: referenceAudio.blob, playbackRate: speed }
-                  : undefined,
-              )
-            }
-          >
-            {isRequestingMic ? 'Requesting mic…' : 'Record'}
-          </button>
-          {isRecording ? (
-            <>
-              <span className="muted">
-                {Math.ceil(shadowing.recordingElapsedMs / 1000)}s /{' '}
-                {MAX_RECORDING_DURATION_MS / 1000}s
-              </span>
-              <button
-                type="button"
-                onClick={() => void shadowing.stopRecording()}
-              >
-                Stop
-              </button>
-            </>
-          ) : null}
-        </div>
-        {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
-
-        {isRecording && shadowing.shadowActive && referenceAudio ? (
-          <LiveShadowWaveform
-            referenceBlob={referenceAudio.blob}
-            active={isRecording && shadowing.shadowActive}
-            getMediaTime={shadowing.getShadowMediaTime}
-            analyser={shadowing.getShadowAnalyser()}
-            sampleRate={shadowing.getShadowSampleRate()}
-          />
-        ) : null}
-
-        {pendingAttempt && pendingUrl ? (
-          <div className="stack">
-            <div className="row" style={{ alignItems: 'center' }}>
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <audio controls src={pendingUrl} />
-            </div>
-            <label>
-              Notes <span className="muted">(optional)</span>
-              <input
-                value={draftNotes}
-                onChange={(event) => setDraftNotes(event.target.value)}
-                placeholder="Focus for next time…"
-              />
-            </label>
-            <div className="row" style={{ alignItems: 'center' }}>
-              <button type="button" onClick={() => void handleSave()}>
-                Save attempt
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingAttempt(null);
-                  setDraftNotes('');
-                }}
-              >
-                Discard
-              </button>
-            </div>
           </div>
         ) : null}
-        {saveError ? <p className="muted">{saveError}</p> : null}
+
+        {guidedMode && referenceAudio ? (
+          <ProgressiveShadowingPanel
+            sentenceId={sentenceId}
+            shadowing={shadowing}
+            referenceAudioRef={referenceAudioRef}
+            referenceAudio={referenceAudio}
+            targetRange={targetRange}
+            speed={speed}
+            onExit={() => setGuidedMode(false)}
+          />
+        ) : (
+          <>
+            <div className="row" style={{ alignItems: 'center' }}>
+              <label className="row" style={{ alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={shadowMode}
+                  disabled={!referenceAudio || isRecording || isRequestingMic}
+                  onChange={(event) => setShadowMode(event.target.checked)}
+                />
+                Shadow mode (play reference while recording)
+              </label>
+              <button
+                type="button"
+                disabled={calibrating || isRecording || isRequestingMic}
+                onClick={() => void handleCalibrate()}
+              >
+                {calibrating ? 'Calibrating…' : 'Calibrate mic'}
+              </button>
+            </div>
+            {calibration ? (
+              <ul className="stack" style={{ margin: 0 }}>
+                {calibration.guidance.map((line) => (
+                  <li key={line} className="muted">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {calibrationError ? <p className="muted">{calibrationError}</p> : null}
+
+            <div className="row" style={{ alignItems: 'center' }}>
+              <label>
+                Delay before recording
+                <select
+                  value={delayMs}
+                  disabled={delayedRecordPending || isRecording || isRequestingMic}
+                  onChange={(event) => setDelayMs(Number(event.target.value))}
+                >
+                  {[500, 750, 1000, 1500, 2000].map((value) => (
+                    <option key={value} value={value}>
+                      {(value / 1000).toFixed(1)}s
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {delayedRecordPending ? (
+                <>
+                  <span className="muted">Listen, then get ready…</span>
+                  <button type="button" onClick={cancelDelayedShadow}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!referenceAudio || isRecording || isRequestingMic}
+                  onClick={() => void handleDelayedShadow()}
+                >
+                  Delayed shadow
+                </button>
+              )}
+            </div>
+
+            <div className="row" style={{ alignItems: 'center' }}>
+              <RecordToggleButton
+                isRecording={isRecording}
+                isRequestingMic={isRequestingMic}
+                elapsedMs={shadowing.recordingElapsedMs}
+                maxDurationMs={MAX_RECORDING_DURATION_MS}
+                idleLabel="Record"
+                onStart={() =>
+                  void shadowing.startRecording(
+                    shadowMode && referenceAudio ? 'shadow' : undefined,
+                    shadowMode && referenceAudio
+                      ? { blob: referenceAudio.blob, playbackRate: speed }
+                      : undefined,
+                  )
+                }
+                onStop={() => void shadowing.stopRecording()}
+              />
+            </div>
+            {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+
+            {isRecording && shadowing.shadowActive && referenceAudio ? (
+              <LiveShadowWaveform
+                referenceBlob={referenceAudio.blob}
+                active={isRecording && shadowing.shadowActive}
+                getMediaTime={shadowing.getShadowMediaTime}
+                analyser={shadowing.getShadowAnalyser()}
+                sampleRate={shadowing.getShadowSampleRate()}
+              />
+            ) : null}
+
+            {pendingAttempt && pendingUrl ? (
+              <div className="stack">
+                <div className="row" style={{ alignItems: 'center' }}>
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <audio controls src={pendingUrl} />
+                </div>
+                <label>
+                  Notes <span className="muted">(optional)</span>
+                  <input
+                    value={draftNotes}
+                    onChange={(event) => setDraftNotes(event.target.value)}
+                    placeholder="Focus for next time…"
+                  />
+                </label>
+                <div className="row" style={{ alignItems: 'center' }}>
+                  <button type="button" onClick={() => void handleSave()}>
+                    Save attempt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingAttempt(null);
+                      setDraftNotes('');
+                    }}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {saveError ? <p className="muted">{saveError}</p> : null}
+          </>
+        )}
 
         <div className="stack">
           <strong>Past attempts</strong>

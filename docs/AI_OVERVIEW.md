@@ -674,6 +674,54 @@ a self-hosted pronunciation-analysis backend. Capabilities:
 - Graceful fallback everywhere the forced-alignment service is
   unreachable (falls back to an onset/cross-correlation heuristic) — the
   app must keep working with the service off the tailnet.
+- **Guided/progressive practice** (`ProgressiveShadowingPanel.tsx`, toggled
+  via a "Start guided practice" button, only shown when reference audio
+  exists) — a low-friction, single-screen alternative to the free-form
+  controls above, for learners who find "record vs. stop vs. shadow-mode vs.
+  delay vs. calibrate, all visible at once" too much to hold in mind while
+  practicing. Walks Listen → Pause & Repeat → Delayed Shadow → Close
+  Shadow → Record & Compare, with Back/Skip/Restart always available (the
+  learner controls pacing, not a rigid rep count — soft on-screen tips like
+  "try this once or twice" are text only, never enforced). Deliberately
+  built as a thin orchestration layer, not a new audio engine:
+  - Every stage reuses existing primitives: Listen/Repeat use the same
+    `<audio>` element + `PlaybackCoordinator` (now with a `playRange` method
+    alongside `alternate`/`dualEar`/`loopRange`, for a single range-bounded
+    playthrough — recording.ts). **Delayed Shadow and Close Shadow are the
+    same underlying mechanism** — both call `startRecording('shadow', ...)`
+    (the existing shadow-mode play-along recording) — the only difference
+    between the two stages is the on-screen coaching text ("trail a beat
+    behind" vs. "stay as close as you can"). No artificial audio-delay
+    mixing was built; the trailing behavior is coached, not engineered.
+  - Recording auto-stops shortly after the reference clip's expected
+    duration (with a fixed trailing buffer), but the single
+    `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now
+    used by the free-form Record/Stop control) always lets the learner stop
+    early — one button whose label/action flips between "start" and "●
+    Recording… tap to stop," never two separate buttons on screen at once.
+  - **Only the final "Record & Compare" take is persisted.** Stages 1-4 are
+    ephemeral: an in-memory blob for instant self-playback and an
+    `Alternate`-style "compare to native," discarded on Retry/Next/segment
+    change. This keeps "Past attempts" from filling up with every rep of a
+    2-5s phrase — matches the pedagogical framing ("copy the speaker, not
+    just the words," shown as coaching text, not graded per-word).
+  - State sequencing lives in `useProgressiveShadowing.ts`, a plain
+    `useReducer` (stage index, session id, the current stage's ephemeral
+    take) — deliberately *not* a new external-store controller like
+    `ShadowingController`, since this is page-local UI orchestration, not
+    shared cross-component state. A `resetKey` (sentence id + selected
+    segment) drives an automatic restart when the practiced segment changes.
+  - `Attempt` gained two optional fields for this: `practiceStage?: 'final'`
+    (only ever written by this flow) and `practiceSessionId?: string` (one
+    `crypto.randomUUID()` per guided-practice run, to group/filter later) —
+    no Dexie version bump needed, same precedent as `notes`/`manualRating`.
+  - Known limitation: Delayed/Close Shadow's shadow-mode mechanism always
+    plays the *entire* reference clip (a pre-existing constraint of
+    `ShadowReferencePlayer`, which has no range-cropping support) even if a
+    shorter target range is marked — Listen/Repeat/Compare do respect the
+    marked range via `playRange`/segment-duration heuristics, but Delayed/
+    Close do not. Not fixed here; would require changing
+    `ShadowReferencePlayer`'s carefully-shared-AudioContext internals.
 
 This whole feature area is **local-only**: `Attempt` blobs, alignment
 caches, ASR transcriptions, and analysis summaries never sync to Supabase
@@ -771,10 +819,12 @@ aren't JSON-serializable/aren't worth backing up).
   resources change.
 - **Named practice-mode taxonomy** from the original design brief
   (Listen/Echo/Delayed shadowing/Close shadowing/Independent production/
-  Meaning→production) is only partially built as distinct named toggles —
-  most map onto existing controls implicitly (e.g. "Independent
-  production" = just not pressing play first); "Delayed shadowing" and
-  "Meaning→production" are now real explicit toggles, added late.
+  Meaning→production) is now substantially closed: the guided/progressive
+  practice mode (§6 above, `ProgressiveShadowingPanel.tsx`) sequences
+  Listen/Pause&Repeat/Delayed Shadow/Close Shadow/Record&Compare as one
+  continuous flow, and "Meaning→production" remains available as the
+  free-form "Show meaning instead" toggle. "Independent production" is
+  still only implicit (not pressing play first), not a named mode.
 - **Reading-in-context grammar drills, kanji-reading-in-isolation drills,
   and "which words share a reading" browsing** (the reverse of
   `KanjiDetailPage`'s current "this kanji occurs in these words" view) are

@@ -1589,6 +1589,8 @@ export async function saveAttempt(input: {
   durationMs: number;
   notes?: string;
   referencePlaybackRate?: number;
+  practiceStage?: 'final';
+  practiceSessionId?: string;
 }): Promise<Attempt> {
   const db = getDb();
   const attempt: Attempt = {
@@ -1599,6 +1601,8 @@ export async function saveAttempt(input: {
     blob: input.blob,
     notes: input.notes,
     referencePlaybackRate: input.referencePlaybackRate,
+    practiceStage: input.practiceStage,
+    practiceSessionId: input.practiceSessionId,
     createdAt: nowIso(),
   };
   await db.attempts.add(attempt);

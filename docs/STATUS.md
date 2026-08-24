@@ -5661,3 +5661,134 @@ recorded before this change have no stored rate and fall back to 1×
 (`serverAlignment`/segment/pitch-timing observations) is unaffected —
 still native-timeline only — since word-level offsets are harder to
 rate-correct precisely and weren't in scope for this pass.
+
+## Guided/progressive shadowing practice mode — done
+
+Prompted by a detailed ChatGPT-authored spec (user-provided) proposing a
+5-stage "progressive shadowing" workflow (Listen → Pause&Repeat → Delayed
+Shadow → Close Shadow → Record&Compare) and, separately, the user's own
+concrete complaint that the existing free-form Shadow page has too many
+things to think about at once while recording (separate Record/Stop
+buttons plus a wall of setup controls — speed, loop marking, shadow-mode
+checkbox, mic calibration, delay dropdown — all visible before a single
+recording starts).
+
+Investigation before writing any code found the spec was written without
+knowledge of this app: nearly every one of its 5 stages already existed in
+some form (reference playback + loop-target marking, a "Delayed shadow"
+auto-record-after-gap toggle, "Shadow mode" play-along recording with a
+live waveform, Alternate/Dual-ear comparison, 4-way rating, a full
+pronunciation-analysis backend). Building the spec literally as a new
+5-screen state machine with its own audio plumbing would have duplicated
+working, tested code. Given a choice of scope (small button fix only /
+button fix + light sequencing / full progressive system), the user chose
+the full system — built here as a thin orchestration layer over the
+existing primitives, not a parallel engine.
+
+**How the 5 stages map onto existing mechanisms** (no new audio engine):
+- **Listen** and **Pause & Repeat** reuse the existing reference `<audio>`
+  element. `PlaybackCoordinator` (`src/lib/recording.ts`) gained one new
+  method, `playRange(audio, range?, playbackRate?)` — a single range-bounded
+  playthrough, exposing the already-existing internal `playUntilEnded`
+  helper that `alternate()` already used internally. Pause & Repeat plays
+  the segment, waits a fixed 750ms, then records — the same shape as the
+  pre-existing free-form "Delayed shadow" toggle, just folded into the
+  guided flow with a fixed delay (no dropdown) and an auto-stop timer.
+- **Delayed Shadow** and **Close Shadow** are, deliberately, *the same
+  underlying mechanism*: both call the pre-existing shadow-mode play-along
+  recording (`shadowing.startRecording('shadow', { blob, playbackRate })`
+  → `ShadowingController` + `ShadowReferencePlayer`). Only the on-screen
+  coaching text differs ("trail a beat behind" vs. "stay as close as you
+  can"). No artificial real-time audio-delay mixing was built for a "true"
+  concurrent trailing effect — the ChatGPT spec's stage-3/4 distinction is
+  pedagogical framing, not a mechanical difference, and building a second
+  audio-mixing path would have contradicted the "reuse, don't duplicate"
+  goal for no real training benefit.
+- **Record & Compare** is a plain (non-shadow) recording through the
+  existing Save/Discard flow, then the existing `playAlternate`/
+  `playDualEar`/4-way `manualRating` — all already built.
+
+**Auto-stop with manual override** (confirmed with the user): recording
+during Repeat/Delayed/Close/Compare stops automatically a fixed buffer
+(700ms) after the expected segment duration — `targetRange` duration when
+one's marked, else the reference clip's own duration, scaled by playback
+rate — but the same single toggle button always lets the learner stop
+early. New shared `src/components/RecordToggleButton.tsx` renders one
+button whose label/action flips between "start" and "● Recording… tap to
+stop," replacing the old separate Record-then-Stop button pair — applied
+to **both** the new guided panel and the pre-existing free-form controls,
+per the user's explicit request, since the two-button pattern was their
+original named complaint.
+
+**Only the final take persists** (confirmed with the user): stages 1-4
+record into an in-memory "ephemeral take" (instant self-playback + an
+Alternate-style "compare to native," reusing `shadowing.playAlternate`
+directly against the raw blob — no saved `Attempt` needed for this) that's
+discarded on Retry/Next/segment change. Only the stage-5 recording is
+saved via the existing `saveAttempt`, so a sentence's "Past attempts"
+history isn't cluttered with 5-10 throwaway reps of a 2-5s phrase. `Attempt`
+(`src/domain/types.ts`) gained two optional fields for this:
+`practiceStage?: 'final'` (only this flow ever writes it) and
+`practiceSessionId?: string` (one `crypto.randomUUID()` per guided-practice
+run, threaded through `saveAttempt` in `src/db/repository.ts`) — no Dexie
+version bump needed, same precedent as `notes`/`manualRating`/`isFavorite`/
+`referencePlaybackRate` (`db/database.ts`'s `attempts` store's indexed-key
+string is unchanged, confirmed by reading the schema-version history before
+making this change).
+
+**New files**:
+- `src/hooks/useProgressiveShadowing.ts` — a plain `useReducer` state
+  machine (stage index/session id/ephemeral take/final attempt id) with
+  `next`/`previous`/`skip`/`retryStage`/`restart` actions, plus a `resetKey`
+  (sentence id + selected segment) that auto-restarts the session when the
+  practiced segment changes. Deliberately *not* a new external-store
+  controller like `ShadowingController` — this is page-local UI-sequencing
+  state, not shared cross-component state, so a plain reducer is simpler
+  and more directly testable (exported pure `progressiveShadowingReducer`
+  alongside the hook).
+- `src/components/ProgressiveShadowingPanel.tsx` — the guided-mode UI,
+  rendered by `ShadowPage.tsx` in place of the free-form controls when a
+  new "Start guided practice" toggle is active (only shown when the
+  sentence has reference audio). Consumes the same `useShadowing()`
+  singleton and `PlaybackCoordinator`/reference-audio ref that the
+  free-form controls use — no second recording/playback stack. Mic
+  calibration is tucked behind a `<details>` "More options" disclosure
+  (existing `<details>` pattern, e.g. `AnalysisPanel.tsx`) instead of being
+  shown by default.
+- `src/components/RecordToggleButton.tsx` — the shared merged Record/Stop
+  control described above.
+
+**Known limitation** (documented, not fixed): Delayed/Close Shadow's
+shadow-mode mechanism always plays the *entire* reference clip —
+`ShadowReferencePlayer` has no range-cropping support, a pre-existing
+constraint of the free-form "Shadow mode" feature too, not a regression
+introduced here. Listen/Repeat/Compare do respect a marked target range;
+Delayed/Close do not. Fixing this would mean changing
+`ShadowReferencePlayer`'s carefully-shared-AudioContext internals (its own
+comments warn against a second AudioContext "chopping the sentence
+opener"), judged out of scope for this pass.
+
+**Tests**: `tests/useProgressiveShadowing.test.ts` (new) — pure reducer
+transition tests (full stage progression, previous/skip/retry/restart,
+resetKey-driven auto-restart, no mocks needed) plus hook-level tests via
+`@testing-library/react`'s `renderHook`. `tests/progressiveShadowingPanel.test.tsx`
+(new) — full-app integration tests through `ShadowPage`, reusing the
+fake-`MediaRecorder`/`getUserMedia` pattern from `tests/shadowing.test.ts`:
+guided-mode toggle show/hide, stage navigation (Back/Skip/Restart),
+auto-stop firing after the reference clip ends, manual stop-before-auto-stop,
+retry discarding the ephemeral take, and — the key persistence behavior —
+skipping straight to Record & Compare and confirming exactly one `Attempt`
+row is saved, tagged with `practiceStage: 'final'` and a
+`practiceSessionId`. Delayed/Close stages' actual recording lifecycle
+wasn't separately exercised in tests (would need mocking
+`ShadowReferencePlayer`'s AudioContext graph, already covered at the
+controller level in `tests/shadowing.test.ts`); their stage-navigation and
+button-rendering are covered.
+
+**Verified**: `npm run check` (typecheck + full `vitest run`, 823 passed, 2
+pre-existing skips, no new failures). Not yet manually exercised in a real
+browser with a real microphone — per the repeated caveat elsewhere in this
+document, browser automation isn't available in this development sandbox;
+a manual pass (mark a short target range, walk all 5 stages including
+retry/skip/previous/restart, confirm only the final stage shows up under
+"Past attempts") is still recommended before relying on this day-to-day.

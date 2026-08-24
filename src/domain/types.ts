@@ -136,6 +136,18 @@ export interface Attempt {
    * practiced at, not always the reference clip's native speed.
    */
   referencePlaybackRate?: number;
+  /**
+   * Set when this attempt was saved from the guided/progressive practice
+   * flow's final "Record & Compare" stage (ShadowPage.tsx). Only that stage
+   * persists — the earlier Listen/Repeat/Delayed/Close reps are ephemeral
+   * and never reach this table, so 'final' is the only value ever written.
+   */
+  practiceStage?: 'final';
+  /**
+   * Groups attempts recorded during the same guided-practice run (one
+   * `crypto.randomUUID()` minted per run). Undefined for free-form attempts.
+   */
+  practiceSessionId?: string;
   createdAt: string;
 }
 
