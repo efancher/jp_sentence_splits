@@ -291,6 +291,8 @@ export async function analyzeAlignment(
   learnerBlob: Blob,
   mode: AlignmentMode,
   referenceRange?: TimeRangeMs,
+  /** Rate the learner played the reference at while shadowing (e.g. 0.5). Scales the expected duration so a deliberately slowed practice pass doesn't read as "too slow". Defaults to 1 (native speed). */
+  referencePlaybackRate = 1,
 ): Promise<AlignmentResult> {
   const [referenceBuffer, learnerBuffer] = await Promise.all([
     decodeAudioBuffer(referenceBlob),
@@ -314,11 +316,12 @@ export async function analyzeAlignment(
     offsetSeconds = sampleOffset / reference.sampleRate;
     confidence = 'medium';
   }
+  const expectedDurationSeconds = reference.durationSeconds / referencePlaybackRate;
   return {
     mode,
     offsetSeconds,
     durationRatio:
-      reference.durationSeconds > 0 ? learner.durationSeconds / reference.durationSeconds : 1,
+      expectedDurationSeconds > 0 ? learner.durationSeconds / expectedDurationSeconds : 1,
     confidence,
     referencePeaks: computePeaks(reference.samples),
     learnerPeaks: computePeaks(learner.samples),

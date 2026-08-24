@@ -128,6 +128,14 @@ export interface Attempt {
   notes?: string;
   manualRating?: AttemptRating;
   isFavorite?: boolean;
+  /**
+   * Reference-audio playback rate in effect when this attempt was recorded
+   * (e.g. 0.5 for a half-speed listen-and-shadow). Undefined for attempts
+   * recorded before this was tracked — treat as 1 (native speed) then.
+   * Lets analysis compare duration against the pace the learner actually
+   * practiced at, not always the reference clip's native speed.
+   */
+  referencePlaybackRate?: number;
   createdAt: string;
 }
 

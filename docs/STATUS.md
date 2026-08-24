@@ -5632,3 +5632,32 @@ yet exercised against a real deployed server/real YouTube video — that
 requires the Hetzner deployment step in `server/youtube-mining/README.md`,
 which is an infrastructure action for the user to run, not something this
 session could do.
+
+## Shadowing analysis: account for reference playback speed — done
+
+Bug: the Shadow page's speed selector (`ShadowPage.tsx`'s `speed` state,
+0.5×/0.75×/1×/…) only ever drove `HTMLMediaElement.playbackRate` for
+on-page listening. The "Analyze" tab always decoded the reference clip's
+own stored blob for duration/pitch comparison, so a learner who
+deliberately listens at half speed before shadowing at that same slower
+pace got a false "your recording is longer than the reference" duration
+observation — the mismatch was just the chosen practice pace, not a real
+timing problem.
+
+Fix: `Attempt` (`src/domain/types.ts`) gained an optional
+`referencePlaybackRate` field, set from the Shadow page's `speed` state
+at save time (`saveAttempt` in `src/db/repository.ts`, called from
+`ShadowPage.tsx`'s `handleSave` — no schema/index change needed since the
+field isn't queried on). `AnalysisPanel` takes it as a new prop and
+threads it into `analyzeAlignment` (`src/lib/waveform.ts`) and
+`buildTimingObservations` (`src/lib/timingObservations.ts`), both of
+which now divide the reference duration by the playback rate before
+computing the learner/reference ratio, so a 0.5×-practiced attempt is
+compared against "twice the native duration" rather than the native
+duration itself. The UI also surfaces the practiced rate next to the
+duration messaging so the ratio number stays interpretable. Attempts
+recorded before this change have no stored rate and fall back to 1×
+(unchanged behavior). Server-side forced-alignment word timing
+(`serverAlignment`/segment/pitch-timing observations) is unaffected —
+still native-timeline only — since word-level offsets are harder to
+rate-correct precisely and weren't in scope for this pass.

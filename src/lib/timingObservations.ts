@@ -50,10 +50,14 @@ export function buildTimingObservations(options: {
   referencePitch?: PitchAnalysisPayload;
   learnerPitch?: PitchAnalysisPayload;
   confidence: ConfidenceLevel;
+  /** Rate the learner played the reference at while shadowing (e.g. 0.5). Scales the expected duration so a deliberately slowed practice pass doesn't read as "too slow". Defaults to 1 (native speed). */
+  referencePlaybackRate?: number;
 }): TimingObservation[] {
   const observations: TimingObservation[] = [];
-  const ratio =
-    options.referenceDuration > 0 ? options.learnerDuration / options.referenceDuration : 1;
+  const playbackRate = options.referencePlaybackRate ?? 1;
+  const expectedDuration = options.referenceDuration / playbackRate;
+  const ratio = expectedDuration > 0 ? options.learnerDuration / expectedDuration : 1;
+  const paceNote = playbackRate !== 1 ? ` (practiced at ${playbackRate}×)` : '';
   if (Math.abs(ratio - 1) > 0.12) {
     observations.push({
       id: 'duration-ratio',
@@ -62,16 +66,16 @@ export function buildTimingObservations(options: {
       severity: Math.min(1, Math.abs(ratio - 1)),
       message:
         ratio > 1
-          ? 'Your recording is longer than the reference.'
-          : 'Your recording is shorter than the reference.',
-      detail: `Duration ratio ${ratio.toFixed(2)} (learner ÷ reference). This measures overall length, not pronunciation quality.`,
+          ? `Your recording is longer than the reference${paceNote}.`
+          : `Your recording is shorter than the reference${paceNote}.`,
+      detail: `Duration ratio ${ratio.toFixed(2)} (learner ÷ reference, adjusted for practice speed). This measures overall length, not pronunciation quality.`,
     });
   } else {
     observations.push({
       id: 'duration-close',
       kind: 'duration',
       confidence: options.confidence === 'low' ? 'low' : 'medium',
-      message: 'Overall duration is close to the reference.',
+      message: `Overall duration is close to the reference${paceNote}.`,
       detail: `Duration ratio ${ratio.toFixed(2)}.`,
     });
   }

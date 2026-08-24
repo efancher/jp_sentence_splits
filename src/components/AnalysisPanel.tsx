@@ -159,6 +159,7 @@ export function AnalysisPanel({
   hasReading,
   durationHintSeconds,
   targetRange,
+  referencePlaybackRate,
   onProposeSegment,
 }: {
   /** History records (Phase 9, Milestone 8) are grouped by sentence. */
@@ -177,6 +178,8 @@ export function AnalysisPanel({
   durationHintSeconds: number;
   /** Restricts the reference side to this sub-range (Phase 8.2's practice-target isolation). */
   targetRange?: TimeRangeMs;
+  /** Rate the learner played the reference at while recording this attempt (e.g. 0.5 for half-speed shadowing). Undefined for attempts recorded before this was tracked — treated as native speed. */
+  referencePlaybackRate?: number;
   /**
    * Applies the "Focus on this" primary issue's segment as the reference
    * player's practice-target range (Phase 9, Milestone 5/6) — reuses the
@@ -258,7 +261,7 @@ export function AnalysisPanel({
         const [refPitch, learnPitch, alignmentResult] = await Promise.all([
           Promise.resolve(extractPitch(referenceCanonical)),
           Promise.resolve(extractPitch(learnerCanonical)),
-          analyzeAlignment(referenceBlob, learnerBlob, mode, targetRange),
+          analyzeAlignment(referenceBlob, learnerBlob, mode, targetRange, referencePlaybackRate),
         ]);
         if (!active) return;
         setReferencePitch(refPitch);
@@ -279,7 +282,7 @@ export function AnalysisPanel({
     return () => {
       active = false;
     };
-  }, [referenceBlob, learnerBlob, mode, targetRange]);
+  }, [referenceBlob, learnerBlob, mode, targetRange, referencePlaybackRate]);
 
   const [serverAlignment, setServerAlignment] = useState<{
     reference?: AlignmentResult;
@@ -361,6 +364,7 @@ export function AnalysisPanel({
     referencePitch,
     learnerPitch,
     confidence,
+    referencePlaybackRate,
   });
   const segmentObservations = useMemo(() => {
     if (!serverAlignment?.reference || !serverAlignment.learner) return [];
@@ -582,6 +586,9 @@ export function AnalysisPanel({
           <p className="muted">
             Offset {alignment.offsetSeconds.toFixed(2)}s · duration ratio{' '}
             {alignment.durationRatio.toFixed(2)} · confidence {alignment.confidence}
+            {referencePlaybackRate && referencePlaybackRate !== 1
+              ? ` · adjusted for ${referencePlaybackRate}× practice speed`
+              : ''}
           </p>
         </>
       ) : null}

@@ -267,6 +267,7 @@ export function ShadowPage() {
         mimeType: RecordingService.supportedMimeType() ?? pendingAttempt.blob.type,
         durationMs: pendingAttempt.durationMs,
         notes: draftNotes.trim() || undefined,
+        referencePlaybackRate: speed,
       });
       setPendingAttempt(null);
       setDraftNotes('');
@@ -697,6 +698,7 @@ export function ShadowPage() {
                       hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}
                       durationHintSeconds={attempt.durationMs / 1000}
                       targetRange={targetRange ?? undefined}
+                      referencePlaybackRate={attempt.referencePlaybackRate}
                       onProposeSegment={setTargetRange}
                     />
                   ) : null}
