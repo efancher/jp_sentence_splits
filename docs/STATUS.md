@@ -5854,3 +5854,51 @@ offering "continue where you left off."
 - **Verified**: `npx tsc --noEmit -p tsconfig.app.json` clean, full
   `vitest run` (824 passed, 2 pre-existing skips, no new failures),
   `npm run lint` shows no new warnings.
+
+## Shadowing: word-synced highlighting on ShadowPage (2026-08-25): done
+
+User request: while shadowing (not just the `listening` review card),
+highlight the portion of the Japanese sentence and the mora/hiragana row
+underneath it together as the reference clip plays, to make it easier to
+map sounds to characters.
+
+- **`src/pages/ShadowPage.tsx`**: new local `SyncedShadowText` component,
+  rendered in place of the old static `sentence.japanese` div + unsynced
+  `MoraBreakdown` (the "not hiding transcript, not showing meaning"
+  branch). Fetches word timestamps via the same
+  `loadOrComputeAlignment`/`getReferenceAlignment`/`saveReferenceAlignment`
+  path `AnalysisPanel` already uses for this sentence's reference audio, so
+  the first shadow of a sentence pays the alignment cost and later ones
+  reuse the cache. Falls back to the previous plain rendering whenever
+  alignment isn't available yet (cold cache, server unreachable) or there's
+  no reference audio at all.
+- **Doesn't reuse `KaraokeSentenceText.tsx` directly**: that component
+  drives its rAF tick loop off `useNativeAudio()`/`nativeAudioController`,
+  the app's single shared `<audio>` singleton used by review cards.
+  Shadowing plays reference audio through its own `<audio>` element
+  (`referenceAudioRef`) managed by `PlaybackCoordinator`/`useShadowing`, a
+  separate playback system — `SyncedShadowText` ticks off that element's
+  own `currentTime` via `play`/`pause`/`ended` listeners + `rAF` instead.
+- **Highlighting is proportional, not text-matched**: the aligner's word
+  boundaries are keyed to its own tokenization, which can diverge from
+  `sentence.japanese` (dictionary-normalized spellings, `<unk>` runs) and
+  from the mora sequence's own word boundaries (`inlineReading` is an
+  independently-authored field, not guaranteed to be a lossless
+  re-encoding of `japanese` — see `scripts/fix-numeral-readings.ts` for a
+  production example where they'd already diverged). Rather than
+  string-matching across three independently-tokenized representations,
+  the active aligned word's `[start,end)` fraction of the total (non-
+  `<unk>`) aligned-transcript character length is applied to both
+  `sentence.japanese` and `moraUnits` to pick each row's highlighted
+  slice. This is an approximation of the true word boundary (worst case
+  off by a character or two), not exact, but needs no fragile
+  cross-tokenization text matching and degrades cleanly — an active
+  `<unk>` word just highlights nothing rather than guessing.
+- Reused the existing `.karaoke-word-active` CSS class (already used by
+  `KaraokeSentenceText`) for both the highlighted text span and the
+  highlighted mora chip, rather than adding new CSS.
+- **Verified**: `npm run check` (typecheck + full `vitest run`, 824
+  passed, 2 pre-existing skips, no new failures), `npm run lint` clean on
+  the changed file. Not manually exercised in a browser (no browser
+  automation in this sandbox) — worth a quick manual check that the
+  highlight tracks sensibly on a real sentence before relying on it.

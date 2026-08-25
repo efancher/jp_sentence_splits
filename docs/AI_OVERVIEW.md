@@ -671,6 +671,20 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     trend labels ("close"/"needs work"/"improving"/"much closer") per
     sentence over time, not full detail forever (recomputable on demand
     from cached alignment).
+- **Word-synced text/mora highlighting during reference playback**
+  (`SyncedShadowText` in `ShadowPage.tsx`): as the clip plays, the
+  currently-spoken portion of the Japanese sentence and the mora/hiragana
+  row underneath it highlight together. Reuses the same alignment fetch as
+  `AnalysisPanel`, but ticks off ShadowPage's own `<audio>` element
+  directly rather than the `nativeAudioController` singleton
+  `KaraokeSentenceText` (§4) relies on, since shadowing plays through a
+  separate `PlaybackCoordinator`-managed element. Highlight boundaries are
+  proportional (aligned word's character-length fraction of the transcript
+  applied to both `sentence.japanese` and the mora sequence), not exact
+  text-matched, since the aligner's tokenization, `sentence.japanese`, and
+  `inlineReading`'s word boundaries aren't guaranteed to agree. Falls back
+  to the old static text + `MoraBreakdown` rendering when alignment isn't
+  available.
 - **Practice-mode variants**: "Delayed shadow" (listen in full, then
   auto-record after a configurable 0.5–2.0s gap) and "Show meaning
   instead" (swap Japanese transcript for English translation, forcing
