@@ -7,6 +7,7 @@ import {
   useProgressiveShadowing,
   type ProgressiveStage,
 } from '../hooks/useProgressiveShadowing';
+import type { MoraUnit } from '../lib/mora';
 import {
   MAX_RECORDING_DURATION_MS,
   PlaybackCoordinator,
@@ -17,6 +18,7 @@ import {
 } from '../lib/recording';
 import { LiveShadowWaveform } from './LiveShadowWaveform';
 import { RecordToggleButton } from './RecordToggleButton';
+import { SyncedShadowText } from './SyncedShadowText';
 
 type Shadowing = ReturnType<typeof useShadowing>;
 
@@ -70,6 +72,8 @@ interface ProgressiveShadowingPanelProps {
   shadowing: Shadowing;
   referenceAudioRef: RefObject<HTMLAudioElement | null>;
   referenceAudio: SentenceAudio;
+  japanese: string;
+  moraUnits: MoraUnit[];
   targetRange: TimeRangeMs | null;
   speed: number;
   onExit: () => void;
@@ -88,6 +92,8 @@ export function ProgressiveShadowingPanel({
   shadowing,
   referenceAudioRef,
   referenceAudio,
+  japanese,
+  moraUnits,
   targetRange,
   speed,
   onExit,
@@ -133,6 +139,23 @@ export function ProgressiveShadowingPanel({
     setEphemeralUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [progressive.ephemeralTake]);
+
+  /**
+   * `ephemeralAudioRef` is one persistent <audio> element reused across
+   * every rep in stages 2-4 (a fresh `new Audio()` per take, like
+   * ShadowReferencePlayer uses, would be simpler but loses the element's
+   * play/pause event wiring elsewhere) — only its `src` changes, reactively,
+   * as `ephemeralUrl` updates. Some browsers (Safari in particular; see the
+   * similar Blob-playback workaround in ShadowPage's
+   * `handleReferenceAudioError`) don't reliably pick up a same-element `src`
+   * swap without an explicit `load()`, so a stale take can keep playing back
+   * after a retry/re-record. Runs in its own effect, one render after the
+   * `src` prop above actually commits to the DOM, so `load()` targets the
+   * new URL rather than the one it's replacing.
+   */
+  useEffect(() => {
+    ephemeralAudioRef.current?.load();
+  }, [ephemeralUrl]);
 
   const [pendingFinalUrl, setPendingFinalUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -383,6 +406,18 @@ export function ProgressiveShadowingPanel({
           Restart session
         </button>
       </div>
+
+      {/* Kept right above the stage's action buttons (rather than only at
+          the top of ShadowPage, further up the page) so the text being
+          practiced stays in view next to whatever the learner is about to
+          press, in every stage — not just while reading, but while
+          recording/comparing/retrying too. */}
+      <SyncedShadowText
+        audioRef={referenceAudioRef}
+        referenceAudio={referenceAudio}
+        japanese={japanese}
+        moraUnits={moraUnits}
+      />
 
       {stage === 'listen' ? (
         <div className="stack">

@@ -5902,3 +5902,48 @@ map sounds to characters.
   the changed file. Not manually exercised in a browser (no browser
   automation in this sandbox) — worth a quick manual check that the
   highlight tracks sensibly on a real sentence before relying on it.
+
+## Guided shadowing: text closer to the buttons + stale ephemeral-take fix (2026-08-25): done
+
+Two follow-ups from the highlighting work above, both from live user
+feedback while trying it:
+
+- **`SyncedShadowText` extracted to its own file**
+  (`src/components/SyncedShadowText.tsx`, out of `ShadowPage.tsx`) so
+  `ProgressiveShadowingPanel.tsx` can reuse it. User feedback: the guided
+  practice buttons (Shadow along, Hear that back, Compare to native,
+  Retry, ...) sat far below the sentence text at the top of `ShadowPage`,
+  making it hard to keep the text in view while pressing them — asked for
+  this "for all of the stages," not just Delayed Shadow. `ProgressiveShadowingPanel`
+  now renders `SyncedShadowText` itself, directly above the Back/Skip/
+  Restart row and every stage's action buttons, wired to the same
+  `referenceAudioRef`/`referenceAudio` it already receives — new
+  `japanese`/`moraUnits` props, passed from `ShadowPage`. `ShadowPage`'s
+  own top-level copy is now hidden while `guidedMode` is active
+  (`!guidedMode ? <div>...</div> : null`) to avoid showing the sentence
+  twice.
+- **Stale ephemeral-take playback bug**: user reported that in Delayed/
+  Close Shadow (stages 3-4), "Hear that back"/"Compare to native" would
+  keep playing an old recording from earlier practice, even after
+  Retry — headphones ruled out mic echo/bleed as the cause. Root cause:
+  `ephemeralAudioRef` is one persistent `<audio>` element reused across
+  every rep in a stage, with only its `src` changing reactively as
+  `ephemeralUrl` (a fresh `URL.createObjectURL` per take) updates — some
+  browsers (Safari in particular; same class of issue as the existing
+  Blob-playback workaround in `ShadowPage`'s `handleReferenceAudioError`)
+  don't reliably reload a same-element `src` swap without an explicit
+  `load()`, so `.play()` can keep serving whatever was already buffered.
+  Fix: a new effect in `ProgressiveShadowingPanel.tsx` calls
+  `ephemeralAudioRef.current?.load()` whenever `ephemeralUrl` changes,
+  timed to run the render *after* the `src` prop itself commits so
+  `load()` targets the new URL, not the one it's replacing. Not
+  reproducible/verifiable in this sandbox (no real browser/mic, and the
+  test harness's `FakeMediaRecorder` always returns an identical blob
+  across takes, so content-level staleness isn't observable via
+  `vitest`/jsdom either — jsdom's `HTMLMediaElement.load()` is itself a
+  no-op stub) — worth the user confirming live that Hear/Compare now
+  reflects the latest take through several retries in a row.
+- **Verified**: `npm run check` (typecheck + full `vitest run`, 824
+  passed — one unrelated pre-existing flake in `data.test.ts`'s card-issue-
+  report test, confirmed to pass in isolation — 2 pre-existing skips),
+  `npm run lint` clean on all changed files.
