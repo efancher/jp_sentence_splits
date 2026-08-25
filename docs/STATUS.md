@@ -4973,15 +4973,16 @@ design. Summary of what shipped:
   balance view reflects real `Review`/`Attempt` activity, not the
   planner's own bookkeeping (no feedback loop between "recommended" and
   "counted as done").
-- **`PlannerSession` is local-only** (no sync wiring, no Supabase
-  migration) — same precedent as `Attempt`/the shadowing-analysis caches.
-  A deliberate scope cut for this first version: full sync wiring (a
-  migration + RLS + `mappers.ts`/`SyncEntity` entries) was judged not
-  worth the added risk/surface for what's currently just session
-  execution history, not durable content — re-planning always works from
-  live `StudyItem`/`Review` data regardless of what device you're on.
-  Included in the local JSON backup (`backupSchema`/`BackupBundle`) since
-  it's small and blob-free, unlike `Attempt`.
+- **`PlannerSession` was local-only** at first ship (no sync wiring, no
+  Supabase migration) — same precedent as `Attempt`/the shadowing-analysis
+  caches, a deliberate scope cut judged not worth the added risk/surface
+  for what was then just session execution history, not durable content.
+  Reversed 2026-08-25 once the cross-device gap (a top-up on a second
+  device started its own separate daily session) became an active user
+  complaint — see this file's "Learning Orchestrator: sync `PlannerSession`
+  across devices" entry below. Included in the local JSON backup
+  (`backupSchema`/`BackupBundle`) since it's small and blob-free, unlike
+  `Attempt`.
 - **UI**: `HomePage` (`src/pages/HomePage.tsx`) is the new index route
   (`/`), replacing `BooksPage` — Books moved to `/books` with its own nav
   entry (`BuildPage`'s stale "Back to books" link and
@@ -5792,3 +5793,64 @@ document, browser automation isn't available in this development sandbox;
 a manual pass (mark a short target range, walk all 5 stages including
 retry/skip/previous/restart, confirm only the final stage shows up under
 "Past attempts") is still recommended before relying on this day-to-day.
+
+## Learning Orchestrator: sync `PlannerSession` across devices (2026-08-25): done
+
+Reverses the deliberate local-only scope cut from the original Learning
+Orchestrator ship (2026-08-20 entry above) — user-reported friction:
+switching devices mid-day meant the new device had no idea a session was
+already started, so it planned a fresh one from scratch instead of
+offering "continue where you left off."
+
+- **`src/sync/types.ts`**: added `'planner_sessions'` to `SyncEntity`.
+- **`supabase/migrations/20260825000000_planner_sessions.sql`**: new
+  table, same shape as the Dexie row (`steps`/`allocation`/`explanation`
+  as `jsonb`, same "embedded list, not a join table" precedent as
+  `analyses.chunks`) — owner-scoped RLS, no cross-table FK checks needed
+  since `PlannerSessionStep` references sentences/books/grammar
+  patterns/vocabulary items loosely. Not yet applied to the live project;
+  run it via the Supabase SQL editor or `npx supabase db push` (see
+  `docs/supabase-setup.md`) before this ships to users with sync enabled.
+- **`src/sync/mappers.ts`**: `plannerSessionToRemote`/`remoteToPlannerSession`,
+  wired into `toRemoteRow`. **`src/sync/engine.ts`**: wired into
+  `applyRemoteUpsert`/`applyRemoteDelete`, `uploadAllLocalData` (first-login
+  migration), `replaceLocalWithCloud` (full cloud-replace).
+- **Conflict policy is last-write-wins, not the usual manual panel**
+  (confirmed with the user — session bookkeeping doesn't need
+  keep-local/keep-remote/duplicate). New `LAST_WRITE_WINS_ENTITIES` set
+  and `forcePushOverwrite` in `engine.ts`: on a push-time version
+  conflict, entities in the set skip `handlePushConflict` (which would
+  otherwise record a `SyncConflict` row for `ConflictPanel.tsx`) and
+  instead unconditionally overwrite the remote row with the local
+  payload.
+- **`src/db/repository.ts`**: `addMinutesToTodaySession` (both the
+  first-session and top-up branches), `updatePlannerSessionStep`, and
+  `endPlannerSessionEarly` now call `notifySync('planner_sessions', ...)`
+  after each `db.plannerSessions.put`, same convention as every other
+  synced entity. The JSON-backup merge path (`restoreBackup`'s
+  `plannerSessions` loop) deliberately does **not** call `notifySync` —
+  matches every other entity in that merge function, which is a pre-sync
+  local-write-only path.
+- **Known unhandled edge case**: if two devices both start *today's
+  first* session while offline, before either has pulled the other's
+  write, both mint a local row with a different `id` for the same `date`
+  — unlike the `kanji`/`vocabulary_items` get-or-create pattern
+  (`adoptRemoteDuplicate`/`remapDuplicateEntityId` in `engine.ts`), there's
+  no dedup-on-create here, so both rows survive in Supabase and pull down
+  to both devices. `getTodayPlannerSession`'s `.where('date').equals(...).first()`
+  picks one arbitrarily; the other becomes an orphaned, harmless extra row
+  (not data loss, just clutter). Judged not worth a unique-constraint +
+  remap-on-insert-conflict addition for how rare simultaneous first-session
+  starts across offline devices are — can revisit if it turns out to
+  matter in practice.
+- **Tests**: `tests/sync.test.ts`'s "sync mappers" describe block gained a
+  planner-session round-trip test
+  (`plannerSessionToRemote`/`remoteToPlannerSession`). `forcePushOverwrite`
+  itself isn't unit-tested — same pre-existing boundary as
+  `adoptRemoteDuplicate`'s network lookup (the network calls aren't
+  testable without a Supabase-mocking harness this repo doesn't have; see
+  `shouldApplyRemoteEvent`'s tests for what *is* covered at that
+  boundary).
+- **Verified**: `npx tsc --noEmit -p tsconfig.app.json` clean, full
+  `vitest run` (824 passed, 2 pre-existing skips, no new failures),
+  `npm run lint` shows no new warnings.

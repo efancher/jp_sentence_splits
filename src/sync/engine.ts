@@ -24,6 +24,7 @@ import {
   remoteToImportBatch,
   remoteToInbox,
   remoteToKanji,
+  remoteToPlannerSession,
   remoteToReferenceAudio,
   remoteToReview,
   remoteToSentence,
@@ -90,7 +91,11 @@ async function pushMutations(): Promise<string | undefined> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'version_conflict') {
-        await handlePushConflict(item, userId);
+        if (LAST_WRITE_WINS_ENTITIES.has(item.entity)) {
+          await forcePushOverwrite(item, userId);
+        } else {
+          await handlePushConflict(item, userId);
+        }
         await removeQueueItem(item.id);
         continue;
       }
@@ -339,6 +344,57 @@ async function remapLinkReferences<T extends { id: string }, F extends keyof T &
       });
     }
   }
+}
+
+/**
+ * Entities where a push-time version conflict should just overwrite the
+ * cloud row with this device's local payload rather than surfacing a
+ * manual keep-local/keep-remote/duplicate conflict (ConflictPanel.tsx) —
+ * `planner_sessions` is session-execution bookkeeping, not durable
+ * content, so silently letting the most recently-pushing device win is an
+ * acceptable simplification (confirmed with the user, see
+ * docs/STATUS.md).
+ */
+const LAST_WRITE_WINS_ENTITIES = new Set<SyncEntity>(['planner_sessions']);
+
+/** Unconditionally overwrites the remote row with the local payload, ignoring the CAS mismatch that triggered `version_conflict` — see `LAST_WRITE_WINS_ENTITIES`. */
+async function forcePushOverwrite(
+  item: SyncQueueItem,
+  userId: string,
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const idCol = idColumnForEntity(item.entity);
+  const localVersion = (await getRecordMeta(item.entity, item.recordId))
+    ?.version ?? 1;
+  const row = toRemoteRow(item.entity, item.payload, userId, localVersion);
+
+  const { data: existing, error: readError } = await supabase
+    .from(item.entity)
+    .select('version')
+    .eq(idCol, item.recordId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+
+  if (!existing) {
+    const { error } = await supabase.from(item.entity).insert(row);
+    if (error) throw new Error(error.message);
+    await acknowledgeSyncedVersion(item.entity, item.recordId, localVersion);
+    return;
+  }
+
+  const nextVersion = Number(existing.version) + 1;
+  const { error } = await supabase
+    .from(item.entity)
+    .update({ ...row, version: nextVersion })
+    .eq(idCol, item.recordId);
+  if (error) throw new Error(error.message);
+  await acknowledgeSyncedVersion(item.entity, item.recordId, nextVersion);
+  syncLog('warn', 'Last-write-wins overwrite', 'LWW_OVERWRITE', {
+    entity: item.entity,
+    recordId: item.recordId,
+    userId,
+  });
 }
 
 async function handlePushConflict(
@@ -623,6 +679,9 @@ async function applyRemoteDelete(
     case 'grammar_relationships':
       await db.grammarRelationships.delete(recordId);
       break;
+    case 'planner_sessions':
+      await db.plannerSessions.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -712,6 +771,9 @@ async function applyRemoteUpsert(
     case 'grammar_relationships':
       await db.grammarRelationships.put(remoteToGrammarRelationship(remote));
       break;
+    case 'planner_sessions':
+      await db.plannerSessions.put(remoteToPlannerSession(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -746,6 +808,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const grammarPatterns = await db.grammarPatterns.toArray();
   const sentenceGrammar = await db.sentenceGrammar.toArray();
   const grammarRelationships = await db.grammarRelationships.toArray();
+  const plannerSessions = await db.plannerSessions.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -801,6 +864,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const relationship of grammarRelationships) {
     await trackAndEnqueue('grammar_relationships', relationship.id, relationship);
   }
+  for (const session of plannerSessions) {
+    await trackAndEnqueue('planner_sessions', session.id, session);
+  }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
   await runSyncCycle();
@@ -854,6 +920,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.grammarPatterns,
       db.sentenceGrammar,
       db.grammarRelationships,
+      db.plannerSessions,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -876,6 +943,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.grammarPatterns.clear();
       await db.sentenceGrammar.clear();
       await db.grammarRelationships.clear();
+      await db.plannerSessions.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -941,6 +1009,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('grammar_relationships', userId, async (rows) => {
     await db.grammarRelationships.bulkPut(rows.map((r) => remoteToGrammarRelationship(r)));
+  });
+  await pullFullTable('planner_sessions', userId, async (rows) => {
+    await db.plannerSessions.bulkPut(rows.map((r) => remoteToPlannerSession(r)));
   });
 
   const { data: maxEvent } = await supabase

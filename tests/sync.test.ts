@@ -30,7 +30,7 @@ import { applyBulkConflictResolution } from '../src/sync/resolveConflict';
 import { trackLocalMutation } from '../src/sync/track';
 import { hasLocalStudyData, needsMigrationPrompt } from '../src/sync/migration';
 import { sentenceAudioToReferenceMeta } from '../src/sync/mappers';
-import type { SentenceAudio } from '../src/domain/types';
+import type { PlannerSession, SentenceAudio } from '../src/domain/types';
 
 describe('sync queue and local-first mutations', () => {
   beforeEach(() => {
@@ -651,5 +651,43 @@ describe('sync mappers', () => {
     expect(local.patternBId).toBe(relationship.patternBId);
     expect(local.relationshipType).toBe('structural_relative');
     expect(local.observedCount).toBe(1);
+  });
+
+  it('round-trips a planner session through remote shape', async () => {
+    const { plannerSessionToRemote, remoteToPlannerSession } = await import(
+      '../src/sync/mappers'
+    );
+    const session: PlannerSession = {
+      id: 'planner_1',
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:10:00.000Z',
+      date: '2026-08-25',
+      targetMinutes: 20,
+      allocation: { explore: 5, understand: 5, practice: 5, retain: 5 },
+      explanation: ['Recommended a mix of due reviews and new sentences.'],
+      steps: [
+        {
+          id: 'planner_step_1',
+          mode: 'retain',
+          activityType: 'due_retain_batch',
+          targetKind: 'review',
+          label: 'Review due cards',
+          estimatedMinutes: 5,
+          reason: '3 cards due.',
+          status: 'pending',
+        },
+      ],
+      status: 'in_progress',
+    };
+    const remote = plannerSessionToRemote(session, 'user-1', 4);
+    expect(remote.owner_id).toBe('user-1');
+    expect(remote.date).toBe('2026-08-25');
+    expect(remote.version).toBe(4);
+    const local = remoteToPlannerSession(remote);
+    expect(local.id).toBe('planner_1');
+    expect(local.targetMinutes).toBe(20);
+    expect(local.allocation).toEqual(session.allocation);
+    expect(local.steps).toEqual(session.steps);
+    expect(local.status).toBe('in_progress');
   });
 });

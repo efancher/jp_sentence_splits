@@ -3292,9 +3292,10 @@ export async function recordGrammarRelationshipObservation(
 // of the feature. Everything decision-shaped (scoring, allocation, step
 // selection, explanation) lives in the pure src/lib/sessionPlanner.ts; this
 // section's job is purely "fetch real data, adapt it into that module's
-// plain input types." Local-only (see PlannerSession's field comment in
-// database.ts) — no notifySync/notifySyncMany calls here, same convention
-// as the shadowing Attempt section.
+// plain input types." PlannerSession syncs (unlike the shadowing Attempt
+// section) so the SessionBar "continue where you left off" state follows
+// the learner across devices — conflicts resolve last-write-wins, not the
+// usual manual panel (src/sync/engine.ts's LAST_WRITE_WINS_ENTITIES).
 // ---------------------------------------------------------------------------
 
 /**
@@ -3724,6 +3725,7 @@ export async function addMinutesToTodaySession(
       status: 'in_progress',
     };
     await db.plannerSessions.put(session);
+    notifySync('planner_sessions', session.id, session);
     return session;
   }
 
@@ -3752,6 +3754,7 @@ export async function addMinutesToTodaySession(
     endedAt: reopens ? undefined : existing.endedAt,
   };
   await db.plannerSessions.put(updated);
+  notifySync('planner_sessions', updated.id, updated);
   return updated;
 }
 
@@ -3842,6 +3845,7 @@ export async function updatePlannerSessionStep(
     updatedAt: timestamp,
   };
   await db.plannerSessions.put(updated);
+  notifySync('planner_sessions', updated.id, updated);
   return updated;
 }
 
@@ -3863,6 +3867,7 @@ export async function endPlannerSessionEarly(sessionId: string): Promise<Planner
     ),
   };
   await db.plannerSessions.put(updated);
+  notifySync('planner_sessions', updated.id, updated);
   return updated;
 }
 

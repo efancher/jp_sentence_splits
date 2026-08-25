@@ -111,9 +111,13 @@ design brief §11 D/F/G) remain deliberately deferred — see
 `src/sync/engine.ts` — per-record optimistic concurrency (`version` +
 compare-and-swap), soft deletes (`deleted_at`), an append-only
 `public.sync_events` table as the pull cursor, manual conflict resolution UI
-(`ConflictPanel.tsx`: keep-local / keep-remote / duplicate). Same Supabase
-project is already shared with the (separate, being absorbed) `shadowing`
-repo, isolated via table prefixes — see `supabase/docs/supabase-setup.md`.
+(`ConflictPanel.tsx`: keep-local / keep-remote / duplicate) for most
+entities — `planner_sessions` is the one exception, resolving push-time
+conflicts last-write-wins instead (`LAST_WRITE_WINS_ENTITIES`,
+`forcePushOverwrite`), since it's session-execution bookkeeping rather
+than durable content. Same Supabase project is already shared with the
+(separate, being absorbed) `shadowing` repo, isolated via table prefixes —
+see `supabase/docs/supabase-setup.md`.
 
 All unified-model tables are now wired into the TypeScript sync engine
 (`src/sync/mappers.ts`, `SyncEntity`) — `study_items`/`reviews` since Phase
@@ -121,7 +125,8 @@ All unified-model tables are now wired into the TypeScript sync engine
 since Phase 5, `vocabulary_confusions` since Phase 7.6, `card_issue_reports`
 since the card-issue-reports feature, `grammar_patterns`/
 `sentence_grammar`/`grammar_relationships` since the grammar-learning
-system's Phase 1 (schema-only — no UI writer yet). The one exception is
+system's Phase 1 (schema-only — no UI writer yet), `planner_sessions`
+since 2026-08-25 (last-write-wins, see above). The one exception left is
 `sources`: still no writer anywhere, so nothing to sync yet.
 
 ## Learning Orchestrator
@@ -134,13 +139,17 @@ recommended mixed session across four conceptual `LearningMode`s (explore/
 understand/practice/retain — `src/lib/sessionPlannerConfig.ts`'s
 `ACTIVITY_TYPE_MODE` maps existing activity types onto them). `src/db/
 repository.ts`'s "Learning Orchestrator" section (end of file) is the only
-Dexie-touching half. One new local-only table, `PlannerSession` (Dexie v14,
+Dexie-touching half. One new table, `PlannerSession` (Dexie v14,
 schema-adjusted v15), records what was actually recommended/executed — one
 row per local calendar day (`date`, at most one `in_progress`/settled
 session per day, topped up in place via `addMinutesToTodaySession` rather
 than a new row per "Start Session" click) — see `docs/AI_OVERVIEW.md` for
-the full design and `docs/STATUS.md`'s 2026-08-20 and 2026-08-21 entries
-for what shipped and what's deliberately deferred. `HomePage`
+the full design and `docs/STATUS.md`'s 2026-08-20, 2026-08-21, and
+2026-08-25 entries for what shipped and what's deliberately deferred.
+`PlannerSession` syncs to Supabase (2026-08-25) with last-write-wins
+conflict resolution (`src/sync/engine.ts`'s `LAST_WRITE_WINS_ENTITIES`)
+rather than the usual manual conflict panel — see the Sync engine section
+above. `HomePage`
 (`src/pages/HomePage.tsx`) is
 now the index route; `BooksPage` moved to `/books`. A persistent
 `SessionBar` (`src/components/SessionBar.tsx`, mounted in `layouts/

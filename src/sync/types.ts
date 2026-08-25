@@ -17,7 +17,8 @@ export type SyncEntity =
   | 'card_issue_reports'
   | 'grammar_patterns'
   | 'sentence_grammar'
-  | 'grammar_relationships';
+  | 'grammar_relationships'
+  | 'planner_sessions';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

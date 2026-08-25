@@ -198,7 +198,7 @@ built out Phases 1–9):
   (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
   rotation).
-- `PlannerSession` (new; Learning Orchestrator, local-only, no sync) — one
+- `PlannerSession` (Learning Orchestrator; syncs, last-write-wins conflicts) — one
   **calendar day's** recommended session, keyed by local `date`
   (`YYYY-MM-DD`, at most one per day, found via `getTodayPlannerSession`):
   `targetMinutes` (grows with each top-up), the mode `allocation` and prose
@@ -319,8 +319,12 @@ activity" was deliberately not built for v1 (Skip plus a
 later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
 2026-08-21 entries for this and other known limitations (no time-tracking
 infrastructure — Explore/Understand activity is inferred from existing row
-timestamps; `PlannerSession` doesn't sync to Supabase,
-local-only like `Attempt`). Since the deep-linked pages
+timestamps). `PlannerSession` syncs to Supabase (2026-08-25 follow-up,
+so the SessionBar "continue where you left off" state follows the learner
+across devices) with last-write-wins conflict resolution rather than the
+usual manual keep-local/keep-remote/duplicate panel — session-execution
+bookkeeping, not durable content, so silently letting the most-recently-
+pushing device win is an acceptable simplification. Since the deep-linked pages
 themselves have no idea a session is running, a persistent **`SessionBar`**
 (`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
 `layouts/AppShell.tsx`) shows on every route whenever a session is
@@ -855,9 +859,13 @@ aren't JSON-serializable/aren't worth backing up).
   are user-editable on the Settings page (2026-08-22), but
   `TOP_UP_INCREMENTS_MINUTES` and the rest of `sessionPlannerConfig.ts`'s
   tuning constants (neglect window, review-priority weights, per-item time
-  estimates) are still code-only; `PlannerSession` is local-only (no cloud
-  sync — a top-up on a second device starts its own separate daily session
-  rather than continuing the first device's). The old "no 'continue longer'
+  estimates) are still code-only; `PlannerSession` now syncs (2026-08-25),
+  so a top-up on a second device continues the same daily session rather
+  than starting a separate one — except if both devices start today's
+  first session while offline before either syncs, which still creates
+  two separate rows for the same date (no dedup-on-create for this
+  entity, unlike the `kanji`/`vocabulary_items` get-or-create pattern).
+  The old "no 'continue longer'
   extend-in-place action" limitation is now resolved — that's what the
   daily top-up model *is*. Browser automation is usually unavailable in
   this sandbox (Playwright Chromium/WebKit fail to launch on missing

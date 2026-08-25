@@ -7,6 +7,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  PlannerSession,
   Review,
   Sentence,
   SentenceAnalysis,
@@ -38,7 +39,8 @@ export type LocalSyncPayload =
   | CardIssueReport
   | GrammarPattern
   | SentenceGrammar
-  | GrammarRelationship;
+  | GrammarRelationship
+  | PlannerSession;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -761,6 +763,45 @@ export function remoteToGrammarRelationship(
   };
 }
 
+export function plannerSessionToRemote(
+  session: PlannerSession,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: session.id,
+    owner_id: ownerId,
+    date: session.date,
+    target_minutes: session.targetMinutes,
+    allocation: session.allocation,
+    explanation: session.explanation,
+    steps: session.steps,
+    status: session.status,
+    ended_at: session.endedAt ?? null,
+    created_at: session.createdAt,
+    updated_at: session.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToPlannerSession(
+  row: Record<string, unknown>,
+): PlannerSession {
+  return {
+    id: String(row.id),
+    date: String(row.date),
+    targetMinutes: Number(row.target_minutes ?? 0),
+    allocation: (row.allocation as PlannerSession['allocation']) ?? {},
+    explanation: Array.isArray(row.explanation) ? (row.explanation as string[]) : [],
+    steps: Array.isArray(row.steps) ? (row.steps as PlannerSession['steps']) : [],
+    status: row.status as PlannerSession['status'],
+    endedAt: (row.ended_at as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -820,6 +861,8 @@ export function toRemoteRow(
       return sentenceGrammarToRemote(payload as SentenceGrammar, ownerId, version);
     case 'grammar_relationships':
       return grammarRelationshipToRemote(payload as GrammarRelationship, ownerId, version);
+    case 'planner_sessions':
+      return plannerSessionToRemote(payload as PlannerSession, ownerId, version);
   }
 }
 
