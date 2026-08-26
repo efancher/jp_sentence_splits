@@ -1,11 +1,29 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { isHiragana, toHiragana } from 'wanakana';
 
 import { getDb, readSettings, updateVocabularyItem } from '../db/repository';
 import type { VocabularyItem } from '../domain/types';
 import { isHanCharacter } from '../lib/kanji';
 import { computeGraduatedSubjectIds } from '../lib/scheduling';
+
+export function matchesVocabularySearch(item: VocabularyItem, query: string): boolean {
+  const trimmed = query.trim();
+  const q = trimmed.toLowerCase();
+  if (!q) return true;
+  // Lets typing romaji (e.g. "neko") match hiragana readings (e.g. "ねこ")
+  // without an OS-level Japanese IME; only applied when fully convertible,
+  // so plain English queries like "dog" can't partially mutate into kana.
+  const qHiragana = toHiragana(trimmed);
+  const readingQuery = isHiragana(qHiragana) ? qHiragana : null;
+  return (
+    item.expression.includes(trimmed) ||
+    item.reading.includes(trimmed) ||
+    (readingQuery !== null && item.reading.includes(readingQuery)) ||
+    item.meaning.toLowerCase().includes(q)
+  );
+}
 
 function VocabularyMeaningField({ item }: { item: VocabularyItem }) {
   const [meaning, setMeaning] = useState(item.meaning);
@@ -64,14 +82,8 @@ export function VocabularyListPage() {
     const all = [...(items ?? [])].sort((a, b) =>
       a.expression.localeCompare(b.expression, 'ja'),
     );
-    const q = query.trim().toLowerCase();
-    if (!q) return all;
-    return all.filter(
-      (item) =>
-        item.expression.includes(query) ||
-        item.reading.includes(query) ||
-        item.meaning.toLowerCase().includes(q),
-    );
+    if (!query.trim()) return all;
+    return all.filter((item) => matchesVocabularySearch(item, query));
   }, [items, query]);
 
   return (
@@ -84,7 +96,7 @@ export function VocabularyListPage() {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Expression, reading, or meaning…"
+          placeholder="Expression, reading (romaji ok), or meaning…"
           aria-label="Search vocabulary"
         />
       </section>

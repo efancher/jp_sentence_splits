@@ -1,6 +1,23 @@
 # Status
 
-Last updated: 2026-08-26 (Fixed shadowing `AnalysisPanel` timing/pitch/ASR
+Last updated: 2026-08-26 (Added romaji fallback matching to the Words page
+search box, for use on machines without a Japanese IME installed —
+requested for using the app on a work laptop where the user didn't want to
+add OS-level Japanese keyboard support. Typing e.g. "neko" now also matches
+a vocabulary item whose reading is "ねこ". Implemented as pure matching
+logic (`matchesVocabularySearch` in `VocabularyListPage.tsx`, using
+`wanakana`'s `toHiragana`/`isHiragana`) rather than live-converting the
+input's displayed value: an earlier attempt bound `wanakana`'s IME-style
+`bind()` directly to the `<input>` DOM node so it would visually convert
+as you type, but that mutates the input's actual value, and testing showed
+it can corrupt plain English queries mid-conversion (e.g. "dog" briefly
+became "どg"), which would have broken meaning search. The query is only
+treated as a hiragana reading query when `toHiragana()` fully converts it
+(via `isHiragana()`); partial/ambiguous romaji is left to fall through to
+the other match branches unaffected. Covered by
+`VocabularyListPage.test.ts`.
+
+Before that: Fixed shadowing `AnalysisPanel` timing/pitch/ASR
 feedback messages showing the raw aligner OOV token literally, e.g. "You
 were slower than the reference during 「<unk>」" — reported on a sentence
 full of casual contractions (足んねえ, 怒らせてくれよ) that MFA's dictionary
