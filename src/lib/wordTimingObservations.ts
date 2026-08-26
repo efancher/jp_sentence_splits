@@ -49,6 +49,17 @@ function isSilence(word: WordAlignment): boolean {
   return !word.text || word.text === '<eps>';
 }
 
+// MFA emits this literal token when a word falls outside its pronunciation
+// dictionary (common for casual contractions like 足んねえ). Timing is still
+// valid for that word, but showing the raw token in a message reads as
+// garbled Japanese — same "flagged placeholder" treatment as
+// KaraokeSentenceText/SyncedShadowText use for the karaoke transcript.
+const ALIGNER_UNKNOWN_TOKEN = '<unk>';
+
+export function displayWordText(text: string): string {
+  return text === ALIGNER_UNKNOWN_TOKEN ? '?' : text;
+}
+
 export function pairWords(
   reference: WordAlignment[],
   learner: WordAlignment[],
@@ -132,8 +143,8 @@ export function buildWordTimingObservations({
         segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
         message:
           ratio > 1
-            ? `You were slower than the reference during 「${refWord.text}」.`
-            : `You were faster than the reference during 「${refWord.text}」.`,
+            ? `You were slower than the reference during 「${displayWordText(refWord.text)}」.`
+            : `You were faster than the reference during 「${displayWordText(refWord.text)}」.`,
         detail: `Reference ${(refDuration * 1000).toFixed(0)}ms, yours ${(learnerDuration * 1000).toFixed(0)}ms.`,
       });
     }
@@ -174,8 +185,8 @@ export function buildWordTimingObservations({
             segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
             message:
               kind === 'consonant'
-                ? `Your 「っ」 in 「${refWord.text}」 is ${degree} than the reference.`
-                : `Your long vowel in 「${refWord.text}」 is ${degree} than the reference.`,
+                ? `Your 「っ」 in 「${displayWordText(refWord.text)}」 is ${degree} than the reference.`
+                : `Your long vowel in 「${displayWordText(refWord.text)}」 is ${degree} than the reference.`,
             detail: `Reference ${(refPhoneDuration * 1000).toFixed(0)}ms, yours ${(learnerPhoneDuration * 1000).toFixed(0)}ms.`,
           });
         }

@@ -1,6 +1,19 @@
 # Status
 
-Last updated: 2026-08-23 (`SessionRunnerPage` now gives every pending/active
+Last updated: 2026-08-26 (Fixed shadowing `AnalysisPanel` timing/pitch/ASR
+feedback messages showing the raw aligner OOV token literally, e.g. "You
+were slower than the reference during 「<unk>」" — reported on a sentence
+full of casual contractions (足んねえ, 怒らせてくれよ) that MFA's dictionary
+doesn't cover, so most of its words come back as `<unk>` in the reference
+alignment's word tier. `KaraokeSentenceText.tsx`/`SyncedShadowText.tsx`
+already special-cased this token (shown as a flagged `?` placeholder) but
+`wordTimingObservations.ts`, `pitchTimingObservations.ts`, and
+`asrObservations.ts` interpolated `word.text` into user-facing messages
+unchanged. Added a shared `displayWordText` helper
+(`wordTimingObservations.ts`) applying the same `?` treatment and used it at
+every message site in all three files.
+
+Before that: `SessionRunnerPage` now gives every pending/active
 step its own Go/Complete/Skip buttons, not just the first — previously the
 list was strictly sequential, so a learner who only had time for a couple of
 easy steps in the morning couldn't touch anything past the first one until

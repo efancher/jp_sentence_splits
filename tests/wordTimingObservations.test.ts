@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AlignmentResult, PhoneAlignment, WordAlignment } from '../src/domain/types';
 import {
   buildWordTimingObservations,
+  displayWordText,
   findLongPhones,
   pairWords,
 } from '../src/lib/wordTimingObservations';
@@ -173,5 +174,30 @@ describe('buildWordTimingObservations', () => {
     };
 
     expect(buildWordTimingObservations({ reference, learner })).toEqual([]);
+  });
+
+  it('shows a flagged placeholder instead of the raw <unk> token for an OOV reference word', () => {
+    const reference: AlignmentResult = {
+      durationSeconds: 1,
+      words: [word(0, 0.3, '<unk>', [])],
+    };
+    const learner: AlignmentResult = {
+      durationSeconds: 1.2,
+      words: [word(0, 0.55, '<unk>', [])],
+    };
+
+    const observations = buildWordTimingObservations({ reference, learner });
+    const durationObservation = observations.find((o) => o.kind === 'word-duration');
+    expect(durationObservation?.message).toBe('You were slower than the reference during 「?」.');
+  });
+});
+
+describe('displayWordText', () => {
+  it('passes real words through unchanged', () => {
+    expect(displayWordText('見に')).toBe('見に');
+  });
+
+  it('replaces the aligner OOV token with a flagged placeholder', () => {
+    expect(displayWordText('<unk>')).toBe('?');
   });
 });

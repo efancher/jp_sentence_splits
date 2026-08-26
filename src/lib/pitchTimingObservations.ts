@@ -1,7 +1,7 @@
 import type { WordAlignment } from '../domain/types';
 import type { PitchAnalysisPayload, PitchFrame } from './pitch';
 import type { TimingObservation } from './timingObservations';
-import { pairWords } from './wordTimingObservations';
+import { displayWordText, pairWords } from './wordTimingObservations';
 
 /**
  * Compares *where in time* pitch movement happens, word by word, using
@@ -122,7 +122,7 @@ export function buildPitchTimingObservations({
         confidence: 'medium',
         severity: Math.min(1, Math.abs(offset) / 0.5),
         segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
-        message: `Your pitch ${verb} occurs ${offset > 0 ? 'later' : 'earlier'} than the reference around 「${refWord.text}」.`,
+        message: `Your pitch ${verb} occurs ${offset > 0 ? 'later' : 'earlier'} than the reference around 「${displayWordText(refWord.text)}」.`,
       });
       return;
     }
@@ -137,7 +137,7 @@ export function buildPitchTimingObservations({
       // the most useful thing to notice sometimes.
       severity: 0.3,
       segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
-      message: `Your pitch ${describeTrend(learner.trend)} during 「${refWord.text}」 where the reference ${describeTrend(ref.trend)}.`,
+      message: `Your pitch ${describeTrend(learner.trend)} during 「${displayWordText(refWord.text)}」 where the reference ${describeTrend(ref.trend)}.`,
     });
   });
 

@@ -1,5 +1,6 @@
 import type { TimingObservation } from './timingObservations';
 import type { WordAlignment } from '../domain/types';
+import { displayWordText } from './wordTimingObservations';
 
 /**
  * Turns a secondary, non-authoritative ASR signal (Phase 9, Milestone 7)
@@ -101,7 +102,7 @@ export function buildAsrObservations({
     confidence: 'low',
     severity: ASR_OBSERVATION_SEVERITY,
     segment: { startMs: word.start * 1000, endMs: word.end * 1000 },
-    message: `Possible pronunciation difference around 「${word.text}」.`,
+    message: `Possible pronunciation difference around 「${displayWordText(word.text)}」.`,
     detail: `Heard: 「${transcribedText}」`,
   }));
 }
