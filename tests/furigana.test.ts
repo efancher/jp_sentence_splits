@@ -32,4 +32,13 @@ describe('parseInlineReadings', () => {
     expect(segments[0]).toEqual({ kind: 'ruby', base: '作', reading: 'つく' });
     expect(segments.some((item) => item.base.includes('りました'))).toBe(true);
   });
+
+  it('does not swallow a preceding hiragana run into the next ruby base when there is no separating space', () => {
+    // Real production data: "でもう1ヶ月[いっかげつ]", no space before "1ヶ月".
+    const segments = parseInlineReadings(
+      'あの 店[みせ]でもう1ヶ月[いっかげつ]も 働[はたら]いてるし。',
+    );
+    expect(segments).toContainEqual({ kind: 'text', base: 'でもう' });
+    expect(segments).toContainEqual({ kind: 'ruby', base: '1ヶ月', reading: 'いっかげつ' });
+  });
 });
