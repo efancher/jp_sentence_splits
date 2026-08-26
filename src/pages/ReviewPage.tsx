@@ -1333,6 +1333,8 @@ function VocabularyTargetCard({
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}
+          {sentence.readingOnly ? <div className="jp muted">{sentence.readingOnly}</div> : null}
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
         </>
       )}
     </>
