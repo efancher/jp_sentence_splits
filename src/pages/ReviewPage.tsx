@@ -1,12 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
+  countReviewsSince,
   deferUnreadySentenceReviews,
   ensureGrammarStudyItem,
   ensureStudyItem,
@@ -20,9 +21,12 @@ import {
   readSettings,
   recordReview,
   reportCardIssue,
+  settleSessionStep,
   type ConfusionPairCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
+import { useActiveSession } from '../hooks/useActiveSession';
+import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
   GrammarPattern,
@@ -540,6 +544,17 @@ interface PendingSeed {
 
 export function ReviewPage() {
   const { bookId } = useParams();
+  const navigate = useNavigate();
+  const activeSession = useActiveSession();
+  // Only the `review` batch step type carries a targetCount to track against
+  // (2026-08-26 follow-up) — grammar_detail/shadow/etc. steps never deep-link
+  // here as their "current" step, so this is undefined most of the time.
+  const reviewStep =
+    activeSession?.currentStep?.targetKind === 'review' ? activeSession.currentStep : undefined;
+  const reviewsDoneThisStep = useLiveQuery(
+    () => (reviewStep?.startedAt ? countReviewsSince(reviewStep.startedAt) : undefined),
+    [reviewStep?.startedAt],
+  );
   const [queue, setQueue] = useState<QueueCard[]>([]);
   const [pool, setPool] = useState<PendingSeed[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -1010,6 +1025,19 @@ export function ReviewPage() {
         expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
       });
       setQueue((q) => q.slice(1));
+
+      // Session-aware auto-advance (2026-08-26 follow-up): once this
+      // review completes the active session's `review` step's target
+      // count, settle the step and jump straight to the next one, instead
+      // of leaving the learner to notice and go back to Mark it complete.
+      if (activeSession && reviewStep?.targetCount) {
+        const doneCount = (reviewsDoneThisStep ?? 0) + 1;
+        if (doneCount >= reviewStep.targetCount) {
+          const result = await settleSessionStep(activeSession.session.id, reviewStep.id, 'completed');
+          const nextPath = result?.nextStep ? sessionStepTargetPath(result.nextStep) : null;
+          if (nextPath) navigate(nextPath);
+        }
+      }
     } finally {
       setSubmitting(false);
     }
@@ -1069,6 +1097,13 @@ export function ReviewPage() {
             </Link>
           ) : null}
         </div>
+
+        {reviewStep?.targetCount ? (
+          <div className="muted" style={{ fontSize: '0.85rem' }}>
+            Reviews this step: {Math.min(reviewsDoneThisStep ?? 0, reviewStep.targetCount)} /{' '}
+            {reviewStep.targetCount}
+          </div>
+        ) : null}
 
         {scope && totalScopedSubjects === 0 ? (
           <p className="muted">No sentences to review here yet.</p>

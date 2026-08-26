@@ -396,13 +396,15 @@ export interface AppSettings {
   dailyBudgetMinutes: number;
   /**
    * Learning Orchestrator (docs/AI_OVERVIEW.md): user-adjustable starting
-   * heuristic for how a session's time splits across the four modes before
-   * neglect-based nudging — a guideline, not a quota (see
-   * allocateTimeAcrossModes). Shares don't need to sum to 1; they're
-   * renormalized proportionally each time. Mirrors BASELINE_MODE_ALLOCATION
-   * in sessionPlannerConfig.ts, which remains the shipped default.
+   * heuristic for how a session's time splits across the four concrete
+   * activity buckets before neglect-based nudging — a guideline, not a
+   * quota (see allocateTimeAcrossModes). Shares don't need to sum to 1;
+   * they're renormalized proportionally each time. Set directly on Home
+   * right before adding time (2026-08-26 follow-up), not on Settings.
+   * Mirrors BASELINE_SESSION_ALLOCATION in sessionPlannerConfig.ts, which
+   * remains the shipped default.
    */
-  modeAllocation: Record<LearningMode, number>;
+  sessionAllocation: Record<SessionBucket, number>;
 }
 
 export interface InboxMembership {
@@ -795,14 +797,16 @@ export interface GrammarRelationship {
 // ---------------------------------------------------------------------------
 
 /**
- * The four conceptual study activities the Orchestrator schedules across
- * (design brief, see docs/AI_OVERVIEW.md): Explore (encounter new material),
- * Understand (investigate grammar/structure), Practice (active production —
- * shadowing, cloze, transformation), Retain (spaced review). A scheduling/
- * analytics taxonomy only — existing pages are unchanged, most already do
- * work that spans more than one mode in a single visit.
+ * The four concrete activities the Orchestrator schedules a session's time
+ * across (docs/AI_OVERVIEW.md; reworked 2026-08-26 from an earlier abstract
+ * Explore/Understand/Practice/Retain taxonomy that user feedback found not
+ * concrete enough to set percentages against directly): `glossing`
+ * (structural analysis + vocab confirmation on new sentences), `grammar`
+ * (examining not-yet-tracked patterns), `shadowing` (pronunciation
+ * practice), `review` (every FSRS due card — comprehension, cloze,
+ * production, grammar drills, etc. — one shared due-queue, one bucket).
  */
-export type LearningMode = 'explore' | 'understand' | 'practice' | 'retain';
+export type SessionBucket = 'glossing' | 'grammar' | 'shadowing' | 'review';
 
 export type PlannerStepStatus = 'pending' | 'active' | 'completed' | 'skipped' | 'replaced';
 
@@ -821,7 +825,7 @@ export type PlannerStepTargetKind =
 
 export interface PlannerSessionStep {
   id: string;
-  mode: LearningMode;
+  bucket: SessionBucket;
   /** A real StudyActivityType for review-surface steps; a synthetic label (e.g. 'shadowing_practice', 'new_sentence', 'grammar_explore') for steps with no StudyItem of their own. */
   activityType: string;
   targetKind: PlannerStepTargetKind;
@@ -838,6 +842,8 @@ export interface PlannerSessionStep {
   completedAt?: string;
   /** Lightweight implicit-feedback signal (design brief §9) — set only when the learner explicitly flags it, never required. */
   feedback?: 'too_easy' | 'difficult';
+  /** Item count this step targets, currently only set for `review` steps (batched "do N due reviews") — lets ReviewPage track live progress toward it rather than parsing the label. */
+  targetCount?: number;
 }
 
 /**
@@ -860,7 +866,7 @@ export interface PlannerSession {
   /** Local calendar day this session belongs to, `YYYY-MM-DD` — see `localDateKey`. */
   date: string;
   targetMinutes: number;
-  allocation: Record<LearningMode, number>;
+  allocation: Record<SessionBucket, number>;
   explanation: string[];
   steps: PlannerSessionStep[];
   status: 'in_progress' | 'completed' | 'ended_early';

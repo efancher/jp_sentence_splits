@@ -1,20 +1,20 @@
 import type {
   FsrsState,
-  LearningMode,
   PlannerSessionStep,
   PlannerStepStatus,
   PlannerStepTargetKind,
+  SessionBucket,
   StudyActivityType,
   StudySubjectType,
 } from '../domain/types';
 import {
-  BASELINE_MODE_ALLOCATION,
+  BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
   MAX_NEGLECT_BOOST,
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
+  PRACTICE_ACTIVITY_TYPES,
   REVIEW_PRIORITY_DEFAULT_LIMIT,
-  SHADOW_MIN_SHARE_OF_PRACTICE,
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
   SYNTHETIC_ACTIVITY_TYPES,
@@ -36,7 +36,7 @@ import {
  * recommend this" question answerable and unit-testable without a browser.
  */
 
-export const ALL_LEARNING_MODES: LearningMode[] = ['explore', 'understand', 'practice', 'retain'];
+export const ALL_SESSION_BUCKETS: SessionBucket[] = ['glossing', 'grammar', 'shadowing', 'review'];
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -47,7 +47,7 @@ function clamp(value: number, min: number, max: number): number {
 // ---------------------------------------------------------------------------
 
 export interface RecentActivityEvent {
-  mode: LearningMode;
+  mode: SessionBucket;
   timestamp: string;
 }
 
@@ -57,7 +57,7 @@ export interface ModeActivitySummary {
   daysSinceLast: number | null;
 }
 
-export type ActivityDistribution = Record<LearningMode, ModeActivitySummary>;
+export type ActivityDistribution = Record<SessionBucket, ModeActivitySummary>;
 
 /** Step 2: how much of each mode the learner has actually done recently. */
 export function computeRecentActivityDistribution(
@@ -67,7 +67,7 @@ export function computeRecentActivityDistribution(
 ): ActivityDistribution {
   const windowStart = now.getTime() - windowDays * 24 * 60 * 60 * 1000;
   const distribution = {} as ActivityDistribution;
-  for (const mode of ALL_LEARNING_MODES) {
+  for (const mode of ALL_SESSION_BUCKETS) {
     const modeEvents = events.filter((event) => event.mode === mode);
     const inWindow = modeEvents.filter(
       (event) => new Date(event.timestamp).getTime() >= windowStart,
@@ -85,7 +85,7 @@ export function computeRecentActivityDistribution(
   return distribution;
 }
 
-export type NeglectScores = Record<LearningMode, number>;
+export type NeglectScores = Record<SessionBucket, number>;
 
 /**
  * Step 3: 0 (touched today) to 1 (never touched, or not touched within the
@@ -98,7 +98,7 @@ export function computeNeglectScores(
   windowDays: number = NEGLECT_WINDOW_DAYS,
 ): NeglectScores {
   const scores = {} as NeglectScores;
-  for (const mode of ALL_LEARNING_MODES) {
+  for (const mode of ALL_SESSION_BUCKETS) {
     const { daysSinceLast } = distribution[mode];
     scores[mode] = daysSinceLast === null ? 1 : clamp(daysSinceLast / windowDays, 0, 1);
   }
@@ -115,7 +115,7 @@ export interface ReviewPriorityInput {
   studyItemId: string;
   subjectType: StudySubjectType;
   activityType: StudyActivityType;
-  mode: LearningMode;
+  mode: SessionBucket;
   due: string;
   scheduledDays: number;
   state: FsrsState['state'];
@@ -138,7 +138,7 @@ export interface ReviewPriorityInput {
 
 export interface ReviewPriorityResult {
   studyItemId: string;
-  mode: LearningMode;
+  mode: SessionBucket;
   activityType: StudyActivityType;
   score: number;
   reasons: string[];
@@ -227,26 +227,26 @@ export function rankReviewPriorities(
 export interface AllocateTimeInput {
   totalMinutes: number;
   neglectScores: NeglectScores;
-  baseline?: Record<LearningMode, number>;
+  baseline?: Record<SessionBucket, number>;
   maxNeglectBoost?: number;
   /** Hard ceiling on how many minutes a mode can actually absorb (e.g. Retain when the due backlog is thin) — leftover redistributes to the other modes. */
-  availableMinutesByMode?: Partial<Record<LearningMode, number>>;
+  availableMinutesByMode?: Partial<Record<SessionBucket, number>>;
 }
 
 function roundAllocation(
-  raw: Map<LearningMode, number>,
+  raw: Map<SessionBucket, number>,
   totalMinutes: number,
-): Record<LearningMode, number> {
-  const rounded = {} as Record<LearningMode, number>;
+): Record<SessionBucket, number> {
+  const rounded = {} as Record<SessionBucket, number>;
   let sum = 0;
-  for (const mode of ALL_LEARNING_MODES) {
+  for (const mode of ALL_SESSION_BUCKETS) {
     const value = Math.round(raw.get(mode) ?? 0);
     rounded[mode] = value;
     sum += value;
   }
   const drift = Math.round(totalMinutes) - sum;
   if (drift !== 0) {
-    const largest = ALL_LEARNING_MODES.reduce((best, mode) =>
+    const largest = ALL_SESSION_BUCKETS.reduce((best, mode) =>
       rounded[mode] > rounded[best] ? mode : best,
     );
     rounded[largest] = Math.max(0, rounded[largest] + drift);
@@ -262,23 +262,23 @@ function roundAllocation(
  * padding with low-value reviews; the freed time goes to the other modes
  * instead of sitting idle.
  */
-export function allocateTimeAcrossModes(input: AllocateTimeInput): Record<LearningMode, number> {
-  const baseline = input.baseline ?? BASELINE_MODE_ALLOCATION;
+export function allocateTimeAcrossModes(input: AllocateTimeInput): Record<SessionBucket, number> {
+  const baseline = input.baseline ?? BASELINE_SESSION_ALLOCATION;
   const boost = input.maxNeglectBoost ?? MAX_NEGLECT_BOOST;
-  const weights = new Map<LearningMode, number>(
-    ALL_LEARNING_MODES.map((mode) => [
+  const weights = new Map<SessionBucket, number>(
+    ALL_SESSION_BUCKETS.map((mode) => [
       mode,
       baseline[mode] * (1 + boost * input.neglectScores[mode]),
     ]),
   );
 
-  const allocation = new Map<LearningMode, number>();
+  const allocation = new Map<SessionBucket, number>();
   let remainingMinutes = input.totalMinutes;
-  const openModes = new Set<LearningMode>(ALL_LEARNING_MODES);
+  const openModes = new Set<SessionBucket>(ALL_SESSION_BUCKETS);
 
   // At most one mode gets newly capped per pass, so this terminates within
-  // ALL_LEARNING_MODES.length iterations.
-  for (let pass = 0; pass < ALL_LEARNING_MODES.length; pass += 1) {
+  // ALL_SESSION_BUCKETS.length iterations.
+  for (let pass = 0; pass < ALL_SESSION_BUCKETS.length; pass += 1) {
     if (openModes.size === 0) break;
     const openWeightSum = [...openModes].reduce((sum, mode) => sum + (weights.get(mode) ?? 0), 0);
     if (openWeightSum <= 0) break;
@@ -318,8 +318,8 @@ export interface ExploreCandidate {
   bookId: string;
   label: string;
   reason: string;
-  /** Ordered next unstarted sentences in this book, capped at EXPLORE_SENTENCE_PREVIEW_LIMIT — one step drafted per entry until the shared Explore budget runs out. */
-  sentences: { sentenceId: string; preview: string }[];
+  /** Ordered next unstarted sentences in this book, capped at EXPLORE_SENTENCE_PREVIEW_LIMIT — one step drafted per entry until the shared glossing budget runs out. */
+  sentences: { sentenceId: string; preview: string; vocabularyConfirmed: boolean }[];
 }
 
 export interface UnderstandCandidate {
@@ -342,21 +342,21 @@ export interface SessionPlannerInput {
   /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
   totalMinutes: number;
   recentActivity: RecentActivityEvent[];
-  /** Due StudyItems eligible for Retain-mode steps (comprehension/reading_retrieval/listening/etc), already scoring-ready. */
+  /** Due StudyItems costed at the quicker "retain" per-item rate (comprehension/reading_retrieval/listening/etc) — merged with practiceDue into one ranked `review` batch. */
   retainDue: ReviewPriorityInput[];
-  /** Due StudyItems eligible for Practice-mode steps (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast). */
+  /** Due StudyItems costed at the slower "practice" per-item rate (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast) — merged with retainDue into one ranked `review` batch. */
   practiceDue: ReviewPriorityInput[];
   exploreCandidates: ExploreCandidate[];
   understandCandidates: UnderstandCandidate[];
   shadowCandidates: ShadowCandidate[];
   reviewLimit?: number;
-  /** User-adjustable override for BASELINE_MODE_ALLOCATION (Settings page) — see AllocateTimeInput.baseline. */
-  baseline?: Record<LearningMode, number>;
+  /** User-adjustable override for BASELINE_SESSION_ALLOCATION (set directly on Home) — see AllocateTimeInput.baseline. */
+  baseline?: Record<SessionBucket, number>;
 }
 
 export interface PlannerStepDraft {
   id: string;
-  mode: LearningMode;
+  bucket: SessionBucket;
   activityType: string;
   targetKind: PlannerStepTargetKind;
   bookId?: string;
@@ -367,11 +367,12 @@ export interface PlannerStepDraft {
   estimatedMinutes: number;
   reason: string;
   status: PlannerStepStatus;
+  targetCount?: number;
 }
 
 export interface RecommendedSession {
   targetMinutes: number;
-  allocation: Record<LearningMode, number>;
+  allocation: Record<SessionBucket, number>;
   neglectScores: NeglectScores;
   steps: PlannerStepDraft[];
   explanation: string[];
@@ -383,36 +384,61 @@ function draftStepId(): string {
   return `draft_${stepCounter}`;
 }
 
-function packCount(budgetMinutes: number, perItemMinutes: number, maxCount: number): number {
-  if (perItemMinutes <= 0 || budgetMinutes <= 0) return 0;
-  return clamp(Math.floor(budgetMinutes / perItemMinutes), 0, maxCount);
+const PRACTICE_ACTIVITY_TYPE_SET = new Set<string>(PRACTICE_ACTIVITY_TYPES);
+
+/** Retain-costed items ("recognize/reveal/self-rate") are quicker than practice-costed ones ("type/produce an answer") — see MODE_ACTIVITY_ESTIMATE_MINUTES. */
+function reviewItemCostMinutes(activityType: StudyActivityType): number {
+  return PRACTICE_ACTIVITY_TYPE_SET.has(activityType)
+    ? MODE_ACTIVITY_ESTIMATE_MINUTES.practice
+    : MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
 }
 
-/** Step 7 (Retain/Practice halves): one batched step for "do N due reviews" rather than one step per card — ReviewPage's own due queue is the actual execution surface. */
-function buildDueBatchStep(
-  mode: LearningMode,
-  ranked: ReviewPriorityResult[],
-  budgetMinutes: number,
-  perItemMinutes: number,
-  activityType: string,
-): PlannerStepDraft | null {
-  const count = packCount(budgetMinutes, perItemMinutes, ranked.length);
-  if (count === 0) return null;
-  const chosen = ranked.slice(0, count);
+/** Sum of per-item costs for the first `limit` ranked items — used both to build the actual step and to compute how many minutes the `review` bucket can actually absorb (see buildRecommendedSession's reviewCeiling). */
+function reviewBatchCostMinutes(ranked: ReviewPriorityResult[], limit: number): number {
+  return ranked.slice(0, limit).reduce((sum, item) => sum + reviewItemCostMinutes(item.activityType), 0);
+}
+
+/**
+ * Step 7 (review bucket): one batched step for "do N due reviews" rather
+ * than one step per card — ReviewPage's own due queue is the actual
+ * execution surface. Retain- and practice-costed items are ranked together
+ * (score doesn't care which pool an item came from) and packed by walking
+ * the ranked list summing each item's own cost, since the two pools cost
+ * different amounts per item — a plain count-based pack would misprice a
+ * batch that's mostly one type or the other.
+ */
+function buildReviewBatchStep(ranked: ReviewPriorityResult[], budgetMinutes: number): PlannerStepDraft | null {
+  let used = 0;
+  const chosen: ReviewPriorityResult[] = [];
+  for (const item of ranked) {
+    const cost = reviewItemCostMinutes(item.activityType);
+    if (used + cost > budgetMinutes) break;
+    used += cost;
+    chosen.push(item);
+  }
+  if (chosen.length === 0) return null;
   const topReasons = [...new Set(chosen.flatMap((item) => item.reasons))].slice(0, 2);
   return {
     id: draftStepId(),
-    mode,
-    activityType,
+    bucket: 'review',
+    activityType: 'due_review_batch',
     targetKind: 'review',
-    label: `Review ${count} high-priority item${count === 1 ? '' : 's'}`,
-    estimatedMinutes: count * perItemMinutes,
+    label: `Review ${chosen.length} high-priority item${chosen.length === 1 ? '' : 's'}`,
+    estimatedMinutes: used,
     reason: topReasons.length > 0 ? topReasons.join(', ') : 'Due for review',
     status: 'pending',
+    targetCount: chosen.length,
   };
 }
 
-/** Step 7 (Explore): continue the highest-priority book(s) — one step per book, sized to the remaining budget. */
+/**
+ * Step 7 (glossing): continue the highest-priority book(s) — one step per
+ * book, sized to the remaining budget. A sentence whose vocabulary is
+ * already confirmed (`vocabularyConfirmed`) only needs the structural-
+ * analysis half — pairing a redundant vocabulary_review step for it was a
+ * bug (2026-08-26 follow-up: it kept re-recommending already-confirmed
+ * vocab, since the exclusion list only covers today's own steps).
+ */
 function buildExploreSteps(
   candidates: ExploreCandidate[],
   budgetMinutes: number,
@@ -422,10 +448,11 @@ function buildExploreSteps(
   let remaining = budgetMinutes;
   outer: for (const candidate of candidates) {
     for (const sentence of candidate.sentences) {
-      if (remaining < perItemMinutes) break outer;
+      const cost = sentence.vocabularyConfirmed ? EXPLORE_STEP_MINUTES.analyze : perItemMinutes;
+      if (remaining < cost) break outer;
       steps.push({
         id: draftStepId(),
-        mode: 'explore',
+        bucket: 'glossing',
         activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
         targetKind: 'continue_book',
         bookId: candidate.bookId,
@@ -435,25 +462,27 @@ function buildExploreSteps(
         reason: candidate.reason,
         status: 'pending',
       });
-      steps.push({
-        id: draftStepId(),
-        mode: 'explore',
-        activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
-        targetKind: 'vocabulary_review',
-        bookId: candidate.bookId,
-        sentenceId: sentence.sentenceId,
-        label: `Vocabulary: ${sentence.preview}`,
-        estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
-        reason: candidate.reason,
-        status: 'pending',
-      });
-      remaining -= perItemMinutes;
+      if (!sentence.vocabularyConfirmed) {
+        steps.push({
+          id: draftStepId(),
+          bucket: 'glossing',
+          activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
+          targetKind: 'vocabulary_review',
+          bookId: candidate.bookId,
+          sentenceId: sentence.sentenceId,
+          label: `Vocabulary: ${sentence.preview}`,
+          estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
+          reason: candidate.reason,
+          status: 'pending',
+        });
+      }
+      remaining -= cost;
     }
   }
   return steps;
 }
 
-/** Step 7 (Understand): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
+/** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
 function buildUnderstandSteps(
   candidates: UnderstandCandidate[],
   budgetMinutes: number,
@@ -465,7 +494,7 @@ function buildUnderstandSteps(
     if (remaining < perItemMinutes) break;
     steps.push({
       id: draftStepId(),
-      mode: 'understand',
+      bucket: 'grammar',
       activityType: SYNTHETIC_ACTIVITY_TYPES.grammarExplore,
       targetKind: 'grammar_detail',
       grammarPatternId: candidate.grammarPatternId,
@@ -480,7 +509,7 @@ function buildUnderstandSteps(
   return steps;
 }
 
-/** Step 7 (Practice, shadowing half): one step per sentence to shadow, after the batched due-practice step (if any) has claimed its share. */
+/** Step 7 (shadowing): one step per sentence to shadow, sized to its own top-level bucket allocation. */
 function buildShadowSteps(
   candidates: ShadowCandidate[],
   budgetMinutes: number,
@@ -492,7 +521,7 @@ function buildShadowSteps(
     if (remaining < perItemMinutes) break;
     steps.push({
       id: draftStepId(),
-      mode: 'practice',
+      bucket: 'shadowing',
       activityType: SYNTHETIC_ACTIVITY_TYPES.shadowingPractice,
       targetKind: 'shadow',
       bookId: candidate.bookId,
@@ -540,7 +569,7 @@ function preferCoherentChains(steps: PlannerStepDraft[]): {
 
 function explainNeglect(neglectScores: NeglectScores, distribution: ActivityDistribution): string[] {
   const explanations: string[] = [];
-  const sortedByNeglect = [...ALL_LEARNING_MODES].sort(
+  const sortedByNeglect = [...ALL_SESSION_BUCKETS].sort(
     (a, b) => neglectScores[b] - neglectScores[a],
   );
   const mostNeglected = sortedByNeglect[0]!;
@@ -552,7 +581,7 @@ function explainNeglect(neglectScores: NeglectScores, distribution: ActivityDist
         : `You haven't touched ${mostNeglected} in ${Math.round(days)} day${Math.round(days) === 1 ? '' : 's'}, so this session emphasizes it.`,
     );
   }
-  const mostActive = [...ALL_LEARNING_MODES].sort(
+  const mostActive = [...ALL_SESSION_BUCKETS].sort(
     (a, b) => distribution[b].count - distribution[a].count,
   )[0]!;
   if (
@@ -602,78 +631,56 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const distribution = computeRecentActivityDistribution(input.recentActivity, input.now);
   const neglectScores = computeNeglectScores(distribution);
 
-  const rankedRetain = rankReviewPriorities(input.retainDue, reviewLimit);
-  const rankedPractice = rankReviewPriorities(input.practiceDue, reviewLimit);
-
-  const retainEstimate = MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
-  const retainCeiling = rankedRetain.length * retainEstimate;
+  // retainDue/practiceDue are ranked together — the score doesn't care which
+  // pool an item came from, and ReviewPage itself doesn't distinguish them
+  // either (one shared due-queue). reviewLimit still caps the combined pool
+  // to "the best N," not both pools' worth.
+  const rankedReview = rankReviewPriorities([...input.retainDue, ...input.practiceDue], reviewLimit);
+  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit);
 
   const allocation = allocateTimeAcrossModes({
     totalMinutes,
     neglectScores,
     baseline: input.baseline,
-    availableMinutesByMode: { retain: retainCeiling },
+    availableMinutesByMode: { review: reviewCeiling },
   });
 
-  const practiceEstimate = MODE_ACTIVITY_ESTIMATE_MINUTES.practice;
-  // Reserve shadowing's cut of Practice before the due-practice batch is
-  // built, so a large due-practice backlog can't claim the whole budget and
-  // squeeze shadow candidates out entirely (floored at one item's worth, so
-  // the reserve is never too small to actually produce a step).
-  const shadowReserve =
-    input.shadowCandidates.length > 0
-      ? Math.min(
-          allocation.practice,
-          Math.max(practiceEstimate, allocation.practice * SHADOW_MIN_SHARE_OF_PRACTICE),
-        )
-      : 0;
-  const dueBatchStep = buildDueBatchStep(
-    'practice',
-    rankedPractice,
-    allocation.practice - shadowReserve,
-    practiceEstimate,
-    'due_practice_batch',
-  );
-  const shadowBudget = allocation.practice - (dueBatchStep?.estimatedMinutes ?? 0);
-  const shadowSteps = buildShadowSteps(input.shadowCandidates, shadowBudget, practiceEstimate);
+  const reviewStep = buildReviewBatchStep(rankedReview, allocation.review);
 
-  const retainStep = buildDueBatchStep(
-    'retain',
-    rankedRetain,
-    allocation.retain,
-    retainEstimate,
-    'due_retain_batch',
+  const shadowSteps = buildShadowSteps(
+    input.shadowCandidates,
+    allocation.shadowing,
+    MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
   );
 
   const exploreSteps = buildExploreSteps(
     input.exploreCandidates,
-    allocation.explore,
-    MODE_ACTIVITY_ESTIMATE_MINUTES.explore,
+    allocation.glossing,
+    MODE_ACTIVITY_ESTIMATE_MINUTES.glossing,
   );
   const understandSteps = buildUnderstandSteps(
     input.understandCandidates,
-    allocation.understand,
-    MODE_ACTIVITY_ESTIMATE_MINUTES.understand,
+    allocation.grammar,
+    MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
   );
 
   const allSteps = [
     ...exploreSteps,
     ...understandSteps,
-    ...(dueBatchStep ? [dueBatchStep] : []),
     ...shadowSteps,
-    ...(retainStep ? [retainStep] : []),
+    ...(reviewStep ? [reviewStep] : []),
   ];
   const { steps: orderedSteps, chainedSentenceIds } = preferCoherentChains(allSteps);
 
   const explanation = explainNeglect(neglectScores, distribution);
-  if (retainCeiling < allocation.retain + retainEstimate && rankedRetain.length < reviewLimit) {
+  if (reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain && rankedReview.length < reviewLimit) {
     explanation.push('No large review backlog right now, so extra time went to other activities.');
   }
   if (chainedSentenceIds.length > 0) {
     explanation.push('Some steps below share the same sentence, so they run back to back.');
   }
   if (explanation.length === 0) {
-    explanation.push('A balanced mix across explore, understand, practice, and retain.');
+    explanation.push('A balanced mix across glossing, grammar, shadowing, and review.');
   }
 
   return {

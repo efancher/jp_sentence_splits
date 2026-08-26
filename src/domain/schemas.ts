@@ -201,14 +201,16 @@ export const settingsSchema = z.object({
   // Additive (Learning Orchestrator settings): absent in older backups.
   dailyBudgetMinutes: z.number().int().positive().default(60),
   // Additive (Learning Orchestrator settings): absent in older backups.
-  modeAllocation: z
+  // Renamed from modeAllocation (2026-08-26) — old backups simply fall
+  // through to the default here, same as any other newly-added field.
+  sessionAllocation: z
     .object({
-      explore: z.number().nonnegative(),
-      understand: z.number().nonnegative(),
-      practice: z.number().nonnegative(),
-      retain: z.number().nonnegative(),
+      glossing: z.number().nonnegative(),
+      grammar: z.number().nonnegative(),
+      shadowing: z.number().nonnegative(),
+      review: z.number().nonnegative(),
     })
-    .default({ explore: 0.35, understand: 0.2, practice: 0.2, retain: 0.25 }),
+    .default({ glossing: 0.35, grammar: 0.15, shadowing: 0.15, review: 0.35 }),
 });
 
 export const inboxMembershipSchema = z.object({
@@ -441,7 +443,7 @@ export const grammarRelationshipSchema = z.object({
 // Learning Orchestrator (docs/AI_OVERVIEW.md) — additive, local-only. Moved
 // ahead of backupSchema for the same forward-reference reason as
 // vocabularyItemSchema/grammarPatternSchema above.
-export const learningModeSchema = z.enum(['explore', 'understand', 'practice', 'retain']);
+export const sessionBucketSchema = z.enum(['glossing', 'grammar', 'shadowing', 'review']);
 export const plannerStepStatusSchema = z.enum([
   'pending',
   'active',
@@ -460,7 +462,7 @@ export const plannerStepTargetKindSchema = z.enum([
 
 export const plannerSessionStepSchema = z.object({
   id: z.string(),
-  mode: learningModeSchema,
+  bucket: sessionBucketSchema,
   activityType: z.string().min(1),
   targetKind: plannerStepTargetKindSchema,
   bookId: z.string().optional(),
@@ -474,6 +476,8 @@ export const plannerSessionStepSchema = z.object({
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
   feedback: z.enum(['too_easy', 'difficult']).optional(),
+  // Additive (2026-08-26): absent in older backups.
+  targetCount: z.number().int().nonnegative().optional(),
 });
 
 export const plannerSessionSchema = z.object({
@@ -482,7 +486,7 @@ export const plannerSessionSchema = z.object({
   updatedAt: z.string(),
   date: z.string(),
   targetMinutes: z.number().positive(),
-  allocation: z.record(learningModeSchema, z.number()),
+  allocation: z.record(sessionBucketSchema, z.number()),
   explanation: z.array(z.string()),
   steps: z.array(plannerSessionStepSchema),
   status: z.enum(['in_progress', 'completed', 'ended_early']),

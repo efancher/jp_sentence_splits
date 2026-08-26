@@ -5977,3 +5977,74 @@ feedback while trying it:
   passed — one unrelated pre-existing flake in `data.test.ts`'s card-issue-
   report test, confirmed to pass in isolation — 2 pre-existing skips),
   `npm run lint` clean on all changed files.
+
+## Session UX follow-up: concrete activity split, review auto-advance, bug fix (2026-08-26): done
+
+Four pieces of live-usage feedback on the Learning Orchestrator session flow.
+
+- **Replaced the abstract Explore/Understand/Practice/Retain allocation
+  with four concrete activities** (`SessionBucket`: `glossing`/`grammar`/
+  `shadowing`/`review`, `src/domain/types.ts`) — user feedback was that the
+  original mode taxonomy (design-brief-authored) wasn't concrete enough to
+  set percentages against directly, and asked for it in terms of actual
+  activities instead. `glossing`/`grammar` map 1:1 onto the old `explore`/
+  `understand`; `shadowing` is now its own top-level bucket (previously a
+  fixed-fraction reserve *within* `practice`, `SHADOW_MIN_SHARE_OF_PRACTICE`,
+  now removed); `review` merges the old `retain` due-batch and `practice`
+  due-batch into **one** ranked-and-packed batch/step
+  (`due_review_batch`, replacing `due_retain_batch`/`due_practice_batch`) —
+  matches how `ReviewPage` already treats them (one shared due-queue, no UI
+  distinction), and is what makes the review-tracking piece below simple
+  (one step, one target count). Packing now walks the combined ranked list
+  summing each item's own per-item cost (`retain`-costed items are quicker
+  than `practice`-costed ones) rather than a uniform count-based pack, since
+  the merged pool is heterogeneous. `allocateTimeAcrossModes`'s neglect/
+  baseline math is otherwise unchanged, just re-keyed onto the new buckets.
+  `AppSettings.modeAllocation` → `sessionAllocation` (no Dexie version bump
+  — same additive-field-backfill precedent as `tts`).
+- **The split is now set directly on Home** (`HomePage.tsx`, a hideable
+  "Customize split" `<details>` section right before the Start/+time
+  buttons) **instead of on Settings** — per explicit user preference,
+  replacing (not supplementing) Settings' old "Activity mix" panel.
+  Editing a value there applies to that add-time call only
+  (`addMinutesToTodaySession`'s new optional `baselineOverride` param,
+  threaded through `getSessionPlannerInput`) and is persisted back as the
+  new saved default on add.
+- **Review steps are now session-aware and auto-advance**
+  (`ReviewPage.tsx`) — the `review` batch step type was never auto-
+  completed before (unlike `continue_book`/`vocabulary_review`), so there
+  was no way to tell you'd hit the recommended count, and no auto-advance.
+  `PlannerSessionStep` gained `targetCount` (the batch's chosen item count).
+  `ReviewPage` now shows a live "Reviews this step: X / N" line
+  (`countReviewsSince`, a new repository helper — timestamp-based off
+  `Review` rows created since the step went `active`, not component state,
+  so progress survives leaving and returning to the page) and, once N is
+  reached, settles the step and auto-advances to the next one
+  (`settleSessionStep`, a new repository helper factored out of
+  `SessionBar`'s existing "find the next pending/active step, activate it"
+  logic so both call sites share it instead of duplicating it).
+- **Bug fix**: `findExploreCandidates` only ever checked
+  `BookSentence.status === 'unstarted'`, never
+  `SentenceAnalysis.vocabularyReviewStatus` — so a sentence whose vocabulary
+  was already confirmed (but whose structural-analysis step wasn't done yet)
+  kept getting a fresh `vocabulary_review` step recommended in later
+  sessions, since the per-day dedup in `addMinutesToTodaySession` only
+  excludes sentences already sitting in *that day's* step list, not all-time
+  confirmation state. Fixed by attaching `vocabularyConfirmed` per candidate
+  sentence and skipping the `vocabulary_review` half of the pair (keeping
+  `continue_book`) when it's already true.
+- **SessionBar trimmed to one action**: "Mark complete" only (still
+  auto-advances to the next step's page, unchanged behavior) — Skip and a
+  standalone "Session" button were dropped per user feedback that
+  simultaneous controls are hard to hold in mind mid-session (same
+  reasoning as the earlier Record/Stop single-control change). The full
+  step list — where Skip still lives, unchanged on `SessionRunnerPage` —
+  stays reachable via the "Session · X/Y" text, now a plain link instead of
+  a button.
+- Not manually exercised in a browser (no browser automation in this
+  sandbox) — the Home split picker, the SessionBar trim, and ReviewPage's
+  live counter/auto-advance are worth a live click-through before relying
+  on them.
+- **Verified**: `npm run check` (typecheck + full `vitest run`, 836
+  passed, 2 pre-existing skips, no new failures), `npm run lint` clean on
+  all changed files.

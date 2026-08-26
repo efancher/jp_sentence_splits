@@ -14,9 +14,7 @@ import {
   getDb,
   readSettings,
 } from '../db/database';
-import type { LearningMode } from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
-import { BASELINE_MODE_ALLOCATION } from '../lib/sessionPlannerConfig';
 import { filterJapaneseVoices } from '../lib/speech';
 import {
   exportFullBackup,
@@ -29,15 +27,6 @@ import { useTheme } from '../hooks/useTheme';
 import { clearDownloadedAudioCache } from '../sync/audioSync';
 import { useSync } from '../sync/SyncProvider';
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
-
-const MODE_ALLOCATION_LABELS: Record<LearningMode, string> = {
-  explore: 'Explore',
-  understand: 'Understand',
-  practice: 'Practice',
-  retain: 'Retain',
-};
-
-const MODE_ALLOCATION_ORDER: LearningMode[] = ['explore', 'understand', 'practice', 'retain'];
 
 export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
@@ -192,48 +181,10 @@ export function SettingsPage() {
         </label>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           How many minutes the "Start" button on Today plans for. The "+more
-          time" top-up buttons stay fixed regardless of this.
+          time" top-up buttons stay fixed regardless of this. The activity
+          split (glossing/grammar/shadowing/review) is set on Home, right
+          before adding time, not here.
         </p>
-        <div className="stack" style={{ gap: '0.5rem' }}>
-          <span>Activity mix</span>
-          {MODE_ALLOCATION_ORDER.map((mode) => (
-            <label key={mode}>
-              {MODE_ALLOCATION_LABELS[mode]}
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={5}
-                value={Math.round(settings.modeAllocation[mode] * 100)}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  if (Number.isNaN(parsed) || parsed < 0) return;
-                  void updateSettings({
-                    modeAllocation: {
-                      ...settings.modeAllocation,
-                      [mode]: parsed / 100,
-                    },
-                  });
-                }}
-              />
-            </label>
-          ))}
-        </div>
-        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Starting split of session time across the four modes, before the
-          orchestrator nudges it toward whatever you've neglected lately.
-          Shares are relative, so they don't strictly need to add up to
-          100% — they're renormalized automatically — but keeping them
-          near 100% total keeps the numbers easy to read.
-        </p>
-        <button
-          type="button"
-          onClick={() =>
-            void updateSettings({ modeAllocation: { ...BASELINE_MODE_ALLOCATION } })
-          }
-        >
-          Reset activity mix to defaults
-        </button>
       </section>
 
       <AuthAndSyncSettings />

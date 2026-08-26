@@ -219,52 +219,66 @@ Sync/queue-internal tables (`syncMeta`, `syncQueue`, `syncRecordMeta`,
 `SessionRunnerPage.tsx` (`/session/:sessionId`)
 Answers "what should I do?" instead of leaving the learner to notice the
 Review queue's due count and default to clearing it. Models study activity
-across four conceptual **learning modes** — **Explore** (encounter new
-Japanese), **Understand** (investigate grammar/structure), **Practice**
-(active production — shadowing, cloze, transformation), **Retain** (spaced
-review) — a scheduling/analytics lens layered on top of existing activity
-types (`ACTIVITY_TYPE_MODE`, `src/lib/sessionPlannerConfig.ts`), not a new
-content model or a forced re-categorization of every feature. This app has
-no continuous native-media player (audio is per-sentence clips, not a
-stream), so Explore steps point at the next not-yet-studied sentences in a
+across four concrete **activity buckets** (`SessionBucket`,
+`src/domain/types.ts`) — **glossing** (structural analysis + vocab
+confirmation on new sentences), **grammar** (examining not-yet-tracked
+patterns), **shadowing** (pronunciation practice), **review** (every FSRS
+due card — comprehension, cloze, production, grammar drills, etc. — one
+shared due-queue, one bucket regardless of activity type) — a
+scheduling/analytics lens layered on top of existing activity types, not a
+new content model or a forced re-categorization of every feature. (Reworked
+2026-08-26 from an earlier abstract Explore/Understand/Practice/Retain
+taxonomy — `retain`'s due-batch and `practice`'s due-batch merged into the
+one `review` bucket, and `shadowing` was promoted out of `practice` into its
+own top-level bucket, per user feedback that the old taxonomy wasn't
+concrete enough to set percentages against directly.) This app has no
+continuous native-media player (audio is per-sentence clips, not a stream),
+so glossing steps point at the next not-yet-studied sentences in a
 recently-opened book instead of "continue watching." Each unstarted
 sentence gets its own pair of chained steps — one `continue_book` step
 (structural analysis, `AnalyzePage`) and one `vocabulary_review` step
-(`VocabularyReviewPage`) — rather than one step bundling a whole book's
-worth of new sentences into a single "N new sentences" line (follow-up,
-2026-08-22).
+(`VocabularyReviewPage`), the latter skipped when the sentence's vocabulary
+is already confirmed (`SentenceAnalysis.vocabularyReviewStatus`, bug fix
+2026-08-26 — it used to keep re-recommending already-confirmed vocab since
+the exclusion list only covered a given day's own steps) — rather than one
+step bundling a whole book's worth of new sentences into a single "N new
+sentences" line (follow-up, 2026-08-22).
 
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process
 is inspectable and unit-tested (`tests/sessionPlanner.test.ts`) without a
 browser: recent-activity distribution over a rolling 14-day window ->
-per-mode **neglect scores** (linear, clamped, deliberately not an
+per-bucket **neglect scores** (linear, clamped, deliberately not an
 exponential decay curve) -> **review-priority ranking**
 (`scoreReviewPriority`, generalizing `grammarPatterns.ts`'s
 `computeGrammarPriorityBucket`/`explainGrammarPriority` explainable-bucket
 pattern across every subject type — forgetting risk x usefulness x
 re-encounter freshness, plus a standalone weakness term, additive rather
 than the source brief's literal product so a fresh single-context item
-never scores to zero) -> **time allocation** across the four modes (a
-35/20/20/25 baseline nudged toward neglected modes, clamped against how
-much each mode can actually absorb — e.g. Retain never gets padded with
-low-value reviews just because minutes are available) -> concrete step
-selection (the baseline itself is `settings.modeAllocation`, defaulting to
-`BASELINE_MODE_ALLOCATION` but user-editable on the Settings page's
-"Learning Orchestrator" panel), bounded to the best 10-15 due items rather than the whole queue
-(within Practice, shadowing gets a reserved minimum share —
-`SHADOW_MIN_SHARE_OF_PRACTICE` — claimed before the due-practice batch, so a
-large cloze/production backlog can't crowd shadow candidates out of the
-recommendation entirely) -> **coherent-chain grouping** (steps that share a
-sentence id, e.g. a
-grammar pattern and a shadowing candidate from the same sentence, run back
-to back) -> a short human-readable explanation
-("You haven't touched practice in 6 days, so this session emphasizes it.").
-`src/db/repository.ts`'s "Learning Orchestrator" section is the only
-Dexie-touching half — it adapts live `StudyItem`/`Review`/`Attempt`/
-`SentenceGrammar`/`bookSentences` data into the planner's plain input
-types, batched (not N+1) the same way `listGrammarPatternSummaries`
-already is.
+never scores to zero; the old two-pool retain/practice ranking is now one
+combined ranked list, since the score doesn't care which pool an item came
+from and `ReviewPage` itself doesn't distinguish them either) -> **time
+allocation** across the four buckets (a 35/15/15/35
+glossing/grammar/shadowing/review baseline nudged toward neglected buckets,
+clamped against how much each bucket can actually absorb — e.g. `review`
+never gets padded with low-value reviews just because minutes are
+available) -> concrete step selection (the baseline itself is
+`settings.sessionAllocation`, defaulting to `BASELINE_SESSION_ALLOCATION`
+but user-editable directly on Home, see below), bounded to the best 10-15
+due items rather than the whole queue. The `review` step is packed by
+walking the combined ranked list and summing each item's own per-item cost
+(retain-style recognition cards are quicker than practice-style production
+cards) rather than a uniform count-based pack, since the merged pool is
+heterogeneous — the chosen count is stored on the step as `targetCount` for
+`ReviewPage`'s own tracking (see below) -> **coherent-chain grouping**
+(steps that share a sentence id, e.g. a grammar pattern and a shadowing
+candidate from the same sentence, run back to back) -> a short
+human-readable explanation ("You haven't touched shadowing in 6 days, so
+this session emphasizes it."). `src/db/repository.ts`'s "Learning
+Orchestrator" section is the only Dexie-touching half — it adapts live
+`StudyItem`/`Review`/`Attempt`/`SentenceGrammar`/`bookSentences` data into
+the planner's plain input types, batched (not N+1) the same way
+`listGrammarPatternSummaries` already is.
 
 **One growing daily session, not fixed Quick/Normal/Deep sittings**
 (follow-up, 2026-08-21): `PlannerSession` is keyed one-per-local-day
@@ -297,28 +311,38 @@ explanation, the full step list with a status badge per step) plus
 `DEFAULT_DAILY_BUDGET_MINUTES` = 60 and user-editable on the Settings page,
 as the default add amount; `TOP_UP_INCREMENTS_MINUTES` = [20, 30], fixed,
 for the smaller top-ups; both constants live in `sessionPlannerConfig.ts`)
-and a "Continue today's
-session" link to the runner whenever a step is still pending/active. Below
-that, the same compact rolling-14-day balance view as before (four
-`.progress-bar` meters — reusing the existing CSS component rather than a
-charting dependency — fill = how recently each mode was touched) and a
-direct-access shortcut row (Books/Grammar/Review/Words/Search), so the
-recommendation guides without gating. **`SessionRunnerPage`** sequences
-today's steps, deep-linking into the existing Analyze/Vocabulary/
-Grammar-detail/Shadow/Review pages for the actual activity rather than
-reimplementing any of them — start/skip/end-early are real, tracked
-actions. A step settles either by an explicit action (the runner's own
-"Mark complete"/"Skip", or `SessionBar`'s equivalents) or by real
-completion of the underlying work — `setBookSentenceStatus('complete')`
-auto-completes the matching `continue_book` step and
-`confirmSentenceVocabulary` auto-completes the matching `vocabulary_review`
-step (`autoCompleteSessionSteps` in `repository.ts`, follow-up,
-2026-08-22) — but never by mere navigation, so a step merely opened and
-left (without either) is never silently counted as done. "Replace an
+and a "Continue today's session" link to the runner whenever a step is
+still pending/active. A hideable "Customize split" section
+(2026-08-26 follow-up, a plain `<details>`, no native dialog) sits right
+above those buttons — four number inputs, one per `SessionBucket`,
+defaulting to `settings.sessionAllocation`; editing one and then
+Start/+time applies that split to just that call
+(`addMinutesToTodaySession`'s optional `baselineOverride` param) and
+persists it back as the new saved default. This **replaces** Settings'
+old "Activity mix" panel rather than sitting alongside it — the split is
+only editable here now. Below that, the same compact rolling-14-day
+balance view as before (four `.progress-bar` meters — reusing the existing
+CSS component rather than a charting dependency — fill = how recently each
+bucket was touched) and a direct-access shortcut row
+(Books/Grammar/Review/Words/Search), so the recommendation guides without
+gating. **`SessionRunnerPage`** sequences today's steps, deep-linking into
+the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
+actual activity rather than reimplementing any of them — start/skip/
+end-early are real, tracked actions. A step settles either by an explicit
+action (the runner's own "Mark complete"/"Skip", or `SessionBar`'s "Mark
+complete") or by real completion of the underlying work —
+`setBookSentenceStatus('complete')` auto-completes the matching
+`continue_book` step, `confirmSentenceVocabulary` auto-completes the
+matching `vocabulary_review` step (`autoCompleteSessionSteps` in
+`repository.ts`, follow-up, 2026-08-22), and — for `review` steps only —
+`ReviewPage` itself auto-completes once its own live count of reviews done
+this sitting reaches the step's `targetCount` (2026-08-26 follow-up, see
+below) — but never by mere navigation, so a step merely opened and left
+(without any of these) is never silently counted as done. "Replace an
 activity" was deliberately not built for v1 (Skip plus a
 later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
 2026-08-21 entries for this and other known limitations (no time-tracking
-infrastructure — Explore/Understand activity is inferred from existing row
+infrastructure — glossing/grammar activity is inferred from existing row
 timestamps). `PlannerSession` syncs to Supabase (2026-08-25 follow-up,
 so the SessionBar "continue where you left off" state follows the learner
 across devices) with last-write-wins conflict resolution rather than the
@@ -328,15 +352,20 @@ pushing device win is an acceptable simplification. Since the deep-linked pages
 themselves have no idea a session is running, a persistent **`SessionBar`**
 (`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
 `layouts/AppShell.tsx`) shows on every route whenever a session is
-`in_progress` — current step, progress, a link back to `/session/:id`, and
-inline "Mark complete"/"Skip" reusing `updatePlannerSessionStep` — so the
-learner is never stranded on Analyze/Review/Shadow with no way back.
-`SessionBar`'s "Mark complete"/"Skip" also auto-advance: after settling the
-current step they look up the next pending/active step in `session.steps`,
-mark it `active`, and navigate straight to its `sessionStepTargetPath`
-(shared with `SessionRunnerPage`'s own "Go", both now sourced from
-`lib/sessionPlanner.ts`), so the learner doesn't have to return to
-`/session/:id` and click "Go" between every step. `SessionRunnerPage`'s
+`in_progress` — current step, progress, and a single "Mark complete"
+action reusing `settleSessionStep` (a new `repository.ts` helper, see
+below) — so the learner is never stranded on Analyze/Review/Shadow with no
+way back. (2026-08-26 follow-up: Skip and a standalone "Session" button
+were dropped from the bar — found cluttered/hard to hold in mind
+mid-session, same reasoning as the earlier Record/Stop single-control
+change; the full step list, where Skip still lives unchanged, stays
+reachable via the "Session · X/Y" text, now a plain link instead of a
+button.) "Mark complete" auto-advances: `settleSessionStep(sessionId,
+stepId, status)` settles the given step, looks up the next pending/active
+step in `session.steps`, marks it `active`, and returns it so the caller
+can navigate to its `sessionStepTargetPath` — shared by `SessionBar` and
+(2026-08-26 follow-up) `ReviewPage`'s own auto-advance below, so neither
+hand-rolls the "find the next step, activate it" lookup. `SessionRunnerPage`'s
 list-row "Mark complete" is unchanged (stays on the list; the reactive
 `activeIndex` just shifts to the next row).
 Relatedly, two "confirm and advance" controls that used to bake navigation
@@ -344,9 +373,18 @@ into the save action were split so confirming never forces a page change:
 `VocabularyPicker`'s "Confirm vocabulary and next" is now a plain "Confirm
 vocabulary" plus a separate "Confirm and next →"; `PracticePage` gained a
 plain "Needs review" alongside "Needs review & next". `ReviewPage`'s
-rating-button-driven due-card queue is unchanged by design — advancing to
-the next due card on rating is normal review-flow behavior, not a
-session-tracking gap.
+rating-button-driven due-card queue is otherwise unchanged by design —
+advancing to the next due card on rating is normal review-flow behavior,
+not a session-tracking gap. What *is* new (2026-08-26 follow-up):
+`ReviewPage` now checks whether the active session's current step is a
+`review` batch step and, if so, shows a live "Reviews this step: X / N"
+line (`countReviewsSince`, a new `repository.ts` helper — timestamp-based
+off `Review` rows created since the step went `active`, not component
+state, so progress survives leaving and returning to the page) and, once N
+is reached, calls `settleSessionStep` and navigates to the next step —
+this is the one place a deep-linked page is deliberately made
+session-aware, since the `review` step's count otherwise had no way to be
+observed from outside `ReviewPage`'s own due-queue state.
 
 ### 1. Content import & organization
 - **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses
@@ -873,10 +911,13 @@ aren't JSON-serializable/aren't worth backing up).
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
 - **Learning Orchestrator known limitations** (see docs/STATUS.md's
-  2026-08-20, 2026-08-21, and 2026-08-22 entries for full detail): no
-  "replace this activity" action; `dailyBudgetMinutes`/`modeAllocation`
-  are user-editable on the Settings page (2026-08-22), but
-  `TOP_UP_INCREMENTS_MINUTES` and the rest of `sessionPlannerConfig.ts`'s
+  2026-08-20, 2026-08-21, 2026-08-22, and 2026-08-26 entries for full
+  detail): no "replace this activity" action; `dailyBudgetMinutes` is
+  user-editable on the Settings page (2026-08-22), and
+  `sessionAllocation` (the glossing/grammar/shadowing/review split,
+  renamed from `modeAllocation`) moved from Settings to a hideable section
+  on Home (2026-08-26), but `TOP_UP_INCREMENTS_MINUTES` and the rest of
+  `sessionPlannerConfig.ts`'s
   tuning constants (neglect window, review-priority weights, per-item time
   estimates) are still code-only; `PlannerSession` now syncs (2026-08-25),
   so a top-up on a second device continues the same daily session rather

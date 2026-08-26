@@ -22,7 +22,6 @@ import type {
   InboxMembership,
   InitialOrderMode,
   Kanji,
-  LearningMode,
   PlannerSession,
   PlannerSessionStep,
   PlannerStepStatus,
@@ -36,6 +35,7 @@ import type {
   SentenceAnalysis,
   SentenceGrammar,
   SentenceVocabulary,
+  SessionBucket,
   StudyActivityType,
   StudyItem,
   StudyStatus,
@@ -97,7 +97,6 @@ import {
   type UnderstandCandidate,
 } from '../lib/sessionPlanner';
 import {
-  ACTIVITY_TYPE_MODE,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   NEGLECT_WINDOW_DAYS,
@@ -3307,7 +3306,7 @@ export async function recordGrammarRelationshipObservation(
  */
 async function buildReviewPriorityInputs(
   studyItems: StudyItem[],
-  mode: LearningMode,
+  mode: SessionBucket,
   now: Date,
 ): Promise<ReviewPriorityInput[]> {
   if (studyItems.length === 0) return [];
@@ -3433,7 +3432,10 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
       .sort((a, b) => a.position - b.position);
     if (unstarted.length === 0) continue;
     const preview = unstarted.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
-    const sentenceRows = await db.sentences.bulkGet(preview.map((item) => item.sentenceId));
+    const [sentenceRows, analysisRows] = await Promise.all([
+      db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
+      db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
+    ]);
     candidates.push({
       bookId: book.id,
       label: book.title,
@@ -3441,6 +3443,10 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
       sentences: preview.map((item, index) => ({
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
+        // A sentence whose vocab is already confirmed only needs the
+        // structural-analysis step re-recommended, not vocabulary_review
+        // again — see buildExploreSteps's own comment (2026-08-26 bug fix).
+        vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
       })),
     });
   }
@@ -3531,7 +3537,15 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
     }));
 }
 
-/** Recent-activity events for the rolling-window balance/neglect calculation (used by both the planner and the dashboard's balance display, so they always agree). */
+/**
+ * Recent-activity events for the rolling-window balance/neglect calculation
+ * (used by both the planner and the dashboard's balance display, so they
+ * always agree). Every review row tags bucket `review` uniformly regardless
+ * of activityType (2026-08-26 follow-up — the retain/practice split that
+ * used to matter here was folded into one `review` bucket, so there's no
+ * more per-activity-type branching to do, unlike the old ACTIVITY_TYPE_MODE
+ * lookup this replaced).
+ */
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -3545,25 +3559,14 @@ async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]
       db.sentenceGrammar.where('updatedAt').above(cutoffIso).toArray(),
     ]);
 
-  const reviewStudyItemIds = [...new Set(recentReviews.map((review) => review.studyItemId))];
-  const reviewStudyItems = reviewStudyItemIds.length ? await db.studyItems.bulkGet(reviewStudyItemIds) : [];
-  const activityTypeByStudyItemId = new Map<string, string>();
-  reviewStudyItems.forEach((item, index) => {
-    if (item) activityTypeByStudyItemId.set(reviewStudyItemIds[index]!, item.activityType);
-  });
-
   const events: RecentActivityEvent[] = [];
-  for (const review of recentReviews) {
-    const activityType = activityTypeByStudyItemId.get(review.studyItemId);
-    const mode = activityType ? ACTIVITY_TYPE_MODE[activityType] : undefined;
-    if (mode) events.push({ mode, timestamp: review.timestamp });
-  }
-  for (const attempt of recentAttempts) events.push({ mode: 'practice', timestamp: attempt.createdAt });
+  for (const review of recentReviews) events.push({ mode: 'review', timestamp: review.timestamp });
+  for (const attempt of recentAttempts) events.push({ mode: 'shadowing', timestamp: attempt.createdAt });
   for (const membership of allBookSentences) {
-    if (membership.addedAt >= cutoffIso) events.push({ mode: 'explore', timestamp: membership.addedAt });
+    if (membership.addedAt >= cutoffIso) events.push({ mode: 'glossing', timestamp: membership.addedAt });
   }
-  for (const analysis of recentAnalyses) events.push({ mode: 'understand', timestamp: analysis.updatedAt });
-  for (const link of recentSentenceGrammar) events.push({ mode: 'understand', timestamp: link.updatedAt });
+  for (const analysis of recentAnalyses) events.push({ mode: 'grammar', timestamp: analysis.updatedAt });
+  for (const link of recentSentenceGrammar) events.push({ mode: 'grammar', timestamp: link.updatedAt });
   return events;
 }
 
@@ -3592,11 +3595,18 @@ const NO_EXCLUSIONS: SessionPlannerExclusions = {
   grammarPatternIds: new Set(),
 };
 
-/** Gathers everything buildRecommendedSession needs — the only Dexie-touching step of the planning pipeline. `exclude` keeps a top-up from re-suggesting a book/sentence/grammar pattern already sitting in today's step list. */
+/**
+ * Gathers everything buildRecommendedSession needs — the only Dexie-touching
+ * step of the planning pipeline. `exclude` keeps a top-up from re-suggesting
+ * a book/sentence/grammar pattern already sitting in today's step list.
+ * `baselineOverride` lets a caller (Home's per-add-time split picker) use a
+ * one-off allocation instead of the saved `settings.sessionAllocation`.
+ */
 export async function getSessionPlannerInput(
   totalMinutes: number,
   now: Date = new Date(),
   exclude: SessionPlannerExclusions = NO_EXCLUSIONS,
+  baselineOverride?: Record<SessionBucket, number>,
 ): Promise<SessionPlannerInput> {
   const db = getDb();
   const settings = await readSettings(db);
@@ -3619,9 +3629,12 @@ export async function getSessionPlannerInput(
       findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     ]);
 
+  // retainDueItems/practiceDueItems are ranked/packed together downstream
+  // (one shared `review` bucket) — the 'review' tag here is only used for
+  // ReviewPriorityInput's informational `mode` field, not for allocation.
   const [retainDue, practiceDue] = await Promise.all([
-    buildReviewPriorityInputs(retainDueItems, 'retain', now),
-    buildReviewPriorityInputs(practiceDueItems, 'practice', now),
+    buildReviewPriorityInputs(retainDueItems, 'review', now),
+    buildReviewPriorityInputs(practiceDueItems, 'review', now),
   ]);
 
   const activeSentenceIds = await activeSentenceIdsForShadowing(5);
@@ -3649,7 +3662,7 @@ export async function getSessionPlannerInput(
     exploreCandidates,
     understandCandidates,
     shadowCandidates,
-    baseline: settings.modeAllocation,
+    baseline: baselineOverride ?? settings.sessionAllocation,
   };
 }
 
@@ -3657,8 +3670,9 @@ export async function getSessionPlannerInput(
 export async function planRecommendedSession(
   minutes: number,
   now: Date = new Date(),
+  baselineOverride?: Record<SessionBucket, number>,
 ): Promise<RecommendedSession> {
-  const input = await getSessionPlannerInput(minutes, now);
+  const input = await getSessionPlannerInput(minutes, now, undefined, baselineOverride);
   return buildRecommendedSession(input);
 }
 
@@ -3674,17 +3688,19 @@ export async function getTodayPlannerSession(now: Date = new Date()): Promise<Pl
  * daily list. Re-plans only against the newly added minutes, excluding
  * sentences/books/grammar patterns already present anywhere in today's step
  * list (regardless of status) so a top-up doesn't re-suggest something
- * already recommended. Due-batch steps (`due_retain_batch`/
- * `due_practice_batch`) need no such exclusion — they always score against
- * the live due queue, which itself shrinks as reviews actually get done via
- * ReviewPage — except that a due-batch step still sitting `pending`
- * (unstarted) is left alone rather than duplicated; its own live due-queue
- * link already reflects the larger budget in practice even though its
- * displayed count doesn't retroactively grow.
+ * already recommended. The `due_review_batch` step needs no such exclusion —
+ * it always scores against the live due queue, which itself shrinks as
+ * reviews actually get done via ReviewPage — except that one still sitting
+ * `pending` (unstarted) is left alone rather than duplicated; its own live
+ * due-queue link already reflects the larger budget in practice even though
+ * its displayed count doesn't retroactively grow. `baselineOverride` (Home's
+ * per-add-time split picker) applies only to this call's own newly-added
+ * steps, not to the session's already-settled allocation history.
  */
 export async function addMinutesToTodaySession(
   minutes: number,
   now: Date = new Date(),
+  baselineOverride?: Record<SessionBucket, number>,
 ): Promise<PlannerSession> {
   const db = getDb();
   const date = localDateKey(now);
@@ -3692,24 +3708,15 @@ export async function addMinutesToTodaySession(
 
   const existing = await db.plannerSessions.where('date').equals(date).first();
   const exclude = exclusionsFromSteps(existing?.steps ?? []);
-  const hasPendingDueBatch = {
-    retain: (existing?.steps ?? []).some(
-      (step) => step.activityType === 'due_retain_batch' && step.status === 'pending',
-    ),
-    practice: (existing?.steps ?? []).some(
-      (step) => step.activityType === 'due_practice_batch' && step.status === 'pending',
-    ),
-  };
+  const hasPendingReviewBatch = (existing?.steps ?? []).some(
+    (step) => step.activityType === 'due_review_batch' && step.status === 'pending',
+  );
 
-  const input = await getSessionPlannerInput(minutes, now, exclude);
+  const input = await getSessionPlannerInput(minutes, now, exclude, baselineOverride);
   const recommended = buildRecommendedSession(input);
 
   const newSteps: PlannerSessionStep[] = recommended.steps
-    .filter((step) => {
-      if (step.activityType === 'due_retain_batch' && hasPendingDueBatch.retain) return false;
-      if (step.activityType === 'due_practice_batch' && hasPendingDueBatch.practice) return false;
-      return true;
-    })
+    .filter((step) => !(step.activityType === 'due_review_batch' && hasPendingReviewBatch))
     .map((step) => ({ ...step, id: createId('planner_step'), status: 'pending' as const }));
 
   if (!existing) {
@@ -3730,8 +3737,8 @@ export async function addMinutesToTodaySession(
   }
 
   const allocation = { ...existing.allocation };
-  for (const mode of Object.keys(recommended.allocation) as LearningMode[]) {
-    allocation[mode] = (allocation[mode] ?? 0) + recommended.allocation[mode];
+  for (const bucket of Object.keys(recommended.allocation) as SessionBucket[]) {
+    allocation[bucket] = (allocation[bucket] ?? 0) + recommended.allocation[bucket];
   }
 
   // Only reopen a settled (completed/ended-early) session if this top-up
@@ -3849,6 +3856,43 @@ export async function updatePlannerSessionStep(
   return updated;
 }
 
+/**
+ * Settles one step (Mark complete/Skip) and, if there's a next pending/
+ * active step afterward, marks it active too — the auto-advance behavior
+ * `SessionBar` and (2026-08-26 follow-up) `ReviewPage` both need, factored
+ * out here so neither hand-rolls the same "find the next step, activate it"
+ * lookup. Returns the next step (if any) so the caller can navigate to its
+ * target path (`sessionStepTargetPath`).
+ */
+export async function settleSessionStep(
+  sessionId: string,
+  stepId: string,
+  status: 'completed' | 'skipped',
+): Promise<{ session: PlannerSession; nextStep: PlannerSessionStep | undefined } | undefined> {
+  const before = await getDb().plannerSessions.get(sessionId);
+  if (!before) return undefined;
+  await updatePlannerSessionStep(sessionId, stepId, { status });
+
+  const currentIndex = before.steps.findIndex((step) => step.id === stepId);
+  const nextStepBefore = before.steps
+    .slice(currentIndex + 1)
+    .find((step) => step.status === 'pending' || step.status === 'active');
+
+  const updated = nextStepBefore
+    ? await updatePlannerSessionStep(sessionId, nextStepBefore.id, { status: 'active' })
+    : await getDb().plannerSessions.get(sessionId);
+  if (!updated) return undefined;
+  return {
+    session: updated,
+    nextStep: nextStepBefore ? updated.steps.find((step) => step.id === nextStepBefore.id) : undefined,
+  };
+}
+
+/** Count of Review rows recorded at/after `timestamp` — powers ReviewPage's live "X/N reviews done" progress against an active session's `review` step target count; timestamp-based (not component state) so progress survives leaving and returning to the page. */
+export async function countReviewsSince(timestamp: string): Promise<number> {
+  return getDb().reviews.where('timestamp').aboveOrEqual(timestamp).count();
+}
+
 /** Ends a session before every step is settled — any still-pending steps count as skipped, not completed. */
 export async function endPlannerSessionEarly(sessionId: string): Promise<PlannerSession | undefined> {
   const db = getDb();
@@ -3872,8 +3916,8 @@ export async function endPlannerSessionEarly(sessionId: string): Promise<Planner
 }
 
 export interface LearningBalanceEntry {
-  mode: LearningMode;
-  /** Number of distinct activity events observed in this mode within the rolling window. */
+  bucket: SessionBucket;
+  /** Number of distinct activity events observed in this bucket within the rolling window. */
   count: number;
   daysSinceLast: number | null;
   neglectScore: number;
@@ -3884,8 +3928,8 @@ export async function computeLearningBalance(now: Date = new Date()): Promise<Le
   const events = await getRecentActivityEvents(now);
   const distribution = computeRecentActivityDistribution(events, now);
   const neglectScores = computeNeglectScores(distribution);
-  return (Object.keys(distribution) as LearningMode[]).map((mode) => ({
-    mode,
+  return (Object.keys(distribution) as SessionBucket[]).map((mode) => ({
+    bucket: mode,
     count: distribution[mode].count,
     daysSinceLast: distribution[mode].daysSinceLast,
     neglectScore: neglectScores[mode],

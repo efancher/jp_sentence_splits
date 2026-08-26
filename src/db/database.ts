@@ -36,7 +36,7 @@ import type {
   SyncRecordMeta,
 } from '../sync/types';
 import {
-  BASELINE_MODE_ALLOCATION,
+  BASELINE_SESSION_ALLOCATION,
   DEFAULT_DAILY_BUDGET_MINUTES,
 } from '../lib/sessionPlannerConfig';
 
@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   newCardsPerSessionLimit: 20,
   graduationMinScheduledDays: 180,
   dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,
-  modeAllocation: { ...BASELINE_MODE_ALLOCATION },
+  sessionAllocation: { ...BASELINE_SESSION_ALLOCATION },
 };
 
 export class GlossbookDatabase extends Dexie {

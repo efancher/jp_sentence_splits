@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LearningMode } from '../src/domain/types';
+import type { SessionBucket } from '../src/domain/types';
 import {
-  ALL_LEARNING_MODES,
+  ALL_SESSION_BUCKETS,
   allocateTimeAcrossModes,
   buildRecommendedSession,
   computeNeglectScores,
@@ -28,7 +28,7 @@ function dueCandidate(overrides: Partial<ReviewPriorityInput> = {}): ReviewPrior
     studyItemId: overrides.studyItemId ?? `item_${Math.random().toString(36).slice(2)}`,
     subjectType: 'vocabularyItem',
     activityType: 'reading_retrieval',
-    mode: 'retain',
+    mode: 'review',
     due: daysAgo(1),
     scheduledDays: 7,
     state: 'review',
@@ -57,25 +57,25 @@ function emptyPlannerInput(overrides: Partial<SessionPlannerInput> = {}): Sessio
 }
 
 describe('computeRecentActivityDistribution / computeNeglectScores', () => {
-  it('treats a mode with no events at all as maximally neglected', () => {
+  it('treats a bucket with no events at all as maximally neglected', () => {
     const distribution = computeRecentActivityDistribution([], NOW);
-    expect(distribution.practice.daysSinceLast).toBeNull();
+    expect(distribution.shadowing.daysSinceLast).toBeNull();
     const neglect = computeNeglectScores(distribution);
-    expect(neglect.practice).toBe(1);
+    expect(neglect.shadowing).toBe(1);
   });
 
-  it('gives a mode touched today a near-zero neglect score', () => {
-    const events: RecentActivityEvent[] = [{ mode: 'retain', timestamp: NOW.toISOString() }];
+  it('gives a bucket touched today a near-zero neglect score', () => {
+    const events: RecentActivityEvent[] = [{ mode: 'review', timestamp: NOW.toISOString() }];
     const distribution = computeRecentActivityDistribution(events, NOW);
     const neglect = computeNeglectScores(distribution);
-    expect(neglect.retain).toBeCloseTo(0, 5);
+    expect(neglect.review).toBeCloseTo(0, 5);
   });
 
   it('scales neglect linearly up to the window, then clamps at 1', () => {
-    const events: RecentActivityEvent[] = [{ mode: 'understand', timestamp: daysAgo(30) }];
+    const events: RecentActivityEvent[] = [{ mode: 'grammar', timestamp: daysAgo(30) }];
     const distribution = computeRecentActivityDistribution(events, NOW, 14);
     const neglect = computeNeglectScores(distribution, 14);
-    expect(neglect.understand).toBe(1);
+    expect(neglect.grammar).toBe(1);
   });
 });
 
@@ -113,33 +113,33 @@ describe('scoreReviewPriority / rankReviewPriorities', () => {
 });
 
 describe('allocateTimeAcrossModes', () => {
-  it('redistributes a capped mode\'s leftover minutes to the others', () => {
-    const neutralNeglect = Object.fromEntries(ALL_LEARNING_MODES.map((m) => [m, 0])) as Record<
-      LearningMode,
+  it("redistributes a capped bucket's leftover minutes to the others", () => {
+    const neutralNeglect = Object.fromEntries(ALL_SESSION_BUCKETS.map((m) => [m, 0])) as Record<
+      SessionBucket,
       number
     >;
     const allocation = allocateTimeAcrossModes({
       totalMinutes: 30,
       neglectScores: neutralNeglect,
-      availableMinutesByMode: { retain: 1 },
+      availableMinutesByMode: { review: 1 },
     });
-    expect(allocation.retain).toBe(1);
-    expect(allocation.explore + allocation.understand + allocation.practice).toBe(29);
+    expect(allocation.review).toBe(1);
+    expect(allocation.glossing + allocation.grammar + allocation.shadowing).toBe(29);
   });
 
   it('sums to the requested total minutes (rounding drift absorbed by the largest share)', () => {
-    const neglect = { explore: 0.2, understand: 0.5, practice: 0.9, retain: 0.1 };
+    const neglect = { glossing: 0.2, grammar: 0.5, shadowing: 0.9, review: 0.1 };
     const allocation = allocateTimeAcrossModes({ totalMinutes: 10, neglectScores: neglect });
-    const sum = ALL_LEARNING_MODES.reduce((total, mode) => total + allocation[mode], 0);
+    const sum = ALL_SESSION_BUCKETS.reduce((total, mode) => total + allocation[mode], 0);
     expect(sum).toBe(10);
   });
 
-  it('shifts share toward a heavily-neglected mode relative to the baseline', () => {
-    const neglected = { explore: 0, understand: 0, practice: 1, retain: 0 };
-    const untouched = { explore: 0, understand: 0, practice: 0, retain: 0 };
+  it('shifts share toward a heavily-neglected bucket relative to the baseline', () => {
+    const neglected = { glossing: 0, grammar: 0, shadowing: 1, review: 0 };
+    const untouched = { glossing: 0, grammar: 0, shadowing: 0, review: 0 };
     const withNeglect = allocateTimeAcrossModes({ totalMinutes: 60, neglectScores: neglected });
     const baseline = allocateTimeAcrossModes({ totalMinutes: 60, neglectScores: untouched });
-    expect(withNeglect.practice).toBeGreaterThan(baseline.practice);
+    expect(withNeglect.shadowing).toBeGreaterThan(baseline.shadowing);
   });
 });
 
@@ -151,9 +151,9 @@ describe('buildRecommendedSession', () => {
     expect(session.explanation.length).toBeGreaterThan(0);
   });
 
-  it('review-heavy recent activity with neglected explore/practice shifts allocation away from retain', () => {
+  it('review-heavy recent activity with neglected glossing/shadowing shifts allocation away from review', () => {
     const recentActivity: RecentActivityEvent[] = Array.from({ length: 10 }, (_, index) => ({
-      mode: 'retain' as const,
+      mode: 'review' as const,
       timestamp: daysAgo(index * 0.5),
     }));
     const session = buildRecommendedSession(
@@ -162,17 +162,17 @@ describe('buildRecommendedSession', () => {
         retainDue: [dueCandidate()],
       }),
     );
-    expect(session.neglectScores.retain).toBe(0);
-    expect(session.neglectScores.explore).toBe(1);
-    expect(session.neglectScores.practice).toBe(1);
-    expect(session.allocation.retain).toBeLessThan(30 * 0.25 + 1);
+    expect(session.neglectScores.review).toBe(0);
+    expect(session.neglectScores.glossing).toBe(1);
+    expect(session.neglectScores.shadowing).toBe(1);
+    expect(session.allocation.review).toBeLessThan(30 * 0.35 + 1);
   });
 
-  it('neglected shadowing increases practice allocation and produces shadow steps', () => {
+  it('neglected shadowing increases shadowing allocation and produces shadow steps', () => {
     const recentActivity: RecentActivityEvent[] = [
-      { mode: 'retain', timestamp: daysAgo(0) },
-      { mode: 'explore', timestamp: daysAgo(0) },
-      { mode: 'understand', timestamp: daysAgo(1) },
+      { mode: 'review', timestamp: daysAgo(0) },
+      { mode: 'glossing', timestamp: daysAgo(0) },
+      { mode: 'grammar', timestamp: daysAgo(1) },
     ];
     const shadowCandidates: ShadowCandidate[] = Array.from({ length: 5 }, (_, index) => ({
       sentenceId: `sent_${index}`,
@@ -183,24 +183,28 @@ describe('buildRecommendedSession', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({ recentActivity, shadowCandidates, totalMinutes: 60 }),
     );
-    expect(session.neglectScores.practice).toBeGreaterThan(0.4);
+    expect(session.neglectScores.shadowing).toBeGreaterThan(0.4);
     const shadowSteps = session.steps.filter((step) => step.targetKind === 'shadow');
     expect(shadowSteps.length).toBeGreaterThan(0);
   });
 
-  it('with no due reviews, retain gets 0 minutes and the rest is spent elsewhere', () => {
+  it('with no due reviews, review gets 0 minutes and the rest is spent elsewhere', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {
         bookId: 'book_1',
         label: 'Episode 4',
         reason: 'Continue',
-        sentences: Array.from({ length: 20 }, (_, i) => ({ sentenceId: `sent_${i}`, preview: 'x' })),
+        sentences: Array.from({ length: 20 }, (_, i) => ({
+          sentenceId: `sent_${i}`,
+          preview: 'x',
+          vocabularyConfirmed: false,
+        })),
       },
     ];
     const session = buildRecommendedSession(
       emptyPlannerInput({ exploreCandidates }),
     );
-    expect(session.allocation.retain).toBe(0);
+    expect(session.allocation.review).toBe(0);
     expect(session.explanation.some((line) => line.toLowerCase().includes('backlog'))).toBe(true);
     const total = session.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
     expect(total).toBeLessThanOrEqual(30);
@@ -213,15 +217,15 @@ describe('buildRecommendedSession', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({ retainDue, totalMinutes: 60, reviewLimit: 15 }),
     );
-    const retainStep = session.steps.find((step) => step.mode === 'retain');
-    expect(retainStep).toBeDefined();
+    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
+    expect(reviewStep).toBeDefined();
     // A 60-minute planning pass can't fit more than the reviewLimit of
-    // 15 items even if the whole budget went to retain — the batch step's
+    // 15 items even if the whole budget went to review — the batch step's
     // count is derived from the ranked (already-capped) list.
-    expect(retainStep!.label).not.toMatch(/2\d\d|1[6-9]\d|[3-9]\d/);
+    expect(reviewStep!.targetCount).toBeLessThanOrEqual(15);
   });
 
-  it('a recently-encountered, not-yet-tracked grammar pattern surfaces as an Understand step with a reason', () => {
+  it('a recently-encountered, not-yet-tracked grammar pattern surfaces as a grammar step with a reason', () => {
     const understandCandidates: UnderstandCandidate[] = [
       {
         grammarPatternId: 'pattern_temo',
@@ -235,7 +239,7 @@ describe('buildRecommendedSession', () => {
     );
     const step = session.steps.find((s) => s.grammarPatternId === 'pattern_temo');
     expect(step).toBeDefined();
-    expect(step!.mode).toBe('understand');
+    expect(step!.bucket).toBe('grammar');
     expect(step!.reason).toContain('Encountered 3 times');
   });
 
@@ -249,7 +253,11 @@ describe('buildRecommendedSession', () => {
             bookId: 'b1',
             label: 'Book',
             reason: 'Continue',
-            sentences: Array.from({ length: 10 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+            sentences: Array.from({ length: 10 }, (_, i) => ({
+              sentenceId: `s${i}`,
+              preview: 'x',
+              vocabularyConfirmed: false,
+            })),
           },
         ],
         understandCandidates: [
@@ -263,20 +271,24 @@ describe('buildRecommendedSession', () => {
     expect(total).toBeLessThanOrEqual(10 + 1);
   });
 
-  it('a large (60-minute) planning pass covers all four modes when candidates exist for each', () => {
+  it('a large (60-minute) planning pass covers all four buckets when candidates exist for each', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
         totalMinutes: 60,
         retainDue: Array.from({ length: 20 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
         practiceDue: Array.from({ length: 20 }, (_, i) =>
-          dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
+          dueCandidate({ studyItemId: `dp_${i}`, activityType: 'cloze' }),
         ),
         exploreCandidates: [
           {
             bookId: 'b1',
             label: 'Book',
             reason: 'Continue',
-            sentences: Array.from({ length: 30 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+            sentences: Array.from({ length: 30 }, (_, i) => ({
+              sentenceId: `s${i}`,
+              preview: 'x',
+              vocabularyConfirmed: false,
+            })),
           },
         ],
         understandCandidates: [
@@ -290,17 +302,17 @@ describe('buildRecommendedSession', () => {
         })),
       }),
     );
-    const modesPresent = new Set(session.steps.map((step) => step.mode));
-    expect(modesPresent.size).toBe(4);
+    const bucketsPresent = new Set(session.steps.map((step) => step.bucket));
+    expect(bucketsPresent.size).toBe(4);
     const total = session.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
     expect(total).toBeLessThanOrEqual(60 + 1);
   });
 
-  it('a large due-practice backlog does not crowd shadow candidates out entirely', () => {
+  it('a large due-practice backlog does not crowd shadow candidates out (fully decoupled buckets)', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({
         practiceDue: Array.from({ length: 50 }, (_, i) =>
-          dueCandidate({ studyItemId: `dp_${i}`, mode: 'practice', activityType: 'cloze' }),
+          dueCandidate({ studyItemId: `dp_${i}`, activityType: 'cloze' }),
         ),
         shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
           sentenceId: `sh_${i}`,
@@ -320,14 +332,18 @@ describe('buildRecommendedSession', () => {
           totalMinutes,
           retainDue: Array.from({ length: 50 }, (_, i) => dueCandidate({ studyItemId: `${totalMinutes}_${i}` })),
           practiceDue: Array.from({ length: 50 }, (_, i) =>
-            dueCandidate({ studyItemId: `${totalMinutes}p_${i}`, mode: 'practice' }),
+            dueCandidate({ studyItemId: `${totalMinutes}p_${i}` }),
           ),
           exploreCandidates: [
             {
               bookId: 'b1',
               label: 'Book',
               reason: 'Continue',
-              sentences: Array.from({ length: 50 }, (_, i) => ({ sentenceId: `s${i}`, preview: 'x' })),
+              sentences: Array.from({ length: 50 }, (_, i) => ({
+                sentenceId: `s${i}`,
+                preview: 'x',
+                vocabularyConfirmed: false,
+              })),
             },
           ],
           understandCandidates: Array.from({ length: 10 }, (_, i) => ({
@@ -364,5 +380,20 @@ describe('buildRecommendedSession', () => {
     const nextStep = session.steps[sharedIndex + 1];
     expect(nextStep?.sentenceId).toBe('shared_sentence');
     expect(session.explanation.some((line) => line.includes('same sentence'))).toBe(true);
+  });
+
+  it('skips a redundant vocabulary_review step for a sentence whose vocab is already confirmed', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: [{ sentenceId: 'sent_confirmed', preview: 'x', vocabularyConfirmed: true }],
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
+    const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_confirmed');
+    expect(stepsForSentence).toHaveLength(1);
+    expect(stepsForSentence[0]!.targetKind).toBe('continue_book');
   });
 });

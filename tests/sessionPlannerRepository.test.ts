@@ -58,8 +58,8 @@ describe('Learning Orchestrator repository layer', () => {
     );
 
     const recommended = await planRecommendedSession(30);
-    expect(recommended.allocation.retain).toBe(0);
-    const exploreStep = recommended.steps.find((step) => step.mode === 'explore');
+    expect(recommended.allocation.review).toBe(0);
+    const exploreStep = recommended.steps.find((step) => step.bucket === 'glossing');
     expect(exploreStep).toBeDefined();
     expect(exploreStep!.bookId).toBe(book.id);
   });
@@ -172,11 +172,11 @@ describe('Learning Orchestrator repository layer', () => {
     await addSentencesToBook(book.id, sentences.map((s) => s.id));
 
     const first = await addMinutesToTodaySession(30);
-    const exploreStepsAfterFirst = first.steps.filter((step) => step.mode === 'explore');
+    const exploreStepsAfterFirst = first.steps.filter((step) => step.bucket === 'glossing');
     expect(exploreStepsAfterFirst.length).toBeGreaterThan(0);
 
     const second = await addMinutesToTodaySession(30);
-    const exploreStepsAfterSecond = second.steps.filter((step) => step.mode === 'explore');
+    const exploreStepsAfterSecond = second.steps.filter((step) => step.bucket === 'glossing');
     // No second "continue this book" step for the same still-unstarted book.
     expect(exploreStepsAfterSecond.length).toBe(exploreStepsAfterFirst.length);
   });
@@ -218,9 +218,9 @@ describe('Learning Orchestrator repository layer', () => {
     await recordReview({ studyItemId: studyItem.id, rating: 'good' });
 
     const balance = await computeLearningBalance();
-    const retain = balance.find((entry) => entry.mode === 'retain')!;
-    const understand = balance.find((entry) => entry.mode === 'understand')!;
-    expect(retain.neglectScore).toBeLessThan(understand.neglectScore);
-    expect(understand.daysSinceLast).toBeNull();
+    const review = balance.find((entry) => entry.bucket === 'review')!;
+    const grammar = balance.find((entry) => entry.bucket === 'grammar')!;
+    expect(review.neglectScore).toBeLessThan(grammar.neglectScore);
+    expect(grammar.daysSinceLast).toBeNull();
   });
 });

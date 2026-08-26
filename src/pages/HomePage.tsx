@@ -3,9 +3,19 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { readSettings } from '../db/database';
-import { addMinutesToTodaySession, computeLearningBalance, getTodayPlannerSession } from '../db/repository';
-import type { LearningMode, PlannerStepStatus } from '../domain/types';
-import { DEFAULT_DAILY_BUDGET_MINUTES, TOP_UP_INCREMENTS_MINUTES } from '../lib/sessionPlannerConfig';
+import {
+  addMinutesToTodaySession,
+  computeLearningBalance,
+  getTodayPlannerSession,
+  updateSettings,
+} from '../db/repository';
+import type { PlannerStepStatus, SessionBucket } from '../domain/types';
+import { ALL_SESSION_BUCKETS } from '../lib/sessionPlanner';
+import {
+  BASELINE_SESSION_ALLOCATION,
+  DEFAULT_DAILY_BUDGET_MINUTES,
+  TOP_UP_INCREMENTS_MINUTES,
+} from '../lib/sessionPlannerConfig';
 
 /**
  * The Learning Orchestrator's home screen (docs/AI_OVERVIEW.md) — the "what
@@ -19,16 +29,21 @@ import { DEFAULT_DAILY_BUDGET_MINUTES, TOP_UP_INCREMENTS_MINUTES } from '../lib/
  * every area stay one tap away, so the recommendation guides without
  * gating (design brief §11's "don't clutter" instruction, unchanged from
  * the original version of this page).
+ *
+ * The activity split (2026-08-26 follow-up) is set directly here, in a
+ * hideable section right before Start/+time, instead of on Settings — user
+ * feedback found the earlier Explore/Understand/Practice/Retain abstraction
+ * not concrete enough to set percentages against, so it's now framed as
+ * four named activities (glossing/grammar/shadowing/review) and this is the
+ * only place it's editable.
  */
 
-const MODE_LABELS: Record<LearningMode, string> = {
-  explore: 'Explore',
-  understand: 'Understand',
-  practice: 'Practice',
-  retain: 'Retain',
+const SESSION_BUCKET_LABELS: Record<SessionBucket, string> = {
+  glossing: 'New sentences (glossing)',
+  grammar: 'Grammar',
+  shadowing: 'Shadowing',
+  review: 'Review',
 };
-
-const MODE_ORDER: LearningMode[] = ['explore', 'understand', 'practice', 'retain'];
 
 const STEP_STATUS_LABELS: Record<PlannerStepStatus, string> = {
   pending: 'Up next',
@@ -56,16 +71,22 @@ function formatDaysSince(days: number | null): string {
 export function HomePage() {
   const navigate = useNavigate();
   const [addingMinutes, setAddingMinutes] = useState<number | null>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
+  // null = follow the saved default (settings.sessionAllocation); set once the
+  // learner edits a value here, and persisted back as the new default on add.
+  const [customSplit, setCustomSplit] = useState<Record<SessionBucket, number> | null>(null);
 
   const session = useLiveQuery(() => getTodayPlannerSession(), []);
   const balance = useLiveQuery(() => computeLearningBalance(), []);
   const settings = useLiveQuery(() => readSettings(), []);
   const dailyBudgetMinutes = settings?.dailyBudgetMinutes ?? DEFAULT_DAILY_BUDGET_MINUTES;
+  const activeSplit = customSplit ?? settings?.sessionAllocation ?? BASELINE_SESSION_ALLOCATION;
 
   async function handleAdd(minutes: number) {
     setAddingMinutes(minutes);
     try {
-      await addMinutesToTodaySession(minutes);
+      await addMinutesToTodaySession(minutes, new Date(), customSplit ?? undefined);
+      if (customSplit) await updateSettings({ sessionAllocation: customSplit });
     } finally {
       setAddingMinutes(null);
     }
@@ -123,6 +144,44 @@ export function HomePage() {
           </>
         )}
 
+        <details
+          open={splitOpen}
+          onToggle={(event) => setSplitOpen((event.target as HTMLDetailsElement).open)}
+        >
+          <summary>Customize split</summary>
+          <div className="stack" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
+            {ALL_SESSION_BUCKETS.map((bucket) => (
+              <label key={bucket}>
+                {SESSION_BUCKET_LABELS[bucket]}
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(activeSplit[bucket] * 100)}
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value, 10);
+                    if (Number.isNaN(parsed) || parsed < 0) return;
+                    setCustomSplit({ ...activeSplit, [bucket]: parsed / 100 });
+                  }}
+                />
+              </label>
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Split of the added time across these four activities, before the
+              orchestrator nudges it toward whatever you've neglected lately.
+              Shares are relative, so they don't strictly need to add up to
+              100%. Changing this and adding time saves it as your new
+              default.
+            </p>
+            {customSplit ? (
+              <button type="button" className="ghost" onClick={() => setCustomSplit(null)}>
+                Reset to saved default
+              </button>
+            ) : null}
+          </div>
+        </details>
+
         <div className="row" role="group" aria-label="Add time to today's session">
           <button
             type="button"
@@ -155,13 +214,13 @@ export function HomePage() {
         {balance === undefined ? (
           <p className="muted">Loading…</p>
         ) : (
-          MODE_ORDER.map((mode) => {
-            const entry = balance.find((item) => item.mode === mode);
+          ALL_SESSION_BUCKETS.map((bucket) => {
+            const entry = balance.find((item) => item.bucket === bucket);
             const fillPercent = entry ? Math.round((1 - entry.neglectScore) * 100) : 0;
             return (
-              <div key={mode} className="stack" style={{ gap: '0.25rem' }}>
+              <div key={bucket} className="stack" style={{ gap: '0.25rem' }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span>{MODE_LABELS[mode]}</span>
+                  <span>{SESSION_BUCKET_LABELS[bucket]}</span>
                   <span className="muted" style={{ fontSize: '0.85rem' }}>
                     {formatDaysSince(entry?.daysSinceLast ?? null)}
                   </span>

@@ -1,4 +1,4 @@
-import type { LearningMode, StudyActivityType } from '../domain/types';
+import type { SessionBucket, StudyActivityType } from '../domain/types';
 
 /**
  * Tunable constants for the Learning Orchestrator (docs/AI_OVERVIEW.md).
@@ -13,40 +13,32 @@ export const DEFAULT_DAILY_BUDGET_MINUTES = 60;
 /** "I have a bit more time" top-up amounts offered on Home, smallest first. */
 export const TOP_UP_INCREMENTS_MINUTES = [20, 30] as const;
 
-/** Prompt's own starting heuristic for a Normal session — a guideline, not a quota (see allocateTimeAcrossModes). */
-export const BASELINE_MODE_ALLOCATION: Record<LearningMode, number> = {
-  explore: 0.35,
-  understand: 0.2,
-  practice: 0.2,
-  retain: 0.25,
+/**
+ * The four concrete activities a session's time is split across (follow-up,
+ * 2026-08-26) — replaces an earlier abstract Explore/Understand/Practice/
+ * Retain taxonomy that user feedback found not concrete enough to reason
+ * about directly. `glossing` = new-sentence structural analysis + vocab
+ * confirmation, `grammar` = examining not-yet-tracked grammar patterns,
+ * `shadowing` = pronunciation practice, `review` = every FSRS due card
+ * (comprehension/cloze/production/pitch/grammar drills/etc. — one shared
+ * due-queue, so one bucket) regardless of which of the old two "halves"
+ * (retain/practice) it used to belong to. See src/lib/sessionPlanner.ts's
+ * ALL_SESSION_BUCKETS for the canonical ordered list.
+ */
+
+/** Starting heuristic split across the four buckets — a guideline, not a quota (see allocateTimeAcrossModes), user-adjustable on Home before adding time. */
+export const BASELINE_SESSION_ALLOCATION: Record<SessionBucket, number> = {
+  glossing: 0.35,
+  grammar: 0.15,
+  shadowing: 0.15,
+  review: 0.35,
 };
 
 /**
- * Which mode each real StudyActivityType belongs to, for attributing past
- * Review rows to a mode (recent-activity distribution) and for labeling
- * candidate steps. Recognition/comprehension-style activities are Retain;
- * production/active-use activities are Practice, even though several of
- * them (cloze, sentence_transformation, grammar_completion/contrast) are
- * also FSRS-scheduled StudyItems like Retain's — the taxonomy is a
- * scheduling/analytics lens on top of the existing activity types, not a
- * new activity-type split (prompt point 1: "do not force all functionality
- * into this taxonomy").
+ * Real StudyActivityTypes eligible for the `review` bucket's "recognition-
+ * style" half — costed at MODE_ACTIVITY_ESTIMATE_MINUTES.retain per item
+ * (quicker: show/reveal/self-rate).
  */
-export const ACTIVITY_TYPE_MODE: Record<StudyActivityType, LearningMode> = {
-  comprehension: 'retain',
-  reading_in_context: 'retain',
-  reading_retrieval: 'retain',
-  listening: 'retain',
-  grammar_comprehension: 'retain',
-  cloze: 'practice',
-  reading_production: 'practice',
-  sentence_transformation: 'practice',
-  contrastive: 'practice',
-  grammar_completion: 'practice',
-  grammar_contrast: 'practice',
-};
-
-/** Real StudyActivityTypes counted toward Retain-mode candidate selection/activity distribution. */
 export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
   'comprehension',
   'reading_in_context',
@@ -55,7 +47,14 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
   'grammar_comprehension',
 ];
 
-/** Real StudyActivityTypes counted toward Practice-mode candidate selection/activity distribution. */
+/**
+ * Real StudyActivityTypes eligible for the `review` bucket's "production-
+ * style" half — costed at MODE_ACTIVITY_ESTIMATE_MINUTES.practice per item
+ * (slower: typed/produced answers). Both halves are ranked and packed
+ * together into one combined `review` batch step (2026-08-26 follow-up) —
+ * this split only matters for per-item time-cost lookup and the due-item
+ * fetch now, not for a separate top-level allocation.
+ */
 export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'cloze',
   'reading_production',
@@ -65,7 +64,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'grammar_contrast',
 ];
 
-/** Synthetic (non-StudyItem) activity labels the planner itself invents for Explore/Understand/shadowing steps. */
+/** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */
 export const SYNTHETIC_ACTIVITY_TYPES = {
   newSentence: 'new_sentence',
   vocabularyReview: 'vocabulary_review',
@@ -73,21 +72,22 @@ export const SYNTHETIC_ACTIVITY_TYPES = {
   shadowingPractice: 'shadowing_practice',
 } as const;
 
-/** Rough minutes-per-item used to pack a mode's time budget into concrete steps — deliberately coarse (prompt point 10 prefers estimates over new time-tracking infrastructure). */
-export const MODE_ACTIVITY_ESTIMATE_MINUTES: Record<LearningMode, number> = {
-  explore: 2.5,
-  understand: 2,
-  practice: 1.5,
+/** Rough minutes-per-item used to pack a bucket's time budget into concrete steps — deliberately coarse (prompt point 10 prefers estimates over new time-tracking infrastructure). Keys are internal cost tiers, not 1:1 with SessionBucket (the `review` bucket draws on both `retain`/`practice` costs, see RETAIN_ACTIVITY_TYPES/PRACTICE_ACTIVITY_TYPES above). */
+export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
+  glossing: 2.5,
+  grammar: 2,
+  shadowing: 1.5,
   retain: 0.75,
-};
+  practice: 1.5,
+} as const;
 
-/** Per-sentence Explore time split across its two paired steps (continue_book + vocabulary_review) — sums to MODE_ACTIVITY_ESTIMATE_MINUTES.explore so total Explore budget math is unaffected by the split into two chained steps. */
+/** Per-sentence Explore/glossing time split across its two paired steps (continue_book + vocabulary_review) — sums to MODE_ACTIVITY_ESTIMATE_MINUTES.glossing so total glossing budget math is unaffected by the split into two chained steps. */
 export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
 
 /** Rolling window (days) recent-activity distribution and neglect are computed over — prompt point 6's "7- or 14-day view." */
 export const NEGLECT_WINDOW_DAYS = 14;
 
-/** How strongly a fully-neglected mode (untouched for the whole window) can pull the baseline allocation toward itself — a fraction added on top of its baseline share before renormalizing, so the baseline is nudged, not overridden. */
+/** How strongly a fully-neglected bucket (untouched for the whole window) can pull the baseline allocation toward itself — a fraction added on top of its baseline share before renormalizing, so the baseline is nudged, not overridden. */
 export const MAX_NEGLECT_BOOST = 0.6;
 
 /** A subject with no re-encounter signal for this many days starts losing review priority (prompt point 4's "gradually reducing review priority for items mined once long ago and never re-encountered"). Never reaches zero — see STALE_PRIORITY_FLOOR. */
@@ -99,31 +99,20 @@ export const STALE_PRIORITY_FLOOR = 0.25;
 /** Default cap on how many due reviews a session actually includes, regardless of how large the due queue is (prompt point 4: "choose the best 10-15 reviews... not the entire due queue"). */
 export const REVIEW_PRIORITY_DEFAULT_LIMIT = 15;
 
-/** How many due StudyItems per mode are fetched (already due-date sorted) before scoring — bounds the cost of the per-candidate diversity/history lookups regardless of total due-queue size. */
+/** How many due StudyItems per pool are fetched (already due-date sorted) before scoring — bounds the cost of the per-candidate diversity/history lookups regardless of total due-queue size. */
 export const SESSION_PLANNER_CANDIDATE_POOL_SIZE = 60;
 
-/** How many books' "continue reading" Explore candidates to consider. */
+/** How many books' "continue reading" glossing candidates to consider. */
 export const EXPLORE_CANDIDATE_LIMIT = 5;
 
-/** Cap on how many of a book's next unstarted sentences findExploreCandidates previews per book — generous relative to any realistic single day's Explore budget (MODE_ACTIVITY_ESTIMATE_MINUTES.explore is 2.5 min/item, so 20 covers 50 min of Explore alone). */
+/** Cap on how many of a book's next unstarted sentences findExploreCandidates previews per book — generous relative to any realistic single day's glossing budget (MODE_ACTIVITY_ESTIMATE_MINUTES.glossing is 2.5 min/item, so 20 covers 50 min of glossing alone). */
 export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
 
-/** How many not-yet-tracked grammar patterns to consider as Understand candidates. */
+/** How many not-yet-tracked grammar patterns to consider as candidates. */
 export const UNDERSTAND_CANDIDATE_LIMIT = 8;
 
 /** How many shadowing candidates to consider. */
 export const SHADOW_CANDIDATE_LIMIT = 10;
-
-/**
- * Minimum share of the Practice allocation reserved for shadowing, claimed
- * before the due-practice batch (cloze/production/etc reviews) gets its cut
- * — without a reserve, a due-practice backlog can crowd shadowing out of
- * every session's recommendation, since the batch step was built first and
- * shadowing only got whatever minutes were left. Still leftover-friendly:
- * if the due batch doesn't use its capped share, the unused time still
- * rolls over to shadowing rather than sitting idle.
- */
-export const SHADOW_MIN_SHARE_OF_PRACTICE = 1 / 3;
 
 /** How many of a learner's most-recently-opened, non-archived books count as "in scope" for shadowing candidates. */
 export const SHADOW_ACTIVE_BOOK_LIMIT = 5;
