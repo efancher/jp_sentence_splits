@@ -6086,3 +6086,50 @@ Four pieces of live-usage feedback on the Learning Orchestrator session flow.
 - **Verified**: `npm run check` (typecheck + full `vitest run`, 836
   passed, 2 pre-existing skips, no new failures), `npm run lint` clean on
   all changed files.
+
+## Shadowing: normalize the live waveform + pitch contour to the learner (2026-08-27): done
+
+User feedback: their voice is a baritone and they speak quietly, so on the
+live shadow view both their amplitude waveform and their pitch contour
+always read far below the reference, making it hard to match anything up.
+The pitch half was an outright bug.
+
+- **Live pitch contour is now genuinely speaker-normalized**
+  (`LiveShadowWaveform.tsx`). It previously converted the learner's live
+  Hz to semitones off the *reference* speaker's median (`referenceMedianRef`),
+  so a learner an octave down was shoved ~12 semitones below a display
+  window only `[-8, +8]` wide — i.e. clipped off the bottom entirely,
+  despite the panel label claiming "speaker-normalized". Now the component
+  buffers raw per-bucket Hz plus every voiced Hz reading of the take,
+  computes a running median (`medianHz`, a new export in `src/lib/pitch.ts`
+  factored out of `extractPitch`'s existing inline median), and derives the
+  displayed semitone contour from *that* each animation frame — so the
+  earliest buckets stay consistent with the latest as the median settles.
+  Both contours are centred on their own median, so the learner matches
+  shape, not absolute pitch. Caption updated to say so and to show both
+  medians ("ref 210 Hz, you 116 Hz").
+- **Live amplitude waveform gets gentle auto-gain** (new pure helpers in
+  `src/lib/waveform.ts`: `peakMagnitude`, `gentleLiveGain`,
+  `livePeaksFromAmplitudes`; constants `LIVE_AMP_NOISE_FLOOR`,
+  `LIVE_AMP_MAX_GAIN`). `gentleLiveGain` pulls a quiet take toward the
+  reference clip's peak magnitude along a `sqrt` curve — never attenuates,
+  capped at 8× — so a quarter-volume take is lifted to ~half height rather
+  than to parity, keeping a "you were quiet" cue. The component now stores
+  raw per-bucket max-abs amplitude and applies the gain (recomputed from
+  the running level) at render, so gain changes don't desync earlier
+  buckets. Removed the now-unused `mergeLivePeak` / `LIVE_MIC_AMPLITUDE_GAIN`
+  (fixed 2× gain) it replaces.
+- **`AnalysisPanel` post-hoc waveforms**: `PeakWaveform` now normalizes
+  each clip to its own peak (`peakMagnitude`) before drawing, so the
+  stacked reference/learner amplitude SVGs compare by shape. The panel's
+  pitch canvas in semitones mode was already per-track normalized (each
+  side runs its own `extractPitch`), so it was left alone.
+- **Tests**: `tests/pitch.test.ts` +`medianHz` cases; `tests/waveform.test.ts`
+  swapped the `mergeLivePeak` block for `peakMagnitude` / `gentleLiveGain`
+  / `livePeaksFromAmplitudes` coverage.
+- Not exercised in a real browser here (no mic/browser automation) — worth
+  a live shadow take to confirm the gold contour now lands on-screen and
+  tracks the reference's shape.
+- **Verified**: `npm run check` (typecheck + full `vitest run`, 847
+  passed, 2 pre-existing skips, no new failures), `npm run lint` clean on
+  all changed files.

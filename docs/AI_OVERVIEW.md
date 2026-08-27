@@ -677,10 +677,17 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   scopes comparisons to it.
 - **Shadow mode**: live mic-calibrated play-along recording (reference
   plays while recording) with a live waveform overlay, sharing one
-  `AudioContext` for mic analysis + reference playback.
+  `AudioContext` for mic analysis + reference playback. The live amplitude
+  waveform applies a gentle `sqrt`-curve auto-gain (`gentleLiveGain` in
+  `src/lib/waveform.ts`) toward the reference's peak level so a quiet
+  speaker still reads as a comparable shape (never to full parity — a
+  loudness cue is kept).
 - **Live pitch-contour overlay** during recording (YIN pitch detection,
   `src/lib/pitch.ts`, validated against synthetic tones — no fixtures
-  existed in the source repo for this).
+  existed in the source repo for this). Both the reference and the live
+  contour are normalized to their *own* running median pitch (`medianHz`),
+  so a baritone matching a higher-pitched reference compares contour
+  *shape* on a shared 0 line rather than being pushed off the display.
 - **Post-hoc `AnalysisPanel`**: reference-vs-saved-attempt comparison
   combining several signal sources into one ranked "Fix One Thing"
   recommendation (`src/lib/feedbackRanking.ts`'s `rankObservations`/

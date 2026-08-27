@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LIVE_AMP_MAX_GAIN,
   computePeaks,
   crossCorrelateOffset,
   detectOnsetSeconds,
   emptyLivePeaks,
   emptyLivePitchBuckets,
   energyEnvelope,
-  mergeLivePeak,
+  gentleLiveGain,
+  livePeaksFromAmplitudes,
+  peakMagnitude,
   peaksToPolyline,
   pitchBucketsToPolyline,
   pitchFramesToBucketSemitones,
@@ -52,21 +55,49 @@ describe('emptyLivePeaks', () => {
   });
 });
 
-describe('mergeLivePeak', () => {
-  it('applies gain and clamps to 1, widening the existing bucket symmetrically', () => {
-    const peaks = emptyLivePeaks(3);
-    mergeLivePeak(peaks, 1, 0.3);
-    expect(peaks[1]).toEqual({ min: -0.6, max: 0.6 });
-
-    mergeLivePeak(peaks, 1, 0.9); // 0.9 * gain(2) = 1.8, clamped to 1
-    expect(peaks[1]).toEqual({ min: -1, max: 1 });
+describe('peakMagnitude', () => {
+  it('returns the largest absolute excursion across buckets', () => {
+    expect(peakMagnitude([{ min: -0.2, max: 0.3 }, { min: -0.7, max: 0.1 }])).toBeCloseTo(0.7);
   });
 
-  it('ignores out-of-range indexes', () => {
-    const peaks = emptyLivePeaks(2);
-    mergeLivePeak(peaks, -1, 0.5);
-    mergeLivePeak(peaks, 5, 0.5);
-    expect(peaks).toEqual(emptyLivePeaks(2));
+  it('returns 0 for empty or silent input', () => {
+    expect(peakMagnitude([])).toBe(0);
+    expect(peakMagnitude(emptyLivePeaks(4))).toBe(0);
+  });
+});
+
+describe('gentleLiveGain', () => {
+  it('never attenuates a take that is already as loud as the reference', () => {
+    expect(gentleLiveGain(0.5, 0.5)).toBe(1);
+    expect(gentleLiveGain(0.9, 0.5)).toBe(1);
+  });
+
+  it('boosts a quiet take along a square-root curve, keeping it below full parity', () => {
+    // ratio 4 -> sqrt -> 2x, so a quarter-volume take still reads at half height.
+    expect(gentleLiveGain(0.125, 0.5)).toBeCloseTo(2);
+  });
+
+  it('treats sub-noise-floor input as the noise floor rather than dividing by ~0', () => {
+    // ratio = 0.5 / 0.02 = 25, sqrt = 5 — same as if the take sat exactly at the floor.
+    expect(gentleLiveGain(0, 0.5)).toBeCloseTo(5);
+    expect(gentleLiveGain(0.0001, 0.5)).toBeCloseTo(5);
+  });
+
+  it('clamps very large boosts to LIVE_AMP_MAX_GAIN', () => {
+    expect(gentleLiveGain(0.001, 5)).toBe(LIVE_AMP_MAX_GAIN);
+  });
+
+  it('returns 1 when there is no reference magnitude', () => {
+    expect(gentleLiveGain(0.1, 0)).toBe(1);
+  });
+});
+
+describe('livePeaksFromAmplitudes', () => {
+  it('renders symmetric peaks at the given gain, clamped to 1', () => {
+    expect(livePeaksFromAmplitudes([0.1, 0.8], 2)).toEqual([
+      { min: -0.2, max: 0.2 },
+      { min: -1, max: 1 },
+    ]);
   });
 });
 

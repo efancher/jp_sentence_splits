@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { estimateFramePitch, extractPitch, hzToRelativeSemitones } from '../lib/pitch';
+import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
 import {
   LIVE_PITCH_DISPLAY_MAX_SEMITONES,
   LIVE_PITCH_DISPLAY_MIN_SEMITONES,
@@ -11,7 +11,9 @@ import {
   decodeAudioBuffer,
   emptyLivePeaks,
   emptyLivePitchBuckets,
-  mergeLivePeak,
+  gentleLiveGain,
+  livePeaksFromAmplitudes,
+  peakMagnitude,
   peaksFromBlob,
   peaksToPolyline,
   pitchBucketsToPolyline,
@@ -23,6 +25,8 @@ const VIEW_WIDTH = 600;
 const WAVE_HEIGHT = 96;
 const PITCH_HEIGHT = 120;
 const PITCH_ESTIMATE_EVERY_N_FRAMES = 2;
+/** Voiced-frame count before the learner's running median is stable enough to normalize against. */
+const LIVE_PITCH_MIN_VOICED_FRAMES = 5;
 
 /**
  * Ported from ~/projects/shadowing/web/src/components/LiveShadowWaveform.tsx.
@@ -52,11 +56,16 @@ export function LiveShadowWaveform({
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [livePeaks, setLivePeaks] = useState<WavePeak[]>([]);
   const [livePitchBuckets, setLivePitchBuckets] = useState<Array<number | null>>([]);
+  const [liveMedianHz, setLiveMedianHz] = useState<number | null>(null);
   const [playheadIndex, setPlayheadIndex] = useState(0);
   const [error, setError] = useState<string>();
-  const livePeaksRef = useRef<WavePeak[]>([]);
-  const livePitchRef = useRef<Array<number | null>>([]);
-  const referenceMedianRef = useRef<number | null>(null);
+  /** Raw per-bucket max-abs amplitude; display gain is applied at render so it stays consistent as the running level grows. */
+  const liveAmpRef = useRef<number[]>([]);
+  /** Raw per-bucket pitch in Hz; normalized to the learner's own running median for display. */
+  const liveHzRef = useRef<Array<number | null>>([]);
+  /** Every voiced Hz reading so far this take, for the running median. */
+  const liveVoicedHzRef = useRef<number[]>([]);
+  const referenceMagnitudeRef = useRef(0);
   const rafRef = useRef<number | undefined>(undefined);
   const frameCountRef = useRef(0);
   const getMediaTimeRef = useRef(getMediaTime);
@@ -77,7 +86,7 @@ export function LiveShadowWaveform({
         setReferencePeaks(wave.peaks);
         setDurationSeconds(wave.durationSeconds);
         setReferenceMedianHz(pitch.medianHz);
-        referenceMedianRef.current = pitch.medianHz;
+        referenceMagnitudeRef.current = peakMagnitude(wave.peaks);
         setReferencePitchBuckets(
           pitchFramesToBucketSemitones(pitch.frames, wave.durationSeconds, LIVE_WAVEFORM_BUCKETS),
         );
@@ -98,10 +107,12 @@ export function LiveShadowWaveform({
       return;
     }
     const buckets = referencePeaks.length || LIVE_WAVEFORM_BUCKETS;
-    livePeaksRef.current = emptyLivePeaks(buckets);
-    livePitchRef.current = emptyLivePitchBuckets(buckets);
-    setLivePeaks(livePeaksRef.current.slice());
-    setLivePitchBuckets(livePitchRef.current.slice());
+    liveAmpRef.current = new Array<number>(buckets).fill(0);
+    liveHzRef.current = emptyLivePitchBuckets(buckets);
+    liveVoicedHzRef.current = [];
+    setLivePeaks(emptyLivePeaks(buckets));
+    setLivePitchBuckets(liveHzRef.current.slice());
+    setLiveMedianHz(null);
     setPlayheadIndex(0);
     frameCountRef.current = 0;
 
@@ -118,22 +129,42 @@ export function LiveShadowWaveform({
       analyser.getFloatTimeDomainData(samples);
       let peak = 0;
       for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
-      mergeLivePeak(livePeaksRef.current, index, peak);
+      if (index >= 0 && index < buckets) {
+        liveAmpRef.current[index] = Math.max(liveAmpRef.current[index] ?? 0, peak);
+      }
 
       frameCountRef.current += 1;
       if (frameCountRef.current % PITCH_ESTIMATE_EVERY_N_FRAMES === 0) {
         const frameStart = Math.max(0, samples.length - LIVE_PITCH_FRAME_SAMPLES);
         const frame = samples.subarray(frameStart);
         const estimated = estimateFramePitch(frame, sampleRate);
-        const median = referenceMedianRef.current;
-        if (estimated.voiced && estimated.hz !== null && median && median > 0) {
-          livePitchRef.current[index] = hzToRelativeSemitones(estimated.hz, median);
+        if (estimated.voiced && estimated.hz !== null && index >= 0 && index < buckets) {
+          liveHzRef.current[index] = estimated.hz;
+          liveVoicedHzRef.current.push(estimated.hz);
         }
       }
 
+      // Gain and pitch-normalization are derived from the whole take so far,
+      // so the earliest buckets stay consistent with the latest ones.
+      let liveMagnitude = 0;
+      for (const amplitude of liveAmpRef.current) liveMagnitude = Math.max(liveMagnitude, amplitude);
+      const gain = gentleLiveGain(liveMagnitude, referenceMagnitudeRef.current);
+      // Wait for a few readings before drawing the contour so the median
+      // (and thus the whole normalized line) isn't thrashing on the first
+      // one or two voiced frames.
+      const median =
+        liveVoicedHzRef.current.length >= LIVE_PITCH_MIN_VOICED_FRAMES
+          ? medianHz(liveVoicedHzRef.current)
+          : null;
+
       setPlayheadIndex(index);
-      setLivePeaks(livePeaksRef.current.slice());
-      setLivePitchBuckets(livePitchRef.current.slice());
+      setLivePeaks(livePeaksFromAmplitudes(liveAmpRef.current, gain));
+      setLiveMedianHz(median);
+      setLivePitchBuckets(
+        liveHzRef.current.map((hz) =>
+          hz !== null && median && median > 0 ? hzToRelativeSemitones(hz, median) : null,
+        ),
+      );
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -189,7 +220,7 @@ export function LiveShadowWaveform({
   return (
     <div className="stack">
       <div className="stack">
-        <span className="muted">Live shadow waveform</span>
+        <span className="muted">Live shadow waveform (your level auto-boosted toward the reference)</span>
         <svg
           viewBox={`0 0 ${VIEW_WIDTH} ${WAVE_HEIGHT}`}
           role="img"
@@ -237,8 +268,11 @@ export function LiveShadowWaveform({
           )}
         </svg>
         <p className="muted">
-          Gold is your live voice vs the reference contour
-          {referenceMedianHz ? ` (ref median ${Math.round(referenceMedianHz)} Hz)` : ''}
+          Gold is your live voice vs the reference contour — each is centred on its
+          own median pitch, so match the shape, not the height
+          {referenceMedianHz ? ` (ref ${Math.round(referenceMedianHz)} Hz` : ''}
+          {referenceMedianHz && liveMedianHz ? `, you ${Math.round(liveMedianHz)} Hz` : ''}
+          {referenceMedianHz ? ')' : ''}
           {active ? '' : ' — start recording to draw'}.
         </p>
       </div>

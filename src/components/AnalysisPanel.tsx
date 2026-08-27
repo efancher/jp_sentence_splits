@@ -29,6 +29,7 @@ import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
   decodeAudioBuffer,
+  peakMagnitude,
   peaksToPolyline,
   sliceCanonicalAudio,
   type AlignmentMode,
@@ -79,7 +80,16 @@ const ALIGNMENT_MODES: AlignmentMode[] = ['original', 'onset-aligned', 'time-nor
  * doesn't have) — clips are short enough to just recompute on open.
  */
 function PeakWaveform({ peaks, label }: { peaks: WavePeak[]; label: string }) {
-  const points = useMemo(() => peaksToPolyline(peaks, WAVE_WIDTH, WAVE_HEIGHT), [peaks]);
+  const points = useMemo(() => {
+    // Normalize each clip to its own peak so a quiet learner take and a
+    // loud reference are compared by shape, not absolute loudness.
+    const magnitude = peakMagnitude(peaks);
+    const scaled =
+      magnitude > 0
+        ? peaks.map((peak) => ({ min: peak.min / magnitude, max: peak.max / magnitude }))
+        : peaks;
+    return peaksToPolyline(scaled, WAVE_WIDTH, WAVE_HEIGHT);
+  }, [peaks]);
   return (
     <div className="stack">
       <span className="muted">{label}</span>

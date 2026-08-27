@@ -13,8 +13,10 @@ import type { TimeRangeMs } from './recording';
 
 export const ANALYSIS_SAMPLE_RATE = 16_000;
 export const LIVE_WAVEFORM_BUCKETS = 240;
-/** Live mic envelopes tend to read quieter than decoded reference peaks. */
-export const LIVE_MIC_AMPLITUDE_GAIN = 2;
+/** Below this live magnitude we treat the signal as noise and stop chasing gain. */
+export const LIVE_AMP_NOISE_FLOOR = 0.02;
+/** Ceiling on the adaptive live-waveform gain. */
+export const LIVE_AMP_MAX_GAIN = 8;
 /** YIN frame size for live pitch (matches offline extractPitch). */
 export const LIVE_PITCH_FRAME_SAMPLES = 1024;
 export const LIVE_PITCH_DISPLAY_MIN_SEMITONES = -8;
@@ -118,24 +120,39 @@ export async function peaksFromBlob(
   };
 }
 
-/** Merge a live amplitude sample into a peak bucket (symmetric envelope). */
-export function mergeLivePeak(
-  peaks: WavePeak[],
-  index: number,
-  amplitude: number,
-  gain = LIVE_MIC_AMPLITUDE_GAIN,
-): void {
-  if (index < 0 || index >= peaks.length) return;
-  const value = Math.min(1, Math.abs(amplitude) * gain);
-  const current = peaks[index] ?? { min: 0, max: 0 };
-  peaks[index] = {
-    min: Math.min(current.min, -value),
-    max: Math.max(current.max, value),
-  };
-}
-
 export function emptyLivePeaks(buckets: number): WavePeak[] {
   return Array.from({ length: buckets }, () => ({ min: 0, max: 0 }));
+}
+
+/** Largest absolute excursion across a set of peak buckets. */
+export function peakMagnitude(peaks: WavePeak[]): number {
+  let magnitude = 0;
+  for (const peak of peaks) {
+    magnitude = Math.max(magnitude, Math.abs(peak.min), Math.abs(peak.max));
+  }
+  return magnitude;
+}
+
+/**
+ * Gentle auto-gain for the live shadow waveform: pulls a quiet take toward
+ * the reference clip's peak magnitude along a square-root curve, so a
+ * much quieter recording is lifted but still reads visibly smaller (the
+ * "you were quiet" cue is kept, just not punishing). Never attenuates
+ * (min 1) and never exceeds LIVE_AMP_MAX_GAIN. Recompute as the running
+ * live magnitude grows so earlier buckets stay consistent with later ones.
+ */
+export function gentleLiveGain(liveMagnitude: number, referenceMagnitude: number): number {
+  if (referenceMagnitude <= 0) return 1;
+  const ratio = referenceMagnitude / Math.max(liveMagnitude, LIVE_AMP_NOISE_FLOOR);
+  return Math.min(LIVE_AMP_MAX_GAIN, Math.max(1, Math.sqrt(ratio)));
+}
+
+/** Render raw per-bucket live amplitudes as a symmetric peak envelope at the given gain. */
+export function livePeaksFromAmplitudes(amplitudes: Array<number>, gain: number): WavePeak[] {
+  return amplitudes.map((amplitude) => {
+    const value = Math.min(1, Math.abs(amplitude) * gain);
+    return { min: -value, max: value };
+  });
 }
 
 export function peaksToPolyline(

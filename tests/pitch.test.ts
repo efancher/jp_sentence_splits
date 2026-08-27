@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { estimateFramePitch, extractPitch, hzToRelativeSemitones } from '../src/lib/pitch';
+import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../src/lib/pitch';
 import type { CanonicalAudio } from '../src/lib/waveform';
 
 const SAMPLE_RATE = 16_000;
@@ -45,6 +45,20 @@ describe('estimateFramePitch', () => {
     });
     const result = estimateFramePitch(noise, SAMPLE_RATE);
     expect(result.voiced).toBe(false);
+  });
+});
+
+describe('medianHz', () => {
+  it('returns null for an empty list', () => {
+    expect(medianHz([])).toBeNull();
+  });
+
+  it('returns the middle value regardless of input order', () => {
+    expect(medianHz([300, 100, 200])).toBe(200);
+  });
+
+  it('is unmoved by a lone outlier', () => {
+    expect(medianHz([108, 110, 112, 111, 440])).toBe(111);
   });
 });
 

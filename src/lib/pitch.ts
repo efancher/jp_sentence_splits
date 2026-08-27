@@ -99,6 +99,19 @@ export function hzToRelativeSemitones(hz: number, medianHz: number): number {
   return 12 * Math.log2(hz / medianHz);
 }
 
+/**
+ * Median of a list of Hz readings. Used both offline (extractPitch) and
+ * live (LiveShadowWaveform, over a growing buffer) so a speaker's contour
+ * is always normalized to their *own* centre — a baritone and a reference
+ * an octave up then overlay on the same 0 line instead of the learner
+ * being shoved off the bottom of the display.
+ */
+export function medianHz(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? null;
+}
+
 export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
   const frames: PitchFrame[] = [];
   const voicedHz: number[] = [];
@@ -121,18 +134,16 @@ export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
       relativeSemitones: null,
     });
   }
-  const medianHz = voicedHz.length
-    ? (voicedHz.slice().sort((a, b) => a - b)[Math.floor(voicedHz.length / 2)] ?? null)
-    : null;
+  const median = medianHz(voicedHz);
   for (const frame of frames) {
-    if (frame.hz !== null && medianHz) {
-      frame.relativeSemitones = 12 * Math.log2(frame.hz / medianHz);
+    if (frame.hz !== null && median) {
+      frame.relativeSemitones = 12 * Math.log2(frame.hz / median);
     }
   }
   const voicedCount = frames.filter((frame) => frame.voiced).length;
   return {
     frames,
-    medianHz,
+    medianHz: median,
     voicedRatio: frames.length ? voicedCount / frames.length : 0,
     durationSeconds: audio.durationSeconds,
   };
