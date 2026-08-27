@@ -51,6 +51,7 @@ import {
 import { useAutosave } from '../hooks/useAutosave';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
+import { useSessionAdvance } from '../hooks/useSessionAdvance';
 
 const CUSTOM_ROLE_VALUE = '__custom__';
 const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
@@ -58,6 +59,7 @@ const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
 export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
+  const advanceToSessionStep = useSessionAdvance();
   const settings = useLiveQuery(() => readSettings(), []);
   const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
   const [showEnglish, setShowEnglish] = useState(false);
@@ -963,7 +965,12 @@ export function AnalyzePage() {
                 if (!ok) return;
               }
               await saveNow();
-              await setBookSentenceStatus(bookId, sentenceId, 'complete');
+              const { nextSessionStep } = await setBookSentenceStatus(
+                bookId,
+                sentenceId,
+                'complete',
+              );
+              advanceToSessionStep(nextSessionStep);
             }}
           >
             Mark complete

@@ -785,13 +785,13 @@ export async function setBookSentenceStatus(
   bookId: string,
   sentenceId: string,
   status: StudyStatus,
-): Promise<void> {
+): Promise<{ nextSessionStep: PlannerSessionStep | undefined }> {
   const db = getDb();
   const item = await db.bookSentences
     .where('[bookId+sentenceId]')
     .equals([bookId, sentenceId])
     .first();
-  if (!item) return;
+  if (!item) return { nextSessionStep: undefined };
   await db.bookSentences.put({
     ...item,
     status,
@@ -799,12 +799,20 @@ export async function setBookSentenceStatus(
   });
   const updated = await db.bookSentences.get(item.id);
   if (updated) notifySync('book_sentences', updated.id, updated);
-  if (status === 'complete') {
-    await autoCompleteSessionSteps(
-      (step) =>
-        step.targetKind === 'continue_book' && step.bookId === bookId && step.sentenceId === sentenceId,
-    );
-  }
+  // Completing the sentence settles its `continue_book` session step, if any,
+  // and reports the step the session then moves to so the analyze/practice
+  // page can carry the learner straight to the next item (see
+  // `autoCompleteSessionSteps`).
+  const nextSessionStep =
+    status === 'complete'
+      ? await autoCompleteSessionSteps(
+          (step) =>
+            step.targetKind === 'continue_book' &&
+            step.bookId === bookId &&
+            step.sentenceId === sentenceId,
+        )
+      : undefined;
+  return { nextSessionStep };
 }
 
 export async function saveAnalysis(
@@ -2164,20 +2172,16 @@ export async function materializeVocabularySelections(
 /**
  * Centralizes the VocabularyPicker confirm write path (VocabularyReviewPage):
  * flips vocabularyReviewStatus to 'confirmed', materializes selections into
- * real VocabularyItem/SentenceVocabulary rows, and settles any matching
+ * real VocabularyItem/SentenceVocabulary rows, and settles the matching
  * 'vocabulary_review' session step — without touching this sentence's
  * structural (chunk/notes) analysis state, which this function has no input
  * for and simply passes through unchanged from the existing row.
  *
- * When today's in-progress session is actually sitting on this sentence's
- * vocabulary step (it's the first pending/active step — i.e. the learner is
- * following the session, not browsing the book), the step is settled via the
- * same `settleSessionStep` auto-advance the SessionBar's Mark-complete button
- * uses, and the newly-activated next step is returned as `nextSessionStep` so
- * the caller can deep-link straight into it. Confirming a sentence the
- * session isn't currently on still settles its step (out of order, via
- * `autoCompleteSessionSteps`) but returns no `nextSessionStep` — the learner
- * is deliberately off the planned path, so nothing yanks them back onto it.
+ * `nextSessionStep` is whatever step today's in-progress session moves to
+ * once this sentence's step is settled (see `autoCompleteSessionSteps`) — the
+ * caller deep-links into it so finishing an item carries the learner to the
+ * next one in the session. Undefined when no session is running, this
+ * sentence isn't part of it, or that was the session's last step.
  */
 export async function confirmSentenceVocabulary(
   sentenceId: string,
@@ -2190,8 +2194,7 @@ export async function confirmSentenceVocabulary(
     selections,
   });
   await materializeVocabularySelections(sentenceId, selections);
-  const nextSessionStep = await settleActiveVocabularyReviewStep(sentenceId);
-  await autoCompleteSessionSteps(
+  const nextSessionStep = await autoCompleteSessionSteps(
     (step) => step.targetKind === 'vocabulary_review' && step.sentenceId === sentenceId,
   );
   return { analysis, nextSessionStep };
@@ -3839,19 +3842,36 @@ export async function getActiveInProgressPlannerSession(): Promise<PlannerSessio
  * only the single currently active-in-progress PlannerSession, never
  * historical/settled sessions, and only ever moves a step to 'completed',
  * never 'skipped' — so it's additive on top of, not a replacement for, the
- * manual path. No-ops if there's no in-progress session or nothing matches.
+ * manual path.
+ *
+ * When it actually settles something, it then pulls the session's next
+ * still-pending step forward (marks it 'active', same as `settleSessionStep`)
+ * and returns it, so the activity page the learner is on can deep-link
+ * straight into the next item — finishing an item carries you through the
+ * session list without a trip back to the runner. Returns undefined when
+ * there's no in-progress session, nothing matched, or that settle finished
+ * the session's last step.
  */
 async function autoCompleteSessionSteps(
   matches: (step: PlannerSessionStep) => boolean,
-): Promise<void> {
+): Promise<PlannerSessionStep | undefined> {
   const session = await getActiveInProgressPlannerSession();
-  if (!session) return;
+  if (!session) return undefined;
   const ids = session.steps
     .filter((step) => (step.status === 'pending' || step.status === 'active') && matches(step))
     .map((step) => step.id);
+  if (ids.length === 0) return undefined;
   for (const id of ids) {
     await updatePlannerSessionStep(session.id, id, { status: 'completed' });
   }
+  const after = await getDb().plannerSessions.get(session.id);
+  const nextStep = after?.steps.find(
+    (step) => step.status === 'pending' || step.status === 'active',
+  );
+  if (!nextStep) return undefined;
+  if (nextStep.status === 'active') return nextStep;
+  const advanced = await updatePlannerSessionStep(session.id, nextStep.id, { status: 'active' });
+  return advanced?.steps.find((step) => step.id === nextStep.id);
 }
 
 /**
@@ -3930,35 +3950,6 @@ export async function settleSessionStep(
     session: updated,
     nextStep: nextStepBefore ? updated.steps.find((step) => step.id === nextStepBefore.id) : undefined,
   };
-}
-
-/**
- * If today's in-progress session is currently sitting on a `vocabulary_review`
- * step for `sentenceId` — meaning that step is the first pending/active one,
- * the same "current step" rule `useActiveSession`/`SessionRunnerPage` use — settle
- * it via `settleSessionStep` (mark done, activate the next step) and return that
- * next step for the caller to deep-link into. Returns undefined when there's no
- * such session, or the learner is on some other step (browsing ahead/behind, or
- * a different activity): the out-of-order match is left to
- * `autoCompleteSessionSteps`, which settles it without disturbing the pointer.
- */
-async function settleActiveVocabularyReviewStep(
-  sentenceId: string,
-): Promise<PlannerSessionStep | undefined> {
-  const session = await getActiveInProgressPlannerSession();
-  if (!session) return undefined;
-  const currentStep = session.steps.find(
-    (step) => step.status === 'pending' || step.status === 'active',
-  );
-  if (
-    !currentStep ||
-    currentStep.targetKind !== 'vocabulary_review' ||
-    currentStep.sentenceId !== sentenceId
-  ) {
-    return undefined;
-  }
-  const result = await settleSessionStep(session.id, currentStep.id, 'completed');
-  return result?.nextStep;
 }
 
 /** Count of Review rows recorded at/after `timestamp` — powers ReviewPage's live "X/N reviews done" progress against an active session's `review` step target count; timestamp-based (not component state) so progress survives leaving and returning to the page. */

@@ -11,7 +11,7 @@ import type { VocabularyReviewStatus, VocabularySelection } from '../domain/type
 import { defaultSelectionsFromSuggestions } from '../lib/vocabularySuggestions';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { useAutosave } from '../hooks/useAutosave';
-import { sessionStepTargetPath } from '../lib/sessionPlanner';
+import { useSessionAdvance } from '../hooks/useSessionAdvance';
 
 /**
  * Standalone vocabulary-extraction workflow for one sentence, split out of
@@ -25,6 +25,7 @@ export function VocabularyReviewPage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
   const activeSession = useActiveSession();
+  const advanceToSessionStep = useSessionAdvance();
   const [selections, setSelections] = useState<VocabularySelection[]>([]);
   const [reviewStatus, setReviewStatus] =
     useState<VocabularyReviewStatus>('unreviewed');
@@ -96,19 +97,23 @@ export function VocabularyReviewPage() {
   const next =
     index >= 0 && index < memberships.length - 1 ? memberships[index + 1] : null;
 
-  // True when the learner is following today's session and its current step is
-  // *this* sentence's vocabulary step, with at least one step still to come —
-  // so confirming should hand off to the next session step rather than (only)
-  // the next sentence in this book. Mirrors settleActiveVocabularyReviewStep's
-  // guard on the repository side; that call is what actually settles + advances.
-  const onSessionVocabStep =
-    activeSession?.currentStep?.targetKind === 'vocabulary_review' &&
-    activeSession.currentStep.sentenceId === sentenceId;
-  const sessionAdvanceReady =
-    Boolean(onSessionVocabStep) &&
+  // Show "Confirm and next →" even when this is the last sentence of the book,
+  // as long as today's session still has this sentence's vocabulary step
+  // pending and something queued after it — confirming will carry the learner
+  // on to that next session step (see the onConfirm handlers below).
+  const sessionHasStepForThisSentence = Boolean(
+    activeSession?.session.steps.some(
+      (step) =>
+        (step.status === 'pending' || step.status === 'active') &&
+        step.targetKind === 'vocabulary_review' &&
+        step.sentenceId === sentenceId,
+    ),
+  );
+  const sessionHasLaterStep =
     (activeSession?.session.steps.filter(
       (step) => step.status === 'pending' || step.status === 'active',
     ).length ?? 0) > 1;
+  const sessionAdvanceReady = sessionHasStepForThisSentence && sessionHasLaterStep;
 
   return (
     <div className="stack">
@@ -200,22 +205,20 @@ export function VocabularyReviewPage() {
         onConfirm={(payload) => {
           setSelections(payload.selections);
           setReviewStatus(payload.reviewStatus);
-          // Deliberately does not navigate (see VocabularyPicker's onConfirm
-          // doc) — the step is still settled inside confirmSentenceVocabulary,
-          // this just lets the learner stay put / go back to the session list.
-          void confirmSentenceVocabulary(sentenceId, payload.selections);
+          // Advances to the next session step when a session is running;
+          // otherwise stays put (no book-next fallback — that's what
+          // "Confirm and next →" is for).
+          void confirmSentenceVocabulary(sentenceId, payload.selections).then(
+            ({ nextSessionStep }) => advanceToSessionStep(nextSessionStep),
+          );
         }}
         onConfirmAndNext={(payload) => {
           setSelections(payload.selections);
           setReviewStatus(payload.reviewStatus);
           void confirmSentenceVocabulary(sentenceId, payload.selections).then(
             ({ nextSessionStep }) => {
-              const sessionTarget = nextSessionStep
-                ? sessionStepTargetPath(nextSessionStep)
-                : null;
-              if (sessionTarget) {
-                navigate(sessionTarget);
-              } else if (next) {
+              // Session step first; fall back to the next sentence in this book.
+              if (!advanceToSessionStep(nextSessionStep) && next) {
                 navigate(`/books/${bookId}/vocabulary/${next.sentenceId}`);
               }
             },

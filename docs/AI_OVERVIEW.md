@@ -368,14 +368,17 @@ complete") or by real completion of the underlying work —
 `setBookSentenceStatus('complete')` auto-completes the matching
 `continue_book` step, `confirmSentenceVocabulary` auto-completes the
 matching `vocabulary_review` step (`autoCompleteSessionSteps` in
-`repository.ts`, follow-up, 2026-08-22) — and, when that step is the
-session's *current* step (the learner is following the session, not
-browsing the book ahead/behind), it settles it via `settleSessionStep`'s
-auto-advance and returns the newly-activated `nextSessionStep`, so
-`VocabularyReviewPage`'s "Confirm and next →" deep-links straight into the
-next step's page instead of just the next sentence in this book
-(2026-08-27 follow-up; plain "Confirm vocabulary" still settles without
-navigating, per its "stop here / back to the session list" purpose) — and, for `review` steps only,
+`repository.ts`, follow-up, 2026-08-22) — and, 2026-08-27, whenever it
+actually settles a step it also pulls the session's earliest unfinished
+step forward (activates it, same as `settleSessionStep`) and returns it, so
+the activity page carries the learner straight to the next item:
+`confirmSentenceVocabulary` → `{ analysis, nextSessionStep }`,
+`setBookSentenceStatus` → `{ nextSessionStep }`, consumed by the
+`useSessionAdvance` hook on `VocabularyReviewPage` / `AnalyzePage` /
+`PracticePage` (no-op with a non-session fallback in the `else` when no
+step comes back). No "is this the current step" gate — the learner
+navigates by menu/list/search, not positional next/prev, and asked for
+in-page completion to follow the session list. And, for `review` steps only,
 `ReviewPage` itself auto-completes once its own live count of reviews done
 this sitting reaches the step's `targetCount` (2026-08-26 follow-up, see
 below) — but never by mere navigation, so a step merely opened and left

@@ -27,6 +27,7 @@ import type {
 } from '../domain/types';
 import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
+import { useSessionAdvance } from '../hooks/useSessionAdvance';
 import { hashString } from '../lib/ids';
 import { summarizeChunks } from '../lib/worksheet';
 
@@ -73,6 +74,7 @@ function sessionOrder(
 export function PracticePage() {
   const { bookId = '', sentenceId: routeSentenceId } = useParams();
   const navigate = useNavigate();
+  const advanceToSessionStep = useSessionAdvance();
   const [searchParams, setSearchParams] = useSearchParams();
   const scope = searchParams.get('scope') ?? 'incomplete';
   const shuffled = searchParams.get('shuffle') === '1';
@@ -284,8 +286,12 @@ export function PracticePage() {
     data.sentenceAudio?.[0];
 
   async function mark(status: StudyStatus, advance = false) {
-    await setBookSentenceStatus(bookId, sentence.id, status);
-    if (advance && next) navigate(practicePath(next.sentenceId));
+    const { nextSessionStep } = await setBookSentenceStatus(bookId, sentence.id, status);
+    // A running session takes the learner to its next step; otherwise fall
+    // back to the next sentence in this book when the caller asked to advance.
+    if (!advanceToSessionStep(nextSessionStep) && advance && next) {
+      navigate(practicePath(next.sentenceId));
+    }
   }
 
   async function markEncounter(vocabularyItemId: string, rating: ReviewRating) {

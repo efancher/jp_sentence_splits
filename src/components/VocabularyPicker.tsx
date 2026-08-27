@@ -48,12 +48,12 @@ export interface VocabularyPickerProps {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
-  /** Saves the confirmed selections without navigating anywhere — the only action always available, regardless of hasNext. */
+  /** Saves the confirmed selections — always available, regardless of hasNext. The host decides what happens next: today it advances to the next session step when a session is running, and otherwise stays put (no book-next navigation). */
   onConfirm?: (payload: {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
-  /** Saves and advances to the next sentence — a separate action from onConfirm (not the same click) so confirming doesn't force navigation, e.g. mid-session when the learner wants to stop here and go back to the session list instead. */
+  /** Saves and advances — a separate action from onConfirm (not the same click). The host sends the learner to the next session step if one exists, otherwise the next sentence in this book. */
   onConfirmAndNext?: (payload: {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
