@@ -1300,11 +1300,41 @@ describe('ReviewPage', () => {
     }
   });
 
-  it('renders word-by-word karaoke text plus the original sentence once alignment is cached (follow-up)', async () => {
+  it('renders the real sentence tokenized from its vocabulary suggestions, each token glossable (follow-up)', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
+    // Suggestions carry the char offsets the karaoke line tokenizes on.
+    await db.sentences.update('sent-1', {
+      readingOnly: 'ほんをよみます。',
+      vocabularySuggestions: [
+        {
+          id: 'vs-1',
+          surface: '本',
+          start: 0,
+          end: 1,
+          expression: '本',
+          reading: 'ほん',
+          pos: '名詞',
+          english: 'book',
+          source: 'morphology',
+          selectedByDefault: true,
+        },
+        {
+          id: 'vs-2',
+          surface: '読み',
+          start: 2,
+          end: 4,
+          expression: '読む',
+          reading: 'よむ',
+          pos: '動詞',
+          english: 'to read',
+          source: 'morphology',
+          selectedByDefault: true,
+        },
+      ],
+    });
     await db.sentenceAudio.add({
       id: 'audio-1',
       sentenceId: 'sent-1',
@@ -1318,8 +1348,6 @@ describe('ReviewPage', () => {
       blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
       importedAt: now,
     });
-    // Pre-cache alignment so KaraokeSentenceText never has to hit the
-    // (unreachable, in tests) forced-alignment service.
     await db.referenceAlignments.add({
       id: 'audio-1',
       alignmentVersion: ALIGNMENT_VERSION,
@@ -1339,15 +1367,15 @@ describe('ReviewPage', () => {
     await screen.findByRole('button', { name: /Play native sentence recording/ });
     await user.click(screen.getByRole('button', { name: 'Reveal text' }));
 
-    // Karaoke words render, and so does the original sentence text
-    // underneath (a cross-check reference, since the aligner's own tokens
-    // can diverge from/garble the real sentence — e.g. `<unk>` tokens).
-    expect(await screen.findByText('本を')).toBeInTheDocument();
-    expect(screen.getByText('読みます')).toBeInTheDocument();
-    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    // The sentence renders as its own tokens (not the aligner's transcript),
+    // and the kana reading line is shown separately underneath.
+    expect(await screen.findByText('本')).toBeInTheDocument();
+    expect(screen.getByText('読み')).toBeInTheDocument();
+    expect(screen.getByText('ます。')).toBeInTheDocument();
+    expect(screen.getByText('ほんをよみます。')).toBeInTheDocument();
   });
 
-  it('shows a flagged placeholder instead of a literal <unk> token from the aligner', async () => {
+  it('never leaks the aligner\'s <unk> token into the displayed sentence', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
@@ -1384,11 +1412,11 @@ describe('ReviewPage', () => {
     await screen.findByRole('button', { name: /Play native sentence recording/ });
     await user.click(screen.getByRole('button', { name: 'Reveal text' }));
 
-    await screen.findByText('読みます');
+    // The real sentence is what's rendered — the aligner transcript (and its
+    // <unk> / dictionary-normalized spellings) never reaches the screen.
+    expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
     expect(screen.queryByText('<unk>')).not.toBeInTheDocument();
-    expect(screen.getByText('?')).toBeInTheDocument();
-    // The original sentence text is still shown in full, unaffected.
-    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+    expect(screen.queryByText('?')).not.toBeInTheDocument();
   });
 
   it('records audio_replayed assistance only on a genuine replay, not the first play (Phase 7.5)', async () => {

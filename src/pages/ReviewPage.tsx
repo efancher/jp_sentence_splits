@@ -1621,10 +1621,12 @@ function PitchAccentCard({
  *
  * Playback speed (follow-up) reuses the same rate-select ShadowPage already
  * has, wired into NativeAudioButton's existing (previously unused here)
- * playbackRate prop. Once text is revealed, it's rendered via
- * KaraokeSentenceText, which highlights words in sync with playback using
- * lazily-computed forced alignment — falls back to plain text on its own
- * when alignment isn't available, so no fallback branching is needed here.
+ * playbackRate prop. Once text is revealed, the sentence is rendered via
+ * KaraokeSentenceText — the real sentence text, tokenized from its
+ * vocabulary suggestions, with the currently-spoken token highlighted (and
+ * its gloss shown) via lazily-computed forced alignment. It falls back to
+ * plain static text on its own when alignment isn't available, so no
+ * fallback branching is needed here.
  */
 function AudioComprehensionCard({
   sentence,

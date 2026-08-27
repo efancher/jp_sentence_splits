@@ -52,8 +52,8 @@ function isSilence(word: WordAlignment): boolean {
 // MFA emits this literal token when a word falls outside its pronunciation
 // dictionary (common for casual contractions like 足んねえ). Timing is still
 // valid for that word, but showing the raw token in a message reads as
-// garbled Japanese — same "flagged placeholder" treatment as
-// KaraokeSentenceText/SyncedShadowText use for the karaoke transcript.
+// garbled Japanese — same "flagged placeholder" treatment SyncedShadowText
+// uses for its karaoke transcript.
 const ALIGNER_UNKNOWN_TOKEN = '<unk>';
 
 export function displayWordText(text: string): string {

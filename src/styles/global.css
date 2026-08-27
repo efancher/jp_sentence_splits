@@ -300,12 +300,6 @@ strong.jp {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-.karaoke-word-unknown {
-  border: 1px dashed var(--border);
-  padding: 0 0.15rem;
-  cursor: help;
-}
-
 .karaoke-line {
   position: relative;
 }

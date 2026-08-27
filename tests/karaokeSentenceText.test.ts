@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { attachGlosses } from '../src/components/KaraokeSentenceText';
+import {
+  alignmentCharPositions,
+  buildSentenceTokens,
+} from '../src/components/KaraokeSentenceText';
 import type { TargetVocabulary, VocabularySuggestion } from '../src/domain/types';
 
 function suggestion(overrides: Partial<VocabularySuggestion>): VocabularySuggestion {
@@ -31,89 +34,78 @@ function targetVocab(overrides: Partial<TargetVocabulary>): TargetVocabulary {
   };
 }
 
-describe('attachGlosses', () => {
-  it('attaches a gloss when an aligner word exactly matches a suggestion surface', () => {
-    const words = [
-      { text: '本を', start: 0, end: 0.6 },
-      { text: '読みます', start: 0.6, end: 1.5 },
-    ];
+describe('buildSentenceTokens', () => {
+  it('slices the sentence at the suggestion offsets and carries each suggestion english across', () => {
+    const japanese = '本を読みます。';
     const suggestions = [
-      suggestion({ surface: '本を', english: 'book (object)' }),
-      suggestion({ surface: '読みます', english: 'read' }),
+      suggestion({ surface: '本', start: 0, end: 1, english: 'book' }),
+      suggestion({ surface: '読み', start: 2, end: 4, expression: '読む', english: 'read' }),
     ];
 
-    expect(attachGlosses(words, suggestions)).toEqual([
-      { text: '本を', start: 0, end: 0.6, gloss: 'book (object)' },
-      { text: '読みます', start: 0.6, end: 1.5, gloss: 'read' },
+    expect(buildSentenceTokens(japanese, suggestions)).toEqual([
+      { text: '本', start: 0, end: 1, gloss: 'book' },
+      { text: 'を', start: 1, end: 2 },
+      { text: '読み', start: 2, end: 4, gloss: 'read' },
+      { text: 'ます。', start: 4, end: 7 },
     ]);
   });
 
-  it('leaves a word ungliossed when nothing matches within the lookahead window', () => {
-    const words = [{ text: 'は', start: 0, end: 0.2 }];
-    const suggestions = [suggestion({ surface: '本', english: 'book' })];
+  it('glosses a conjugated token from targetVocabulary matched by dictionary expression', () => {
+    const japanese = '終わってる';
+    const suggestions = [
+      // Conjugated surface, no english (JMDict backfill declined the homophones).
+      suggestion({ surface: '終わっ', start: 0, end: 3, expression: '終わる', reading: 'おわっ' }),
+    ];
+    const targetVocabulary = [targetVocab({ expression: '終わる', reading: 'おわる', english: 'to end' })];
 
-    expect(attachGlosses(words, suggestions)).toEqual([{ text: 'は', start: 0, end: 0.2 }]);
+    expect(buildSentenceTokens(japanese, suggestions, targetVocabulary)[0]).toEqual({
+      text: '終わっ',
+      start: 0,
+      end: 3,
+      gloss: 'to end',
+    });
   });
 
-  it('resyncs after a mismatch instead of matching out of order', () => {
-    // Aligner splits "読みます" into two tokens the tokenizer treats as one;
-    // the next real word ("か") should still find its match a few slots
-    // later, not fail just because the previous slot didn't line up.
-    const words = [
-      { text: '読み', start: 0, end: 0.3 },
-      { text: 'ます', start: 0.3, end: 0.6 },
-      { text: 'か', start: 0.6, end: 0.8 },
-    ];
+  it('renders the whole sentence as one plain token when there are no suggestions', () => {
+    expect(buildSentenceTokens('走る。', [])).toEqual([{ text: '走る。', start: 0, end: 3 }]);
+  });
+
+  it('skips a suggestion that overlaps one already emitted', () => {
+    const japanese = 'ABCD';
     const suggestions = [
-      suggestion({ surface: '読みます', english: 'read' }),
-      suggestion({ surface: 'か', english: 'question particle' }),
+      suggestion({ surface: 'ABC', start: 0, end: 3, english: 'abc' }),
+      suggestion({ surface: 'BC', start: 1, end: 3, english: 'bc' }),
+      suggestion({ surface: 'D', start: 3, end: 4, english: 'd' }),
     ];
 
-    expect(attachGlosses(words, suggestions)).toEqual([
-      { text: '読み', start: 0, end: 0.3 },
-      { text: 'ます', start: 0.3, end: 0.6 },
-      { text: 'か', start: 0.6, end: 0.8, gloss: 'question particle' },
+    expect(buildSentenceTokens(japanese, suggestions)).toEqual([
+      { text: 'ABC', start: 0, end: 3, gloss: 'abc' },
+      { text: 'D', start: 3, end: 4, gloss: 'd' },
     ]);
   });
+});
 
-  it('consumes a matched suggestion with no english so it does not get reused later', () => {
+describe('alignmentCharPositions', () => {
+  it('resolves each aligner word to its character offset in the sentence, resyncing across a split', () => {
+    const japanese = '本を読みますか';
     const words = [
-      { text: 'を', start: 0, end: 0.2 },
-      { text: 'を', start: 0.2, end: 0.4 },
-    ];
-    const suggestions = [
-      suggestion({ surface: 'を' }), // particle, no gloss
-      suggestion({ surface: 'を', english: 'object marker' }),
+      { start: 0, end: 0.4, text: '本を' },
+      { start: 0.4, end: 0.6, text: '読み' }, // aligner split
+      { start: 0.6, end: 0.8, text: 'ます' },
+      { start: 0.8, end: 1, text: 'か' },
     ];
 
-    const result = attachGlosses(words, suggestions);
-    expect(result[0]!.gloss).toBeUndefined();
-    expect(result[1]!.gloss).toBe('object marker');
+    expect(alignmentCharPositions(japanese, words)).toEqual([0, 2, 4, 6]);
   });
 
-  it('falls back to a targetVocabulary gloss, matched by dictionary reading, when the suggestion has none', () => {
-    // The morphology suggestion's surface is bare kana ("たっ") with no
-    // English — the offline JMDict backfill declines to guess among 経つ/
-    // 立つ/絶つ homophones. targetVocabulary already resolved that
-    // ambiguity for this sentence via a curated deck entry.
-    const words = [{ text: 'たっ', start: 0, end: 0.3 }];
-    const suggestions = [suggestion({ surface: 'たっ', expression: 'たつ', reading: 'たつ' })];
-    const targetVocabulary = [
-      targetVocab({ expression: '経つ', reading: 'たつ', english: 'to pass (of time)' }),
+  it('maps <unk> to -1 and still places the following word past it', () => {
+    const japanese = 'それより家どこ';
+    const words = [
+      { start: 0, end: 0.3, text: 'それより' },
+      { start: 0.3, end: 0.5, text: '<unk>' }, // audio the aligner could not place (家)
+      { start: 0.5, end: 0.8, text: 'どこ' },
     ];
 
-    expect(attachGlosses(words, suggestions, targetVocabulary)[0]!.gloss).toBe('to pass (of time)');
-  });
-
-  it('prefers the suggestion english over targetVocabulary when both are present', () => {
-    const words = [{ text: '終わっ', start: 0, end: 0.3 }];
-    const suggestions = [
-      suggestion({ surface: '終わっ', reading: 'おわる', english: 'to end (from JMDict)' }),
-    ];
-    const targetVocabulary = [
-      targetVocab({ expression: '終わる', reading: 'おわる', english: 'To End; To Be Over' }),
-    ];
-
-    expect(attachGlosses(words, suggestions, targetVocabulary)[0]!.gloss).toBe('to end (from JMDict)');
+    expect(alignmentCharPositions(japanese, words)).toEqual([0, -1, 5]);
   });
 });

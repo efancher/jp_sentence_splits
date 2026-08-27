@@ -562,25 +562,23 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   the translation and vocab chips; only the second step satisfies the
   parent `revealed` gate that unlocks the FSRS rating buttons. On text
   reveal, the sentence renders via `KaraokeSentenceText`
-  (`src/components/KaraokeSentenceText.tsx`): it lazily computes/caches a
-  `ReferenceAlignment` for the clip (via `loadOrComputeAlignment`, same
-  cache the shadowing-analysis flow uses) and highlights the word under the
-  playhead in sync with playback, falling back to plain unhighlighted text
-  whenever alignment isn't available yet or the service is unreachable.
-  Since the karaoke line is aligner-derived text (occasionally an `<unk>`
-  token for an unmatched word, shown as a flagged `?` placeholder rather
-  than the raw token; more subtly it can also diverge via dictionary
-  normalization/mis-segmentation), the real `sentence.japanese` text is
-  always shown on a second, muted line underneath as a cross-check. While a
-  word is highlighted, a small popup shows its English gloss, sourced from
-  `sentence.vocabularySuggestions` (the same offline-backfilled glosses the
-  vocabulary picker uses) by matching aligner word text against suggestion
-  `surface` text in reading order (`attachGlosses`, exported from
-  `KaraokeSentenceText.tsx` and unit-tested in
-  `tests/karaokeSentenceText.test.ts`); the two tokenizers don't align
-  index-for-index, so matching uses a small lookahead window rather than
-  strict pairing. Only tokenized-and-glossed content words get a popup —
-  particles and anything the aligner couldn't match get none.
+  (`src/components/KaraokeSentenceText.tsx`): the **real** `sentence.japanese`,
+  split into tokens on its `vocabularySuggestions`' char offsets
+  (`buildSentenceTokens`, exported + unit-tested in
+  `tests/karaokeSentenceText.test.ts`) — not the aligner's own
+  dictionary-normalized transcript, which can diverge (kanji where the audio
+  was kana, literal `<unk>` where it couldn't be placed). It lazily
+  computes/caches a `ReferenceAlignment` for the clip (via
+  `loadOrComputeAlignment`, same cache the shadowing-analysis flow uses);
+  during playback a `requestAnimationFrame` loop highlights whichever token
+  the playhead sits in, mapped through the aligner's word timings by a
+  forward `indexOf` resync (`alignmentCharPositions`), and a popup shows
+  that token's English gloss. Falls back to plain static text when alignment
+  isn't cached and the service is unreachable. The gloss is the suggestion's
+  own `english` or a `targetVocabulary` entry matched by the suggestion's
+  dictionary `expression`/`reading` (so a conjugated token still resolves).
+  A smaller kana line (`sentence.readingOnly`) underneath is the separate
+  pronunciation guide.
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide

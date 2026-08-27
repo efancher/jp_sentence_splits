@@ -6335,16 +6335,33 @@ and `SentenceTransformationCard` now show `You typed: …` on an *incorrect*
 reveal (the value is already in component state), so the learner can see
 what went wrong. Not shown when correct.
 
-**Verified**: `npm run typecheck`, `npm run lint` (no new warnings on
-changed files), `npm run test` (full suite: 861 passed, 2 pre-existing
-skips). New tests in `tests/reviewPage.test.tsx`: romaji-typed reading
-accepted; wrong answer echoed back.
+**Karaoke listening card now shows the real sentence (`a7f31fe5` 2nd half,
+`53a7952f`)** — `KaraokeSentenceText` was rendering the forced-alignment
+*transcript* (dictionary-normalized, `<unk>` shown as a bare `?` that reads
+as punctuation) as its primary line, with `attachGlosses` fuzzily matching
+aligner-word strings to morphology tokens (so conjugated content words
+silently got no gloss). Rewritten to render `sentence.japanese` itself,
+tokenized on its `vocabularySuggestions`' exact char offsets
+(`buildSentenceTokens`) — glosses are now exact (suggestion `english`, or a
+`targetVocabulary` match by dictionary `expression`/`reading`, which
+resolves conjugated tokens). The aligner data now only drives *highlight
+timing*: `alignmentCharPositions` maps each aligner word back to a sentence
+character by a forward `indexOf` resync, `<unk>` → no highlight. The
+transcript line and the `<unk>` `?` placeholder are gone; the kana
+`readingOnly` line stays as the separate pronunciation guide. `attachGlosses`
+/ `AlignedWord` / the `.karaoke-word-unknown` CSS removed;
+`tests/karaokeSentenceText.test.ts` rewritten for `buildSentenceTokens` +
+`alignmentCharPositions`; the two `KaraokeSentenceText` cases in
+`tests/reviewPage.test.tsx` updated.
 
-**Still not done** (app-side): `attachGlosses` (`KaraokeSentenceText`)
-misses glosses on conjugated content words and renders the aligner's
-`<unk>` as a bare `?` (issues `a7f31fe5` second half, `53a7952f`).
+**Verified**: `npm run typecheck`, `npm run lint` (no new warnings on
+changed files), `npm run build`, `npm run test` (full suite: 861 passed, 2
+pre-existing skips). New/updated tests: romaji-typed reading accepted; wrong
+answer echoed back; sentence tokenized from suggestions; aligner `<unk>`
+never reaches the screen. **Not exercised in a real browser** (the karaoke
+highlight is playback-time-driven and needs mic/audio) — worth a live
+listening-card check that the highlight tracks and glosses pop.
 
 **Issue-report status after this pass**: `8a339ad5`, `4a48d712`,
-`24f2f900`, `f31eac90`, `e9b8a19c` resolved; `a7f31fe5` half-resolved
-(compound gone, gloss matching remains); `53a7952f` open (aligner). User
-to mark the resolved ones done in-app (`CardIssuesPage`).
+`24f2f900`, `f31eac90`, `e9b8a19c`, `a7f31fe5`, `53a7952f` all resolved.
+User to mark them done in-app (`CardIssuesPage`).

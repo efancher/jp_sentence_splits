@@ -1,88 +1,133 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
 import type { SentenceAudio, TargetVocabulary, VocabularySuggestion } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 
-type AlignedWord = { text: string; start: number; end: number; gloss?: string };
+export type SentenceToken = {
+  text: string;
+  /** Character offsets into the sentence this token was sliced from. */
+  start: number;
+  end: number;
+  gloss?: string;
+};
+
+type TimedWord = { start: number; end: number; text: string };
 
 /**
- * Attaches an English gloss to each aligner word by walking both lists in
- * reading order and matching surface text. The aligner and the morphology
- * tokenizer (source of `vocabularySuggestions`) are independent, so their
- * tokens don't line up index-for-index — one may split/merge what the other
- * treats as a single word — but both proceed left-to-right over the same
- * sentence, so a small lookahead window is enough to resync without ever
- * matching backwards. Words with no exact match (most function words, since
- * the offline backfill only glosses content words, or a genuine mismatch)
- * simply get no popup.
+ * Splits a sentence into display tokens straight from its
+ * `vocabularySuggestions` — which carry exact `start`/`end` character
+ * offsets into the sentence Japanese (`VocabularySelection.surface`'s
+ * `validateSpan` guarantees `japanese.slice(start, end) === surface` at
+ * creation), so no fuzzy string matching is involved and every content
+ * morpheme lines up. Gaps between suggestions (and the whole sentence when
+ * there are no suggestions at all — older imports) become plain, ungloissed
+ * runs.
  *
- * `vocabularySuggestions.english` is only populated when the offline JMDict
- * backfill found an unambiguous match — a word written in kana whose lemma
- * has several equally-common kanji homophones (e.g. たつ: 経つ "to pass",
- * 立つ "to stand", 絶つ "to sever"...) is deliberately left unglossed there
- * rather than guessing. `targetVocabulary` (the curated chips shown below,
- * from linked source decks) already resolved that ambiguity for this
- * specific sentence, so it's consulted as a fallback, matched by dictionary
- * reading rather than surface text — the surface here is still the bare
- * conjugated kana (e.g. "たっ"), which can't be substring-matched against a
- * kanji expression like "経つ".
+ * Each token's gloss is the suggestion's own `english` (populated by the
+ * offline JMDict backfill when it found an unambiguous match) or, failing
+ * that, a `targetVocabulary` entry matched by the suggestion's dictionary
+ * `expression` or `reading` — the curated deck chips already resolved the
+ * homophone ambiguity the backfill declines to guess at (e.g. たつ:
+ * 経つ/立つ/絶つ). Matching by `expression` (the lemma the suggestion
+ * carries) rather than surface text is what lets a conjugated word like
+ * 終わってる still pick up 終わる's gloss.
  */
-export function attachGlosses(
-  words: { text: string; start: number; end: number }[],
+export function buildSentenceTokens(
+  japanese: string,
   suggestions: VocabularySuggestion[],
   targetVocabulary: TargetVocabulary[] = [],
-): AlignedWord[] {
-  const LOOKAHEAD = 4;
-  const englishByReading = new Map(
-    targetVocabulary.filter((item) => item.english).map((item) => [item.reading, item.english]),
-  );
-  let cursor = 0;
-  return words.map((word) => {
-    const limit = Math.min(suggestions.length, cursor + LOOKAHEAD);
-    for (let i = cursor; i < limit; i++) {
-      const suggestion = suggestions[i]!;
-      if (suggestion.surface === word.text) {
-        cursor = i + 1;
-        const gloss = suggestion.english || englishByReading.get(suggestion.reading);
-        return { ...word, gloss };
-      }
+): SentenceToken[] {
+  const englishByKey = new Map<string, string>();
+  for (const item of targetVocabulary) {
+    if (!item.english) continue;
+    for (const key of [item.expression, item.reading]) {
+      if (key && !englishByKey.has(key)) englishByKey.set(key, item.english);
     }
-    return word;
-  });
+  }
+
+  const spans = suggestions
+    .filter((s) => s.end > s.start && s.start >= 0 && s.end <= japanese.length)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+
+  const tokens: SentenceToken[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.start < cursor) continue; // overlapping/duplicate suggestion
+    if (span.start > cursor) {
+      tokens.push({ text: japanese.slice(cursor, span.start), start: cursor, end: span.start });
+    }
+    tokens.push({
+      text: japanese.slice(span.start, span.end),
+      start: span.start,
+      end: span.end,
+      gloss:
+        span.english ||
+        englishByKey.get(span.expression) ||
+        englishByKey.get(span.reading) ||
+        undefined,
+    });
+    cursor = span.end;
+  }
+  if (cursor < japanese.length) {
+    tokens.push({ text: japanese.slice(cursor), start: cursor, end: japanese.length });
+  }
+  if (tokens.length === 0) {
+    tokens.push({ text: japanese, start: 0, end: japanese.length });
+  }
+  return tokens;
 }
 
 /**
- * Word-synced highlighting for a revealed sentence, computed lazily from the
- * tailnet-only forced-alignment service and cached via
- * getReferenceAlignment/saveReferenceAlignment (same cache as the shadowing
- * analysis flow) — the first review of a sentence pays the alignment cost,
- * every later one reuses it. Falls back to plain, unhighlighted text
- * whenever alignment isn't available (server unreachable/cold, or not
- * finished loading yet), since it's just a reading aid, not the source of
- * truth for the sentence's text.
- *
- * The aligner occasionally can't match a stretch of audio to its dictionary
- * and emits a literal `<unk>` token in that word's place — rendering it
- * as-is reads as garbled Japanese (e.g. "<unk>容思い出して"), so it's shown
- * as a flagged placeholder instead. Since the karaoke line is therefore
- * *derived* text and can diverge from the real sentence (this way or more
- * subtly — dictionary-normalized spellings, mis-segmented words), the
- * actual sentence text is always shown underneath too, so the learner can
- * cross-check rather than trust the aligner's transcript. A third, smaller
- * line shows the precomputed all-kana reading (`sentence.readingOnly`) when
- * present, purely as a mapping aid from audio to kana — it's optional
- * because not every sentence has one populated.
- *
- * While a word is highlighted, a small popup shows its English gloss (from
- * `vocabularySuggestions`, the same offline-backfilled glosses the
- * vocabulary picker uses) positioned under that word via its DOM offset
- * within the relatively-positioned word row — simpler and more reliable
- * than tracking viewport/scroll position, and correct even as the line
- * wraps. Only content words that were tokenized and glossed get a popup;
- * particles and anything the aligner couldn't match to a suggestion get
- * none.
+ * Best-effort character offset in `japanese` for each forced-alignment
+ * word, so playback position (which the aligner reports in seconds against
+ * its *own*, dictionary-normalized transcript) can be mapped back onto the
+ * real sentence's tokens. Both lists run left-to-right over the same
+ * utterance, so a forward `indexOf` from a running cursor resyncs after any
+ * mis-segmentation; `<unk>`/`<eps>` (audio the aligner couldn't place) map
+ * to -1 and just don't drive a highlight.
+ */
+export function alignmentCharPositions(japanese: string, words: TimedWord[]): number[] {
+  const positions: number[] = [];
+  let cursor = 0;
+  for (const word of words) {
+    if (!word.text || word.text === '<unk>' || word.text === '<eps>') {
+      positions.push(-1);
+      continue;
+    }
+    const found = japanese.indexOf(word.text, cursor);
+    if (found >= 0 && found <= cursor + 8) {
+      positions.push(found);
+      cursor = found + word.text.length;
+    } else {
+      positions.push(Math.min(cursor, Math.max(0, japanese.length - 1)));
+      cursor = Math.min(japanese.length, cursor + word.text.length);
+    }
+  }
+  return positions;
+}
+
+function tokenIndexForChar(tokens: SentenceToken[], char: number): number {
+  if (char < 0) return -1;
+  return tokens.findIndex((token) => char >= token.start && char < token.end);
+}
+
+/**
+ * The revealed sentence on the listening card (Phase 7.4), shown as the
+ * real sentence text — not the forced-alignment transcript, which is
+ * dictionary-normalized and can diverge (kanji where the audio was kana,
+ * literal `<unk>` where it couldn't be placed). The sentence is tokenized
+ * from `vocabularySuggestions` (see `buildSentenceTokens`); while the audio
+ * plays, a `requestAnimationFrame` loop highlights whichever token the
+ * playhead currently sits in, mapped through the aligner's word timings
+ * (`alignmentCharPositions`), and a small popup shows that token's English
+ * gloss. Falls back to plain, static text whenever alignment isn't cached
+ * and the tailnet-only alignment service is unreachable — it's a reading
+ * aid, not the source of truth. A smaller kana line underneath
+ * (`sentence.readingOnly`) is the actual pronunciation guide, kept separate
+ * so the kanji sentence line isn't mistaken for it.
  */
 export function KaraokeSentenceText({
   audio,
@@ -98,11 +143,20 @@ export function KaraokeSentenceText({
   targetVocabulary?: TargetVocabulary[];
 }) {
   const native = useNativeAudio();
-  const [alignmentWords, setAlignmentWords] = useState<AlignedWord[]>([]);
+  const [alignmentWords, setAlignmentWords] = useState<TimedWord[]>([]);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [glossPopup, setGlossPopup] = useState<{ text: string; left: number; top: number } | null>(
     null,
+  );
+
+  const tokens = useMemo(
+    () => buildSentenceTokens(japanese, vocabularySuggestions, targetVocabulary ?? []),
+    [japanese, vocabularySuggestions, targetVocabulary],
+  );
+  const charPositions = useMemo(
+    () => alignmentCharPositions(japanese, alignmentWords),
+    [japanese, alignmentWords],
   );
 
   useEffect(() => {
@@ -117,17 +171,15 @@ export function KaraokeSentenceText({
     ).then((result) => {
       if (cancelled || !result) return;
       setAlignmentWords(
-        attachGlosses(
-          result.words.filter((word) => word.text && word.text !== '<eps>'),
-          vocabularySuggestions,
-          targetVocabulary,
-        ),
+        result.words
+          .filter((word) => word.text && word.text !== '<eps>')
+          .map((word) => ({ start: word.start, end: word.end, text: word.text })),
       );
     });
     return () => {
       cancelled = true;
     };
-  }, [audio.id, audio.blob, japanese, vocabularySuggestions, targetVocabulary]);
+  }, [audio.id, audio.blob, japanese]);
 
   const active = native.isPlaying && native.activeItemId === audio.id;
 
@@ -139,9 +191,7 @@ export function KaraokeSentenceText({
     let frame: number;
     const tick = () => {
       const t = native.getCurrentTime();
-      const index = alignmentWords.findIndex(
-        (word) => t >= word.start && t < word.end,
-      );
+      const index = alignmentWords.findIndex((word) => t >= word.start && t < word.end);
       setActiveWordIndex((prev) => (prev === index ? prev : index));
       frame = requestAnimationFrame(tick);
     };
@@ -149,53 +199,39 @@ export function KaraokeSentenceText({
     return () => cancelAnimationFrame(frame);
   }, [active, alignmentWords, native.getCurrentTime]);
 
+  const activeTokenIndex =
+    activeWordIndex >= 0 ? tokenIndexForChar(tokens, charPositions[activeWordIndex] ?? -1) : -1;
+
   useEffect(() => {
-    const word = alignmentWords[activeWordIndex];
-    const el = wordRefs.current[activeWordIndex];
-    if (!word?.gloss || !el) {
+    const token = tokens[activeTokenIndex];
+    const el = wordRefs.current[activeTokenIndex];
+    if (!token?.gloss || !el) {
       setGlossPopup(null);
       return;
     }
-    setGlossPopup({ text: word.gloss, left: el.offsetLeft, top: el.offsetTop + el.offsetHeight + 4 });
-  }, [activeWordIndex, alignmentWords]);
-
-  if (alignmentWords.length === 0) {
-    return (
-      <div className="stack" style={{ gap: '0.25rem' }}>
-        <div className="jp jp-lg">{japanese}</div>
-        {readingOnly && <div className="jp muted jp-sm">{readingOnly}</div>}
-      </div>
-    );
-  }
+    setGlossPopup({ text: token.gloss, left: el.offsetLeft, top: el.offsetTop + el.offsetHeight + 4 });
+  }, [activeTokenIndex, tokens]);
 
   return (
     <div className="stack" style={{ gap: '0.25rem' }}>
       <div className="jp jp-lg karaoke-line">
-        {alignmentWords.map((word, index) => {
-          const isUnknown = word.text === '<unk>';
-          return (
-            <span
-              key={`${word.text}-${index}`}
-              ref={(el) => {
-                wordRefs.current[index] = el;
-              }}
-              className={`karaoke-word${index === activeWordIndex ? ' karaoke-word-active' : ''}${isUnknown ? ' karaoke-word-unknown' : ''}`}
-              title={isUnknown ? 'Not recognized by the alignment service' : undefined}
-            >
-              {isUnknown ? '?' : word.text}
-            </span>
-          );
-        })}
-        {glossPopup && (
-          <div
-            className="karaoke-gloss"
-            style={{ left: glossPopup.left, top: glossPopup.top }}
+        {tokens.map((token, index) => (
+          <span
+            key={`${token.start}-${index}`}
+            ref={(el) => {
+              wordRefs.current[index] = el;
+            }}
+            className={`karaoke-word${index === activeTokenIndex ? ' karaoke-word-active' : ''}`}
           >
+            {token.text}
+          </span>
+        ))}
+        {glossPopup && (
+          <div className="karaoke-gloss" style={{ left: glossPopup.left, top: glossPopup.top }}>
             {glossPopup.text}
           </div>
         )}
       </div>
-      <div className="jp muted">{japanese}</div>
       {readingOnly && <div className="jp muted jp-sm">{readingOnly}</div>}
     </div>
   );
