@@ -331,15 +331,24 @@ explanation, the full step list with a status badge per step) plus
 as the default add amount; `TOP_UP_INCREMENTS_MINUTES` = [20, 30], fixed,
 for the smaller top-ups; both constants live in `sessionPlannerConfig.ts`)
 and a "Continue today's session" link to the runner whenever a step is
-still pending/active. A hideable "Customize split" section
-(2026-08-26 follow-up, a plain `<details>`, no native dialog) sits right
-above those buttons — four number inputs, one per `SessionBucket`,
-defaulting to `settings.sessionAllocation`; editing one and then
-Start/+time applies that split to just that call
+still pending/active. A "Customize split" section (2026-08-26 follow-up, a
+plain `<details>`, no native dialog; **open by default** as of 2026-08-27 —
+was collapsed, but the user kept forgetting it was there to adjust before
+starting) sits right above those buttons — four number inputs, one per
+`SessionBucket`, defaulting to `settings.sessionAllocation`; editing one and
+then Start/+time applies that split to just that call
 (`addMinutesToTodaySession`'s optional `baselineOverride` param) and
 persists it back as the new saved default. This **replaces** Settings'
 old "Activity mix" panel rather than sitting alongside it — the split is
-only editable here now. Below that, the same compact rolling-14-day
+only editable here now. A "Clear today's session" button (2026-08-27,
+below the step list) deletes today's `PlannerSession` outright
+(`deleteTodayPlannerSession`, `src/db/repository.ts`) via an inline
+confirm (no native dialog) — the fix for "I started with the wrong split
+and there was no way to undo it," since only *newly-added* minutes could
+ever pick up a corrected split otherwise; real underlying progress
+(analyses, vocab confirmations, reviews) is untouched, only the session's
+own step-list bookkeeping is discarded. Below that, the same compact
+rolling-14-day
 balance view as before (four `.progress-bar` meters — reusing the existing
 CSS component rather than a charting dependency — fill = how recently each
 bucket was touched) and a direct-access shortcut row

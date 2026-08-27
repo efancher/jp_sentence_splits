@@ -3948,6 +3948,27 @@ export async function endPlannerSessionEarly(sessionId: string): Promise<Planner
   return updated;
 }
 
+/**
+ * Deletes today's PlannerSession outright (user request, 2026-08-27: "clear
+ * out a session after I created it with the wrong split") — unlike
+ * endPlannerSessionEarly, which just settles remaining steps, this removes
+ * the row entirely so the next "Start"/"+time" tap on Home builds a fresh
+ * one from scratch with a corrected split, rather than only ever being able
+ * to apply a corrected split to minutes added *after* the mistake. Any
+ * step's real underlying progress (a sentence actually analyzed, vocabulary
+ * actually confirmed, reviews actually done) is untouched — only the
+ * session's own step list/allocation bookkeeping is discarded, the same
+ * distinction `autoCompleteSessionSteps` already draws between real
+ * completion and step tracking.
+ */
+export async function deleteTodayPlannerSession(now: Date = new Date()): Promise<void> {
+  const db = getDb();
+  const session = await db.plannerSessions.where('date').equals(localDateKey(now)).first();
+  if (!session) return;
+  await db.plannerSessions.delete(session.id);
+  notifySync('planner_sessions', session.id, { id: session.id }, 'delete');
+}
+
 export interface LearningBalanceEntry {
   bucket: SessionBucket;
   /** Number of distinct activity events observed in this bucket within the rolling window. */

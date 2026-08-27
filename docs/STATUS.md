@@ -1,6 +1,41 @@
 # Status
 
-Last updated: 2026-08-27 (Extended vocabulary-first gating to grammar and
+Last updated: 2026-08-27 (Home page: "Clear today's session" and the
+"Customize split" panel open by default, both user-requested. (1) There was
+previously no way to undo a bad "Start"/"+time" tap — `addMinutesToTodaySession`
+bakes the split into that pass's steps immediately, and only *new* minutes
+added later can use a corrected split, so a wrong split on the very first
+tap of the day stuck around for the rest of it. New `deleteTodayPlannerSession`
+(`src/db/repository.ts`) removes today's `PlannerSession` row outright
+(delete + `notifySync(..., 'delete')`, same soft-delete-on-push pattern
+`deleteBook`/`deleteBookChapter` already use) so the next Start/+time tap
+builds a genuinely fresh session; only the session's own step-list/allocation
+bookkeeping is discarded; real work (analyses, vocab confirmations, reviews)
+is untouched, same distinction `autoCompleteSessionSteps` already draws.
+Wired into `HomePage.tsx` as a "Clear today's session" button with an inline
+confirm (two buttons, "Yes, clear it"/"Cancel") rather than `window.confirm`,
+per the standing PWA-native-dialogs-broken constraint. (2) The "Customize
+split" `<details>` now defaults open (`useState(true)`, was `false`) — the
+user reported repeatedly forgetting it was there to adjust before starting a
+session. Fixed a latent bug this surfaced: `HomePage`'s `session` state used
+bare `useLiveQuery(() => getTodayPlannerSession(), [])`, and since that
+query's own "no session today" result is `undefined` — identical to
+`useLiveQuery`'s own "still loading" sentinel — clearing a session (the only
+code path that can make a *previously-existing* today-session become absent
+again) left the page stuck on "Loading…" forever instead of reverting to
+"Nothing planned yet today." Fixed by wrapping the query in `?? null`, the
+same "always return a defined sentinel" convention `StudyItemDebugPage`
+already documents. Verified in a real headless-Chromium browser (Playwright,
+`libnspr4`/`libnss3` extracted from `apt-get download` .deb packages into a
+scratch `LD_LIBRARY_PATH` dir since the sandbox lacks them, same workaround
+as the 2026-08-23 entry below): split panel open with no click,
+"Clear today's session" → inline confirm → "Yes, clear it" → session and
+`SessionBar` both disappear, page reverts correctly, zero console errors.
+Covered by `tests/homePage.test.tsx` (new) and two new cases in
+`tests/sessionPlannerRepository.test.ts`. `npm run check` (typecheck + full
+854-test suite) passes.
+
+Before that: Extended vocabulary-first gating to grammar and
 shadowing, follow-up to the same day's glossing-order fix below: the user
 pointed out the same "infer X from vocabulary context" logic applies to
 grammar comprehension and shadowing, not just structural analysis — you

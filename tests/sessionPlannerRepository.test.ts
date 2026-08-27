@@ -7,6 +7,7 @@ import {
   computeLearningBalance,
   confirmSentenceVocabulary,
   createBook,
+  deleteTodayPlannerSession,
   endPlannerSessionEarly,
   ensureStudyItem,
   getDb,
@@ -266,5 +267,33 @@ describe('Learning Orchestrator repository layer', () => {
     const shadowStep = afterConfirm.steps.find((step) => step.targetKind === 'shadow');
     expect(shadowStep).toBeDefined();
     expect(shadowStep!.sentenceId).toBe(sentence.id);
+  });
+
+  it('deleteTodayPlannerSession removes today\'s session entirely, letting the next Start build a fresh one (user request, 2026-08-27: "clear out a session created with the wrong split")', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const wrongSplit = { glossing: 1, grammar: 0, shadowing: 0, review: 0 };
+    const first = await addMinutesToTodaySession(30, new Date(), wrongSplit);
+    expect(first.allocation.glossing).toBeGreaterThan(0);
+    expect(await db.plannerSessions.count()).toBe(1);
+
+    await deleteTodayPlannerSession();
+    expect(await getTodayPlannerSession()).toBeUndefined();
+    expect(await db.plannerSessions.count()).toBe(0);
+
+    // A fresh Start with a corrected split creates a brand-new session, not
+    // a top-up of the deleted one.
+    const correctedSplit = { glossing: 0, grammar: 0, shadowing: 0, review: 1 };
+    const second = await addMinutesToTodaySession(30, new Date(), correctedSplit);
+    expect(second.id).not.toBe(first.id);
+    expect(await db.plannerSessions.count()).toBe(1);
+  });
+
+  it('deleteTodayPlannerSession is a no-op when nothing is planned yet today', async () => {
+    await expect(deleteTodayPlannerSession()).resolves.toBeUndefined();
   });
 });

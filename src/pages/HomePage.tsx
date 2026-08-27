@@ -6,6 +6,7 @@ import { readSettings } from '../db/database';
 import {
   addMinutesToTodaySession,
   computeLearningBalance,
+  deleteTodayPlannerSession,
   getTodayPlannerSession,
   updateSettings,
 } from '../db/repository';
@@ -71,12 +72,20 @@ function formatDaysSince(days: number | null): string {
 export function HomePage() {
   const navigate = useNavigate();
   const [addingMinutes, setAddingMinutes] = useState<number | null>(null);
-  const [splitOpen, setSplitOpen] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  // Open by default (2026-08-27 follow-up) — hiding it behind a click meant
+  // the split was easy to forget to adjust before starting/topping up.
+  const [splitOpen, setSplitOpen] = useState(true);
   // null = follow the saved default (settings.sessionAllocation); set once the
   // learner edits a value here, and persisted back as the new default on add.
   const [customSplit, setCustomSplit] = useState<Record<SessionBucket, number> | null>(null);
 
-  const session = useLiveQuery(() => getTodayPlannerSession(), []);
+  // Sentinel `null` for "loaded, no session today" — useLiveQuery itself
+  // returns undefined while loading, so leaving getTodayPlannerSession's own
+  // undefined-when-absent result unwrapped would make "just cleared" and
+  // "still fetching" indistinguishable (same convention StudyItemDebugPage
+  // uses).
+  const session = useLiveQuery(async () => (await getTodayPlannerSession()) ?? null, []);
   const balance = useLiveQuery(() => computeLearningBalance(), []);
   const settings = useLiveQuery(() => readSettings(), []);
   const dailyBudgetMinutes = settings?.dailyBudgetMinutes ?? DEFAULT_DAILY_BUDGET_MINUTES;
@@ -90,6 +99,11 @@ export function HomePage() {
     } finally {
       setAddingMinutes(null);
     }
+  }
+
+  async function handleClear() {
+    await deleteTodayPlannerSession(new Date());
+    setConfirmingClear(false);
   }
 
   const hasUnsettledStep = session?.steps.some(
@@ -140,6 +154,25 @@ export function HomePage() {
               </button>
             ) : (
               <p className="muted">All done for now — add more time below whenever you have it.</p>
+            )}
+
+            {confirmingClear ? (
+              <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  Clear today's plan and start over? Completed work (reviews, analysis, vocab
+                  confirmations) isn't affected.
+                </span>
+                <button type="button" className="danger" onClick={handleClear}>
+                  Yes, clear it
+                </button>
+                <button type="button" className="ghost" onClick={() => setConfirmingClear(false)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="ghost" onClick={() => setConfirmingClear(true)}>
+                Clear today's session
+              </button>
             )}
           </>
         )}
