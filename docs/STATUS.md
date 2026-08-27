@@ -6259,3 +6259,59 @@ The pitch half was an outright bug.
 - **Verified**: `npm run check` (typecheck + full `vitest run`, 847
   passed, 2 pre-existing skips, no new failures), `npm run lint` clean on
   all changed files.
+
+## Card-issue triage + morphology-import vocab cleanup (2026-08-27): done
+
+Batch triage of the 7 open `card_issue_reports` (`npm run issues:list`,
+`.claude/skills/card-issue-triage`). Most trace to one root cause: a batch
+of ~160 `vocabulary_items` (id prefix `vocab_item_`) created through the
+VocabularyPicker on 2026-08-15/16 — before `deriveDictionaryReading` and
+`combinedExpressionWarning` existed — carrying conjugated-surface readings
+(お父さん「おちちさん」, 売る「うら」, 行く「いき」…) and garbled combined
+expressions (売られた+喧嘩 → "売るれるた喧嘩").
+
+**Re-ran the three general scripts from the 2026-08-20 cleanup against
+production** (`--apply`, all idempotent): `fix:vocabulary-reading-mismatches`
+(3), `fix:vocabulary-godan-readings` (3), `merge:duplicate-vocabulary-items`
+(**20 pairs** — study_items/reviews/issue-reports repointed, buggy rows
+soft-deleted). 480 → 460 live items. Each re-run to 0 afterward.
+
+**New: `scripts/fix-morphology-batch-vocab-readings.ts`** (`npm run
+fix:morphology-batch-vocab-readings -- [--apply]`, dry-run default,
+idempotent, explicit id lists) for what those three deliberately skip —
+items with no usable `surface_form`, JMDict-ambiguous readings, or a
+decomposition (not conjugation) origin. Same `delete-garbled-combined-
+vocabulary.ts` / `fix-numeral-readings.ts` "hand-picked id list, not a
+re-derived scan" pattern. Ran `--apply` against production:
+- **A** — soft-deleted 6 garbled combined-expression items (0 study_items
+  each), plus their `sentence_vocabulary` / `vocabulary_kanji` links.
+- **B** — fixed 7 readings in place to the single unambiguous JMDict
+  reading (売る うる, 安い やすい, 笑う わらう, 乗る のる, 父さん とうさん,
+  飛び散らす とびちらす, 湿る しめる).
+- **C** — merged 7 buggy rows into their canonical item the same way
+  `merge:duplicate-vocabulary-items` does (行く いこう/いき→いく, 言う
+  いい→いう, 来る き→くる, する し→する, 寄る よっ→よる, **お父さん
+  おちちさん→おとうさん** — this last carried the `reading_retrieval`
+  study_item + 3 reviews from card issue `8a339ad5`, repointed intact).
+
+447 live items after. Verified card issue `8a339ad5`'s study_item now
+resolves to お父さん「おとうさん」.
+
+**Deferred (raised with the user, not actioned this pass)**: 4 noun
+homograph pairs left with two live readings each (何 なに/なん, 羽 はね/わ,
+話 はなし/わ, 後 あと/ご — both readings genuinely valid, need a per-word
+pick); 5 learner-authored phrase cards with an un-converted digit in the
+reading (`1つ下`「1つした」 etc. — cosmetic, 0 reviews).
+
+**Also surfaced from the same triage, not yet done** (app-side, no data
+fix): `SentenceTransformationCard` / `ReadingProductionCard` never echo the
+learner's typed answer on reveal (issues `24f2f900`, `f31eac90`);
+`isReadingAnswerCorrect` (`ReviewPage.tsx`) does no kana conversion so a
+romaji answer typed without a JP IME can't match (issue `e9b8a19c`);
+`attachGlosses` (`KaraokeSentenceText`) misses glosses on conjugated
+content words and renders the aligner's `<unk>` as a bare `?` (issues
+`a7f31fe5`, `53a7952f`).
+
+**Not committed here**: nothing in `src/`; this entry + the new script +
+its `package.json` alias only. The DB writes above are already live.
+User to mark the corresponding reports resolved in-app (`CardIssuesPage`).

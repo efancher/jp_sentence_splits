@@ -30,6 +30,7 @@
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
     "merge:duplicate-vocabulary-items": "tsx scripts/merge-duplicate-vocabulary-items.ts",
     "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",
+    "fix:morphology-batch-vocab-readings": "tsx scripts/fix-morphology-batch-vocab-readings.ts",
     "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",
     "fix:numeral-readings": "tsx scripts/fix-numeral-readings.ts",
     "issues:list": "tsx scripts/list-card-issues.ts",
