@@ -533,6 +533,8 @@ describe('ReviewPage', () => {
 
     expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
     expect(screen.getByText('よむ')).toBeInTheDocument();
+    // The learner's own answer is echoed back so they can see what went wrong.
+    expect(screen.getByText('よみます')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Again' }));
 
     await waitFor(async () => {
@@ -541,6 +543,69 @@ describe('ReviewPage', () => {
     const [review] = await db.reviews.toArray();
     expect(review?.rating).toBe('again');
     expect(review?.responseRaw).toBe('よみます');
+    expect(review?.expectedAnswer).toBe('よむ');
+  });
+
+  it('accepts a romaji-typed reading when the learner has no Japanese IME (Phase 7.9 follow-up)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const farFutureFsrsState = {
+      due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 0,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    for (const activityType of ['reading_retrieval', 'cloze']) {
+      await db.studyItems.add({
+        id: `si-vocab-1-${activityType}`,
+        subjectType: 'vocabularyItem',
+        subjectId: 'vocab-1',
+        activityType,
+        fsrsState: farFutureFsrsState,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Type the reading');
+    await user.type(screen.getByLabelText('Type the reading'), 'yomu');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe('yomu');
     expect(review?.expectedAnswer).toBe('よむ');
   });
 

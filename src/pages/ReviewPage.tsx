@@ -52,12 +52,12 @@ import {
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { segmentIntoMorae } from '../lib/mora';
-import { normalizeSentenceKey } from '../lib/normalize';
 import {
   pitchPatternLabel,
   possiblePitchPatternsForMoraCount,
   type PitchAccentPattern,
 } from '../lib/pitchAccentShape';
+import { isReadingAnswerCorrect } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -297,12 +297,6 @@ function getPitchAccentReviewCandidates(
     result.push({ ...candidate, moraCount, correctLabel, choices });
   }
   return result;
-}
-
-/** Same normalization `normalizeSentenceKey` uses for sentence-identity matching (NFC, whitespace-insensitive) — reused here for typed-reading comparison since the requirements coincide. */
-function isReadingAnswerCorrect(typed: string, expected: string): boolean {
-  const normalizedTyped = normalizeSentenceKey(typed);
-  return normalizedTyped.length > 0 && normalizedTyped === normalizeSentenceKey(expected);
 }
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -1449,6 +1443,11 @@ function ReadingProductionCard({
       ) : (
         <>
           <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
+          {!wasCorrect ? (
+            <div className="muted">
+              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
+            </div>
+          ) : null}
           <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
@@ -1516,6 +1515,11 @@ function SentenceTransformationCard({
       ) : (
         <>
           <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
+          {!wasCorrect ? (
+            <div className="muted">
+              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
+            </div>
+          ) : null}
           <div className="jp">{target.expression}</div>
           <div className="jp">{target.reading}</div>
           {vocabularyItem.meaning ? (

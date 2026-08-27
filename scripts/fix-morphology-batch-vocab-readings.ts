@@ -11,12 +11,15 @@
  * 2026-08-27 and cleared 26 more items/pairs automatically. This script
  * mops up what those three deliberately leave alone:
  *
- *   A. Garbled combined-expression items — combining a content word with a
- *      particle/auxiliary without editing the draft glued the raw lemmas
- *      together (e.g. 売られた + 喧嘩 -> expression "売るれるた喧嘩"). Same
- *      mechanism delete-garbled-combined-vocabulary.ts handles; these are
- *      six more, all with zero study_items. Soft-deleted (item + its
- *      sentence_vocabulary / vocabulary_kanji links).
+ *   A. Soft-delete outright (item + its sentence_vocabulary / vocabulary_kanji
+ *      links), all with zero study_items: six garbled combined-expression
+ *      items — combining a content word with a particle/auxiliary without
+ *      editing the draft glued the raw lemmas together (e.g. 売られた + 喧嘩
+ *      -> "売るれるた喧嘩"), same mechanism delete-garbled-combined-
+ *      vocabulary.ts handles — plus one redundant transparent compound
+ *      (使用期間, added 2026-08-28: = 使用 + 期間, no dictionary headword,
+ *      empty meaning, both parts already linked+glossed on the same
+ *      sentence; card issue a7f31fe5).
  *
  *   B. Conjugated-surface readings on a word with no correct duplicate to
  *      merge into and no usable sentence_vocabulary.surface_form for the
@@ -36,6 +39,10 @@
  *      (never dropped), sentence_vocabulary and vocabulary_kanji repointed
  *      or soft-deleted on collision, buggy row soft-deleted last.
  *
+ *   D. Append a missing sense to an existing meaning (2026-08-28): 出る's
+ *      WaniKani gloss doesn't cover 電話に出る "to answer the phone"
+ *      (card issue 4a48d712).
+ *
  * Explicit id lists, not a re-derived scan — "garbled combine" and
  * "which JMDict reading" aren't reliably decidable by pattern (see
  * delete-garbled-combined-vocabulary.ts's and fix-vocabulary-godan-
@@ -52,14 +59,33 @@ import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 type SupabaseClient = Awaited<ReturnType<typeof createScriptSupabaseClient>>;
 
-// A — soft-delete outright (garbled combined-expression items, 0 study_items).
+// A — soft-delete outright (item + its sentence_vocabulary / vocabulary_kanji
+// links). Aborts on any item that unexpectedly has a study_item.
 const GARBLED_ITEM_IDS = [
+  // Garbled combined-expression items — combine glued raw lemmas together.
   'vocab_item_521afdb3-2c06-4cd9-96c8-116da609bb37', // 売るれるた喧嘩「うられたけんか」
   'vocab_item_7ad4ab27-0ad2-406b-96e0-a84c1ad34ccc', // 安いすぎる「やすすぎる」
   'vocab_item_1178d80e-8118-4268-a7aa-121184a5c4d8', // 最低だセリフ「さいていなせりふ」
   'vocab_item_06192301-baad-46fa-9308-887d43491a8a', // 笑うれる「わらわれる」
   'vocab_item_c94382b0-3fa2-458c-b580-89b6264b0640', // 鈍感だふりするて「どんかんなふりして」
   'vocab_item_0b5353f0-eecf-4fc4-b0d5-5111065310ec', // なし「なかれ」 (勿れ mis-attached)
+  // Redundant transparent compound (2026-08-28) — 使用期間 "period of use"
+  // is just 使用 + 期間, not a dictionary headword, has an empty meaning, and
+  // is linked to the same sentence (sent_0637c92f) that already has both
+  // 使用 and 期間 linked and glossed. Learner-reported as confusing
+  // (card issue a7f31fe5).
+  'vocab_9dbc362d-83b7-4d6d-a7e4-6db4aa7e51ec', // 使用期間「しようきかん」
+];
+
+// D — append a missing sense to an existing meaning (card issue 4a48d712:
+// 電話に出る "to answer the phone" isn't covered by 出る's WaniKani gloss).
+const MEANING_FIXES: { id: string; expression: string; from: string; to: string }[] = [
+  {
+    id: 'vocab_cbb17c5f-c109-4915-a99b-67e0aab53711',
+    expression: '出る',
+    from: 'To Exit; To Leave; To Attend',
+    to: 'To Exit; To Leave; To Attend; To Answer (the phone)',
+  },
 ];
 
 // B — update reading in place.
@@ -131,7 +157,7 @@ async function reviewCount(supabase: SupabaseClient, studyItemId: string): Promi
 }
 
 async function runGarbled(supabase: SupabaseClient, apply: boolean) {
-  console.log('=== A: garbled combined-expression items ===');
+  console.log('=== A: soft-delete (garbled combines + redundant compound) ===');
   for (const id of GARBLED_ITEM_IDS) {
     const { data: item } = await supabase.from('vocabulary_items').select('id, expression, reading, deleted_at').eq('id', id).maybeSingle();
     if (!item) { console.log(`  ${id}: not found — skipping`); continue; }
@@ -172,6 +198,19 @@ async function runReadingFixes(supabase: SupabaseClient, apply: boolean) {
     }
     console.log(`  ${fix.expression}: "${fix.from}" -> "${fix.to}"`);
     await repoint(supabase, 'vocabulary_items', fix.id, { reading: fix.to }, apply);
+  }
+}
+
+async function runMeaningFixes(supabase: SupabaseClient, apply: boolean) {
+  console.log('\n=== D: append missing meaning senses ===');
+  for (const fix of MEANING_FIXES) {
+    const { data: item } = await supabase.from('vocabulary_items').select('id, expression, meaning, deleted_at').eq('id', fix.id).maybeSingle();
+    if (!item) { console.log(`  ${fix.expression}: not found — skipping`); continue; }
+    if (item.deleted_at) { console.log(`  ${fix.expression}: deleted — skipping`); continue; }
+    if (item.meaning === fix.to) { console.log(`  ${fix.expression}: already "${fix.to}" — skipping`); continue; }
+    if (item.meaning !== fix.from) { console.log(`  ${fix.expression}: meaning is "${item.meaning}", expected "${fix.from}" — skipping`); continue; }
+    console.log(`  ${fix.expression}: "${fix.from}" -> "${fix.to}"`);
+    await repoint(supabase, 'vocabulary_items', fix.id, { meaning: fix.to }, apply);
   }
 }
 
@@ -250,6 +289,7 @@ async function main() {
 
   await runGarbled(supabase, apply);
   await runReadingFixes(supabase, apply);
+  await runMeaningFixes(supabase, apply);
   await runMerges(supabase, apply);
 
   console.log(`\nDone. ${apply ? 'Applied.' : 'Dry run — nothing written. Re-run with --apply to write.'}`);

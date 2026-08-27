@@ -588,7 +588,13 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   sentence translation as a pre-reveal hint so the blank isn't otherwise
   under-constrained),
   `reading_production` (show the word, type the reading — typed-answer
-  checked via `isReadingAnswerCorrect`), `sentence_transformation`
+  checked via `isReadingAnswerCorrect` in `src/lib/readingAnswer.ts`, which
+  is whitespace/kana-form lenient: accepts romaji typed without a Japanese
+  IME and katakana-vs-hiragana differences; the same helper backs
+  `classifyReviewError` so an accepted answer isn't logged as an error;
+  both `reading_production` and `sentence_transformation` echo the
+  learner's own typed answer back on an incorrect reveal),
+  `sentence_transformation`
   (conjugate a word to a per-word-hashed target form — 13 verb/10
   adjective forms via `src/lib/conjugation.ts`, a ported/validated
   engine), `pitch_accent` (narrower eligibility than the other four — only

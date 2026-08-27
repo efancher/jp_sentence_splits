@@ -9,6 +9,7 @@ import type {
   StudyItem,
   StudySubjectType,
 } from '../domain/types';
+import { isReadingAnswerCorrect } from './readingAnswer';
 
 /**
  * Thin wrapper around ts-fsrs (docs/UNIFIED_APP_ARCHITECTURE.md §10). Pure
@@ -212,7 +213,10 @@ export function classifyReviewError(input: {
   if (
     input.responseRaw !== undefined &&
     input.expectedAnswer !== undefined &&
-    input.responseRaw !== input.expectedAnswer
+    // Same lenient comparison the card's own ✓/✗ uses — otherwise a
+    // romaji-typed or katakana-stored reading that the card accepted would
+    // still be classified as an error here.
+    !isReadingAnswerCorrect(input.responseRaw, input.expectedAnswer)
   ) {
     if (input.activityType === 'reading_production') return 'incorrect_reading';
     if (input.activityType === 'sentence_transformation') return 'grammar_misunderstanding';

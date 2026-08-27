@@ -6297,27 +6297,54 @@ re-derived scan" pattern. Ran `--apply` against production:
 447 live items after. Verified card issue `8a339ad5`'s study_item now
 resolves to お父さん「おとうさん」.
 
-**Follow-up (2026-08-28)**: fixed the 5 learner-authored phrase cards that
-had a bare Arabic numeral left in the reading (`1つ下`「1つした」→「ひとつ
-した」, `2つ先の駅`, `２週間後`, `たったの1ヶ月`, `もう1ヶ月`) — each `to`
-copied from the parent sentence's own `inline_reading` since numeral+counter
-readings are context-dependent. Added to `READING_FIXES` in the same
-script.
+**Follow-up (2026-08-28), all via the same script**:
+- 5 learner-authored phrase cards with a bare Arabic numeral in the reading
+  (`1つ下`「1つした」→「ひとつした」, `2つ先の駅`, `２週間後`, `たったの1ヶ月`,
+  `もう1ヶ月`) — each `to` copied from the parent sentence's own
+  `inline_reading` since numeral+counter readings are context-dependent.
+  Added to `READING_FIXES`.
+- **D3** — soft-deleted the redundant `使用期間` compound (= 使用 + 期間, no
+  dictionary headword, empty meaning, both parts already linked+glossed on
+  `sent_0637c92f`). Added to the section-A delete list. Closes the first
+  half of issue `a7f31fe5`.
+- **D4** — appended "To Answer (the phone)" to `出る`'s meaning (new
+  `MEANING_FIXES` section). Closes issue `4a48d712`.
 
 **Still deferred**: 4 noun homograph pairs left with two live readings each
 (何 なに/なん, 羽 はね/わ, 話 はなし/わ, 後 あと/ご — both readings
 genuinely valid; user chose to wait and see whether the duplication becomes
 annoying in practice before merging).
 
-**Also surfaced from the same triage, not yet done** (app-side, no data
-fix): `SentenceTransformationCard` / `ReadingProductionCard` never echo the
-learner's typed answer on reveal (issues `24f2f900`, `f31eac90`);
-`isReadingAnswerCorrect` (`ReviewPage.tsx`) does no kana conversion so a
-romaji answer typed without a JP IME can't match (issue `e9b8a19c`);
-`attachGlosses` (`KaraokeSentenceText`) misses glosses on conjugated
-content words and renders the aligner's `<unk>` as a bare `?` (issues
-`a7f31fe5`, `53a7952f`).
+### App-side fixes (2026-08-28)
 
-**Not committed here**: nothing in `src/`; this entry + the new script +
-its `package.json` alias only. The DB writes above are already live.
-User to mark the corresponding reports resolved in-app (`CardIssuesPage`).
+**Lenient reading-answer matching (`e9b8a19c`)** — extracted
+`isReadingAnswerCorrect` from `ReviewPage.tsx` into `src/lib/readingAnswer.ts`
+and made it whitespace/NFC-insensitive *and* kana-form lenient: both sides
+are also compared as hiragana (`wanakana` `toHiragana`, only trusted when
+the whole input converts to kana — same guard as `matchesVocabularySearch`),
+so a learner with no Japanese IME can type the reading in romaji ("sureba"
+→ すれば) and a katakana-stored expected reading (イク) still matches.
+`classifyReviewError` (`src/lib/scheduling.ts`) now uses the same helper
+instead of a raw `!==`, so a romaji/katakana answer the card accepted isn't
+then logged as `incorrect_reading` / `grammar_misunderstanding`. Degrades
+to plain normalized equality for the non-reading answers that also flow
+through it (grammar pattern names, pitch-accent labels).
+
+**Answer echo on reveal (`24f2f900`, `f31eac90`)** — `ReadingProductionCard`
+and `SentenceTransformationCard` now show `You typed: …` on an *incorrect*
+reveal (the value is already in component state), so the learner can see
+what went wrong. Not shown when correct.
+
+**Verified**: `npm run typecheck`, `npm run lint` (no new warnings on
+changed files), `npm run test` (full suite: 861 passed, 2 pre-existing
+skips). New tests in `tests/reviewPage.test.tsx`: romaji-typed reading
+accepted; wrong answer echoed back.
+
+**Still not done** (app-side): `attachGlosses` (`KaraokeSentenceText`)
+misses glosses on conjugated content words and renders the aligner's
+`<unk>` as a bare `?` (issues `a7f31fe5` second half, `53a7952f`).
+
+**Issue-report status after this pass**: `8a339ad5`, `4a48d712`,
+`24f2f900`, `f31eac90`, `e9b8a19c` resolved; `a7f31fe5` half-resolved
+(compound gone, gloss matching remains); `53a7952f` open (aligner). User
+to mark the resolved ones done in-app (`CardIssuesPage`).
