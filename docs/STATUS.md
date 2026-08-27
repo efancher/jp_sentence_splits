@@ -1,6 +1,44 @@
 # Status
 
-Last updated: 2026-08-27 (Vocabulary-first glossing order, per user
+Last updated: 2026-08-27 (Extended vocabulary-first gating to grammar and
+shadowing, follow-up to the same day's glossing-order fix below: the user
+pointed out the same "infer X from vocabulary context" logic applies to
+grammar comprehension and shadowing, not just structural analysis — you
+need to already know a sentence's words to infer its grammar from context,
+and to have attention free for pronunciation instead of word-recall during
+shadowing. Two more call sites now reuse `getSentenceFullReviewReadiness`
+(the exact same "confirmed + every linked vocab item FSRS-proficient" rule):
+(1) `pickContextSentenceForGrammarPattern` (`src/db/repository.ts`) — used
+by `ReviewPage` to choose which of a tracked grammar pattern's sentence
+encounters to show for a `grammar_comprehension`/`grammar_completion`/
+`grammar_contrast` card — now skips any encounter whose vocabulary isn't
+ready, falling back to an older-but-ready encounter, or excluding the
+pattern from this review pass entirely if none qualify (no due-date
+push needed, unlike `deferUnreadySentenceReviews`, since a
+`grammarPattern`-subject StudyItem has no single fixed sentence to defer
+against — candidate selection just doesn't offer an unready one). (2)
+`findShadowCandidates` (`src/db/repository.ts`) — the shadowing bucket's
+candidate pool now filters to sentences whose vocabulary is confirmed and
+proficient before ranking by fewest existing attempts; `buildShadowSteps`
+itself needed no change since an unready sentence just never becomes a
+candidate (no parallel "not ready yet" step needed, unlike glossing's
+`vocabulary_review` fallback, since there's no shadow-adjacent prerequisite
+activity to substitute in). Left deliberately untouched: `findUnderstandCandidates`'s
+`grammar_detail` step (the "examine this pattern" dashboard visit,
+`GrammarPatternDetailPage`) — its `sentenceId` is only used for coherent-chain
+grouping cosmetics, not a full-sentence comprehension test, so it isn't the
+kind of "unfamiliar-vocab glossing" this fix targets. Required updating 5
+existing `grammar_comprehension`/`grammar_completion`/`grammar_contrast`
+tests in `tests/reviewPage.test.tsx` (their fixture sentences had no
+confirmed vocabulary at all, so they'd have silently stopped rendering) plus
+2 in `tests/data.test.ts`, all via the same `confirmSentenceVocabulary(id,
+[])` no-real-vocab-items pattern already used for the glossing fix's own
+tests. Added a new readiness-gate test in each of `tests/data.test.ts`
+(`pickContextSentenceForGrammarPattern` skips/falls back correctly) and
+`tests/sessionPlannerRepository.test.ts` (no `shadow` step until vocabulary
+is confirmed). `npm run check` (typecheck + full 849-test suite) passes.
+
+Before that: Vocabulary-first glossing order, per user
 request: the learner reported regularly seeing a sentence's structural
 analysis/grammar glossing before they'd even looked at its vocabulary. Root
 cause: `buildExploreSteps` (`src/lib/sessionPlanner.ts`) unconditionally

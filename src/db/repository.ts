@@ -3144,10 +3144,19 @@ export async function listGrammarRelationshipsForPattern(
 }
 
 /**
- * Most-recently-linked sentence for a grammar pattern — mirrors
- * pickContextSentenceForVocabularyItem's shape exactly. Used by ReviewPage
- * to pick which of a tracked pattern's encounters to show for a
- * grammar_comprehension/grammar_completion card.
+ * Most-recently-linked sentence for a grammar pattern whose own vocabulary
+ * is confirmed and proficient — mirrors pickContextSentenceForVocabularyItem's
+ * shape, plus the same "vocab before sentence-level context" gate as
+ * getSentenceFullReviewReadiness (user request, 2026-08-27): testing
+ * grammar comprehension in a sentence full of unfamiliar words isn't a
+ * useful signal any more than testing sentence comprehension is. Used by
+ * ReviewPage to pick which of a tracked pattern's encounters to show for a
+ * grammar_comprehension/grammar_completion/grammar_contrast card — a
+ * pattern with no ready encounter yet simply isn't offered as a candidate
+ * this pass (mirrors deferUnreadySentenceReviews's effect, but via
+ * candidate selection rather than a stored due-date push, since a
+ * grammarPattern-subject StudyItem has no fixed one-sentence FK to defer
+ * against).
  */
 export async function pickContextSentenceForGrammarPattern(
   grammarPatternId: string,
@@ -3159,7 +3168,9 @@ export async function pickContextSentenceForGrammarPattern(
     .toArray();
   if (links.length === 0) return undefined;
   const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const readiness = await getSentenceFullReviewReadiness(sorted.map((link) => link.sentenceId));
   for (const link of sorted) {
+    if (!readiness.get(link.sentenceId)) continue;
     const sentence = await db.sentences.get(link.sentenceId);
     if (sentence) return { sentence, sentenceGrammar: link };
   }
@@ -3509,14 +3520,25 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
   return ids;
 }
 
-/** Practice(shadowing) candidates: sentences with reference audio and the fewest existing attempts, scoped to sentences actually in progress. */
+/**
+ * Practice(shadowing) candidates: sentences with reference audio and the
+ * fewest existing attempts, scoped to sentences actually in progress and
+ * whose vocabulary is confirmed and proficient (user request, 2026-08-27,
+ * same getSentenceFullReviewReadiness gate as glossing/grammar — shadowing
+ * a sentence full of unfamiliar words splits attention between recalling
+ * the words and imitating the pronunciation, when the whole point is to
+ * free up attention for the latter).
+ */
 async function findShadowCandidates(limit: number, activeSentenceIds: Set<string>): Promise<ShadowCandidate[]> {
   if (activeSentenceIds.size === 0) return [];
   const db = getDb();
   const activeIds = [...activeSentenceIds];
   const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray();
   if (audioRows.length === 0) return [];
-  const sentenceIdsWithAudio = [...new Set(audioRows.map((audio) => audio.sentenceId))];
+  const sentenceIdsWithAudioUnfiltered = [...new Set(audioRows.map((audio) => audio.sentenceId))];
+  const readiness = await getSentenceFullReviewReadiness(sentenceIdsWithAudioUnfiltered);
+  const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
+  if (sentenceIdsWithAudio.length === 0) return [];
 
   const [attempts, sentences, bookSentences] = await Promise.all([
     db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),

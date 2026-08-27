@@ -251,7 +251,17 @@ learner has actually demonstrated recall of the sentence's words, typically
 landing a day or more after the vocabulary step once a review cycle has
 passed. A sentence whose vocabulary is confirmed but not yet proficient
 gets no glossing step at all that pass; the planner moves on to the next
-sentence rather than blocking the book on it.
+sentence rather than blocking the book on it. The same rule extends to the
+shadowing bucket (2026-08-27 follow-up, same user request): `findShadowCandidates`
+(`src/db/repository.ts`) only pools sentences whose vocabulary is confirmed
+and proficient before ranking by fewest existing attempts, so a sentence
+never gets recommended for pronunciation practice while its words still
+need conscious recall — the point of shadowing being free to focus on
+pronunciation, not split attention with vocabulary retrieval. Unlike
+glossing's not-ready sentences (which fall back to a `vocabulary_review`
+step), an unready sentence simply isn't a shadow candidate at all — there's
+no shadow-adjacent activity to substitute in, so `buildShadowSteps` needed
+no change.
 
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process
@@ -599,7 +609,17 @@ state has graduated past "new/learning" for every reviewable vocabulary
 item in that sentence) — `getSentenceFullReviewReadiness`/
 `isSentenceReadyForFullReview`/`deferUnreadySentenceReviews` implement
 this, applied both as an ongoing filter on the due queue and defensively
-against lazily-seeded new items so nothing bypasses the gate.
+against lazily-seeded new items so nothing bypasses the gate. The same
+readiness rule gates which sentence a grammar review card shows, too
+(2026-08-27 follow-up): `pickContextSentenceForGrammarPattern` — which
+`ReviewPage` uses to choose which of a tracked pattern's sentence encounters
+to show for `grammar_comprehension`/`grammar_completion`/`grammar_contrast`
+— skips any encounter whose vocabulary isn't confirmed+proficient,
+preferring an older-but-ready encounter over the most recent unready one,
+and simply not offering the pattern as a review candidate at all if none of
+its encounters qualify (no due-date push needed here, unlike
+`deferUnreadySentenceReviews`, since a `grammarPattern`-subject StudyItem
+has no single fixed sentence to defer against).
 Mnemonic-shown/audio-replayed/etc. assistance flags are recorded on
 `Review.assistance` without penalizing the score — informational only for
 future planning. A **session planner** caps new-subject introduction per

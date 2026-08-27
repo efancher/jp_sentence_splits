@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
+  confirmSentenceVocabulary,
   ensureGrammarPattern,
   ensureGrammarRelationship,
   ensureGrammarStudyItem,
@@ -1765,6 +1766,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressUnconditionalSentenceActivityTypes('sent-grammar-1');
+    await confirmSentenceVocabulary('sent-grammar-1', []);
 
     const pattern = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",
@@ -1825,6 +1827,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressUnconditionalSentenceActivityTypes('sent-grammar-2');
+    await confirmSentenceVocabulary('sent-grammar-2', []);
 
     const correct = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",
@@ -1895,6 +1898,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressUnconditionalSentenceActivityTypes('sent-grammar-3');
+    await confirmSentenceVocabulary('sent-grammar-3', []);
 
     const correct = await ensureGrammarPattern('〜わけがない');
     const others = await Promise.all(
@@ -1955,6 +1959,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressUnconditionalSentenceActivityTypes('sent-grammar-4');
+    await confirmSentenceVocabulary('sent-grammar-4', []);
 
     const correct = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",
@@ -2026,6 +2031,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressUnconditionalSentenceActivityTypes('sent-grammar-5');
+    await confirmSentenceVocabulary('sent-grammar-5', []);
 
     const correct = await ensureGrammarPattern('〜わけがない');
     const confusable = await ensureGrammarPattern('〜はずがない');

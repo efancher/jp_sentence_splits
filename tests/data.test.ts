@@ -5,6 +5,7 @@ import {
   addSentencesToBook,
   assignBookSentencesToChapter,
   commitImport,
+  confirmSentenceVocabulary,
   createBook,
   createBookChapter,
   deferUnreadySentenceReviews,
@@ -1511,7 +1512,30 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(studyItem.subjectId).toBe(pattern.id);
   });
 
-  it('pickContextSentenceForGrammarPattern returns the most recently linked sentence', async () => {
+  it('pickContextSentenceForGrammarPattern returns the most recently linked sentence whose vocabulary is confirmed and proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
+    const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {});
+    const newLink = await ensureSentenceGrammar('sent-new', pattern.id, {});
+    await getDb().sentenceGrammar.update(oldLink.id, {
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await getDb().sentenceGrammar.update(newLink.id, {
+      createdAt: '2026-02-01T00:00:00.000Z',
+    });
+    await confirmSentenceVocabulary('sent-old', []);
+    await confirmSentenceVocabulary('sent-new', []);
+
+    const picked = await pickContextSentenceForGrammarPattern(pattern.id);
+    expect(picked?.sentence.id).toBe('sent-new');
+  });
+
+  it('pickContextSentenceForGrammarPattern returns undefined with no links', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    expect(await pickContextSentenceForGrammarPattern(pattern.id)).toBeUndefined();
+  });
+
+  it("pickContextSentenceForGrammarPattern skips the most recent link if its vocabulary isn't confirmed+proficient, and returns undefined if none qualify", async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
     const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {});
@@ -1523,13 +1547,13 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
       createdAt: '2026-02-01T00:00:00.000Z',
     });
 
-    const picked = await pickContextSentenceForGrammarPattern(pattern.id);
-    expect(picked?.sentence.id).toBe('sent-new');
-  });
-
-  it('pickContextSentenceForGrammarPattern returns undefined with no links', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
+    // Neither sentence has confirmed vocabulary yet — no candidate at all.
     expect(await pickContextSentenceForGrammarPattern(pattern.id)).toBeUndefined();
+
+    // Only the older sentence is ready — it's picked over the unready newer one.
+    await confirmSentenceVocabulary('sent-old', []);
+    const picked = await pickContextSentenceForGrammarPattern(pattern.id);
+    expect(picked?.sentence.id).toBe('sent-old');
   });
 
   it('computeGrammarPatternContextDiversity mirrors the vocabulary version, over sentenceGrammar', async () => {

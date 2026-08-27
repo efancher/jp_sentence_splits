@@ -233,4 +233,38 @@ describe('Learning Orchestrator repository layer', () => {
     expect(review.neglectScore).toBeLessThan(grammar.neglectScore);
     expect(grammar.daysSinceLast).toBeNull();
   });
+
+  it('gives a sentence no shadow step until its vocabulary is confirmed and proficient (user request, 2026-08-27)', async () => {
+    const book = await createBook({ title: 'Shadow Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    // findShadowCandidates only considers sentences already "in progress" —
+    // marking it unstarted-but-with-audio would exclude it from the pool
+    // for an unrelated reason and defeat this test.
+    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
+    await db.sentenceAudio.add({
+      id: 'audio-shadow-1',
+      sentenceId: sentence.id,
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: new Date().toISOString(),
+    });
+
+    const beforeConfirm = await planRecommendedSession(60);
+    expect(beforeConfirm.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
+
+    await confirmSentenceVocabulary(sentence.id, []);
+    const afterConfirm = await planRecommendedSession(60);
+    const shadowStep = afterConfirm.steps.find((step) => step.targetKind === 'shadow');
+    expect(shadowStep).toBeDefined();
+    expect(shadowStep!.sentenceId).toBe(sentence.id);
+  });
 });
