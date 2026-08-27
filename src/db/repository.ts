@@ -2164,15 +2164,25 @@ export async function materializeVocabularySelections(
 /**
  * Centralizes the VocabularyPicker confirm write path (VocabularyReviewPage):
  * flips vocabularyReviewStatus to 'confirmed', materializes selections into
- * real VocabularyItem/SentenceVocabulary rows, and auto-completes any
- * matching 'vocabulary_review' session step — without touching this
- * sentence's structural (chunk/notes) analysis state, which this function
- * has no input for and simply passes through unchanged from the existing row.
+ * real VocabularyItem/SentenceVocabulary rows, and settles any matching
+ * 'vocabulary_review' session step — without touching this sentence's
+ * structural (chunk/notes) analysis state, which this function has no input
+ * for and simply passes through unchanged from the existing row.
+ *
+ * When today's in-progress session is actually sitting on this sentence's
+ * vocabulary step (it's the first pending/active step — i.e. the learner is
+ * following the session, not browsing the book), the step is settled via the
+ * same `settleSessionStep` auto-advance the SessionBar's Mark-complete button
+ * uses, and the newly-activated next step is returned as `nextSessionStep` so
+ * the caller can deep-link straight into it. Confirming a sentence the
+ * session isn't currently on still settles its step (out of order, via
+ * `autoCompleteSessionSteps`) but returns no `nextSessionStep` — the learner
+ * is deliberately off the planned path, so nothing yanks them back onto it.
  */
 export async function confirmSentenceVocabulary(
   sentenceId: string,
   selections: VocabularySelection[],
-): Promise<SentenceAnalysis> {
+): Promise<{ analysis: SentenceAnalysis; nextSessionStep: PlannerSessionStep | undefined }> {
   const db = getDb();
   const existing = await db.analyses.get(sentenceId);
   const analysis = await saveAnalysis(sentenceId, existing?.chunks ?? [], existing?.notes ?? '', {
@@ -2180,10 +2190,11 @@ export async function confirmSentenceVocabulary(
     selections,
   });
   await materializeVocabularySelections(sentenceId, selections);
+  const nextSessionStep = await settleActiveVocabularyReviewStep(sentenceId);
   await autoCompleteSessionSteps(
     (step) => step.targetKind === 'vocabulary_review' && step.sentenceId === sentenceId,
   );
-  return analysis;
+  return { analysis, nextSessionStep };
 }
 
 // ---------------------------------------------------------------------------
@@ -3919,6 +3930,35 @@ export async function settleSessionStep(
     session: updated,
     nextStep: nextStepBefore ? updated.steps.find((step) => step.id === nextStepBefore.id) : undefined,
   };
+}
+
+/**
+ * If today's in-progress session is currently sitting on a `vocabulary_review`
+ * step for `sentenceId` — meaning that step is the first pending/active one,
+ * the same "current step" rule `useActiveSession`/`SessionRunnerPage` use — settle
+ * it via `settleSessionStep` (mark done, activate the next step) and return that
+ * next step for the caller to deep-link into. Returns undefined when there's no
+ * such session, or the learner is on some other step (browsing ahead/behind, or
+ * a different activity): the out-of-order match is left to
+ * `autoCompleteSessionSteps`, which settles it without disturbing the pointer.
+ */
+async function settleActiveVocabularyReviewStep(
+  sentenceId: string,
+): Promise<PlannerSessionStep | undefined> {
+  const session = await getActiveInProgressPlannerSession();
+  if (!session) return undefined;
+  const currentStep = session.steps.find(
+    (step) => step.status === 'pending' || step.status === 'active',
+  );
+  if (
+    !currentStep ||
+    currentStep.targetKind !== 'vocabulary_review' ||
+    currentStep.sentenceId !== sentenceId
+  ) {
+    return undefined;
+  }
+  const result = await settleSessionStep(session.id, currentStep.id, 'completed');
+  return result?.nextStep;
 }
 
 /** Count of Review rows recorded at/after `timestamp` — powers ReviewPage's live "X/N reviews done" progress against an active session's `review` step target count; timestamp-based (not component state) so progress survives leaving and returning to the page. */

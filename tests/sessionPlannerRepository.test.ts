@@ -296,4 +296,46 @@ describe('Learning Orchestrator repository layer', () => {
   it('deleteTodayPlannerSession is a no-op when nothing is planned yet today', async () => {
     await expect(deleteTodayPlannerSession()).resolves.toBeUndefined();
   });
+
+  it('confirming vocabulary on the session\'s current step settles it, activates the next, and returns it (2026-08-27: "when in a session could confirming navigate to the next item?")', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const first = makeSentence();
+    const second = makeSentence();
+    await db.sentences.bulkPut([first, second]);
+    await addSentencesToBook(book.id, [first.id, second.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const vocabSteps = session.steps.filter((step) => step.targetKind === 'vocabulary_review');
+    expect(vocabSteps.map((step) => step.sentenceId)).toEqual([first.id, second.id]);
+
+    const { nextSessionStep } = await confirmSentenceVocabulary(first.id, []);
+    expect(nextSessionStep?.id).toBe(vocabSteps[1]!.id);
+    expect(nextSessionStep?.sentenceId).toBe(second.id);
+
+    const updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === vocabSteps[0]!.id)!.status).toBe('completed');
+    expect(updated!.steps.find((step) => step.id === vocabSteps[1]!.id)!.status).toBe('active');
+  });
+
+  it('confirming vocabulary on a sentence the session is not currently on settles that step without advancing the pointer', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const first = makeSentence();
+    const second = makeSentence();
+    await db.sentences.bulkPut([first, second]);
+    await addSentencesToBook(book.id, [first.id, second.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const vocabSteps = session.steps.filter((step) => step.targetKind === 'vocabulary_review');
+
+    // Jump ahead to the second sentence while the session still points at the first.
+    const { nextSessionStep } = await confirmSentenceVocabulary(second.id, []);
+    expect(nextSessionStep).toBeUndefined();
+
+    const updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === vocabSteps[1]!.id)!.status).toBe('completed');
+    // The step the learner skipped past is left untouched for them to come back to.
+    expect(updated!.steps.find((step) => step.id === vocabSteps[0]!.id)!.status).toBe('pending');
+  });
 });

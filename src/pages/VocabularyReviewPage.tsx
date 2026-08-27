@@ -9,7 +9,9 @@ import { VocabularyPicker } from '../components/VocabularyPicker';
 import { confirmSentenceVocabulary, getDb, saveAnalysis } from '../db/repository';
 import type { VocabularyReviewStatus, VocabularySelection } from '../domain/types';
 import { defaultSelectionsFromSuggestions } from '../lib/vocabularySuggestions';
+import { useActiveSession } from '../hooks/useActiveSession';
 import { useAutosave } from '../hooks/useAutosave';
+import { sessionStepTargetPath } from '../lib/sessionPlanner';
 
 /**
  * Standalone vocabulary-extraction workflow for one sentence, split out of
@@ -22,6 +24,7 @@ import { useAutosave } from '../hooks/useAutosave';
 export function VocabularyReviewPage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
+  const activeSession = useActiveSession();
   const [selections, setSelections] = useState<VocabularySelection[]>([]);
   const [reviewStatus, setReviewStatus] =
     useState<VocabularyReviewStatus>('unreviewed');
@@ -92,6 +95,20 @@ export function VocabularyReviewPage() {
   const prev = index > 0 ? memberships[index - 1] : null;
   const next =
     index >= 0 && index < memberships.length - 1 ? memberships[index + 1] : null;
+
+  // True when the learner is following today's session and its current step is
+  // *this* sentence's vocabulary step, with at least one step still to come —
+  // so confirming should hand off to the next session step rather than (only)
+  // the next sentence in this book. Mirrors settleActiveVocabularyReviewStep's
+  // guard on the repository side; that call is what actually settles + advances.
+  const onSessionVocabStep =
+    activeSession?.currentStep?.targetKind === 'vocabulary_review' &&
+    activeSession.currentStep.sentenceId === sentenceId;
+  const sessionAdvanceReady =
+    Boolean(onSessionVocabStep) &&
+    (activeSession?.session.steps.filter(
+      (step) => step.status === 'pending' || step.status === 'active',
+    ).length ?? 0) > 1;
 
   return (
     <div className="stack">
@@ -175,7 +192,7 @@ export function VocabularyReviewPage() {
         suggestions={sentence.vocabularySuggestions ?? []}
         selections={selections}
         reviewStatus={reviewStatus}
-        hasNext={Boolean(next)}
+        hasNext={Boolean(next) || sessionAdvanceReady}
         onChange={({ selections: nextSelections, reviewStatus: nextStatus }) => {
           setSelections(nextSelections);
           setReviewStatus(nextStatus);
@@ -183,16 +200,26 @@ export function VocabularyReviewPage() {
         onConfirm={(payload) => {
           setSelections(payload.selections);
           setReviewStatus(payload.reviewStatus);
+          // Deliberately does not navigate (see VocabularyPicker's onConfirm
+          // doc) — the step is still settled inside confirmSentenceVocabulary,
+          // this just lets the learner stay put / go back to the session list.
           void confirmSentenceVocabulary(sentenceId, payload.selections);
         }}
         onConfirmAndNext={(payload) => {
           setSelections(payload.selections);
           setReviewStatus(payload.reviewStatus);
-          void confirmSentenceVocabulary(sentenceId, payload.selections).then(() => {
-            if (next) {
-              navigate(`/books/${bookId}/vocabulary/${next.sentenceId}`);
-            }
-          });
+          void confirmSentenceVocabulary(sentenceId, payload.selections).then(
+            ({ nextSessionStep }) => {
+              const sessionTarget = nextSessionStep
+                ? sessionStepTargetPath(nextSessionStep)
+                : null;
+              if (sessionTarget) {
+                navigate(sessionTarget);
+              } else if (next) {
+                navigate(`/books/${bookId}/vocabulary/${next.sentenceId}`);
+              }
+            },
+          );
         }}
       />
     </div>

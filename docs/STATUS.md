@@ -1,6 +1,31 @@
 # Status
 
-Last updated: 2026-08-27 (Planner: bound how far a thin bucket's freed
+Last updated: 2026-08-27 (Session: confirming vocabulary now advances the
+session. The user, mid-session, confirmed a sentence's vocabulary and was
+confused that the SessionBar silently relabelled to the next step without
+taking them there — `confirmSentenceVocabulary` only ever called
+`autoCompleteSessionSteps` (settle the matching `vocabulary_review` step),
+never `settleSessionStep`'s activate-next-and-return-it auto-advance that
+the SessionBar's "Mark complete" uses. Now: new
+`settleActiveVocabularyReviewStep(sentenceId)` in `repository.ts` checks
+whether today's in-progress session's *current* step (first pending/active,
+same rule `useActiveSession` uses) is a `vocabulary_review` for that exact
+sentence — i.e. the learner is following the session, not browsing the book
+ahead/behind — and if so settles it via `settleSessionStep` and returns the
+newly-activated next step. `confirmSentenceVocabulary` now returns
+`{ analysis, nextSessionStep }`; `VocabularyReviewPage`'s "Confirm and
+next →" deep-links into `sessionStepTargetPath(nextSessionStep)` when set
+(falling back to the next book sentence otherwise), and shows that button
+even when the book has no next sentence but the session has more steps
+(`useActiveSession`-derived `sessionAdvanceReady`). Plain "Confirm
+vocabulary" still settles without navigating, per its deliberate "stop here
+/ back to the session list" purpose. Out-of-order confirms (session points
+elsewhere) still settle their step via `autoCompleteSessionSteps` and
+return no `nextSessionStep` — nothing yanks the learner back onto the
+planned path. Two new cases in `tests/sessionPlannerRepository.test.ts`;
+full suite (859) + typecheck green.
+
+Before that: Planner: bound how far a thin bucket's freed
 minutes can flood another. The user asked for a 60-min mostly-review split
 (0/5/5/90) and got a session of 5 shadowing reps + one small review batch —
 because the `review` bucket was capped at what the due queue could absorb
