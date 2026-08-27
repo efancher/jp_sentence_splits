@@ -547,10 +547,13 @@ export function ReviewPage() {
   const navigate = useNavigate();
   const activeSession = useActiveSession();
   // Only the `review` batch step type carries a targetCount to track against
-  // (2026-08-26 follow-up) — grammar_detail/shadow/etc. steps never deep-link
-  // here as their "current" step, so this is undefined most of the time.
-  const reviewStep =
-    activeSession?.currentStep?.targetKind === 'review' ? activeSession.currentStep : undefined;
+  // (2026-08-26 follow-up). Prefer the step whose page this actually is
+  // (`routeStep`) so the counter/auto-advance still work when the learner
+  // opened reviews ahead of an earlier unfinished step; fall back to
+  // `currentStep` for the ordinary "reviews are next" case.
+  const reviewStep = [activeSession?.routeStep, activeSession?.currentStep].find(
+    (step) => step?.targetKind === 'review',
+  );
   const reviewsDoneThisStep = useLiveQuery(
     () => (reviewStep?.startedAt ? countReviewsSince(reviewStep.startedAt) : undefined),
     [reviewStep?.startedAt],

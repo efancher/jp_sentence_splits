@@ -390,22 +390,29 @@ pushing device win is an acceptable simplification. Since the deep-linked pages
 themselves have no idea a session is running, a persistent **`SessionBar`**
 (`src/components/SessionBar.tsx`, `useActiveSession` hook, mounted once in
 `layouts/AppShell.tsx`) shows on every route whenever a session is
-`in_progress` — current step, progress, and a single "Mark complete"
-action reusing `settleSessionStep` (a new `repository.ts` helper, see
-below) — so the learner is never stranded on Analyze/Review/Shadow with no
-way back. (2026-08-26 follow-up: Skip and a standalone "Session" button
-were dropped from the bar — found cluttered/hard to hold in mind
-mid-session, same reasoning as the earlier Record/Stop single-control
-change; the full step list, where Skip still lives unchanged, stays
-reachable via the "Session · X/Y" text, now a plain link instead of a
-button.) "Mark complete" auto-advances: `settleSessionStep(sessionId,
-stepId, status)` settles the given step, looks up the next pending/active
-step in `session.steps`, marks it `active`, and returns it so the caller
-can navigate to its `sessionStepTargetPath` — shared by `SessionBar` and
-(2026-08-26 follow-up) `ReviewPage`'s own auto-advance below, so neither
-hand-rolls the "find the next step, activate it" lookup. `SessionRunnerPage`'s
-list-row "Mark complete" is unchanged (stays on the list; the reactive
-`activeIndex` just shifts to the next row).
+`in_progress` — progress, plus one action, so the learner is never
+stranded on Analyze/Review/Shadow with no way back. That action is
+**scoped to the page on screen** (2026-08-27): `useActiveSession` compares
+each pending/active step's `sessionStepTargetPath` to the current route and
+exposes `routeStep` (the step whose page this is) alongside `currentStep`
+(the oldest unfinished). When `routeStep` exists the bar names it and "Mark
+complete" settles *exactly that step*; otherwise it shows "Next: <label>"
+and a plain **"Resume"** that only navigates to `currentStep`'s page —
+never a settle. The earlier version always settled `currentStep` regardless
+of the page, so "Mark complete" could quietly finish a step the learner had
+jumped past without looking at. (2026-08-26 follow-up: Skip and a
+standalone "Session" button were dropped from the bar — found cluttered/
+hard to hold in mind mid-session, same reasoning as the earlier Record/Stop
+single-control change; the full step list, where Skip still lives
+unchanged, stays reachable via the "Session · X/Y" text, a plain link.)
+"Mark complete" auto-advances: `settleSessionStep(sessionId, stepId,
+status)` settles the given step, looks up the next pending/active step
+after it in `session.steps`, marks it `active`, and returns it so the
+caller can navigate to its `sessionStepTargetPath` — shared by `SessionBar`
+and (2026-08-26 follow-up) `ReviewPage`'s own target-count auto-advance, so
+neither hand-rolls the "find the next step, activate it" lookup.
+`SessionRunnerPage`'s list-row "Mark complete" is unchanged (stays on the
+list; the reactive `activeIndex` just shifts to the next row).
 Relatedly, `VocabularyPicker` has a single "Confirm vocabulary" button that
 saves without navigating (the earlier "Confirm and next →" was removed
 2026-08-27 — moving through a session is "Mark complete"'s job); `PracticePage`

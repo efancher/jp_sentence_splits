@@ -9,18 +9,17 @@ import { sessionStepTargetPath } from '../lib/sessionPlanner';
  * Persistent "you're mid-session" affordance, mounted once in AppShell so it
  * shows on every route a session step deep-links into (Analyze, Review,
  * Shadow, Grammar detail, ...) without those pages needing to know a session
- * exists. Lets the learner get back to the session list, or close out the
- * current step, from wherever a page's own navigation (e.g. "confirm and
- * next") happened to carry them — that gap, not the review/practice pages
- * themselves, was the actual bug.
+ * exists.
  *
- * Trimmed to a single "Mark complete" action (2026-08-26 follow-up — Skip
- * and a standalone "Session" button were found cluttered/hard to hold in
- * mind mid-session, mirroring the earlier single-control preference for
- * Record/Stop). Marking complete auto-advances straight to the next step's
- * page, same as before. The full step list — where Skip still lives,
- * unchanged — stays one tap away via the plain "Session · X/Y" link below,
- * just not as a prominent button.
+ * The bar acts on *what's on screen*: when the current route is a pending
+ * step's page (`routeStep`), it names that step and its "Mark complete"
+ * settles exactly it, then auto-advances to the next step's page. When the
+ * learner is anywhere else — a settled step they came back to, an unrelated
+ * book, a menu — there's nothing to "complete" from here, so the bar instead
+ * shows the next unfinished step and a plain "Resume" that just navigates
+ * there (no settle). This split is deliberate: the earlier version always
+ * settled `currentStep` regardless of the page, so "Mark complete" could
+ * quietly finish a step the learner hadn't looked at.
  */
 export function SessionBar() {
   const active = useActiveSession();
@@ -28,22 +27,27 @@ export function SessionBar() {
   const navigate = useNavigate();
 
   if (!active) return null;
-  const { session, currentStep } = active;
+  const { session, currentStep, routeStep } = active;
 
   const settledCount = session.steps.filter(
     (step) => step.status === 'completed' || step.status === 'skipped' || step.status === 'replaced',
   ).length;
 
   async function markComplete() {
-    if (!currentStep || updating) return;
+    if (!routeStep || updating) return;
     setUpdating(true);
     try {
-      const result = await settleSessionStep(session.id, currentStep.id, 'completed');
+      const result = await settleSessionStep(session.id, routeStep.id, 'completed');
       const nextPath = result?.nextStep ? sessionStepTargetPath(result.nextStep) : null;
       if (nextPath) navigate(nextPath);
     } finally {
       setUpdating(false);
     }
+  }
+
+  function resume() {
+    const path = currentStep ? sessionStepTargetPath(currentStep) : null;
+    navigate(path ?? `/session/${session.id}`);
   }
 
   return (
@@ -52,12 +56,20 @@ export function SessionBar() {
         <Link to={`/session/${session.id}`} className="muted">
           Session · {settledCount}/{session.steps.length}
         </Link>
-        {currentStep ? <strong>{currentStep.label}</strong> : null}
+        {routeStep ? (
+          <strong>{routeStep.label}</strong>
+        ) : currentStep ? (
+          <span className="muted">Next: {currentStep.label}</span>
+        ) : null}
       </div>
       <div className="row session-bar-actions">
-        {currentStep ? (
+        {routeStep ? (
           <button type="button" disabled={updating} onClick={() => void markComplete()}>
             Mark complete
+          </button>
+        ) : currentStep ? (
+          <button type="button" onClick={resume}>
+            Resume
           </button>
         ) : null}
       </div>

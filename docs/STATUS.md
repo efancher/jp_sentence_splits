@@ -1,6 +1,20 @@
 # Status
 
-Last updated: 2026-08-27 (Session: one advance control. The user, twice,
+Last updated: 2026-08-27 (Session: the SessionBar now acts on the page
+you're looking at. Second half of the "one advance control" work below —
+the user pointed out that when the bar's current step and the on-screen
+item differ, you can't tell what "Mark complete" affects. `useActiveSession`
+now also returns `routeStep`: the pending/active step whose
+`sessionStepTargetPath` equals the current route. `SessionBar` shows and
+settles `routeStep` when you're on a step's page ("Mark complete" →
+settles exactly it → auto-advances); everywhere else it shows "Next:
+<label>" and a plain **"Resume"** that only navigates to `currentStep`,
+never settles. Removes the footgun where "Mark complete" blindly settled
+the oldest-unfinished step regardless of the page. `ReviewPage` prefers
+`routeStep` for its counter/auto-advance too. New `tests/sessionBar.test.tsx`;
+full suite (860) + typecheck green.
+
+Before that: Session: one advance control. The user, twice,
 was confused that finishing an item in place (Confirm vocabulary, Analyze
 "Mark complete") settled its session step but left them on the page while
 the SessionBar silently relabelled to the next step. After trying to make
@@ -18,8 +32,7 @@ planner gating is unaffected — it reads the sentence's `vocabularyReviewStatus
 "Confirm and next →" button (and its `onConfirmAndNext`/`hasNext` props) and
 the short-lived `useSessionAdvance` hook. Session steps are a day-plan
 checklist layered over real progress, never its source of truth. Tests in
-`tests/sessionPlannerRepository.test.ts` rewritten; full suite (858) +
-typecheck green.
+`tests/sessionPlannerRepository.test.ts` rewritten.
 
 Before that: Planner: bound how far a thin bucket's freed
 minutes can flood another. The user asked for a 60-min mostly-review split
