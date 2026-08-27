@@ -235,14 +235,23 @@ concrete enough to set percentages against directly.) This app has no
 continuous native-media player (audio is per-sentence clips, not a stream),
 so glossing steps point at the next not-yet-studied sentences in a
 recently-opened book instead of "continue watching." Each unstarted
-sentence gets its own pair of chained steps — one `continue_book` step
-(structural analysis, `AnalyzePage`) and one `vocabulary_review` step
-(`VocabularyReviewPage`), the latter skipped when the sentence's vocabulary
-is already confirmed (`SentenceAnalysis.vocabularyReviewStatus`, bug fix
-2026-08-26 — it used to keep re-recommending already-confirmed vocab since
-the exclusion list only covered a given day's own steps) — rather than one
-step bundling a whole book's worth of new sentences into a single "N new
-sentences" line (follow-up, 2026-08-22).
+sentence gets a `vocabulary_review` step (`VocabularyReviewPage`) and,
+*separately*, a `continue_book` step (structural analysis, `AnalyzePage`) —
+rather than one step bundling a whole book's worth of new sentences into a
+single "N new sentences" line (follow-up, 2026-08-22). The two are no
+longer always paired in the same pass (vocabulary-first reorder, user
+request, 2026-08-27): a not-yet-confirmed sentence gets only
+`vocabulary_review`; `continue_book` is withheld until the sentence's
+vocabulary is both confirmed (`SentenceAnalysis.vocabularyReviewStatus`)
+*and* every linked vocabulary item has itself reached FSRS proficiency
+(`buildExploreSteps`'s `vocabularyReady`, reusing the same
+`isSentenceReadyForFullReview` rule that gates full-sentence review cards,
+§4) — so structural analysis/grammar glossing never surfaces before the
+learner has actually demonstrated recall of the sentence's words, typically
+landing a day or more after the vocabulary step once a review cycle has
+passed. A sentence whose vocabulary is confirmed but not yet proficient
+gets no glossing step at all that pass; the planner moves on to the next
+sentence rather than blocking the book on it.
 
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process

@@ -198,6 +198,7 @@ describe('buildRecommendedSession', () => {
           sentenceId: `sent_${i}`,
           preview: 'x',
           vocabularyConfirmed: false,
+          vocabularyReady: false,
         })),
       },
     ];
@@ -257,6 +258,7 @@ describe('buildRecommendedSession', () => {
               sentenceId: `s${i}`,
               preview: 'x',
               vocabularyConfirmed: false,
+              vocabularyReady: false,
             })),
           },
         ],
@@ -288,6 +290,7 @@ describe('buildRecommendedSession', () => {
               sentenceId: `s${i}`,
               preview: 'x',
               vocabularyConfirmed: false,
+              vocabularyReady: false,
             })),
           },
         ],
@@ -343,6 +346,7 @@ describe('buildRecommendedSession', () => {
                 sentenceId: `s${i}`,
                 preview: 'x',
                 vocabularyConfirmed: false,
+                vocabularyReady: false,
               })),
             },
           ],
@@ -382,18 +386,56 @@ describe('buildRecommendedSession', () => {
     expect(session.explanation.some((line) => line.includes('same sentence'))).toBe(true);
   });
 
-  it('skips a redundant vocabulary_review step for a sentence whose vocab is already confirmed', () => {
+  it('skips a redundant vocabulary_review step for a sentence whose vocab is already confirmed and proficient', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {
         bookId: 'book_1',
         label: 'Book',
         reason: 'Continue',
-        sentences: [{ sentenceId: 'sent_confirmed', preview: 'x', vocabularyConfirmed: true }],
+        sentences: [
+          { sentenceId: 'sent_confirmed', preview: 'x', vocabularyConfirmed: true, vocabularyReady: true },
+        ],
       },
     ];
     const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
     const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_confirmed');
     expect(stepsForSentence).toHaveLength(1);
     expect(stepsForSentence[0]!.targetKind).toBe('continue_book');
+  });
+
+  it('gives a not-yet-confirmed sentence only a vocabulary_review step, never continue_book in the same pass', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: [
+          { sentenceId: 'sent_new', preview: 'x', vocabularyConfirmed: false, vocabularyReady: false },
+        ],
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
+    const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_new');
+    expect(stepsForSentence).toHaveLength(1);
+    expect(stepsForSentence[0]!.targetKind).toBe('vocabulary_review');
+  });
+
+  it('gives no step at all to a sentence whose vocab is confirmed but not yet proficient, and moves on to the next sentence', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: [
+          { sentenceId: 'sent_maturing', preview: 'x', vocabularyConfirmed: true, vocabularyReady: false },
+          { sentenceId: 'sent_next', preview: 'y', vocabularyConfirmed: false, vocabularyReady: false },
+        ],
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
+    expect(session.steps.some((step) => step.sentenceId === 'sent_maturing')).toBe(false);
+    const nextSteps = session.steps.filter((step) => step.sentenceId === 'sent_next');
+    expect(nextSteps).toHaveLength(1);
+    expect(nextSteps[0]!.targetKind).toBe('vocabulary_review');
   });
 });

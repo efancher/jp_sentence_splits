@@ -319,7 +319,13 @@ export interface ExploreCandidate {
   label: string;
   reason: string;
   /** Ordered next unstarted sentences in this book, capped at EXPLORE_SENTENCE_PREVIEW_LIMIT — one step drafted per entry until the shared glossing budget runs out. */
-  sentences: { sentenceId: string; preview: string; vocabularyConfirmed: boolean }[];
+  sentences: {
+    sentenceId: string;
+    preview: string;
+    vocabularyConfirmed: boolean;
+    /** Every reviewable vocabulary item confirmed for this sentence has itself reached FSRS proficiency (review/relearning), per isSentenceReadyForFullReview — see buildExploreSteps. */
+    vocabularyReady: boolean;
+  }[];
 }
 
 export interface UnderstandCandidate {
@@ -433,36 +439,48 @@ function buildReviewBatchStep(ranked: ReviewPriorityResult[], budgetMinutes: num
 
 /**
  * Step 7 (glossing): continue the highest-priority book(s) — one step per
- * book, sized to the remaining budget. A sentence whose vocabulary is
- * already confirmed (`vocabularyConfirmed`) only needs the structural-
- * analysis half — pairing a redundant vocabulary_review step for it was a
- * bug (2026-08-26 follow-up: it kept re-recommending already-confirmed
- * vocab, since the exclusion list only covers today's own steps).
+ * book, sized to the remaining budget. Vocabulary-first by design (user
+ * request, 2026-08-27): a not-yet-confirmed sentence only gets its
+ * `vocabulary_review` step, never `continue_book` (structural analysis,
+ * which surfaces literal-English glosses per chunk) in the same pass —
+ * otherwise the learner sees a sentence's grammar/meaning glossed before
+ * they've even looked at its words. Once vocabulary is confirmed,
+ * `continue_book` stays withheld further still until every one of the
+ * sentence's vocabulary items has itself reached FSRS proficiency
+ * (`vocabularyReady`, reusing the same `isSentenceReadyForFullReview` rule
+ * that already gates full-sentence review cards) — confirming a word isn't
+ * the same as having demonstrated recall of it. A sentence that's confirmed
+ * but not yet proficient gets no step at all this pass (its words are still
+ * maturing via the review bucket); the loop moves on to the next sentence
+ * rather than blocking the book's progress on it.
  */
 function buildExploreSteps(
   candidates: ExploreCandidate[],
   budgetMinutes: number,
-  perItemMinutes: number,
 ): PlannerStepDraft[] {
   const steps: PlannerStepDraft[] = [];
   let remaining = budgetMinutes;
   outer: for (const candidate of candidates) {
     for (const sentence of candidate.sentences) {
-      const cost = sentence.vocabularyConfirmed ? EXPLORE_STEP_MINUTES.analyze : perItemMinutes;
-      if (remaining < cost) break outer;
-      steps.push({
-        id: draftStepId(),
-        bucket: 'glossing',
-        activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
-        targetKind: 'continue_book',
-        bookId: candidate.bookId,
-        sentenceId: sentence.sentenceId,
-        label: `Continue ${candidate.label}: ${sentence.preview}`,
-        estimatedMinutes: EXPLORE_STEP_MINUTES.analyze,
-        reason: candidate.reason,
-        status: 'pending',
-      });
-      if (!sentence.vocabularyConfirmed) {
+      if (sentence.vocabularyConfirmed && sentence.vocabularyReady) {
+        const cost = EXPLORE_STEP_MINUTES.analyze;
+        if (remaining < cost) break outer;
+        steps.push({
+          id: draftStepId(),
+          bucket: 'glossing',
+          activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
+          targetKind: 'continue_book',
+          bookId: candidate.bookId,
+          sentenceId: sentence.sentenceId,
+          label: `Continue ${candidate.label}: ${sentence.preview}`,
+          estimatedMinutes: cost,
+          reason: candidate.reason,
+          status: 'pending',
+        });
+        remaining -= cost;
+      } else if (!sentence.vocabularyConfirmed) {
+        const cost = EXPLORE_STEP_MINUTES.vocabulary;
+        if (remaining < cost) break outer;
         steps.push({
           id: draftStepId(),
           bucket: 'glossing',
@@ -471,12 +489,12 @@ function buildExploreSteps(
           bookId: candidate.bookId,
           sentenceId: sentence.sentenceId,
           label: `Vocabulary: ${sentence.preview}`,
-          estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
+          estimatedMinutes: cost,
           reason: candidate.reason,
           status: 'pending',
         });
+        remaining -= cost;
       }
-      remaining -= cost;
     }
   }
   return steps;
@@ -653,11 +671,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
   );
 
-  const exploreSteps = buildExploreSteps(
-    input.exploreCandidates,
-    allocation.glossing,
-    MODE_ACTIVITY_ESTIMATE_MINUTES.glossing,
-  );
+  const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing);
   const understandSteps = buildUnderstandSteps(
     input.understandCandidates,
     allocation.grammar,

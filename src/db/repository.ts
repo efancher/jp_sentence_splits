@@ -3443,12 +3443,21 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
       sentences: preview.map((item, index) => ({
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
-        // A sentence whose vocab is already confirmed only needs the
-        // structural-analysis step re-recommended, not vocabulary_review
-        // again — see buildExploreSteps's own comment (2026-08-26 bug fix).
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
+        // Patched below, once readiness is known for every candidate
+        // sentence at once (batched, not N+1) — see buildExploreSteps for
+        // why continue_book waits on this rather than just confirmation.
+        vocabularyReady: false,
       })),
     });
+  }
+  const readiness = await getSentenceFullReviewReadiness(
+    candidates.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
+  );
+  for (const candidate of candidates) {
+    for (const sentence of candidate.sentences) {
+      sentence.vocabularyReady = readiness.get(sentence.sentenceId) ?? false;
+    }
   }
   return candidates;
 }
@@ -3583,7 +3592,9 @@ function exclusionsFromSteps(steps: PlannerSessionStep[]): SessionPlannerExclusi
   const grammarPatternIds = new Set<string>();
   for (const step of steps) {
     if (step.sentenceId) sentenceIds.add(step.sentenceId);
-    if (step.bookId && step.targetKind === 'continue_book') bookIds.add(step.bookId);
+    if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review')) {
+      bookIds.add(step.bookId);
+    }
     if (step.grammarPatternId) grammarPatternIds.add(step.grammarPatternId);
   }
   return { sentenceIds, bookIds, grammarPatternIds };

@@ -1,6 +1,44 @@
 # Status
 
-Last updated: 2026-08-26 (Added romaji fallback matching to the Words page
+Last updated: 2026-08-27 (Vocabulary-first glossing order, per user
+request: the learner reported regularly seeing a sentence's structural
+analysis/grammar glossing before they'd even looked at its vocabulary. Root
+cause: `buildExploreSteps` (`src/lib/sessionPlanner.ts`) unconditionally
+paired a `continue_book` step (structural analysis, `AnalyzePage`, showing
+literal-English glosses per chunk) with a `vocabulary_review` step for every
+new sentence — `continue_book` came first in the array with no dependency
+reason (`VocabularyReviewPage` reads `sentence.vocabularySuggestions`,
+populated at import time, independent of analysis). Fixed at two levels: (1)
+a not-yet-confirmed sentence now gets only its `vocabulary_review` step,
+never `continue_book`, in the same planning pass; (2) once vocabulary is
+confirmed, `continue_book` is withheld further still until every one of the
+sentence's vocabulary items has itself reached FSRS proficiency
+(`ExploreCandidate.sentences[].vocabularyReady`, computed in
+`findExploreCandidates` via the existing `getSentenceFullReviewReadiness`
+— the same rule that already gates full-sentence `comprehension`/
+`reading_in_context` review cards, reused rather than re-derived). A
+sentence that's confirmed but not yet proficient gets no glossing step at
+all this pass (its words are maturing via the `review` bucket); the loop
+moves on to the next sentence rather than blocking the book on it — in
+practice this means structural analysis for a freshly-introduced sentence
+now typically lands a day or more after its vocabulary review, once the
+words have had at least one successful recall. Incidental fix in
+`exclusionsFromSteps`: book-level top-up exclusion previously only fired on
+a `continue_book` step's presence; since an unconfirmed sentence's book no
+longer ever gets one, this let the same `vocabulary_review` steps get
+re-suggested on every same-day top-up — now `vocabulary_review` also counts
+as "this book was already touched today." `EXPLORE_STEP_MINUTES` no longer
+represents a "split across a paired step" cost (removed the now-unused
+`perItemMinutes` param from `buildExploreSteps`) since the two step kinds
+never co-occur for the same sentence in one pass. Covered by
+`tests/sessionPlanner.test.ts` (three new cases: not-confirmed → only
+vocabulary_review; confirmed-but-not-ready → no step, moves to next
+sentence; confirmed-and-ready → only continue_book) and an updated
+`tests/sessionPlannerRepository.test.ts` case exercising the full
+confirm → (next day) → continue_book → complete lifecycle end to end.
+`npm run check` (typecheck + full 838-test suite) passes.
+
+Before that: Added romaji fallback matching to the Words page
 search box, for use on machines without a Japanese IME installed —
 requested for using the app on a work laptop where the user didn't want to
 add OS-level Japanese keyboard support. Typing e.g. "neko" now also matches

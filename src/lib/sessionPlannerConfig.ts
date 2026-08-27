@@ -81,7 +81,7 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
   practice: 1.5,
 } as const;
 
-/** Per-sentence Explore/glossing time split across its two paired steps (continue_book + vocabulary_review) — sums to MODE_ACTIVITY_ESTIMATE_MINUTES.glossing so total glossing budget math is unaffected by the split into two chained steps. */
+/** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */
 export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
 
 /** Rolling window (days) recent-activity distribution and neglect are computed over — prompt point 6's "7- or 14-day view." */
