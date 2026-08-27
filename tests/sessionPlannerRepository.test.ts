@@ -97,41 +97,29 @@ describe('Learning Orchestrator repository layer', () => {
     expect(afterComplete!.endedAt).toBeDefined();
   });
 
-  it('real completion (confirming vocabulary, finishing the sentence) auto-settles the matching session step', async () => {
+  it('a not-yet-confirmed sentence gets only its vocabulary_review step — continue_book is withheld until vocab is confirmed and proficient (2026-08-27)', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();
     const sentence = makeSentence();
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
 
-    // Vocabulary-first (2026-08-27): a not-yet-confirmed sentence only gets
-    // its vocabulary_review step — continue_book (structural analysis) is
-    // withheld until vocab is confirmed and proficient.
     const session = await addMinutesToTodaySession(30);
     const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
     expect(vocabStep).toBeDefined();
     expect(vocabStep!.sentenceId).toBe(sentence.id);
     expect(session.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
 
-    // Confirming vocabulary (no real vocab items here, so nothing to wait on
-    // for proficiency) auto-completes the vocabulary_review step.
+    // The gate reads the sentence's analysis status, not the session step, so
+    // confirming vocabulary (no real vocab items here → immediately "ready")
+    // unlocks the continue_book step on the next day's plan even though the
+    // vocabulary_review step itself was never explicitly settled.
     await confirmSentenceVocabulary(sentence.id, []);
-    let updated = await getPlannerSession(session.id);
-    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).toBe('completed');
-
-    // The sentence is now confirmed and ready, but today's session already
-    // excludes its book (a glossing step was already given today) — a
-    // top-up the next day picks it up fresh as a continue_book step.
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const nextDaySession = await addMinutesToTodaySession(30, tomorrow);
     const continueStep = nextDaySession.steps.find((step) => step.targetKind === 'continue_book');
     expect(continueStep).toBeDefined();
     expect(continueStep!.sentenceId).toBe(sentence.id);
-
-    // Finishing the sentence auto-completes the continue_book step.
-    await setBookSentenceStatus(book.id, sentence.id, 'complete');
-    updated = await getPlannerSession(nextDaySession.id);
-    expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).toBe('completed');
   });
 
   it('ending a session early marks remaining steps skipped, never completed', async () => {
@@ -297,56 +285,36 @@ describe('Learning Orchestrator repository layer', () => {
     await expect(deleteTodayPlannerSession()).resolves.toBeUndefined();
   });
 
-  it('confirming vocabulary settles the matching step and returns the session\'s next step, activated (2026-08-27: "make item-to-item navigation follow the session list")', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const first = makeSentence();
-    const second = makeSentence();
-    await db.sentences.bulkPut([first, second]);
-    await addSentencesToBook(book.id, [first.id, second.id]);
-
-    const session = await addMinutesToTodaySession(30);
-    const vocabSteps = session.steps.filter((step) => step.targetKind === 'vocabulary_review');
-    expect(vocabSteps.map((step) => step.sentenceId)).toEqual([first.id, second.id]);
-
-    const { nextSessionStep } = await confirmSentenceVocabulary(first.id, []);
-    expect(nextSessionStep?.id).toBe(vocabSteps[1]!.id);
-    expect(nextSessionStep?.sentenceId).toBe(second.id);
-
-    const updated = await getPlannerSession(session.id);
-    expect(updated!.steps.find((step) => step.id === vocabSteps[0]!.id)!.status).toBe('completed');
-    expect(updated!.steps.find((step) => step.id === vocabSteps[1]!.id)!.status).toBe('active');
-  });
-
-  it('confirming a sentence out of order still hands back the session\'s earliest unfinished step', async () => {
-    const book = await createBook({ title: 'Continue Me' });
-    const db = getDb();
-    const first = makeSentence();
-    const second = makeSentence();
-    await db.sentences.bulkPut([first, second]);
-    await addSentencesToBook(book.id, [first.id, second.id]);
-
-    const session = await addMinutesToTodaySession(30);
-    const vocabSteps = session.steps.filter((step) => step.targetKind === 'vocabulary_review');
-
-    // Jump ahead to the second sentence while the session still points at the first.
-    const { nextSessionStep } = await confirmSentenceVocabulary(second.id, []);
-    expect(nextSessionStep?.id).toBe(vocabSteps[0]!.id);
-
-    const updated = await getPlannerSession(session.id);
-    expect(updated!.steps.find((step) => step.id === vocabSteps[1]!.id)!.status).toBe('completed');
-    // The still-unfinished earlier step is pulled forward as the active one.
-    expect(updated!.steps.find((step) => step.id === vocabSteps[0]!.id)!.status).toBe('active');
-  });
-
-  it('confirming vocabulary with no session running returns no next step', async () => {
+  it('doing the work in place does not settle its session step — that is Mark complete\'s job only (2026-08-27)', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();
     const sentence = makeSentence();
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
 
-    const { nextSessionStep } = await confirmSentenceVocabulary(sentence.id, []);
-    expect(nextSessionStep).toBeUndefined();
+    const session = await addMinutesToTodaySession(30);
+    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
+    expect(vocabStep!.sentenceId).toBe(sentence.id);
+
+    // Confirming vocabulary records the confirmation but leaves the step alone.
+    await confirmSentenceVocabulary(sentence.id, []);
+    let updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).not.toBe('completed');
+
+    // Only an explicit Mark complete settles it.
+    await updatePlannerSessionStep(session.id, vocabStep!.id, { status: 'completed' });
+    updated = await getPlannerSession(session.id);
+    expect(updated!.steps.find((step) => step.id === vocabStep!.id)!.status).toBe('completed');
+
+    // Next day: the now-confirmed, ready sentence yields a continue_book step,
+    // and finishing the sentence likewise does not settle it on its own.
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const nextDaySession = await addMinutesToTodaySession(30, tomorrow);
+    const continueStep = nextDaySession.steps.find((step) => step.targetKind === 'continue_book');
+    expect(continueStep!.sentenceId).toBe(sentence.id);
+
+    await setBookSentenceStatus(book.id, sentence.id, 'complete');
+    updated = await getPlannerSession(nextDaySession.id);
+    expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).not.toBe('completed');
   });
 });

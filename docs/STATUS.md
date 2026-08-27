@@ -1,29 +1,25 @@
 # Status
 
-Last updated: 2026-08-27 (Session: finishing an item in place now carries
-you to the session's next step. The user, mid-session, confirmed a
-sentence's vocabulary (and separately finished a gloss) and stayed on the
-same page while the SessionBar silently relabelled to the next step —
-`confirmSentenceVocabulary` / `setBookSentenceStatus('complete')` only
-called `autoCompleteSessionSteps` (settle the matching step), never the
-activate-next-and-navigate that the SessionBar's "Mark complete"
-(`settleSessionStep`) does. Per the user's stated preference — they
-navigate via menus / full lists / search, not sequential next buttons, so
-in-page "next" should just follow the session list — `autoCompleteSessionSteps`
-now, whenever it actually settles a step, pulls the session's earliest
-still-unfinished step forward (marks it `active`, same as `settleSessionStep`)
-and returns it. `confirmSentenceVocabulary` returns `{ analysis,
-nextSessionStep }`; `setBookSentenceStatus` returns `{ nextSessionStep }`.
-New `useSessionAdvance` hook (`src/hooks/`) deep-links into that step's
-`sessionStepTargetPath`, no-op when there's none (no session / item not in
-it / session finished), returning a boolean so callers keep their own
-non-session fallback in the `else` — `VocabularyReviewPage` ("Confirm
-vocabulary" and "Confirm and next →"), `AnalyzePage` ("Mark complete"),
-`PracticePage` (`mark`). No "are you on the current step" gate: settling
-any step the session knows about advances to the next unfinished one, since
-the learner explicitly asked for session-list order over positional
-next/prev. New cases in `tests/sessionPlannerRepository.test.ts`; full
-suite (860) + typecheck green.
+Last updated: 2026-08-27 (Session: one advance control. The user, twice,
+was confused that finishing an item in place (Confirm vocabulary, Analyze
+"Mark complete") settled its session step but left them on the page while
+the SessionBar silently relabelled to the next step. After trying to make
+in-place completion also navigate, the user chose the cleaner model:
+**session steps settle only via an explicit "Mark complete"/"Skip"**
+(SessionBar / SessionRunnerPage), plus ReviewPage's own target-count
+auto-advance and `endPlannerSessionEarly`. Removed `autoCompleteSessionSteps`
+entirely (the 2026-08-22 "real completion auto-settles" path) — it was the
+footgun: with it, tapping the bar's "Mark complete" after already doing the
+work would settle and skip the *next*, unstarted step. `confirmSentenceVocabulary`
+is back to `Promise<SentenceAnalysis>`, `setBookSentenceStatus` to
+`Promise<void>`; both now only write their own domain state. Vocabulary-first
+planner gating is unaffected — it reads the sentence's `vocabularyReviewStatus`
+/ `status`, never the session step. Removed the `VocabularyPicker`
+"Confirm and next →" button (and its `onConfirmAndNext`/`hasNext` props) and
+the short-lived `useSessionAdvance` hook. Session steps are a day-plan
+checklist layered over real progress, never its source of truth. Tests in
+`tests/sessionPlannerRepository.test.ts` rewritten; full suite (858) +
+typecheck green.
 
 Before that: Planner: bound how far a thin bucket's freed
 minutes can flood another. The user asked for a 60-min mostly-review split

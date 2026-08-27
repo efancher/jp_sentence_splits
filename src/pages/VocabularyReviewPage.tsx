@@ -9,9 +9,7 @@ import { VocabularyPicker } from '../components/VocabularyPicker';
 import { confirmSentenceVocabulary, getDb, saveAnalysis } from '../db/repository';
 import type { VocabularyReviewStatus, VocabularySelection } from '../domain/types';
 import { defaultSelectionsFromSuggestions } from '../lib/vocabularySuggestions';
-import { useActiveSession } from '../hooks/useActiveSession';
 import { useAutosave } from '../hooks/useAutosave';
-import { useSessionAdvance } from '../hooks/useSessionAdvance';
 
 /**
  * Standalone vocabulary-extraction workflow for one sentence, split out of
@@ -24,8 +22,6 @@ import { useSessionAdvance } from '../hooks/useSessionAdvance';
 export function VocabularyReviewPage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
-  const activeSession = useActiveSession();
-  const advanceToSessionStep = useSessionAdvance();
   const [selections, setSelections] = useState<VocabularySelection[]>([]);
   const [reviewStatus, setReviewStatus] =
     useState<VocabularyReviewStatus>('unreviewed');
@@ -96,24 +92,6 @@ export function VocabularyReviewPage() {
   const prev = index > 0 ? memberships[index - 1] : null;
   const next =
     index >= 0 && index < memberships.length - 1 ? memberships[index + 1] : null;
-
-  // Show "Confirm and next →" even when this is the last sentence of the book,
-  // as long as today's session still has this sentence's vocabulary step
-  // pending and something queued after it — confirming will carry the learner
-  // on to that next session step (see the onConfirm handlers below).
-  const sessionHasStepForThisSentence = Boolean(
-    activeSession?.session.steps.some(
-      (step) =>
-        (step.status === 'pending' || step.status === 'active') &&
-        step.targetKind === 'vocabulary_review' &&
-        step.sentenceId === sentenceId,
-    ),
-  );
-  const sessionHasLaterStep =
-    (activeSession?.session.steps.filter(
-      (step) => step.status === 'pending' || step.status === 'active',
-    ).length ?? 0) > 1;
-  const sessionAdvanceReady = sessionHasStepForThisSentence && sessionHasLaterStep;
 
   return (
     <div className="stack">
@@ -197,7 +175,6 @@ export function VocabularyReviewPage() {
         suggestions={sentence.vocabularySuggestions ?? []}
         selections={selections}
         reviewStatus={reviewStatus}
-        hasNext={Boolean(next) || sessionAdvanceReady}
         onChange={({ selections: nextSelections, reviewStatus: nextStatus }) => {
           setSelections(nextSelections);
           setReviewStatus(nextStatus);
@@ -205,24 +182,9 @@ export function VocabularyReviewPage() {
         onConfirm={(payload) => {
           setSelections(payload.selections);
           setReviewStatus(payload.reviewStatus);
-          // Advances to the next session step when a session is running;
-          // otherwise stays put (no book-next fallback — that's what
-          // "Confirm and next →" is for).
-          void confirmSentenceVocabulary(sentenceId, payload.selections).then(
-            ({ nextSessionStep }) => advanceToSessionStep(nextSessionStep),
-          );
-        }}
-        onConfirmAndNext={(payload) => {
-          setSelections(payload.selections);
-          setReviewStatus(payload.reviewStatus);
-          void confirmSentenceVocabulary(sentenceId, payload.selections).then(
-            ({ nextSessionStep }) => {
-              // Session step first; fall back to the next sentence in this book.
-              if (!advanceToSessionStep(nextSessionStep) && next) {
-                navigate(`/books/${bookId}/vocabulary/${next.sentenceId}`);
-              }
-            },
-          );
+          // Just records the confirmation. Advancing through a session is the
+          // SessionBar "Mark complete" button's job (single advance control).
+          void confirmSentenceVocabulary(sentenceId, payload.selections);
         }}
       />
     </div>

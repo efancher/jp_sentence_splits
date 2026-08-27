@@ -48,17 +48,11 @@ export interface VocabularyPickerProps {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
-  /** Saves the confirmed selections — always available, regardless of hasNext. The host decides what happens next: today it advances to the next session step when a session is running, and otherwise stays put (no book-next navigation). */
+  /** Saves the confirmed selections. Does not navigate — moving through a session is the SessionBar "Mark complete" button's job, so there's a single advance control. */
   onConfirm?: (payload: {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
-  /** Saves and advances — a separate action from onConfirm (not the same click). The host sends the learner to the next session step if one exists, otherwise the next sentence in this book. */
-  onConfirmAndNext?: (payload: {
-    selections: VocabularySelection[];
-    reviewStatus: VocabularyReviewStatus;
-  }) => void;
-  hasNext?: boolean;
 }
 
 const TRAY_ID = 'tray';
@@ -437,8 +431,6 @@ export function VocabularyPicker({
   reviewStatus,
   onChange,
   onConfirm,
-  onConfirmAndNext,
-  hasNext = false,
 }: VocabularyPickerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -650,11 +642,6 @@ export function VocabularyPicker({
   function confirm() {
     if (!validateAndSave()) return;
     onConfirm?.({ selections, reviewStatus: 'confirmed' });
-  }
-
-  function confirmAndNext() {
-    if (!validateAndSave()) return;
-    onConfirmAndNext?.({ selections, reviewStatus: 'confirmed' });
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -931,11 +918,6 @@ export function VocabularyPicker({
         <button type="button" onClick={confirm}>
           Confirm vocabulary
         </button>
-        {hasNext ? (
-          <button type="button" className="ghost" onClick={confirmAndNext}>
-            Confirm and next →
-          </button>
-        ) : null}
       </div>
     </section>
   );

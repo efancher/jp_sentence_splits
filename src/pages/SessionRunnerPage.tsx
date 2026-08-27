@@ -13,11 +13,12 @@ import { sessionStepTargetPath } from '../lib/sessionPlanner';
  * but every pending/active step gets its own Go/Complete/Skip so the
  * learner can knock out an easy one now and save the rest for later,
  * rather than being forced through in order — SessionBar's "current step"
- * shortcut still always means the oldest unsettled one. A step is never
- * silently counted as done just because the learner opened and left it —
- * it's settled either by an explicit action here/in SessionBar, or by real
- * completion of the underlying work (see updatePlannerSessionStep's and
- * autoCompleteSessionSteps's own doc comments in repository.ts).
+ * shortcut still always means the oldest unsettled one. A step is settled
+ * only by an explicit action — Complete/Skip here or in SessionBar,
+ * ReviewPage's target-count auto-advance, or endPlannerSessionEarly. Doing
+ * the underlying work in place (confirming vocabulary, marking a sentence
+ * complete) does not settle its step (2026-08-27); the step is a day-plan
+ * checklist item the learner ticks off, layered over the real progress.
  */
 
 const STATUS_LABELS: Record<PlannerSessionStep['status'], string> = {

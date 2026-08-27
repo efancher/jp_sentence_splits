@@ -362,27 +362,21 @@ bucket was touched) and a direct-access shortcut row
 gating. **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
-end-early are real, tracked actions. A step settles either by an explicit
-action (the runner's own "Mark complete"/"Skip", or `SessionBar`'s "Mark
-complete") or by real completion of the underlying work —
-`setBookSentenceStatus('complete')` auto-completes the matching
-`continue_book` step, `confirmSentenceVocabulary` auto-completes the
-matching `vocabulary_review` step (`autoCompleteSessionSteps` in
-`repository.ts`, follow-up, 2026-08-22) — and, 2026-08-27, whenever it
-actually settles a step it also pulls the session's earliest unfinished
-step forward (activates it, same as `settleSessionStep`) and returns it, so
-the activity page carries the learner straight to the next item:
-`confirmSentenceVocabulary` → `{ analysis, nextSessionStep }`,
-`setBookSentenceStatus` → `{ nextSessionStep }`, consumed by the
-`useSessionAdvance` hook on `VocabularyReviewPage` / `AnalyzePage` /
-`PracticePage` (no-op with a non-session fallback in the `else` when no
-step comes back). No "is this the current step" gate — the learner
-navigates by menu/list/search, not positional next/prev, and asked for
-in-page completion to follow the session list. And, for `review` steps only,
-`ReviewPage` itself auto-completes once its own live count of reviews done
-this sitting reaches the step's `targetCount` (2026-08-26 follow-up, see
-below) — but never by mere navigation, so a step merely opened and left
-(without any of these) is never silently counted as done. "Replace an
+end-early are real, tracked actions. A step settles **only by an explicit
+action**: the runner's own "Mark complete"/"Skip", `SessionBar`'s "Mark
+complete", `ReviewPage`'s target-count auto-advance (once its live count of
+reviews done this sitting reaches the step's `targetCount`, 2026-08-26), or
+`endPlannerSessionEarly`. Doing the underlying work in place —
+`confirmSentenceVocabulary`, `setBookSentenceStatus('complete')` — records
+its own domain state but does **not** touch any session step (2026-08-27,
+reverting the 2026-08-22 `autoCompleteSessionSteps` "real completion
+auto-settles" path). That auto-settle was a footgun: after doing the work,
+tapping the bar's "Mark complete" would settle and skip the *next*,
+unstarted step. So the session step is a day-plan checklist item the
+learner ticks off, layered over the real progress (analyses, vocabulary
+confirmations, reviews) — never its source of truth, and the planner's
+vocabulary-first gating reads that real state, not step status. A step
+opened and left is never counted as done. "Replace an
 activity" was deliberately not built for v1 (Skip plus a
 later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
 2026-08-21 entries for this and other known limitations (no time-tracking
@@ -412,11 +406,11 @@ can navigate to its `sessionStepTargetPath` — shared by `SessionBar` and
 hand-rolls the "find the next step, activate it" lookup. `SessionRunnerPage`'s
 list-row "Mark complete" is unchanged (stays on the list; the reactive
 `activeIndex` just shifts to the next row).
-Relatedly, two "confirm and advance" controls that used to bake navigation
-into the save action were split so confirming never forces a page change:
-`VocabularyPicker`'s "Confirm vocabulary and next" is now a plain "Confirm
-vocabulary" plus a separate "Confirm and next →"; `PracticePage` gained a
-plain "Needs review" alongside "Needs review & next". `ReviewPage`'s
+Relatedly, `VocabularyPicker` has a single "Confirm vocabulary" button that
+saves without navigating (the earlier "Confirm and next →" was removed
+2026-08-27 — moving through a session is "Mark complete"'s job); `PracticePage`
+keeps its own book-level "Complete & next" / "Needs review & next" buttons
+for paging through a book outside a session. `ReviewPage`'s
 rating-button-driven due-card queue is otherwise unchanged by design —
 advancing to the next due card on rating is normal review-flow behavior,
 not a session-tracking gap. What *is* new (2026-08-26 follow-up):
