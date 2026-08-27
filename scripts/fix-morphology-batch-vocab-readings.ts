@@ -62,8 +62,9 @@ const GARBLED_ITEM_IDS = [
   'vocab_item_0b5353f0-eecf-4fc4-b0d5-5111065310ec', // なし「なかれ」 (勿れ mis-attached)
 ];
 
-// B — update reading in place to the single unambiguous JMDict reading.
+// B — update reading in place.
 const READING_FIXES: { id: string; expression: string; from: string; to: string }[] = [
+  // Conjugated-surface reading -> single unambiguous JMDict dictionary reading.
   { id: 'vocab_item_fcbb65c4-2022-4ea5-8357-cd6d31e3106d', expression: '売る', from: 'うら', to: 'うる' },
   { id: 'vocab_item_3456b883-ec40-4e8d-9ef5-ee882b9ad621', expression: '安い', from: 'やす', to: 'やすい' },
   { id: 'vocab_item_a05a8c10-6525-42b8-b456-b00f3b1b87dd', expression: '笑う', from: 'わらっ', to: 'わらう' },
@@ -71,6 +72,16 @@ const READING_FIXES: { id: string; expression: string; from: string; to: string 
   { id: 'vocab_item_b202d3cc-c6cd-4150-a469-2d07543e1387', expression: '父さん', from: 'ちちさん', to: 'とうさん' },
   { id: 'vocab_item_d1b2eafc-d58a-4f9d-85d2-9bd75d2ce4f6', expression: '飛び散らす', from: 'とびちらし', to: 'とびちらす' },
   { id: 'vocab_item_424b8e48-4dc2-4caf-9190-9ba81c1eaeaa', expression: '湿る', from: 'しめっ', to: 'しめる' },
+  // Learner-authored phrase cards (2026-08-28) — a bare Arabic numeral was
+  // left unconverted in the reading. Numeral+counter readings are
+  // context-dependent, so each `to` is copied from the parent sentence's
+  // own `inline_reading` (all five link to exactly one sentence), not a
+  // generic digit rule.
+  { id: 'vocab_item_54c1c183-f05d-4136-b935-aff02d5f1ba6', expression: '1つ下', from: '1つした', to: 'ひとつした' },
+  { id: 'vocab_item_8a86d706-7975-4826-b04b-80fcdfc822da', expression: '2つ先の駅', from: '2つさきのえき', to: 'ふたつさきのえき' },
+  { id: 'vocab_item_1d6df3c1-893b-4962-873f-9d5abc20bee0', expression: '２週間後', from: '２しゅうかんご', to: 'にしゅうかんご' },
+  { id: 'vocab_item_19d3c294-b617-498b-8f46-0c672dc618a4', expression: 'たったの1ヶ月', from: 'たったの1かげつ', to: 'たったのいっかげつ' },
+  { id: 'vocab_item_774a416b-8606-445f-a235-f5e4c0a86401', expression: 'もう1ヶ月', from: 'もう1かげつ', to: 'もういっかげつ' },
 ];
 
 // C — merge buggy -> correct (both rows real vocabulary_items).

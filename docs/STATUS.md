@@ -6297,11 +6297,17 @@ re-derived scan" pattern. Ran `--apply` against production:
 447 live items after. Verified card issue `8a339ad5`'s study_item now
 resolves to お父さん「おとうさん」.
 
-**Deferred (raised with the user, not actioned this pass)**: 4 noun
-homograph pairs left with two live readings each (何 なに/なん, 羽 はね/わ,
-話 はなし/わ, 後 あと/ご — both readings genuinely valid, need a per-word
-pick); 5 learner-authored phrase cards with an un-converted digit in the
-reading (`1つ下`「1つした」 etc. — cosmetic, 0 reviews).
+**Follow-up (2026-08-28)**: fixed the 5 learner-authored phrase cards that
+had a bare Arabic numeral left in the reading (`1つ下`「1つした」→「ひとつ
+した」, `2つ先の駅`, `２週間後`, `たったの1ヶ月`, `もう1ヶ月`) — each `to`
+copied from the parent sentence's own `inline_reading` since numeral+counter
+readings are context-dependent. Added to `READING_FIXES` in the same
+script.
+
+**Still deferred**: 4 noun homograph pairs left with two live readings each
+(何 なに/なん, 羽 はね/わ, 話 はなし/わ, 後 あと/ご — both readings
+genuinely valid; user chose to wait and see whether the duplication becomes
+annoying in practice before merging).
 
 **Also surfaced from the same triage, not yet done** (app-side, no data
 fix): `SentenceTransformationCard` / `ReadingProductionCard` never echo the
