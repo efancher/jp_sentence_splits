@@ -76,13 +76,28 @@ export const SYNTHETIC_ACTIVITY_TYPES = {
 export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
   glossing: 2.5,
   grammar: 2,
-  shadowing: 1.5,
+  // A shadowing rep is listen -> record -> compare waveform/pitch -> usually
+  // repeat a few times; 1.5 min badly undercounted it and let the bucket
+  // balloon whenever spillover minutes had nowhere else to go (2026-08-27).
+  shadowing: 3.5,
   retain: 0.75,
   practice: 1.5,
 } as const;
 
 /** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */
 export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
+
+/**
+ * Ceiling on how far redistribution (minutes freed by a bucket that hit its
+ * own candidate ceiling) can push any single bucket past its own
+ * weight-based fair share of the requested time. Without this, a session
+ * that's mostly one bucket by the learner's split (e.g. 90% review) but has
+ * a thin candidate list for it dumps all the freed minutes into whichever
+ * other bucket still has candidates — turning a 5%-share bucket into most of
+ * the session. 2 = a bucket can absorb at most double its fair share from
+ * redistribution; anything beyond that goes idle and the session is shorter.
+ */
+export const REDISTRIBUTION_MAX_SHARE_MULTIPLE = 2;
 
 /** Rolling window (days) recent-activity distribution and neglect are computed over — prompt point 6's "7- or 14-day view." */
 export const NEGLECT_WINDOW_DAYS = 14;

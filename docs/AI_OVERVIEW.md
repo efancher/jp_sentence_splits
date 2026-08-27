@@ -279,9 +279,15 @@ combined ranked list, since the score doesn't care which pool an item came
 from and `ReviewPage` itself doesn't distinguish them either) -> **time
 allocation** across the four buckets (a 35/15/15/35
 glossing/grammar/shadowing/review baseline nudged toward neglected buckets,
-clamped against how much each bucket can actually absorb — e.g. `review`
-never gets padded with low-value reviews just because minutes are
-available) -> concrete step selection (the baseline itself is
+then clamped two ways: against how much each bucket's own candidate list can
+actually absorb — `review` never gets padded with low-value reviews, and
+neither `shadowing`/`grammar`/`glossing` get padded past their candidate
+count — and against `REDISTRIBUTION_MAX_SHARE_MULTIPLE` x each bucket's own
+fair share, so minutes freed by a thin bucket can't pile into one
+down-weighted bucket that still has candidates and invert the learner's
+split; whatever no bucket can absorb goes idle and the session simply comes
+back shorter, with an explanation line saying so) -> concrete step
+selection (the baseline itself is
 `settings.sessionAllocation`, defaulting to `BASELINE_SESSION_ALLOCATION`
 but user-editable directly on Home, see below), bounded to the best 10-15
 due items rather than the whole queue. The `review` step is packed by

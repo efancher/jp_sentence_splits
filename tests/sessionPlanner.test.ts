@@ -367,6 +367,70 @@ describe('buildRecommendedSession', () => {
     }
   });
 
+  it('a thin due queue does not balloon into a shadowing-dominated session when shadowing is a small share', () => {
+    // Learner asked for a mostly-review hour, but only a handful of due
+    // cards exist. The freed minutes must not all pour into shadowing.
+    const recentActivity: RecentActivityEvent[] = [
+      { mode: 'review', timestamp: daysAgo(0) },
+      { mode: 'shadowing', timestamp: daysAgo(1) },
+      { mode: 'glossing', timestamp: daysAgo(11) },
+    ];
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        recentActivity,
+        baseline: { glossing: 0, grammar: 0.05, shadowing: 0.05, review: 0.9 },
+        retainDue: Array.from({ length: 14 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+        shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
+          sentenceId: `sh_${i}`,
+          label: `Sentence ${i}`,
+          reason: 'Not yet shadowed',
+        })),
+      }),
+    );
+    const shadowMinutes = session.steps
+      .filter((step) => step.targetKind === 'shadow')
+      .reduce((sum, step) => sum + step.estimatedMinutes, 0);
+    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
+    expect(reviewStep).toBeDefined();
+    // Shadowing is a 5% share — its slice of the plan should stay modest,
+    // nowhere near the ~20 min the old redistribute-to-weight logic gave it.
+    expect(shadowMinutes).toBeLessThan(reviewStep!.estimatedMinutes);
+    expect(session.allocation.shadowing).toBeLessThan(10);
+  });
+
+  it('plans a shorter session, with an explanation, when no bucket can absorb the requested time', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        retainDue: Array.from({ length: 3 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+      }),
+    );
+    const planned = ALL_SESSION_BUCKETS.reduce((sum, b) => sum + session.allocation[b], 0);
+    expect(planned).toBeLessThan(30);
+    expect(session.explanation.some((line) => line.includes('shorter than'))).toBe(true);
+  });
+
+  it('does not claim to emphasize a neglected bucket the learner zeroed in their split', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        baseline: { glossing: 0, grammar: 0.05, shadowing: 0.05, review: 0.9 },
+        recentActivity: [
+          { mode: 'review', timestamp: daysAgo(0) },
+          { mode: 'grammar', timestamp: daysAgo(0) },
+          { mode: 'shadowing', timestamp: daysAgo(0) },
+          { mode: 'glossing', timestamp: daysAgo(11) },
+        ],
+        retainDue: Array.from({ length: 14 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+      }),
+    );
+    expect(session.neglectScores.glossing).toBeGreaterThan(0.7);
+    expect(session.explanation.some((line) => line.includes('glossing') && line.includes('emphasizes'))).toBe(
+      false,
+    );
+  });
+
   it('groups steps that share a sentenceId back to back (coherent chains)', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({

@@ -14,6 +14,7 @@ import {
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
   PRACTICE_ACTIVITY_TYPES,
+  REDISTRIBUTION_MAX_SHARE_MULTIPLE,
   REVIEW_PRIORITY_DEFAULT_LIMIT,
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
@@ -231,6 +232,8 @@ export interface AllocateTimeInput {
   maxNeglectBoost?: number;
   /** Hard ceiling on how many minutes a mode can actually absorb (e.g. Retain when the due backlog is thin) — leftover redistributes to the other modes. */
   availableMinutesByMode?: Partial<Record<SessionBucket, number>>;
+  /** Max multiple of a mode's own fair share it can reach via redistribution (default REDISTRIBUTION_MAX_SHARE_MULTIPLE) — bounds how far freed minutes can override the learner's split. */
+  redistributionCap?: number;
 }
 
 function roundAllocation(
@@ -272,6 +275,24 @@ export function allocateTimeAcrossModes(input: AllocateTimeInput): Record<Sessio
     ]),
   );
 
+  // A mode's effective ceiling is the smaller of what its candidate list can
+  // spend (availableMinutesByMode) and `redistributionCap` x its own fair
+  // share of the requested time — the latter stops minutes freed by a capped
+  // bucket from piling into one down-weighted bucket that happens to still
+  // have candidates (see REDISTRIBUTION_MAX_SHARE_MULTIPLE).
+  const totalWeight = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + (weights.get(mode) ?? 0), 0);
+  const capMultiple = input.redistributionCap ?? REDISTRIBUTION_MAX_SHARE_MULTIPLE;
+  const effectiveCeiling = (mode: SessionBucket): number | undefined => {
+    const candidateCeiling = input.availableMinutesByMode?.[mode];
+    const fairShareCap =
+      totalWeight > 0
+        ? capMultiple * input.totalMinutes * ((weights.get(mode) ?? 0) / totalWeight)
+        : undefined;
+    if (candidateCeiling === undefined) return fairShareCap;
+    if (fairShareCap === undefined) return candidateCeiling;
+    return Math.min(candidateCeiling, fairShareCap);
+  };
+
   const allocation = new Map<SessionBucket, number>();
   let remainingMinutes = input.totalMinutes;
   const openModes = new Set<SessionBucket>(ALL_SESSION_BUCKETS);
@@ -286,7 +307,7 @@ export function allocateTimeAcrossModes(input: AllocateTimeInput): Record<Sessio
     let cappedThisPass = false;
     for (const mode of [...openModes]) {
       const share = remainingMinutes * ((weights.get(mode) ?? 0) / openWeightSum);
-      const ceiling = input.availableMinutesByMode?.[mode];
+      const ceiling = effectiveCeiling(mode);
       if (ceiling !== undefined && share > ceiling) {
         allocation.set(mode, ceiling);
         remainingMinutes -= ceiling;
@@ -303,7 +324,19 @@ export function allocateTimeAcrossModes(input: AllocateTimeInput): Record<Sessio
   }
   for (const mode of openModes) allocation.set(mode, 0);
 
-  return roundAllocation(allocation, input.totalMinutes);
+  // When every mode has hit its ceiling there may be minutes left that
+  // nothing can absorb (thin due queue, few candidates, and/or the learner
+  // zeroed a bucket in their split). Round against what was actually
+  // allocated, not input.totalMinutes — otherwise roundAllocation would dump
+  // the whole unallocatable remainder onto the largest bucket, re-inflating
+  // exactly the bucket (usually shadowing) this ceiling logic is meant to
+  // bound. The session simply comes back shorter than requested; the
+  // explanation says why (see buildRecommendedSession).
+  const allocatedTotal = ALL_SESSION_BUCKETS.reduce(
+    (sum, mode) => sum + (allocation.get(mode) ?? 0),
+    0,
+  );
+  return roundAllocation(allocation, allocatedTotal);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +533,28 @@ function buildExploreSteps(
   return steps;
 }
 
+/**
+ * How many minutes the glossing bucket could actually absorb given its
+ * candidate sentences — mirrors buildExploreSteps' per-sentence branch
+ * (vocab-confirm cost vs structural-analysis cost, never both), but
+ * unbounded by budget. Feeds allocateTimeAcrossModes' availableMinutesByMode
+ * so a thin candidate list doesn't attract redistributed spillover minutes
+ * it can't spend.
+ */
+function exploreCeilingMinutes(candidates: ExploreCandidate[]): number {
+  let total = 0;
+  for (const candidate of candidates) {
+    for (const sentence of candidate.sentences) {
+      if (sentence.vocabularyConfirmed && sentence.vocabularyReady) {
+        total += EXPLORE_STEP_MINUTES.analyze;
+      } else if (!sentence.vocabularyConfirmed) {
+        total += EXPLORE_STEP_MINUTES.vocabulary;
+      }
+    }
+  }
+  return total;
+}
+
 /** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */
 function buildUnderstandSteps(
   candidates: UnderstandCandidate[],
@@ -585,13 +640,27 @@ function preferCoherentChains(steps: PlannerStepDraft[]): {
   return { steps: ordered, chainedSentenceIds };
 }
 
-function explainNeglect(neglectScores: NeglectScores, distribution: ActivityDistribution): string[] {
+function explainNeglect(
+  neglectScores: NeglectScores,
+  distribution: ActivityDistribution,
+  allocation: Record<SessionBucket, number>,
+  baseline: Record<SessionBucket, number>,
+): string[] {
   const explanations: string[] = [];
   const sortedByNeglect = [...ALL_SESSION_BUCKETS].sort(
     (a, b) => neglectScores[b] - neglectScores[a],
   );
   const mostNeglected = sortedByNeglect[0]!;
-  if (neglectScores[mostNeglected] >= 0.7) {
+  const plannedTotal = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + allocation[mode], 0);
+  const neglectedShare = plannedTotal > 0 ? allocation[mostNeglected] / plannedTotal : 0;
+  const baselineTotal = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + baseline[mode], 0);
+  const neglectedBaselineShare =
+    baselineTotal > 0 ? baseline[mostNeglected] / baselineTotal : 0;
+  // Only claim the session "emphasizes" the neglected bucket when it
+  // actually got a bigger-than-baseline slice — otherwise (the learner
+  // zeroed it in their split, or there were no candidates for it) the
+  // message is just wrong.
+  if (neglectScores[mostNeglected] >= 0.7 && neglectedShare > neglectedBaselineShare) {
     const days = distribution[mostNeglected].daysSinceLast;
     explanations.push(
       days === null
@@ -656,11 +725,22 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   const rankedReview = rankReviewPriorities([...input.retainDue, ...input.practiceDue], reviewLimit);
   const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit);
 
+  // Every bucket — not just review — is clamped to what its candidate list
+  // can actually spend. Without this, minutes freed by a capped bucket get
+  // redistributed to the others by weight regardless of whether they have
+  // material for them, which is how a thin due queue used to turn into a
+  // session of ~10 shadowing reps even when the learner set shadowing to a
+  // small share (2026-08-27).
   const allocation = allocateTimeAcrossModes({
     totalMinutes,
     neglectScores,
     baseline: input.baseline,
-    availableMinutesByMode: { review: reviewCeiling },
+    availableMinutesByMode: {
+      glossing: exploreCeilingMinutes(input.exploreCandidates),
+      grammar: input.understandCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
+      shadowing: input.shadowCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
+      review: reviewCeiling,
+    },
   });
 
   const reviewStep = buildReviewBatchStep(rankedReview, allocation.review);
@@ -686,9 +766,20 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   ];
   const { steps: orderedSteps, chainedSentenceIds } = preferCoherentChains(allSteps);
 
-  const explanation = explainNeglect(neglectScores, distribution);
+  const explanation = explainNeglect(
+    neglectScores,
+    distribution,
+    allocation,
+    input.baseline ?? BASELINE_SESSION_ALLOCATION,
+  );
   if (reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain && rankedReview.length < reviewLimit) {
-    explanation.push('No large review backlog right now, so extra time went to other activities.');
+    explanation.push("No large review backlog right now, so review is a small part of today's plan.");
+  }
+  const plannedMinutes = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + allocation[mode], 0);
+  if (plannedMinutes < totalMinutes - MODE_ACTIVITY_ESTIMATE_MINUTES.grammar) {
+    explanation.push(
+      `Your due queue and new-material lists only add up to about ${Math.round(plannedMinutes)} min right now, so today's plan is shorter than the ${Math.round(totalMinutes)} you asked for.`,
+    );
   }
   if (chainedSentenceIds.length > 0) {
     explanation.push('Some steps below share the same sentence, so they run back to back.');

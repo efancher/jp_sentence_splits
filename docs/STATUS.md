@@ -1,6 +1,25 @@
 # Status
 
-Last updated: 2026-08-27 (Home page: "Clear today's session" and the
+Last updated: 2026-08-27 (Planner: bound how far a thin bucket's freed
+minutes can flood another. The user asked for a 60-min mostly-review split
+(0/5/5/90) and got a session of 5 shadowing reps + one small review batch —
+because the `review` bucket was capped at what the due queue could absorb
+(~13 min) and *all* the freed minutes redistributed by weight into
+`shadowing` (glossing was 0, grammar had no candidates), turning a 5% share
+into ~23 min. Three fixes in `src/lib/sessionPlanner.ts` /
+`sessionPlannerConfig.ts`: (1) every bucket — not just `review` — now gets a
+candidate-count ceiling in `availableMinutesByMode`
+(`exploreCeilingMinutes` / `understandCandidates.length` /
+`shadowCandidates.length`), (2) new `REDISTRIBUTION_MAX_SHARE_MULTIPLE` (=2)
+caps any bucket at 2x its own fair share when absorbing redistributed
+minutes, whatever's left over goes idle and the session comes back shorter
+with an explanation line, (3) `MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing`
+1.5 -> 3.5 (a rep is listen/record/compare/repeat, not 90s). Also fixed the
+"you haven't touched glossing in N days, so this session emphasizes it"
+explanation firing even when glossing got a 0 share. New cases in
+`tests/sessionPlanner.test.ts`; full suite (857) + typecheck green.
+
+Before that: Home page: "Clear today's session" and the
 "Customize split" panel open by default, both user-requested. (1) There was
 previously no way to undo a bad "Start"/"+time" tap — `addMinutesToTodaySession`
 bakes the split into that pass's steps immediately, and only *new* minutes
