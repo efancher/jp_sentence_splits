@@ -44,17 +44,81 @@ export interface JmdictFile {
   words: JmdictEntry[];
 }
 
+/**
+ * Coarse part-of-speech class used only to break homophone/polysemy ties in
+ * `lookupJmdict` against the fugashi POS the caller already has. Not a full
+ * grammar taxonomy — just enough to tell "the verb する" from "the noun 為
+ * (bamboo screen)" etc.
+ */
+export type PosClass = 'noun' | 'verb' | 'adj-i' | 'adj-na' | 'adv';
+
+/** JMDict POS tags (v5r, adj-i, n, ...) -> every PosClass they imply. */
+export function jmdictPosClasses(pos: string): PosClass[] {
+  const tags = pos
+    .split(/[,;]\s*/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  const out = new Set<PosClass>();
+  for (const tag of tags) {
+    if (tag === 'adj-i' || tag === 'adj-ix') out.add('adj-i');
+    else if (tag === 'adj-na') out.add('adj-na');
+    else if (/^v(1|5[a-z]*|k|z|s|s-[is]|n|r|t|i)$/.test(tag) || tag === 'vs') out.add('verb');
+    else if (tag === 'n' || tag.startsWith('n-') || tag === 'pn' || tag === 'num') out.add('noun');
+    else if (tag === 'adv' || tag === 'adv-to') out.add('adv');
+  }
+  return [...out];
+}
+
+/**
+ * fugashi/UniDic POS string ("動詞/一般", "名詞/固有名詞", "形状詞/一般") ->
+ * PosClass. UniDic tags na-adjectives as 形状詞. Returns null for anything
+ * that can't disambiguate a content-word lookup (particles, aux, symbols).
+ */
+export function japanesePosToJmdictClass(pos: string): PosClass | null {
+  const major = (pos.split('/')[0] ?? '').trim();
+  switch (major) {
+    case '名詞':
+    case '代名詞':
+    case '数詞':
+      return 'noun';
+    case '動詞':
+      return 'verb';
+    case '形容詞':
+      return 'adj-i';
+    case '形状詞':
+    case '形容動詞':
+      return 'adj-na';
+    case '副詞':
+      return 'adv';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Best-effort PosClass from whatever POS string a caller has: a fugashi/UniDic
+ * tag ("動詞/一般"), or a JMDict tag list from an existing vocabulary row
+ * ("v5r,vt", "n,vs"). Returns the first class for the JMDict-tag case.
+ */
+export function resolvePosClass(pos: string | null | undefined): PosClass | null {
+  if (!pos?.trim()) return null;
+  return japanesePosToJmdictClass(pos) ?? jmdictPosClasses(pos)[0] ?? null;
+}
+
 export interface GlossEntry {
   expression: string;
   reading: string;
   gloss: string;
   pos: string;
+  posClasses: PosClass[];
   common: boolean;
   entryId: string;
 }
 
 export interface JmdictIndex {
-  byKey: Map<string, GlossEntry>;
+  /** All candidates per `expression|reading`, common-first. */
+  byKey: Map<string, GlossEntry[]>;
+  /** All candidates per expression, common-first. */
   byExpression: Map<string, GlossEntry[]>;
 }
 
@@ -91,6 +155,7 @@ export function glossEntriesFromJmdictEntry(entry: JmdictEntry): GlossEntry[] {
   const gloss = firstEnglishGloss(entry);
   if (!gloss) return [];
   const pos = posTags(entry);
+  const posClasses = jmdictPosClasses(pos);
   const kanjiList = entry.kanji ?? [];
   const kanaList = entry.kana ?? [];
 
@@ -100,6 +165,7 @@ export function glossEntriesFromJmdictEntry(entry: JmdictEntry): GlossEntry[] {
       reading: kana.text,
       gloss,
       pos,
+      posClasses,
       common: Boolean(kana.common),
       entryId: entry.id,
     }));
@@ -115,6 +181,7 @@ export function glossEntriesFromJmdictEntry(entry: JmdictEntry): GlossEntry[] {
         reading: kana.text,
         gloss,
         pos,
+        posClasses,
         common: Boolean(kanji.common || kana.common),
         entryId: entry.id,
       });
@@ -130,22 +197,12 @@ export function glossEntriesFromJmdictEntry(entry: JmdictEntry): GlossEntry[] {
       reading: kana.text,
       gloss,
       pos,
+      posClasses,
       common: Boolean(kana.common),
       entryId: entry.id,
     });
   }
   return results;
-}
-
-/**
- * Same "common first, then shortest gloss" preference used for both the
- * exact-key and by-expression indexes, so a homophone match doesn't depend
- * on which JMDict entry happened to be inserted first (file order is
- * otherwise arbitrary from this codebase's perspective).
- */
-function isBetterCandidate(candidate: GlossEntry, existing: GlossEntry): boolean {
-  if (candidate.common !== existing.common) return candidate.common;
-  return candidate.gloss.length < existing.gloss.length;
 }
 
 /**
@@ -165,51 +222,96 @@ function isGenuinelyAmbiguous(candidates: GlossEntry[]): boolean {
   return distinctCommonEntries.size > 1;
 }
 
-/** Pure parse: the full JMDict file -> exact-key and by-expression lookup indexes. */
+function commonFirstShortestGloss(a: GlossEntry, b: GlossEntry): number {
+  if (a.common !== b.common) return a.common ? -1 : 1;
+  return a.gloss.length - b.gloss.length;
+}
+
+function dedupeSortCap(candidates: GlossEntry[]): GlossEntry[] {
+  const seen = new Set<string>();
+  const unique = candidates.filter((c) => {
+    const key = `${c.entryId}|${c.gloss}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  unique.sort(commonFirstShortestGloss);
+  unique.length = Math.min(unique.length, MAX_CANDIDATES_PER_EXPRESSION);
+  return unique;
+}
+
+/**
+ * Pure parse: the full JMDict file -> exact-key and by-expression lookup
+ * indexes. Unlike the earlier version, genuinely-ambiguous entries are *kept*
+ * in both maps (common-first, capped) — `lookupJmdict` decides whether a
+ * caller-supplied POS resolves the ambiguity, and only falls back to
+ * dropping the match when it can't.
+ */
 export function buildJmdictIndex(file: JmdictFile): JmdictIndex {
-  const keyCandidates = new Map<string, GlossEntry[]>();
-  const expressionCandidates = new Map<string, GlossEntry[]>();
+  const byKey = new Map<string, GlossEntry[]>();
+  const byExpression = new Map<string, GlossEntry[]>();
+  const push = (map: Map<string, GlossEntry[]>, key: string, value: GlossEntry) => {
+    const list = map.get(key);
+    if (list) list.push(value);
+    else map.set(key, [value]);
+  };
 
   for (const entry of file.words) {
     for (const glossEntry of glossEntriesFromJmdictEntry(entry)) {
-      const key = `${glossEntry.expression}|${glossEntry.reading}`;
-      const keyList = keyCandidates.get(key);
-      if (keyList) keyList.push(glossEntry);
-      else keyCandidates.set(key, [glossEntry]);
-
-      const list = expressionCandidates.get(glossEntry.expression);
-      if (list) list.push(glossEntry);
-      else expressionCandidates.set(glossEntry.expression, [glossEntry]);
+      push(byKey, `${glossEntry.expression}|${glossEntry.reading}`, glossEntry);
+      push(byExpression, glossEntry.expression, glossEntry);
     }
   }
 
-  const byKey = new Map<string, GlossEntry>();
-  for (const [key, candidates] of keyCandidates) {
-    if (isGenuinelyAmbiguous(candidates)) continue;
-    byKey.set(key, candidates.reduce((best, c) => (isBetterCandidate(c, best) ? c : best)));
-  }
-
-  const byExpression = new Map<string, GlossEntry[]>();
-  for (const [expression, candidates] of expressionCandidates) {
-    if (isGenuinelyAmbiguous(candidates)) continue;
-    candidates.sort((a, b) => {
-      if (a.common !== b.common) return a.common ? -1 : 1;
-      return a.gloss.length - b.gloss.length;
-    });
-    candidates.length = Math.min(candidates.length, MAX_CANDIDATES_PER_EXPRESSION);
-    byExpression.set(expression, candidates);
+  for (const [key, candidates] of byKey) byKey.set(key, dedupeSortCap(candidates));
+  for (const [expression, candidates] of byExpression) {
+    byExpression.set(expression, dedupeSortCap(candidates));
   }
 
   return { byKey, byExpression };
 }
 
-/** expression+reading exact match first, else the best (common-first) candidate for the expression alone. */
-export function lookupJmdict(index: JmdictIndex, expression: string, reading?: string): GlossEntry | null {
+/**
+ * Choose one gloss from a candidate list:
+ * - single candidate -> take it;
+ * - a caller POS that narrows the list to exactly one PosClass match -> take it
+ *   (or the common-first best if the survivors are all spelling variants of one
+ *   word);
+ * - otherwise the pre-POS behavior: the common-first best iff the list isn't
+ *   `isGenuinelyAmbiguous`, else null (a guess dressed up as a match is worse
+ *   than no gloss).
+ */
+function pickCandidate(candidates: GlossEntry[], posClass: PosClass | null): GlossEntry | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  if (posClass) {
+    const byPos = candidates.filter((c) => c.posClasses.includes(posClass));
+    if (byPos.length === 1) return byPos[0];
+    if (byPos.length > 1 && !isGenuinelyAmbiguous(byPos)) return byPos[0];
+  }
+
+  if (isGenuinelyAmbiguous(candidates)) return null;
+  return candidates[0];
+}
+
+/**
+ * expression+reading exact match first, else the expression alone. `pos` is an
+ * optional fugashi/UniDic POS string ("動詞/一般", "名詞/普通名詞", ...) used only
+ * to break homophone/polysemy ties.
+ */
+export function lookupJmdict(
+  index: JmdictIndex,
+  expression: string,
+  reading?: string,
+  pos?: string,
+): GlossEntry | null {
+  const posClass = resolvePosClass(pos);
   if (reading) {
-    const exact = index.byKey.get(`${expression}|${reading}`);
+    const exact = pickCandidate(index.byKey.get(`${expression}|${reading}`) ?? [], posClass);
     if (exact) return exact;
   }
-  return index.byExpression.get(expression)?.[0] ?? null;
+  return pickCandidate(index.byExpression.get(expression) ?? [], posClass);
 }
 
 async function downloadJmdictFile(): Promise<JmdictFile> {

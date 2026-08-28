@@ -305,5 +305,38 @@ describe('vocabularySuggestions', () => {
       );
       expect(suggestion?.reading).toBe('せんぱい');
     });
+
+    it('recovers the dictionary reading from a godan っ-onbin stem (持つ)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '持っ', start: 0, end: 2, lemma: '持つ', reading: 'もっ', pos: '動詞' },
+        '持って',
+      );
+      expect(suggestion?.expression).toBe('持つ');
+      expect(suggestion?.reading).toBe('もつ');
+    });
+
+    it('recovers the dictionary reading from a godan ん-onbin stem (呼ぶ)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '呼ん', start: 0, end: 2, lemma: '呼ぶ', reading: 'よん', pos: '動詞' },
+        '呼んだ',
+      );
+      expect(suggestion?.reading).toBe('よぶ');
+    });
+
+    it('recovers the dictionary reading from a kana godan っ-onbin stem (たつ)', () => {
+      const suggestion = suggestionFromToken(
+        { surface: 'たっ', start: 0, end: 2, lemma: 'たつ', reading: 'たっ', pos: '動詞' },
+        'たった',
+      );
+      expect(suggestion?.reading).toBe('たつ');
+    });
+
+    it('does not touch a godan し-onbin stem (話す) — left for POS-aware lookup', () => {
+      const suggestion = suggestionFromToken(
+        { surface: '話し', start: 0, end: 2, lemma: '話す', reading: 'はなし', pos: '動詞' },
+        '話して',
+      );
+      expect(suggestion?.reading).toBe('はなし');
+    });
   });
 });

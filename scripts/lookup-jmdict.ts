@@ -3,14 +3,16 @@
  * end. Downloads/caches the JMDict release on first run (scripts/.cache/,
  * gitignored); nothing here writes to Supabase.
  *
- * Usage: npm run jmdict:lookup -- 先生 [reading]
+ * Usage: npm run jmdict:lookup -- 先生 [reading] [pos]
+ *   pos is a fugashi POS ("動詞") or JMDict tags ("v5r,vt"), used to break
+ *   homophone ties — e.g. `npm run jmdict:lookup -- する 動詞`.
  */
 import { buildJmdictIndex, ensureJmdictFile, lookupJmdict } from './lib/jmdict';
 
 async function main() {
-  const [expression, reading] = process.argv.slice(2);
+  const [expression, reading, pos] = process.argv.slice(2);
   if (!expression) {
-    console.error('Usage: npm run jmdict:lookup -- <expression> [reading]');
+    console.error('Usage: npm run jmdict:lookup -- <expression> [reading] [pos]');
     process.exitCode = 1;
     return;
   }
@@ -19,7 +21,7 @@ async function main() {
   const file = await ensureJmdictFile();
   const index = buildJmdictIndex(file);
 
-  const result = lookupJmdict(index, expression, reading);
+  const result = lookupJmdict(index, expression, reading, pos);
   if (!result) {
     console.log(`No match for "${expression}"${reading ? ` (${reading})` : ''}.`);
     return;

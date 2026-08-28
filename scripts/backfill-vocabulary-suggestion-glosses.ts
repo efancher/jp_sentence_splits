@@ -85,7 +85,12 @@ async function main() {
     let changed = false;
     const enriched = sentence.suggestions.map((suggestion) => {
       if (!needsGloss(suggestion)) return suggestion;
-      const result = lookupJmdict(index, suggestion.expression, suggestion.reading || undefined);
+      const result = lookupJmdict(
+        index,
+        suggestion.expression,
+        suggestion.reading || undefined,
+        suggestion.pos || undefined,
+      );
       if (!result) {
         suggestionsNotFound += 1;
         return suggestion;

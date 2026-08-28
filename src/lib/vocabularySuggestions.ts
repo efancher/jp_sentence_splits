@@ -87,7 +87,19 @@ function isAdjacentAcrossWhitespace(
  * it up (見つける -> みつけるる). This matters because callers may pass an
  * already-correct reading back in on a rerun (e.g. the reading-mismatch
  * backfill script, which re-derives from every known surface form each run).
+ *
+ * Godan 音便 (onbin) stems are a second case fugashi produces: `surface` is
+ * the euphonic te/ta stem (持っ / 呼ん / 走っ) with its conjugated reading
+ * (もっ / よん / はしっ) while `lemma` is the dictionary form (持つ / 呼ぶ /
+ * 走る). A trailing っ or ん in the reading is always the euphonic mora —
+ * never a godan dictionary-form final kana — so when the pre-okurigana
+ * spelling matches we drop it and append the lemma's final kana. Kept
+ * deliberately narrow: い-onbin (書い) and the negative/volitional stems
+ * collide with ichidan masu-stems, so they're left for POS-aware lookup and
+ * the by-expression fallback to handle.
  */
+const GODAN_FINAL_KANA = 'うくぐすつぬぶむる';
+
 export function deriveDictionaryReading(
   surface: string,
   surfaceReading: string,
@@ -95,10 +107,22 @@ export function deriveDictionaryReading(
 ): string {
   if (lemma === surface) return surfaceReading;
   if (lemma === '来る' || lemma === 'くる') return surfaceReading;
-  if (!lemma.startsWith(surface)) return surfaceReading;
-  const tail = lemma.slice(surface.length);
-  if (surfaceReading.endsWith(tail)) return surfaceReading;
-  return surfaceReading + tail;
+  if (lemma.startsWith(surface)) {
+    const tail = lemma.slice(surface.length);
+    if (surfaceReading.endsWith(tail)) return surfaceReading;
+    return surfaceReading + tail;
+  }
+  const lemmaFinal = lemma.slice(-1);
+  if (
+    lemma.length >= 2 &&
+    surface.length >= 1 &&
+    GODAN_FINAL_KANA.includes(lemmaFinal) &&
+    lemma.slice(0, -1) === surface.slice(0, -1) &&
+    /[っん]$/.test(surfaceReading)
+  ) {
+    return surfaceReading.slice(0, -1) + lemmaFinal;
+  }
+  return surfaceReading;
 }
 
 export function suggestionFromToken(

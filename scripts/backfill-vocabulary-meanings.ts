@@ -67,7 +67,12 @@ async function main() {
   let matched = 0;
   let notFound = 0;
   for (const item of items) {
-    const result = lookupJmdict(index, item.expression, item.reading || undefined);
+    const result = lookupJmdict(
+      index,
+      item.expression,
+      item.reading || undefined,
+      item.partOfSpeech || undefined,
+    );
     if (!result) {
       notFound += 1;
       continue;
