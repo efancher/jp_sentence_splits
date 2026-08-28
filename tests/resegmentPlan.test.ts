@@ -127,6 +127,19 @@ describe('seedResegmentReview', () => {
     expect(rows[0]!.needsTranslationReview).toBe(true);
   });
 
+  it('leaves a split of a merged group blank rather than joining every source', () => {
+    const rows = seedResegmentReview(
+      [{ translation: 'No, younger.' }, { translation: 'Only one.' }, { translation: 'Casual is fine.' }],
+      [
+        { japanese: 'いや、私は下だから。', sourceIndexes: [0, 1] },
+        { japanese: 'たったの1つじゃん。', sourceIndexes: [1, 2] },
+        { japanese: 'いいでしょ。', sourceIndexes: [2] },
+      ],
+    );
+    expect(rows.map((r) => r.translation)).toEqual(['', '', '']);
+    expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
+  });
+
   it('does not paste the whole translation onto every piece of a split', () => {
     const rows = seedResegmentReview(
       [{ translation: 'Yeah, we are the same age. Is it okay to stop being polite, Mizuki?' }],
