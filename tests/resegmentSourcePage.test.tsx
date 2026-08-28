@@ -123,6 +123,38 @@ describe('ResegmentSourcePage', () => {
     expect(membership.map((m) => m.sentenceId)).toContain(studyItems[0]!.subjectId);
   });
 
+  it('lets the user remove an uninteresting row before applying', async () => {
+    const { book } = await seed();
+    vi.mocked(miningApi.resegmentSentences).mockImplementation(async (sentences) =>
+      sentences.map((s, i) => ({
+        japanese: s.japanese,
+        startMs: 0,
+        endMs: 0,
+        reading: null,
+        tokens: null,
+        sourceIndexes: [i],
+      })),
+    );
+    const user = userEvent.setup();
+    renderPage(book.id);
+    await user.click(await screen.findByRole('button', { name: /lyrics \/ manual/i }));
+    await waitFor(() => expect(screen.getByText(/2 sentences/)).toBeInTheDocument());
+
+    const firstRow = screen
+      .getByDisplayValue('さすがです。水希。たったの')
+      .closest('section')!;
+    await user.click(within(firstRow).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.getByText(/1 sentences/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(screen.getByText('book detail')).toBeInTheDocument());
+
+    const db = getDb();
+    const membership = await db.bookSentences.where('bookId').equals(book.id).sortBy('position');
+    const fresh = (await db.sentences.bulkGet(membership.map((m) => m.sentenceId))).filter(Boolean);
+    expect(fresh.map((s) => s!.japanese)).toEqual(['1ヶ月だよ。変わんないじゃん。']);
+  });
+
   it('lets the user merge two rows before applying (lyrics mode)', async () => {
     const { book } = await seed();
     vi.mocked(miningApi.resegmentSentences).mockImplementation(async (sentences) =>

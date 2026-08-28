@@ -108,6 +108,10 @@ export function ResegmentSourcePage() {
     );
   }
 
+  function removeRow(index: number) {
+    setRows((current) => current.filter((_, i) => i !== index));
+  }
+
   function mergeUp(index: number) {
     setRows((current) => {
       if (index === 0) return current;
@@ -315,6 +319,13 @@ export function ResegmentSourcePage() {
                     onClick={() => splitRow(index)}
                   >
                     Split by 。
+                  </button>
+                  <button
+                    type="button"
+                    disabled={phase === 'applying' || rows.length === 1}
+                    onClick={() => removeRow(index)}
+                  >
+                    Remove
                   </button>
                 </div>
               </div>

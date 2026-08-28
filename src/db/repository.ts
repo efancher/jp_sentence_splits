@@ -631,30 +631,71 @@ export async function applyResegmentation(
         }
       }
 
-      // 4. Retire the old sentences (keeping the repointed study items).
+      // 4. Retire the old sentences. A new segment whose text is byte-identical
+      //    to an old one derives the *same* id (`sentenceIdFromNormalizedKey`)
+      //    — that row was just overwritten in step 1 and must NOT be deleted;
+      //    only its now-stale analysis/grammar links are cleared.
+      const newIdSet = new Set(seen);
       for (const oldId of plan.retiredSentenceIds) {
+        if (newIdSet.has(oldId)) {
+          if (await db.analyses.get(oldId)) {
+            await db.analyses.delete(oldId);
+            sink.push({
+              entity: 'analyses',
+              recordId: oldId,
+              payload: { sentenceId: oldId },
+              operation: 'delete',
+            });
+          }
+          for (const link of await db.sentenceGrammar
+            .where('sentenceId')
+            .equals(oldId)
+            .toArray()) {
+            await db.sentenceGrammar.delete(link.id);
+            sink.push({
+              entity: 'sentence_grammar',
+              recordId: link.id,
+              payload: { id: link.id },
+              operation: 'delete',
+            });
+          }
+          continue;
+        }
         await cascadeRetireSentenceLocal(db, oldId, sink, keepStudyItemIds);
       }
 
-      // 5. Splice the new sentences into the book in segment order.
-      const remaining = await db.bookSentences
+      // 5. Rebuild this source's slice of the book in segment order. Every
+      //    membership for a sentence in the source (retired or reused) is
+      //    dropped; the new set is added first, other books' sentences follow.
+      const sourceSentenceIds = new Set([
+        ...plan.retiredSentenceIds,
+        ...newIdSet,
+      ]);
+      const allMemberships = await db.bookSentences
         .where('bookId')
         .equals(bookId)
         .sortBy('position');
-      const additions = seen.size
-        ? [...seen].map((sentenceId, index) => ({
-            id: createId('bs'),
-            bookId,
-            sentenceId,
-            position: index,
-            status: 'unstarted' as StudyStatus,
-            addedAt: timestamp,
-          }))
-        : [];
-      const repositioned = remaining.map((item, index) => ({
-        ...item,
-        position: additions.length + index,
+      for (const membership of allMemberships) {
+        if (!sourceSentenceIds.has(membership.sentenceId)) continue;
+        await db.bookSentences.delete(membership.id);
+        sink.push({
+          entity: 'book_sentences',
+          recordId: membership.id,
+          payload: { id: membership.id },
+          operation: 'delete',
+        });
+      }
+      const additions = [...seen].map((sentenceId, index) => ({
+        id: createId('bs'),
+        bookId,
+        sentenceId,
+        position: index,
+        status: 'unstarted' as StudyStatus,
+        addedAt: timestamp,
       }));
+      const repositioned = allMemberships
+        .filter((item) => !sourceSentenceIds.has(item.sentenceId))
+        .map((item, index) => ({ ...item, position: additions.length + index }));
       await db.bookSentences.bulkPut([...additions, ...repositioned]);
       for (const row of [...additions, ...repositioned]) {
         sink.push({ entity: 'book_sentences', recordId: row.id, payload: row });
