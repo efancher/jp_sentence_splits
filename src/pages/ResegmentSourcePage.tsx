@@ -22,6 +22,8 @@ interface ReviewRow {
   /** From the initial /resegment pass; stale after a manual edit — apply re-annotates. */
   readingOnly: string;
   sourceIndexes: number[];
+  /** Contributing old sentences' translations — shown as a hint, not the field value. */
+  sourceTranslations: string[];
   needsTranslationReview: boolean;
 }
 
@@ -88,6 +90,7 @@ export function ResegmentSourcePage() {
           translation: row.translation,
           readingOnly: row.readingOnly,
           sourceIndexes: row.sourceIndexes,
+          sourceTranslations: row.sourceTranslations,
           needsTranslationReview: row.needsTranslationReview,
         })),
       );
@@ -115,6 +118,9 @@ export function ResegmentSourcePage() {
         translation: [prev.translation, row.translation].filter(Boolean).join(' '),
         readingOnly: '',
         sourceIndexes: [...new Set([...prev.sourceIndexes, ...row.sourceIndexes])],
+        sourceTranslations: [
+          ...new Set([...prev.sourceTranslations, ...row.sourceTranslations]),
+        ],
         needsTranslationReview: true,
       };
       next.splice(index, 1);
@@ -130,11 +136,12 @@ export function ResegmentSourcePage() {
         .map((piece) => piece.trim())
         .filter(Boolean);
       if (pieces.length <= 1) return current;
-      const replacements: ReviewRow[] = pieces.map((japanese, pieceIndex) => ({
+      const replacements: ReviewRow[] = pieces.map((japanese) => ({
         japanese,
-        translation: pieceIndex === 0 ? row.translation : '',
+        translation: '',
         readingOnly: '',
         sourceIndexes: row.sourceIndexes,
+        sourceTranslations: row.sourceTranslations,
         needsTranslationReview: true,
       }));
       const next = [...current];
@@ -339,6 +346,12 @@ export function ResegmentSourcePage() {
               {row.needsTranslationReview ? (
                 <span className="muted" style={{ color: 'var(--warning)' }}>
                   verify translation
+                </span>
+              ) : null}
+              {row.sourceTranslations.length > 0 &&
+              !row.sourceTranslations.includes(row.translation.trim()) ? (
+                <span className="muted" style={{ fontSize: '0.85em' }}>
+                  original: {row.sourceTranslations.join(' / ')}
                 </span>
               ) : null}
             </section>

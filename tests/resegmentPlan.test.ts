@@ -126,4 +126,19 @@ describe('seedResegmentReview', () => {
     );
     expect(rows[0]!.needsTranslationReview).toBe(true);
   });
+
+  it('does not paste the whole translation onto every piece of a split', () => {
+    const rows = seedResegmentReview(
+      [{ translation: 'Yeah, we are the same age. Is it okay to stop being polite, Mizuki?' }],
+      [
+        { japanese: 'うん。', sourceIndexes: [0] },
+        { japanese: '同い年です。', sourceIndexes: [0] },
+        { japanese: '水希。', sourceIndexes: [0] },
+      ],
+    );
+    expect(rows.map((r) => r.translation)).toEqual(['', '', '']);
+    expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
+    // the whole old translation is still available as a hint
+    expect(rows[2]!.sourceTranslations[0]).toContain('Mizuki');
+  });
 });
