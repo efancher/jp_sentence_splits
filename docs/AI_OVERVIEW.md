@@ -618,7 +618,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   words with dictionary pitch-accent data, `VocabularyItem.pitchAccentPositions`
   — multiple choice among the pitch-accent categories actually
   distinguishable at the word's own mora count,
-  `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts`).
+  `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts`; the
+  reveal draws the mora-by-mora H/L contour via `PitchAccentDiagram`
+  (`src/components/PitchAccentDiagram.tsx`), an SVG render of the same
+  `expectedPitchShape` the scoring path uses, with a trailing
+  following-particle node so heiban reads apart from odaka).
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.

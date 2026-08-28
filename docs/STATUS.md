@@ -1,6 +1,22 @@
 # Status
 
-Last updated: 2026-08-28 (Vocabulary meaning glossing. YouTube-mined
+Last updated: 2026-08-28 (Pitch-accent review card now shows the pattern.
+Card-issue triage of a "would be nice if the pitch pattern was displayed"
+report: the `pitch_accent` SRS card (`PitchAccentCard`, `ReviewPage.tsx`)
+only ever named the category on reveal ("Heiban (平板)") and drew nothing.
+New `src/components/PitchAccentDiagram.tsx` — a small SVG mora-by-mora H/L
+contour rendered from `expectedPitchShape` (the same `pitchAccentShape.ts`
+function the scoring path uses, so the picture can't drift from the
+grader), with a trailing hollow following-particle node so heiban reads
+apart from odaka (identical within the word's own span). Shown on the
+card's reveal only. `tests/pitchAccentDiagram.test.tsx` (4). The other
+open report that triage run — a comprehension card whose Japanese
+("さ、さすがです。水希。たったの") is a truncated auto-caption fragment — traced to
+systemic mis-segmentation across the whole pre-2026-08-23 "Easy Japanese
+Drama: After Work" import (91 sentences, predates `resegment.py`); left as
+a planned bulk re-mine rather than hand-patched.)
+
+Before that: 2026-08-28 (Vocabulary meaning glossing. YouTube-mined
 vocabulary arrived with every "Meaning (optional)" field blank — the
 fugashi/UniDic tokenizer gives surface/lemma/reading/POS but never a
 gloss, and nothing filled it in. Fixed on two paths. **Deterministic**

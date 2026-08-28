@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
+import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
@@ -1597,6 +1598,12 @@ function PitchAccentCard({
         <>
           <div className="muted">{selected === correctLabel ? '✓ Correct' : '✗ Not quite'}</div>
           <div>{PITCH_ACCENT_PATTERN_LABELS[correctLabel]}</div>
+          {vocabularyItem.pitchAccentPositions?.length ? (
+            <PitchAccentDiagram
+              reading={vocabularyItem.reading}
+              position={vocabularyItem.pitchAccentPositions[0]!}
+            />
+          ) : null}
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}

@@ -290,6 +290,21 @@ strong.jp {
   border: 1px dashed var(--border);
 }
 
+/* PitchAccentDiagram (ReviewPage pitch_accent card reveal) — static H/L contour. */
+.pitch-diagram {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  margin: 0.25rem 0;
+}
+
+.pitch-diagram-label {
+  fill: var(--text-muted);
+  font-family: var(--font-jp);
+  font-size: 11px;
+}
+
 /* KaraokeSentenceText (ReviewPage listening card) — word-by-word playback highlight. */
 .karaoke-word {
   transition: background-color 0.1s ease-out;
