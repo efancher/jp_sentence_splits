@@ -23,7 +23,10 @@ uvicorn app.main:app --reload --port 8003
 ```
 
 System requirements beyond the Python packages: `ffmpeg` and `ffprobe` on
-`PATH` (audio extraction/clipping). The kana-reading/morphology engine
+`PATH` (audio extraction/clipping), and a JS runtime for yt-dlp's YouTube
+`n`-challenge solver — `node` >= 22 (or deno/bun) on `PATH`, or its path
+in `MINING_YTDLP_JS_RUNTIME_PATH`. See "JavaScript runtime" under
+"YouTube's bot-check" below. The kana-reading/morphology engine
 (`fugashi`/`unidic-lite`/`jaconv`) is a soft dependency — if it fails to
 import or initialize, readings/tokens are simply omitted rather than
 erroring (same contract as the original CLI).
@@ -106,6 +109,33 @@ used sporadically is lower-risk than continuous automated use, but if the
 account does get flagged, the worst case is a lock on that account, not
 just expired cookies.
 
+### Player-client and "The page needs to be reloaded."
+
+With cookies attached, yt-dlp's default/`web` player client currently
+fails every video with `ERROR: [youtube] <id>: The page needs to be
+reloaded.` (yt-dlp #17389 / #17405). We work around it by forcing
+`player_client=web_safari,mweb` (`MINING_YTDLP_PLAYER_CLIENT`), which
+returns downloadable HLS audio. Revisit once the upstream bug is fixed.
+
+### JavaScript runtime (required)
+
+Since yt-dlp 2025.11.12, extracting YouTube formats requires an external
+JS runtime to solve the `n` signature challenge — without one, yt-dlp
+drops every format and the job fails. We use **node (>= 22)**, plus the
+`yt-dlp-ejs` pip package (in `requirements.txt`) for the solver scripts.
+
+The systemd user PATH doesn't include nvm's node, so the unit sets
+`MINING_YTDLP_JS_RUNTIME_PATH=%h/.local/bin/node`. Create that symlink
+once, and re-point it after nvm upgrades node:
+
+```
+ln -sfn "$(nvm which default)" ~/.local/bin/node
+```
+
+Verify: `node --version` >= v22, and `yt-dlp -v <url>` shows
+`[youtube] ... Downloading player ...` followed by `[jsc:node] Solving JS
+challenges using node` with no `n challenge solving failed` warning.
+
 ## Configuration (env vars, all optional)
 
 - `MINING_API_HOST` / `MINING_API_PORT` — bind address (default
@@ -119,3 +149,9 @@ just expired cookies.
   survives before automatic cleanup, and how often the sweep runs.
 - `MINING_YTDLP_COOKIES_FILE` — path to a cookies.txt for yt-dlp; see
   "YouTube's bot-check" above. Unset by default.
+- `MINING_YTDLP_PLAYER_CLIENT` — comma-separated yt-dlp
+  `youtube:player_client` list (default `web_safari,mweb`); empty to use
+  yt-dlp's own default. See "Player-client" above.
+- `MINING_YTDLP_JS_RUNTIME` / `MINING_YTDLP_JS_RUNTIME_PATH` — JS runtime
+  name (default `node`) and, if it's not on PATH, its absolute path. See
+  "JavaScript runtime" above.

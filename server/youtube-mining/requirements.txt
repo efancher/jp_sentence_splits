@@ -1,6 +1,10 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
-yt-dlp>=2024.8.6
+yt-dlp>=2025.11.12
+# Solver scripts for YouTube's JS `n` challenge. Also requires an
+# external JS runtime on PATH (node >= 22 / deno / bun) — see README
+# "YouTube's bot-check" and MINING_YTDLP_JS_RUNTIME* in app/config.py.
+yt-dlp-ejs>=0.8.0
 # Kana reading generation and morphology tokens degrade gracefully to
 # "unavailable" if these fail to import/initialize (see app/readings.py) —
 # they're not hard requirements, but install them for full functionality.

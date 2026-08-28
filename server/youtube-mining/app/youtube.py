@@ -45,6 +45,15 @@ def _ydl(opts: dict[str, Any] | None = None):
     }
     if config.YTDLP_COOKIES_FILE:
         base["cookiefile"] = config.YTDLP_COOKIES_FILE
+    if config.YTDLP_PLAYER_CLIENT:
+        base["extractor_args"] = {
+            "youtube": {"player_client": config.YTDLP_PLAYER_CLIENT.split(",")}
+        }
+    if config.YTDLP_JS_RUNTIME:
+        runtime_cfg = {}
+        if config.YTDLP_JS_RUNTIME_PATH:
+            runtime_cfg["path"] = config.YTDLP_JS_RUNTIME_PATH
+        base["js_runtimes"] = {config.YTDLP_JS_RUNTIME: runtime_cfg}
     if opts:
         base.update(opts)
     return YoutubeDL(base)

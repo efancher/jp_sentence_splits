@@ -6,6 +6,10 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/projects/jp_sentence_splits/server/youtube-mining
 Environment=MINING_YTDLP_COOKIES_FILE=%h/projects/jp_sentence_splits/server/youtube-mining/youtube-cookies.txt
+# yt-dlp's JS challenge solver needs a node >= 22 binary; the systemd
+# user PATH doesn't include nvm's. Point at a stable symlink the user
+# maintains: ln -sfn "$(nvm which default)" ~/.local/bin/node
+Environment=MINING_YTDLP_JS_RUNTIME_PATH=%h/.local/bin/node
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5

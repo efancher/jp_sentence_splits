@@ -1,6 +1,21 @@
 # Status
 
-Last updated: 2026-08-27 (Session: the SessionBar now acts on the page
+Last updated: 2026-08-28 (YouTube mining: fixed a total extraction
+outage. yt-dlp now (a) fails every video with "The page needs to be
+reloaded." when cookies are attached to its default `web` client
+(yt-dlp #17389/#17405) and (b) since 2025.11.12 needs an external JS
+runtime to solve YouTube's `n` challenge or it drops all formats.
+`app/youtube.py` now forces `player_client=web_safari,mweb`
+(`MINING_YTDLP_PLAYER_CLIENT`) and passes a `js_runtimes` config
+(`MINING_YTDLP_JS_RUNTIME` / `_PATH`, default node); added `yt-dlp-ejs`
+to requirements and bumped the yt-dlp floor to 2025.11.12. The systemd
+unit points `MINING_YTDLP_JS_RUNTIME_PATH` at `~/.local/bin/node` (a
+user-maintained symlink to nvm's node, since the systemd user PATH
+lacks it). Also corrected the bogus `--cookies -` cookie-export command
+in the README/config comments. Verified end-to-end against the live
+service: URL → 87 cues + audio + ja/en subs. 24 mining tests green.
+
+Before that: 2026-08-27 (Session: the SessionBar now acts on the page
 you're looking at. Second half of the "one advance control" work below —
 the user pointed out that when the bar's current step and the on-screen
 item differ, you can't tell what "Mark complete" affects. `useActiveSession`
