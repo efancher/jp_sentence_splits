@@ -10,6 +10,7 @@ import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { resegmentSentences } from '../lib/miningApi';
 import {
   buildResegmentPlan,
+  distributeTranslation,
   seedResegmentReview,
   type ResegmentReviewedSegment,
 } from '../lib/resegmentPlan';
@@ -136,9 +137,10 @@ export function ResegmentSourcePage() {
         .map((piece) => piece.trim())
         .filter(Boolean);
       if (pieces.length <= 1) return current;
-      const replacements: ReviewRow[] = pieces.map((japanese) => ({
+      const translations = distributeTranslation(row.translation, pieces.length);
+      const replacements: ReviewRow[] = pieces.map((japanese, pieceIndex) => ({
         japanese,
-        translation: '',
+        translation: translations[pieceIndex] ?? '',
         readingOnly: '',
         sourceIndexes: row.sourceIndexes,
         sourceTranslations: row.sourceTranslations,

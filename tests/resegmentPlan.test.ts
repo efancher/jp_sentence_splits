@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildResegmentPlan,
+  distributeTranslation,
   overlapRatio,
   seedResegmentReview,
   type ResegmentOldSentence,
@@ -101,6 +102,18 @@ describe('buildResegmentPlan', () => {
   });
 });
 
+describe('distributeTranslation', () => {
+  it('assigns one English sentence per piece when counts match', () => {
+    expect(distributeTranslation('A. B? C!', 3)).toEqual(['A.', 'B?', 'C!']);
+  });
+  it('leaves trailing pieces blank when there is less English', () => {
+    expect(distributeTranslation('Only this.', 3)).toEqual(['Only this.', '', '']);
+  });
+  it('folds extra English into the last piece', () => {
+    expect(distributeTranslation('A. B. C. D.', 2)).toEqual(['A.', 'B. C. D.']);
+  });
+});
+
 describe('seedResegmentReview', () => {
   it('inherits a single source translation and does not flag it', () => {
     const rows = seedResegmentReview(
@@ -127,6 +140,23 @@ describe('seedResegmentReview', () => {
     expect(rows[0]!.needsTranslationReview).toBe(true);
   });
 
+  it('spreads a bundled translation across the pieces of a pure split', () => {
+    const rows = seedResegmentReview(
+      [{ translation: 'Yeah. It is okay to stop being polite? Right, Mizuki?' }],
+      [
+        { japanese: 'うん。', sourceIndexes: [0] },
+        { japanese: '敬語じゃなくてもいい?', sourceIndexes: [0] },
+        { japanese: '水希。', sourceIndexes: [0] },
+      ],
+    );
+    expect(rows.map((r) => r.translation)).toEqual([
+      'Yeah.',
+      'It is okay to stop being polite?',
+      'Right, Mizuki?',
+    ]);
+    expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
+  });
+
   it('leaves a split of a merged group blank rather than joining every source', () => {
     const rows = seedResegmentReview(
       [{ translation: 'No, younger.' }, { translation: 'Only one.' }, { translation: 'Casual is fine.' }],
@@ -140,7 +170,7 @@ describe('seedResegmentReview', () => {
     expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
   });
 
-  it('does not paste the whole translation onto every piece of a split', () => {
+  it('never pastes the same full translation onto more than one split piece', () => {
     const rows = seedResegmentReview(
       [{ translation: 'Yeah, we are the same age. Is it okay to stop being polite, Mizuki?' }],
       [
@@ -149,7 +179,8 @@ describe('seedResegmentReview', () => {
         { japanese: '水希。', sourceIndexes: [0] },
       ],
     );
-    expect(rows.map((r) => r.translation)).toEqual(['', '', '']);
+    const nonEmpty = rows.map((r) => r.translation).filter(Boolean);
+    expect(new Set(nonEmpty).size).toBe(nonEmpty.length);
     expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
     // the whole old translation is still available as a hint
     expect(rows[2]!.sourceTranslations[0]).toContain('Mizuki');
