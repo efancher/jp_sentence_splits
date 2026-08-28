@@ -16,6 +16,7 @@ import {
   displayJapanese,
   normalizeSentenceKey,
 } from './normalize';
+import { inlineReadingFromTokens } from './inlineReadingFromTokens';
 import { suggestionsFromTokens } from './vocabularySuggestions';
 
 const SHADOWING_PACKAGE_FORMAT = 'japanese-shadowing-package';
@@ -280,7 +281,7 @@ function buildDrafts(
         normalizedKey,
         japanese,
         readingOnly: sentence.reading?.trim() ?? '',
-        inlineReading: '',
+        inlineReading: inlineReadingFromTokens(japanese, sentence.tokens ?? []),
         translation: sentence.english?.trim() ?? '',
         targetVocabulary: [],
         vocabularySuggestions: suggestionsFromTokens(
@@ -318,6 +319,7 @@ function buildDrafts(
         japanese,
         sentence.tokens,
       );
+      current.inlineReading ||= inlineReadingFromTokens(japanese, sentence.tokens);
     }
 
     const meta = orderMeta.get(normalizedKey);

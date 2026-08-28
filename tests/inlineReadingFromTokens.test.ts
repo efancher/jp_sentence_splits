@@ -1,0 +1,62 @@
+import { describe, expect, it } from 'vitest';
+
+import { inlineReadingFromTokens } from '../src/lib/inlineReadingFromTokens';
+import type { MorphologyToken } from '../src/lib/vocabularySuggestions';
+
+const tok = (
+  surface: string,
+  start: number,
+  reading?: string,
+): MorphologyToken => ({
+  surface,
+  start,
+  end: start + surface.length,
+  lemma: surface,
+  reading,
+});
+
+describe('inlineReadingFromTokens', () => {
+  it('annotates only kanji-bearing tokens and passes kana through', () => {
+    const jp = '映画を見た';
+    const tokens = [
+      tok('映画', 0, 'えいが'),
+      tok('を', 2, 'を'),
+      tok('見', 3, 'み'),
+      tok('た', 4, 'た'),
+    ];
+    expect(inlineReadingFromTokens(jp, tokens)).toBe('映画[えいが]を見[み]た');
+  });
+
+  it('reproduces punctuation and spacing the tokenizer skipped', () => {
+    const jp = 'さすがです。 水希。';
+    const tokens = [
+      tok('さすが', 0, 'さすが'),
+      tok('です', 3, 'です'),
+      // 。 at 5 and the space at 6 are not tokens
+      tok('水希', 7, 'みずき'),
+    ];
+    expect(inlineReadingFromTokens(jp, tokens)).toBe('さすがです。 水希[みずき]。');
+  });
+
+  it('returns empty string when nothing needs ruby', () => {
+    const jp = 'たったのいっかげつ';
+    expect(inlineReadingFromTokens(jp, [tok('たったの', 0), tok('いっかげつ', 4)])).toBe('');
+  });
+
+  it('returns empty string for no tokens', () => {
+    expect(inlineReadingFromTokens('映画', [])).toBe('');
+  });
+
+  it('skips tokens whose span does not match the source text', () => {
+    const jp = '見た';
+    // stale offset from a pre-edit sentence
+    expect(inlineReadingFromTokens(jp, [tok('映画', 0, 'えいが')])).toBe('');
+  });
+
+  it('handles the ヶ counter run', () => {
+    const jp = '1ヶ月';
+    expect(inlineReadingFromTokens(jp, [tok('1', 0), tok('ヶ月', 1, 'かげつ')])).toBe(
+      '1ヶ月[かげつ]',
+    );
+  });
+});
