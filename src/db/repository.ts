@@ -46,6 +46,7 @@ import type {
   VocabularyKanji,
   VocabularyReviewStatus,
   VocabularySelection,
+  VocabularySuggestion,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
@@ -225,6 +226,27 @@ export async function updateSentenceText(
   await db.sentences.put(updated);
   notifySync('sentences', updated.id, updated);
   return updated;
+}
+
+/**
+ * Replace a sentence's tokenizer-derived `vocabularySuggestions` wholesale.
+ * Used by the just-in-time AI glossing on VocabularyReviewPage to persist the
+ * `english` it fills in, so a revisit doesn't re-request the same glosses.
+ */
+export async function updateSentenceVocabularySuggestions(
+  sentenceId: string,
+  suggestions: VocabularySuggestion[],
+): Promise<void> {
+  const db = getDb();
+  const existing = await db.sentences.get(sentenceId);
+  if (!existing) return;
+  const updated: Sentence = {
+    ...existing,
+    vocabularySuggestions: suggestions,
+    updatedAt: nowIso(),
+  };
+  await db.sentences.put(updated);
+  notifySync('sentences', updated.id, updated);
 }
 
 export async function deleteBook(bookId: string): Promise<void> {

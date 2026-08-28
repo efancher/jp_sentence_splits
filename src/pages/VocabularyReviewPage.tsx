@@ -1,14 +1,27 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { VocabularyPicker } from '../components/VocabularyPicker';
-import { confirmSentenceVocabulary, getDb, saveAnalysis } from '../db/repository';
-import type { VocabularyReviewStatus, VocabularySelection } from '../domain/types';
-import { defaultSelectionsFromSuggestions } from '../lib/vocabularySuggestions';
+import {
+  confirmSentenceVocabulary,
+  getDb,
+  saveAnalysis,
+  updateSentenceVocabularySuggestions,
+} from '../db/repository';
+import type {
+  VocabularyReviewStatus,
+  VocabularySelection,
+  VocabularySuggestion,
+} from '../domain/types';
+import { glossVocabulary } from '../lib/vocabAssist';
+import {
+  defaultSelectionsFromSuggestions,
+  isContentPos,
+} from '../lib/vocabularySuggestions';
 import { useAutosave } from '../hooks/useAutosave';
 
 /**
@@ -74,6 +87,92 @@ export function VocabularyReviewPage() {
       });
     },
     { enabled: hydrated },
+  );
+
+  // Just-in-time AI glossing: when this sentence's content words have no
+  // English meaning yet (every word mined from YouTube starts blank — fugashi
+  // gives no gloss), fill them in context via `vocab-assist`, once per
+  // sentence. Degrades silently — offline / signed-out just leaves the fields
+  // blank, exactly as before.
+  const [glossState, setGlossState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const glossAttempted = useRef<Set<string>>(new Set());
+  const japanese = data?.sentence?.japanese ?? '';
+
+  useEffect(() => {
+    if (!hydrated || !data?.sentence) return;
+    const { id: activeId, vocabularySuggestions } = data.sentence;
+    if (glossAttempted.current.has(activeId)) return;
+    const suggestions = vocabularySuggestions ?? [];
+    const needing = suggestions.filter(
+      (item) => isContentPos(item.pos) && !item.english?.trim(),
+    );
+    if (needing.length === 0) return;
+    glossAttempted.current.add(activeId);
+
+    let cancelled = false;
+    setGlossState('loading');
+    void (async () => {
+      const result = await glossVocabulary({
+        sentence: japanese,
+        words: needing.map((item) => ({
+          expression: item.expression,
+          reading: item.reading,
+          surface: item.surface,
+        })),
+      });
+      if (cancelled) return;
+      if (!result.ok) {
+        setGlossState('error');
+        return;
+      }
+      setGlossState('idle');
+      const byExpression = new Map(
+        result.data.glosses
+          .filter((gloss) => gloss.meaning?.trim())
+          .map((gloss) => [gloss.expression, gloss]),
+      );
+      if (byExpression.size === 0) return;
+
+      const nextSuggestions: VocabularySuggestion[] = suggestions.map((item) =>
+        !item.english?.trim() && byExpression.has(item.expression)
+          ? { ...item, english: byExpression.get(item.expression)!.meaning }
+          : item,
+      );
+      await updateSentenceVocabularySuggestions(activeId, nextSuggestions);
+      setSelections((current) =>
+        current.map((selection) => {
+          if (selection.english?.trim()) return selection;
+          const gloss = byExpression.get(selection.expression);
+          if (!gloss) return selection;
+          return {
+            ...selection,
+            english: gloss.meaning,
+            pos: selection.pos || gloss.partOfSpeech,
+          };
+        }),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, data?.sentence?.id]);
+
+  const handleSuggestMeaning = useCallback(
+    async (word: { expression: string; reading: string }) => {
+      if (!japanese) return null;
+      const result = await glossVocabulary({
+        sentence: japanese,
+        words: [{ expression: word.expression, reading: word.reading }],
+      });
+      if (!result.ok) return null;
+      const gloss = result.data.glosses.find((item) => item.meaning?.trim());
+      return gloss
+        ? { meaning: gloss.meaning, partOfSpeech: gloss.partOfSpeech }
+        : null;
+    },
+    [japanese],
   );
 
   if (!data?.sentence || !data.book) {
@@ -166,6 +265,9 @@ export function VocabularyReviewPage() {
                     ? 'Unsaved'
                     : 'Ready'}
           </span>
+          {glossState === 'loading' ? (
+            <span className="muted">Glossing vocabulary…</span>
+          ) : null}
         </div>
         <VocabChips items={sentence.targetVocabulary} />
       </section>
@@ -175,6 +277,7 @@ export function VocabularyReviewPage() {
         suggestions={sentence.vocabularySuggestions ?? []}
         selections={selections}
         reviewStatus={reviewStatus}
+        onSuggestMeaning={handleSuggestMeaning}
         onChange={({ selections: nextSelections, reviewStatus: nextStatus }) => {
           setSelections(nextSelections);
           setReviewStatus(nextStatus);

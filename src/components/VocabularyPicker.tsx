@@ -53,6 +53,16 @@ export interface VocabularyPickerProps {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
+  /**
+   * Optional per-word AI meaning suggestion (VocabularyReviewPage wires this to
+   * the `vocab-assist` edge function). When omitted, the "Suggest (AI)" button
+   * is hidden — keeps this a self-contained controlled component with no
+   * network dependency of its own.
+   */
+  onSuggestMeaning?: (word: {
+    expression: string;
+    reading: string;
+  }) => Promise<{ meaning: string; partOfSpeech?: string } | null>;
 }
 
 const TRAY_ID = 'tray';
@@ -283,6 +293,7 @@ function SelectedCard({
   onToggleEdit,
   onRemove,
   onUpdate,
+  onSuggestMeaning,
 }: {
   item: VocabularySelection;
   japanese: string;
@@ -291,7 +302,34 @@ function SelectedCard({
   onToggleEdit: () => void;
   onRemove: () => void;
   onUpdate: (patch: Partial<VocabularySelection>) => void;
+  onSuggestMeaning?: VocabularyPickerProps['onSuggestMeaning'];
 }) {
+  const [suggestState, setSuggestState] = useState<
+    { status: 'idle' } | { status: 'loading' } | { status: 'error'; reason: string }
+  >({ status: 'idle' });
+
+  async function handleSuggestMeaning() {
+    if (!onSuggestMeaning || !item.expression.trim()) return;
+    setSuggestState({ status: 'loading' });
+    try {
+      const result = await onSuggestMeaning({
+        expression: item.expression.trim(),
+        reading: item.reading.trim(),
+      });
+      if (!result?.meaning?.trim()) {
+        setSuggestState({ status: 'error', reason: 'No suggestion available.' });
+        return;
+      }
+      setSuggestState({ status: 'idle' });
+      onUpdate({ english: result.meaning, pos: item.pos || result.partOfSpeech });
+    } catch {
+      setSuggestState({
+        status: 'error',
+        reason: 'Vocabulary AI is unavailable right now.',
+      });
+    }
+  }
+
   const {
     attributes,
     listeners,
@@ -411,13 +449,35 @@ function SelectedCard({
               onChange={(event) => onUpdate({ reading: event.target.value })}
             />
           </label>
-          <label>
-            Meaning (optional)
+          <div className="stack" style={{ gap: '0.3rem' }}>
+            <div
+              className="row"
+              style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
+            >
+              <span>Meaning (optional)</span>
+              {onSuggestMeaning ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={
+                    suggestState.status === 'loading' || !item.expression.trim()
+                  }
+                  onClick={() => void handleSuggestMeaning()}
+                >
+                  {suggestState.status === 'loading' ? 'Suggesting…' : 'Suggest (AI)'}
+                </button>
+              ) : null}
+            </div>
             <input
               value={item.english ?? ''}
               onChange={(event) => onUpdate({ english: event.target.value })}
             />
-          </label>
+            {suggestState.status === 'error' ? (
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                {suggestState.reason}
+              </span>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
@@ -431,6 +491,7 @@ export function VocabularyPicker({
   reviewStatus,
   onChange,
   onConfirm,
+  onSuggestMeaning,
 }: VocabularyPickerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -853,6 +914,7 @@ export function VocabularyPicker({
                   }
                   onRemove={() => removeSelection(item.id)}
                   onUpdate={(patch) => updateSelection(item.id, patch)}
+                  onSuggestMeaning={onSuggestMeaning}
                 />
               ))}
             </div>
