@@ -35,6 +35,7 @@
 import type { VocabularySuggestion } from '../src/domain/types';
 
 import { buildJmdictIndex, ensureJmdictFile, lookupJmdict } from './lib/jmdict';
+import { buildJmnedictIndex, ensureJmnedictFile, lookupJmnedict } from './lib/jmnedict';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -70,10 +71,11 @@ async function main() {
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
-  console.log('Fetching sentences with unglossed content-word suggestions, and loading JMDict...');
-  const [sentences, index] = await Promise.all([
+  console.log('Fetching sentences with unglossed content-word suggestions, and loading JMDict + JMnedict...');
+  const [sentences, index, nameIndex] = await Promise.all([
     fetchSentencesNeedingGlosses(supabase, user.id),
     ensureJmdictFile().then(buildJmdictIndex),
+    ensureJmnedictFile().then(buildJmnedictIndex),
   ]);
   console.log(`Found ${sentences.length} sentence(s) with at least one unglossed content word.`);
   if (!sentences.length) return;
@@ -91,14 +93,19 @@ async function main() {
         suggestion.reading || undefined,
         suggestion.pos || undefined,
       );
-      if (!result) {
+      const gloss =
+        result?.gloss ??
+        (suggestion.pos?.includes('固有名詞')
+          ? lookupJmnedict(nameIndex, suggestion.expression, suggestion.reading || undefined)?.gloss
+          : undefined);
+      if (!gloss) {
         suggestionsNotFound += 1;
         return suggestion;
       }
       suggestionsMatched += 1;
       changed = true;
-      console.log(`  ${suggestion.expression} [${suggestion.reading}] — ${result.gloss}`);
-      return { ...suggestion, english: result.gloss };
+      console.log(`  ${suggestion.expression} [${suggestion.reading}] — ${gloss}`);
+      return { ...suggestion, english: gloss };
     });
     if (!changed) continue;
     sentencesUpdated += 1;

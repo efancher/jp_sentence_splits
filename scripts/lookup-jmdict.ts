@@ -8,6 +8,7 @@
  *   homophone ties — e.g. `npm run jmdict:lookup -- する 動詞`.
  */
 import { buildJmdictIndex, ensureJmdictFile, lookupJmdict } from './lib/jmdict';
+import { buildJmnedictIndex, ensureJmnedictFile, lookupJmnedict } from './lib/jmnedict';
 
 async function main() {
   const [expression, reading, pos] = process.argv.slice(2);
@@ -22,12 +23,19 @@ async function main() {
   const index = buildJmdictIndex(file);
 
   const result = lookupJmdict(index, expression, reading, pos);
-  if (!result) {
-    console.log(`No match for "${expression}"${reading ? ` (${reading})` : ''}.`);
+  if (result) {
+    console.log(`${result.expression} [${result.reading}] — ${result.gloss}`);
+    console.log(`  pos: ${result.pos || '(none)'}  common: ${result.common}`);
     return;
   }
-  console.log(`${result.expression} [${result.reading}] — ${result.gloss}`);
-  console.log(`  pos: ${result.pos || '(none)'}  common: ${result.common}`);
+
+  const name = lookupJmnedict(buildJmnedictIndex(await ensureJmnedictFile()), expression, reading);
+  if (name) {
+    console.log(`${name.expression} [${name.reading}] — ${name.gloss}  (JMnedict)`);
+    return;
+  }
+
+  console.log(`No match for "${expression}"${reading ? ` (${reading})` : ''}.`);
 }
 
 main().catch((error) => {

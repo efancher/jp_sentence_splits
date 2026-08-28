@@ -18,6 +18,7 @@
  * Usage: npm run backfill:vocabulary-meanings -- [--apply]
  */
 import { buildJmdictIndex, ensureJmdictFile, lookupJmdict } from './lib/jmdict';
+import { buildJmnedictIndex, ensureJmnedictFile, lookupJmnedict } from './lib/jmnedict';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -56,10 +57,11 @@ async function main() {
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
-  console.log('Fetching vocabulary items with no meaning yet, and loading JMDict...');
-  const [items, index] = await Promise.all([
+  console.log('Fetching vocabulary items with no meaning yet, and loading JMDict + JMnedict...');
+  const [items, index, nameIndex] = await Promise.all([
     fetchBlankMeaningItems(supabase, user.id),
     ensureJmdictFile().then(buildJmdictIndex),
+    ensureJmnedictFile().then(buildJmnedictIndex),
   ]);
   console.log(`Found ${items.length} item(s) with a blank meaning.`);
   if (!items.length) return;
@@ -73,17 +75,20 @@ async function main() {
       item.reading || undefined,
       item.partOfSpeech || undefined,
     );
-    if (!result) {
+    // Proper nouns have no JMDict entry — fall back to JMnedict.
+    const name = result ? null : lookupJmnedict(nameIndex, item.expression, item.reading || undefined);
+    const gloss = result?.gloss ?? name?.gloss;
+    if (!gloss) {
       notFound += 1;
       continue;
     }
     matched += 1;
     console.log(
-      `  ${item.expression} [${item.reading}] — ${result.gloss}${item.partOfSpeech ? '' : ` (pos: ${result.pos || '(none)'})`}`,
+      `  ${item.expression} [${item.reading}] — ${gloss}${item.partOfSpeech || !result ? '' : ` (pos: ${result.pos || '(none)'})`}`,
     );
     if (apply) {
-      const patch: Record<string, string> = { meaning: result.gloss };
-      if (!item.partOfSpeech && result.pos) patch.part_of_speech = result.pos;
+      const patch: Record<string, string> = { meaning: gloss };
+      if (!item.partOfSpeech && result?.pos) patch.part_of_speech = result.pos;
       const { error } = await supabase
         .from('vocabulary_items')
         .update(patch)
