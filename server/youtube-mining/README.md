@@ -71,9 +71,25 @@ included) with "Sign in to confirm you're not a bot" unless yt-dlp
 presents cookies from a real logged-in browser session. Export one from
 your own browser (already signed into YouTube) — e.g. the "Get
 cookies.txt LOCALLY" extension, or on a machine with a real browser
-profile: `yt-dlp --cookies-from-browser chrome --cookies -
-https://www.youtube.com > youtube-cookies.txt` — and copy it to
-`server/youtube-mining/youtube-cookies.txt` on this host (gitignored,
+profile:
+
+```
+yt-dlp --cookies-from-browser firefox --cookies youtube-cookies.txt \
+  --skip-download "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+yt-dlp loads cookies from the browser and writes the jar out to the
+`--cookies` path when it exits. Do **not** redirect stdout (`>`) — that
+captures the log, not the cookies — and use a real watch URL, not the
+bare homepage (which resolves to your recommended feed). The exported
+file must start with `# Netscape HTTP Cookie File` and contain
+`.youtube.com` auth lines (`__Secure-3PSID`, `LOGIN_INFO`); if those are
+missing, that browser profile isn't actually signed into YouTube. On
+macOS, avoid `--cookies-from-browser safari` — Safari's cookie store is
+in an Apple-sandboxed container and yt-dlp gets `Operation not permitted`
+unless the terminal has Full Disk Access; use Firefox or the extension
+instead. Copy
+it to `server/youtube-mining/youtube-cookies.txt` on this host (gitignored,
 never commit it — it's equivalent to a session credential). The systemd
 unit already points `MINING_YTDLP_COOKIES_FILE` at that path; without the
 file present, mining jobs from this host will fail at the download step.
