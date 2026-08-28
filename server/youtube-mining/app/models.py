@@ -22,6 +22,9 @@ class Cue(BaseModel):
     endMs: int
     text: str
     isAuto: bool = False
+    # Original-input positions this cue descends from, set by resegment.py's
+    # merge/split passes; None until a provenance-tracking pass runs.
+    sourceIndexes: list[int] | None = None
 
 
 class MorphemeToken(BaseModel):
@@ -72,6 +75,33 @@ class CreateJobRequest(BaseModel):
 
 class CreateJobResponse(BaseModel):
     jobId: str
+
+
+class ResegmentSentenceInput(BaseModel):
+    japanese: str = Field(min_length=1)
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=0)
+
+
+class ResegmentRequest(BaseModel):
+    sentences: list[ResegmentSentenceInput] = Field(min_length=1)
+    # Both default true = full resegmentation (merge cut-off cues, then split
+    # bundled ones). Both false = annotate-only: return each input unchanged
+    # with its reading/tokens, for lyrics/manual mode where punctuation is not
+    # a reliable boundary signal.
+    merge: bool = True
+    split: bool = True
+    generateKana: bool = True
+
+
+class ResegmentedCue(BaseModel):
+    japanese: str
+    startMs: int
+    endMs: int
+    reading: str | None = None
+    tokens: list[MorphemeToken] | None = None
+    # Indexes into the request's `sentences` that fed this cue.
+    sourceIndexes: list[int]
 
 
 class ClipRequest(BaseModel):

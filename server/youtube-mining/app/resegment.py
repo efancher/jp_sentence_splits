@@ -46,6 +46,17 @@ def _ends_sentence(text: str) -> bool:
     return index >= 0 and stripped[index] in _TERMINAL_CHARS
 
 
+def _source_indexes(cue: Cue) -> list[int]:
+    """Which original-input positions a cue descends from.
+
+    Populated as cues are merged/split so a caller (the /resegment endpoint)
+    can map each resulting sentence back to the request sentences that fed
+    it — needed to migrate study progress. Falls back to the cue's own
+    `index` for a cue that has not been through a provenance-tracking pass.
+    """
+    return list(cue.sourceIndexes) if cue.sourceIndexes is not None else [cue.index]
+
+
 def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
     """Merge consecutive cues until each merged cue ends on a sentence boundary.
 
@@ -57,28 +68,10 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
     buffer_start: int | None = None
     buffer_end: int | None = None
     buffer_auto = False
+    buffer_sources: list[int] = []
 
-    for cue in cues:
-        if buffer_start is None:
-            buffer_start = cue.startMs
-        buffer_text = join_fragments(buffer_text, cue.text)
-        buffer_end = cue.endMs
-        buffer_auto = buffer_auto or cue.isAuto
-        if _ends_sentence(buffer_text):
-            merged.append(
-                Cue(
-                    index=len(merged),
-                    startMs=buffer_start,
-                    endMs=buffer_end,
-                    text=buffer_text,
-                    isAuto=buffer_auto,
-                )
-            )
-            buffer_text = ""
-            buffer_start = None
-            buffer_auto = False
-
-    if buffer_text and buffer_start is not None and buffer_end is not None:
+    def flush() -> None:
+        nonlocal buffer_text, buffer_start, buffer_auto, buffer_sources
         merged.append(
             Cue(
                 index=len(merged),
@@ -86,8 +79,26 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
                 endMs=buffer_end,
                 text=buffer_text,
                 isAuto=buffer_auto,
+                sourceIndexes=sorted(set(buffer_sources)),
             )
         )
+        buffer_text = ""
+        buffer_start = None
+        buffer_auto = False
+        buffer_sources = []
+
+    for cue in cues:
+        if buffer_start is None:
+            buffer_start = cue.startMs
+        buffer_text = join_fragments(buffer_text, cue.text)
+        buffer_end = cue.endMs
+        buffer_auto = buffer_auto or cue.isAuto
+        buffer_sources.extend(_source_indexes(cue))
+        if _ends_sentence(buffer_text):
+            flush()
+
+    if buffer_text and buffer_start is not None and buffer_end is not None:
+        flush()
     return merged
 
 
@@ -100,9 +111,17 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
         remainder = cue.text[consumed_len:].strip()
         if remainder:
             pieces.append(remainder)
+        sources = _source_indexes(cue)
         if len(pieces) <= 1:
             result.append(
-                Cue(index=len(result), startMs=cue.startMs, endMs=cue.endMs, text=cue.text, isAuto=cue.isAuto)
+                Cue(
+                    index=len(result),
+                    startMs=cue.startMs,
+                    endMs=cue.endMs,
+                    text=cue.text,
+                    isAuto=cue.isAuto,
+                    sourceIndexes=sources,
+                )
             )
             continue
 
@@ -118,7 +137,14 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
             )
             piece_end = max(piece_end, cursor + 1)
             result.append(
-                Cue(index=len(result), startMs=cursor, endMs=piece_end, text=piece, isAuto=cue.isAuto)
+                Cue(
+                    index=len(result),
+                    startMs=cursor,
+                    endMs=piece_end,
+                    text=piece,
+                    isAuto=cue.isAuto,
+                    sourceIndexes=list(sources),
+                )
             )
             cursor = piece_end
     return result

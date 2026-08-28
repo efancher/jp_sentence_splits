@@ -72,7 +72,10 @@ import {
   type ContextDiversity,
   type MaturityLevel,
 } from '../lib/maturity';
-import { nowIso } from '../lib/normalize';
+import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
+import { nowIso, normalizeSentenceKey } from '../lib/normalize';
+import type { ResegmentPlan } from '../lib/resegmentPlan';
+import { suggestionsFromTokens } from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
   createInitialFsrsState,
@@ -122,6 +125,7 @@ import {
 } from '../lib/curatedVocabulary';
 import { ensureSettings, getDb, localDateKey, readSettings } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
+import type { SyncEntity } from '../sync/types';
 
 function sortSentences(
   sentences: Sentence[],
@@ -247,6 +251,449 @@ export async function updateSentenceVocabularySuggestions(
   };
   await db.sentences.put(updated);
   notifySync('sentences', updated.id, updated);
+}
+
+type PendingSyncOp = {
+  entity: SyncEntity;
+  recordId: string;
+  payload: unknown;
+  operation?: 'upsert' | 'delete';
+};
+
+/**
+ * Local cascade for retiring a sentence, run inside an existing `rw`
+ * transaction. Appends the matching sync ops to `sink` (fired by the caller
+ * after the transaction commits) rather than calling `notifySync` directly,
+ * so a caller doing many of these keeps them in one batch.
+ *
+ * `keepStudyItemIds` holds sentence-subject study items the caller has
+ * already repointed onto a replacement sentence — those must survive.
+ */
+async function cascadeRetireSentenceLocal(
+  db: ReturnType<typeof getDb>,
+  sentenceId: string,
+  sink: PendingSyncOp[],
+  keepStudyItemIds: Set<string> = new Set(),
+): Promise<void> {
+  const sentence = await db.sentences.get(sentenceId);
+  if (!sentence) return;
+
+  const memberships = await db.bookSentences
+    .where('sentenceId')
+    .equals(sentenceId)
+    .toArray();
+  for (const membership of memberships) {
+    await db.bookSentences.delete(membership.id);
+    sink.push({
+      entity: 'book_sentences',
+      recordId: membership.id,
+      payload: { id: membership.id },
+      operation: 'delete',
+    });
+  }
+
+  if (await db.analyses.get(sentenceId)) {
+    await db.analyses.delete(sentenceId);
+    sink.push({
+      entity: 'analyses',
+      recordId: sentenceId,
+      payload: { sentenceId },
+      operation: 'delete',
+    });
+  }
+
+  for (const link of await db.sentenceVocabulary
+    .where('sentenceId')
+    .equals(sentenceId)
+    .toArray()) {
+    await db.sentenceVocabulary.delete(link.id);
+    sink.push({
+      entity: 'sentence_vocabulary',
+      recordId: link.id,
+      payload: { id: link.id },
+      operation: 'delete',
+    });
+  }
+
+  for (const link of await db.sentenceGrammar
+    .where('sentenceId')
+    .equals(sentenceId)
+    .toArray()) {
+    await db.sentenceGrammar.delete(link.id);
+    sink.push({
+      entity: 'sentence_grammar',
+      recordId: link.id,
+      payload: { id: link.id },
+      operation: 'delete',
+    });
+  }
+
+  const studyItems = (
+    await db.studyItems.where('subjectId').equals(sentenceId).toArray()
+  ).filter((item) => item.subjectType === 'sentence' && !keepStudyItemIds.has(item.id));
+  for (const item of studyItems) {
+    await db.studyItems.delete(item.id);
+    sink.push({
+      entity: 'study_items',
+      recordId: item.id,
+      payload: { id: item.id },
+      operation: 'delete',
+    });
+  }
+
+  if (await db.inbox.get(sentenceId)) {
+    await db.inbox.delete(sentenceId);
+    sink.push({
+      entity: 'inbox',
+      recordId: sentenceId,
+      payload: { sentenceId },
+      operation: 'delete',
+    });
+  }
+
+  await db.sentences.delete(sentenceId);
+  sink.push({
+    entity: 'sentences',
+    recordId: sentenceId,
+    payload: { id: sentenceId },
+    operation: 'delete',
+  });
+}
+
+/**
+ * Retire a sentence and everything that hangs off it (book memberships,
+ * analysis, vocabulary/grammar links, sentence-subject study items, inbox
+ * entry). The first sentence-delete path in the app — sentences were
+ * previously only ever removed by the sync engine applying a *remote*
+ * delete. Soft-deletes remotely via the normal queued-`delete` path (never a
+ * raw DELETE). `reviews.context_sentence_id` left dangling is harmless (a
+ * soft delete never fires the server-side `on delete set null`).
+ */
+export async function deleteSentenceCascade(sentenceId: string): Promise<void> {
+  const db = getDb();
+  const sink: PendingSyncOp[] = [];
+  await db.transaction(
+    'rw',
+    [
+      db.sentences,
+      db.bookSentences,
+      db.analyses,
+      db.sentenceVocabulary,
+      db.sentenceGrammar,
+      db.studyItems,
+      db.inbox,
+    ],
+    async () => {
+      await cascadeRetireSentenceLocal(db, sentenceId, sink);
+    },
+  );
+  notifySyncMany(sink);
+}
+
+export interface ResegmentSourceSentence {
+  id: string;
+  japanese: string;
+  translation: string;
+  startMs: number;
+  endMs: number;
+  firstOccurrenceIndex: number;
+  studyItems: {
+    id: string;
+    activityType: string;
+    fsrsReps: number;
+    reviewCount: number;
+  }[];
+}
+
+export interface ResegmentSourceContext {
+  bookTitle: string;
+  /** e.g. `source-FkX4A-ZLBrc` — prefix of the shadowing sourceReference cardIds. */
+  sourceId: string;
+  sentences: ResegmentSourceSentence[];
+}
+
+const VIDEO_POSITION_RE = /Video position:\s*([\d.]+)\s*[–-]\s*([\d.]+)\s*seconds/;
+
+/**
+ * Gather a shadowing book's current sentences (in caption order) plus the
+ * sentence-subject study progress on each, for `ResegmentSourcePage`. Only
+ * sentences carrying a `SHADOWING` source reference are included — a book
+ * could in principle also hold sentences from other imports.
+ */
+export async function loadResegmentSourceContext(
+  bookId: string,
+): Promise<ResegmentSourceContext | null> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) return null;
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .sortBy('position');
+  const rows = (await db.sentences.bulkGet(memberships.map((m) => m.sentenceId)))
+    .filter((s): s is Sentence => Boolean(s))
+    .map((sentence) => ({
+      sentence,
+      ref: sentence.sourceReferences.find((r) => r.cardType === 'SHADOWING'),
+    }))
+    .filter((entry): entry is { sentence: Sentence; ref: NonNullable<typeof entry.ref> } =>
+      Boolean(entry.ref),
+    );
+
+  rows.sort(
+    (a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex,
+  );
+
+  const sourceId = rows[0]?.ref.cardId.split(':')[0] ?? '';
+  const sentences: ResegmentSourceSentence[] = [];
+  let fallbackMs = 0;
+  for (const { sentence, ref } of rows) {
+    const match = ref.userNotes?.match(VIDEO_POSITION_RE);
+    const startMs = match ? Math.round(Number(match[1]) * 1000) : fallbackMs;
+    const endMs = match ? Math.round(Number(match[2]) * 1000) : fallbackMs + 1000;
+    fallbackMs = endMs;
+    const studyItems = (
+      await db.studyItems.where('subjectId').equals(sentence.id).toArray()
+    ).filter((item) => item.subjectType === 'sentence');
+    sentences.push({
+      id: sentence.id,
+      japanese: sentence.japanese,
+      translation: sentence.translation,
+      startMs,
+      endMs,
+      firstOccurrenceIndex: sentence.firstOccurrenceIndex,
+      studyItems: await Promise.all(
+        studyItems.map(async (item) => ({
+          id: item.id,
+          activityType: item.activityType,
+          fsrsReps: item.fsrsState.reps,
+          reviewCount: await db.reviews
+            .where('studyItemId')
+            .equals(item.id)
+            .count(),
+        })),
+      ),
+    });
+  }
+  return { bookTitle: book.title, sourceId, sentences };
+}
+
+/**
+ * Replace a shadowing source's badly-segmented sentences with the reviewed
+ * re-segmentation (`src/lib/resegmentPlan.ts`, `src/pages/ResegmentSourcePage.tsx`):
+ * create the new sentences, splice them into the book in place of the old
+ * ones, carry study progress across per the plan's `studyItemMoves`, repoint
+ * vocabulary links whose surface form survives, and retire the old sentences.
+ * Analysis (chunk boundaries) and grammar links are offset-bound and dropped
+ * — the new sentences start unanalyzed.
+ */
+export async function applyResegmentation(
+  bookId: string,
+  plan: ResegmentPlan,
+): Promise<{ batchId: string; newSentenceIds: string[] }> {
+  const db = getDb();
+  const timestamp = nowIso();
+  const batchId = createId('batch');
+  const sink: PendingSyncOp[] = [];
+
+  const oldSentences = (
+    await db.sentences.bulkGet(plan.retiredSentenceIds)
+  ).filter((s): s is Sentence => Boolean(s));
+  const templateRef =
+    oldSentences
+      .flatMap((s) => s.sourceReferences)
+      .find((ref) => ref.cardType === 'SHADOWING') ??
+    oldSentences.flatMap((s) => s.sourceReferences)[0];
+  const sourceId = templateRef?.cardId.split(':')[0] ?? `resegment-${bookId}`;
+
+  // tempIndex -> new sentence id
+  const newIds: string[] = plan.plannedSentences.map((planned) =>
+    sentenceIdFromNormalizedKey(normalizeSentenceKey(planned.japanese)),
+  );
+
+  const newSentences: Sentence[] = plan.plannedSentences.map((planned, index) => ({
+    id: newIds[index]!,
+    normalizedKey: normalizeSentenceKey(planned.japanese),
+    japanese: planned.japanese,
+    readingOnly: planned.readingOnly,
+    inlineReading:
+      planned.inlineReading ||
+      inlineReadingFromTokens(planned.japanese, planned.tokens),
+    translation: planned.translation,
+    targetVocabulary: [],
+    vocabularySuggestions: suggestionsFromTokens(planned.japanese, planned.tokens),
+    sourceReferences: [
+      {
+        cardId: `${sourceId}:reseg-${String(index).padStart(3, '0')}`,
+        cardType: 'SHADOWING',
+        contextNumber: 1,
+        userNotes: templateRef?.userNotes,
+        importBatchId: batchId,
+      },
+    ],
+    conflicts: [],
+    firstOccurrenceIndex: planned.firstOccurrenceIndex,
+    importBatchIds: [batchId],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+
+  const keepStudyItemIds = new Set(
+    plan.studyItemMoves
+      .filter((move) => move.targetIndex !== null)
+      .map((move) => move.studyItemId),
+  );
+  const mappingByOld = new Map(
+    plan.sentenceMapping.map((m) => [m.oldSentenceId, m.targetIndex]),
+  );
+
+  await db.transaction(
+    'rw',
+    [
+      db.sentences,
+      db.bookSentences,
+      db.analyses,
+      db.sentenceVocabulary,
+      db.sentenceGrammar,
+      db.studyItems,
+      db.inbox,
+      db.books,
+      db.importBatches,
+    ],
+    async () => {
+      // 1. New sentences (dedupe if two segments normalize equal).
+      const seen = new Set<string>();
+      for (const sentence of newSentences) {
+        if (seen.has(sentence.id)) continue;
+        seen.add(sentence.id);
+        await db.sentences.put(sentence);
+        sink.push({ entity: 'sentences', recordId: sentence.id, payload: sentence });
+      }
+
+      // 2. Carry study progress across.
+      const studyItems = await db.studyItems.bulkGet(
+        plan.studyItemMoves.map((move) => move.studyItemId),
+      );
+      for (let i = 0; i < plan.studyItemMoves.length; i += 1) {
+        const move = plan.studyItemMoves[i]!;
+        const item = studyItems[i];
+        if (!item) continue;
+        if (move.targetIndex === null) {
+          await db.studyItems.delete(item.id);
+          sink.push({
+            entity: 'study_items',
+            recordId: item.id,
+            payload: { id: item.id },
+            operation: 'delete',
+          });
+          continue;
+        }
+        const updated: StudyItem = {
+          ...item,
+          subjectId: newIds[move.targetIndex]!,
+          updatedAt: timestamp,
+        };
+        await db.studyItems.put(updated);
+        sink.push({ entity: 'study_items', recordId: updated.id, payload: updated });
+      }
+
+      // 3. Repoint vocabulary links whose surface form survives the re-split.
+      const repointed = new Set<string>();
+      for (const oldId of plan.retiredSentenceIds) {
+        const targetIndex = mappingByOld.get(oldId) ?? null;
+        for (const link of await db.sentenceVocabulary
+          .where('sentenceId')
+          .equals(oldId)
+          .toArray()) {
+          const newSentence =
+            targetIndex === null ? undefined : newSentences[targetIndex];
+          const survives =
+            newSentence &&
+            (!link.surfaceForm || newSentence.japanese.includes(link.surfaceForm));
+          const dedupeKey = newSentence
+            ? `${newSentence.id}:${link.vocabularyItemId}`
+            : '';
+          if (survives && !repointed.has(dedupeKey)) {
+            repointed.add(dedupeKey);
+            const moved: SentenceVocabulary = {
+              ...link,
+              sentenceId: newSentence!.id,
+            };
+            await db.sentenceVocabulary.delete(link.id);
+            await db.sentenceVocabulary.put(moved);
+            sink.push({
+              entity: 'sentence_vocabulary',
+              recordId: moved.id,
+              payload: moved,
+            });
+          }
+          // links that don't survive are removed by cascadeRetireSentenceLocal
+        }
+      }
+
+      // 4. Retire the old sentences (keeping the repointed study items).
+      for (const oldId of plan.retiredSentenceIds) {
+        await cascadeRetireSentenceLocal(db, oldId, sink, keepStudyItemIds);
+      }
+
+      // 5. Splice the new sentences into the book in segment order.
+      const remaining = await db.bookSentences
+        .where('bookId')
+        .equals(bookId)
+        .sortBy('position');
+      const additions = seen.size
+        ? [...seen].map((sentenceId, index) => ({
+            id: createId('bs'),
+            bookId,
+            sentenceId,
+            position: index,
+            status: 'unstarted' as StudyStatus,
+            addedAt: timestamp,
+          }))
+        : [];
+      const repositioned = remaining.map((item, index) => ({
+        ...item,
+        position: additions.length + index,
+      }));
+      await db.bookSentences.bulkPut([...additions, ...repositioned]);
+      for (const row of [...additions, ...repositioned]) {
+        sink.push({ entity: 'book_sentences', recordId: row.id, payload: row });
+      }
+
+      // 6. Import batch + book bump.
+      const batch: ImportBatch = {
+        id: batchId,
+        filename: `resegment:${sourceId}`,
+        batchName: `Re-segmented ${new Date(timestamp).toLocaleDateString()}`,
+        importedAt: timestamp,
+        counts: {
+          totalRows: newSentences.length,
+          contextOccurrences: 0,
+          uniqueSentences: seen.size,
+          newSentences: seen.size,
+          updatedSentences: 0,
+          exactDuplicatesIgnored: 0,
+          newVocabularyAssociations: 0,
+          rowsSkipped: 0,
+          warningCount: 0,
+          conflictCount: 0,
+        },
+        warnings: [],
+      };
+      await db.importBatches.put(batch);
+      sink.push({ entity: 'import_batches', recordId: batch.id, payload: batch });
+
+      const book = await db.books.get(bookId);
+      if (book) {
+        const updatedBook = { ...book, updatedAt: timestamp };
+        await db.books.put(updatedBook);
+        sink.push({ entity: 'books', recordId: book.id, payload: updatedBook });
+      }
+    },
+  );
+
+  notifySyncMany(sink);
+  return { batchId, newSentenceIds: [...new Set(newIds)] };
 }
 
 export async function deleteBook(bookId: string): Promise<void> {

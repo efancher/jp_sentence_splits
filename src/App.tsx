@@ -75,6 +75,11 @@ const CardIssuesPage = lazy(() =>
     default: module.CardIssuesPage,
   })),
 );
+const ResegmentSourcePage = lazy(() =>
+  import('./pages/ResegmentSourcePage').then((module) => ({
+    default: module.ResegmentSourcePage,
+  })),
+);
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((module) => ({
     default: module.SearchPage,
@@ -170,6 +175,10 @@ export default function App() {
               element={<PracticePage />}
             />
             <Route path="books/:bookId/review" element={<ReviewPage />} />
+            <Route
+              path="books/:bookId/resegment"
+              element={<ResegmentSourcePage />}
+            />
             <Route path="books/:bookId/build" element={<BuildPage />} />
             <Route
               path="books/:bookId/build/:sentenceId"

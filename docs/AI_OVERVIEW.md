@@ -456,6 +456,21 @@ observed from outside `ReviewPage`'s own due-queue state.
   `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior as above; only how the preview gets
   built differs.
+- **Re-segment captions** (`ResegmentSourcePage.tsx`, route
+  `/books/:bookId/resegment`, button on `BookDetailPage` for
+  `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on
+  real sentence boundaries after the fact, for imports that predate the
+  resegmentation pass. Calls the stateless `POST /resegment` on
+  `server/youtube-mining` (re-segment + kana + tokens, no re-download;
+  `merge:false split:false` = annotate-only for song lyrics), lets the
+  user merge/split/edit in a review step, then `applyResegmentation()`
+  (`src/db/repository.ts`) creates the new sentences, retires the old
+  ones (`deleteSentenceCascade` — the only sentence-delete path; soft
+  delete, never raw DELETE), carries study progress onto the
+  best-text-overlap replacement (`src/lib/resegmentPlan.ts`), and repoints
+  surviving vocabulary links. Chunk analysis is offset-bound and dropped.
+  No machine translation — a split sentence keeps the joined source
+  translation, flagged for the user to check.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori

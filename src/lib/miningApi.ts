@@ -77,10 +77,26 @@ const clipResponseSchema = z.object({
   }),
 });
 
+const resegmentedCueSchema = z.object({
+  japanese: z.string(),
+  startMs: z.number(),
+  endMs: z.number(),
+  reading: z.string().nullable().optional(),
+  tokens: z.array(morphemeTokenSchema).nullable().optional(),
+  sourceIndexes: z.array(z.number()),
+});
+
 export type MiningSourceInfo = z.infer<typeof sourceInfoSchema>;
 export type MiningCue = z.infer<typeof cueSchema>;
 export type MiningJobStatus = z.infer<typeof jobStatusSchema>;
 export type MiningClipResult = z.infer<typeof clipResponseSchema>;
+export type ResegmentedCue = z.infer<typeof resegmentedCueSchema>;
+
+export interface ResegmentSentenceInput {
+  japanese: string;
+  startMs: number;
+  endMs: number;
+}
 
 export interface ClipCueOptions {
   japanese: string;
@@ -154,6 +170,34 @@ export async function fetchMiningClipAudio(
     throw new Error(`Failed to fetch clip audio: ${await readErrorDetail(response)}`);
   }
   return response.blob();
+}
+
+/**
+ * Re-segment an already-imported source's sentences without re-downloading
+ * (server/youtube-mining `POST /resegment`, stateless). `merge`/`split`
+ * default true — full resegmentation for drama transcripts; pass both false
+ * for annotate-only (lyrics / manual mode, where sentence-final punctuation
+ * isn't a reliable boundary). Returns the new cues with kana readings +
+ * morpheme tokens and, per cue, which input indexes fed it.
+ */
+export async function resegmentSentences(
+  sentences: ResegmentSentenceInput[],
+  options: { merge?: boolean; split?: boolean; generateKana?: boolean } = {},
+): Promise<ResegmentedCue[]> {
+  const response = await fetch(`${API_BASE}/resegment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sentences,
+      merge: options.merge ?? true,
+      split: options.split ?? true,
+      generateKana: options.generateKana ?? true,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to re-segment: ${await readErrorDetail(response)}`);
+  }
+  return z.array(resegmentedCueSchema).parse(await response.json());
 }
 
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */

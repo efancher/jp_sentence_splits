@@ -413,6 +413,11 @@ export function BookDetailPage() {
           <Link to={`/books/${bookId}/review`}>
             <button type="button">Review</button>
           </Link>
+          {data.book.sourceKey?.startsWith('shadowing:') ? (
+            <Link to={`/books/${bookId}/resegment`}>
+              <button type="button">Re-segment captions</button>
+            </Link>
+          ) : null}
           <button type="button" onClick={() => setEditMetadata(true)}>
             Edit details
           </button>

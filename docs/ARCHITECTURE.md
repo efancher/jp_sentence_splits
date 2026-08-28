@@ -206,7 +206,11 @@ configurable FSRS-interval threshold).
   `shadowing-analysis-api` below (own systemd unit + tailscale path).
   `src/lib/miningApi.ts` is the frontend client; unlike `analysisApi.ts`,
   failures throw rather than degrading silently, since this is the whole
-  feature the page is driving, not an optional enhancement.
+  feature the page is driving, not an optional enhancement. Also serves a
+  stateless `POST /resegment` (no download/ffmpeg) that
+  `ResegmentSourcePage.tsx` uses to re-split an *already-imported* source's
+  sentences — the same `resegment.py` + `readings.py` + `morphology.py`
+  the mining pipeline runs, over plain text.
 - **`anki` repo**: archived (Phase 6, read-only on GitHub) — existing
   Satori/Shadowing sentence notes were imported once via `anki_headless/`
   and verified (Phase 2). WaniKani-catalog and JMDict vocabulary/kanji

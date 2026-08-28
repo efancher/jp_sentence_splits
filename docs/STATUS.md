@@ -1,6 +1,34 @@
 # Status
 
-Last updated: 2026-08-28 (Pitch-accent review card now shows the pattern.
+Last updated: 2026-08-28 (Re-segment an existing shadowing source — in-app.
+Follow-up to the pitch-accent triage below: the "さ、さすがです。水希。たったの"
+fragment is systemic to the pre-`resegment.py` "After Work" / "First Day at
+Work" / GLIM-SPANKY imports. The app forbids editing a sentence's `japanese`
+in place and re-import keys on `normalizedKey`, so this is a deliberate
+replace flow. **Server**: new stateless `POST /resegment` on
+`server/youtube-mining` — `{sentences:[{japanese,startMs,endMs}], merge?, split?}`
+→ re-segmented cues + kana readings + morpheme tokens, no yt-dlp/ffmpeg;
+`merge:false split:false` = annotate-only (lyrics/manual mode). `resegment.py`
+now threads `sourceIndexes` provenance through merge/split. **Client**:
+`src/lib/inlineReadingFromTokens.ts` (pure `漢字[かな]` builder — also wired
+into `shadowingImport.ts buildDrafts`, closing the long-standing "mining
+imports have no inline_reading" gap); `src/lib/resegmentPlan.ts` (pure —
+maps each old sentence's study progress onto the new sentence sharing the
+longest common run, gated at 0.6 containment; resolves per-activity
+collisions by keeping the more-reviewed card); `applyResegmentation` +
+`deleteSentenceCascade` + `loadResegmentSourceContext` in `repository.ts`
+(the app's first sentence-delete path — soft-deletes via the normal queued
+`delete`, never raw DELETE; carries FSRS state, repoints surviving
+`sentence_vocabulary` links, drops offset-bound `analyses`/`sentence_grammar`);
+`ResegmentSourcePage.tsx` at `/books/:bookId/resegment` with a "Re-segment
+captions" button on `BookDetailPage` for shadowing books. No MT — split
+sentences carry the joined source translation flagged "verify". Tests:
+`tests/{resegmentPlan,inlineReadingFromTokens,applyResegmentation,resegmentSourcePage}`
++ `server/youtube-mining/tests/test_resegment_api.py`. **Not yet run against
+production data** — needs the user to drive the flow on the real "After Work"
+book and confirm study cards survived a sync cycle.)
+
+Before that: 2026-08-28 (Pitch-accent review card now shows the pattern.
 Card-issue triage of a "would be nice if the pitch pattern was displayed"
 report: the `pitch_accent` SRS card (`PitchAccentCard`, `ReviewPage.tsx`)
 only ever named the category on reveal ("Heiban (平板)") and drew nothing.

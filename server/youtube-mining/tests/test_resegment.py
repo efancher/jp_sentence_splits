@@ -65,3 +65,43 @@ def test_resegment_cues_merges_then_splits() -> None:
     result = resegment_cues(cues)
     assert [cue.text for cue in result] == ["彼は来た。", "今日は晴れです。"]
     assert [cue.index for cue in result] == [0, 1]
+
+
+def test_resegment_tracks_source_indexes_across_merge_and_split() -> None:
+    # Mirrors the real "たったの1ヶ月" breakage: a fragment cut off mid-sentence,
+    # merged with the next cue, which then bundles two sentences.
+    cues = [
+        Cue(index=0, startMs=0, endMs=1000, text="さすがです。水希。たったの"),
+        Cue(index=1, startMs=1000, endMs=2000, text="1ヶ月だよ。変わんないじゃん。"),
+        Cue(index=2, startMs=2000, endMs=3000, text="別の話。"),
+    ]
+    result = resegment_cues(cues)
+    assert [cue.text for cue in result] == [
+        "さすがです。",
+        "水希。",
+        "たったの1ヶ月だよ。",
+        "変わんないじゃん。",
+        "別の話。",
+    ]
+    # Cues 0+1 merged (0 was cut off mid-sentence), so every piece of that
+    # merge is attributed to both; cue 2 stood alone.
+    assert [cue.sourceIndexes for cue in result] == [
+        [0, 1],
+        [0, 1],
+        [0, 1],
+        [0, 1],
+        [2],
+    ]
+
+
+def test_merge_can_be_skipped_for_punctuationless_lyrics() -> None:
+    cues = [
+        Cue(index=0, startMs=0, endMs=1000, text="なあ 全身全霊で", sourceIndexes=[0]),
+        Cue(index=1, startMs=1000, endMs=2000, text="ぶつかろうぜ 輝くために", sourceIndexes=[1]),
+    ]
+    # merge would fuse these (neither ends on 。); split leaves them alone.
+    assert [c.text for c in split_multi_sentence_cues(cues)] == [
+        "なあ 全身全霊で",
+        "ぶつかろうぜ 輝くために",
+    ]
+    assert [c.sourceIndexes for c in split_multi_sentence_cues(cues)] == [[0], [1]]
