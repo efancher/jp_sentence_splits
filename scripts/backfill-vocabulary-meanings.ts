@@ -75,9 +75,16 @@ async function main() {
       item.reading || undefined,
       item.partOfSpeech || undefined,
     );
-    // Proper nouns have no JMDict entry — fall back to JMnedict.
-    const name = result ? null : lookupJmnedict(nameIndex, item.expression, item.reading || undefined);
-    const gloss = result?.gloss ?? name?.gloss;
+    // Proper nouns have no JMDict entry — fall back to JMnedict, but only for
+    // person/place names (typePriority <= 1) written with kanji/katakana. This
+    // script has no fugashi 固有名詞 signal (unlike the suggestion-glosses one),
+    // so a bare hiragana word that missed JMDict — その, ある — must not be
+    // "matched" to a same-spelling given name.
+    const name =
+      result || /[ぁ-ん]/.test(item.expression)
+        ? null
+        : lookupJmnedict(nameIndex, item.expression, item.reading || undefined);
+    const gloss = result?.gloss ?? (name && name.typePriority <= 1 ? name.gloss : undefined);
     if (!gloss) {
       notFound += 1;
       continue;

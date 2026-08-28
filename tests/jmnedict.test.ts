@@ -45,4 +45,22 @@ describe('lookupJmnedict', () => {
   it('returns null for an unknown name', () => {
     expect(lookupJmnedict(index, '存在しない')).toBeNull();
   });
+
+  it('prefers the person-name type when an entry is tagged place + surname', () => {
+    const both = buildJmnedictIndex({
+      words: [
+        {
+          id: 'x',
+          kanji: [{ text: '佐藤' }],
+          kana: [{ text: 'さとう', appliesToKanji: ['*'] }],
+          translation: [
+            { type: ['place', 'surname'], translation: [{ lang: 'eng', text: 'Satō' }] },
+          ],
+        },
+      ],
+    });
+    const hit = lookupJmnedict(both, '佐藤', 'さとう');
+    expect(hit?.gloss).toBe('Satō (surname)');
+    expect(hit?.typePriority).toBe(0);
+  });
 });
