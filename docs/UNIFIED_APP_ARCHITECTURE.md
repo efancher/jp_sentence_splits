@@ -43,7 +43,7 @@ Repos inspected:
 | Sentence import (CSV/Satori) | ✅ full | — | ✅ (offline `.apkg` + live AnkiConnect) |
 | Sentence import (`.shadowing.zip`) | ✅ full (consumer) | ✅ (producer, CLI) | ✅ (consumer, `shadowing_decks.py`) |
 | Structural chunk/role analysis (Cure-Dolly) | ✅ (the core feature) | — | — (only in inert `reference/satori_gloss.py`) |
-| Sticky/literal English glossing | ✅ local heuristic, no MT | — | — (Python reference version *did* call an MT API; not ported) |
+| Sticky/literal English glossing | ✅ local heuristic, no MT (chunk/sentence); vocabulary *meanings* have an optional Claude/JMDict pre-fill, always editable | — | — (Python reference version *did* call an MT API; not ported) |
 | Furigana rendering | ✅ (from inline bracket notation, not generated) | — (VTT-based, no furigana) | ✅ (WK/Migaku-ruby-derived, sentence + word level) |
 | Book/chapter/source organization | ✅ | ✅ (flat "sources," no chapters) | ✅ (decks, flat) |
 | Vocabulary tracking | ✅ 3-tier (imported/suggested/curated), span-based | — | ✅ rich (WK subjects + JMDict), but flashcard-shaped |

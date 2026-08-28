@@ -1,6 +1,39 @@
 # Status
 
-Last updated: 2026-08-28 (YouTube mining: fixed a total extraction
+Last updated: 2026-08-28 (Vocabulary meaning glossing. YouTube-mined
+vocabulary arrived with every "Meaning (optional)" field blank — the
+fugashi/UniDic tokenizer gives surface/lemma/reading/POS but never a
+gloss, and nothing filled it in. Fixed on two paths. **Deterministic**
+(`scripts/lib/jmdict.ts`): `lookupJmdict` now takes the tokenizer POS and
+uses it to break homophone/polysemy ties — the old code dropped any
+expression with 2+ common JMDict entries (する, こと, 先, 番, ...) as
+"genuinely ambiguous", which was ~150 of the 171 misses on the mined book.
+`buildJmdictIndex` keeps ambiguous candidates now; the "null rather than
+guess" fallback only fires when POS can't resolve it. `deriveDictionaryReading`
+recovers the dictionary reading from a godan っ/ん onbin stem (持っ/もっ →
+持つ/もつ; narrow by design — い-onbin and negative/volitional stems collide
+with ichidan masu-stems). New `scripts/lib/jmnedict.ts` adds EDRDG's name
+dictionary as a proper-noun fallback (佐藤 → "Satō (surname)"; person-type
+wins when an entry is tagged place+surname). Both `backfill:vocabulary-
+suggestion-glosses` and `backfill:vocabulary-meanings` pass POS through and
+consult JMnedict. **Runtime AI** (`supabase/functions/vocab-assist/`,
+Claude Haiku, mirrors grammar-assist): `VocabularyReviewPage` fires one
+`vocab-assist` call the first time it opens a sentence whose content words
+have no meaning, glossing them *in sentence context* (resolves the
+homophones/senses JMDict can't), persisting onto the sentence's suggestions
+(`updateSentenceVocabularySuggestions`) + blank selections. Plus a per-word
+"Suggest (AI)" button in `VocabularyPicker` (new optional `onSuggestMeaning`
+prop; hidden when not wired). `src/lib/vocabAssist.ts` has grammarAssist's
+never-throw / degrade-silently contract. Docs: the "no MT" claims scoped to
+chunk/sentence sticky-English. New tests: `tests/jmnedict.test.ts`,
+`tests/vocabAssist.test.ts`, `tests/vocabularyPicker.test.tsx`, plus
+POS-disambiguation / godan-onbin cases in the existing jmdict / vocabulary-
+suggestions suites. Full suite (880) + typecheck green.
+**Needs the user**: `npx supabase functions deploy vocab-assist`
+(`ANTHROPIC_API_KEY` secret already set), then re-run both
+`backfill:vocabulary-*` scripts with `--apply`.)
+
+Before that: 2026-08-28 (YouTube mining: fixed a total extraction
 outage. yt-dlp now (a) fails every video with "The page needs to be
 reloaded." when cookies are attached to its default `web` client
 (yt-dlp #17389/#17405) and (b) since 2025.11.12 needs an external JS

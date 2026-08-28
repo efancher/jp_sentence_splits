@@ -21,8 +21,13 @@ Supabase (`@supabase/supabase-js`) provides optional cloud sync — the app is
 fully usable offline/local-only. Zod v4 validates backups and imports.
 `vite-plugin-pwa` makes it an installable PWA (iOS home-screen supported).
 
-No state-management library, no UI component library, no MT/NLP dependency.
-Keep it that way unless a real need forces the issue.
+No state-management library, no UI component library. No MT in the analysis
+core — chunk/sentence "sticky English" is a local heuristic, never machine
+translation. The only AI is two optional Supabase Edge Functions
+(`grammar-assist`, `vocab-assist`, Claude Haiku) that produce *editable
+suggestions*: they pre-fill a field or a chip, the learner confirms, and the
+whole app still works with them unreachable. Keep it that way unless a real
+need forces the issue.
 
 ## Data flow
 
@@ -82,7 +87,9 @@ integration in this codebase — a `grammar-assist` Supabase Edge Function
 suggestion and context-specific explanation, called from `GrammarPicker.tsx`
 via `src/lib/grammarAssist.ts`. AI output is never authoritative: a
 suggestion only materializes on explicit Add, and a drafted explanation only
-pre-fills the existing manual-edit form, saved by the same Save action.
+pre-fills the existing manual-edit form, saved by the same Save action. (A
+second Edge Function, `vocab-assist`, followed the same pattern for
+vocabulary meanings — see "External interop" / AI_OVERVIEW §2.)
 Phase 5 added FSRS-scheduled review: `grammar_comprehension`/
 `grammar_completion` activity types on the existing `StudyItem`/`Review`
 machinery, entered only via "Track" (never lazily seeded by `ReviewPage`

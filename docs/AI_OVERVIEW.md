@@ -475,8 +475,10 @@ The core, most-differentiated feature. A sentence is split into an ordered
 list of `AnalysisChunk`s, each assigned a grammatical role (topic/subject/
 object/verb/particle/etc. — see `ROLE_PRESETS` in `appConfig.ts` and
 `src/lib/roleGuide.tsx` for the full taxonomy) and a "literal English"
-gloss (sticky/word-for-word, not fluent translation — no MT dependency
-anywhere in the app). Supports synthetic zero-が chunks for Japanese's
+gloss (sticky/word-for-word, not fluent translation — a local heuristic,
+never machine translation; the two Claude Edge Functions only ever pre-fill
+*editable* fields, never the chunk/sentence sticky English). Supports
+synthetic zero-が chunks for Japanese's
 frequent implicit subject. Chunks render as visually distinct "puzzle
 piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge shape
 encodes grammatical fit, so structure is visually scannable.
@@ -518,6 +520,23 @@ load-bearing bridge between the sentence-analysis world and the SRS world.
 `AnalyzePage` and `VocabularyReviewPage` cross-link (a "Vocabulary" button
 on `AnalyzePage`'s header and on each `BookDetailPage` sentence row; an
 "Analyze" link back from the vocabulary page).
+
+**Vocabulary meaning glossing.** The fugashi/UniDic tokenizer gives every
+suggestion a surface/lemma/reading/POS but never an English gloss, so
+YouTube-mined vocabulary arrives with the "Meaning (optional)" field blank.
+Two things fill it: (1) `VocabularyReviewPage` fires one `vocab-assist` Edge
+Function call (Claude Haiku, `src/lib/vocabAssist.ts`) the first time it
+opens a sentence whose content words have no meaning yet — glossing them
+*in sentence context* (which resolves homophones/senses JMDict can't:
+する, 先), persisting the result onto the sentence's suggestions
+(`updateSentenceVocabularySuggestions`) and any blank selections; (2) a
+per-word **"Suggest (AI)"** button in the `VocabularyPicker` edit view for
+one-off fills. Both only pre-fill the still-editable field and degrade
+silently offline/signed-out. Offline, the deterministic path is the
+`backfill:vocabulary-suggestion-glosses` / `backfill:vocabulary-meanings`
+scripts — POS-aware JMDict lookup (`scripts/lib/jmdict.ts` takes the
+tokenizer POS to disambiguate homophone clusters) with a JMnedict
+fallback (`scripts/lib/jmnedict.ts`) for proper nouns.
 
 ### 3. Practice & Build modes (lightweight, non-SRS study)
 - **Practice** (`PracticePage.tsx`) — reveal-based drilling scoped to a
@@ -1009,21 +1028,25 @@ aren't JSON-serializable/aren't worth backing up).
   `shadowing` repo via table-prefix isolation (`shadowing_*` tables
   coexist, unused going forward). Entirely optional — the app is fully
   functional local-only without it. Also hosts `supabase/functions/
-  invite-book-member/` and `supabase/functions/grammar-assist/` — Deno
-  Edge Functions, one of two kinds of server-side (non-browser, non-Dexie)
-  code in this app (the other is `server/youtube-mining/`, below).
-- **Anthropic API** (new, via `supabase/functions/grammar-assist/`) — the
-  first and only LLM/AI integration anywhere in this codebase. Called
-  server-side only, from the Edge Function, using `claude-haiku-4-5` with
-  forced structured tool output (`strict: true`); the API key is an Edge
-  Function secret (`ANTHROPIC_API_KEY`), never shipped to the browser.
-  Deliberately not routed through `shadowing-analysis-api` below — a
-  different kind of workload on an already memory-constrained host.
-  Entirely optional and additive: every AI-assisted surface
-  (`src/lib/grammarAssist.ts`) degrades to an inline "unavailable" message
-  if the function isn't deployed, the key isn't configured, or the network
-  is unreachable — nothing in the grammar-learning system depends on it
-  being present.
+  invite-book-member/`, `supabase/functions/grammar-assist/`, and
+  `supabase/functions/vocab-assist/` — Deno Edge Functions, one of two kinds
+  of server-side (non-browser, non-Dexie) code in this app (the other is
+  `server/youtube-mining/`, below).
+- **Anthropic API** (via `supabase/functions/grammar-assist/` and
+  `supabase/functions/vocab-assist/`) — the LLM/AI integrations in this
+  codebase. Called server-side only, from the Edge Functions, using
+  `claude-haiku-4-5` with forced structured tool output (`strict: true`);
+  the API key is an Edge Function secret (`ANTHROPIC_API_KEY`), never
+  shipped to the browser. Deliberately not routed through
+  `shadowing-analysis-api` below — a different kind of workload on an
+  already memory-constrained host. Entirely optional and additive: every
+  AI-assisted surface (`src/lib/grammarAssist.ts`, `src/lib/vocabAssist.ts`)
+  degrades to an inline "unavailable" message / silently leaves a field
+  blank if the function isn't deployed, the key isn't configured, or the
+  network is unreachable. `grammar-assist` suggests/explains grammar
+  patterns; `vocab-assist` glosses vocabulary meanings in sentence context
+  (both a just-in-time pass on `VocabularyReviewPage` and a per-word
+  "Suggest (AI)" button).
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only

@@ -11,6 +11,7 @@
 | `migrations/20260819000000_grammar_learning_foundation.sql` | Grammar-learning system: grammar_patterns, sentence_grammar, grammar_relationships, analyses.grammar_suggestions, study_items.subject_type widened for 'grammarPattern' |
 | `functions/invite-book-member/` | Edge Function for email invites |
 | `functions/grammar-assist/` | Edge Function: AI-assisted grammar-pattern suggestion/explanation (Claude Haiku via the Anthropic API; requires `ANTHROPIC_API_KEY` function secret) |
+| `functions/vocab-assist/` | Edge Function: AI-assisted vocabulary meaning glossing in sentence context (Claude Haiku; same `ANTHROPIC_API_KEY` secret) |
 | `tests/rls_expectations.md` | Multi-user RLS verification outline |
 
 Apply migrations via the Dashboard SQL Editor or `supabase db push`.
