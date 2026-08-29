@@ -1,6 +1,36 @@
 # Status
 
-Last updated: 2026-08-29 (WaniKani mnemonics on review cards. The
+Last updated: 2026-08-30 (WaniKani mnemonics — kanji slice + hints.
+Follow-up to the vocab slice below. `Kanji` gains
+`meaningMnemonic`/`meaningHint`/`readingMnemonic`/`readingHint`
+(`types.ts`, `kanjiSchema`, `src/sync/mappers.ts` both directions,
+migration `20260830000000_kanji_wanikani_mnemonics.sql`; no Dexie bump).
+**Hints are kanji-only** — WaniKani vocabulary subjects carry mnemonics
+but no `*_hint`, so there was no such thing as a vocab-level hint to add.
+**Ingestion**: no new backfill script — `scripts/lib/wanikani.ts`'s
+`wanikaniSubjectToKanjiFields` now returns the four fields (trimmed,
+null when absent) and the existing catalog importer
+`scripts/import-wanikani-kanji.ts` writes them; re-running it refreshes
+every ~2k `Kanji` row (idempotent on `id`, already). New manual-dispatch
+`import-wanikani-kanji.yml` (reuses the `WANIKANI_API_TOKEN` secret) so
+the re-run needs no local setup — there was no workflow for the kanji
+import before. **UI**: `CardMnemonic` in `ReviewPage` gains a third
+source tier — when a word has no learner note *and* no WaniKani vocab
+mnemonic, it looks up the expression's component kanji
+(`db.kanji.where('character').anyOf(...)`, distinct Han chars in
+first-appearance order, via `useLiveQuery`) and renders one block per
+kanji: the character + its reading/meaning mnemonic + a dimmer hint line
+(`.mnemonic-hint`), all through the existing `MnemonicText` markup
+renderer. Fallback-only (not shown alongside a vocab mnemonic —
+that already names its kanji). Still only the three vocab-target cards
+(`reading_retrieval`/`cloze`/`reading_production`);
+`sentence_transformation`/`pitch_accent` unchanged. Tests:
+`tests/wanikaniKanji.test.ts` extended; new `reviewPage.test.tsx`
+component-kanji-fallback case. Migrations (vocab + kanji) and the
+backfill/import runs are **not yet done against production** — see
+`ROADMAP.md`.)
+
+Before that: 2026-08-29 (WaniKani mnemonics on review cards. The
 "Show mnemonic" affordance on `ReviewPage`'s vocabulary-target cards
 (`reading_retrieval`/`cloze`/`reading_production`) only ever rendered
 `VocabularyItem.notes` — a free-text field that's essentially always blank

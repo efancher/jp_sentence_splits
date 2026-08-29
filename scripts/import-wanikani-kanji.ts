@@ -71,6 +71,10 @@ async function main() {
         onyomi: fields.onyomi,
         kunyomi: fields.kunyomi,
         nanori: fields.nanori,
+        meaningMnemonic: fields.meaningMnemonic ?? undefined,
+        meaningHint: fields.meaningHint ?? undefined,
+        readingMnemonic: fields.readingMnemonic ?? undefined,
+        readingHint: fields.readingHint ?? undefined,
         externalId: fields.externalId,
         createdAt: now,
         updatedAt: now,
@@ -83,6 +87,10 @@ async function main() {
         onyomi: parsed.onyomi,
         kunyomi: parsed.kunyomi,
         nanori: parsed.nanori,
+        meaning_mnemonic: parsed.meaningMnemonic ?? null,
+        meaning_hint: parsed.meaningHint ?? null,
+        reading_mnemonic: parsed.readingMnemonic ?? null,
+        reading_hint: parsed.readingHint ?? null,
         external_id: parsed.externalId,
       };
     });

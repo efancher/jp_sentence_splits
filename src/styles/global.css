@@ -296,6 +296,29 @@ strong.jp {
   font-weight: 600;
 }
 
+/* WaniKani "hint" lines — one-sentence reinforcements under a kanji mnemonic. */
+.mnemonic-hint {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.mnemonic-kanji-block {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.mnemonic-kanji-block:first-child {
+  margin-top: 0;
+}
+
+.mnemonic-kanji-char {
+  font-family: var(--font-jp);
+  font-weight: 700;
+  margin-right: 0.3rem;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

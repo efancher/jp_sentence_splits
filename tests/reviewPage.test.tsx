@@ -1251,6 +1251,54 @@ describe('ReviewPage', () => {
     expect(screen.queryByText(/<reading>/)).not.toBeInTheDocument();
   });
 
+  it('falls back to component-kanji mnemonics + hints when the word has no WaniKani vocab mnemonic', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.kanji.add({
+      id: 'kanji-読',
+      character: '読',
+      meanings: ['read'],
+      onyomi: ['ドク'],
+      kunyomi: ['よ'],
+      nanori: [],
+      readingMnemonic: 'Read it as <reading>よ</reading>, like saying "yo!".',
+      readingHint: 'Picture shouting "yo" at a book.',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    // Single-context item — the mnemonic auto-shows once the async maturity
+    // check resolves; if it hasn't, click the button. Either way the
+    // component-kanji fallback content must appear.
+    const showButton = screen.queryByRole('button', { name: 'Show mnemonic' });
+    if (showButton) await user.click(showButton);
+    expect(await screen.findByText(/like saying "yo!"/)).toBeInTheDocument();
+    expect(await screen.findByText(/Picture shouting "yo" at a book/)).toBeInTheDocument();
+    expect(screen.getByText('読')).toBeInTheDocument();
+  });
+
   it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {
     await seedBookWithSentence();
     const db = getDb();

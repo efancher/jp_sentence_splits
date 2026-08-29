@@ -22,6 +22,10 @@ export interface WkKanjiSubject {
     hidden_at: string | null;
     meanings: WkMeaning[];
     readings?: WkReading[];
+    meaning_mnemonic?: string;
+    meaning_hint?: string;
+    reading_mnemonic?: string;
+    reading_hint?: string;
   };
 }
 
@@ -65,6 +69,11 @@ export interface KanjiFields {
   onyomi: string[];
   kunyomi: string[];
   nanori: string[];
+  /** WaniKani mnemonics/hints — null when absent (radical-only kanji occasionally lack a reading mnemonic). */
+  meaningMnemonic: string | null;
+  meaningHint: string | null;
+  readingMnemonic: string | null;
+  readingHint: string | null;
   externalId: string;
 }
 
@@ -79,6 +88,10 @@ export function wanikaniSubjectToKanjiFields(subject: WkKanjiSubject): KanjiFiel
     onyomi: readings.onyomi,
     kunyomi: readings.kunyomi,
     nanori: readings.nanori,
+    meaningMnemonic: subject.data.meaning_mnemonic?.trim() || null,
+    meaningHint: subject.data.meaning_hint?.trim() || null,
+    readingMnemonic: subject.data.reading_mnemonic?.trim() || null,
+    readingHint: subject.data.reading_hint?.trim() || null,
     externalId: `wk:${subject.id}`,
   };
 }

@@ -90,14 +90,35 @@ describe('readingsByType', () => {
 });
 
 describe('wanikaniSubjectToKanjiFields', () => {
-  it('transforms a subject into Kanji fields', () => {
+  it('transforms a subject into Kanji fields, mnemonics null when absent', () => {
     expect(wanikaniSubjectToKanjiFields(subject({}, 42))).toEqual({
       character: '生',
       meanings: ['Life'],
       onyomi: ['セイ'],
       kunyomi: ['い.きる'],
       nanori: ['なま'],
+      meaningMnemonic: null,
+      meaningHint: null,
+      readingMnemonic: null,
+      readingHint: null,
       externalId: 'wk:42',
+    });
+  });
+
+  it('carries the WaniKani mnemonics and hints (trimmed) when present', () => {
+    const fields = wanikaniSubjectToKanjiFields(
+      subject({
+        meaning_mnemonic: '  A <radical>life</radical> begins.  ',
+        meaning_hint: 'Remember the sprout.',
+        reading_mnemonic: 'The reading is <reading>セイ</reading>.',
+        reading_hint: '',
+      }),
+    );
+    expect(fields).toMatchObject({
+      meaningMnemonic: 'A <radical>life</radical> begins.',
+      meaningHint: 'Remember the sprout.',
+      readingMnemonic: 'The reading is <reading>セイ</reading>.',
+      readingHint: null,
     });
   });
 

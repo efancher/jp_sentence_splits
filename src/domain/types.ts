@@ -506,6 +506,20 @@ export interface Kanji {
   kunyomi: string[];
   nanori: string[];
   notes?: string;
+  /**
+   * WaniKani's mnemonics + hints for this character, filled by re-running
+   * `scripts/import-wanikani-kanji.ts` (the catalog importer — every Kanji
+   * row WaniKani has data for came from it). Hints are one-line
+   * reinforcements and only exist on WaniKani kanji subjects, not
+   * vocabulary. Text carries WaniKani's `<radical>`/`<kanji>`/`<reading>`
+   * markup, rendered by `src/components/MnemonicText.tsx`. Surfaced only as
+   * a fallback on review cards (`ReviewPage`'s `CardMnemonic`) when the word
+   * under study has no WaniKani vocab mnemonic of its own.
+   */
+  meaningMnemonic?: string;
+  meaningHint?: string;
+  readingMnemonic?: string;
+  readingHint?: string;
   externalId?: string;
   createdAt: string;
   updatedAt: string;
