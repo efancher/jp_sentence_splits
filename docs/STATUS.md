@@ -19,6 +19,25 @@ up automatically. Tests: `tests/wanikaniMnemonic.test.ts` + a
 and kanji-slice deploys from 2026-08-29 already ran against production
 (303 vocab items, 2101 kanji rows).
 
+Before that: 2026-08-31 (Pitch-accent review card now explains the
+pattern, not just names it. Follow-up to the `PitchAccentDiagram` work
+below, from a "are there rules that explain why a pattern is used" ask.
+New `src/lib/pitchAccentRules.ts` — `explainPitchAccent({expression,
+reading, partOfSpeech, position, moraCount})` returns a `patternGloss`
+(always: what the drawn H/L contour means) plus an optional `ruleNote`
+for the cases where Tokyo pitch accent is actually rule-governed:
+loanwords (katakana → antepenultimate-mora tendency, with the
+special-mora leftward shift; or "drifted to heiban"), pre-accenting
+suffix compounds (〜的/〜性/〜化/〜学/〜者), and the verb / i-adjective
+two-class system (heiban vs. second-to-last-mora downstep). Every
+heuristic note is cross-checked against the word's real Kanjium
+`position` before it's shown — rule and dictionary disagree ⇒ stay
+silent. Plain native nouns get a "no rule, memorized" fallback.
+Rendered as two `.muted` lines under the diagram on the `pitch_accent`
+card reveal (`PitchAccentCard`, `ReviewPage.tsx`).
+`tests/pitchAccentRules.test.ts` (16). Pure module, no schema/data
+change.)
+
 Before that: 2026-08-31 (WaniKani subject cache in Supabase. The two
 ingestion scripts (`import-wanikani-kanji.ts`,
 `backfill-wanikani-mnemonics.ts`) re-paged the entire WaniKani `/subjects`

@@ -653,7 +653,14 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   reveal draws the mora-by-mora H/L contour via `PitchAccentDiagram`
   (`src/components/PitchAccentDiagram.tsx`), an SVG render of the same
   `expectedPitchShape` the scoring path uses, with a trailing
-  following-particle node so heiban reads apart from odaka).
+  following-particle node so heiban reads apart from odaka. Below the
+  diagram, `explainPitchAccent` (`src/lib/pitchAccentRules.ts`) adds a
+  plain-language gloss of the contour plus, for the rule-governed cases
+  only — loanwords, pre-accenting suffix compounds (〜的/〜性/〜化/〜学/〜者),
+  and the verb / i-adjective two-class system — a "why this pattern" note,
+  each cross-checked against the word's real Kanjium position and
+  suppressed on disagreement; plain native nouns get a "memorized, no
+  rule" fallback).
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.

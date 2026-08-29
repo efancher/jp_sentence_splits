@@ -55,6 +55,7 @@ import {
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { segmentIntoMorae } from '../lib/mora';
+import { explainPitchAccent } from '../lib/pitchAccentRules';
 import {
   pitchPatternLabel,
   possiblePitchPatternsForMoraCount,
@@ -1751,10 +1752,29 @@ function PitchAccentCard({
           <div className="muted">{selected === correctLabel ? '✓ Correct' : '✗ Not quite'}</div>
           <div>{PITCH_ACCENT_PATTERN_LABELS[correctLabel]}</div>
           {vocabularyItem.pitchAccentPositions?.length ? (
-            <PitchAccentDiagram
-              reading={vocabularyItem.reading}
-              position={vocabularyItem.pitchAccentPositions[0]!}
-            />
+            <>
+              <PitchAccentDiagram
+                reading={vocabularyItem.reading}
+                position={vocabularyItem.pitchAccentPositions[0]!}
+              />
+              {(() => {
+                const explanation = explainPitchAccent({
+                  expression: vocabularyItem.expression,
+                  reading: vocabularyItem.reading,
+                  partOfSpeech: vocabularyItem.partOfSpeech,
+                  position: vocabularyItem.pitchAccentPositions[0]!,
+                  moraCount: candidate.moraCount,
+                });
+                return (
+                  <>
+                    <div className="muted">{explanation.patternGloss}</div>
+                    {explanation.ruleNote ? (
+                      <div className="muted">{explanation.ruleNote}</div>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </>
           ) : null}
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
