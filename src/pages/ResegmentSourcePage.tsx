@@ -9,11 +9,13 @@ import {
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { resegmentSentences } from '../lib/miningApi';
 import {
+  buildRealignGroups,
   buildResegmentPlan,
   distributeTranslation,
   seedResegmentReview,
   type ResegmentReviewedSegment,
 } from '../lib/resegmentPlan';
+import { realignTranslations } from '../lib/sentenceRealign';
 
 type Phase = 'loading' | 'mode' | 'segmenting' | 'review' | 'applying' | 'error';
 
@@ -46,6 +48,9 @@ export function ResegmentSourcePage() {
   const [error, setError] = useState('');
   const [context, setContext] = useState<ResegmentSourceContext | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [realigning, setRealigning] = useState(false);
+  const [realignNote, setRealignNote] = useState('');
+  const [showAllRows, setShowAllRows] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +200,30 @@ export function ResegmentSourcePage() {
     }
   }
 
+  async function autoFillTranslations() {
+    if (!context || realigning) return;
+    setRealigning(true);
+    setRealignNote('');
+    const { groups, assignments } = buildRealignGroups(rows, context.sentences);
+    const result = await realignTranslations(groups);
+    setRealigning(false);
+    if (!result.ok) {
+      setRealignNote(result.reason);
+      return;
+    }
+    setRows((current) =>
+      current.map((row, index) => {
+        const assignment = assignments[index];
+        const suggestion =
+          assignment && result.groups[assignment.groupIndex]?.pieceTranslations[assignment.rank];
+        const next = suggestion?.trim();
+        if (!next) return row;
+        return { ...row, translation: next, needsTranslationReview: true };
+      }),
+    );
+    setRealignNote('Filled from the original translation — give the flagged rows a glance.');
+  }
+
   const summary = useMemo(() => {
     if (!context) return null;
     const segments: ResegmentReviewedSegment[] = rows.map((row) => ({
@@ -215,7 +244,22 @@ export function ResegmentSourcePage() {
     );
   }, [context, rows]);
 
-  const unresolvedTranslations = rows.filter((row) => row.needsTranslationReview).length;
+  const rowsWithProgress = useMemo(() => {
+    const indexes = new Set<number>();
+    for (const move of summary?.studyItemMoves ?? []) {
+      if (move.targetIndex !== null) indexes.add(move.targetIndex);
+    }
+    return indexes;
+  }, [summary]);
+
+  const filteringActive = rowsWithProgress.size > 0 && !showAllRows;
+  const hiddenRowCount = filteringActive
+    ? rows.length - rows.filter((_, i) => rowsWithProgress.has(i)).length
+    : 0;
+  const unresolvedTranslations = rows.filter(
+    (row, i) =>
+      row.needsTranslationReview && (!filteringActive || rowsWithProgress.has(i)),
+  ).length;
 
   if (phase === 'loading') return <p className="muted">Loading source…</p>;
 
@@ -274,6 +318,13 @@ export function ResegmentSourcePage() {
               <div className="row">
                 <button
                   type="button"
+                  disabled={phase === 'applying' || realigning}
+                  onClick={() => void autoFillTranslations()}
+                >
+                  {realigning ? 'Filling…' : 'Auto-fill translations (AI)'}
+                </button>
+                <button
+                  type="button"
                   className="primary"
                   disabled={phase === 'applying'}
                   onClick={() => void apply()}
@@ -289,86 +340,140 @@ export function ResegmentSourcePage() {
                 </button>
               </div>
             </div>
+            {realignNote ? <div className="muted">{realignNote}</div> : null}
             {unresolvedTranslations > 0 ? (
               <div className="muted">
                 {unresolvedTranslations} translation
-                {unresolvedTranslations === 1 ? '' : 's'} need a check — a split
+                {unresolvedTranslations === 1 ? '' : 's'} to check
+                {filteringActive ? ' on cards with progress' : ''} — a split
                 can&apos;t divide a translation automatically.
               </div>
             ) : null}
+            {rowsWithProgress.size > 0 ? (
+              <label className="row" style={{ fontSize: '0.9em' }}>
+                <input
+                  type="checkbox"
+                  checked={showAllRows}
+                  onChange={(event) => setShowAllRows(event.target.checked)}
+                />
+                Show all {rows.length} sentences (otherwise only the{' '}
+                {rowsWithProgress.size} with study progress are shown in full)
+              </label>
+            ) : null}
           </section>
 
-          {rows.map((row, index) => (
-            <section className="panel stack" key={index}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="muted">
-                  #{index + 1} · from original{' '}
-                  {row.sourceIndexes.map((i) => i + 1).join(', ')}
-                </span>
-                <div className="row">
-                  <button
-                    type="button"
-                    disabled={index === 0 || phase === 'applying'}
-                    onClick={() => mergeUp(index)}
-                  >
-                    Merge up
-                  </button>
-                  <button
-                    type="button"
-                    disabled={phase === 'applying'}
-                    onClick={() => splitRow(index)}
-                  >
-                    Split by 。
-                  </button>
-                  <button
-                    type="button"
-                    disabled={phase === 'applying' || rows.length === 1}
-                    onClick={() => removeRow(index)}
-                  >
-                    Remove
-                  </button>
+          {rows.map((row, index) =>
+            !filteringActive || rowsWithProgress.has(index) ? (
+              <section className="panel stack" key={index}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="muted">
+                    #{index + 1} · from original{' '}
+                    {row.sourceIndexes.map((i) => i + 1).join(', ')}
+                    {rowsWithProgress.has(index) ? ' · has study progress' : ''}
+                  </span>
+                  <div className="row">
+                    <button
+                      type="button"
+                      disabled={index === 0 || phase === 'applying'}
+                      onClick={() => mergeUp(index)}
+                    >
+                      Merge up
+                    </button>
+                    <button
+                      type="button"
+                      disabled={phase === 'applying'}
+                      onClick={() => splitRow(index)}
+                    >
+                      Split by 。
+                    </button>
+                    <button
+                      type="button"
+                      disabled={phase === 'applying' || rows.length === 1}
+                      onClick={() => removeRow(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <textarea
-                className="jp"
-                rows={2}
-                value={row.japanese}
-                disabled={phase === 'applying'}
-                onChange={(event) =>
-                  updateRow(index, { japanese: event.target.value })
-                }
-              />
-              <label>
-                Translation
-                <input
-                  value={row.translation}
+                <textarea
+                  className="jp"
+                  rows={2}
+                  value={row.japanese}
                   disabled={phase === 'applying'}
                   onChange={(event) =>
-                    updateRow(index, {
-                      translation: event.target.value,
-                      needsTranslationReview: false,
-                    })
-                  }
-                  style={
-                    row.needsTranslationReview
-                      ? { borderColor: 'var(--warning)' }
-                      : undefined
+                    updateRow(index, { japanese: event.target.value })
                   }
                 />
-              </label>
-              {row.needsTranslationReview ? (
-                <span className="muted" style={{ color: 'var(--warning)' }}>
-                  verify translation
-                </span>
-              ) : null}
-              {row.sourceTranslations.length > 0 &&
-              !row.sourceTranslations.includes(row.translation.trim()) ? (
-                <span className="muted" style={{ fontSize: '0.85em' }}>
-                  original: {row.sourceTranslations.join(' / ')}
-                </span>
-              ) : null}
+                <label>
+                  Translation
+                  <input
+                    value={row.translation}
+                    disabled={phase === 'applying'}
+                    onChange={(event) =>
+                      updateRow(index, {
+                        translation: event.target.value,
+                        needsTranslationReview: false,
+                      })
+                    }
+                    style={
+                      row.needsTranslationReview
+                        ? { borderColor: 'var(--warning)' }
+                        : undefined
+                    }
+                  />
+                </label>
+                {row.needsTranslationReview ? (
+                  <span className="muted" style={{ color: 'var(--warning)' }}>
+                    verify translation
+                  </span>
+                ) : null}
+                {row.sourceTranslations.length > 0 &&
+                !row.sourceTranslations.includes(row.translation.trim()) ? (
+                  <span className="muted" style={{ fontSize: '0.85em' }}>
+                    original: {row.sourceTranslations.join(' / ')}
+                  </span>
+                ) : null}
+              </section>
+            ) : null,
+          )}
+
+          {filteringActive && hiddenRowCount > 0 ? (
+            <section className="panel stack">
+              <span className="muted">
+                {hiddenRowCount} other sentence{hiddenRowCount === 1 ? '' : 's'} —
+                no study progress, will apply with the seeded translation.
+              </span>
+              {rows.map((row, index) =>
+                rowsWithProgress.has(index) ? null : (
+                  <div
+                    key={index}
+                    className="row"
+                    style={{ justifyContent: 'space-between', gap: '0.5rem' }}
+                  >
+                    <span className="jp jp-sm">{row.japanese}</span>
+                    <span
+                      className="muted"
+                      style={{
+                        fontSize: '0.85em',
+                        color: row.needsTranslationReview
+                          ? 'var(--warning)'
+                          : undefined,
+                      }}
+                    >
+                      {row.translation || '—'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={phase === 'applying' || rows.length === 1}
+                      onClick={() => removeRow(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ),
+              )}
             </section>
-          ))}
+          ) : null}
         </>
       ) : null}
     </div>

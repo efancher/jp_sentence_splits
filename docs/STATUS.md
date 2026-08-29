@@ -21,8 +21,16 @@ collisions by keeping the more-reviewed card); `applyResegmentation` +
 `delete`, never raw DELETE; carries FSRS state, repoints surviving
 `sentence_vocabulary` links, drops offset-bound `analyses`/`sentence_grammar`);
 `ResegmentSourcePage.tsx` at `/books/:bookId/resegment` with a "Re-segment
-captions" button on `BookDetailPage` for shadowing books. No MT — split
-sentences carry the joined source translation flagged "verify". Tests:
+captions" button on `BookDetailPage` for shadowing books. Split sentences
+seed from the old translation (`distributeTranslation` — 1:1 only when the
+sentence counts line up), all flagged. **Two friction-cutters (2026-08-29)**:
+(1) `sentence-realign` Edge Function (third Claude-Haiku function, after
+grammar/vocab-assist) — an "Auto-fill translations (AI)" button that
+*redistributes the existing human translation* across the new pieces (not
+fresh MT); `src/lib/sentenceRealign.ts` has the never-throw contract.
+(2) the review list shows in full only the ~N sentences a study card is
+migrating onto (`rowsWithProgress`); the rest collapse to a one-line
+list with a "Show all" toggle. Tests:
 `tests/{resegmentPlan,inlineReadingFromTokens,applyResegmentation,resegmentSourcePage}`
 + `server/youtube-mining/tests/test_resegment_api.py`. **Not yet run against
 production data** — needs the user to drive the flow on the real "After Work"

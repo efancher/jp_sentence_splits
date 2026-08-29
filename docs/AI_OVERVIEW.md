@@ -469,8 +469,13 @@ observed from outside `ReviewPage`'s own due-queue state.
   delete, never raw DELETE), carries study progress onto the
   best-text-overlap replacement (`src/lib/resegmentPlan.ts`), and repoints
   surviving vocabulary links. Chunk analysis is offset-bound and dropped.
-  No machine translation — a split sentence keeps the joined source
-  translation, flagged for the user to check.
+  A split sentence seeds its English from the old translation; an
+  "Auto-fill translations (AI)" button (`sentence-realign` Edge Function,
+  Claude Haiku) *redistributes the existing human translation* across the
+  new pieces rather than translating from scratch. The review list shows
+  in full only the sentences a study card is migrating onto (the rest
+  collapse behind a "Show all" toggle) so a 90-sentence source is a
+  handful of rows to check.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRealignGroups,
   buildResegmentPlan,
   distributeTranslation,
   overlapRatio,
@@ -109,6 +110,51 @@ describe('distributeTranslation', () => {
   it('dumps everything on the first piece when the counts do not line up', () => {
     expect(distributeTranslation('Only this.', 3)).toEqual(['Only this.', '', '']);
     expect(distributeTranslation('A. B. C. D.', 2)).toEqual(['A. B. C. D.', '']);
+  });
+});
+
+describe('buildRealignGroups', () => {
+  it('groups consecutive rows by shared provenance and maps each row back', () => {
+    const old = [
+      { japanese: 'A。B。', translation: 'Ay. Bee.' },
+      { japanese: 'C。', translation: 'See.' },
+    ];
+    const rows = [
+      { japanese: 'A。', sourceIndexes: [0] },
+      { japanese: 'B。', sourceIndexes: [0] },
+      { japanese: 'C。', sourceIndexes: [1] },
+    ];
+    const { groups, assignments } = buildRealignGroups(rows, old);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({
+      originalJapanese: 'A。B。',
+      originalTranslation: 'Ay. Bee.',
+      pieces: ['A。', 'B。'],
+    });
+    expect(groups[1]!.pieces).toEqual(['C。']);
+    expect(assignments).toEqual([
+      { groupIndex: 0, rank: 0 },
+      { groupIndex: 0, rank: 1 },
+      { groupIndex: 1, rank: 0 },
+    ]);
+  });
+
+  it('joins the originals of a merged run', () => {
+    const old = [
+      { japanese: 'X', translation: 'Ex.' },
+      { japanese: 'Y', translation: 'Why.' },
+    ];
+    const rows = [
+      { japanese: 'XY一。', sourceIndexes: [0, 1] },
+      { japanese: 'XY二。', sourceIndexes: [0, 1] },
+    ];
+    const { groups } = buildRealignGroups(rows, old);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      originalJapanese: 'XY',
+      originalTranslation: 'Ex. Why.',
+      pieces: ['XY一。', 'XY二。'],
+    });
   });
 });
 

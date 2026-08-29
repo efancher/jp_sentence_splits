@@ -8,6 +8,7 @@ import { createBook, ensureStudyItem, getDb } from '../src/db/repository';
 import { createId, sentenceIdFromNormalizedKey } from '../src/lib/ids';
 import { normalizeSentenceKey } from '../src/lib/normalize';
 import * as miningApi from '../src/lib/miningApi';
+import * as sentenceRealign from '../src/lib/sentenceRealign';
 import { ResegmentSourcePage } from '../src/pages/ResegmentSourcePage';
 import { withAppProviders } from '../src/test/providers';
 import type { Sentence } from '../src/domain/types';
@@ -15,6 +16,10 @@ import type { Sentence } from '../src/domain/types';
 vi.mock('../src/lib/miningApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/miningApi')>()),
   resegmentSentences: vi.fn(),
+}));
+
+vi.mock('../src/lib/sentenceRealign', () => ({
+  realignTranslations: vi.fn(),
 }));
 
 function shadowingSentence(japanese: string, index: number): Sentence {
@@ -76,6 +81,7 @@ describe('ResegmentSourcePage', () => {
   beforeEach(() => {
     resetDbForTests(`reseg-page-${createId('db')}`);
     vi.mocked(miningApi.resegmentSentences).mockReset();
+    vi.mocked(sentenceRealign.realignTranslations).mockReset();
   });
 
   it('runs drama re-segmentation, shows the plan summary, and applies it', async () => {
@@ -102,8 +108,10 @@ describe('ResegmentSourcePage', () => {
 
     // One review row per clean sentence.
     await waitFor(() =>
-      expect(screen.getByText(/4 sentences/)).toBeInTheDocument(),
+      expect(screen.getByText(/sentences · \d+ cards? kept/)).toBeInTheDocument(),
     );
+    // Only the sentence with study progress is shown in full; reveal the rest.
+    await user.click(screen.getByRole('checkbox'));
     expect(screen.getByDisplayValue('たったの1ヶ月だよ。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Apply' }));
@@ -138,13 +146,14 @@ describe('ResegmentSourcePage', () => {
     const user = userEvent.setup();
     renderPage(book.id);
     await user.click(await screen.findByRole('button', { name: /lyrics \/ manual/i }));
-    await waitFor(() => expect(screen.getByText(/2 sentences/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/sentences · \d+ cards? kept/)).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox')); // show all rows in full
 
     const firstRow = screen
       .getByDisplayValue('さすがです。水希。たったの')
       .closest('section')!;
     await user.click(within(firstRow).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(screen.getByText(/1 sentences/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText((t) => /^1 sentences ·/.test(t))).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(screen.getByText('book detail')).toBeInTheDocument());
@@ -153,6 +162,70 @@ describe('ResegmentSourcePage', () => {
     const membership = await db.bookSentences.where('bookId').equals(book.id).sortBy('position');
     const fresh = (await db.sentences.bulkGet(membership.map((m) => m.sentenceId))).filter(Boolean);
     expect(fresh.map((s) => s!.japanese)).toEqual(['1ヶ月だよ。変わんないじゃん。']);
+  });
+
+  it('auto-fills translations from the realign AI', async () => {
+    const { book } = await seed();
+    vi.mocked(miningApi.resegmentSentences).mockImplementation(async (sentences) =>
+      sentences.map((s, i) => ({
+        japanese: s.japanese,
+        startMs: 0,
+        endMs: 0,
+        reading: null,
+        tokens: null,
+        sourceIndexes: [i],
+      })),
+    );
+    vi.mocked(sentenceRealign.realignTranslations).mockResolvedValue({
+      ok: true,
+      groups: [
+        { pieceTranslations: ['As expected, Mizuki.'] },
+        { pieceTranslations: ['Only a month.'] },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderPage(book.id);
+    await user.click(await screen.findByRole('button', { name: /lyrics \/ manual/i }));
+    await waitFor(() => expect(screen.getByText(/sentences · \d+ cards? kept/)).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox'));
+
+    await user.click(screen.getByRole('button', { name: /auto-fill translations/i }));
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('As expected, Mizuki.')).toBeInTheDocument(),
+    );
+    expect(screen.getByDisplayValue('Only a month.')).toBeInTheDocument();
+    expect(sentenceRealign.realignTranslations).toHaveBeenCalledWith([
+      expect.objectContaining({ pieces: ['さすがです。水希。たったの'] }),
+      expect.objectContaining({ pieces: ['1ヶ月だよ。変わんないじゃん。'] }),
+    ]);
+  });
+
+  it('shows the reason when the realign AI is unavailable', async () => {
+    const { book } = await seed();
+    vi.mocked(miningApi.resegmentSentences).mockImplementation(async (sentences) =>
+      sentences.map((s, i) => ({
+        japanese: s.japanese,
+        startMs: 0,
+        endMs: 0,
+        reading: null,
+        tokens: null,
+        sourceIndexes: [i],
+      })),
+    );
+    vi.mocked(sentenceRealign.realignTranslations).mockResolvedValue({
+      ok: false,
+      reason: 'Sign in to use AI translation help.',
+    });
+    const user = userEvent.setup();
+    renderPage(book.id);
+    await user.click(await screen.findByRole('button', { name: /lyrics \/ manual/i }));
+    await waitFor(() => expect(screen.getByText(/sentences · \d+ cards? kept/)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /auto-fill translations/i }));
+    await waitFor(() =>
+      expect(screen.getByText('Sign in to use AI translation help.')).toBeInTheDocument(),
+    );
   });
 
   it('lets the user merge two rows before applying (lyrics mode)', async () => {
@@ -172,10 +245,11 @@ describe('ResegmentSourcePage', () => {
     renderPage(book.id);
     await user.click(await screen.findByRole('button', { name: /lyrics \/ manual/i }));
 
-    await waitFor(() => expect(screen.getByText(/2 sentences/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/sentences · \d+ cards? kept/)).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox')); // show all rows in full
     const secondRow = screen.getByDisplayValue('1ヶ月だよ。変わんないじゃん。').closest('section')!;
     await user.click(within(secondRow).getByRole('button', { name: 'Merge up' }));
 
-    await waitFor(() => expect(screen.getByText(/1 sentences/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText((t) => /^1 sentences ·/.test(t))).toBeInTheDocument());
   });
 });
