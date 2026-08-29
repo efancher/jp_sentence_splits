@@ -16,6 +16,8 @@ describe('isDeferralMnemonic', () => {
       "This is a jukugo word that uses the on'yomi readings of the kanji. Because of that, you should be able to read this word on your own.",
       'You already know how to read this word, since it uses the readings you learned for the kanji.',
       "Since this is a single kanji vocab word, the reading is the same as the kanji's reading.",
+      'The kanji and the word are exactly the same. That means they share meanings as well!',
+      'The kanji and the word are exactly the same. That means they share readings as well!',
       'No mnemonic is needed here.',
       'You know this already!',
     ]) {

@@ -145,7 +145,10 @@ so the raw WaniKani text stays intact and an improved re-import is picked
 up automatically. Tests: `tests/wanikaniMnemonic.test.ts` + a
 `reviewPage.test.tsx` case. No schema/migration/data change — vocab-slice
 and kanji-slice deploys from 2026-08-29 already ran against production
-(303 vocab items, 2101 kanji rows).
+(303 vocab items, 2101 kanji rows). 2026-08-29 follow-up: added cues for
+WaniKani's "the kanji and the word are exactly the same … they share
+meanings/readings as well" single-kanji-vocab placeholder, which was
+still rendering as a real mnemonic on cloze cards.
 
 Before that: 2026-08-31 (VocabularyPicker shows "Confirmed ✓" inline next
 to the "Confirm vocabulary" button. The only confirmation feedback was the
