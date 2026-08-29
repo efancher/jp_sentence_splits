@@ -58,7 +58,7 @@ import {
   possiblePitchPatternsForMoraCount,
   type PitchAccentPattern,
 } from '../lib/pitchAccentShape';
-import { isReadingAnswerCorrect } from '../lib/readingAnswer';
+import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -565,6 +565,15 @@ export function ReviewPage() {
   );
   /** Set only by reading_production's Check step; recorded as Review.responseRaw on rate. */
   const [typedResponse, setTypedResponse] = useState('');
+  /**
+   * The reading `reading_production`'s Check step actually graded the typed
+   * answer against — the dictionary reading, or the in-context inflected
+   * reading when that's what the learner matched. Recorded as
+   * `Review.expectedAnswer` so `classifyReviewError` reaches the same ✓/✗
+   * verdict the card showed (otherwise an accepted inflected reading would
+   * still be logged as `incorrect_reading`).
+   */
+  const [typedResponseExpected, setTypedResponseExpected] = useState<string | null>(null);
   /** "Report issue" — an inline text box, not window.prompt (silently no-ops on installed iOS Safari PWAs). */
   const [reportingIssue, setReportingIssue] = useState(false);
   const [issueNote, setIssueNote] = useState('');
@@ -964,6 +973,7 @@ export function ReviewPage() {
     setMnemonicVisible(false);
     setAssistanceUsed(new Set());
     setTypedResponse('');
+    setTypedResponseExpected(null);
     setReportingIssue(false);
     setIssueNote('');
     setIssueReported(false);
@@ -1008,13 +1018,15 @@ export function ReviewPage() {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
-      const expectedAnswerValue = current.transformation
-        ? current.transformation.target.reading
-        : current.pitchAccent
-          ? current.pitchAccent.correctLabel
-          : current.grammar
-            ? current.grammar.pattern.canonicalName
-            : current.target?.vocabularyItem.reading;
+      const expectedAnswerValue =
+        typedResponseExpected ??
+        (current.transformation
+          ? current.transformation.target.reading
+          : current.pitchAccent
+            ? current.pitchAccent.correctLabel
+            : current.grammar
+              ? current.grammar.pattern.canonicalName
+              : current.target?.vocabularyItem.reading);
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
@@ -1179,8 +1191,9 @@ export function ReviewPage() {
                 vocabularyItem={current.target.vocabularyItem}
                 surfaceForm={current.target.surfaceForm}
                 revealed={revealed}
-                onCheck={(value) => {
+                onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
+                  setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
                 mnemonicVisible={mnemonicVisible}
@@ -1337,6 +1350,13 @@ function VocabularyTargetCard({
 }) {
   const isCloze = activityType === 'cloze';
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  // Only reading_retrieval names the dictionary form — cloze hides the word
+  // itself pre-reveal, so spelling out its lemma would give the answer away.
+  const showDictionaryForm =
+    !isCloze &&
+    !revealed &&
+    !!vocabularyItem.expression &&
+    surfaceForm !== vocabularyItem.expression;
   return (
     <>
       <div className="jp jp-lg">
@@ -1344,6 +1364,9 @@ function VocabularyTargetCard({
         <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
         {after}
       </div>
+      {showDictionaryForm ? (
+        <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
+      ) : null}
       {isCloze && !revealed && sentence.translation ? (
         <div className="muted">{sentence.translation}</div>
       ) : null}
@@ -1358,7 +1381,7 @@ function VocabularyTargetCard({
       ) : null}
       {!revealed ? (
         <button type="button" onClick={onReveal}>
-          {isCloze ? 'Reveal word' : 'Reveal reading'}
+          {isCloze ? 'Reveal word' : showDictionaryForm ? 'Reveal dictionary reading' : 'Reveal reading'}
         </button>
       ) : (
         <>
@@ -1383,6 +1406,16 @@ function VocabularyTargetCard({
  * signal, same as every other card type — correctness is recorded
  * (Review.responseRaw/expectedAnswer, threaded up via onCheck) as
  * supplementary evidence, not used to auto-pick a rating.
+ *
+ * When the word appears inflected in the sentence (頑張って for 頑張る) the
+ * highlighted text alone doesn't say whether the dictionary reading or the
+ * in-context one is wanted — `sentence_transformation` is the card that
+ * tests producing the inflected form. So this card names the dictionary
+ * form explicitly *and* accepts the in-context reading pulled from
+ * `inlineReading` (`surfaceReadingFromInline`), so reading 頑張って off the
+ * screen as がんばって is never marked wrong. `onCheck`'s second argument is
+ * whichever reading the answer was actually graded against, recorded as
+ * `Review.expectedAnswer` (see `typedResponseExpected`).
  */
 function ReadingProductionCard({
   sentence,
@@ -1397,13 +1430,20 @@ function ReadingProductionCard({
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
   revealed: boolean;
-  onCheck: (typedReading: string) => void;
+  onCheck: (typedReading: string, gradedAgainst: string) => void;
   mnemonicVisible: boolean;
   onShowMnemonic: () => void;
 }) {
   const [value, setValue] = useState('');
   const [wasCorrect, setWasCorrect] = useState(false);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  const isInflected =
+    !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
+  const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
+  const acceptableReadings = [
+    vocabularyItem.reading,
+    ...(inContextReading ? [inContextReading] : []),
+  ].filter((reading): reading is string => reading.length > 0);
 
   return (
     <>
@@ -1412,6 +1452,9 @@ function ReadingProductionCard({
         <mark>{target || surfaceForm}</mark>
         {after}
       </div>
+      {isInflected ? (
+        <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
+      ) : null}
       {!revealed && vocabularyItem.notes ? (
         mnemonicVisible ? (
           <div className="muted">💡 {vocabularyItem.notes}</div>
@@ -1426,12 +1469,15 @@ function ReadingProductionCard({
           className="row"
           onSubmit={(event) => {
             event.preventDefault();
-            setWasCorrect(isReadingAnswerCorrect(value, vocabularyItem.reading));
-            onCheck(value);
+            const matched = acceptableReadings.find((reading) =>
+              isReadingAnswerCorrect(value, reading),
+            );
+            setWasCorrect(Boolean(matched));
+            onCheck(value, matched ?? vocabularyItem.reading);
           }}
         >
           <label>
-            Type the reading
+            {isInflected ? 'Type the dictionary reading' : 'Type the reading'}
             <input
               type="text"
               value={value}

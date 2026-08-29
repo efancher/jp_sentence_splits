@@ -1,6 +1,24 @@
 # Status
 
-Last updated: 2026-08-28 (Re-segment an existing shadowing source — in-app.
+Last updated: 2026-08-29 (Reading cards disambiguate inflected words.
+`reading_production`/`reading_retrieval` highlighted the word *as inflected
+in the sentence* (頑張って) but graded/revealed against the dictionary
+reading (がんばる), with nothing on the card saying which was wanted —
+`sentence_transformation` is the card that tests producing the inflected
+form. Fix in `src/pages/ReviewPage.tsx` + `src/lib/readingAnswer.ts`:
+(1) when `surfaceForm !== vocabularyItem.expression`, the card shows
+"Dictionary form: 頑張る" and the label/reveal-button becomes "…dictionary
+reading" (`reading_retrieval` too; `cloze` excluded — would spoil the
+blank); (2) new `surfaceReadingFromInline` derives the in-context kana
+reading from the sentence's `inlineReading` (頑張[がんば]って → がんばって),
+which `reading_production` now also accepts — `isReadingAnswerCorrect` takes
+`string | readonly string[]`. The reading actually graded against is threaded
+up via `onCheck`'s new second arg and recorded as `Review.expectedAnswer`
+(`typedResponseExpected`) so `classifyReviewError` reaches the same ✓/✗
+verdict. Tests: new `tests/readingAnswer.test.ts`; `tests/reviewPage.test.tsx`
+copy updated for the inflected 読む/読みます fixtures.)
+
+Before that: 2026-08-28 (Re-segment an existing shadowing source — in-app.
 Follow-up to the pitch-accent triage below: the "さ、さすがです。水希。たったの"
 fragment is systemic to the pre-`resegment.py` "After Work" / "First Day at
 Work" / GLIM-SPANKY imports. The app forbids editing a sentence's `japanese`

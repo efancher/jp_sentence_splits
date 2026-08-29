@@ -425,9 +425,12 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    // reading_retrieval card first — shows the word, hides the reading.
-    await screen.findByText('Reveal reading');
+    // reading_retrieval card first — shows the word, hides the reading. The
+    // surface form is inflected (読みます for 読む), so the card names the
+    // dictionary form and labels the reveal accordingly.
+    await screen.findByText('Reveal dictionary reading');
     expect(screen.getByText('読みます')).toBeInTheDocument();
+    expect(screen.getByText('Dictionary form: 読む')).toBeInTheDocument();
     expect(screen.queryByText('よむ')).not.toBeInTheDocument();
 
     await waitFor(async () => {
@@ -443,7 +446,7 @@ describe('ReviewPage', () => {
       expect(seeded.every((item) => item.subjectType === 'vocabularyItem')).toBe(true);
     });
 
-    await user.click(screen.getByRole('button', { name: 'Reveal reading' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
     expect(screen.getByText('よむ')).toBeInTheDocument();
     expect(screen.getByText('to read')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Good' }));
@@ -462,8 +465,8 @@ describe('ReviewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
     // reading_production card last — types the reading, checks, then rates.
-    await screen.findByText('Type the reading');
-    await user.type(screen.getByLabelText('Type the reading'), 'よむ');
+    await screen.findByText('Type the dictionary reading');
+    await user.type(screen.getByLabelText('Type the dictionary reading'), 'よむ');
     await user.click(screen.getByRole('button', { name: 'Check' }));
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
     expect(screen.getByText('よむ')).toBeInTheDocument();
@@ -527,8 +530,8 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Type the reading');
-    await user.type(screen.getByLabelText('Type the reading'), 'よみます');
+    await screen.findByText('Type the dictionary reading');
+    await user.type(screen.getByLabelText('Type the dictionary reading'), 'よみます');
     await user.click(screen.getByRole('button', { name: 'Check' }));
 
     expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
@@ -594,8 +597,8 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Type the reading');
-    await user.type(screen.getByLabelText('Type the reading'), 'yomu');
+    await screen.findByText('Type the dictionary reading');
+    await user.type(screen.getByLabelText('Type the dictionary reading'), 'yomu');
     await user.click(screen.getByRole('button', { name: 'Check' }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
@@ -1134,7 +1137,7 @@ describe('ReviewPage', () => {
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Reveal reading');
+    await screen.findByText('Reveal dictionary reading');
     // Async maturity check (computeVocabularyContextDiversity) — retry
     // until it resolves and flips mnemonicVisible, rather than asserting
     // on the very first render.
@@ -1196,14 +1199,14 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Reveal reading');
+    await screen.findByText('Reveal dictionary reading');
     expect(screen.queryByText('💡 Sounds like "yomu".')).not.toBeInTheDocument();
     const showButton = await screen.findByRole('button', { name: 'Show mnemonic' });
 
     await user.click(showButton);
     expect(screen.getByText('💡 Sounds like "yomu".')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Reveal reading' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
     await waitFor(async () => {
@@ -1714,7 +1717,7 @@ describe('ReviewPage', () => {
 
     // Second batch should be vocab-1's cards, not sent-2's — proves
     // interleaving rather than draining every sentence first.
-    await screen.findByText('Reveal reading');
+    await screen.findByText('Reveal dictionary reading');
     const seeded = await db.studyItems.where('subjectId').equals('vocab-1').toArray();
     expect(seeded.map((item) => item.activityType).sort()).toEqual([
       'cloze',

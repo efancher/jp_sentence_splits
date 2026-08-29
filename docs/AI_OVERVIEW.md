@@ -630,7 +630,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   IME and katakana-vs-hiragana differences; the same helper backs
   `classifyReviewError` so an accepted answer isn't logged as an error;
   both `reading_production` and `sentence_transformation` echo the
-  learner's own typed answer back on an incorrect reveal),
+  learner's own typed answer back on an incorrect reveal. When the word
+  appears inflected in the sentence (頑張って for 頑張る) the card names the
+  dictionary form explicitly ("Dictionary form: 頑張る", label becomes "Type
+  the dictionary reading") — since `sentence_transformation` is the card
+  that tests producing the inflected form — *and* also accepts the
+  in-context inflected reading pulled from `inlineReading`
+  (`surfaceReadingFromInline`), recording whichever reading it actually
+  graded against as `Review.expectedAnswer` so `classifyReviewError` stays
+  consistent; `reading_retrieval` gets the same dictionary-form label, `cloze`
+  does not since it would spoil the blanked word),
   `sentence_transformation`
   (conjugate a word to a per-word-hashed target form — 13 verb/10
   adjective forms via `src/lib/conjugation.ts`, a ported/validated
