@@ -88,6 +88,20 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
 export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
 
 /**
+ * Minimum share of the glossing bucket's minutes that vocabulary
+ * confirmations (`vocabulary_review`) get first claim on, whenever any
+ * not-yet-confirmed sentence is a candidate (user request, 2026-08-29).
+ * buildExploreSteps spends up to this fraction on confirmations before it
+ * drafts a single `continue_book` structural-analysis step, so a backlog of
+ * unlooked-at words never sits behind grammar/meaning glossing of sentences
+ * the learner has already confirmed. Confirmations can still take *more*
+ * than this share (the rest of the bucket is filled in reading order,
+ * both step kinds) — it's a floor, not a cap; and if there's no vocab
+ * backlog the reserve is zero and structural analysis uses the whole bucket.
+ */
+export const VOCAB_CONFIRM_MIN_GLOSSING_SHARE = 0.6;
+
+/**
  * Ceiling on how far redistribution (minutes freed by a bucket that hit its
  * own candidate ceiling) can push any single bucket past its own
  * weight-based fair share of the requested time. Without this, a session

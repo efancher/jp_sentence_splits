@@ -484,6 +484,59 @@ describe('buildRecommendedSession', () => {
     expect(stepsForSentence[0]!.targetKind).toBe('vocabulary_review');
   });
 
+  it('vocabulary confirmations get first claim on the glossing budget, ahead of continue_book for already-confirmed sentences', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: [
+          // Confirmed + proficient sentences come first in reading order —
+          // the old planner would have drafted their continue_book steps
+          // before ever reaching the unconfirmed sentences below.
+          { sentenceId: 'ready_1', preview: 'a', vocabularyConfirmed: true, vocabularyReady: true },
+          { sentenceId: 'ready_2', preview: 'b', vocabularyConfirmed: true, vocabularyReady: true },
+          ...Array.from({ length: 20 }, (_, i) => ({
+            sentenceId: `new_${i}`,
+            preview: `n${i}`,
+            vocabularyConfirmed: false,
+            vocabularyReady: false,
+          })),
+        ],
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ totalMinutes: 30, exploreCandidates }));
+    const glossing = session.steps.filter((step) => step.bucket === 'glossing');
+    expect(glossing.length).toBeGreaterThan(2);
+    // The first glossing steps drafted are confirmations, not continue_book.
+    expect(glossing[0]!.targetKind).toBe('vocabulary_review');
+    const vocabMinutes = glossing
+      .filter((step) => step.targetKind === 'vocabulary_review')
+      .reduce((sum, step) => sum + step.estimatedMinutes, 0);
+    const totalGlossingMinutes = glossing.reduce((sum, step) => sum + step.estimatedMinutes, 0);
+    expect(vocabMinutes / totalGlossingMinutes).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('leaves the whole glossing bucket to structural analysis when there is no confirmation backlog', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: Array.from({ length: 10 }, (_, i) => ({
+          sentenceId: `ready_${i}`,
+          preview: `r${i}`,
+          vocabularyConfirmed: true,
+          vocabularyReady: true,
+        })),
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ totalMinutes: 30, exploreCandidates }));
+    const glossing = session.steps.filter((step) => step.bucket === 'glossing');
+    expect(glossing.length).toBeGreaterThan(0);
+    expect(glossing.every((step) => step.targetKind === 'continue_book')).toBe(true);
+  });
+
   it('gives no step at all to a sentence whose vocab is confirmed but not yet proficient, and moves on to the next sentence', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {

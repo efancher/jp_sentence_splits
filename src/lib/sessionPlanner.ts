@@ -19,6 +19,7 @@ import {
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
   SYNTHETIC_ACTIVITY_TYPES,
+  VOCAB_CONFIRM_MIN_GLOSSING_SHARE,
 } from './sessionPlannerConfig';
 
 /**
@@ -470,89 +471,139 @@ function buildReviewBatchStep(ranked: ReviewPriorityResult[], budgetMinutes: num
   };
 }
 
+interface ExploreSentenceEntry {
+  kind: 'vocabulary' | 'analyze';
+  candidate: ExploreCandidate;
+  sentence: ExploreCandidate['sentences'][number];
+}
+
+/** Classifies every candidate sentence into the one glossing step it's eligible for right now (or none), preserving book-then-position reading order. */
+function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSentenceEntry[] {
+  const entries: ExploreSentenceEntry[] = [];
+  for (const candidate of candidates) {
+    for (const sentence of candidate.sentences) {
+      if (!sentence.vocabularyConfirmed) {
+        entries.push({ kind: 'vocabulary', candidate, sentence });
+      } else if (sentence.vocabularyReady) {
+        entries.push({ kind: 'analyze', candidate, sentence });
+      }
+      // confirmed-but-not-proficient: no step this pass — its words mature
+      // via the review bucket; move on rather than block the book.
+    }
+  }
+  return entries;
+}
+
+function exploreEntryCost(entry: ExploreSentenceEntry): number {
+  return entry.kind === 'vocabulary'
+    ? EXPLORE_STEP_MINUTES.vocabulary
+    : EXPLORE_STEP_MINUTES.analyze;
+}
+
+function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
+  const { candidate, sentence } = entry;
+  if (entry.kind === 'vocabulary') {
+    return {
+      id: draftStepId(),
+      bucket: 'glossing',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
+      targetKind: 'vocabulary_review',
+      bookId: candidate.bookId,
+      sentenceId: sentence.sentenceId,
+      label: `Vocabulary: ${sentence.preview}`,
+      estimatedMinutes: EXPLORE_STEP_MINUTES.vocabulary,
+      reason: candidate.reason,
+      status: 'pending',
+    };
+  }
+  return {
+    id: draftStepId(),
+    bucket: 'glossing',
+    activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
+    targetKind: 'continue_book',
+    bookId: candidate.bookId,
+    sentenceId: sentence.sentenceId,
+    label: `Continue ${candidate.label}: ${sentence.preview}`,
+    estimatedMinutes: EXPLORE_STEP_MINUTES.analyze,
+    reason: candidate.reason,
+    status: 'pending',
+  };
+}
+
 /**
- * Step 7 (glossing): continue the highest-priority book(s) — one step per
- * book, sized to the remaining budget. Vocabulary-first by design (user
- * request, 2026-08-27): a not-yet-confirmed sentence only gets its
- * `vocabulary_review` step, never `continue_book` (structural analysis,
- * which surfaces literal-English glosses per chunk) in the same pass —
- * otherwise the learner sees a sentence's grammar/meaning glossed before
- * they've even looked at its words. Once vocabulary is confirmed,
- * `continue_book` stays withheld further still until every one of the
- * sentence's vocabulary items has itself reached FSRS proficiency
- * (`vocabularyReady`, reusing the same `isSentenceReadyForFullReview` rule
- * that already gates full-sentence review cards) — confirming a word isn't
- * the same as having demonstrated recall of it. A sentence that's confirmed
- * but not yet proficient gets no step at all this pass (its words are still
- * maturing via the review bucket); the loop moves on to the next sentence
- * rather than blocking the book's progress on it.
+ * Step 7 (glossing): continue the highest-priority book(s). Two design
+ * rules, both from user requests:
+ *
+ * 1. A not-yet-confirmed sentence only gets its `vocabulary_review` step,
+ *    never `continue_book` (structural analysis, which surfaces literal-
+ *    English glosses per chunk) in the same pass (2026-08-27) — otherwise
+ *    the learner sees a sentence's grammar/meaning glossed before they've
+ *    even looked at its words. Once vocabulary is confirmed, `continue_book`
+ *    stays withheld further still until every one of the sentence's
+ *    vocabulary items has itself reached FSRS proficiency (`vocabularyReady`,
+ *    reusing the same `isSentenceReadyForFullReview` rule that gates full-
+ *    sentence review cards) — confirming a word isn't the same as having
+ *    demonstrated recall of it.
+ *
+ * 2. Vocabulary confirmations get first claim on the glossing budget
+ *    (2026-08-29): pass 1 spends up to VOCAB_CONFIRM_MIN_GLOSSING_SHARE of
+ *    the bucket on `vocabulary_review` steps across *all* candidate books
+ *    before pass 2 drafts anything, so a confirmation backlog never sits
+ *    behind `continue_book` steps for sentences already confirmed earlier in
+ *    the reading order. Pass 2 then fills the rest of the bucket in reading
+ *    order with whatever's left (both step kinds), keeping per-book
+ *    coherence and chain-grouping intact for the remainder.
  */
 function buildExploreSteps(
   candidates: ExploreCandidate[],
   budgetMinutes: number,
 ): PlannerStepDraft[] {
+  const entries = classifyExploreSentences(candidates);
   const steps: PlannerStepDraft[] = [];
+  const consumed = new Set<ExploreSentenceEntry>();
   let remaining = budgetMinutes;
-  outer: for (const candidate of candidates) {
-    for (const sentence of candidate.sentences) {
-      if (sentence.vocabularyConfirmed && sentence.vocabularyReady) {
-        const cost = EXPLORE_STEP_MINUTES.analyze;
-        if (remaining < cost) break outer;
-        steps.push({
-          id: draftStepId(),
-          bucket: 'glossing',
-          activityType: SYNTHETIC_ACTIVITY_TYPES.newSentence,
-          targetKind: 'continue_book',
-          bookId: candidate.bookId,
-          sentenceId: sentence.sentenceId,
-          label: `Continue ${candidate.label}: ${sentence.preview}`,
-          estimatedMinutes: cost,
-          reason: candidate.reason,
-          status: 'pending',
-        });
-        remaining -= cost;
-      } else if (!sentence.vocabularyConfirmed) {
-        const cost = EXPLORE_STEP_MINUTES.vocabulary;
-        if (remaining < cost) break outer;
-        steps.push({
-          id: draftStepId(),
-          bucket: 'glossing',
-          activityType: SYNTHETIC_ACTIVITY_TYPES.vocabularyReview,
-          targetKind: 'vocabulary_review',
-          bookId: candidate.bookId,
-          sentenceId: sentence.sentenceId,
-          label: `Vocabulary: ${sentence.preview}`,
-          estimatedMinutes: cost,
-          reason: candidate.reason,
-          status: 'pending',
-        });
-        remaining -= cost;
-      }
-    }
+
+  // Pass 1 (reserved): vocabulary confirmations, up to the reserve share.
+  const hasVocabBacklog = entries.some((entry) => entry.kind === 'vocabulary');
+  const vocabReserve = hasVocabBacklog ? budgetMinutes * VOCAB_CONFIRM_MIN_GLOSSING_SHARE : 0;
+  let vocabSpent = 0;
+  for (const entry of entries) {
+    if (entry.kind !== 'vocabulary') continue;
+    const cost = exploreEntryCost(entry);
+    if (cost > remaining || vocabSpent + cost > vocabReserve) break;
+    steps.push(exploreStepFor(entry));
+    consumed.add(entry);
+    remaining -= cost;
+    vocabSpent += cost;
   }
+
+  // Pass 2 (open): remaining sentences in reading order, both kinds. Keep
+  // scanning past a step that doesn't fit — a cheaper one may still.
+  for (const entry of entries) {
+    if (consumed.has(entry)) continue;
+    const cost = exploreEntryCost(entry);
+    if (cost > remaining) continue;
+    steps.push(exploreStepFor(entry));
+    consumed.add(entry);
+    remaining -= cost;
+  }
+
   return steps;
 }
 
 /**
  * How many minutes the glossing bucket could actually absorb given its
- * candidate sentences — mirrors buildExploreSteps' per-sentence branch
- * (vocab-confirm cost vs structural-analysis cost, never both), but
- * unbounded by budget. Feeds allocateTimeAcrossModes' availableMinutesByMode
- * so a thin candidate list doesn't attract redistributed spillover minutes
- * it can't spend.
+ * candidate sentences — the sum of every eligible sentence's single step
+ * cost, unbounded by budget (the pass-1 vocab reserve only reorders within a
+ * fixed budget, it doesn't change total capacity). Feeds
+ * allocateTimeAcrossModes' availableMinutesByMode so a thin candidate list
+ * doesn't attract redistributed spillover minutes it can't spend.
  */
 function exploreCeilingMinutes(candidates: ExploreCandidate[]): number {
-  let total = 0;
-  for (const candidate of candidates) {
-    for (const sentence of candidate.sentences) {
-      if (sentence.vocabularyConfirmed && sentence.vocabularyReady) {
-        total += EXPLORE_STEP_MINUTES.analyze;
-      } else if (!sentence.vocabularyConfirmed) {
-        total += EXPLORE_STEP_MINUTES.vocabulary;
-      }
-    }
-  }
-  return total;
+  return classifyExploreSentences(candidates).reduce(
+    (total, entry) => total + exploreEntryCost(entry),
+    0,
+  );
 }
 
 /** Step 7 (grammar): one step per grammar pattern worth examining, in priority order, until the budget runs out. */

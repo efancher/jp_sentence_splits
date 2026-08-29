@@ -4089,7 +4089,6 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
 
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
-    if (candidates.length >= limit) break;
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
     const unstarted = memberships
       .filter((item) => item.status === 'unstarted')
@@ -4115,15 +4114,29 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
       })),
     });
   }
+  // Books whose next sentences still need vocabulary confirmed float above
+  // fully-confirmed books (user request, 2026-08-29) — Array.sort is stable,
+  // so recency order is preserved within each group. Done before the slice
+  // so a slightly-less-recent book with a confirmation backlog isn't dropped
+  // in favour of a more-recent book that's already caught up.
+  const limited = candidates
+    .map((candidate, index) => ({ candidate, index }))
+    .sort((a, b) => {
+      const rank = (c: ExploreCandidate) =>
+        c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
+      return rank(a.candidate) - rank(b.candidate) || a.index - b.index;
+    })
+    .slice(0, limit)
+    .map((entry) => entry.candidate);
   const readiness = await getSentenceFullReviewReadiness(
-    candidates.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
+    limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
   );
-  for (const candidate of candidates) {
+  for (const candidate of limited) {
     for (const sentence of candidate.sentences) {
       sentence.vocabularyReady = readiness.get(sentence.sentenceId) ?? false;
     }
   }
-  return candidates;
+  return limited;
 }
 
 /**

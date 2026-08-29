@@ -122,6 +122,33 @@ describe('Learning Orchestrator repository layer', () => {
     expect(continueStep!.sentenceId).toBe(sentence.id);
   });
 
+  it('prefers a book that still needs vocabulary confirmed over more-recent fully-confirmed books when candidate slots are scarce (2026-08-29)', async () => {
+    const db = getDb();
+
+    // Oldest book: its next sentence still needs vocabulary confirmed.
+    const backlogBook = await createBook({ title: 'Needs Vocab' });
+    const backlogSentence = makeSentence();
+    await db.sentences.put(backlogSentence);
+    await addSentencesToBook(backlogBook.id, [backlogSentence.id]);
+    await db.books.update(backlogBook.id, { lastOpenedAt: '2026-01-01T00:00:00.000Z' });
+
+    // Six more-recent books whose next sentence is already confirmed + proficient —
+    // enough to fill every Explore candidate slot by recency alone.
+    for (let i = 0; i < 6; i += 1) {
+      const book = await createBook({ title: `Confirmed ${i}` });
+      const sentence = makeSentence();
+      await db.sentences.put(sentence);
+      await addSentencesToBook(book.id, [sentence.id]);
+      await confirmSentenceVocabulary(sentence.id, []);
+      await db.books.update(book.id, { lastOpenedAt: `2026-08-2${i}T00:00:00.000Z` });
+    }
+
+    const recommended = await planRecommendedSession(30);
+    const vocabStep = recommended.steps.find((step) => step.targetKind === 'vocabulary_review');
+    expect(vocabStep).toBeDefined();
+    expect(vocabStep!.sentenceId).toBe(backlogSentence.id);
+  });
+
   it('ending a session early marks remaining steps skipped, never completed', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();

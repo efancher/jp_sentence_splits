@@ -253,7 +253,21 @@ learner has actually demonstrated recall of the sentence's words, typically
 landing a day or more after the vocabulary step once a review cycle has
 passed. A sentence whose vocabulary is confirmed but not yet proficient
 gets no glossing step at all that pass; the planner moves on to the next
-sentence rather than blocking the book on it. The same rule extends to the
+sentence rather than blocking the book on it. Within the glossing bucket,
+vocabulary confirmations get first claim on the minutes (user request,
+2026-08-29): `buildExploreSteps` runs two passes — pass 1 spends up to
+`VOCAB_CONFIRM_MIN_GLOSSING_SHARE` (0.6) of the bucket on `vocabulary_review`
+steps across *every* candidate book before pass 2 drafts a single
+`continue_book`, so a confirmation backlog never sits behind structural
+analysis of sentences confirmed earlier in the reading order; pass 2 then
+fills the rest of the bucket in reading order with both step kinds (it's a
+floor on confirmations, not a cap — they can take more, and with no backlog
+the reserve is zero and structural analysis uses the whole bucket).
+`findExploreCandidates` reinforces this by floating books whose next
+sentences still need vocabulary confirmed above fully-confirmed books
+(recency order preserved within each group) before the candidate-slot slice,
+so a slightly-older book with a backlog isn't dropped for a caught-up newer
+one. The same rule extends to the
 shadowing bucket (2026-08-27 follow-up, same user request): `findShadowCandidates`
 (`src/db/repository.ts`) only pools sentences whose vocabulary is confirmed
 and proficient before ranking by fewest existing attempts, so a sentence

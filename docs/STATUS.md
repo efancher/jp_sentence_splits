@@ -1,6 +1,29 @@
 # Status
 
-Last updated: 2026-08-29 (Reference audio pulls across devices. Follow-up
+Last updated: 2026-08-29 (Vocabulary confirmations prioritized within the
+session planner's glossing bucket. User asked how to prioritize vocabulary
+confirmations in the recommended-session split. `buildExploreSteps`
+(`src/lib/sessionPlanner.ts`) now runs two passes instead of one
+book-then-position walk: pass 1 spends up to the new
+`VOCAB_CONFIRM_MIN_GLOSSING_SHARE` (0.6, `sessionPlannerConfig.ts`) of the
+glossing budget on `vocabulary_review` steps across every candidate book
+before pass 2 drafts any `continue_book` structural-analysis step; pass 2
+fills the rest in reading order with both step kinds. It's a floor on
+confirmations, not a cap — they can take the whole bucket, and with no
+backlog the reserve is zero so structural analysis is unaffected.
+`exploreCeilingMinutes` refactored to share the new
+`classifyExploreSentences`/`exploreEntryCost` helpers (same total, no
+behavior change — the reserve only reorders within a fixed budget).
+`findExploreCandidates` (`src/db/repository.ts`) now sorts books with an
+unconfirmed-vocab next sentence above fully-confirmed books (stable, so
+recency order holds within each group) *before* slicing to the candidate
+limit, so an older book with a confirmation backlog isn't dropped for a
+caught-up newer one — the early `candidates.length >= limit` break was
+removed so the sort sees every book. Tests: `tests/sessionPlanner.test.ts`
+(+2), `tests/sessionPlannerRepository.test.ts` (+1). No schema change.
+AI_OVERVIEW.md §0 (Learning Orchestrator) updated.)
+
+Before that: 2026-08-29 (Reference audio pulls across devices. Follow-up
 to the re-segmentation audio work below: the backfill put 84 re-cut clips
 in Supabase, but `applyRemoteUpsert` for `reference_audio` only ever
 *updated* existing local rows — a clip imported/mined/backfilled elsewhere
