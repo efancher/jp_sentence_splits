@@ -13,6 +13,7 @@ import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 type FilterKey =
   | 'all'
   | 'unassigned'
+  | 'not_in_book'
   | 'unstarted'
   | 'in_progress'
   | 'complete'
@@ -56,6 +57,8 @@ export function SearchPage() {
       switch (filter) {
         case 'unassigned':
           return inboxIds.has(sentence.id);
+        case 'not_in_book':
+          return !statuses.has(sentence.id);
         case 'unstarted':
           return (statuses.get(sentence.id) ?? 'unstarted') === 'unstarted';
         case 'in_progress':
@@ -112,7 +115,8 @@ export function SearchPage() {
             onChange={(event) => setFilter(event.target.value as FilterKey)}
           >
             <option value="all">All</option>
-            <option value="unassigned">Unassigned</option>
+            <option value="unassigned">In inbox</option>
+            <option value="not_in_book">Not in a book</option>
             <option value="unstarted">Unstarted</option>
             <option value="in_progress">In progress</option>
             <option value="complete">Complete</option>

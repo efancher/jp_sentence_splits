@@ -1,6 +1,17 @@
 # Status
 
-Last updated: 2026-08-29 (User-facing sentence + book cascade deletes.
+Last updated: 2026-08-29 (Search: "Not in a book" filter. From "is there
+a way to filter for sentences not in books so i can [as]sign them?" The
+existing "Unassigned" filter (renamed "In inbox") only matched sentences
+with a row in the `inbox` table — populated solely by import → "Leave in
+Inbox" — so a sentence removed from its only book (`removeSentencesFromBook`
+doesn't re-add to the inbox) was a true orphan that showed nowhere. New
+`not_in_book` `FilterKey` in `SearchPage.tsx`: `!statuses.has(sentence.id)`
+where `statuses` is already built from `meta.bookSentences`. With no query
+it lists every orphan; select + "Add to book" as before. No schema change,
+no new tests (pure filter branch). AI_OVERVIEW.md §Search updated.)
+
+Before that: 2026-08-29 (User-facing sentence + book cascade deletes.
 From "is there a way to delete sentences like this one" plus "it might
 also be nice to have a book delete that cascades". `deleteSentenceCascade`
 already existed in `repository.ts` (built for resegmentation) but had no

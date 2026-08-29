@@ -513,9 +513,12 @@ observed from outside `ReviewPage`'s own due-queue state.
   into a book; `ImportBatchPage.tsx` lets you review/organize everything
   from one import run at once.
 - **Search** (`SearchPage.tsx`) — full-text-ish search across sentences
-  with facet filters (unassigned, by study status, has-warning,
-  multi-vocab, missing translation/analysis); results can be bulk-added to
-  a book or exported as a worksheet.
+  with facet filters (in inbox, not in a book, by study status,
+  has-warning, multi-vocab, missing translation/analysis); results can be
+  bulk-added to a book or exported as a worksheet. "In inbox" keys off the
+  `inbox` table (import → "Leave in Inbox"); "Not in a book" catches every
+  sentence with zero `bookSentences` rows, including ones removed from
+  their only book.
 
 ### 2. Structural (Cure-Dolly) analysis — `AnalyzePage.tsx`,
 `src/lib/chunking.ts`/`clauseBands.ts`/`stickyEnglish.ts`/`puzzleShapes.ts`
