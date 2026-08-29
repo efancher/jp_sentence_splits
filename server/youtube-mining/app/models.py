@@ -113,6 +113,29 @@ class ClipRequest(BaseModel):
     transcriptStatus: TranscriptStatus = "manually-corrected"
 
 
+class ReclipCut(BaseModel):
+    # Milliseconds relative to the concatenation of this group's clips.
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=1)
+
+
+class ReclipRequest(BaseModel):
+    """One group of old clips that a run of new sentences descends from."""
+
+    clipsBase64: list[str] = Field(min_length=1)
+    cuts: list[ReclipCut] = Field(min_length=1)
+
+
+class ReclipClip(BaseModel):
+    audioBase64: str
+    mimeType: Literal["audio/mp4"] = "audio/mp4"
+    durationMs: int
+
+
+class ReclipResponse(BaseModel):
+    clips: list[ReclipClip]
+
+
 class ClipAudioInfo(BaseModel):
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int

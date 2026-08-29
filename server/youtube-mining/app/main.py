@@ -1,12 +1,13 @@
 import asyncio
 import logging
+import subprocess
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app import config, jobs, morphology, readings, resegment
+from app import config, jobs, morphology, readings, reclip, resegment
 from app.models import (
     ClipRequest,
     ClipResponse,
@@ -14,6 +15,9 @@ from app.models import (
     CreateJobResponse,
     Cue,
     JobStatusResponse,
+    ReclipClip,
+    ReclipRequest,
+    ReclipResponse,
     ResegmentedCue,
     ResegmentRequest,
 )
@@ -130,6 +134,33 @@ def _resegment_sync(req: ResegmentRequest) -> list[ResegmentedCue]:
             )
         )
     return out
+
+
+def _reclip_sync(req: ReclipRequest) -> ReclipResponse:
+    results = reclip.reclip_group(
+        req.clipsBase64, [(c.startMs, c.endMs) for c in req.cuts]
+    )
+    return ReclipResponse(
+        clips=[
+            ReclipClip(audioBase64=audio, durationMs=duration)
+            for audio, duration in results
+        ]
+    )
+
+
+@app.post("/reclip", response_model=ReclipResponse)
+async def reclip_sentences(req: ReclipRequest):
+    """Re-cut reference audio onto new sentence boundaries after re-segmentation.
+
+    Stateless: concatenates the supplied old per-fragment clips and cuts the
+    requested sub-ranges. No job, no yt-dlp, no source download.
+    """
+    try:
+        return await asyncio.to_thread(_reclip_sync, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except subprocess.CalledProcessError as exc:
+        raise HTTPException(status_code=500, detail=f"ffmpeg failed: {exc.stderr}")
 
 
 @app.post("/resegment", response_model=list[ResegmentedCue])
