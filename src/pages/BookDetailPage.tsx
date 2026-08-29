@@ -26,6 +26,7 @@ import {
   createBookChapter,
   deleteBookChapter,
   deleteBook,
+  deleteBookCascade,
   duplicateBookOrdering,
   exportBookBackup,
   exportBookMiningPackage,
@@ -255,6 +256,8 @@ export function BookDetailPage() {
   const [pasteOrderError, setPasteOrderError] = useState('');
   const [editMetadata, setEditMetadata] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmCascadeDelete, setConfirmCascadeDelete] = useState(false);
+  const [cascadeDeleting, setCascadeDeleting] = useState(false);
   const [destinationBookId, setDestinationBookId] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
@@ -528,6 +531,46 @@ export function BookDetailPage() {
           >
             Delete book
           </button>
+          {confirmCascadeDelete ? (
+            <>
+              <button
+                type="button"
+                className="danger"
+                disabled={cascadeDeleting}
+                onClick={async () => {
+                  setCascadeDeleting(true);
+                  try {
+                    await deleteBookCascade(bookId);
+                    navigate('/books');
+                  } catch (error) {
+                    setCascadeDeleting(false);
+                    window.alert(
+                      error instanceof Error ? error.message : String(error),
+                    );
+                  }
+                }}
+              >
+                {cascadeDeleting
+                  ? 'Deleting…'
+                  : `Confirm: delete book + ${data.rows.length} sentence(s)`}
+              </button>
+              <button
+                type="button"
+                disabled={cascadeDeleting}
+                onClick={() => setConfirmCascadeDelete(false)}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="danger"
+              onClick={() => setConfirmCascadeDelete(true)}
+            >
+              Delete book + sentences
+            </button>
+          )}
         </div>
         {selected.size ? (
           <div className="panel stack">

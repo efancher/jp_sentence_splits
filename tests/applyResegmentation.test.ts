@@ -4,6 +4,7 @@ import { resetDbForTests } from '../src/db/database';
 import {
   applyResegmentation,
   createBook,
+  deleteBookCascade,
   deleteSentenceCascade,
   ensureStudyItem,
   getDb,
@@ -335,5 +336,35 @@ describe('deleteSentenceCascade', () => {
     expect(await db.analyses.get(s.id)).toBeUndefined();
     expect(await db.studyItems.get(study.id)).toBeUndefined();
     expect(await db.bookSentences.where('sentenceId').equals(s.id).count()).toBe(0);
+  });
+});
+
+describe('deleteBookCascade', () => {
+  beforeEach(() => {
+    resetDbForTests(`book-cascade-del-${createId('db')}`);
+  });
+
+  it('deletes the book and its orphaned sentences but keeps shared ones', async () => {
+    const db = getDb();
+    const bookA = await createBook({ title: 'A' });
+    const bookB = await createBook({ title: 'B' });
+    const orphan = shadowingSentence('これは孤立です。', 0);
+    const shared = shadowingSentence('これは共有です。', 1);
+    await db.sentences.bulkPut([orphan, shared]);
+    await db.bookSentences.bulkPut([
+      { id: createId('bs'), bookId: bookA.id, sentenceId: orphan.id, position: 0, status: 'unstarted', addedAt: nowIso() },
+      { id: createId('bs'), bookId: bookA.id, sentenceId: shared.id, position: 1, status: 'unstarted', addedAt: nowIso() },
+      { id: createId('bs'), bookId: bookB.id, sentenceId: shared.id, position: 0, status: 'unstarted', addedAt: nowIso() },
+    ]);
+    const orphanStudy = await ensureStudyItem('sentence', orphan.id, 'comprehension');
+
+    await deleteBookCascade(bookA.id);
+
+    expect(await db.books.get(bookA.id)).toBeUndefined();
+    expect(await db.sentences.get(orphan.id)).toBeUndefined();
+    expect(await db.studyItems.get(orphanStudy.id)).toBeUndefined();
+    expect(await db.sentences.get(shared.id)).toBeDefined();
+    expect(await db.bookSentences.where('bookId').equals(bookA.id).count()).toBe(0);
+    expect(await db.bookSentences.where('bookId').equals(bookB.id).count()).toBe(1);
   });
 });

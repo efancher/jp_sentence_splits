@@ -481,8 +481,8 @@ observed from outside `ReviewPage`'s own due-queue state.
   `merge:false split:false` = annotate-only for song lyrics), lets the
   user merge/split/edit in a review step, then `applyResegmentation()`
   (`src/db/repository.ts`) creates the new sentences, retires the old
-  ones (`deleteSentenceCascade` — the only sentence-delete path; soft
-  delete, never raw DELETE), carries study progress onto the
+  ones (`deleteSentenceCascade`; soft delete, never raw DELETE), carries
+  study progress onto the
   best-text-overlap replacement (`src/lib/resegmentPlan.ts`), and repoints
   surviving vocabulary links. Chunk analysis is offset-bound and dropped.
   A split sentence seeds its English from the old translation; an
@@ -501,7 +501,14 @@ observed from outside `ReviewPage`'s own due-queue state.
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori
   chapter text, `src/lib/pasteOrder.ts`), move/copy sentences between
-  books, archive books.
+  books, archive books. Two book-delete buttons: "Delete book" drops the
+  book but leaves its sentences in the library; "Delete book + sentences"
+  (`deleteBookCascade`, two-step inline confirm) also retires every
+  sentence the book would orphan, keeping any shared with another book.
+  A single sentence is deleted from the "Danger zone" at the bottom of
+  `AnalyzePage` (`deleteSentenceCascade`, two-step confirm) — both cascade
+  paths soft-delete via the normal queued `delete`, never raw DELETE, and
+  leave confirmed vocabulary/kanji in the library.
 - **Inbox** (`InboxPage.tsx`) — sentences land here by default until filed
   into a book; `ImportBatchPage.tsx` lets you review/organize everything
   from one import run at once.

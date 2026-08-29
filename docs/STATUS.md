@@ -1,6 +1,24 @@
 # Status
 
-Last updated: 2026-08-29 (Pitch-accent review card can model the native
+Last updated: 2026-08-29 (User-facing sentence + book cascade deletes.
+From "is there a way to delete sentences like this one" plus "it might
+also be nice to have a book delete that cascades". `deleteSentenceCascade`
+already existed in `repository.ts` (built for resegmentation) but had no
+UI — now wired to a "Danger zone" delete button at the bottom of
+`AnalyzePage` (two-step inline confirm, not `window.confirm`, per the
+installed-PWA native-dialog quirk; navigates back to the book on success).
+New `deleteBookCascade(bookId)` (`repository.ts`): retires every sentence
+the book would leave orphaned (only book membership is this one) via the
+same `cascadeRetireSentenceLocal` path, keeps sentences shared with
+another book (drops just this book's membership), then deletes the book —
+all in one transaction, soft-deleted through the normal queued `delete`.
+`BookDetailPage` keeps the existing non-cascading "Delete book" and adds
+a second "Delete book + sentences" danger button (two-step confirm,
+shows the sentence count). Tests: `deleteBookCascade` case added to
+`tests/applyResegmentation.test.ts` (orphan deleted, shared kept). No
+schema change. AI_OVERVIEW.md §"Books/Chapters" + resegment note updated.)
+
+Before that: 2026-08-29 (Pitch-accent review card can model the native
 realization. From a "for the pitch accent cards, if there's native audio,
 it might be nice to help with modeling the pitch accent of natives" ask —
 the `pitch_accent` card was dictionary-only (multiple choice + diagram +

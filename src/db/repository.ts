@@ -907,6 +907,74 @@ export async function deleteBook(bookId: string): Promise<void> {
   ]);
 }
 
+/**
+ * Delete a book and retire every sentence that would be left orphaned by its
+ * removal — i.e. sentences whose only book membership is this one. Sentences
+ * shared with another book are kept; only their membership in this book is
+ * dropped (same as `deleteBook`). Each orphan goes through the same cascade as
+ * `deleteSentenceCascade` (analysis, vocab/grammar links, sentence-subject
+ * study items, inbox entry), all soft-deleted via the normal queued `delete`.
+ */
+export async function deleteBookCascade(bookId: string): Promise<void> {
+  const db = getDb();
+  const memberships = await db.bookSentences
+    .where('bookId')
+    .equals(bookId)
+    .toArray();
+
+  const orphanSentenceIds: string[] = [];
+  const sharedMembershipIds: string[] = [];
+  for (const membership of memberships) {
+    const all = await db.bookSentences
+      .where('sentenceId')
+      .equals(membership.sentenceId)
+      .toArray();
+    if (all.some((item) => item.bookId !== bookId)) {
+      sharedMembershipIds.push(membership.id);
+    } else {
+      orphanSentenceIds.push(membership.sentenceId);
+    }
+  }
+
+  const sink: PendingSyncOp[] = [];
+  await db.transaction(
+    'rw',
+    [
+      db.books,
+      db.sentences,
+      db.bookSentences,
+      db.analyses,
+      db.sentenceVocabulary,
+      db.sentenceGrammar,
+      db.studyItems,
+      db.inbox,
+    ],
+    async () => {
+      for (const sentenceId of orphanSentenceIds) {
+        await cascadeRetireSentenceLocal(db, sentenceId, sink);
+      }
+      // Shared sentences survive — just drop this book's membership.
+      for (const membershipId of sharedMembershipIds) {
+        await db.bookSentences.delete(membershipId);
+        sink.push({
+          entity: 'book_sentences',
+          recordId: membershipId,
+          payload: { id: membershipId },
+          operation: 'delete',
+        });
+      }
+      await db.books.delete(bookId);
+      sink.push({
+        entity: 'books',
+        recordId: bookId,
+        payload: { id: bookId },
+        operation: 'delete',
+      });
+    },
+  );
+  notifySyncMany(sink);
+}
+
 export async function duplicateBookOrdering(bookId: string): Promise<Book> {
   const db = getDb();
   const book = await db.books.get(bookId);

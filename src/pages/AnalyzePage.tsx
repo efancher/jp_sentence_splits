@@ -10,6 +10,7 @@ import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
 import {
+  deleteSentenceCascade,
   getDb,
   saveAnalysis,
   setBookSentenceStatus,
@@ -79,6 +80,8 @@ export function AnalyzePage() {
     roles: string[];
     spaced: string;
   } | null>(null);
+  const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
+  const [deletingSentence, setDeletingSentence] = useState(false);
 
   const isCustomRole = (chunk: AnalysisChunk): boolean =>
     customRoleIds.has(chunk.id) ||
@@ -115,6 +118,7 @@ export function AnalyzePage() {
     setCustomRoleIds(new Set());
     setDismissedSuggestionIds(new Set());
     setHeuristicPreview(null);
+    setConfirmDeleteSentence(false);
     setNotes(data.analysis?.notes ?? '');
     setTranslation(data.sentence.translation ?? '');
     setReadingOnly(data.sentence.readingOnly ?? '');
@@ -1014,6 +1018,55 @@ export function AnalyzePage() {
             <button type="button">Build this</button>
           </Link>
         </div>
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Danger zone</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          Deletes this sentence everywhere: its analysis, vocabulary and grammar
+          links, book membership, and any sentence-level study progress. Confirmed
+          vocabulary and kanji stay in your library.
+        </p>
+        {confirmDeleteSentence ? (
+          <div className="row">
+            <button
+              type="button"
+              className="danger"
+              disabled={deletingSentence}
+              onClick={async () => {
+                setDeletingSentence(true);
+                try {
+                  await deleteSentenceCascade(sentenceId);
+                  navigate(`/books/${bookId}`);
+                } catch (error) {
+                  setDeletingSentence(false);
+                  window.alert(
+                    error instanceof Error ? error.message : String(error),
+                  );
+                }
+              }}
+            >
+              {deletingSentence ? 'Deleting…' : 'Confirm delete'}
+            </button>
+            <button
+              type="button"
+              disabled={deletingSentence}
+              onClick={() => setConfirmDeleteSentence(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="row">
+            <button
+              type="button"
+              className="danger"
+              onClick={() => setConfirmDeleteSentence(true)}
+            >
+              Delete sentence
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
