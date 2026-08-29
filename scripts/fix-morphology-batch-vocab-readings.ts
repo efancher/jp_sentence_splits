@@ -98,6 +98,11 @@ const READING_FIXES: { id: string; expression: string; from: string; to: string 
   { id: 'vocab_item_b202d3cc-c6cd-4150-a469-2d07543e1387', expression: '父さん', from: 'ちちさん', to: 'とうさん' },
   { id: 'vocab_item_d1b2eafc-d58a-4f9d-85d2-9bd75d2ce4f6', expression: '飛び散らす', from: 'とびちらし', to: 'とびちらす' },
   { id: 'vocab_item_424b8e48-4dc2-4caf-9190-9ba81c1eaeaa', expression: '湿る', from: 'しめっ', to: 'しめる' },
+  // 2026-08-29 reading audit (scripts/audit-vocab-readings.ts). JMDict has
+  // both あく and すく for 空く; the only occurrence is 穴が空いている
+  // ("a hole is open"), which is あく — so the derivation scripts skip it
+  // as ambiguous but the reading is decidable here.
+  { id: 'vocab_item_d7bf1f99-c739-4a20-ac75-00f07be0f090', expression: '空く', from: 'あい', to: 'あく' },
   // Learner-authored phrase cards (2026-08-28) — a bare Arabic numeral was
   // left unconverted in the reading. Numeral+counter readings are
   // context-dependent, so each `to` is copied from the parent sentence's

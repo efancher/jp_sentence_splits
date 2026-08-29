@@ -36,6 +36,7 @@
     "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",
     "fix:numeral-readings": "tsx scripts/fix-numeral-readings.ts",
     "fix:pronoun-readings": "tsx scripts/fix-pronoun-readings.ts",
+    "audit:vocab-readings": "tsx scripts/audit-vocab-readings.ts",
     "issues:list": "tsx scripts/list-card-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts"
   },
