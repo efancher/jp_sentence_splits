@@ -704,7 +704,16 @@ its encounters qualify (no due-date push needed here, unlike
 has no single fixed sentence to defer against).
 Mnemonic-shown/audio-replayed/etc. assistance flags are recorded on
 `Review.assistance` without penalizing the score — informational only for
-future planning. A **session planner** caps new-subject introduction per
+future planning. The "Show mnemonic" scaffolding on vocabulary-target
+cards (`CardMnemonic` in `ReviewPage.tsx`) shows the learner's own
+`VocabularyItem.notes` if set, otherwise falls back to WaniKani's
+meaning/reading mnemonic (`VocabularyItem.meaningMnemonic`/
+`readingMnemonic`, backfilled by `scripts/backfill-wanikani-mnemonics.ts`,
+only ~6.5k WK-catalog words covered) — the reading mnemonic for
+reading-focused cards, the meaning mnemonic for `cloze`. WaniKani's inline
+`<radical>`/`<kanji>`/`<vocabulary>`/`<reading>`/`<ja>` markup is parsed
+into colour-coded spans by `src/components/MnemonicText.tsx` (no HTML
+injection). Not surfaced anywhere outside review cards. A **session planner** caps new-subject introduction per
 sitting (`AppSettings.newCardsPerSessionLimit`) without capping
 already-due reviews, and interleaves activity categories round-robin
 rather than draining one category first. **Graduation** (`isGraduated`,
@@ -1105,7 +1114,16 @@ aren't JSON-serializable/aren't worth backing up).
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`) of
   the full non-hidden kanji catalog (readings/meanings) into Supabase
-  `kanji`; not a live SRS/progress sync, catalog content only.
+  `kanji`; not a live SRS/progress sync, catalog content only. Also
+  `scripts/backfill-wanikani-mnemonics.ts` (`npm run
+  backfill:wanikani-mnemonics`, manual-dispatch
+  `backfill-wanikani-mnemonics.yml`) which fills
+  `vocabulary_items.meaning_mnemonic`/`reading_mnemonic` from WK
+  `vocabulary`/`kana_vocabulary` subjects, matched on expression (reading
+  as homophone tiebreaker) — surfaced only on `ReviewPage`'s "Show
+  mnemonic". Both need a `WANIKANI_API_TOKEN`. Tofugu's mnemonic content
+  stays in the user's private Supabase/IndexedDB, never the repo or public
+  build.
 - **JMDict** (`jmdict-simplified` release) — downloaded/cached locally
   (`scripts/.cache/`, ~110 MB, gitignored) and used only as a local lookup
   index (`scripts/lib/jmdict.ts`) backing the `npm run jmdict:lookup` CLI

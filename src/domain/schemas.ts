@@ -341,6 +341,8 @@ export const vocabularyItemSchema = z.object({
   notes: z.string().optional(),
   externalId: z.string().optional(),
   pitchAccentPositions: z.array(z.number()).optional(),
+  meaningMnemonic: z.string().optional(),
+  readingMnemonic: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

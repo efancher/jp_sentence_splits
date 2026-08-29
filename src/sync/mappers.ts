@@ -442,6 +442,8 @@ export function vocabularyItemToRemote(
     notes: item.notes ?? null,
     external_id: item.externalId ?? null,
     pitch_accent_positions: item.pitchAccentPositions ?? null,
+    meaning_mnemonic: item.meaningMnemonic ?? null,
+    reading_mnemonic: item.readingMnemonic ?? null,
     created_at: item.createdAt,
     updated_at: item.updatedAt,
     deleted_at: null,
@@ -462,6 +464,8 @@ export function remoteToVocabularyItem(
     externalId: (row.external_id as string | null) ?? undefined,
     pitchAccentPositions:
       (row.pitch_accent_positions as number[] | null) ?? undefined,
+    meaningMnemonic: (row.meaning_mnemonic as string | null) ?? undefined,
+    readingMnemonic: (row.reading_mnemonic as string | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

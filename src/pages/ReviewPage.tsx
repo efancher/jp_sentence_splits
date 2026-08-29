@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
+import { MnemonicText } from '../components/MnemonicText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { VocabChips } from '../components/VocabChips';
@@ -1316,6 +1317,47 @@ export function ReviewPage() {
 }
 
 /**
+ * The pre-reveal scaffolding hint on a vocabulary-target card, behind the
+ * "Show mnemonic" button (or auto-shown for a fragile item — see the
+ * mnemonic-scaffolding effect above). Prefers the learner's own note;
+ * otherwise falls back to the WaniKani mnemonic backfilled onto the item
+ * (`scripts/backfill-wanikani-mnemonics.ts`) — the reading mnemonic for
+ * reading-focused cards, the meaning mnemonic for `cloze` (which tests
+ * recall from meaning, not from a visible word). Renders nothing when
+ * neither source has anything.
+ */
+function CardMnemonic({
+  vocabularyItem,
+  activityType,
+  visible,
+  onShow,
+}: {
+  vocabularyItem: VocabularyItem;
+  activityType: StudyActivityType;
+  visible: boolean;
+  onShow: () => void;
+}) {
+  const own = vocabularyItem.notes?.trim();
+  const wk =
+    activityType === 'cloze'
+      ? vocabularyItem.meaningMnemonic || vocabularyItem.readingMnemonic
+      : vocabularyItem.readingMnemonic || vocabularyItem.meaningMnemonic;
+  if (!own && !wk) return null;
+  if (!visible) {
+    return (
+      <button type="button" onClick={onShow}>
+        Show mnemonic
+      </button>
+    );
+  }
+  return (
+    <div className="muted">
+      💡 {own ? own : <MnemonicText text={wk as string} />}
+    </div>
+  );
+}
+
+/**
  * Renders both vocabulary-item-subject card types (Phase 7.2/7.3): they
  * share the highlighted-sentence layout and only differ in what's hidden
  * before reveal. `reading_retrieval` shows the target word, hides its
@@ -1370,14 +1412,13 @@ function VocabularyTargetCard({
       {isCloze && !revealed && sentence.translation ? (
         <div className="muted">{sentence.translation}</div>
       ) : null}
-      {!revealed && vocabularyItem.notes ? (
-        mnemonicVisible ? (
-          <div className="muted">💡 {vocabularyItem.notes}</div>
-        ) : (
-          <button type="button" onClick={onShowMnemonic}>
-            Show mnemonic
-          </button>
-        )
+      {!revealed ? (
+        <CardMnemonic
+          vocabularyItem={vocabularyItem}
+          activityType={activityType}
+          visible={mnemonicVisible}
+          onShow={onShowMnemonic}
+        />
       ) : null}
       {!revealed ? (
         <button type="button" onClick={onReveal}>
@@ -1455,14 +1496,13 @@ function ReadingProductionCard({
       {isInflected ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}
-      {!revealed && vocabularyItem.notes ? (
-        mnemonicVisible ? (
-          <div className="muted">💡 {vocabularyItem.notes}</div>
-        ) : (
-          <button type="button" onClick={onShowMnemonic}>
-            Show mnemonic
-          </button>
-        )
+      {!revealed ? (
+        <CardMnemonic
+          vocabularyItem={vocabularyItem}
+          activityType="reading_production"
+          visible={mnemonicVisible}
+          onShow={onShowMnemonic}
+        />
       ) : null}
       {!revealed ? (
         <form

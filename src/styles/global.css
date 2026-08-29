@@ -259,6 +259,43 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* WaniKani mnemonic rendering (MnemonicText.tsx) — colour-coded salient words,
+   preserving WaniKani's paragraph breaks. */
+.mnemonic-text {
+  white-space: pre-wrap;
+}
+
+.mnemonic-tag {
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 0 0.15em;
+}
+
+.mnemonic-radical {
+  color: color-mix(in srgb, #4a90d9 78%, var(--text));
+  background: color-mix(in srgb, #4a90d9 16%, transparent);
+}
+
+.mnemonic-kanji {
+  color: color-mix(in srgb, #d94a9c 78%, var(--text));
+  background: color-mix(in srgb, #d94a9c 16%, transparent);
+}
+
+.mnemonic-vocabulary {
+  color: color-mix(in srgb, #8a4ad9 80%, var(--text));
+  background: color-mix(in srgb, #8a4ad9 16%, transparent);
+}
+
+.mnemonic-reading {
+  color: var(--text-muted);
+  background: var(--bg-muted);
+}
+
+.mnemonic-ja {
+  font-family: var(--font-jp);
+  font-weight: 600;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

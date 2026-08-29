@@ -1,0 +1,46 @@
+name: Backfill WaniKani mnemonics
+
+# Manual-only, on purpose (see .github/workflows/backfill-vocabulary-suggestions.yml
+# and docs/STATUS.md for the full rationale): writes to production Supabase
+# using a real account password stored as a secret, so every run is an
+# explicit, logged human action — never a push/schedule trigger. Also needs
+# a WaniKani API token (WANIKANI_API_TOKEN secret) to read the vocabulary
+# catalog.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write changes (unchecked = dry run, prints what would change)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backfill
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SCRIPT_SUPABASE_EMAIL: ${{ secrets.SCRIPT_SUPABASE_EMAIL }}
+          SCRIPT_SUPABASE_PASSWORD: ${{ secrets.SCRIPT_SUPABASE_PASSWORD }}
+          WANIKANI_API_TOKEN: ${{ secrets.WANIKANI_API_TOKEN }}
+        run: |
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            npm run backfill:wanikani-mnemonics -- --apply
+          else
+            npm run backfill:wanikani-mnemonics
+          fi

@@ -1,6 +1,37 @@
 # Status
 
-Last updated: 2026-08-29 (Reading cards disambiguate inflected words.
+Last updated: 2026-08-29 (WaniKani mnemonics on review cards. The
+"Show mnemonic" affordance on `ReviewPage`'s vocabulary-target cards
+(`reading_retrieval`/`cloze`/`reading_production`) only ever rendered
+`VocabularyItem.notes` — a free-text field that's essentially always blank
+— so the button rarely appeared. Now it falls back to WaniKani's own
+meaning/reading mnemonics, backfilled onto the item. **Data**: additive
+nullable `meaningMnemonic`/`readingMnemonic` on `VocabularyItem`
+(`types.ts`, `vocabularyItemSchema`, `src/sync/mappers.ts` both
+directions, migration `20260829000000_vocabulary_wanikani_mnemonics.sql`;
+no Dexie version bump — non-indexed). **Ingestion**:
+`scripts/backfill-wanikani-mnemonics.ts` (mirrors
+`backfill-pitch-accent.ts` — dry-run by default, `--apply` writes,
+idempotent on "both mnemonics blank"), matching `VocabularyItem.expression`
+against a WK `vocabulary`/`kana_vocabulary` subject's `characters` with
+`reading` as the homophone tiebreaker; `scripts/lib/wanikani.ts` gained
+`fetchWanikaniVocabularySubjects` + `wanikaniVocabSubjectToMnemonics`.
+`npm run backfill:wanikani-mnemonics` + a manual-dispatch
+`backfill-wanikani-mnemonics.yml` (needs a `WANIKANI_API_TOKEN` secret).
+Coverage is partial by nature (~6.5k WK vocab) — unmatched items stay
+blank, same as pitch accent. **UI**: new `src/components/MnemonicText.tsx`
+parses WaniKani's inline `<radical>`/`<kanji>`/`<vocabulary>`/`<reading>`/
+`<ja>` markup into colour-coded spans (no HTML injection); new local
+`CardMnemonic` in `ReviewPage.tsx` picks the reading mnemonic for
+reading-focused cards / the meaning mnemonic for `cloze`, still preferring
+a learner note when one exists. The existing fragile-item auto-show and
+`mnemonic_shown` assistance tracking are unchanged. Licensing: WaniKani
+mnemonics are Tofugu's content — fine for this personal, own-API-token app
+(same footing as the archived Anki decks); kept out of the repo/public
+build, only in the user's private Supabase/IndexedDB. Tests:
+`tests/mnemonicText.test.tsx` + a `reviewPage.test.tsx` fallback case.)
+
+Before that: 2026-08-29 (Reading cards disambiguate inflected words.
 `reading_production`/`reading_retrieval` highlighted the word *as inflected
 in the sentence* (頑張って) but graded/revealed against the dictionary
 reading (がんばる), with nothing on the card saying which was wanted —

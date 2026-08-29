@@ -1215,6 +1215,42 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('falls back to the WaniKani reading mnemonic (parsed markup) when the item has no learner note', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      readingMnemonic:
+        'The reading is <reading>よむ</reading>, like telling someone "<ja>you, move</ja>".',
+      meaningMnemonic: 'This should not be the one shown for a reading card.',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    await user.click(await screen.findByRole('button', { name: 'Show mnemonic' }));
+    // Markup is parsed, not rendered literally, and the reading mnemonic wins.
+    expect(screen.getByText('you, move')).toBeInTheDocument();
+    expect(screen.queryByText(/This should not be the one shown/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<reading>/)).not.toBeInTheDocument();
+  });
+
   it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {
     await seedBookWithSentence();
     const db = getDb();

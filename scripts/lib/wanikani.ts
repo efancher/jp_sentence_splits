@@ -83,12 +83,12 @@ export function wanikaniSubjectToKanjiFields(subject: WkKanjiSubject): KanjiFiel
   };
 }
 
-interface WkPage {
-  data: WkKanjiSubject[];
+interface WkPage<T = WkKanjiSubject> {
+  data: T[];
   pages: { next_url: string | null };
 }
 
-async function wkGet(url: string, token: string): Promise<WkPage> {
+async function wkGet<T = WkKanjiSubject>(url: string, token: string): Promise<WkPage<T>> {
   const headers = {
     Authorization: `Bearer ${token.trim()}`,
     'Wanikani-Revision': WK_REVISION,
@@ -104,7 +104,7 @@ async function wkGet(url: string, token: string): Promise<WkPage> {
     if (!response.ok) {
       throw new Error(`WaniKani API error ${response.status} for ${url}: ${await response.text()}`);
     }
-    return (await response.json()) as WkPage;
+    return (await response.json()) as WkPage<T>;
   }
 }
 
@@ -113,8 +113,70 @@ export async function fetchWanikaniKanjiSubjects(token: string): Promise<WkKanji
   const out: WkKanjiSubject[] = [];
   let url: string | null = `${WK_API_BASE}/subjects?types=kanji`;
   while (url) {
-    const page = await wkGet(url, token);
+    const page: WkPage<WkKanjiSubject> = await wkGet<WkKanjiSubject>(url, token);
     out.push(...page.data.filter((subject) => !isHiddenSubject(subject)));
+    url = page.pages.next_url;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary subjects — mnemonics only (scripts/backfill-wanikani-mnemonics.ts).
+// WaniKani has both `vocabulary` and `kana_vocabulary` subject types; only
+// `vocabulary` carries kanji + the `<radical>`/`<kanji>` mnemonic markup we
+// want, but kana_vocabulary still has plain meaning/reading mnemonics worth
+// keeping, so both are fetched.
+// ---------------------------------------------------------------------------
+
+export interface WkVocabSubject {
+  id: number;
+  object: string;
+  data: {
+    characters: string | null;
+    hidden_at: string | null;
+    readings?: WkReading[];
+    meaning_mnemonic?: string;
+    reading_mnemonic?: string;
+  };
+}
+
+export interface VocabMnemonics {
+  /** The vocabulary's written form, e.g. 一つ — matched against VocabularyItem.expression. */
+  characters: string;
+  /** Accepted readings (primary first) — the homophone tiebreaker. */
+  readings: string[];
+  meaningMnemonic: string | null;
+  readingMnemonic: string | null;
+}
+
+/** Pure transform from a WK vocabulary subject to its mnemonic fields. Returns null when there's nothing usable (no characters, or both mnemonics empty). */
+export function wanikaniVocabSubjectToMnemonics(
+  subject: WkVocabSubject,
+): VocabMnemonics | null {
+  const characters = subject.data.characters;
+  if (!characters) return null;
+  const meaningMnemonic = subject.data.meaning_mnemonic?.trim() || null;
+  const readingMnemonic = subject.data.reading_mnemonic?.trim() || null;
+  if (!meaningMnemonic && !readingMnemonic) return null;
+  const readings = subject.data.readings ?? [];
+  const primary = readings.filter((r) => r.primary || r.accepted_answer);
+  return {
+    characters,
+    readings: (primary.length ? primary : readings).map((r) => r.reading),
+    meaningMnemonic,
+    readingMnemonic,
+  };
+}
+
+/** Fetches every non-hidden vocabulary + kana_vocabulary subject from the WaniKani catalog. */
+export async function fetchWanikaniVocabularySubjects(
+  token: string,
+): Promise<WkVocabSubject[]> {
+  const out: WkVocabSubject[] = [];
+  let url: string | null = `${WK_API_BASE}/subjects?types=vocabulary,kana_vocabulary`;
+  while (url) {
+    const page: WkPage<WkVocabSubject> = await wkGet<WkVocabSubject>(url, token);
+    out.push(...page.data.filter((subject) => !subject.data.hidden_at));
     url = page.pages.next_url;
   }
   return out;

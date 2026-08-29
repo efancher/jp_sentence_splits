@@ -235,8 +235,11 @@ configurable FSRS-interval threshold).
   `faster-whisper` (`base` model) for a secondary, non-authoritative ASR
   signal.
 - **WaniKani API**: source of the kanji catalog (`scripts/import-wanikani-
-  kanji.ts`), one-time/occasional bulk import, not a live per-user
-  integration.
+  kanji.ts`) and, since 2026-08-29, per-word meaning/reading mnemonics
+  (`scripts/backfill-wanikani-mnemonics.ts` → `vocabulary_items`, shown
+  only on `ReviewPage`'s "Show mnemonic"). One-time/occasional bulk
+  imports, not a live per-user integration; Tofugu mnemonic content is
+  kept out of the repo and public build.
 - **JMDict** (`jmdict-simplified`, pinned release, downloaded/cached by
   `scripts/lib/jmdict.ts`): local dictionary lookups and several backfill
   scripts (vocabulary meanings, suggestion glosses) — no network dependency

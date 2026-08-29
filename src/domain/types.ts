@@ -462,6 +462,17 @@ export interface VocabularyItem {
    * backfilled or no dictionary match (`scripts/backfill-pitch-accent.ts`).
    */
   pitchAccentPositions?: number[];
+  /**
+   * WaniKani's meaning/reading mnemonics for this word, backfilled from the
+   * WaniKani API by `scripts/backfill-wanikani-mnemonics.ts` (matched on
+   * expression, reading as tiebreaker). Only ~6.5k words are in WaniKani's
+   * catalog, so most items stay blank — surfaced only as optional
+   * scaffolding on review cards (`ReviewPage`'s "Show mnemonic"). The text
+   * carries WaniKani's own `<radical>`/`<kanji>`/`<vocabulary>`/`<reading>`/
+   * `<ja>` markup, rendered by `src/components/MnemonicText.tsx`.
+   */
+  meaningMnemonic?: string;
+  readingMnemonic?: string;
   createdAt: string;
   updatedAt: string;
 }
