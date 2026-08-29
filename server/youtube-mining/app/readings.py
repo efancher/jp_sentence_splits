@@ -20,6 +20,16 @@ def has_kanji(text: str) -> bool:
     return bool(_KANJI_RE.search(text))
 
 
+# Surface forms whose unidic-lite lemma reading is a poor default for this
+# learner tool. unidic-lite tags the standalone pronoun 私 with the formal
+# reading ワタクシ; わたし is overwhelmingly the intended reading in the drama
+# transcripts this service segments (the learner can still edit it). Keyed on
+# the exact token surface, so compounds like 私たち are unaffected.
+READING_OVERRIDES: dict[str, str] = {
+    "私": "わたし",
+}
+
+
 @lru_cache(maxsize=1)
 def _load_engine() -> Optional[tuple[object, Callable[[str], str]]]:
     try:
@@ -51,6 +61,10 @@ def generate_reading(text: str) -> Optional[str]:
     parts: list[str] = []
     for word in tagger(text):
         surface = word.surface
+        override = READING_OVERRIDES.get(surface)
+        if override:
+            parts.append(override)
+            continue
         if not has_kanji(surface):
             parts.append(surface)
             continue

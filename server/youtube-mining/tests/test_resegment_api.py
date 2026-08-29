@@ -72,3 +72,20 @@ def test_resegment_generates_readings_and_tokens_when_available() -> None:
     else:
         assert cue["reading"] is None
         assert cue["tokens"] is None
+
+
+def test_resegment_reads_bare_watashi_as_watashi_not_watakushi() -> None:
+    """unidic-lite lemmatizes the pronoun 私 as ワタクシ; READING_OVERRIDES
+    corrects the standalone-token case to わたし (see readings.py)."""
+    if not reading_engine_available():
+        return
+    resp = client.post(
+        "/resegment",
+        json={"sentences": [{"japanese": "私と同い年です。", "startMs": 0, "endMs": 1000}]},
+    )
+    assert resp.status_code == 200
+    cue = resp.json()[0]
+    assert "わたし" in cue["reading"]
+    assert "わたくし" not in cue["reading"]
+    watashi = next(t for t in cue["tokens"] if t["surface"] == "私")
+    assert watashi["reading"] == "わたし"

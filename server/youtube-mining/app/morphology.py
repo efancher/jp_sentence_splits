@@ -9,7 +9,7 @@ app's vocabulary-suggestion picker already consumes
 from __future__ import annotations
 
 from app.models import MorphemeToken
-from app.readings import _load_engine, has_kanji
+from app.readings import READING_OVERRIDES, _load_engine, has_kanji
 
 
 def _feature_str(feature: object, name: str) -> str:
@@ -31,6 +31,9 @@ def _lemma_from_feature(feature: object, surface: str) -> str:
 
 
 def _reading_from_feature(feature: object, surface: str, kata2hira) -> str:
+    override = READING_OVERRIDES.get(surface)
+    if override:
+        return override
     kana = _feature_str(feature, "kana") or _feature_str(feature, "pron")
     if kana:
         return kata2hira(kana)
