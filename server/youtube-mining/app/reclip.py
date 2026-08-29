@@ -53,13 +53,63 @@ def _concat_clips(clip_paths: list[Path], out_path: Path) -> None:
     subprocess.run(command, check=True, capture_output=True, text=True)
 
 
+_MIN_TRIMMED_MS = 300
+
+
+def _trim_silence(src: Path, dst: Path) -> int:
+    """Strip leading/trailing near-silence, keeping a short lead-in/out.
+
+    "After Work"-era auto-caption cue *end* times overshoot the speech by
+    seconds, so a proportional re-cut of those clips carries a lot of dead
+    air — at the edges, and (when two overshooting cues were concatenated) in
+    the middle too. Tighten to the spoken span and collapse any interior gap
+    longer than ~0.7s down to that length, so natural pauses survive but a
+    multi-second hole doesn't. Falls back to a plain copy if the trim would
+    leave almost nothing (all-silent slice, or too aggressive).
+    """
+    chain = (
+        "silenceremove=start_periods=1:start_silence=0.10:"
+        "start_threshold=-35dB:detection=peak,"
+        "areverse,"
+        "silenceremove=start_periods=1:start_silence=0.15:"
+        "start_threshold=-35dB:detection=peak,"
+        "areverse,"
+        "silenceremove=stop_periods=-1:stop_silence=0.7:"
+        "stop_duration=0.7:stop_threshold=-38dB:detection=peak"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(src), "-af", chain, "-c:a", "aac", "-b:a", "192k", str(dst)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        trimmed_ms = clip.probe_duration_ms(dst)
+    except (KeyError, ValueError, subprocess.CalledProcessError):
+        trimmed_ms = 0
+    if trimmed_ms >= _MIN_TRIMMED_MS:
+        return trimmed_ms
+    # All-silent slice, or the trim ate everything — keep the untrimmed cut.
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(src), "-c", "copy", str(dst)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return clip.probe_duration_ms(dst)
+
+
 def reclip_group(
-    clips_b64: list[str], cuts: list[tuple[int, int]]
+    clips_b64: list[str],
+    cuts: list[tuple[int, int]],
+    *,
+    trim_silence: bool = False,
 ) -> list[tuple[str, int]]:
     """Concatenate the base64 m4a `clips_b64` (in order) and cut each
     `(start_ms, end_ms)` range out of the concatenation.
 
-    Returns one `(base64_m4a, duration_ms)` per cut, in the same order.
+    Returns one `(base64_m4a, duration_ms)` per cut, in the same order. With
+    `trim_silence`, each cut is tightened to its spoken span.
     """
     if not clips_b64:
         raise ValueError("at least one clip is required")
@@ -86,6 +136,10 @@ def reclip_group(
             duration_ms = clip.clip_audio(
                 concat_path, cut_path, start_ms=start, end_ms=end
             )
+            if trim_silence:
+                trimmed_path = tmp_dir / f"trim-{j:03d}.m4a"
+                duration_ms = _trim_silence(cut_path, trimmed_path)
+                cut_path = trimmed_path
             out.append(
                 (base64.b64encode(cut_path.read_bytes()).decode("ascii"), duration_ms)
             )

@@ -78,7 +78,11 @@ async function bumpReviews(studyItemId: string, count: number) {
   }
 }
 
-async function planFor(oldIds: string[], segments: string[]) {
+async function planFor(
+  oldIds: string[],
+  segments: string[],
+  timings?: [number, number][],
+) {
   const db = getDb();
   const olds = await Promise.all(
     oldIds.map(async (id) => {
@@ -103,12 +107,14 @@ async function planFor(oldIds: string[], segments: string[]) {
   );
   return buildResegmentPlan(
     olds,
-    segments.map((japanese) => ({
+    segments.map((japanese, i) => ({
       japanese,
       translation: '',
       readingOnly: '',
       inlineReading: '',
       tokens: [],
+      startMs: timings?.[i]?.[0],
+      endMs: timings?.[i]?.[1],
     })),
   );
 }
@@ -201,6 +207,93 @@ describe('applyResegmentation', () => {
     expect(links[0]!.sentenceId).toBe(
       sentenceIdFromNormalizedKey(normalizeSentenceKey('たったの1ヶ月だよ。')),
     );
+  });
+
+  it('re-cuts reference audio onto the new sentences and retires the old clip', async () => {
+    const db = getDb();
+    const book = await createBook({ title: 'After Work' });
+    const s = shadowingSentence('さすがです。水希。たったの1ヶ月だよ。', 0);
+    await db.sentences.put(s);
+    await db.bookSentences.put({
+      id: createId('bs'),
+      bookId: book.id,
+      sentenceId: s.id,
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIso(),
+    });
+    await db.sentenceAudio.put({
+      id: 'audio_old',
+      sentenceId: s.id,
+      sourceId: 'source-VID',
+      sourceSentenceId: 'source-VID:sentence-000',
+      sourceTitle: 'After Work',
+      mimeType: 'audio/mp4',
+      durationMs: 3000,
+      startMs: 1000,
+      endMs: 4000,
+      blob: new Blob(['parent-audio'], { type: 'audio/mp4' }),
+      importedAt: nowIso(),
+    });
+
+    const reclip = vi
+      .fn()
+      .mockImplementation(async (_clips: Blob[], cuts: { startMs: number; endMs: number }[]) =>
+        cuts.map(() => ({ blob: new Blob(['cut'], { type: 'audio/mp4' }), durationMs: 900 })),
+      );
+
+    const plan = await planFor(
+      [s.id],
+      ['さすがです。', '水希。', 'たったの1ヶ月だよ。'],
+      [
+        [1000, 1800],
+        [1800, 2400],
+        [2400, 4000],
+      ],
+    );
+    await applyResegmentation(book.id, plan, { reclip });
+
+    expect(reclip).toHaveBeenCalledTimes(3);
+    expect(await db.sentenceAudio.get('audio_old')).toBeUndefined();
+    const clips = await db.sentenceAudio.toArray();
+    expect(clips).toHaveLength(3);
+    expect(new Set(clips.map((c) => c.sentenceId))).toEqual(
+      new Set(
+        ['さすがです。', '水希。', 'たったの1ヶ月だよ。'].map((j) =>
+          sentenceIdFromNormalizedKey(normalizeSentenceKey(j)),
+        ),
+      ),
+    );
+    expect(clips.every((c) => c.durationMs === 900 && c.sourceId === 'source-VID')).toBe(true);
+  });
+
+  it('still applies when audio re-cutting throws (mining service down)', async () => {
+    const { book, a, b } = await seedSource();
+    const db = getDb();
+    await db.sentenceAudio.put({
+      id: 'audio_a',
+      sentenceId: a.id,
+      sourceId: 'source-VID',
+      sourceSentenceId: 'x',
+      sourceTitle: 'After Work',
+      mimeType: 'audio/mp4',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['x'], { type: 'audio/mp4' }),
+      importedAt: nowIso(),
+    });
+    const reclip = vi.fn().mockRejectedValue(new Error('unreachable'));
+    const plan = await planFor(
+      [a.id, b.id],
+      ['さすがです。', '水希。', 'たったの1ヶ月だよ。', '変わんないじゃん。'],
+      [[0, 500], [500, 1000], [1000, 1500], [1500, 2000]],
+    );
+    const { newSentenceIds } = await applyResegmentation(book.id, plan, { reclip });
+    expect(newSentenceIds).toHaveLength(4);
+    // Old clip untouched, no new clips — re-segmentation itself still landed.
+    expect(await db.sentenceAudio.get('audio_a')).toBeDefined();
+    expect(await db.sentenceAudio.count()).toBe(1);
   });
 });
 

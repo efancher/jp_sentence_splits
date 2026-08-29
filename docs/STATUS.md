@@ -1,6 +1,42 @@
 # Status
 
-Last updated: 2026-08-31 (WaniKani "deferral" mnemonics fall through to
+Last updated: 2026-08-29 (Re-segmentation now carries reference audio +
+fixes 私→わたくし. Two regressions surfaced by a question about
+"私と同い年です。" in *Easy Japanese Drama: After Work*, both from that book
+having been re-segmented against production:
+
+**1. 私 read as わたくし.** unidic-lite lemmatizes the bare pronoun 私
+(代名詞) with the formal reading ワタクシ, so `applyResegmentation`
+regenerating `inline_reading` + `vocabulary_suggestions` from the morphology
+service picked it up everywhere. New `READING_OVERRIDES` map in
+`server/youtube-mining/app/readings.py` (applied in `generate_reading` and
+`morphology._reading_from_feature`, keyed on exact token surface so 私たち
+etc. are safe). `scripts/fix-pronoun-readings.ts` swept the already-written
+rows — 17 sentences corrected in production.
+
+**2. Shadowing audio lost on re-segment.** `applyResegmentation` never
+touched `sentenceAudio` — the old per-fragment `reference_audio` rows kept
+pointing at the retired fragment sentences, so re-segmented sentences had no
+clip (After Work: 33/118 sentences with audio). Forward fix: `/resegment`'s
+per-cue timings now thread through `ResegmentReviewRow` /
+`ResegmentReviewedSegment` / `ResegmentPlannedSentence` (merge takes the
+union span, split divides proportionally by piece length); a new stateless
+`POST /reclip` on `server/youtube-mining` (`app/reclip.py` — concat the old
+fragment clips a new sentence overlaps, ffmpeg-cut its slice, optional
+silence-trim for the auto-caption-bloat case) re-cuts each new sentence's
+audio; `applyResegmentation` writes the new `SentenceAudio` rows + retires
+the orphaned old ones (soft delete), best-effort so a re-segment still lands
+if the mining service is down. Each new sentence also gets a real per-
+sentence `Video position:` note now (`withVideoPosition`), so a *future*
+re-segment reads correct timings instead of one template fragment's.
+`scripts/backfill-resegment-audio.ts` reconstructed After Work's audio from
+the still-intact `reference_audio` source timings — 117/118 sentences now
+have a clip (only "あれ?" unmatched). Tests:
+`server/youtube-mining/tests/test_reclip_api.py` + `test_resegment_api.py`,
+`tests/resegmentPlan.test.ts` (`concatCut`), `tests/applyResegmentation.test.ts`
+(audio-carry + mining-down). Mining service redeployed.)
+
+Before that: 2026-08-31 (WaniKani "deferral" mnemonics fall through to
 the kanji. Follow-up to the mnemonics work below, from a real-usage catch:
 WaniKani's reading (and sometimes meaning) mnemonic for a lot of jukugo /
 single-kanji vocab is a placeholder — "this uses the on'yomi you already

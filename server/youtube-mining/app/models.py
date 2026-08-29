@@ -124,6 +124,9 @@ class ReclipRequest(BaseModel):
 
     clipsBase64: list[str] = Field(min_length=1)
     cuts: list[ReclipCut] = Field(min_length=1)
+    # Tighten each cut to its spoken span — for re-cutting clips whose
+    # source cue timings overshoot the speech (auto-caption drama imports).
+    trimSilence: bool = False
 
 
 class ReclipClip(BaseModel):

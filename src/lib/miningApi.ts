@@ -200,6 +200,59 @@ export async function resegmentSentences(
   return z.array(resegmentedCueSchema).parse(await response.json());
 }
 
+const reclipResponseSchema = z.object({
+  clips: z.array(
+    z.object({
+      audioBase64: z.string(),
+      mimeType: z.literal('audio/mp4'),
+      durationMs: z.number(),
+    }),
+  ),
+});
+
+function base64ToBlob(base64: string, type: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
+}
+
+/**
+ * Re-cut reference audio onto new sentence boundaries after re-segmentation
+ * (server/youtube-mining `POST /reclip`, stateless). `parentClips` are the
+ * old per-fragment clips a run of new sentences descends from, in
+ * video-timeline order; `cuts` are ms ranges over their concatenation.
+ * Returns one m4a Blob per cut, in order. `trimSilence` tightens each cut to
+ * its spoken span — for clips whose source cue timings overshoot the speech.
+ */
+export async function reclipResegmentedAudio(
+  parentClips: Blob[],
+  cuts: { startMs: number; endMs: number }[],
+  options: { trimSilence?: boolean } = {},
+): Promise<{ blob: Blob; durationMs: number }[]> {
+  const clipsBase64 = await Promise.all(parentClips.map(blobToBase64));
+  const response = await fetch(`${API_BASE}/reclip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clipsBase64, cuts, trimSilence: options.trimSilence ?? false }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to re-cut audio: ${await readErrorDetail(response)}`);
+  }
+  const { clips } = reclipResponseSchema.parse(await response.json());
+  return clips.map((clip) => ({
+    blob: base64ToBlob(clip.audioBase64, clip.mimeType),
+    durationMs: clip.durationMs,
+  }));
+}
+
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */
 export async function deleteMiningJob(jobId: string): Promise<void> {
   try {

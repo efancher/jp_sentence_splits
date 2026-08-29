@@ -74,7 +74,7 @@ import {
 } from '../lib/maturity';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { nowIso, normalizeSentenceKey } from '../lib/normalize';
-import type { ResegmentPlan } from '../lib/resegmentPlan';
+import { concatCut, type ResegmentPlan } from '../lib/resegmentPlan';
 import { suggestionsFromTokens } from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
@@ -487,9 +487,32 @@ export async function loadResegmentSourceContext(
  * Analysis (chunk boundaries) and grammar links are offset-bound and dropped
  * — the new sentences start unanalyzed.
  */
+/** Rewrite (or append) the `Video position:` line in a shadowing sentence's
+ *  userNotes so a later re-segment reads the *new* per-sentence timing, not
+ *  the template fragment's. */
+function withVideoPosition(
+  notes: string | undefined,
+  startMs?: number,
+  endMs?: number,
+): string | undefined {
+  if (startMs == null || endMs == null) return notes;
+  const line = `Video position: ${(startMs / 1000).toFixed(3)}–${(endMs / 1000).toFixed(3)} seconds`;
+  if (!notes) return line;
+  return /Video position:[^\n]*/.test(notes)
+    ? notes.replace(/Video position:[^\n]*/, line)
+    : `${notes}\n${line}`;
+}
+
+type ReclipFn = (
+  parentClips: Blob[],
+  cuts: { startMs: number; endMs: number }[],
+  options?: { trimSilence?: boolean },
+) => Promise<{ blob: Blob; durationMs: number }[]>;
+
 export async function applyResegmentation(
   bookId: string,
   plan: ResegmentPlan,
+  options: { reclip?: ReclipFn } = {},
 ): Promise<{ batchId: string; newSentenceIds: string[] }> {
   const db = getDb();
   const timestamp = nowIso();
@@ -527,7 +550,11 @@ export async function applyResegmentation(
         cardId: `${sourceId}:reseg-${String(index).padStart(3, '0')}`,
         cardType: 'SHADOWING',
         contextNumber: 1,
-        userNotes: templateRef?.userNotes,
+        userNotes: withVideoPosition(
+          templateRef?.userNotes,
+          planned.startMs,
+          planned.endMs,
+        ),
         importBatchId: batchId,
       },
     ],
@@ -546,6 +573,82 @@ export async function applyResegmentation(
   const mappingByOld = new Map(
     plan.sentenceMapping.map((m) => [m.oldSentenceId, m.targetIndex]),
   );
+  const dedupedNewIds = new Set(newIds);
+
+  // Re-cut reference audio onto the new sentence boundaries (network — must
+  // happen before the write transaction). Best-effort: a re-segmentation
+  // still lands if the mining service is unreachable, exactly as before this
+  // feature existed.
+  const newAudioRecords: SentenceAudio[] = [];
+  const retiredAudioIds: string[] = [];
+  try {
+    const reclip: ReclipFn =
+      options.reclip ??
+      (async (...args) =>
+        (await import('../lib/miningApi')).reclipResegmentedAudio(...args));
+
+    const oldAudio = (
+      await db.sentenceAudio
+        .where('sentenceId')
+        .anyOf(plan.retiredSentenceIds)
+        .toArray()
+    )
+      .filter((row) => row.blob != null && row.blob.size !== 0)
+      .sort((a, b) => a.startMs - b.startMs);
+
+    for (let index = 0; index < plan.plannedSentences.length; index += 1) {
+      const planned = plan.plannedSentences[index]!;
+      const newId = newIds[index]!;
+      if (
+        planned.startMs == null ||
+        planned.endMs == null ||
+        planned.endMs <= planned.startMs
+      ) {
+        continue;
+      }
+      // A split assigns `inheritsFrom` only to the largest piece, so pick
+      // parent clips by video-timeline overlap instead: any old clip whose
+      // source range intersects this new sentence's span.
+      const parents = oldAudio.filter(
+        (row) => row.endMs > planned.startMs! && row.startMs < planned.endMs!,
+      );
+      if (parents.length === 0) continue;
+
+      const cut = concatCut(planned.startMs, planned.endMs, parents);
+      if (cut.endMs <= cut.startMs) continue;
+      const [result] = await reclip(
+        parents.map((row) => row.blob),
+        [cut],
+        { trimSilence: true },
+      );
+      if (!result) continue;
+
+      const template = parents[0]!;
+      newAudioRecords.push({
+        id: `audio_reseg_${hashString(`${template.sourceId}:${newId}`)}`,
+        sentenceId: newId,
+        sourceId: template.sourceId,
+        sourceSentenceId: `${template.sourceId}:reseg-${newId}`,
+        sourceTitle: template.sourceTitle,
+        sourceUrl: template.sourceUrl,
+        mimeType: 'audio/mp4',
+        durationMs: result.durationMs,
+        startMs: planned.startMs,
+        endMs: planned.endMs,
+        blob: result.blob,
+        importedAt: timestamp,
+      });
+    }
+
+    for (const row of oldAudio) {
+      if (dedupedNewIds.has(row.sentenceId)) continue; // byte-identical id survives
+      retiredAudioIds.push(row.id);
+    }
+  } catch (error) {
+    console.warn('Re-segmentation audio re-cut skipped:', error);
+    newAudioRecords.length = 0;
+    retiredAudioIds.length = 0;
+  }
 
   await db.transaction(
     'rw',
@@ -559,6 +662,7 @@ export async function applyResegmentation(
       db.inbox,
       db.books,
       db.importBatches,
+      db.sentenceAudio,
     ],
     async () => {
       // 1. New sentences (dedupe if two segments normalize equal).
@@ -730,10 +834,50 @@ export async function applyResegmentation(
         await db.books.put(updatedBook);
         sink.push({ entity: 'books', recordId: book.id, payload: updatedBook });
       }
+
+      // 7. Reference audio: retire the gone fragments' clips, store the
+      //    freshly re-cut clips for the new sentences.
+      if (retiredAudioIds.length) {
+        await db.sentenceAudio.bulkDelete(retiredAudioIds);
+        for (const id of retiredAudioIds) {
+          sink.push({
+            entity: 'reference_audio',
+            recordId: id,
+            payload: { id },
+            operation: 'delete',
+          });
+        }
+      }
+      for (const record of newAudioRecords) {
+        await db.sentenceAudio.put(record);
+      }
     },
   );
 
   notifySyncMany(sink);
+
+  // Upload the re-cut clips to Supabase Storage + queue their metadata, the
+  // same optional/never-block way the shadowing import does.
+  if (newAudioRecords.length) {
+    void (async () => {
+      try {
+        const { ensureSyncMeta } = await import('../sync/queue');
+        const { getSupabase } = await import('../sync/supabaseClient');
+        const { uploadReferenceAudio } = await import('../sync/audioSync');
+        const meta = await ensureSyncMeta();
+        if (!meta.syncReferenceAudio) return;
+        const supabase = getSupabase();
+        const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
+        if (!userId) return;
+        for (const record of newAudioRecords) {
+          await uploadReferenceAudio({ audio: record, bookId, ownerId: userId });
+        }
+      } catch {
+        // Local apply must succeed even if the optional upload fails.
+      }
+    })();
+  }
+
   return { batchId, newSentenceIds: [...new Set(newIds)] };
 }
 

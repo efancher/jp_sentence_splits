@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRealignGroups,
   buildResegmentPlan,
+  concatCut,
   distributeTranslation,
   overlapRatio,
   seedResegmentReview,
@@ -247,5 +248,49 @@ describe('seedResegmentReview', () => {
     expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
     // the whole old translation is still available as a hint
     expect(rows[2]!.sourceTranslations[0]).toContain('Mizuki');
+  });
+
+  it('carries cue timings onto the review rows', () => {
+    const rows = seedResegmentReview(
+      [{ translation: '' }],
+      [
+        { japanese: 'A。', sourceIndexes: [0], startMs: 1000, endMs: 2000 },
+        { japanese: 'B。', sourceIndexes: [0], startMs: 2000, endMs: 3000 },
+      ],
+    );
+    expect(rows.map((r) => [r.startMs, r.endMs])).toEqual([
+      [1000, 2000],
+      [2000, 3000],
+    ]);
+  });
+});
+
+describe('concatCut', () => {
+  const clip = (startMs: number, endMs: number) => ({
+    startMs,
+    endMs,
+    durationMs: endMs - startMs,
+  });
+
+  it('maps a range inside one clip to a file offset', () => {
+    expect(concatCut(1500, 2500, [clip(1000, 4000)])).toEqual({
+      startMs: 500,
+      endMs: 1500,
+    });
+  });
+
+  it('clamps a range that starts before / ends after the clips', () => {
+    expect(concatCut(0, 9999, [clip(1000, 4000)])).toEqual({
+      startMs: 0,
+      endMs: 3000,
+    });
+  });
+
+  it('walks across concatenated clips', () => {
+    // clip A [1000,3000] -> file [0,2000]; clip B [3000,5000] -> file [2000,4000]
+    expect(concatCut(2000, 4000, [clip(1000, 3000), clip(3000, 5000)])).toEqual({
+      startMs: 1000,
+      endMs: 3000,
+    });
   });
 });

@@ -477,7 +477,12 @@ observed from outside `ReviewPage`'s own due-queue state.
   new pieces rather than translating from scratch. The review list shows
   in full only the sentences a study card is migrating onto (the rest
   collapse behind a "Show all" toggle) so a 90-sentence source is a
-  handful of rows to check.
+  handful of rows to check. Reference audio is carried across too: each
+  new sentence's clip is re-cut from the old per-fragment clips it
+  overlaps in the video timeline via a stateless `POST /reclip`
+  (concatenate + ffmpeg cut + optional silence-trim, no re-download);
+  best-effort, so a re-segment still lands if the mining service is
+  unreachable.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori

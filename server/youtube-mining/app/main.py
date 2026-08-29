@@ -138,7 +138,9 @@ def _resegment_sync(req: ResegmentRequest) -> list[ResegmentedCue]:
 
 def _reclip_sync(req: ReclipRequest) -> ReclipResponse:
     results = reclip.reclip_group(
-        req.clipsBase64, [(c.startMs, c.endMs) for c in req.cuts]
+        req.clipsBase64,
+        [(c.startMs, c.endMs) for c in req.cuts],
+        trim_silence=req.trimSilence,
     )
     return ReclipResponse(
         clips=[

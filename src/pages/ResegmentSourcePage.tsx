@@ -25,6 +25,10 @@ interface ReviewRow {
   /** From the initial /resegment pass; stale after a manual edit — apply re-annotates. */
   readingOnly: string;
   sourceIndexes: number[];
+  /** Video-timeline span of this row, carried through so its reference audio
+   *  can be re-cut on apply. Merges/splits below keep it in sync. */
+  startMs: number;
+  endMs: number;
   /** Contributing old sentences' translations — shown as a hint, not the field value. */
   sourceTranslations: string[];
   needsTranslationReview: boolean;
@@ -96,6 +100,8 @@ export function ResegmentSourcePage() {
           translation: row.translation,
           readingOnly: row.readingOnly,
           sourceIndexes: row.sourceIndexes,
+          startMs: row.startMs,
+          endMs: row.endMs,
           sourceTranslations: row.sourceTranslations,
           needsTranslationReview: row.needsTranslationReview,
         })),
@@ -128,6 +134,8 @@ export function ResegmentSourcePage() {
         translation: [prev.translation, row.translation].filter(Boolean).join(' '),
         readingOnly: '',
         sourceIndexes: [...new Set([...prev.sourceIndexes, ...row.sourceIndexes])],
+        startMs: Math.min(prev.startMs, row.startMs),
+        endMs: Math.max(prev.endMs, row.endMs),
         sourceTranslations: [
           ...new Set([...prev.sourceTranslations, ...row.sourceTranslations]),
         ],
@@ -147,14 +155,28 @@ export function ResegmentSourcePage() {
         .filter(Boolean);
       if (pieces.length <= 1) return current;
       const translations = distributeTranslation(row.translation, pieces.length);
-      const replacements: ReviewRow[] = pieces.map((japanese, pieceIndex) => ({
-        japanese,
-        translation: translations[pieceIndex] ?? '',
-        readingOnly: '',
-        sourceIndexes: row.sourceIndexes,
-        sourceTranslations: row.sourceTranslations,
-        needsTranslationReview: true,
-      }));
+      // Divide the row's time span proportionally by piece length, mirroring
+      // the server's split-cue timing (server/youtube-mining resegment.py).
+      const totalChars = pieces.reduce((n, p) => n + p.length, 0) || 1;
+      const span = row.endMs - row.startMs;
+      let cursor = row.startMs;
+      const replacements: ReviewRow[] = pieces.map((japanese, pieceIndex) => {
+        const pieceStart = cursor;
+        cursor =
+          pieceIndex === pieces.length - 1
+            ? row.endMs
+            : Math.round(pieceStart + (span * japanese.length) / totalChars);
+        return {
+          japanese,
+          translation: translations[pieceIndex] ?? '',
+          readingOnly: '',
+          sourceIndexes: row.sourceIndexes,
+          startMs: pieceStart,
+          endMs: cursor,
+          sourceTranslations: row.sourceTranslations,
+          needsTranslationReview: true,
+        };
+      });
       const next = [...current];
       next.splice(index, 1, ...replacements);
       return next;
@@ -181,6 +203,8 @@ export function ResegmentSourcePage() {
           readingOnly: cue?.reading?.trim() ?? row.readingOnly,
           inlineReading: inlineReadingFromTokens(row.japanese, tokens),
           tokens,
+          startMs: row.startMs,
+          endMs: row.endMs,
         };
       });
       const plan = buildResegmentPlan(
