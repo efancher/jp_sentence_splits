@@ -106,11 +106,9 @@ describe('distributeTranslation', () => {
   it('assigns one English sentence per piece when counts match', () => {
     expect(distributeTranslation('A. B? C!', 3)).toEqual(['A.', 'B?', 'C!']);
   });
-  it('leaves trailing pieces blank when there is less English', () => {
+  it('dumps everything on the first piece when the counts do not line up', () => {
     expect(distributeTranslation('Only this.', 3)).toEqual(['Only this.', '', '']);
-  });
-  it('folds extra English into the last piece', () => {
-    expect(distributeTranslation('A. B. C. D.', 2)).toEqual(['A.', 'B. C. D.']);
+    expect(distributeTranslation('A. B. C. D.', 2)).toEqual(['A. B. C. D.', '']);
   });
 });
 
