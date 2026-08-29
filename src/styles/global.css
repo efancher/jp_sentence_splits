@@ -304,6 +304,14 @@ strong.jp {
   opacity: 0.8;
 }
 
+/* WaniKani "you already know the kanji" placeholder, shown as a lead-in
+   above the component-kanji mnemonics it defers to. */
+.mnemonic-deferral-note {
+  display: block;
+  font-style: italic;
+  opacity: 0.85;
+}
+
 .mnemonic-kanji-block {
   display: block;
   margin-top: 0.35rem;

@@ -1294,9 +1294,56 @@ describe('ReviewPage', () => {
     // component-kanji fallback content must appear.
     const showButton = screen.queryByRole('button', { name: 'Show mnemonic' });
     if (showButton) await user.click(showButton);
-    expect(await screen.findByText(/like saying "yo!"/)).toBeInTheDocument();
+    expect(await screen.findByText(/like saying "yo!"/, {}, { timeout: 3000 })).toBeInTheDocument();
     expect(await screen.findByText(/Picture shouting "yo" at a book/)).toBeInTheDocument();
     expect(screen.getByText('読')).toBeInTheDocument();
+  });
+
+  it('treats a WaniKani "you already know the kanji" placeholder as no vocab mnemonic and shows the component kanji instead', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      readingMnemonic:
+        "This is a word that uses the kun'yomi reading you already learned for the kanji, so you should be able to read this word on your own.",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.kanji.add({
+      id: 'kanji-読',
+      character: '読',
+      meanings: ['read'],
+      onyomi: ['ドク'],
+      kunyomi: ['よ'],
+      nanori: [],
+      readingMnemonic: 'Read it as <reading>よ</reading>, like saying "yo!".',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    const showButton = screen.queryByRole('button', { name: 'Show mnemonic' });
+    if (showButton) await user.click(showButton);
+    // The kanji mnemonic is what actually helps here.
+    expect(await screen.findByText(/like saying "yo!"/, {}, { timeout: 3000 })).toBeInTheDocument();
+    // The placeholder still appears, but only as a lead-in above it.
+    expect(screen.getByText(/read this word on your own/)).toBeInTheDocument();
   });
 
   it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {

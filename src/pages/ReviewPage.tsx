@@ -62,6 +62,7 @@ import {
 } from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
+import { isDeferralMnemonic } from '../lib/wanikaniMnemonic';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -1324,11 +1325,14 @@ export function ReviewPage() {
  *   1. the learner's own note (`VocabularyItem.notes`),
  *   2. WaniKani's mnemonic for the word itself
  *      (`meaningMnemonic`/`readingMnemonic`, from
- *      `scripts/backfill-wanikani-mnemonics.ts`),
+ *      `scripts/backfill-wanikani-mnemonics.ts`) — unless it's one of
+ *      WaniKani's "you already know the kanji" placeholders
+ *      (`isDeferralMnemonic`), which is useless if the learner *doesn't*,
+ *      so those fall through to tier 3 (shown as a lead-in line above it).
  *   3. WaniKani's mnemonics + hints for the word's component kanji
  *      (`Kanji.*Mnemonic`/`*Hint`, from `scripts/import-wanikani-kanji.ts`) —
  *      only ~6.5k words are in WaniKani's vocab catalog but ~2k kanji are,
- *      so mined words often land here.
+ *      so mined words (and deferral-placeholder words) often land here.
  * Reading-focused cards use the reading mnemonic; `cloze` (recall from
  * meaning, not from a visible word) uses the meaning mnemonic. Renders
  * nothing when no source has anything.
@@ -1346,9 +1350,12 @@ function CardMnemonic({
 }) {
   const useMeaning = activityType === 'cloze';
   const own = vocabularyItem.notes?.trim();
-  const wkWord = useMeaning
+  const rawWkWord = useMeaning
     ? vocabularyItem.meaningMnemonic || vocabularyItem.readingMnemonic
     : vocabularyItem.readingMnemonic || vocabularyItem.meaningMnemonic;
+  const wkWordIsDeferral = rawWkWord ? isDeferralMnemonic(rawWkWord) : false;
+  const wkWord = rawWkWord && !wkWordIsDeferral ? rawWkWord : undefined;
+  const deferralNote = wkWordIsDeferral ? rawWkWord : undefined;
 
   // Distinct kanji of the expression, in first-appearance order.
   const kanjiChars = useMemo(
@@ -1393,17 +1400,24 @@ function CardMnemonic({
       ) : wkWord ? (
         <MnemonicText text={wkWord} />
       ) : (
-        kanjiEntries.map((k) => (
-          <span key={k.char} className="mnemonic-kanji-block">
-            <span className="mnemonic-kanji-char">{k.char}</span>
-            <MnemonicText text={k.mnemonic} />
-            {k.hint ? (
-              <span className="mnemonic-hint">
-                <MnemonicText text={k.hint} />
-              </span>
-            ) : null}
-          </span>
-        ))
+        <>
+          {deferralNote ? (
+            <span className="mnemonic-deferral-note">
+              <MnemonicText text={deferralNote} />
+            </span>
+          ) : null}
+          {kanjiEntries.map((k) => (
+            <span key={k.char} className="mnemonic-kanji-block">
+              <span className="mnemonic-kanji-char">{k.char}</span>
+              <MnemonicText text={k.mnemonic} />
+              {k.hint ? (
+                <span className="mnemonic-hint">
+                  <MnemonicText text={k.hint} />
+                </span>
+              ) : null}
+            </span>
+          ))}
+        </>
       )}
     </div>
   );

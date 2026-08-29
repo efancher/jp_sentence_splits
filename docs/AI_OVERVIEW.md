@@ -711,8 +711,12 @@ cards (`CardMnemonic` in `ReviewPage.tsx`) has three source tiers, in
 order: (1) the learner's own `VocabularyItem.notes`; (2) WaniKani's
 meaning/reading mnemonic for the word itself
 (`VocabularyItem.meaningMnemonic`/`readingMnemonic`, backfilled by
-`scripts/backfill-wanikani-mnemonics.ts`, ~6.5k WK-catalog words); (3)
-WaniKani's mnemonics **and hints** for the word's component kanji
+`scripts/backfill-wanikani-mnemonics.ts`, ~6.5k WK-catalog words) —
+*unless* it's one of WaniKani's "you already know the component kanji"
+placeholders (`isDeferralMnemonic`, `src/lib/wanikaniMnemonic.ts`), which
+is useless if the learner doesn't, so those fall through to tier 3 and
+render only as an italic lead-in above it; (3) WaniKani's mnemonics **and
+hints** for the word's component kanji
 (`Kanji.meaningMnemonic`/`meaningHint`/`readingMnemonic`/`readingHint`,
 filled by re-running `scripts/import-wanikani-kanji.ts`; ~2k kanji, so
 mined words that miss tier 2 often land here) — one block per kanji, the

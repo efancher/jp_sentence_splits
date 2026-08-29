@@ -1,6 +1,25 @@
 # Status
 
-Last updated: 2026-08-31 (WaniKani subject cache in Supabase. The two
+Last updated: 2026-08-31 (WaniKani "deferral" mnemonics fall through to
+the kanji. Follow-up to the mnemonics work below, from a real-usage catch:
+WaniKani's reading (and sometimes meaning) mnemonic for a lot of jukugo /
+single-kanji vocab is a placeholder — "this uses the on'yomi you already
+learned for the kanji, you can read it on your own" — not an actual memory
+aid, and useless on a card if the learner *doesn't* remember the kanji.
+New `src/lib/wanikaniMnemonic.ts`: `isDeferralMnemonic` (conservative —
+matches WaniKani's boilerplate phrasings + a near-empty check, a real
+paragraph-length mnemonic passes) and `stripMnemonicMarkup`. `CardMnemonic`
+in `ReviewPage.tsx` now treats a deferral as "no tier-2 mnemonic": it
+falls through to the tier-3 component-kanji mnemonics/hints and shows the
+placeholder text only as an italic lead-in above them
+(`.mnemonic-deferral-note`). Detection is render-time, not backfill-time,
+so the raw WaniKani text stays intact and an improved re-import is picked
+up automatically. Tests: `tests/wanikaniMnemonic.test.ts` + a
+`reviewPage.test.tsx` case. No schema/migration/data change — vocab-slice
+and kanji-slice deploys from 2026-08-29 already ran against production
+(303 vocab items, 2101 kanji rows).
+
+Before that: 2026-08-31 (WaniKani subject cache in Supabase. The two
 ingestion scripts (`import-wanikani-kanji.ts`,
 `backfill-wanikani-mnemonics.ts`) re-paged the entire WaniKani `/subjects`
 catalog (~2k kanji / ~9k vocab) on every run — including the routine
