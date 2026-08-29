@@ -101,6 +101,18 @@ interface WkPage<T = WkKanjiSubject> {
   pages: { next_url: string | null };
 }
 
+/**
+ * A raw WaniKani subject as returned by the API — `data_updated_at` sits
+ * beside `data`, not inside it, and is the field the `wanikani_subjects`
+ * cache keys its incremental `updated_after` pulls on.
+ */
+export interface WkRawSubject {
+  id: number;
+  object: string;
+  data_updated_at: string;
+  data: Record<string, unknown>;
+}
+
 async function wkGet<T = WkKanjiSubject>(url: string, token: string): Promise<WkPage<T>> {
   const headers = {
     Authorization: `Bearer ${token.trim()}`,
@@ -121,13 +133,23 @@ async function wkGet<T = WkKanjiSubject>(url: string, token: string): Promise<Wk
   }
 }
 
-/** Fetches every non-hidden kanji subject from the WaniKani catalog (not the user's own progress). */
-export async function fetchWanikaniKanjiSubjects(token: string): Promise<WkKanjiSubject[]> {
-  const out: WkKanjiSubject[] = [];
-  let url: string | null = `${WK_API_BASE}/subjects?types=kanji`;
+/**
+ * Pages through `/subjects` for the given object types, optionally only those
+ * changed since `updatedAfter` (an ISO timestamp — WaniKani's `updated_after`
+ * query param). Returns raw subjects including hidden ones; callers decide
+ * what to keep. Used by the `wanikani_subjects` cache sync.
+ */
+export async function fetchWanikaniSubjectsRaw(
+  token: string,
+  opts: { types: string[]; updatedAfter?: string | null },
+): Promise<WkRawSubject[]> {
+  const params = new URLSearchParams({ types: opts.types.join(',') });
+  if (opts.updatedAfter) params.set('updated_after', opts.updatedAfter);
+  const out: WkRawSubject[] = [];
+  let url: string | null = `${WK_API_BASE}/subjects?${params.toString()}`;
   while (url) {
-    const page: WkPage<WkKanjiSubject> = await wkGet<WkKanjiSubject>(url, token);
-    out.push(...page.data.filter((subject) => !isHiddenSubject(subject)));
+    const page: WkPage<WkRawSubject> = await wkGet<WkRawSubject>(url, token);
+    out.push(...page.data);
     url = page.pages.next_url;
   }
   return out;
@@ -181,16 +203,3 @@ export function wanikaniVocabSubjectToMnemonics(
   };
 }
 
-/** Fetches every non-hidden vocabulary + kana_vocabulary subject from the WaniKani catalog. */
-export async function fetchWanikaniVocabularySubjects(
-  token: string,
-): Promise<WkVocabSubject[]> {
-  const out: WkVocabSubject[] = [];
-  let url: string | null = `${WK_API_BASE}/subjects?types=vocabulary,kana_vocabulary`;
-  while (url) {
-    const page: WkPage<WkVocabSubject> = await wkGet<WkVocabSubject>(url, token);
-    out.push(...page.data.filter((subject) => !subject.data.hidden_at));
-    url = page.pages.next_url;
-  }
-  return out;
-}

@@ -211,7 +211,9 @@ built out Phases 1–9):
   planner" (the per-sitting new-card cap on `ReviewPage`).
 
 Sync/queue-internal tables (`syncMeta`, `syncQueue`, `syncRecordMeta`,
-`syncConflicts`) are infrastructure, not domain data.
+`syncConflicts`) are infrastructure, not domain data. `wanikani_subjects`
+(Supabase-only, no Dexie counterpart) is a script-side cache of raw
+WaniKani API responses — see External interop.
 
 ## Feature walkthrough
 
@@ -1132,7 +1134,12 @@ aren't JSON-serializable/aren't worth backing up).
   kanji-only. All of it surfaced only on `ReviewPage`'s "Show mnemonic".
   Everything needs a `WANIKANI_API_TOKEN`. Tofugu's mnemonic content stays
   in the user's private Supabase/IndexedDB, never the repo or public
-  build.
+  build. Both scripts pull raw WaniKani subject payloads through a
+  script-only `wanikani_subjects` cache table
+  (`scripts/lib/wanikaniCache.ts`) — an incremental `updated_after` pull
+  keyed on the newest cached `data_updated_at`, so a re-run (or the usual
+  dry-run→`--apply`) fetches only what WaniKani changed. The cache is
+  **not** synced to the client; `--skip-wk-sync` reads it with no API call.
 - **JMDict** (`jmdict-simplified` release) — downloaded/cached locally
   (`scripts/.cache/`, ~110 MB, gitignored) and used only as a local lookup
   index (`scripts/lib/jmdict.ts`) backing the `npm run jmdict:lookup` CLI

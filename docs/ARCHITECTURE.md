@@ -135,6 +135,9 @@ since the card-issue-reports feature, `grammar_patterns`/
 system's Phase 1 (schema-only — no UI writer yet), `planner_sessions`
 since 2026-08-25 (last-write-wins, see above). The one exception left is
 `sources`: still no writer anywhere, so nothing to sync yet.
+`wanikani_subjects` (2026-08-31) is deliberately outside the sync engine —
+a script-only WaniKani-API response cache the browser never reads (it sees
+only the derived `kanji`/`vocabulary_items` rows).
 
 ## Learning Orchestrator
 
@@ -241,7 +244,12 @@ configurable FSRS-interval threshold).
   shown only on `ReviewPage`'s "Show mnemonic" (learner note → WK vocab
   mnemonic → component-kanji mnemonic/hint fallback). One-time/occasional
   bulk imports, not a live per-user integration; Tofugu mnemonic content
-  is kept out of the repo and public build.
+  is kept out of the repo and public build. Raw WaniKani subject payloads
+  are cached in a **script-only** `wanikani_subjects` Supabase table
+  (`scripts/lib/wanikaniCache.ts`, incremental `updated_after` pulls) so
+  re-runs don't re-page the whole catalog — not wired into the sync engine
+  / Dexie / backup, since the browser only ever reads the derived
+  `kanji` / `vocabulary_items` rows.
 - **JMDict** (`jmdict-simplified`, pinned release, downloaded/cached by
   `scripts/lib/jmdict.ts`): local dictionary lookups and several backfill
   scripts (vocabulary meanings, suggestion glosses) — no network dependency

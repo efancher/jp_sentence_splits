@@ -8,7 +8,9 @@ name: Import WaniKani kanji
 #
 # Re-runnable and idempotent on `character` — a re-run refreshes readings,
 # meanings, and (since 2026-08-30) the meaning/reading mnemonics + hints on
-# every existing row.
+# every existing row. Raw WaniKani payloads are cached in the
+# `wanikani_subjects` table, so a re-run only pulls what WaniKani changed
+# (incremental `updated_after`), not the whole catalog.
 on:
   workflow_dispatch:
 

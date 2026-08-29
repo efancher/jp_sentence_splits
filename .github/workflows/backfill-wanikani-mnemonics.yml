@@ -4,8 +4,9 @@ name: Backfill WaniKani mnemonics
 # and docs/STATUS.md for the full rationale): writes to production Supabase
 # using a real account password stored as a secret, so every run is an
 # explicit, logged human action — never a push/schedule trigger. Also needs
-# a WaniKani API token (WANIKANI_API_TOKEN secret) to read the vocabulary
-# catalog.
+# a WaniKani API token (WANIKANI_API_TOKEN secret) to refresh the vocabulary
+# subject cache (`wanikani_subjects` table) — an incremental `updated_after`
+# pull, so after the first run it fetches only what WaniKani changed.
 on:
   workflow_dispatch:
     inputs:

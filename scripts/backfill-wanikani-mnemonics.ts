@@ -1,26 +1,37 @@
 /**
- * Backfills `vocabulary_items.meaning_mnemonic` / `reading_mnemonic` from the
- * WaniKani API, for items with no mnemonic yet — surfaced only as optional
- * scaffolding on review cards (`ReviewPage`'s "Show mnemonic").
+ * Backfills `vocabulary_items.meaning_mnemonic` / `reading_mnemonic` from
+ * WaniKani vocabulary subjects, for items with no mnemonic yet — surfaced
+ * only as optional scaffolding on review cards (`ReviewPage`'s "Show
+ * mnemonic").
  *
  * Matches on `expression` (against a WK vocabulary subject's `characters`),
  * using `reading` as a tiebreaker when more than one WK subject shares a
  * spelling (homophones). Only the ~6.5k words in WaniKani's catalog get
  * filled; everything else stays blank and is retried harmlessly next run.
  *
- * Reuses scripts/lib/wanikani.ts. Dry-run by default; --apply required to
- * write. Idempotent: only items missing both mnemonics are selected.
+ * The raw WaniKani payloads are cached in `wanikani_subjects` first
+ * (incremental `updated_after` pull), so a re-run — or the usual dry-run
+ * then --apply — doesn't re-page the whole catalog. `--skip-wk-sync` reads
+ * straight from that cache without touching the WaniKani API (no token
+ * needed). Dry-run by default; --apply required to write. Idempotent: only
+ * items missing both mnemonics are selected.
  *
- * Usage: WANIKANI_API_TOKEN=... npm run backfill:wanikani-mnemonics -- [--apply]
+ * Usage: WANIKANI_API_TOKEN=... npm run backfill:wanikani-mnemonics -- [--apply] [--skip-wk-sync]
  */
 import { requireEnv } from './lib/env';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 import {
-  fetchWanikaniVocabularySubjects,
   wanikaniVocabSubjectToMnemonics,
   type VocabMnemonics,
+  type WkVocabSubject,
 } from './lib/wanikani';
+import {
+  readCachedWanikaniSubjects,
+  syncWanikaniSubjectCache,
+} from './lib/wanikaniCache';
+
+const VOCAB_TYPES = ['vocabulary', 'kana_vocabulary'];
 
 interface VocabularyItemRow {
   id: string;
@@ -62,18 +73,29 @@ function pickMatch(
 }
 
 async function main() {
-  const token = requireEnv('WANIKANI_API_TOKEN');
-  const apply = parseApplyFlag(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const apply = parseApplyFlag(argv);
+  const skipWkSync = argv.includes('--skip-wk-sync');
+  const token = skipWkSync ? '' : requireEnv('WANIKANI_API_TOKEN');
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
-  console.log('Fetching vocabulary items with no mnemonic yet, and the WaniKani vocabulary catalog...');
+  if (skipWkSync) {
+    console.log('Skipping WaniKani API sync — reading vocabulary subjects from the cache.');
+  } else {
+    console.log('Syncing WaniKani vocabulary subjects into the cache...');
+    const { fetched } = await syncWanikaniSubjectCache(supabase, user.id, token, VOCAB_TYPES);
+    console.log(`  ${fetched} subject(s) changed since last sync.`);
+  }
+
   const [items, subjects] = await Promise.all([
     fetchItemsMissingMnemonics(supabase, user.id),
-    fetchWanikaniVocabularySubjects(token),
+    readCachedWanikaniSubjects<WkVocabSubject>(supabase, user.id, VOCAB_TYPES),
   ]);
-  console.log(`Found ${items.length} item(s) with no mnemonic. Fetched ${subjects.length} WK vocabulary subjects.`);
+  console.log(
+    `Found ${items.length} item(s) with no mnemonic. Read ${subjects.length} WK vocabulary subjects from the cache.`,
+  );
   if (!items.length) return;
 
   const byCharacters = new Map<string, VocabMnemonics[]>();

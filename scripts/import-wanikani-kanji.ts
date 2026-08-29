@@ -1,15 +1,25 @@
 /**
- * Bulk-imports the WaniKani kanji catalog into Supabase `kanji`.
- * Catalog ingestion (every non-hidden kanji subject), not personal SRS
- * progress — re-runnable, idempotent on `character`.
+ * Bulk-imports the WaniKani kanji catalog into Supabase `kanji` (readings,
+ * meanings, and the meaning/reading mnemonics + hints). Catalog ingestion
+ * (every non-hidden kanji subject), not personal SRS progress —
+ * re-runnable, idempotent on `character`.
  *
- * Usage: npm run import:wanikani-kanji
+ * The raw WaniKani payloads are cached in `wanikani_subjects` first
+ * (incremental `updated_after` pull), so a re-run doesn't re-page the whole
+ * catalog. `--skip-wk-sync` reads straight from that cache without touching
+ * the WaniKani API (no token needed).
+ *
+ * Usage: npm run import:wanikani-kanji -- [--skip-wk-sync]
  */
 import { kanjiSchema } from '../src/domain/schemas';
 
 import { requireEnv } from './lib/env';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
-import { fetchWanikaniKanjiSubjects, wanikaniSubjectToKanjiFields } from './lib/wanikani';
+import { wanikaniSubjectToKanjiFields, type WkKanjiSubject } from './lib/wanikani';
+import {
+  readCachedWanikaniSubjects,
+  syncWanikaniSubjectCache,
+} from './lib/wanikaniCache';
 
 const UPSERT_BATCH_SIZE = 500;
 const SELECT_PAGE_SIZE = 1000;
@@ -38,19 +48,27 @@ async function fetchExistingCharacterIds(
 }
 
 async function main() {
-  const token = requireEnv('WANIKANI_API_TOKEN');
+  const skipWkSync = process.argv.slice(2).includes('--skip-wk-sync');
+  const token = skipWkSync ? '' : requireEnv('WANIKANI_API_TOKEN');
   const supabase = await createScriptSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Signed in but no user on session — unexpected.');
 
-  console.log('Fetching WaniKani kanji catalog and existing rows...');
+  if (skipWkSync) {
+    console.log('Skipping WaniKani API sync — reading kanji subjects from the cache.');
+  } else {
+    console.log('Syncing WaniKani kanji subjects into the cache...');
+    const { fetched } = await syncWanikaniSubjectCache(supabase, user.id, token, ['kanji']);
+    console.log(`  ${fetched} subject(s) changed since last sync.`);
+  }
+
   const [subjects, existingIds] = await Promise.all([
-    fetchWanikaniKanjiSubjects(token),
+    readCachedWanikaniSubjects<WkKanjiSubject>(supabase, user.id, ['kanji']),
     fetchExistingCharacterIds(supabase, user.id),
   ]);
-  console.log(`Fetched ${subjects.length} non-hidden kanji subjects.`);
+  console.log(`Read ${subjects.length} non-hidden kanji subjects from the cache.`);
   console.log(`Found ${existingIds.size} existing kanji rows for this owner.`);
 
   const now = new Date().toISOString();

@@ -1,6 +1,31 @@
 # Status
 
-Last updated: 2026-08-30 (WaniKani mnemonics — kanji slice + hints.
+Last updated: 2026-08-31 (WaniKani subject cache in Supabase. The two
+ingestion scripts (`import-wanikani-kanji.ts`,
+`backfill-wanikani-mnemonics.ts`) re-paged the entire WaniKani `/subjects`
+catalog (~2k kanji / ~9k vocab) on every run — including the routine
+"dry-run, eyeball, then `--apply`" double pull. New **script-only**
+`wanikani_subjects` table (`20260831000000_wanikani_subject_cache.sql`):
+owner-scoped, composite PK `(owner_id, wk_id)`, `data jsonb` +
+`data_updated_at` + `fetched_at`, standard `owner_id = auth.uid()` RLS.
+**Not** wired into the TS sync engine / Dexie / JSON backup — the browser
+app never reads it, only the derived `kanji` / `vocabulary_items` rows.
+New `scripts/lib/wanikaniCache.ts`: `syncWanikaniSubjectCache` does an
+**incremental** pull (WaniKani's `updated_after` param, cursor =
+newest cached `data_updated_at`; first run is a full pull, later runs
+usually fetch 0 rows) and upserts; `readCachedWanikaniSubjects<T>`
+reconstructs the `{ id, object, data }` shape the pure transforms expect
+and drops since-hidden subjects (kept in the table so the cursor stays
+correct). `scripts/lib/wanikani.ts` gains `fetchWanikaniSubjectsRaw`
+(paged, `updated_after`-aware) and drops the now-unused
+`fetchWanikaniKanjiSubjects`/`fetchWanikaniVocabularySubjects`. Both
+scripts take `--skip-wk-sync` to read straight from the cache with no
+WaniKani API call / token. `WANIKANI_API_TOKEN` secret still required for a
+normal (cache-refreshing) run. Tests: `tests/wanikaniCache.test.ts`
+(`latestDataUpdatedAt`, `isVisibleSubject`). Migration **not yet applied to
+production** — see `ROADMAP.md`.)
+
+Before that: 2026-08-30 (WaniKani mnemonics — kanji slice + hints.
 Follow-up to the vocab slice below. `Kanji` gains
 `meaningMnemonic`/`meaningHint`/`readingMnemonic`/`readingHint`
 (`types.ts`, `kanjiSchema`, `src/sync/mappers.ts` both directions,
