@@ -679,7 +679,19 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   and the verb / i-adjective two-class system — a "why this pattern" note,
   each cross-checked against the word's real Kanjium position and
   suppressed on disagreement; plain native nouns get a "memorized, no
-  rule" fallback).
+  rule" fallback). When the sentence has a native recording
+  (`SentenceAudio`), the reveal also renders `PitchAccentNativeAudio`
+  (`src/components/PitchAccentNativeAudio.tsx`) — a "Loop native word"
+  toggle that plays just the target word's span on repeat as a model of
+  the real realization next to the dictionary contour, with a
+  pitch-preserving speed control and a whole-sentence button for context.
+  The word's span is located by forced alignment (`isolatedWordRange` in
+  `src/lib/isolatedWordRange.ts` — character-proportion mapping like
+  `SyncedShadowText`, folding in a following ≤2-char case particle so the
+  post-word pitch is audible); it falls back to whole-sentence-only
+  playback when alignment is unavailable or the word can't be located.
+  Plays through a local `<audio>` + `PlaybackCoordinator`, not the
+  `nativeAudioController` singleton (no range support there).
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.

@@ -6,6 +6,7 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { MnemonicText } from '../components/MnemonicText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
+import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
@@ -268,6 +269,8 @@ interface PitchAccentReviewCandidate {
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
+  /** The sentence's first reference recording, when it has one — powers the reveal's "loop the native word" control. */
+  audio?: SentenceAudio;
   moraCount: number;
   correctLabel: PitchAccentPattern;
   /** Every pattern distinguishable at this word's mora count, in a per-word-stable shuffled order (see below) — not the raw fixed enum order, so the correct answer isn't always in the same button position. */
@@ -283,9 +286,14 @@ interface PitchAccentReviewCandidate {
  * final ordering step) rather than ranked/sliced the way grammar's
  * corpus-scale distractor pool needs — here the choice set is already
  * small and fully determined by moraCount, so only ordering varies.
+ *
+ * `audioBySentenceId` is the same first-recording-per-sentence map the
+ * audio-comprehension candidates use; a matching entry is attached so the
+ * reveal can offer to loop the native realization of the word.
  */
 function getPitchAccentReviewCandidates(
   candidates: VocabularyTargetCandidate[],
+  audioBySentenceId: Map<string, SentenceAudio>,
 ): PitchAccentReviewCandidate[] {
   const result: PitchAccentReviewCandidate[] = [];
   for (const candidate of candidates) {
@@ -299,7 +307,13 @@ function getPitchAccentReviewCandidates(
       const hb = Number.parseInt(hashString(`${candidate.vocabularyItem.id}:order:${b}`), 16);
       return ha - hb;
     });
-    result.push({ ...candidate, moraCount, correctLabel, choices });
+    result.push({
+      ...candidate,
+      audio: audioBySentenceId.get(candidate.sentence.id),
+      moraCount,
+      correctLabel,
+      choices,
+    });
   }
   return result;
 }
@@ -704,7 +718,10 @@ export function ReviewPage() {
         transformationVocabularyItemIdSet.has(item.subjectId),
     );
 
-    const pitchAccentCandidates = getPitchAccentReviewCandidates(vocabularyTargetCandidates);
+    const pitchAccentCandidates = getPitchAccentReviewCandidates(
+      vocabularyTargetCandidates,
+      audioBySentenceId,
+    );
     const pitchAccentVocabularyItemIdSet = new Set(
       pitchAccentCandidates.map((candidate) => candidate.vocabularyItem.id),
     );
@@ -1717,7 +1734,7 @@ function PitchAccentCard({
   revealed: boolean;
   onCheck: (chosenLabel: string) => void;
 }) {
-  const { vocabularyItem, sentence, surfaceForm, correctLabel, choices } = candidate;
+  const { vocabularyItem, sentence, surfaceForm, audio, correctLabel, choices } = candidate;
   const [selected, setSelected] = useState<PitchAccentPattern | null>(null);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
 
@@ -1775,6 +1792,13 @@ function PitchAccentCard({
                 );
               })()}
             </>
+          ) : null}
+          {audio ? (
+            <PitchAccentNativeAudio
+              audio={audio}
+              japanese={sentence.japanese}
+              surfaceForm={surfaceForm}
+            />
           ) : null}
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>

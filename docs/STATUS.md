@@ -1,6 +1,28 @@
 # Status
 
-Last updated: 2026-08-29 (Vocabulary confirmations prioritized within the
+Last updated: 2026-08-29 (Pitch-accent review card can model the native
+realization. From a "for the pitch accent cards, if there's native audio,
+it might be nice to help with modeling the pitch accent of natives" ask —
+the `pitch_accent` card was dictionary-only (multiple choice + diagram +
+rule note), using no audio even when the sentence had a reference
+recording. New `src/components/PitchAccentNativeAudio.tsx`, rendered on
+the card reveal when the sentence has a `SentenceAudio` row: a "Loop
+native word" toggle that repeats just the target word's span, a
+pitch-preserving speed control (`PLAYBACK_SPEEDS`), and a whole-sentence
+button for context. The word span is located by forced alignment via new
+pure helper `src/lib/isolatedWordRange.ts` (character-proportion mapping,
+mirroring `SyncedShadowText`; folds in a following ≤2-char case particle
+so the post-word pitch is audible). Degrades to whole-sentence-only
+playback when alignment is unreachable or the word can't be located.
+Plays through a local `<audio>` + `PlaybackCoordinator` (which sets
+`preservesPitch`), not the `nativeAudioController` singleton — no range
+support there; starting the loop stops the singleton so the two can't
+overlap. `getPitchAccentReviewCandidates` now takes the same
+first-recording-per-sentence map the audio-comprehension candidates use
+and attaches `audio?`. Tests: `tests/isolatedWordRange.test.ts` (4). No
+schema/data change. AI_OVERVIEW.md §4 updated.)
+
+Before that: 2026-08-29 (Vocabulary confirmations prioritized within the
 session planner's glossing bucket. User asked how to prioritize vocabulary
 confirmations in the recommended-session split. `buildExploreSteps`
 (`src/lib/sessionPlanner.ts`) now runs two passes instead of one
