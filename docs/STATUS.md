@@ -19,6 +19,15 @@ up automatically. Tests: `tests/wanikaniMnemonic.test.ts` + a
 and kanji-slice deploys from 2026-08-29 already ran against production
 (303 vocab items, 2101 kanji rows).
 
+Before that: 2026-08-31 (VocabularyPicker shows "Confirmed ✓" inline next
+to the "Confirm vocabulary" button. The only confirmation feedback was the
+header status pills, which sit above the (long) morph strip + selection
+tray and scroll out of view when you're down at the confirm button — so
+you had to scroll back up to check it took. New optional `saveState` prop
+(wired from `VocabularyReviewPage`'s `useAutosave`) drives a pill right
+beside the button: "Confirmed — saving…" → "Confirmed ✓" (or "— save
+failed"), `aria-live="polite"`. `tests/vocabularyPicker.test.tsx` (+2).)
+
 Before that: 2026-08-31 (Pitch-accent review card now explains the
 pattern, not just names it. Follow-up to the `PitchAccentDiagram` work
 below, from a "are there rules that explain why a pattern is used" ask.

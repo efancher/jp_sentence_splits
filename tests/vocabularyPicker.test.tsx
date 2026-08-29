@@ -22,11 +22,13 @@ const baseSelection: VocabularySelection = {
 
 function Harness({
   onSuggestMeaning,
+  saveState,
 }: {
   onSuggestMeaning?: (word: {
     expression: string;
     reading: string;
   }) => Promise<{ meaning: string; partOfSpeech?: string } | null>;
+  saveState?: 'idle' | 'dirty' | 'saving' | 'saved' | 'failed';
 }) {
   const [selections, setSelections] = useState<VocabularySelection[]>([baseSelection]);
   const [reviewStatus, setReviewStatus] =
@@ -37,10 +39,12 @@ function Harness({
       suggestions={[]}
       selections={selections}
       reviewStatus={reviewStatus}
+      saveState={saveState}
       onChange={({ selections: next, reviewStatus: status }) => {
         setSelections(next);
         setReviewStatus(status);
       }}
+      onConfirm={() => {}}
       onSuggestMeaning={onSuggestMeaning}
     />
   );
@@ -70,6 +74,25 @@ describe('VocabularyPicker "Suggest (AI)"', () => {
     });
     const meaningInput = await screen.findByDisplayValue('senior colleague');
     expect(meaningInput).toBeInTheDocument();
+  });
+
+  it('shows inline "Confirmed" feedback next to the button after confirming', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(screen.queryByText(/confirmed ✓/i)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Confirm vocabulary' }));
+    expect(await screen.findByText(/confirmed ✓/i)).toBeInTheDocument();
+  });
+
+  it('reflects the parent save state in the inline confirmation feedback', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Harness saveState="saving" />);
+    await user.click(screen.getByRole('button', { name: 'Confirm vocabulary' }));
+    expect(screen.getByText(/confirmed — saving…/i)).toBeInTheDocument();
+
+    rerender(<Harness saveState="failed" />);
+    expect(screen.getByText(/confirmed — save failed/i)).toBeInTheDocument();
   });
 
   it('shows an inline message when the suggestion is unavailable', async () => {

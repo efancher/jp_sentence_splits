@@ -277,6 +277,7 @@ export function VocabularyReviewPage() {
         suggestions={sentence.vocabularySuggestions ?? []}
         selections={selections}
         reviewStatus={reviewStatus}
+        saveState={saveState}
         onSuggestMeaning={handleSuggestMeaning}
         onChange={({ selections: nextSelections, reviewStatus: nextStatus }) => {
           setSelections(nextSelections);

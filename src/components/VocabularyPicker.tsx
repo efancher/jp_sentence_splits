@@ -23,6 +23,7 @@ import type {
   VocabularySelection,
   VocabularySuggestion,
 } from '../domain/types';
+import type { SaveState } from '../hooks/useAutosave';
 import { createId } from '../lib/ids';
 import {
   buildMorphStrip,
@@ -53,6 +54,13 @@ export interface VocabularyPickerProps {
     selections: VocabularySelection[];
     reviewStatus: VocabularyReviewStatus;
   }) => void;
+  /**
+   * Autosave state from the parent, surfaced as inline feedback right next to
+   * the "Confirm vocabulary" button — the header status pills are above a long
+   * strip/tray and scroll out of view when you're at the confirm button, so
+   * the confirmation was easy to miss without scrolling back up.
+   */
+  saveState?: SaveState;
   /**
    * Optional per-word AI meaning suggestion (VocabularyReviewPage wires this to
    * the `vocab-assist` edge function). When omitted, the "Suggest (AI)" button
@@ -492,6 +500,7 @@ export function VocabularyPicker({
   onChange,
   onConfirm,
   onSuggestMeaning,
+  saveState,
 }: VocabularyPickerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -976,10 +985,19 @@ export function VocabularyPicker({
         </button>
       </div>
 
-      <div className="row">
+      <div className="row" style={{ alignItems: 'center' }}>
         <button type="button" onClick={confirm}>
           Confirm vocabulary
         </button>
+        {reviewStatus === 'confirmed' ? (
+          <span className="status-pill confirmed" aria-live="polite">
+            {saveState === 'saving'
+              ? 'Confirmed — saving…'
+              : saveState === 'failed'
+                ? 'Confirmed — save failed'
+                : 'Confirmed ✓'}
+          </span>
+        ) : null}
       </div>
     </section>
   );
