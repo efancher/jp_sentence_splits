@@ -299,6 +299,68 @@ describe('sync queue and local-first mutations', () => {
     expect('blob' in meta).toBe(false);
   });
 
+  const remoteAudioRow = (id: string, sentenceId: string) => ({
+    id,
+    sentence_id: sentenceId,
+    source_id: 'source-VID',
+    source_sentence_id: `source-VID:${id}`,
+    source_title: 'After Work',
+    mime_type: 'audio/mp4',
+    duration_ms: 1500,
+    source_start_ms: 1000,
+    source_end_ms: 2500,
+    storage_path: `u/b/${id}.m4a`,
+    created_at: '2026-08-29T00:00:00.000Z',
+    version: 1,
+  });
+
+  it('creates a blob-less reference-audio row from a pull when audio sync is on', async () => {
+    await updateSyncMeta({ syncReferenceAudio: true });
+    const { applyRemoteUpsert } = await import('../src/sync/engine');
+    await applyRemoteUpsert('reference_audio', remoteAudioRow('audio_new', 'sent_x'), 1);
+
+    const row = await getDb().sentenceAudio.get('audio_new');
+    expect(row).toBeDefined();
+    expect(row?.sentenceId).toBe('sent_x');
+    expect(row?.durationMs).toBe(1500);
+    expect(row?.startMs).toBe(1000);
+    expect('blob' in (row ?? {})).toBe(true); // blob-less placeholder; hydrates separately
+  });
+
+  it('ignores a new reference-audio row from a pull when audio sync is off', async () => {
+    await updateSyncMeta({ syncReferenceAudio: false });
+    const { applyRemoteUpsert } = await import('../src/sync/engine');
+    await applyRemoteUpsert('reference_audio', remoteAudioRow('audio_off', 'sent_y'), 1);
+    expect(await getDb().sentenceAudio.get('audio_off')).toBeUndefined();
+  });
+
+  it('updates metadata but keeps the local blob for an existing reference-audio row', async () => {
+    await updateSyncMeta({ syncReferenceAudio: true });
+    const blob = new Blob(['local-audio'], { type: 'audio/mp4' });
+    await getDb().sentenceAudio.put({
+      id: 'audio_have',
+      sentenceId: 'sent_old',
+      sourceId: 'source-VID',
+      sourceSentenceId: 'x',
+      sourceTitle: 'After Work',
+      mimeType: 'audio/mp4',
+      durationMs: 999,
+      startMs: 0,
+      endMs: 999,
+      blob,
+      importedAt: '2026-07-19T00:00:00.000Z',
+    });
+
+    const { applyRemoteUpsert } = await import('../src/sync/engine');
+    await applyRemoteUpsert('reference_audio', remoteAudioRow('audio_have', 'sent_new'), 2);
+
+    const row = await getDb().sentenceAudio.get('audio_have');
+    expect(row?.sentenceId).toBe('sent_new'); // metadata followed the remote
+    expect(row?.durationMs).toBe(1500);
+    expect(row?.blob).toBeDefined(); // still has a blob (not the placeholder path)
+    expect(row?.importedAt).toBe('2026-07-19T00:00:00.000Z'); // original, not overwritten
+  });
+
   it('two logical devices can edit different records without conflict rows', async () => {
     await saveAnalysis('sent_a', [
       {

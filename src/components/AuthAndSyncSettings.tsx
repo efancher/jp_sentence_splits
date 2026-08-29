@@ -92,6 +92,30 @@ export function AuthAndSyncSettings() {
               />
               Sync reference audio to cloud storage
             </label>
+            {sync.syncReferenceAudio ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    const { resyncReferenceAudio } = await import('../sync/audioSync');
+                    const count = await resyncReferenceAudio();
+                    setMessage(
+                      `Reference audio: ${count} clip(s) available for this account. ` +
+                        'Any not yet on this device download in the background.',
+                    );
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Audio re-sync failed.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Download all reference audio now
+              </button>
+            ) : null}
             <label className="row">
               <input
                 type="checkbox"

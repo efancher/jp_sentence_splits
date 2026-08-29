@@ -51,7 +51,17 @@ export class NativeAudioController {
       activeItemId: record.id,
       error: null,
     });
-    await this.attemptPlayback(record, playbackRate, generation, false);
+    // Metadata-only row (audio synced from another device / a re-segment
+    // backfill, blob not downloaded yet) — fetch it before the first play
+    // rather than going through the error-then-retry path.
+    let playable = record;
+    if (!record.blob || record.blob.size === 0) {
+      const { repairSentenceAudio } = await import('../sync/audioSync');
+      const blob = await repairSentenceAudio(record.id);
+      if (generation !== this.generation) return;
+      if (blob) playable = { ...record, blob };
+    }
+    await this.attemptPlayback(playable, playbackRate, generation, false);
   }
 
   private async attemptPlayback(

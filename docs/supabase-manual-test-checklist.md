@@ -45,6 +45,8 @@
 - [ ] Sync on → metadata + file upload under `{user}/{book}/{id}.*`
 - [ ] Download on demand; Wi-Fi-only respected when `navigator.connection` exists
 - [ ] Clear audio cache removes local blobs
+- [ ] Sync on, second device → clip imported on device A appears on device B (metadata after a sync, audio on play or after `hydrateMissingReferenceAudio`)
+- [ ] "Download all reference audio now" re-populates after Clear audio cache
 
 ## Backup
 

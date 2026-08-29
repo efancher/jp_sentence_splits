@@ -133,6 +133,22 @@ describe('NativeAudioController', () => {
     });
   });
 
+  it('fetches the blob before first play for a metadata-only row (synced from another device)', async () => {
+    const freshBlob = new Blob(['downloaded-audio'], { type: 'audio/mp4' });
+    repairSentenceAudio.mockResolvedValue(freshBlob);
+
+    const controller = new NativeAudioController();
+    const metadataOnly = { ...audioRecord('audio-1'), blob: new Blob([], { type: 'audio/mp4' }) };
+    await controller.play(metadataOnly);
+
+    expect(repairSentenceAudio).toHaveBeenCalledWith('audio-1');
+    // Played the downloaded blob, not the empty placeholder — one Audio, no
+    // error-retry.
+    expect(MockAudio.instances).toHaveLength(1);
+    expect(MockAudio.instances[0]?.src).toBe(`blob:${freshBlob.size}`);
+    expect(controller.getSnapshot()).toMatchObject({ isPlaying: true, error: null });
+  });
+
   it('recovers by refetching from the cloud when the local blob is corrupt (Safari WebKitBlobResource)', async () => {
     let failNext = true;
     class FlakyAudio extends MockAudio {

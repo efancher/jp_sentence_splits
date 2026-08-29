@@ -36,6 +36,7 @@ import {
   remoteToVocabularyKanji,
   toRemoteRow,
 } from './mappers';
+import { hydrateMissingReferenceAudio } from './audioSync';
 import { getSupabase } from './supabaseClient';
 import { syncLog } from './logger';
 import type { SyncEntity, SyncQueueItem } from './types';
@@ -53,6 +54,15 @@ export async function runSyncCycle(): Promise<void> {
       // stayed on "Pending N" forever (e.g. after a missing SQL migration).
       const pushFailure = await pushMutations();
       await pullChanges();
+      // Best-effort: pull down blobs for any metadata-only reference-audio
+      // rows the pull just created. Never fails the cycle.
+      try {
+        await hydrateMissingReferenceAudio();
+      } catch (error) {
+        syncLog('warn', 'Reference-audio hydration failed', 'AUDIO_HYDRATE', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
       await updateSyncMeta({
         lastSyncAt: new Date().toISOString(),
         lastError: pushFailure,
@@ -693,7 +703,8 @@ async function applyRemoteDelete(
   });
 }
 
-async function applyRemoteUpsert(
+/** Apply one already-fetched remote row to Dexie. Exported for unit tests. */
+export async function applyRemoteUpsert(
   entity: SyncEntity,
   remote: Record<string, unknown>,
   version: number,
@@ -719,7 +730,8 @@ async function applyRemoteUpsert(
       await db.inbox.put(remoteToInbox(remote));
       break;
     case 'reference_audio': {
-      // Metadata only — blobs download on demand.
+      // Metadata only — blobs download on demand (hydrateMissingReferenceAudio
+      // after the pull, or the play-time self-heal in nativeAudio.ts).
       const meta = remoteToReferenceAudio(remote);
       const existing = await db.sentenceAudio.get(meta.id);
       if (existing) {
@@ -735,7 +747,27 @@ async function applyRemoteUpsert(
           startMs: meta.startMs,
           endMs: meta.endMs,
         });
+        break;
       }
+      // No local row yet (audio imported on another device, or a
+      // re-segmentation backfill). Create a blob-less placeholder so the
+      // sentence shows its audio affordance; the blob hydrates separately.
+      const syncMeta = await ensureSyncMeta();
+      if (!syncMeta.syncReferenceAudio) break;
+      await db.sentenceAudio.put({
+        id: meta.id,
+        sentenceId: meta.sentenceId,
+        sourceId: meta.sourceId,
+        sourceSentenceId: meta.sourceSentenceId,
+        sourceTitle: meta.sourceTitle,
+        sourceUrl: meta.sourceUrl,
+        mimeType: meta.mimeType,
+        durationMs: meta.durationMs,
+        startMs: meta.startMs,
+        endMs: meta.endMs,
+        blob: new Blob([], { type: meta.mimeType }),
+        importedAt: meta.importedAt,
+      });
       break;
     }
     case 'study_items':
@@ -1013,6 +1045,38 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   await pullFullTable('planner_sessions', userId, async (rows) => {
     await db.plannerSessions.bulkPut(rows.map((r) => remoteToPlannerSession(r)));
   });
+
+  // Reference audio: metadata only (blob-less placeholders), gated on the
+  // opt-in toggle. Blobs hydrate via hydrateMissingReferenceAudio below.
+  // Only touched when the toggle is on — audio the user imported locally on
+  // this device isn't "cloud data" and shouldn't be dropped by this path if
+  // they never opted into audio sync.
+  const audioSyncMeta = await ensureSyncMeta();
+  if (audioSyncMeta.syncReferenceAudio) {
+    await db.sentenceAudio.clear();
+    await pullFullTable('reference_audio', userId, async (rows) => {
+      await db.sentenceAudio.bulkPut(
+        rows.map((r) => {
+          const meta = remoteToReferenceAudio(r);
+          return {
+            id: meta.id,
+            sentenceId: meta.sentenceId,
+            sourceId: meta.sourceId,
+            sourceSentenceId: meta.sourceSentenceId,
+            sourceTitle: meta.sourceTitle,
+            sourceUrl: meta.sourceUrl,
+            mimeType: meta.mimeType,
+            durationMs: meta.durationMs,
+            startMs: meta.startMs,
+            endMs: meta.endMs,
+            blob: new Blob([], { type: meta.mimeType }),
+            importedAt: meta.importedAt,
+          };
+        }),
+      );
+    });
+    await hydrateMissingReferenceAudio();
+  }
 
   const { data: maxEvent } = await supabase
     .from('sync_events')

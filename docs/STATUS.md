@@ -1,6 +1,24 @@
 # Status
 
-Last updated: 2026-08-29 (Re-segmentation now carries reference audio +
+Last updated: 2026-08-29 (Reference audio pulls across devices. Follow-up
+to the re-segmentation audio work below: the backfill put 84 re-cut clips
+in Supabase, but `applyRemoteUpsert` for `reference_audio` only ever
+*updated* existing local rows — a clip imported/mined/backfilled elsewhere
+never materialized on another device (the user guide even said "imported
+shadowing audio does not sync"). Now, when the "Sync reference audio"
+toggle is on: a `reference_audio` row from a pull creates a blob-less
+`sentenceAudio` placeholder (`applyRemoteUpsert`, plus a full-table pull in
+`replaceLocalWithCloud`); `hydrateMissingReferenceAudio` (every sync cycle,
+best-effort, Wi-Fi-setting-aware) downloads the blobs; `nativeAudio.ts`
+`play()` fetches the blob up front for a placeholder row instead of going
+through the error-retry path. New `resyncReferenceAudio` + a "Download all
+reference audio now" button in `AuthAndSyncSettings.tsx` force-pull the
+whole set past the incremental cursor — the recovery path after "Clear
+audio cache". `applyRemoteUpsert` exported for tests. Tests:
+`tests/sync.test.ts` (+3), `tests/nativeAudio.test.ts` (+1). No schema
+change.)
+
+Before that: 2026-08-29 (Re-segmentation now carries reference audio +
 fixes 私→わたくし. Two regressions surfaced by a question about
 "私と同い年です。" in *Easy Japanese Drama: After Work*, both from that book
 having been re-segmented against production:

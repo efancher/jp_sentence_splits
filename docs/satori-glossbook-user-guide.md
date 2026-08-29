@@ -292,8 +292,12 @@ and an ichi.moe link.
 data to the cloud and share it across an iPhone, iPad, and desktop
 automatically. **Sync now** forces an immediate sync; the status line shows
 pending changes and the last successful sync time. Reference audio syncs
-separately (a toggle, since it's larger) — imported shadowing audio does
-not sync regardless.
+separately (a toggle under **Account & sync**, since the clips are larger):
+with it on, clips you imported/mined on one device become available on your
+others — the metadata syncs and each clip's audio downloads on demand
+(Wi-Fi-only by default). **Download all reference audio now** force-pulls
+the whole set for your account, e.g. after clearing the audio cache. With
+the toggle off, imported audio stays on the device that imported it.
 
 Without signing in, data stays entirely local to that browser/device.
 

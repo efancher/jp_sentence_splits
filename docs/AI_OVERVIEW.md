@@ -971,12 +971,22 @@ place by design.
   unresolvable); `repairSentenceAudio` re-downloads the original from
   Supabase Storage and overwrites the local copy, wired into both
   native-audio and shadowing reference playback paths.
+- **Reference-audio cross-device pull** (2026-08-29): when "Sync reference
+  audio" is on, a `reference_audio` row that arrives from another device (or
+  a re-segmentation backfill) now materializes as a blob-less local
+  `sentenceAudio` row (`applyRemoteUpsert`, plus a full-table pull in
+  `replaceLocalWithCloud`); `hydrateMissingReferenceAudio` (every sync
+  cycle) and a play-time fetch in `nativeAudio.ts` download the blobs,
+  Wi-Fi-setting-aware. A "Download all reference audio now" button
+  (`resyncReferenceAudio`) force-pulls the whole set, bypassing the
+  incremental cursor — the recovery path after "Clear audio cache".
 - **Book sharing** (`src/sync/sharing.ts`, `BookSharingPanel.tsx`, Postgres
   `book_members` table): invite collaborators to a specific book as
   `editor` or `viewer` via email + accept-token flow — the one multi-user
   feature in an otherwise single-user app.
 - **What's synced vs. local-only**: books/sentences/analyses/import
-  batches/inbox/reference audio/study_items/reviews/vocabulary_items/
+  batches/inbox/reference audio (metadata; blobs stream from Storage, opt-in
+  toggle)/study_items/reviews/vocabulary_items/
   sentence_vocabulary/kanji/vocabulary_kanji/vocabulary_confusions/
   card_issue_reports/grammar_patterns/sentence_grammar/
   grammar_relationships all sync (`grammar_patterns`/`sentence_grammar`

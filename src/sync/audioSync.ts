@@ -154,3 +154,107 @@ export async function clearDownloadedAudioCache(): Promise<number> {
   await db.sentenceAudio.clear();
   return count;
 }
+
+/**
+ * Pull every `reference_audio` row for the signed-in user, create a
+ * blob-less local `sentenceAudio` row for any that's missing (audio imported
+ * on another device, or a re-segmentation backfill), then download the
+ * blobs. Use after "Clear audio cache" or to force-pick-up audio that
+ * incremental sync's cursor has already passed. No-op when audio sync is
+ * off. Returns the number of rows now present locally.
+ */
+export async function resyncReferenceAudio(): Promise<number> {
+  const meta = await ensureSyncMeta();
+  if (!meta.syncReferenceAudio) return 0;
+
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) return 0;
+
+  const { data, error } = await supabase
+    .from('reference_audio')
+    .select(
+      'id, sentence_id, source_id, source_sentence_id, source_title, source_url, mime_type, duration_ms, source_start_ms, source_end_ms, created_at',
+    )
+    .eq('owner_id', userId)
+    .is('deleted_at', null);
+  if (error) {
+    syncLog('warn', error.message, 'AUDIO_RESYNC');
+    return 0;
+  }
+
+  const db = getDb();
+  for (const row of data ?? []) {
+    const id = String(row.id);
+    if (await db.sentenceAudio.get(id)) continue;
+    await db.sentenceAudio.put({
+      id,
+      sentenceId: String(row.sentence_id ?? ''),
+      sourceId: String(row.source_id ?? ''),
+      sourceSentenceId: String(row.source_sentence_id ?? ''),
+      sourceTitle: String(row.source_title ?? ''),
+      sourceUrl: (row.source_url as string | null) ?? undefined,
+      mimeType: String(row.mime_type),
+      durationMs: Number(row.duration_ms ?? 0),
+      startMs: Number(row.source_start_ms ?? 0),
+      endMs: Number(row.source_end_ms ?? 0),
+      blob: new Blob([], { type: String(row.mime_type) }),
+      importedAt: String(row.created_at),
+    });
+  }
+
+  await hydrateMissingReferenceAudio();
+  return (data ?? []).length;
+}
+
+/**
+ * Download the blobs for any local `sentenceAudio` rows that only have
+ * metadata — i.e. rows the sync engine created from a cloud `reference_audio`
+ * row that this device never imported itself. Runs after a pull cycle.
+ * Respects the Wi-Fi-only setting via `fetchFromStorage`; a row it can't
+ * fetch now is retried on the next cycle. No-op when audio sync is off.
+ */
+export async function hydrateMissingReferenceAudio(): Promise<number> {
+  const meta = await ensureSyncMeta();
+  if (!meta.syncReferenceAudio) return 0;
+
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+
+  const db = getDb();
+  const missing = (await db.sentenceAudio.toArray()).filter(
+    (row) => !row.blob || row.blob.size === 0,
+  );
+  if (missing.length === 0) return 0;
+
+  const { data, error } = await supabase
+    .from('reference_audio')
+    .select('id, storage_path, mime_type')
+    .in('id', missing.map((row) => row.id));
+  if (error) {
+    syncLog('warn', error.message, 'AUDIO_HYDRATE');
+    return 0;
+  }
+  const byId = new Map(
+    (data ?? []).map((row) => [String(row.id), row as { storage_path?: string; mime_type?: string }]),
+  );
+
+  let healed = 0;
+  for (const row of missing) {
+    const info = byId.get(row.id);
+    if (!info?.storage_path) continue;
+    const blob = await fetchFromStorage(info.storage_path);
+    if (!blob) continue; // offline / Wi-Fi-only / gone — retry next cycle
+    await db.sentenceAudio.update(row.id, {
+      blob,
+      mimeType: info.mime_type ?? row.mimeType,
+    });
+    healed += 1;
+  }
+  if (healed) syncLog('info', `Hydrated ${healed} reference-audio blob(s)`, 'AUDIO_HYDRATE');
+  return healed;
+}
