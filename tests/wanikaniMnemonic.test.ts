@@ -18,6 +18,8 @@ describe('isDeferralMnemonic', () => {
       "Since this is a single kanji vocab word, the reading is the same as the kanji's reading.",
       'The kanji and the word are exactly the same. That means they share meanings as well!',
       'The kanji and the word are exactly the same. That means they share readings as well!',
+      'This word uses the same reading as the one you learned with the kanji. ' +
+        '<vocabulary>I</vocabulary> certainly like that and I bet you do too.',
       'No mnemonic is needed here.',
       'You know this already!',
     ]) {
