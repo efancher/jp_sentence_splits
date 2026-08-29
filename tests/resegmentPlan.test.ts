@@ -155,17 +155,36 @@ describe('seedResegmentReview', () => {
     expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
   });
 
-  it('leaves a split of a merged group blank rather than joining every source', () => {
+  it('distributes a merged run of fragments across its split pieces', () => {
+    // Originals 0,1,2 were each cut off mid-sentence, merged, then re-split
+    // into 3 clean sentences — every piece carries the same [0,1,2] provenance.
     const rows = seedResegmentReview(
       [{ translation: 'No, younger.' }, { translation: 'Only one.' }, { translation: 'Casual is fine.' }],
       [
-        { japanese: 'いや、私は下だから。', sourceIndexes: [0, 1] },
-        { japanese: 'たったの1つじゃん。', sourceIndexes: [1, 2] },
-        { japanese: 'いいでしょ。', sourceIndexes: [2] },
+        { japanese: 'いや、私は下だから。', sourceIndexes: [0, 1, 2] },
+        { japanese: 'たったの1つじゃん。', sourceIndexes: [0, 1, 2] },
+        { japanese: 'いいでしょ。', sourceIndexes: [0, 1, 2] },
       ],
     );
-    expect(rows.map((r) => r.translation)).toEqual(['', '', '']);
+    expect(rows.map((r) => r.translation)).toEqual([
+      'No, younger.',
+      'Only one.',
+      'Casual is fine.',
+    ]);
     expect(rows.every((r) => r.needsTranslationReview)).toBe(true);
+  });
+
+  it('puts everything on the first piece of a split when the counts do not line up', () => {
+    const rows = seedResegmentReview(
+      [{ translation: 'No, younger.' }, { translation: 'Only one year, and casual is fine.' }],
+      [
+        { japanese: 'いや、私は下だから。', sourceIndexes: [0, 1] },
+        { japanese: 'たったの1つじゃん。', sourceIndexes: [0, 1] },
+        { japanese: 'いいでしょ。', sourceIndexes: [0, 1] },
+      ],
+    );
+    expect(rows[0]!.translation).toBe('No, younger. Only one year, and casual is fine.');
+    expect(rows.slice(1).every((r) => r.translation === '')).toBe(true);
   });
 
   it('never pastes the same full translation onto more than one split piece', () => {
