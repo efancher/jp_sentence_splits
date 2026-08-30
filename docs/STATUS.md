@@ -24,8 +24,13 @@ noSpeechProb > 0.6, OR'd through resegment merge/split). (3) A human
 caption track (≥50% of cues end on 。) is now preferred over ASR and skips
 the slow ASR pass entirely; a punctuation-free transcript (songs) skips the
 merge pass so lyrics stay line-by-line. Tests across analysis + mining
-(28 / 63 py, 1028 ts). Both services running. Still open: a real
-music-video gate (yt-dlp categories), `word_timestamps`, the staged wizard.
+(15 / 66 py, 1028 ts). Both services running. (4) `word_timestamps` on
+`/transcribe-source` → `split_multi_sentence_cues` cuts at the real word
+gap (~17% of segments multi-sentence; ~2.5–3× slower, env-flagged). (5)
+music-video gate: yt-dlp `categories` = `["Music"]` → prefer the lyrics
+caption track over ASR, never merge lines; verified end-to-end mining
+GLIM SPANKY through the exit node. Still open: merge/split in the review
+UI, the full staged wizard, `aType` pitch accent.
 
 Before that: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
 reading from the tokenizer. `unidic-lite` already exposes `kanaBase` (the

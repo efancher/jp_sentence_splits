@@ -139,12 +139,12 @@ Still open:
 - ~~Manual-caption preference~~ **[done 2026-08-30]** — `_looks_human_captioned`
   (≥50% of ≥5 cues end on sentence punctuation) → use the caption track and
   skip ASR entirely (correct kanji/names, and instant vs minutes).
-- **Songs** — partly handled **[2026-08-30]**: a punctuation-free transcript
-  (<15% terminal punctuation) skips the merge pass, so lyrics stay
-  line-by-line instead of fusing into one cue. Whisper still hallucinates on
-  dense music though — a real music-video gate (yt-dlp `categories` / `track`
-  metadata → prefer the lyrics caption track over ASR) is still open, held
-  until the exit node's up to verify the yt-dlp fields.
+- ~~Songs~~ **[done 2026-08-30]**: yt-dlp `info["categories"]` carries
+  `"Music"` for a music upload (verified). A Music upload → use the JA
+  caption track (synced lyrics) and skip ASR if one exists; always skip the
+  merge pass so lines don't fuse. A punctuation-free transcript from any
+  source also skips merge. (A song with *no* lyrics track still gets rough
+  ASR — Whisper mangles dense music — but the reviewer has the audio.)
 - ~~`word_timestamps=True`~~ **[done 2026-08-30]** —
   `/transcribe-source` returns per-word timings; `split_multi_sentence_cues`
   cuts a multi-sentence cue (~17% of turbo segments) at the real word gap.
