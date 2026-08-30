@@ -649,7 +649,30 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   own `english` or a `targetVocabulary` entry matched by the suggestion's
   dictionary `expression`/`reading` (so a conjugated token still resolves).
   A smaller kana line (`sentence.readingOnly`) underneath is the separate
-  pronunciation guide.
+  pronunciation guide. This full-sentence `listening` card is **tier 2 of a
+  listening ladder**: withheld until every `word_listening` card (below) for
+  the sentence's vocabulary occurrences is FSRS-proficient
+  (`getSentenceListeningReadiness`), on top of the usual
+  vocab-confirmed-and-proficient gate — so the learner has heard each
+  content word in isolation before being asked to parse the whole clip.
+- **SentenceVocabulary subject, audio-gated**: `word_listening` — tier 1 of
+  that ladder. One card **per surface-form occurrence** of a word in a
+  sentence that has a `SentenceAudio` row (like the contextual conjugation
+  card; subjectId a `SentenceVocabulary.id`). The card loops just that
+  word's span of the recording via `SegmentLoopPlayer`
+  (`src/components/SegmentLoopPlayer.tsx` — the isolate-a-range-and-loop
+  control extracted from `PitchAccentNativeAudio`, using
+  `isolatedWordRange` + `PlaybackCoordinator.loopRange`, with a
+  whole-sentence fallback when forced alignment can't isolate the word) and
+  asks the learner to recall its reading/meaning, then self-rate. Eligible
+  only once the word's own reading is FSRS-proficient
+  (`getProficientVocabularyItemIds`, via the new
+  `ActivityDescriptor.isReady` hook) — so the ladder is cloze/reading →
+  word listening → sentence listening. Words with no separate vocabulary
+  entry (particles, function words) get no tier-1 card and are only ever
+  tested inside the full sentence. Like the conjugation card, neither tier
+  has a `deferUnreadySentenceReviews` pass — the `isGatedOut` filter keeps
+  gated items out of both the due queue and the pending-seed pool.
 - **VocabularyItem subject** (all three require a `surfaceForm`-bearing
   `SentenceVocabulary` link, i.e. only vocab confirmed via the picker
   after `surfaceForm` was added): `reading_retrieval` (show word, hide
@@ -759,7 +782,13 @@ state has graduated past "new/learning" for every reviewable vocabulary
 item in that sentence) — `getSentenceFullReviewReadiness`/
 `isSentenceReadyForFullReview`/`deferUnreadySentenceReviews` implement
 this, applied both as an ongoing filter on the due queue and defensively
-against lazily-seeded new items so nothing bypasses the gate. The same
+against lazily-seeded new items so nothing bypasses the gate. The
+`listening` card adds a second layer on top (the listening ladder, §4
+above): `getSentenceListeningReadiness` also requires every
+`word_listening` occurrence for the sentence to be proficient, and
+`word_listening` itself is gated behind the word's reading proficiency —
+both via the generic `ActivityDescriptor.isReady` hook rather than a
+`deferUnreadySentenceReviews` pass. The same
 readiness rule gates which sentence a grammar review card shows, too
 (2026-08-27 follow-up): `pickContextSentenceForGrammarPattern` — which
 `ReviewPage` uses to choose which of a tracked pattern's sentence encounters

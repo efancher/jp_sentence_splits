@@ -1,6 +1,48 @@
 # Status
 
-Last updated: 2026-08-30 (Contextual conjugation cards — per encounter, not
+Last updated: 2026-08-30 (Progressive listening — a two-tier ladder. From
+"i like the listening cards, but i find the sentences [too] long. i wonder
+if we could do it like we do vocabulary and glosses, where first i need to
+show i've learned all listening for the individual vocabulary in a sentence
+then i do the listening for the entire sentence." New `word_listening`
+activity type: subjectType `sentenceVocabulary` (subjectId a
+`SentenceVocabulary.id`), one card **per surface-form occurrence** of a word
+in a sentence that has a `SentenceAudio` row — same per-encounter shape as
+the contextual conjugation card. The card loops just that word's span of the
+reference recording and asks for its reading/meaning, then a 4-point
+self-rate. The loop control is a new `SegmentLoopPlayer`
+(`src/components/SegmentLoopPlayer.tsx`), extracted verbatim from
+`PitchAccentNativeAudio` (which now wraps it — no behavior change): forced
+alignment → `isolatedWordRange` → `PlaybackCoordinator.loopRange`,
+pitch-preserving speed control, whole-sentence fallback when the word can't
+be isolated (isolation-failure is an accepted degradation — the card still
+seeds). **Ladder**: tier 1 `word_listening` is withheld until the word's own
+reading is FSRS-proficient (`getProficientVocabularyItemIds`, extracted from
+`getSentenceFullReviewReadiness` as a pure refactor); tier 2 — the existing
+full-sentence `listening` card — is now withheld until *every*
+`word_listening` occurrence for the sentence is proficient
+(`getSentenceListeningReadiness`), on top of its existing
+vocab-confirmed+proficient gate. So the progression is cloze/reading → word
+listening → sentence listening. Both new gates go through a new generic
+`ActivityDescriptor.isReady(candidate, ctx)` hook (ctx =
+`{ proficientVocabularyItemIds, listeningReadiness }`, built once per queue
+build) evaluated alongside the existing `gateSentenceId` in `isGatedOut` —
+and, like the conjugation card, neither tier gets a
+`deferUnreadySentenceReviews` pass (the `isGatedOut` filter already keeps
+gated items out of both the due queue and the pending-seed pool). Particles
+/ function words have no vocabulary entry, so they get no tier-1 card and
+are only ever tested inside the full sentence — an accepted gap.
+`word_listening` joins `RETAIN_ACTIVITY_TYPES` (planner per-item costing)
+and `classifyReviewError`'s "stays unclassified" set. **No schema
+migration** — `sentenceVocabulary` subjectType already exists (conjugation
+cards), and a new `activityType` string is additive by design.
+**Verified**: `npm run check` green (993 tests, +8: 4 in
+`tests/reviewPage.test.tsx` for both ladder tiers, 4 in `tests/data.test.ts`
+for `getProficientVocabularyItemIds` / `getSentenceListeningReadiness`).
+**Not yet manually verified in a real browser.** AI_OVERVIEW.md §review +
+ROADMAP.md updated.)
+
+Before that: 2026-08-30 (Contextual conjugation cards — per encounter, not
 per word. From "i think it would be best to save the conjugation cards for
 where they actually appear in a book... if a verb hasn't shown up in
 conditional form we don't try and force it into a different sentence."

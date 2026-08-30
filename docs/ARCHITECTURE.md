@@ -180,7 +180,9 @@ Phase 7 to `vocabularyItem`, `vocabularyConfusion` and `sentenceVocabulary`
 subjects and several
 more `activityType`s (`reading_production`, `sentence_transformation` — now
 one card per word-in-sentence occurrence, quizzing the conjugation form that
-sentence used — listening, cloze), and to the `grammarPattern` subject
+sentence used — `listening`, `word_listening` — a per-occurrence "hear just
+this word" card gating the full-sentence `listening` card, cloze), and to
+the `grammarPattern` subject
 (grammar-learning system Phase 5, `grammar_comprehension`/`grammar_completion`)
 — see `docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
