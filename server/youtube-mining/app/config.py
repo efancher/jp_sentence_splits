@@ -71,6 +71,15 @@ USE_ASR_TRANSCRIPT = os.environ.get("MINING_USE_ASR_TRANSCRIPT", "1") != "0"
 # music-heavy track triggers a second no-VAD pass — 30 min covers a long
 # source with headroom.
 ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1800"))
+# An ASR segment is flagged low-confidence (→ review UI marks it) when its
+# mean token log-prob is below this or its no-speech probability is above the
+# next one. Whisper's typical clean-speech avg_logprob is ~-0.25 to -0.4.
+ASR_LOW_CONFIDENCE_LOGPROB = float(
+    os.environ.get("MINING_ASR_LOW_CONFIDENCE_LOGPROB", "-0.55")
+)
+ASR_HIGH_NO_SPEECH_PROB = float(
+    os.environ.get("MINING_ASR_HIGH_NO_SPEECH_PROB", "0.6")
+)
 
 # Persistent per-video source-audio cache (app/source_cache.py). Unlike a
 # job's scratch dir this is never swept: a re-segment / audio-repair pass

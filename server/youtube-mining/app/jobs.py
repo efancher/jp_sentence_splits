@@ -189,6 +189,7 @@ def cues_out(job: Job) -> list[CueOut]:
             japanese=cue.text,
             isAuto=cue.isAuto,
             englishGuess=job.english_by_index.get(cue.index),
+            lowConfidence=cue.lowConfidence,
         )
         for cue in job.cues
     ]

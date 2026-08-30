@@ -142,7 +142,14 @@ def test_uses_asr_transcript_over_captions_when_available(
         "transcribe_source",
         lambda _path: [
             Cue(index=0, startMs=0, endMs=1800, text="全然違う文だよ。", isAuto=True),
-            Cue(index=1, startMs=1800, endMs=3600, text="キャプションじゃない。", isAuto=True),
+            Cue(
+                index=1,
+                startMs=1800,
+                endMs=3600,
+                text="キャプションじゃない。",
+                isAuto=True,
+                lowConfidence=True,
+            ),
         ],
     )
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
@@ -154,6 +161,7 @@ def test_uses_asr_transcript_over_captions_when_available(
         "全然違う文だよ。",
         "キャプションじゃない。",
     ]
+    assert [c["lowConfidence"] for c in status["cues"]] == [False, True]
 
 
 def test_cue_preview_audio(client: TestClient) -> None:

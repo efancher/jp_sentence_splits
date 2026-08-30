@@ -303,6 +303,11 @@ export function YouTubeMinePage() {
           ) : (
             <div className="muted">Loading cue audio…</div>
           )}
+          {currentCue.lowConfidence ? (
+            <div style={{ color: 'var(--warning)' }}>
+              ⚠ Low transcription confidence — check this line against the audio.
+            </div>
+          ) : null}
           <label>
             Japanese
             <textarea

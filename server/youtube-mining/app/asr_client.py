@@ -39,6 +39,13 @@ def transcribe_source(audio_path: Path) -> list[Cue] | None:
         logger.warning("ASR transcript unavailable, using captions: %s", exc)
         return None
 
+    def _low_confidence(seg: dict) -> bool:
+        lp = seg.get("avgLogprob")
+        ns = seg.get("noSpeechProb")
+        return (lp is not None and lp < config.ASR_LOW_CONFIDENCE_LOGPROB) or (
+            ns is not None and ns > config.ASR_HIGH_NO_SPEECH_PROB
+        )
+
     cues = [
         Cue(
             index=i,
@@ -46,6 +53,7 @@ def transcribe_source(audio_path: Path) -> list[Cue] | None:
             endMs=int(seg["endMs"]),
             text=str(seg["text"]).strip(),
             isAuto=True,
+            lowConfidence=_low_confidence(seg),
         )
         for i, seg in enumerate(segments)
         if str(seg.get("text", "")).strip()

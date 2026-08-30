@@ -14,7 +14,7 @@ import { withAppProviders } from '../src/test/providers';
 const { CUES } = vi.hoisted(() => ({
   CUES: [
     { index: 0, startMs: 0, endMs: 1000, japanese: '今日は晴れです。', isAuto: false, englishGuess: 'It is sunny today.' },
-    { index: 1, startMs: 1000, endMs: 2000, japanese: '散歩に行きましょう。', isAuto: false, englishGuess: "Let's go for a walk." },
+    { index: 1, startMs: 1000, endMs: 2000, japanese: '散歩に行きましょう。', isAuto: false, englishGuess: "Let's go for a walk.", lowConfidence: true },
   ],
 }));
 
@@ -93,6 +93,8 @@ describe('YouTube mining page', () => {
 
     expect(await screen.findByText('Cue 2 / 2')).toBeInTheDocument();
     await waitFor(() => expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 1));
+    // Cue 2 is flagged low-confidence; cue 1 was not.
+    expect(screen.getByText(/Low transcription confidence/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
 
     expect(await screen.findByText('Import preview')).toBeInTheDocument();

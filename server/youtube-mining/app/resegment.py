@@ -68,10 +68,12 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
     buffer_start: int | None = None
     buffer_end: int | None = None
     buffer_auto = False
+    buffer_low_conf = False
     buffer_sources: list[int] = []
 
     def flush() -> None:
-        nonlocal buffer_text, buffer_start, buffer_auto, buffer_sources
+        nonlocal buffer_text, buffer_start, buffer_auto, buffer_low_conf
+        nonlocal buffer_sources
         merged.append(
             Cue(
                 index=len(merged),
@@ -79,12 +81,14 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
                 endMs=buffer_end,
                 text=buffer_text,
                 isAuto=buffer_auto,
+                lowConfidence=buffer_low_conf,
                 sourceIndexes=sorted(set(buffer_sources)),
             )
         )
         buffer_text = ""
         buffer_start = None
         buffer_auto = False
+        buffer_low_conf = False
         buffer_sources = []
 
     for cue in cues:
@@ -93,6 +97,7 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
         buffer_text = join_fragments(buffer_text, cue.text)
         buffer_end = cue.endMs
         buffer_auto = buffer_auto or cue.isAuto
+        buffer_low_conf = buffer_low_conf or cue.lowConfidence
         buffer_sources.extend(_source_indexes(cue))
         if _ends_sentence(buffer_text):
             flush()
@@ -120,6 +125,7 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
                     endMs=cue.endMs,
                     text=cue.text,
                     isAuto=cue.isAuto,
+                    lowConfidence=cue.lowConfidence,
                     sourceIndexes=sources,
                 )
             )
@@ -143,6 +149,7 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
                     endMs=piece_end,
                     text=piece,
                     isAuto=cue.isAuto,
+                    lowConfidence=cue.lowConfidence,
                     sourceIndexes=list(sources),
                 )
             )

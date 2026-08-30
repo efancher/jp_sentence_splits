@@ -25,6 +25,10 @@ class Cue(BaseModel):
     # Original-input positions this cue descends from, set by resegment.py's
     # merge/split passes; None until a provenance-tracking pass runs.
     sourceIndexes: list[int] | None = None
+    # True when this cue (or, after merge/split, any of its source segments)
+    # came from a low-confidence ASR segment — the review UI marks it for a
+    # careful listen. Set by app/asr_client.py, OR'd through merge/split.
+    lowConfidence: bool = False
 
 
 class MorphemeToken(BaseModel):
@@ -60,6 +64,7 @@ class CueOut(BaseModel):
     japanese: str
     isAuto: bool
     englishGuess: str | None = None
+    lowConfidence: bool = False
 
 
 JobState = Literal["pending", "fetching", "parsing", "ready", "error"]

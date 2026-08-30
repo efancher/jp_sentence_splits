@@ -43,6 +43,7 @@ const cueSchema = z.object({
   japanese: z.string(),
   isAuto: z.boolean(),
   englishGuess: z.string().nullable().optional(),
+  lowConfidence: z.boolean().optional(),
 });
 
 const jobStatusSchema = z.object({

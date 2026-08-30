@@ -105,3 +105,16 @@ def test_merge_can_be_skipped_for_punctuationless_lyrics() -> None:
         "ぶつかろうぜ 輝くために",
     ]
     assert [c.sourceIndexes for c in split_multi_sentence_cues(cues)] == [[0], [1]]
+
+
+def test_low_confidence_flag_propagates_through_merge_and_split() -> None:
+    # One low-confidence ASR segment gets merged with a clean one, then the
+    # merged cue is split — every descendant carries the flag.
+    cues = [
+        Cue(index=0, startMs=0, endMs=1000, text="よく聞こえない", lowConfidence=True),
+        Cue(index=1, startMs=1000, endMs=2000, text="です。はっきり。"),
+        Cue(index=2, startMs=2000, endMs=3000, text="別の話。"),
+    ]
+    result = resegment_cues(cues)
+    assert [c.text for c in result] == ["よく聞こえないです。", "はっきり。", "別の話。"]
+    assert [c.lowConfidence for c in result] == [True, True, False]
