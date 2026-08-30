@@ -197,32 +197,20 @@ describe('ProgressiveShadowingPanel (via ShadowPage)', () => {
     expect(screen.getByText('Stage 1 of 5 · Listen')).toBeInTheDocument();
   });
 
-  it('Delayed and Close stages offer a hands-free practice loop of the native audio', async () => {
+  it('the shadow-rep loop control only appears on Delayed and Close', async () => {
     const user = userEvent.setup();
     renderShadowPage();
-    const audio = await enterGuidedMode(user);
-    audio.pause = vi.fn();
+    await enterGuidedMode(user);
 
-    // No loop control on Listen.
-    expect(screen.queryByRole('button', { name: /Loop native audio/ })).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: 'Skip ›' })); // -> Repeat
-    await user.click(screen.getByRole('button', { name: 'Skip ›' })); // -> Delayed
-    expect(screen.getByText('Stage 3 of 5 · Delayed Shadow')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /Loop native audio/ }));
-    const stopBtn = await screen.findByRole('button', { name: '⏹ Stop loop' });
-    expect(stopBtn).toHaveAttribute('aria-pressed', 'true');
-    expect(audio.play).toHaveBeenCalled();
-
-    await user.click(stopBtn);
-    await screen.findByRole('button', { name: /Loop native audio/ });
-    expect(audio.pause).toHaveBeenCalled();
-
-    // Advancing to Close keeps the control; a stale loop does not carry over.
+    expect(screen.queryByRole('button', { name: /Loop shadow reps/ })).toBeNull(); // Listen
     await user.click(screen.getByRole('button', { name: 'Skip ›' }));
-    expect(screen.getByText('Stage 4 of 5 · Close Shadow')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Loop native audio/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Loop shadow reps/ })).toBeNull(); // Repeat
+    await user.click(screen.getByRole('button', { name: 'Skip ›' }));
+    expect(screen.getByRole('button', { name: /Loop shadow reps/ })).toBeInTheDocument(); // Delayed
+    await user.click(screen.getByRole('button', { name: 'Skip ›' }));
+    expect(screen.getByRole('button', { name: /Loop shadow reps/ })).toBeInTheDocument(); // Close
+    await user.click(screen.getByRole('button', { name: 'Skip ›' }));
+    expect(screen.queryByRole('button', { name: /Loop shadow reps/ })).toBeNull(); // Compare
   });
 
   describe('recording lifecycle (Repeat / Compare stages)', () => {
@@ -232,6 +220,33 @@ describe('ProgressiveShadowingPanel (via ShadowPage)', () => {
     });
 
     afterEach(() => vi.unstubAllGlobals());
+
+    it('Loop shadow reps runs shadow-along reps back to back until stopped, keeping only the last as an ephemeral take', async () => {
+      const user = userEvent.setup();
+      renderShadowPage();
+      await enterGuidedMode(user);
+      await user.click(screen.getByRole('button', { name: 'Skip ›' })); // Repeat
+      await user.click(screen.getByRole('button', { name: 'Skip ›' })); // Delayed
+
+      await user.click(screen.getByRole('button', { name: /Loop shadow reps/ }));
+      expect(screen.getByRole('button', { name: '⏹ Stop loop' })).toBeInTheDocument();
+      expect(screen.getByText(/Rep 1/)).toBeInTheDocument();
+
+      // First rep records, auto-stops, then a second rep begins on its own.
+      await waitFor(() => expect(screen.getByText(/Rep 2/)).toBeInTheDocument(), {
+        timeout: 5_000,
+      });
+
+      await user.click(screen.getByRole('button', { name: '⏹ Stop loop' }));
+      await screen.findByRole('button', { name: /Loop shadow reps/ });
+
+      // Nothing persisted — stages 1-4 stay ephemeral — but a take is kept
+      // for review.
+      expect(await getDb().attempts.count()).toBe(0);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: '▶ Hear that back' })).toBeInTheDocument(),
+      );
+    }, 15_000);
 
     it('Pause & Repeat auto-stops after the reference clip ends, producing an ephemeral (unsaved) take', async () => {
       const user = userEvent.setup();

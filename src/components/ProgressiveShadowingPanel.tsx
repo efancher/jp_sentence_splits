@@ -45,9 +45,9 @@ const STAGE_TIP: Partial<Record<ProgressiveStage, string>> = {
   listen: 'Try this once or twice.',
   repeat: 'A couple of tries is usually enough.',
   delayed:
-    'Repeat a few times — this is the hardest habit to build. "Loop native audio" replays it hands-free so you can practice along.',
+    'Repeat a few times — this is the hardest habit to build. "Loop shadow reps" runs the play-along hands-free so you just keep shadowing.',
   close:
-    'Repeat as many times as feels useful before recording a final take — use "Loop native audio" to run reps back to back.',
+    'Repeat as many times as feels useful before recording a final take — "Loop shadow reps" runs them back to back for you.',
 };
 
 const RATINGS: { value: AttemptRating; label: string }[] = [
@@ -61,9 +61,10 @@ const REPEAT_AUTO_STOP_MULTIPLIER = 1.6;
 const AUTO_STOP_BUFFER_MS = 700;
 const REPEAT_STAGE_DELAY_MS = 750;
 /**
- * Gap between reps for the shadow-along practice loop (stages 3-4). Delayed
- * Shadow leaves ~1s to reset between reps; Close Shadow restarts seamlessly
- * so you stay locked onto the speaker continuously.
+ * Extra pause between reps of the hands-free shadow loop (stages 3-4), on
+ * top of the unavoidable ~0.5s the mic + play-along graph take to rebuild
+ * each rep. Delayed Shadow leaves a beat to reset; Close Shadow goes again
+ * as soon as it can, to keep you locked onto the speaker.
  */
 const LOOP_GAP_MS: Partial<Record<ProgressiveStage, number>> = {
   delayed: 1000,
@@ -115,7 +116,8 @@ export function ProgressiveShadowingPanel({
 
   const [listening, setListening] = useState(false);
   const [gettingReady, setGettingReady] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
+  const [isLoopingReps, setIsLoopingReps] = useState(false);
+  const [repCount, setRepCount] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [pendingFinalAttempt, setPendingFinalAttempt] = useState<
@@ -135,7 +137,15 @@ export function ProgressiveShadowingPanel({
   const ephemeralAudioRef = useRef<HTMLAudioElement | null>(null);
   const finalAudioRef = useRef<HTMLAudioElement | null>(null);
   const compareCoordinatorRef = useRef(new PlaybackCoordinator());
-  const loopCoordinatorRef = useRef(new PlaybackCoordinator());
+  /** Hands-free shadow-rep loop (stages 3-4): true while it should keep going. */
+  const loopActiveRef = useRef(false);
+  const loopGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest values for the loop continuation, which runs from a timeout and
+  // must not close over a stale render.
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
   const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingGapCancelRef = useRef<(() => void) | null>(null);
 
@@ -198,12 +208,23 @@ export function ProgressiveShadowingPanel({
     setGettingReady(false);
   }
 
+  /** Tear the shadow-rep loop down without touching an in-flight recording. */
+  function teardownRepLoop() {
+    loopActiveRef.current = false;
+    if (loopGapTimerRef.current) {
+      clearTimeout(loopGapTimerRef.current);
+      loopGapTimerRef.current = null;
+    }
+    setIsLoopingReps(false);
+    setRepCount(0);
+  }
+
   // Reset all in-flight/ephemeral local UI state whenever the stage or the
   // practice session changes (segment/sentence change, restart, next/prev).
   useEffect(() => {
     cancelPendingGap();
     clearAutoStop();
-    loopCoordinatorRef.current.cancel();
+    teardownRepLoop();
     setActionError(null);
     setPendingFinalAttempt(null);
     setFinalNotes('');
@@ -218,8 +239,8 @@ export function ProgressiveShadowingPanel({
     () => () => {
       cancelPendingGap();
       clearAutoStop();
+      teardownRepLoop();
       compareCoordinatorRef.current.cancel();
-      loopCoordinatorRef.current.cancel();
       shadowing.cancelRecording();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,7 +249,8 @@ export function ProgressiveShadowingPanel({
 
   // Pick up a just-finished recording. During stages 1-4 it becomes this
   // stage's ephemeral take; during Compare it becomes the pending final
-  // attempt, following ShadowPage's existing save/discard pattern.
+  // attempt, following ShadowPage's existing save/discard pattern. When the
+  // hands-free rep loop is running, it also schedules the next rep.
   useEffect(() => {
     if (shadowing.status !== 'stopped' || !shadowing.lastRecording) return;
     clearAutoStop();
@@ -237,8 +259,25 @@ export function ProgressiveShadowingPanel({
     } else {
       progressive.setEphemeralTake(shadowing.lastRecording);
     }
+    if (loopActiveRef.current && stageRef.current !== 'compare') {
+      loopGapTimerRef.current = setTimeout(() => {
+        loopGapTimerRef.current = null;
+        if (!loopActiveRef.current) return;
+        setRepCount((n) => n + 1);
+        startShadowRep();
+      }, LOOP_GAP_MS[stageRef.current] ?? 0);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shadowing.status, shadowing.lastRecording]);
+
+  // If a rep fails to start (mic denied mid-loop), stop the loop rather than
+  // spin. startRecording lands on 'idle' + error in that case, not 'stopped'.
+  useEffect(() => {
+    if (loopActiveRef.current && shadowing.status === 'idle' && shadowing.error) {
+      teardownRepLoop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shadowing.status, shadowing.error]);
 
   function armAutoStop(durationMs: number) {
     clearAutoStop();
@@ -290,47 +329,47 @@ export function ProgressiveShadowingPanel({
   }
 
   /**
-   * The shadow-along practice loop for stages 3-4: replays the native audio
-   * (the selected segment, or the whole clip) back to back so you can
-   * shadow along rep after rep without touching a button between them. It's
-   * playback only — nothing is recorded or kept. Stop it and use "Shadow
-   * along" when you want to capture a rep. Gap between reps is per-stage
-   * (LOOP_GAP_MS).
+   * One shadow-along rep: play the native audio through the shadow-mode
+   * graph while recording the mic, and arm the auto-stop for a bit past the
+   * clip's expected length. Shared by the "Shadow along" button and the
+   * hands-free rep loop. Reads speed from a ref so a loop continuation
+   * running from a timeout stays current.
    */
-  async function handleToggleLoop() {
-    if (isLooping) {
-      loopCoordinatorRef.current.cancel();
-      return;
-    }
-    const audio = referenceAudioRef.current;
-    if (!audio) return;
-    const clipMs =
-      audio.duration && Number.isFinite(audio.duration)
-        ? audio.duration * 1000
-        : DEFAULT_SEGMENT_DURATION_MS;
-    const range = targetRange ?? { startMs: 0, endMs: clipMs };
+  function startShadowRep() {
     setActionError(null);
-    setIsLooping(true);
-    try {
-      await loopCoordinatorRef.current.loopRange(audio, range, speed, LOOP_GAP_MS[stage] ?? 0);
-    } catch {
-      setActionError('Could not loop the reference audio.');
-    } finally {
-      setIsLooping(false);
-    }
+    const audio = referenceAudioRef.current;
+    void shadowing
+      .startRecording('shadow', { blob: referenceAudio.blob, playbackRate: speedRef.current })
+      .then(() => {
+        const fullDurationMs =
+          audio?.duration && Number.isFinite(audio.duration)
+            ? (audio.duration * 1000) / speedRef.current
+            : null;
+        armAutoStop((fullDurationMs ?? DEFAULT_SEGMENT_DURATION_MS) + AUTO_STOP_BUFFER_MS);
+      });
   }
 
   function handleStartShadowAlong() {
-    setActionError(null);
-    loopCoordinatorRef.current.cancel();
-    const audio = referenceAudioRef.current;
-    void shadowing
-      .startRecording('shadow', { blob: referenceAudio.blob, playbackRate: speed })
-      .then(() => {
-        const fullDurationMs =
-          audio?.duration && Number.isFinite(audio.duration) ? (audio.duration * 1000) / speed : null;
-        armAutoStop((fullDurationMs ?? DEFAULT_SEGMENT_DURATION_MS) + AUTO_STOP_BUFFER_MS);
-      });
+    startShadowRep();
+  }
+
+  /**
+   * Hands-free shadow practice for stages 3-4: keep running full
+   * shadow-along reps (native audio + mic recording) back to back, each
+   * one becoming the current ephemeral take, until stopped. The rep chain
+   * is driven from the "recording stopped" effect above. Stopping while a
+   * rep is recording keeps that rep.
+   */
+  function handleToggleRepLoop() {
+    if (loopActiveRef.current) {
+      teardownRepLoop();
+      if (isRecording) void shadowing.stopRecording();
+      return;
+    }
+    loopActiveRef.current = true;
+    setIsLoopingReps(true);
+    setRepCount(1);
+    startShadowRep();
   }
 
   function handleStartFinalRecording() {
@@ -343,7 +382,6 @@ export function ProgressiveShadowingPanel({
 
   async function handleHearEphemeral() {
     if (!ephemeralAudioRef.current) return;
-    loopCoordinatorRef.current.cancel();
     try {
       await ephemeralAudioRef.current.play();
     } catch {
@@ -355,7 +393,6 @@ export function ProgressiveShadowingPanel({
     const reference = referenceAudioRef.current;
     const learner = ephemeralAudioRef.current;
     if (!reference || !learner) return;
-    loopCoordinatorRef.current.cancel();
     await shadowing.playAlternate(reference, learner, 'ephemeral-take', speed, targetRange ?? undefined);
   }
 
@@ -524,24 +561,42 @@ export function ProgressiveShadowingPanel({
 
       {stage === 'delayed' || stage === 'close' ? (
         <div className="stack">
-          <RecordToggleButton
-            isRecording={isRecording}
-            isRequestingMic={isRequestingMic}
-            elapsedMs={shadowing.recordingElapsedMs}
-            maxDurationMs={MAX_RECORDING_DURATION_MS}
-            idleLabel={stage === 'delayed' ? '🎙 Shadow along (trailing)' : '🎙 Shadow along (close)'}
-            onStart={handleStartShadowAlong}
-            onStop={() => void shadowing.stopRecording()}
-          />
-          <button
-            type="button"
-            className={isLooping ? 'primary' : undefined}
-            aria-pressed={isLooping}
-            disabled={isRecording || isRequestingMic}
-            onClick={() => void handleToggleLoop()}
-          >
-            {isLooping ? '⏹ Stop loop' : '🔁 Loop native audio (practice along)'}
-          </button>
+          {isLoopingReps ? (
+            <div className="row" style={{ alignItems: 'center' }}>
+              <button
+                type="button"
+                className="primary"
+                aria-pressed
+                onClick={handleToggleRepLoop}
+              >
+                ⏹ Stop loop
+              </button>
+              <span className="muted">
+                {isRecording || isRequestingMic
+                  ? `Rep ${repCount} — shadow along…`
+                  : `Rep ${repCount} done — next one starting…`}
+              </span>
+            </div>
+          ) : (
+            <>
+              <RecordToggleButton
+                isRecording={isRecording}
+                isRequestingMic={isRequestingMic}
+                elapsedMs={shadowing.recordingElapsedMs}
+                maxDurationMs={MAX_RECORDING_DURATION_MS}
+                idleLabel={stage === 'delayed' ? '🎙 Shadow along (trailing)' : '🎙 Shadow along (close)'}
+                onStart={handleStartShadowAlong}
+                onStop={() => void shadowing.stopRecording()}
+              />
+              <button
+                type="button"
+                disabled={isRecording || isRequestingMic}
+                onClick={handleToggleRepLoop}
+              >
+                🔁 Loop shadow reps (hands-free practice)
+              </button>
+            </>
+          )}
           {isRecording && shadowing.shadowActive ? (
             <LiveShadowWaveform
               referenceBlob={referenceAudio.blob}
@@ -551,7 +606,7 @@ export function ProgressiveShadowingPanel({
               sampleRate={shadowing.getShadowSampleRate()}
             />
           ) : null}
-          {ephemeralUrl ? (
+          {ephemeralUrl && !isLoopingReps ? (
             <div className="row" style={{ alignItems: 'center' }}>
               <button type="button" onClick={() => void handleHearEphemeral()}>
                 ▶ Hear that back

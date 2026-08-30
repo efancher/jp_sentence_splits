@@ -988,13 +988,18 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     between the two stages is the on-screen coaching text ("trail a beat
     behind" vs. "stay as close as you can"). No artificial audio-delay
     mixing was built; the trailing behavior is coached, not engineered.
-    Both also have a **"Loop native audio" toggle** — a hands-free practice
-    loop (`PlaybackCoordinator.loopRange`, now with an optional per-rep gap)
-    that just replays the reference back to back so the learner can shadow
-    along rep after rep without pressing anything. Playback only, nothing
-    recorded; gap is ~1s on Delayed Shadow (room to reset) and 0 on Close
-    Shadow (stay locked on). Starting a "Shadow along" recording, or any
-    hear/compare action, cancels the loop.
+    Both also have a **"Loop shadow reps" toggle** — hands-free practice
+    that keeps running full shadow-along reps (native audio + mic
+    recording, `startRecording('shadow', …)`) back to back until stopped.
+    Each finished rep replaces the stage's ephemeral take (so "Hear that
+    back"/"Compare" reflect the latest one); nothing is persisted. The rep
+    chain is driven from the same "recording stopped" effect that sets the
+    ephemeral take: on stop, if the loop is still active, a timeout
+    (`LOOP_GAP_MS` — ~1s on Delayed Shadow, 0 on Close, on top of the
+    unavoidable ~0.5s mic + play-along-graph rebuild each rep) starts the
+    next rep. Stopping mid-rep keeps that rep; a failed rep start (mic
+    denied) tears the loop down instead of spinning. The loop is also
+    cancelled on stage change / unmount.
   - Recording auto-stops shortly after the reference clip's expected
     duration (with a fixed trailing buffer), but the single
     `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now
