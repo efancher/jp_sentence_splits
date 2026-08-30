@@ -1,6 +1,6 @@
 ---
 name: card-issue-triage
-description: Use when the user asks to check, see, triage, or give an opinion on "issue reports", "card issues", or "reported issues" — the flags they raise from ReviewPage's "Report issue" button while studying. Also use if they ask why a reading/translation/highlight looked wrong on a review card. Pulls the open reports from Supabase and investigates the underlying study_item/vocabulary_item/sentence data to determine whether each is a real bug (and why) or a misunderstanding.
+description: Use when the user asks to check, see, triage, or give an opinion on "issue reports", "card issues", "reported issues", or "review issues" — the flags they raise from ReviewPage's "Report issue" button while studying. Also use if they ask why a reading/translation/highlight looked wrong, or why review audio was cut off / silent / too short, on a review card. Pulls the open reports from Supabase and investigates the underlying study_item / vocabulary_item / sentence_vocabulary / sentence / reference_audio data to determine whether each is a real bug (and why) or a misunderstanding.
 ---
 
 # Card issue triage
@@ -22,16 +22,27 @@ activity type, sentence text, note, and the `study_item_id` it's attached to.
 
 Don't take the reporter's note at face value — check the underlying row. The
 note tells you *what looked wrong*, not *why*. `study_items.subject_type` is
-either `vocabularyItem` or `sentence`:
+one of three values, and the id prefix on `subject_id` tells you which table:
 
-- `vocabularyItem` reports (`reading_retrieval`, `cloze`, `reading_production`) →
-  look up `vocabulary_items` by `study_items.subject_id`. Check whether
-  `reading` actually corresponds to `expression` — a common real bug (see
-  below) is `expression` holding the dictionary form while `reading` holds a
-  conjugated-surface-form reading.
-- `sentence` reports (`reading_in_context`, `comprehension`) → look up
-  `sentences` by `study_items.subject_id`. Check `translation`,
-  `reading_only`, `inline_reading` for gaps.
+- **`vocabularyItem`** (`subject_id` = `vocab_…`; activities `reading_retrieval`,
+  `cloze`, `reading_production`, `pitch_accent`) → look up `vocabulary_items`.
+  Check whether `reading` actually corresponds to `expression` — a common real
+  bug (§3) is `expression` holding the dictionary form while `reading` holds a
+  conjugated-surface-form reading. For `pitch_accent`, also check
+  `pitch_accent_positions` and the context sentence's audio (§4).
+- **`sentenceVocabulary`** (`subject_id` = `sv_…`; activities `word_listening`,
+  and other in-sentence word activities) → look up `sentence_vocabulary`, which
+  gives you `sentence_id`, `vocabulary_item_id`, and `surface_form` (the word as
+  it appears in that sentence). Then pull *both* the `vocabulary_items` row and
+  the `sentences` row. `word_listening` plays audio, so check `reference_audio`
+  for that `sentence_id` (§4).
+- **`sentence`** (`subject_id` = `sent_…`; activities `reading_in_context`,
+  `comprehension`) → look up `sentences`. Check `translation`, `reading_only`,
+  `inline_reading` for gaps.
+
+`card_issue_reports.sentence_id` is also populated on most reports — a fast way
+to jump straight to the sentence + its `reference_audio` regardless of
+`subject_type`.
 
 There's no ready-made script for this lookup — write a throwaway one. It
 **must live under `scripts/`** (not `/tmp`) because
@@ -49,9 +60,27 @@ async function main() {
     .select('*')
     .in('id', [/* study_item ids from step 1 */]);
   for (const item of items ?? []) {
-    const table = item.subject_type === 'vocabularyItem' ? 'vocabulary_items' : 'sentences';
-    const { data: subject } = await supabase.from(table).select('*').eq('id', item.subject_id).single();
-    console.log(item.id, subject);
+    let sentenceId: string | null = null;
+    if (item.subject_type === 'vocabularyItem') {
+      const { data } = await supabase.from('vocabulary_items').select('*').eq('id', item.subject_id).single();
+      console.log(item.id, 'vocab', data);
+    } else if (item.subject_type === 'sentenceVocabulary') {
+      const { data: sv } = await supabase.from('sentence_vocabulary').select('*').eq('id', item.subject_id).single();
+      console.log(item.id, 'sv', sv);
+      sentenceId = sv?.sentence_id ?? null;
+      if (sv?.vocabulary_item_id) {
+        const { data } = await supabase.from('vocabulary_items').select('*').eq('id', sv.vocabulary_item_id).single();
+        console.log('  vocab', data);
+      }
+    } else {
+      sentenceId = item.subject_id;
+    }
+    if (sentenceId) {
+      const { data: sent } = await supabase.from('sentences').select('*').eq('id', sentenceId).single();
+      console.log('  sentence', sent);
+      const { data: audio } = await supabase.from('reference_audio').select('*').eq('sentence_id', sentenceId).is('deleted_at', null);
+      console.log('  reference_audio', audio);
+    }
   }
 }
 main().catch((e) => { console.error(e); process.exitCode = 1; });
@@ -94,7 +123,47 @@ non-blocking hint for it in the picker UI itself. If a report references a
 nonsensical multi-morpheme expression, that's almost certainly this, not the
 reading bug above.
 
-## 4. Resolution is client-side, not scriptable
+## 4. Known bug: truncated / silent reference-audio clips ("After Work"-era)
+
+Any report whose note is about the *audio* — "cut off", "too short", "just
+kssts", "only plays half the sentence", "silent" — on a `word_listening`,
+`pitch_accent`, or other audio-playing card. Check `reference_audio` for the
+sentence and compare the file length to the span it should cover:
+
+```
+ratio = duration_ms / (source_end_ms - source_start_ms)
+```
+
+`ratio` well below ~0.5 (e.g. a 694 ms clip for 草野って草野浩先生だよな。, span
+3548 ms) = **truncated clip**. This is the residue of the 2026-08-29
+`backfill-resegment-audio.ts` run on *Easy Japanese Drama: After Work*
+(`book_30cac126-7197-4dd8-934f-53a0798c2326`): `concatCut` in
+`src/lib/resegmentPlan.ts` assumes each source-fragment clip's file duration
+equals its video span, so a cue spanning a gap or a short fragment gets a
+collapsed cut window. A separate earlier symptom of the same run was ~27
+*silent* clips (fixed by `remine-silent-shadowing-audio.ts`). ~14 more clips
+in that book are truncated-but-audible and slipped past that re-mine because
+its candidate filter only detects silence, not short duration.
+
+To confirm the scope, sweep the book's `audio_reseg_*` rows (live, not
+deleted) and flag any with a low duration/span ratio — write a throwaway
+`scripts/_tmp_*.ts` for it.
+
+**Fix path:** re-cut the flagged sentences from the real source at their
+stored `source_start_ms`/`source_end_ms` (those values are trustworthy).
+`remine-silent-shadowing-audio.ts` does exactly this operation but needs a
+duration-vs-span candidate filter added (or a one-off variant), plus either
+the youtube-mining service reachable or `--local-source <dir>` holding the
+source audio downloaded on a residential IP. Writes new `reference_audio`
+rows + soft-deletes the bad ones (an in-place update wouldn't reach devices
+that already cached the bad blob).
+
+Not every audio complaint is this bug: also check that `source_start_ms` /
+`source_end_ms` themselves look sane for the sentence, and that a clip exists
+at all (a card with no `reference_audio` row falls back to whatever the UI
+does then — that may itself be the reported problem).
+
+## 5. Resolution is client-side, not scriptable
 
 There is no CLI/script path to mark a report resolved — `list-card-issues.ts`
 is deliberately read-only. Resolving happens in the app itself
