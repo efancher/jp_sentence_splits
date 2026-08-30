@@ -378,11 +378,17 @@ function playUntilEnded(
  * Plays `audio` repeatedly within `range`, jumping back to the start
  * whenever playback crosses the end — until `signal` aborts. Backs Phase
  * 8.2's practice-target isolation (new code, not ported from anywhere).
+ *
+ * `gapMs` pauses that long between reps (0 = seamless restart). Handles
+ * both a mid-clip `range.endMs` (via `timeupdate`) and one at the very end
+ * of the clip (via `ended`), so it works for a whole-clip loop too — the
+ * guided-shadowing practice loop passes the full duration.
  */
 function playLoopedRange(
   audio: HTMLAudioElement,
   range: TimeRangeMs,
   signal: AbortSignal,
+  gapMs = 0,
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     const startSec = range.startMs / 1000;
@@ -391,12 +397,33 @@ function playLoopedRange(
       resolve();
       return;
     }
+    let gapTimer: ReturnType<typeof setTimeout> | undefined;
+    let restarting = false;
     const cleanup = () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', restart);
       signal.removeEventListener('abort', onAbort);
+      if (gapTimer) clearTimeout(gapTimer);
+    };
+    const restart = () => {
+      if (restarting || signal.aborted) return;
+      if (gapMs > 0) {
+        restarting = true;
+        audio.pause();
+        gapTimer = setTimeout(() => {
+          gapTimer = undefined;
+          restarting = false;
+          if (signal.aborted) return;
+          audio.currentTime = startSec;
+          void audio.play().catch(() => {});
+        }, gapMs);
+      } else {
+        audio.currentTime = startSec;
+        if (audio.paused) void audio.play().catch(() => {});
+      }
     };
     const onTimeUpdate = () => {
-      if (audio.currentTime >= endSec) audio.currentTime = startSec;
+      if (!restarting && audio.currentTime >= endSec) restart();
     };
     const onAbort = () => {
       audio.pause();
@@ -404,6 +431,7 @@ function playLoopedRange(
       resolve();
     };
     audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', restart);
     signal.addEventListener('abort', onAbort, { once: true });
     audio.currentTime = startSec;
     audio.play().catch(() => {
@@ -620,17 +648,21 @@ export class PlaybackCoordinator {
     await playUntilEnded(audio, signal, range);
   }
 
-  /** Loops `audio` within `range` until `cancel()` is called. */
+  /**
+   * Loops `audio` within `range` until `cancel()` is called. `gapMs` pauses
+   * that long between reps (0 = seamless).
+   */
   async loopRange(
     audio: HTMLAudioElement,
     range: TimeRangeMs,
     playbackRate = 1,
+    gapMs = 0,
   ): Promise<void> {
     this.cancel();
     this.controller = new AbortController();
     const { signal } = this.controller;
     audio.playbackRate = playbackRate;
     audio.preservesPitch = true;
-    await playLoopedRange(audio, range, signal);
+    await playLoopedRange(audio, range, signal, gapMs);
   }
 }

@@ -988,6 +988,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     between the two stages is the on-screen coaching text ("trail a beat
     behind" vs. "stay as close as you can"). No artificial audio-delay
     mixing was built; the trailing behavior is coached, not engineered.
+    Both also have a **"Loop native audio" toggle** — a hands-free practice
+    loop (`PlaybackCoordinator.loopRange`, now with an optional per-rep gap)
+    that just replays the reference back to back so the learner can shadow
+    along rep after rep without pressing anything. Playback only, nothing
+    recorded; gap is ~1s on Delayed Shadow (room to reset) and 0 on Close
+    Shadow (stay locked on). Starting a "Shadow along" recording, or any
+    hear/compare action, cancels the loop.
   - Recording auto-stops shortly after the reference clip's expected
     duration (with a fixed trailing buffer), but the single
     `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now

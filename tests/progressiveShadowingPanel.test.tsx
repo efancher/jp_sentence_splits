@@ -197,6 +197,34 @@ describe('ProgressiveShadowingPanel (via ShadowPage)', () => {
     expect(screen.getByText('Stage 1 of 5 · Listen')).toBeInTheDocument();
   });
 
+  it('Delayed and Close stages offer a hands-free practice loop of the native audio', async () => {
+    const user = userEvent.setup();
+    renderShadowPage();
+    const audio = await enterGuidedMode(user);
+    audio.pause = vi.fn();
+
+    // No loop control on Listen.
+    expect(screen.queryByRole('button', { name: /Loop native audio/ })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Skip ›' })); // -> Repeat
+    await user.click(screen.getByRole('button', { name: 'Skip ›' })); // -> Delayed
+    expect(screen.getByText('Stage 3 of 5 · Delayed Shadow')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Loop native audio/ }));
+    const stopBtn = await screen.findByRole('button', { name: '⏹ Stop loop' });
+    expect(stopBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(audio.play).toHaveBeenCalled();
+
+    await user.click(stopBtn);
+    await screen.findByRole('button', { name: /Loop native audio/ });
+    expect(audio.pause).toHaveBeenCalled();
+
+    // Advancing to Close keeps the control; a stale loop does not carry over.
+    await user.click(screen.getByRole('button', { name: 'Skip ›' }));
+    expect(screen.getByText('Stage 4 of 5 · Close Shadow')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Loop native audio/ })).toBeInTheDocument();
+  });
+
   describe('recording lifecycle (Repeat / Compare stages)', () => {
     beforeEach(() => {
       vi.stubGlobal('MediaRecorder', FakeMediaRecorder);

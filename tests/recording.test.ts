@@ -295,6 +295,66 @@ describe('PlaybackCoordinator.loopRange', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('pauses gapMs between reps, then seeks back and replays', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(
+      audio as unknown as HTMLAudioElement,
+      { startMs: 0, endMs: 1000 },
+      1,
+      30,
+    );
+    expect(audio.play).toHaveBeenCalledOnce();
+
+    audio.currentTime = 1.1;
+    audio.dispatch('timeupdate');
+    // In the gap: paused, not yet restarted.
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(audio.play).toHaveBeenCalledOnce();
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(audio.currentTime).toBe(0);
+    expect(audio.play).toHaveBeenCalledTimes(2);
+
+    coordinator.cancel();
+    await done;
+  });
+
+  it('cancelling during a gap does not fire another rep', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(
+      audio as unknown as HTMLAudioElement,
+      { startMs: 0, endMs: 1000 },
+      1,
+      10_000,
+    );
+    audio.currentTime = 1.1;
+    audio.dispatch('timeupdate');
+    coordinator.cancel();
+    await done;
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(audio.play).toHaveBeenCalledOnce();
+  });
+
+  it('loops a range that ends at the clip end via the ended event', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+      startMs: 0,
+      endMs: 3000,
+    });
+    audio.dispatch('ended');
+    expect(audio.currentTime).toBe(0);
+
+    coordinator.cancel();
+    await done;
+  });
+
   it('cancelling one loop does not affect a fresh one on the same coordinator', async () => {
     const coordinator = new PlaybackCoordinator();
     const first = new FakeAudioElement();

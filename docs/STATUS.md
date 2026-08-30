@@ -1,6 +1,26 @@
 # Status
 
-Last updated: 2026-08-30 (Progressive listening — a two-tier ladder. From
+Last updated: 2026-08-30 (Guided shadowing: a practice loop for the
+"shadow along" stages. From "I wonder if for stage 3 and 4 of the guided
+shadowing if there could be a loop button so I could practice over and
+over again." Delayed Shadow and Close Shadow (`ProgressiveShadowingPanel`)
+now have a **"Loop native audio" toggle** next to "Shadow along" — a
+hands-free loop that replays the reference back to back (the marked
+segment, or the whole clip) so you can shadow along rep after rep without
+touching a button. Playback only; nothing is recorded (keeps ephemeral
+takes from thrashing and "Past attempts" clean). Per-stage gap between
+reps: ~1s on Delayed Shadow (room to reset), 0 on Close Shadow (stay
+locked on) — `LOOP_GAP_MS`. Reuses `PlaybackCoordinator.loopRange`, which
+gained an optional `gapMs` and now also handles a range that ends at the
+clip end (via the `ended` event, not just `timeupdate`) so a whole-clip
+loop works. Starting a "Shadow along" recording or any hear/compare
+action cancels the loop; the loop is also cancelled on stage change /
+unmount. **Verified**: `npm run check` green (995 passing + 2 skipped,
++4: 3 in `tests/recording.test.ts` for the per-rep gap and an
+end-of-clip loop, 1 in `tests/progressiveShadowingPanel.test.tsx`).
+Not yet manually verified in a real browser. AI_OVERVIEW.md §6 updated.)
+
+Before that: 2026-08-30 (Progressive listening — a two-tier ladder. From
 "i like the listening cards, but i find the sentences [too] long. i wonder
 if we could do it like we do vocabulary and glosses, where first i need to
 show i've learned all listening for the individual vocabulary in a sentence
