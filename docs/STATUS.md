@@ -5,32 +5,35 @@ reps" toggle for the Delayed/Close stages. From "I wonder if for stage 3
 and 4 ... there could be a loop button so I could practice over and over
 again" → "what i actually wanted to loop was including the recording."
 `ShadowingController.startShadowLoop(blob, { playbackRate, onRep })` +
-`stopShadowLoop()`: acquires the mic and builds the play-along graph
-**once**, under the starting tap, then sets the reference `<audio loop>`
-so it replays itself. On the controller's 100 ms tick it watches the
+`stopShadowLoop()`: under the starting tap it acquires the mic **once**
+and starts a plain `<audio loop>` for the reference — **no AudioContext,
+no per-rep `play()`**. On the controller's 100 ms tick it watches the
 reference `currentTime`; a jump back past half the clip = a loop wrap →
 `RecordingService.cycleRecorder()` (stop + fresh `MediaRecorder` on the
 same held-open stream) so `onRep` gets one blob per rep, each becoming
-the stage's ephemeral take. `ShadowReferencePlayer` gained a `loop`
-option (sets `<audio>.loop`, `stop()` only pauses) + `teardown()`;
+the stage's ephemeral take. `ShadowReferencePlayer` gained a `loop` mode
+(plain element playback, `stop()` only pauses) + `teardown()`;
 `RecordingService` gained `start({ reuseStream })` / `releaseStream()` /
 `cycleRecorder()`. Panel shows a live rep counter in place of the record
-button while looping and hides Hear/Compare/Retry/Next until you stop.
+button while looping, hides Hear/Compare/Retry/Next until you stop, and
+reserves a `minHeight` for the whole action area so nothing reflows the
+sentence out of view on mobile as the controls swap / the counter ticks.
+No live waveform during the loop (no analyser) — the counter is the
+feedback.
 
-Two earlier iterations this session were dead ends and are gone:
-per-rep `startRecording('shadow')` on a `setTimeout` chain (broke on
-iOS ~rep 6 — `getUserMedia` needs a user gesture), then a
+Iterations that were dead ends this session and are gone: per-rep
+`startRecording('shadow')` on a `setTimeout` chain, then a
 persistent-graph variant that still called `AudioContext.resume()` /
-`audio.play()` per rep (also gesture-gated). The current design does
-none of those after the tap — `MediaRecorder` start/stop and
-`<audio loop>` are not gesture-gated.
+`audio.play()` per rep — both broke on iOS ~rep 6 because `getUserMedia`
+/ `AudioContext.resume()` / `HTMLMediaElement.play()` need a transient
+user activation. The final design does none of those after the tap.
 
 `cancelRecording` now calls `shadowPlayer.teardown()` (was `.stop()`).
 One-off "Shadow along" and every other recording path are unchanged.
 **Verified**: `npm run check` green (1001 passing + 2 skipped; +3
-`progressiveShadowingPanel`, +4 `shadowing`, +3 `recording`). Not yet
-verified on the iPhone — that's where it matters. AI_OVERVIEW.md §6
-updated.)
+`progressiveShadowingPanel`, +4 `shadowing`, +3 `recording`). Confirmed
+working on the user's iPhone; a follow-up commit reserved the action-area
+height after they noted the per-rep reflow. AI_OVERVIEW.md §6 updated.)
 
 Before that: 2026-08-30 (Progressive listening — a two-tier ladder. From
 "i like the listening cards, but i find the sentences [too] long. i wonder
