@@ -1,6 +1,22 @@
 # Status
 
-Last updated: 2026-08-30 (Truncated reference-audio repair. Card-issue
+Last updated: 2026-08-30 (Mining downloads via Tailscale exit node.
+YouTube bot-blocks the datacenter mining box's IP and datacenter-IP
+cookies rotate within minutes, so fresh from-source mining (the pending
+auto-caption re-mine, any new book) was stuck. New `app/exit_node.py` in
+`server/youtube-mining`: if a personal device on the tailnet (laptop /
+phone) advertises a Tailscale exit node, `_run_job` flips the box's exit
+node on just around the yt-dlp/subtitle/info fetches and clears it after —
+yt-dlp then sees a residential IP, no cookies needed. `MINING_EXIT_NODE`
+(primary) + `MINING_EXIT_NODE_FALLBACK` (when primary offline); no-op when
+unset; downloads direct with a warning if neither is reachable. Needs
+`tailscale set --operator=<user>` once (already set). systemd unit →
+laptop primary, phone fallback. `tests/test_exit_node.py` (6); 50 pass.
+**Device-side setup still required:** enable "run as exit node" on the
+laptop + phone and approve in the Tailscale admin console (see the deploy
+README). Until then mining still falls back to cookies.
+
+Before that: 2026-08-30 (Truncated reference-audio repair. Card-issue
 triage surfaced 4 reports of "After Work" review audio cutting off
 mid-word. Root: the 2026-08-29 `backfill-resegment-audio` run left 18
 `audio_reseg_*` clips whose file is far shorter than the video span they

@@ -1263,7 +1263,11 @@ aren't JSON-serializable/aren't worth backing up).
   per-sentence audio on demand (ffmpeg) as the user reviews cues in
   `YouTubeMinePage.tsx`. Ported from the sibling `shadowmine` CLI below —
   copied, not imported, so this app has no runtime dependency on that
-  repo for this feature.
+  repo for this feature. YouTube bot-blocks the datacenter host's IP;
+  `app/exit_node.py` works around it by routing each download through a
+  Tailscale exit node advertised by a personal device on the tailnet
+  (`MINING_EXIT_NODE` / `_FALLBACK`), with cookie auth
+  (`MINING_YTDLP_COOKIES_FILE`) as the fallback — see the service README.
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`,
   manual-dispatch `import-wanikani-kanji.yml`) of the full non-hidden
