@@ -53,6 +53,11 @@ class MorphemeToken(BaseModel):
     # falls back to deriving it from `reading` + `lemma`.
     lemmaReading: str = ""
     pos: str = ""
+    # UniDic accent type — the mora index of the accent nucleus, "0" = heiban.
+    # "" when unavailable ("*") or a compound/accent-changing form. Same
+    # convention as VocabularyItem.pitchAccentPositions. Only reliable for a
+    # single-morpheme content word (names get a bare "1"/"0" default).
+    accentType: str = ""
 
 
 class SourceInfo(BaseModel):

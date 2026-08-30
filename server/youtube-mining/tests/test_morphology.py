@@ -54,3 +54,13 @@ def test_lemma_reading_respects_overrides() -> None:
     watashi = next(t for t in tokenize_japanese("私は学生です。") if t.surface == "私")
     assert watashi.reading == "わたし"
     assert watashi.lemmaReading == "わたし"
+
+
+def test_accent_type_is_a_plain_integer_or_blank() -> None:
+    sensei = tokenize_japanese("先生")[0]
+    assert sensei.accentType == "3"  # 先生 is nakadaka on the 3rd mora
+    tokyo = tokenize_japanese("東京")[0]
+    assert tokyo.accentType == "0"  # heiban
+    # A conjugated/particle token or an unknown-accent word yields "".
+    ta = next(t for t in tokenize_japanese("食べた") if t.surface == "た")
+    assert ta.accentType == ""

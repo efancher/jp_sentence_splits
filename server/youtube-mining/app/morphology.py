@@ -65,6 +65,14 @@ def _pos_from_feature(feature: object) -> str:
     return pos1
 
 
+def _accent_type_from_feature(feature: object) -> str:
+    """UniDic `aType` — accent nucleus mora index, "0" = heiban. Only a plain
+    integer is returned; "*" (unknown) and compound forms like "1,3" / "C2"
+    come back as "" for the caller to ignore."""
+    raw = _feature_str(feature, "aType")
+    return raw if raw.isdigit() else ""
+
+
 def tokenize_japanese(text: str) -> list[MorphemeToken]:
     """Tokenize ``text`` into character-aligned MorphemeToken spans.
 
@@ -103,6 +111,7 @@ def tokenize_japanese(text: str) -> list[MorphemeToken]:
                 reading=_reading_from_feature(feature, surface, kata2hira),
                 lemmaReading=_lemma_reading_from_feature(feature, lemma, kata2hira),
                 pos=_pos_from_feature(feature),
+                accentType=_accent_type_from_feature(feature),
             )
         )
         cursor = end

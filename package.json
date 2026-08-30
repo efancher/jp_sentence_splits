@@ -26,6 +26,7 @@
     "backfill:verb-pair-confusions": "tsx scripts/backfill-verb-pair-confusions.ts",
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
     "backfill:pitch-accent": "tsx scripts/backfill-pitch-accent.ts",
+    "backfill:pitch-accent-unidic": "tsx scripts/backfill-vocabulary-pitch-accent-unidic.ts",
     "backfill:resegment-audio": "tsx scripts/backfill-resegment-audio.ts",
     "backfill:source-audio": "tsx scripts/backfill-source-audio.ts",
     "backfill:wanikani-mnemonics": "tsx scripts/backfill-wanikani-mnemonics.ts",
