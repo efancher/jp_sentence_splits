@@ -46,6 +46,8 @@ export function YouTubeMinePage() {
   const [clipping, setClipping] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  /** How many *following* cues the reviewer has merged into the current one. */
+  const [mergedCount, setMergedCount] = useState(0);
   const [confirmed, setConfirmed] = useState<{
     sentences: ShadowingSentenceInput[];
     audio: ShadowingAudioDraft[];
@@ -95,23 +97,29 @@ export function YouTubeMinePage() {
 
   const cues: MiningCue[] = jobStatus?.cues ?? [];
   const currentCue = cues[cueIndex];
+  const throughIndex = cueIndex + mergedCount;
+  const lastMergedCue = cues[throughIndex];
+  const canMergeNext = throughIndex + 1 < cues.length;
 
-  // Reset the per-cue edit fields whenever the cue under review changes.
+  // Reset the per-cue edit fields (and any pending merge) whenever the cue
+  // under review changes.
   useEffect(() => {
     if (!currentCue) return;
     setJapaneseText(currentCue.japanese);
     setEnglishText(currentCue.englishGuess ?? '');
+    setMergedCount(0);
   }, [currentCue]);
 
   // Pull the cue's audio so it can be heard before deciding to keep it —
   // the review step's whole point is catching a mis-transcription by ear.
+  // Covers the full span when the reviewer has merged following cues in.
   useEffect(() => {
     if (phase !== 'reviewing' || !jobId || !currentCue) return;
     let objectUrl: string | null = null;
     let cancelled = false;
     setPreviewUrl(null);
     setPreviewFailed(false);
-    void fetchCuePreviewAudio(jobId, currentCue.index).then(
+    void fetchCuePreviewAudio(jobId, currentCue.index, currentCue.index + mergedCount).then(
       (blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -125,7 +133,33 @@ export function YouTubeMinePage() {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [phase, jobId, currentCue]);
+  }, [phase, jobId, currentCue, mergedCount]);
+
+  function mergeNext() {
+    const next = cues[throughIndex + 1];
+    if (!next) return;
+    setJapaneseText((prev) => `${prev.trimEnd()}${next.japanese}`);
+    setEnglishText((prev) =>
+      next.englishGuess ? `${prev} ${next.englishGuess}`.trim() : prev,
+    );
+    setMergedCount((c) => c + 1);
+  }
+
+  function unmerge() {
+    if (mergedCount === 0 || !currentCue) return;
+    const to = cueIndex + mergedCount - 1;
+    setJapaneseText(
+      cues.slice(cueIndex, to + 1).map((c) => c.japanese).join(''),
+    );
+    setEnglishText(
+      cues
+        .slice(cueIndex, to + 1)
+        .map((c) => c.englishGuess ?? '')
+        .filter(Boolean)
+        .join(' '),
+    );
+    setMergedCount((c) => c - 1);
+  }
 
   async function handleStart() {
     setError('');
@@ -182,6 +216,9 @@ export function YouTubeMinePage() {
         japanese: japaneseText.trim(),
         english: englishText.trim() || undefined,
         generateKana,
+        ...(mergedCount > 0 && lastMergedCue
+          ? { startMs: currentCue.startMs, endMs: lastMergedCue.endMs }
+          : {}),
       });
       const blob = await fetchMiningClipAudio(jobId, result.sentenceId);
       const japanese = displayJapanese(result.japanese);
@@ -206,14 +243,14 @@ export function YouTubeMinePage() {
         endMs: result.endMs,
         blob,
       };
-      if (cueIndex + 1 >= cues.length) {
+      if (throughIndex + 1 >= cues.length) {
         await finish({ sentence, audio: audioDraft });
       } else {
         setConfirmed((prev) => ({
           sentences: [...prev.sentences, sentence],
           audio: [...prev.audio, audioDraft],
         }));
-        setCueIndex((index) => index + 1);
+        setCueIndex((index) => index + 1 + mergedCount);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clip sentence');
@@ -223,10 +260,10 @@ export function YouTubeMinePage() {
   }
 
   function handleSkip() {
-    if (cueIndex + 1 >= cues.length) {
+    if (throughIndex + 1 >= cues.length) {
       void finish();
     } else {
-      setCueIndex((index) => index + 1);
+      setCueIndex((index) => index + 1 + mergedCount);
     }
   }
 
@@ -288,12 +325,14 @@ export function YouTubeMinePage() {
       {phase === 'reviewing' && currentCue ? (
         <section className="panel stack">
           <h3 style={{ margin: 0 }}>
-            Cue {cueIndex + 1} / {cues.length}
+            Cue {cueIndex + 1}
+            {mergedCount > 0 ? `–${throughIndex + 1}` : ''} / {cues.length}
           </h3>
           <div className="muted">
             {formatTimestamp(currentCue.startMs)} –{' '}
-            {formatTimestamp(currentCue.endMs)}
+            {formatTimestamp((lastMergedCue ?? currentCue).endMs)}
             {currentCue.isAuto ? ' · auto captions' : ''}
+            {mergedCount > 0 ? ` · ${mergedCount + 1} cues merged` : ''}
           </div>
           {previewUrl ? (
             // eslint-disable-next-line jsx-a11y/media-has-caption
@@ -331,6 +370,21 @@ export function YouTubeMinePage() {
             />
             Generate kana reading
           </label>
+          <div className="row">
+            <button
+              type="button"
+              disabled={clipping || !canMergeNext}
+              onClick={mergeNext}
+              title="Fold the next cue into this one"
+            >
+              + Merge next
+            </button>
+            {mergedCount > 0 ? (
+              <button type="button" disabled={clipping} onClick={unmerge}>
+                Unmerge
+              </button>
+            ) : null}
+          </div>
           <div className="row">
             <button
               type="button"

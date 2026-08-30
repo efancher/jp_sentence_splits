@@ -13,8 +13,9 @@ import { withAppProviders } from '../src/test/providers';
 // top-level const here would throw "cannot access before initialization".
 const { CUES } = vi.hoisted(() => ({
   CUES: [
-    { index: 0, startMs: 0, endMs: 1000, japanese: '今日は晴れです。', isAuto: false, englishGuess: 'It is sunny today.' },
-    { index: 1, startMs: 1000, endMs: 2000, japanese: '散歩に行きましょう。', isAuto: false, englishGuess: "Let's go for a walk.", lowConfidence: true },
+    { index: 0, startMs: 0, endMs: 1000, japanese: '今日は', isAuto: false, englishGuess: 'Today' },
+    { index: 1, startMs: 1000, endMs: 2000, japanese: '晴れです。', isAuto: false, englishGuess: 'it is sunny.', lowConfidence: true },
+    { index: 2, startMs: 2000, endMs: 3200, japanese: '散歩に行きましょう。', isAuto: false, englishGuess: "Let's go for a walk." },
   ],
 }));
 
@@ -23,7 +24,7 @@ vi.mock('../src/lib/miningApi', () => ({
   getMiningJob: vi.fn(async () => ({
     jobId: 'job-1',
     status: 'ready' as const,
-    stage: 'Ready — 2 sentence(s) found.',
+    stage: 'Ready — 3 sentence(s) found.',
     source: {
       id: 'source-vidmocked',
       type: 'youtube' as const,
@@ -35,22 +36,24 @@ vi.mock('../src/lib/miningApi', () => ({
     },
     cues: CUES,
   })),
-  clipMiningCue: vi.fn(async (_jobId: string, cueIndex: number, options: { japanese: string; english?: string }) => {
+  clipMiningCue: vi.fn(async (_jobId: string, cueIndex: number, options: { japanese: string; english?: string; startMs?: number; endMs?: number }) => {
     const cue = CUES[cueIndex]!;
+    const startMs = options.startMs ?? cue.startMs;
+    const endMs = options.endMs ?? cue.endMs;
     return {
       sentenceId: `sentence-00${cueIndex + 1}-mocked`,
       japanese: options.japanese,
       reading: null,
       english: options.english ?? null,
-      startMs: cue.startMs,
-      endMs: cue.endMs,
-      subtitleStartMs: cue.startMs,
-      subtitleEndMs: cue.endMs,
-      adjustedStartMs: cue.startMs,
-      adjustedEndMs: cue.endMs,
+      startMs,
+      endMs,
+      subtitleStartMs: startMs,
+      subtitleEndMs: endMs,
+      adjustedStartMs: startMs,
+      adjustedEndMs: endMs,
       transcriptStatus: 'manually-corrected' as const,
       tokens: null,
-      audio: { mimeType: 'audio/mp4' as const, durationMs: cue.endMs - cue.startMs + 300 },
+      audio: { mimeType: 'audio/mp4' as const, durationMs: endMs - startMs + 300 },
     };
   }),
   fetchMiningClipAudio: vi.fn(async () => new Blob(['fake-clip'], { type: 'audio/mp4' })),
@@ -68,7 +71,8 @@ beforeEach(() => {
 });
 
 describe('YouTube mining page', () => {
-  it('mines a video, reviews both cues, and imports the resulting book', async () => {
+  it('merges a cut-off cue with the next, then reviews and imports', async () => {
+    const { clipMiningCue } = await import('../src/lib/miningApi');
     const user = userEvent.setup();
     render(withAppProviders(<App />));
     await openNavMenu(user);
@@ -80,29 +84,35 @@ describe('YouTube mining page', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Start' }));
 
-    expect(await screen.findByText('Cue 1 / 2')).toBeInTheDocument();
-    expect(await screen.findByDisplayValue('今日は晴れです。')).toBeInTheDocument();
+    expect(await screen.findByText('Cue 1 / 3')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('今日は')).toBeInTheDocument();
 
-    // The cue's audio is fetched and rendered so it can be heard before keeping.
-    await waitFor(() =>
-      expect(document.querySelector('audio')).toBeInTheDocument(),
-    );
-    expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0);
+    // The cue's audio is fetched so it can be heard before keeping.
+    await waitFor(() => expect(document.querySelector('audio')).toBeInTheDocument());
+    expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0, 0);
+
+    // Fold cue 2 into cue 1 — text joins, header shows the range, audio
+    // preview re-fetches over the merged span.
+    await user.click(screen.getByRole('button', { name: '+ Merge next' }));
+    expect(await screen.findByText('Cue 1–2 / 3')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('今日は晴れです。')).toBeInTheDocument();
+    await waitFor(() => expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0, 1));
 
     await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
 
-    expect(await screen.findByText('Cue 2 / 2')).toBeInTheDocument();
-    await waitFor(() => expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 1));
-    // Cue 2 is flagged low-confidence; cue 1 was not.
-    expect(screen.getByText(/Low transcription confidence/)).toBeInTheDocument();
+    // The merged clip spans cue 1's start to cue 2's end.
+    expect(clipMiningCue).toHaveBeenCalledWith(
+      'job-1',
+      0,
+      expect.objectContaining({ japanese: '今日は晴れです。', startMs: 0, endMs: 2000 }),
+    );
+
+    // Advanced past both merged cues, straight to cue 3.
+    expect(await screen.findByText('Cue 3 / 3')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
 
     expect(await screen.findByText('Import preview')).toBeInTheDocument();
-    expect(screen.getByText('Mocked Mining Video')).toBeInTheDocument();
-    await user.click(
-      screen.getByRole('button', { name: 'Import complete project' }),
-    );
-
+    await user.click(screen.getByRole('button', { name: 'Import complete project' }));
     expect(
       await screen.findByRole('heading', { name: 'Mocked Mining Video' }),
     ).toBeInTheDocument();

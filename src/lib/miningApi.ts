@@ -182,8 +182,13 @@ export async function fetchMiningClipAudio(
 export async function fetchCuePreviewAudio(
   jobId: string,
   cueIndex: number,
+  throughIndex?: number,
 ): Promise<Blob> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/cues/${cueIndex}/audio`);
+  const query =
+    throughIndex != null && throughIndex > cueIndex ? `?through=${throughIndex}` : '';
+  const response = await fetch(
+    `${API_BASE}/jobs/${jobId}/cues/${cueIndex}/audio${query}`,
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch cue audio: ${await readErrorDetail(response)}`);
   }

@@ -108,11 +108,16 @@ async def clip_range(job_id: str, req: ClipRequest):
 
 
 @app.get("/jobs/{job_id}/cues/{cue_index}/audio")
-async def get_cue_preview_audio(job_id: str, cue_index: int):
-    """A cue's audio for playback during review (before it's kept/clipped)."""
+async def get_cue_preview_audio(
+    job_id: str, cue_index: int, through: int | None = None
+):
+    """A cue's audio for playback during review (before it's kept/clipped).
+    `?through=<j>` extends the span to cue j's end, for previewing a merge."""
     try:
         job = jobs.get_job(job_id)
-        path = await asyncio.to_thread(jobs.preview_cue_audio, job, cue_index)
+        path = await asyncio.to_thread(
+            jobs.preview_cue_audio, job, cue_index, through
+        )
     except jobs.JobNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
     except jobs.CueIndexError:

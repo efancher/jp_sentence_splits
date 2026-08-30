@@ -312,23 +312,27 @@ def clip_audio_path(job: Job, sentence_id: str) -> Path:
     return record.path
 
 
-def preview_cue_audio(job: Job, cue_index: int) -> Path:
+def preview_cue_audio(job: Job, cue_index: int, through_index: int | None = None) -> Path:
     """Cut a cue's raw span from the source audio for playback during review —
-    so the reviewer can hear a caption before deciding to keep it. Cached
-    under the job dir (swept with the job); does not touch `job.clips` or the
-    sentence sequence like `clip_cue` does."""
+    so the reviewer can hear a caption before deciding to keep it. With
+    `through_index` the span runs from cue `cue_index`'s start to cue
+    `through_index`'s end, for previewing a merge. Cached under the job dir
+    (swept with the job); does not touch `job.clips` or the sentence sequence
+    like `clip_cue` does."""
     if job.status != "ready" or job.source_audio_path is None:
         raise ValueError("Job is not ready for clipping yet")
-    if cue_index < 0 or cue_index >= len(job.cues):
+    end_index = cue_index if through_index is None else through_index
+    if cue_index < 0 or end_index >= len(job.cues) or end_index < cue_index:
         raise CueIndexError(cue_index)
-    out = job.dir / "previews" / f"{cue_index}.m4a"
+    out = job.dir / "previews" / f"{cue_index}-{end_index}.m4a"
     if out.exists():
         return out
     out.parent.mkdir(parents=True, exist_ok=True)
-    cue = job.cues[cue_index]
     media_ms = clip.probe_duration_ms(job.source_audio_path)
     _, _, adj_start, adj_end = clip.compute_boundaries(
-        cue.startMs, cue.endMs, media_duration_ms=media_ms
+        job.cues[cue_index].startMs,
+        job.cues[end_index].endMs,
+        media_duration_ms=media_ms,
     )
     clip.clip_audio(job.source_audio_path, out, start_ms=adj_start, end_ms=adj_end)
     return out

@@ -239,6 +239,9 @@ def test_cue_preview_audio(client: TestClient) -> None:
     # Cached — a second request serves the same file without re-clipping.
     assert client.get(f"/jobs/{job_id}/cues/0/audio").status_code == 200
     assert client.get(f"/jobs/{job_id}/cues/99/audio").status_code == 404
+    # ?through extends the span for a merge preview (still needs 2+ cues).
+    assert client.get(f"/jobs/{job_id}/cues/0/audio?through=1").status_code == 200
+    assert client.get(f"/jobs/{job_id}/cues/1/audio?through=0").status_code == 404
 
 
 def test_unknown_job_returns_404(client: TestClient) -> None:
