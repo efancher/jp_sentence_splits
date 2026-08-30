@@ -633,6 +633,18 @@ function buildUnderstandSteps(
   return steps;
 }
 
+/**
+ * Human-readable "how much have I shadowed this sentence" line, shared by the
+ * planner (frozen into `step.reason` at plan time) and the session runner
+ * (recomputed live from the current attempt count, so the card stops saying
+ * "Not shadowed yet" once an attempt has actually been recorded).
+ */
+export function shadowAttemptSummary(attemptCount: number): string {
+  return attemptCount === 0
+    ? 'Not shadowed yet'
+    : `Shadowed ${attemptCount}x so far`;
+}
+
 /** Step 7 (shadowing): one step per sentence to shadow, sized to its own top-level bucket allocation. */
 function buildShadowSteps(
   candidates: ShadowCandidate[],

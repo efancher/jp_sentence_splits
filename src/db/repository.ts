@@ -92,6 +92,7 @@ import {
   buildRecommendedSession,
   computeNeglectScores,
   computeRecentActivityDistribution,
+  shadowAttemptSummary,
   type ExploreCandidate,
   type RecentActivityEvent,
   type RecommendedSession,
@@ -2334,6 +2335,25 @@ export async function listAttemptsForSentence(
   return attempts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/**
+ * How many shadowing attempts exist per sentence, for a batch of sentence ids
+ * — the session runner uses this to keep each shadow step's subtitle honest
+ * (the planner only writes `step.reason` once, at plan time). Counts every
+ * attempt row, matching `findShadowCandidates`' own ordering signal.
+ */
+export async function countAttemptsForSentences(
+  sentenceIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (sentenceIds.length === 0) return counts;
+  const db = getDb();
+  const attempts = await db.attempts.where('sentenceId').anyOf(sentenceIds).toArray();
+  for (const attempt of attempts) {
+    counts.set(attempt.sentenceId, (counts.get(attempt.sentenceId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export async function deleteAttempt(attemptId: string): Promise<void> {
   const db = getDb();
   await db.attempts.delete(attemptId);
@@ -4447,7 +4467,7 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
       sentenceId: candidate.sentenceId,
       bookId: bookIdBySentenceId.get(candidate.sentenceId),
       label: candidate.sentence.japanese.slice(0, 24),
-      reason: candidate.attemptCount === 0 ? 'Not shadowed yet' : `Shadowed ${candidate.attemptCount}x so far`,
+      reason: shadowAttemptSummary(candidate.attemptCount),
     }));
 }
 

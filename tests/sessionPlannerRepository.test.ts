@@ -6,6 +6,7 @@ import {
   addSentencesToBook,
   computeLearningBalance,
   confirmSentenceVocabulary,
+  countAttemptsForSentences,
   createBook,
   deleteTodayPlannerSession,
   endPlannerSessionEarly,
@@ -15,9 +16,11 @@ import {
   getTodayPlannerSession,
   planRecommendedSession,
   recordReview,
+  saveAttempt,
   setBookSentenceStatus,
   updatePlannerSessionStep,
 } from '../src/db/repository';
+import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
 import type { Sentence } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 
@@ -343,5 +346,26 @@ describe('Learning Orchestrator repository layer', () => {
     await setBookSentenceStatus(book.id, sentence.id, 'complete');
     updated = await getPlannerSession(nextDaySession.id);
     expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).not.toBe('completed');
+  });
+
+  it('countAttemptsForSentences tallies recorded attempts so a shadow step subtitle can stay current', async () => {
+    const db = getDb();
+    const s1 = makeSentence();
+    const s2 = makeSentence();
+    await db.sentences.bulkPut([s1, s2]);
+
+    expect(await countAttemptsForSentences([])).toEqual(new Map());
+    expect(await countAttemptsForSentences([s1.id, s2.id])).toEqual(new Map());
+
+    const blob = new Blob(['x'], { type: 'audio/webm' });
+    await saveAttempt({ sentenceId: s1.id, blob, mimeType: 'audio/webm', durationMs: 100 });
+    await saveAttempt({ sentenceId: s1.id, blob, mimeType: 'audio/webm', durationMs: 100, practiceStage: 'final' });
+    await saveAttempt({ sentenceId: s2.id, blob, mimeType: 'audio/webm', durationMs: 100 });
+
+    const counts = await countAttemptsForSentences([s1.id, s2.id]);
+    expect(counts.get(s1.id)).toBe(2);
+    expect(counts.get(s2.id)).toBe(1);
+    expect(shadowAttemptSummary(counts.get(s1.id) ?? 0)).toBe('Shadowed 2x so far');
+    expect(shadowAttemptSummary(0)).toBe('Not shadowed yet');
   });
 });

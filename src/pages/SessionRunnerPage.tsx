@@ -1,9 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { endPlannerSessionEarly, getPlannerSession, updatePlannerSessionStep } from '../db/repository';
+import {
+  countAttemptsForSentences,
+  endPlannerSessionEarly,
+  getPlannerSession,
+  updatePlannerSessionStep,
+} from '../db/repository';
 import type { PlannerSessionStep } from '../domain/types';
-import { sessionStepTargetPath } from '../lib/sessionPlanner';
+import { sessionStepTargetPath, shadowAttemptSummary } from '../lib/sessionPlanner';
 
 /**
  * Executes a recommended session (design brief §8): each step deep-links
@@ -37,8 +42,26 @@ export function SessionRunnerPage() {
     [sessionId],
   );
 
+  const shadowSentenceIds = (session?.steps ?? [])
+    .filter((step) => step.bucket === 'shadowing' && step.sentenceId)
+    .map((step) => step.sentenceId!);
+  // Recompute each shadow step's subtitle from the live attempt count — the
+  // planner freezes `step.reason` at plan time, so without this the card keeps
+  // saying "Not shadowed yet" after the learner has recorded attempts.
+  const shadowAttemptCounts = useLiveQuery(
+    () => countAttemptsForSentences(shadowSentenceIds),
+    [shadowSentenceIds.join(',')],
+  );
+
   if (!sessionId) return null;
   if (!session) return <p className="muted">Loading…</p>;
+
+  function stepReason(step: PlannerSessionStep): string {
+    if (step.bucket === 'shadowing' && step.sentenceId && shadowAttemptCounts) {
+      return shadowAttemptSummary(shadowAttemptCounts.get(step.sentenceId) ?? 0);
+    }
+    return step.reason;
+  }
 
   async function handleGo(step: PlannerSessionStep) {
     const path = sessionStepTargetPath(step);
@@ -95,7 +118,7 @@ export function SessionRunnerPage() {
                 <span className="status-pill">{STATUS_LABELS[step.status]}</span>
               </div>
               <div className="muted" style={{ fontSize: '0.85rem' }}>
-                {step.reason} · {Math.round(step.estimatedMinutes)} min
+                {stepReason(step)} · {Math.round(step.estimatedMinutes)} min
               </div>
               {isUnsettled && !finished ? (
                 <div className="row" style={{ marginTop: '0.5rem' }}>

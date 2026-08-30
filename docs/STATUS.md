@@ -1,6 +1,21 @@
 # Status
 
-Last updated: 2026-08-30 (Guided shadowing: a hands-free "Loop shadow
+Last updated: 2026-08-30 (Session runner: shadow steps show a live
+"shadowed Nx" subtitle. Bug: `SessionRunnerPage` rendered `step.reason`
+verbatim, but the planner freezes that string at plan time, so a shadow
+step kept saying "Not shadowed yet" even after the learner had recorded
+attempts. Fix: `shadowAttemptSummary(count)` is now a shared export in
+`sessionPlanner.ts` (used by both `findShadowCandidates`' frozen reason
+and the runner's live recompute); new
+`countAttemptsForSentences(ids): Map<id, count>` repository helper;
+`SessionRunnerPage` `useLiveQuery`s the counts for its shadow steps'
+`sentenceId`s and swaps in `shadowAttemptSummary(count)` for those rows'
+subtitle. Counts every attempt row, matching the planner's own ordering
+signal. Non-shadow steps still show their frozen `reason`. Test in
+`tests/sessionPlannerRepository.test.ts`. **Verified**: `npm run check`
+green.)
+
+Before that: 2026-08-30 (Guided shadowing: a hands-free "Loop shadow
 reps" toggle for the Delayed/Close stages. From "I wonder if for stage 3
 and 4 ... there could be a loop button so I could practice over and over
 again" → "what i actually wanted to loop was including the recording."
