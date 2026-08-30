@@ -111,6 +111,22 @@ def delete_job(job_id: str) -> None:
     shutil.rmtree(job.dir, ignore_errors=True)
 
 
+_SENTENCE_END_CHARS = "。｡．.！!？?…」』"
+
+
+def _looks_human_captioned(cues: list[Cue]) -> bool:
+    """True when the JA caption track looks human-authored, not YouTube's
+    auto-captions — the latter carry no sentence-final punctuation at all,
+    a real track ends most cues on it. Used to skip ASR when good subs
+    already exist."""
+    if len(cues) < 5:
+        return False
+    ending = sum(
+        1 for cue in cues if cue.text.rstrip()[-1:] in _SENTENCE_END_CHARS
+    )
+    return ending / len(cues) >= 0.5
+
+
 def _run_job(job: Job, url: str) -> None:
     try:
         job.status = "fetching"
@@ -151,20 +167,34 @@ def _run_job(job: Job, url: str) -> None:
 
         job.status = "parsing"
         subtitle_dir = job.dir / "subtitles"
+        caption_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
 
-        # Prefer an ASR transcript (kanji + punctuation) over YouTube's
-        # auto-caption track; fall back to captions when ASR is unavailable.
-        job.stage = "Transcribing audio…"
-        raw_cues = asr_client.transcribe_source(
-            cached_source or job.source_audio_path
-        )
-        if raw_cues is not None:
+        # A real (human) subtitle track beats Whisper — correct kanji, names,
+        # no hallucination — and skips the slow ASR pass. YouTube's Japanese
+        # auto-captions carry no sentence-final punctuation; a human track
+        # does, so punctuation density tells them apart.
+        if _looks_human_captioned(caption_cues):
             logger.info(
-                "Mining job %s: ASR transcript, %d segment(s)", job.id, len(raw_cues)
+                "Mining job %s: human caption track (%d cues), skipping ASR",
+                job.id,
+                len(caption_cues),
             )
-        else:
             job.stage = "Splitting sentences…"
-            raw_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
+            raw_cues = [c.model_copy(update={"isAuto": False}) for c in caption_cues]
+        else:
+            job.stage = "Transcribing audio…"
+            raw_cues = asr_client.transcribe_source(
+                cached_source or job.source_audio_path
+            )
+            if raw_cues is not None:
+                logger.info(
+                    "Mining job %s: ASR transcript, %d segment(s)",
+                    job.id,
+                    len(raw_cues),
+                )
+            else:
+                job.stage = "Splitting sentences…"
+                raw_cues = caption_cues
 
         job.cues = resegment.resegment_cues(raw_cues)
         job.english_by_index = subtitles.load_parallel_text_from_dir(

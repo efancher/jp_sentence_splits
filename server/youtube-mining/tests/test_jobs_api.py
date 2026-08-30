@@ -164,6 +164,33 @@ def test_uses_asr_transcript_over_captions_when_available(
     assert [c["lowConfidence"] for c in status["cues"]] == [False, True]
 
 
+def test_human_caption_track_skips_asr(client: TestClient, monkeypatch) -> None:
+    human_vtt = "WEBVTT\n\n" + "\n\n".join(
+        f"00:00:0{i}.000 --> 00:00:0{i + 1}.000\n文{i}です。" for i in range(6)
+    )
+
+    def fake_subs(url: str, job_dir: Path, langs=None):
+        d = job_dir / "subtitles"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "video.ja.vtt").write_text(human_vtt, encoding="utf-8")
+        return sorted(d.glob("*.vtt"))
+
+    monkeypatch.setattr(youtube, "download_subtitles", fake_subs)
+    asr_called = []
+    monkeypatch.setattr(
+        jobs.asr_client,
+        "transcribe_source",
+        lambda p: asr_called.append(p) or None,
+    )
+
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    status = _wait_until_ready(client, create.json()["jobId"])
+    assert status["status"] == "ready"
+    assert asr_called == []  # punctuated human track → ASR skipped
+    assert all(not c["isAuto"] for c in status["cues"])
+    assert status["cues"][0]["japanese"] == "文0です。"
+
+
 def test_cue_preview_audio(client: TestClient) -> None:
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
     job_id = create.json()["jobId"]
