@@ -38,16 +38,17 @@ replaced the hard-coded `descriptor.key === 'sentence'` seeding check).
 `buildReviewPriorityInputs` gain a `sentenceVocabulary` branch. Migration
 `20260901000000_study_item_sentence_vocabulary_subject.sql` widens the
 `study_items_subject_type_check` constraint (same precedent as the
-`vocabularyConfusion`/`grammarPattern` widenings). One-time cleanup script
+`vocabularyConfusion`/`grammarPattern` widenings) — **applied to production
+2026-08-30**. One-time cleanup script
 `scripts/retire-per-word-conjugation-items.ts` soft-deletes the old per-word
 `sentence_transformation` study items (unreachable from ReviewPage now, but
-still counted by the session planner's practice pool). **Verified**: `npm
-run check` + `npm run build` green, `tests/reviewPage.test.tsx` +
-`tests/conjugation.test.ts` rewritten/extended (per-occurrence seeding,
-one-card-per-encounter with distinct forms, no card for a
-noun/compound-surface, `identifyConjugationForm` unit cases). **Not yet
-manually verified in a real browser**; **retire script not yet run against
-production** (run its dry-run first). AI_OVERVIEW.md §review +
+still counted by the session planner's practice pool) — **run against
+production 2026-08-30, 10 rows retired**, re-run confirms 0 remaining.
+**Verified**: `npm run check` + `npm run build` green,
+`tests/reviewPage.test.tsx` + `tests/conjugation.test.ts` rewritten/extended
+(per-occurrence seeding, one-card-per-encounter with distinct forms, no card
+for a noun/compound-surface, `identifyConjugationForm` unit cases). **Not
+yet manually verified in a real browser.** AI_OVERVIEW.md §review +
 ARCHITECTURE.md + ROADMAP.md updated.)
 
 Before that: 2026-08-29 (Search: "Not in a book" filter. From "is there
