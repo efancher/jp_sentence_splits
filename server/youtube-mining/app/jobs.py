@@ -32,6 +32,7 @@ from app import (
     morphology,
     readings,
     resegment,
+    source_cache,
     subtitles,
     youtube,
 )
@@ -133,6 +134,16 @@ def _run_job(job: Job, url: str) -> None:
             job.stage = "Reading video info…"
             info = youtube.inspect_url(url)
         job.source = youtube.info_to_source(info)
+
+        # Stash a compressed copy of the source outside the job sweep so a
+        # later re-segment / audio repair re-cuts from the original, not from
+        # lossy fragment clips. Best effort — never fail the job over it.
+        try:
+            source_cache.store(job.source.videoId, job.source_audio_path)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "source_cache.store failed for %s", job.source.videoId, exc_info=True
+            )
 
         job.status = "parsing"
         job.stage = "Splitting sentences…"

@@ -1,13 +1,16 @@
 import asyncio
+import base64
 import logging
 import subprocess
+import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app import config, jobs, morphology, readings, reclip, resegment
+from app import clip, config, jobs, morphology, readings, reclip, resegment, source_cache, youtube
 from app.models import (
     ClipRequest,
     ClipResponse,
@@ -20,6 +23,9 @@ from app.models import (
     ReclipResponse,
     ResegmentedCue,
     ResegmentRequest,
+    SourceAudioInfo,
+    SourceAudioRequest,
+    SourceClipRequest,
 )
 
 logger = logging.getLogger("youtube_mining_api")
@@ -179,6 +185,66 @@ async def reclip_sentences(req: ReclipRequest):
         raise HTTPException(status_code=422, detail=str(exc))
     except subprocess.CalledProcessError as exc:
         raise HTTPException(status_code=500, detail=f"ffmpeg failed: {exc.stderr}")
+
+
+def _source_clip_sync(req: SourceClipRequest) -> ReclipResponse:
+    cached = source_cache.ensure(req.url)
+    media_ms = clip.probe_duration_ms(cached)
+    clips: list[ReclipClip] = []
+    with tempfile.TemporaryDirectory(prefix="source-clip-") as tmp:
+        for i, cut in enumerate(req.cuts):
+            _, _, adj_start, adj_end = clip.compute_boundaries(
+                cut.startMs, cut.endMs, media_duration_ms=media_ms
+            )
+            out = Path(tmp) / f"cut-{i}.m4a"
+            duration = clip.clip_audio(
+                cached, out, start_ms=adj_start, end_ms=adj_end
+            )
+            clips.append(
+                ReclipClip(
+                    audioBase64=base64.b64encode(out.read_bytes()).decode("ascii"),
+                    durationMs=duration,
+                )
+            )
+    return ReclipResponse(clips=clips)
+
+
+@app.post("/source-audio", response_model=SourceAudioInfo)
+async def ensure_source_audio(req: SourceAudioRequest):
+    """Ensure the video's source audio is in the persistent cache
+    (downloading + transcoding it if absent), and return its metadata."""
+    try:
+        path = await asyncio.to_thread(source_cache.ensure, req.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    duration_ms, size_bytes = source_cache.info(path)
+    video_id = youtube.extract_video_id(req.url) or ""
+    return SourceAudioInfo(
+        videoId=video_id, durationMs=duration_ms, sizeBytes=size_bytes
+    )
+
+
+@app.get("/source-audio/{video_id}")
+async def get_source_audio(video_id: str):
+    path = source_cache.get(video_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Source audio not cached")
+    return FileResponse(path, media_type=source_cache.MIME_TYPE)
+
+
+@app.post("/source-audio/clip", response_model=ReclipResponse)
+async def clip_source_audio(req: SourceClipRequest):
+    """Cut absolute (startMs, endMs) spans out of a video's cached source
+    audio — re-cut a book's reference clips from the original source rather
+    than from lossy fragment clips. Ensures the source is cached first."""
+    try:
+        return await asyncio.to_thread(_source_clip_sync, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.post("/resegment", response_model=list[ResegmentedCue])

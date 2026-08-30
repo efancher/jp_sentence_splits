@@ -139,6 +139,26 @@ class ReclipResponse(BaseModel):
     clips: list[ReclipClip]
 
 
+class SourceAudioRequest(BaseModel):
+    url: str = Field(min_length=1)
+
+
+class SourceAudioInfo(BaseModel):
+    videoId: str
+    mimeType: Literal["audio/ogg"] = "audio/ogg"
+    durationMs: int
+    sizeBytes: int
+
+
+class SourceClipRequest(BaseModel):
+    """Cut absolute (startMs, endMs) spans out of a video's cached source
+    audio — for re-cutting a book's reference clips from the original source
+    instead of from lossy fragment clips (see app/source_cache.py)."""
+
+    url: str = Field(min_length=1)
+    cuts: list[ReclipCut] = Field(min_length=1)
+
+
 class ClipAudioInfo(BaseModel):
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int

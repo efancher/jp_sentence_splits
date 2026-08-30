@@ -183,9 +183,19 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
 ## Implementation order (each slice independently shippable)
 
 1. **C — source retention.** Smallest, no UX change, immediately de-risks
-   re-cuts. New table + migration + `GET /jobs/{id}/source-audio` +
-   client-side persist on import. Retro-fill existing shadowing books by
-   one-off re-download (exit node works now).
+   re-cuts.
+   - **[done 2026-08-30]** server foundation: `app/source_cache.py` — a
+     persistent per-video Opus cache outside the job sweep, populated on
+     every successful mine; `POST /source-audio` (ensure), `GET
+     /source-audio/{videoId}` (stream), `POST /source-audio/clip {url,cuts}`
+     (cut absolute spans). `tests/test_source_cache.py`.
+   - **remaining:** `source_audio` Supabase table (cloud-only, not synced —
+     like `wanikani_subjects`) recording `book_id → videoId`; client writes
+     it + mirrors the Opus to the `reference-audio` bucket at import commit;
+     `applyResegmentation` switches to `POST /source-audio/clip` when a
+     book has a retained source (drop the `concatCut` fragment path);
+     `scripts/backfill-source-audio.ts` to retro-fill existing shadowing
+     books (exit node makes the re-download possible).
 2. **B — full UniDic + inline lookups.** Server-only; measure the
    reading/accent quality delta on one re-mined book vs its current state.
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`

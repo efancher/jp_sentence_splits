@@ -214,6 +214,15 @@ challenges using node` with no `n challenge solving failed` warning.
 - `MINING_EXIT_NODE` / `MINING_EXIT_NODE_FALLBACK` — Tailscale device
   name(s) to route each download through (primary, then fallback if the
   primary is offline). See "Tailscale exit node" above. Unset by default.
+- `MINING_SOURCE_CACHE_ROOT` / `MINING_SOURCE_CACHE_MAX_BYTES` /
+  `MINING_SOURCE_CACHE_OPUS_KBPS` — the persistent per-video source-audio
+  cache (`app/source_cache.py`): a compressed Opus copy of every mined
+  source, kept outside the job sweep so a later re-segment / audio-repair
+  re-cuts from the original instead of from lossy fragment clips. Defaults:
+  `~/.cache/youtube-mining/source-cache`, 2 GiB (LRU-evicted), 32 kbps.
+  Endpoints: `POST /source-audio {url}` (ensure cached, returns metadata),
+  `GET /source-audio/{videoId}` (stream it), `POST /source-audio/clip
+  {url, cuts}` (cut absolute spans out of it).
 - `MINING_YTDLP_COOKIES_FILE` — path to a cookies.txt for yt-dlp; see
   "YouTube's bot-check" above. Unset by default.
 - `MINING_YTDLP_PLAYER_CLIENT` — comma-separated yt-dlp

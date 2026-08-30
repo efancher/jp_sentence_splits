@@ -57,6 +57,20 @@ YTDLP_PLAYER_CLIENT = os.environ.get(
     "MINING_YTDLP_PLAYER_CLIENT", ""
 ).strip()
 
+# Persistent per-video source-audio cache (app/source_cache.py). Unlike a
+# job's scratch dir this is never swept: a re-segment / audio-repair pass
+# months later re-cuts from the original source stashed here instead of from
+# a lossy concat of fragment clips. Compressed Opus mono, ~250 KB/min at the
+# default 32 kbps; LRU-evicted once the directory passes MAX_BYTES.
+SOURCE_CACHE_ROOT = os.environ.get(
+    "MINING_SOURCE_CACHE_ROOT",
+    os.path.join(os.path.expanduser("~"), ".cache", "youtube-mining", "source-cache"),
+)
+SOURCE_CACHE_MAX_BYTES = int(
+    os.environ.get("MINING_SOURCE_CACHE_MAX_BYTES", str(2 * 1024 * 1024 * 1024))
+)
+SOURCE_CACHE_OPUS_KBPS = int(os.environ.get("MINING_SOURCE_CACHE_OPUS_KBPS", "32"))
+
 # Route yt-dlp + subtitle/info fetches through a Tailscale exit node for the
 # duration of each download. YouTube bot-blocks this datacenter IP (see the
 # cookies note above); a personal device on a home connection, already on
