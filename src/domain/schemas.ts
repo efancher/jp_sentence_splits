@@ -225,6 +225,7 @@ export const studySubjectTypeSchema = z.enum([
   'chunk',
   'vocabularyConfusion',
   'grammarPattern',
+  'sentenceVocabulary',
 ]);
 
 export const fsrsStateSchema = z.object({

@@ -545,13 +545,20 @@ export interface VocabularyKanji {
  * precedent as `vocabularyItem` being reserved in Phase 1 before Phase 7.2
  * became its first consumer. subjectId for that type is a
  * VocabularyConfusion.id.
+ *
+ * `sentenceVocabulary` — subjectId is a `SentenceVocabulary.id`, i.e. one
+ * specific occurrence of a word in one sentence (not the word overall).
+ * Added for the contextual conjugation card (docs/STATUS.md): a verb read in
+ * three sentences gets three independently-scheduled cards, each quizzing
+ * the form that sentence actually used.
  */
 export type StudySubjectType =
   | 'sentence'
   | 'vocabularyItem'
   | 'chunk'
   | 'vocabularyConfusion'
-  | 'grammarPattern';
+  | 'grammarPattern'
+  | 'sentenceVocabulary';
 
 /**
  * activityType is intentionally a plain string, not a closed union — new
