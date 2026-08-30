@@ -67,7 +67,10 @@ ANALYSIS_API_BASE = (
     os.environ.get("MINING_ANALYSIS_API_BASE", "http://127.0.0.1:8002").rstrip("/")
 )
 USE_ASR_TRANSCRIPT = os.environ.get("MINING_USE_ASR_TRANSCRIPT", "1") != "0"
-ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1200"))
+# large-v3-turbo runs ~1.5–3.6x realtime on the analysis box's CPU, and a
+# music-heavy track triggers a second no-VAD pass — 30 min covers a long
+# source with headroom.
+ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1800"))
 
 # Persistent per-video source-audio cache (app/source_cache.py). Unlike a
 # job's scratch dir this is never swept: a re-segment / audio-repair pass
