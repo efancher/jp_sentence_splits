@@ -22,6 +22,7 @@ const morphemeTokenSchema = z.object({
   end: z.number(),
   lemma: z.string(),
   reading: z.string().optional(),
+  lemmaReading: z.string().optional(),
   pos: z.string().optional(),
 });
 

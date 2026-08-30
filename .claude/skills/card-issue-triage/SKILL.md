@@ -92,11 +92,17 @@ Was: `suggestionFromToken` in `src/lib/vocabularySuggestions.ts` built vocab
 suggestions as `expression = token.lemma` (dictionary form) paired directly
 with `reading = token.reading`, where `token.reading` from the Shadowmine
 morphology package is the reading of the **surface** (conjugated) text, not
-the lemma. Now fixed via `deriveDictionaryReading` (same file) — see
+the lemma. Fixed via `deriveDictionaryReading` (same file) — see
 docs/STATUS.md's "Vocabulary reading-mismatch bug + cleanup" entry for the
 full story (the fix, three backfill/merge scripts, and a corruption scare
 from an early non-idempotent version of the backfill, caught and fixed same
 session).
+
+Since 2026-08-30 the mining/re-segment tokens also carry `lemmaReading`
+(UniDic `kanaBase`, the actual dictionary-form reading), which
+`suggestionFromToken` now uses verbatim — so a *new* mine gets 読む/よむ etc.
+right and never needs `deriveDictionaryReading` at all. A mismatch report
+therefore points at pre-2026-08-30 data.
 
 If a *new* report looks like this pattern (dictionary-form expression paired
 with what looks like a conjugated-form reading), it's most likely a case the

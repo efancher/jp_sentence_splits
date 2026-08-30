@@ -62,6 +62,7 @@ const packageTokenSchema = z.object({
   end: z.number().int().positive(),
   lemma: z.string().min(1),
   reading: z.string().optional(),
+  lemmaReading: z.string().optional(),
   pos: z.string().optional(),
 });
 

@@ -42,6 +42,21 @@ def _reading_from_feature(feature: object, surface: str, kata2hira) -> str:
     return ""
 
 
+def _lemma_reading_from_feature(feature: object, lemma: str, kata2hira) -> str:
+    """Reading of the *dictionary form* — UniDic's kanaBase (読ん → よむ, not
+    よん). This is what the vocabulary suggestion wants; `reading` above is the
+    conjugated-surface reading for furigana. "" when unavailable."""
+    override = READING_OVERRIDES.get(lemma)
+    if override:
+        return override
+    kana_base = _feature_str(feature, "kanaBase") or _feature_str(feature, "pronBase")
+    if kana_base:
+        return kata2hira(kana_base)
+    if not has_kanji(lemma):
+        return lemma
+    return ""
+
+
 def _pos_from_feature(feature: object) -> str:
     pos1 = _feature_str(feature, "pos1")
     pos2 = _feature_str(feature, "pos2")
@@ -78,13 +93,15 @@ def tokenize_japanese(text: str) -> list[MorphemeToken]:
             cursor = max(cursor, end)
             continue
         feature = word.feature
+        lemma = _lemma_from_feature(feature, surface)
         tokens.append(
             MorphemeToken(
                 surface=surface,
                 start=start,
                 end=end,
-                lemma=_lemma_from_feature(feature, surface),
+                lemma=lemma,
                 reading=_reading_from_feature(feature, surface, kata2hira),
+                lemmaReading=_lemma_reading_from_feature(feature, lemma, kata2hira),
                 pos=_pos_from_feature(feature),
             )
         )

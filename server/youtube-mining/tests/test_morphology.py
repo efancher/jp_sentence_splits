@@ -38,3 +38,19 @@ def test_tokenize_shimashita_lemma_is_suru() -> None:
 
 def test_tokenize_empty_and_unavailable() -> None:
     assert tokenize_japanese("") == []
+
+
+def test_lemma_reading_is_dictionary_form_not_surface() -> None:
+    """`lemmaReading` (UniDic kanaBase) is the dictionary-form reading — the
+    case `deriveDictionaryReading` on the client exists to recover."""
+    tokens = {t.surface: t for t in tokenize_japanese("本を読んで見つけました。")}
+    assert tokens["読ん"].lemma == "読む"
+    assert tokens["読ん"].reading == "よん"  # surface, for furigana
+    assert tokens["読ん"].lemmaReading == "よむ"  # dictionary form, for vocab
+    assert tokens["見つけ"].lemmaReading == "みつける"
+
+
+def test_lemma_reading_respects_overrides() -> None:
+    watashi = next(t for t in tokenize_japanese("私は学生です。") if t.surface == "私")
+    assert watashi.reading == "わたし"
+    assert watashi.lemmaReading == "わたし"

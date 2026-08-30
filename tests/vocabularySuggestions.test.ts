@@ -338,5 +338,39 @@ describe('vocabularySuggestions', () => {
       );
       expect(suggestion?.reading).toBe('はなし');
     });
+
+    it('uses the token lemmaReading verbatim when present, skipping derivation', () => {
+      // し-onbin: derivation punts (keeps はなし); lemmaReading has the answer.
+      const suggestion = suggestionFromToken(
+        {
+          surface: '話し',
+          start: 0,
+          end: 2,
+          lemma: '話す',
+          reading: 'はなし',
+          lemmaReading: 'はなす',
+          pos: '動詞',
+        },
+        '話して',
+      );
+      expect(suggestion?.expression).toBe('話す');
+      expect(suggestion?.reading).toBe('はなす');
+    });
+
+    it('falls back to derivation when lemmaReading is blank', () => {
+      const suggestion = suggestionFromToken(
+        {
+          surface: '見つけ',
+          start: 0,
+          end: 3,
+          lemma: '見つける',
+          reading: 'みつけ',
+          lemmaReading: '',
+          pos: '動詞',
+        },
+        japanese,
+      );
+      expect(suggestion?.reading).toBe('みつける');
+    });
   });
 });

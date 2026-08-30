@@ -126,21 +126,31 @@ found `small` runs in ~2 GB RAM at ~6× realtime CPU there.
   STATUS "casual contractions that MFA's dictionary").
 - Per-segment `avg_logprob` becomes stage-1's confidence signal.
 
-### B. Full UniDic + inline accent/name lookup (stages 1, 4)
+### B. Dictionary-form reading + accent from UniDic (stages 1, 4)
 
-Swap `unidic-lite` → full `unidic` (~250 MB) in `readings.py`/`morphology.py`.
-Full UniDic separates `kanaBase` (dictionary reading) from `kana` (surface
-reading) cleanly **and** carries `aType` (pitch-accent class). Then:
+**Finding (2026-08-30):** `unidic-lite` *already* exposes `kanaBase` (the
+dictionary-form reading — 読ん→ヨム, not the surface ヨン) and `aType` (the
+pitch-accent nucleus mora). No need to swap to full `unidic` (~250 MB) —
+the mining service just wasn't reading those fields.
 
-- `morphology.py` emits dictionary form, dictionary reading, and accent
-  position directly → `deriveDictionaryReading` heuristic +
-  `fix-vocabulary-*-readings` + `merge-duplicate-vocabulary-items` +
-  `backfill-pitch-accent` become largely unnecessary for new mines.
-- Add JMnedict proper-noun reading check + Kanjium cross-check *inline*
-  (already implemented in `scripts/lib/jmnedict.ts` / `kanjiumPitch.ts`,
-  just post-hoc today).
-- `READING_OVERRIDES` (currently 1 entry) → a small curated table of
-  context-ambiguous readings (何 なに/なん, 方 かた/ほう, 今日 きょう/こんにち…).
+- **[done 2026-08-30]** `morphology.py` now emits `lemmaReading`
+  (`kata2hira(kanaBase)`) alongside the surface `reading`. Client
+  `suggestionFromToken` (`vocabularySuggestions.ts`) uses it verbatim,
+  falling back to `deriveDictionaryReading` only when it's blank (older
+  data). This is the case the whole `deriveDictionaryReading` +
+  `fix-vocabulary-reading-mismatches` + `fix-vocabulary-godan-readings`
+  chain existed to paper over — a *new* mine now gets 読む/よむ, 見つける/みつける,
+  行く/いく, 書く/かく right at import. `test_morphology.py`,
+  `vocabularySuggestions.test.ts`.
+- **remaining:** parse `aType` → `pitchAccentPositions` on the suggestion
+  (needs the "mining vs `backfill-pitch-accent` Kanjium authority" call —
+  who wins on disagreement, and whether the confirm flow carries it).
+- **remaining:** JMnedict proper-noun reading check + Kanjium cross-check
+  *inline* (both in `scripts/lib/` today, post-hoc). Bigger — needs the
+  datasets available to the Python service.
+- **maybe:** `READING_OVERRIDES` (1 entry) → a small curated table of
+  context-ambiguous readings (何 なに/なん, 方 かた/ほう…). Low frequency;
+  `kanaBase` doesn't help here (it's a fugashi-context problem).
 
 ### C. Retain source audio per book (stage 5)
 
@@ -202,8 +212,10 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      bucket, `source/{videoId}.opus`) so `source_cache.ensure` can restore
      from Storage instead of re-hitting YouTube if the box disk is wiped.
      Cloud-only table (like `wanikani_subjects`), client writes it at import.
-2. **B — full UniDic + inline lookups.** Server-only; measure the
-   reading/accent quality delta on one re-mined book vs its current state.
+2. **B — dictionary-form reading (`lemmaReading` from UniDic `kanaBase`).**
+   **[done 2026-08-30]** — the conjugation reading-mismatch class is fixed
+   at the source for new mines. `aType` pitch accent + inline JMnedict/Kanjium
+   still open (see slice B section).
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`
    range endpoint, transcript + segmentation panels with inline playback and
    waveform. Auto-captions still the text source at this point.

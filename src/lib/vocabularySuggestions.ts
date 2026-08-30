@@ -17,7 +17,14 @@ export interface MorphologyToken {
   start: number;
   end: number;
   lemma: string;
+  /** Reading of the surface (conjugated) form — for furigana over the text. */
   reading?: string;
+  /**
+   * Reading of the lemma (dictionary form) — UniDic's kanaBase, the reading
+   * the vocabulary suggestion wants. Present on mining/re-segment tokens;
+   * absent on older data, where `deriveDictionaryReading` recovers it.
+   */
+  lemmaReading?: string;
   pos?: string;
 }
 
@@ -135,13 +142,17 @@ export function suggestionFromToken(
   const expression = token.lemma.trim() || token.surface;
   const pos = token.pos?.trim() ?? '';
   const surfaceReading = token.reading?.trim() ?? '';
+  // The tokenizer's own dictionary-form reading (UniDic kanaBase) when it has
+  // one; otherwise derive it from the surface reading + lemma.
+  const lemmaReading = token.lemmaReading?.trim();
   return {
     id: createId('vsug'),
     surface: token.surface,
     start: token.start,
     end: token.end,
     expression,
-    reading: deriveDictionaryReading(token.surface, surfaceReading, expression),
+    reading:
+      lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression),
     pos,
     source: 'morphology',
     selectedByDefault: isContentPos(pos),

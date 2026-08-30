@@ -1,6 +1,24 @@
 # Status
 
-Last updated: 2026-08-30 (Mining pipeline v2 slice C — retained source
+Last updated: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
+reading from the tokenizer. `unidic-lite` already exposes `kanaBase` (the
+lemma's reading — 読ん→ヨム, not the surface ヨン) and `aType` (pitch
+accent); the mining service just wasn't reading them. `morphology.py` now
+emits `lemmaReading` (`kata2hira(kanaBase)`) on every `MorphemeToken`
+alongside the surface `reading`; `suggestionFromToken`
+(`vocabularySuggestions.ts`) uses it verbatim, falling back to
+`deriveDictionaryReading` only when blank (older data). This is the case
+the whole `deriveDictionaryReading` + `fix-vocabulary-reading-mismatches` +
+`fix-vocabulary-godan-readings` chain existed to paper over — a new mine
+now gets 読む/よむ, 見つける/みつける, 行く/いく right at import. `lemmaReading`
+threaded through `MorphemeToken` (py), `morphemeTokenSchema` /
+`packageTokenSchema` (ts zod). Also fixed the 2 First Day at Work
+auto-caption translations (「はい。」/「ありがとうございます。」 had adjacent-cue
+bleed). Tests: `test_morphology.py` +2, `vocabularySuggestions.test.ts`
++2 — 58 py / 1028 ts green. Deployed. Still open in slice B: `aType` →
+`pitchAccentPositions`, inline JMnedict/Kanjium.
+
+Before that: 2026-08-30 (Mining pipeline v2 slice C — retained source
 audio. Design: `docs/mining-pipeline-v2.md`. A mining job's downloaded
 source is swept after 2h, so a later re-segment / audio-repair re-cut from
 lossy fragment clips via `concatCut` — the path that produced the 18

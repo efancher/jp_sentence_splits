@@ -32,7 +32,12 @@ class MorphemeToken(BaseModel):
     start: int = Field(ge=0)
     end: int = Field(ge=1)
     lemma: str = Field(min_length=1)
+    # Reading of the *surface* form (conjugated), for furigana over the text.
     reading: str = ""
+    # Reading of the *lemma* (dictionary form), for the vocabulary suggestion —
+    # UniDic's kanaBase. "" when the tokenizer can't give one; the client then
+    # falls back to deriving it from `reading` + `lemma`.
+    lemmaReading: str = ""
     pos: str = ""
 
 
