@@ -177,6 +177,20 @@ function SubjectSummary({ subject }: { subject: StudyItemDebugSubject }) {
       </div>
     );
   }
+  if (subject.kind === 'sentenceVocabulary') {
+    return (
+      <>
+        <div className="jp jp-lg">{subject.sentence.japanese}</div>
+        <div className="muted">
+          {subject.vocabularyItem.expression}
+          {subject.surfaceForm && subject.surfaceForm !== subject.vocabularyItem.expression
+            ? ` → ${subject.surfaceForm}`
+            : null}
+          {subject.vocabularyItem.meaning ? ` · ${subject.vocabularyItem.meaning}` : null}
+        </div>
+      </>
+    );
+  }
   return <p className="muted">Subject not found (may have been deleted).</p>;
 }
 

@@ -13,11 +13,6 @@ import {
   getDb,
   updateSettings,
 } from '../src/db/repository';
-import {
-  conjugate,
-  conjugationFormsForWordClass,
-  type ConjugationWordClass,
-} from '../src/lib/conjugation';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId, hashString } from '../src/lib/ids';
@@ -30,31 +25,6 @@ import {
 } from '../src/lib/pitchAccentShape';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
-
-/**
- * Mirrors ReviewPage's private pickTransformationTarget (not exported —
- * this file only imports the page component, matching this suite's
- * existing convention) so tests can assert against whichever form the
- * per-word hash actually picks, rather than assuming it's always plain
- * past now that the quizzed form varies by word (see ReviewPage.tsx).
- */
-function expectedTransformation(
-  expression: string,
-  reading: string,
-  vocabularyItemId: string,
-  wordClass: ConjugationWordClass,
-) {
-  const forms = conjugationFormsForWordClass(wordClass);
-  const startIndex = Number.parseInt(hashString(vocabularyItemId), 16) % forms.length;
-  for (let offset = 0; offset < forms.length; offset += 1) {
-    const form = forms[(startIndex + offset) % forms.length]!;
-    const target = conjugate(expression, reading, wordClass, form.key);
-    if (!target) continue;
-    if (target.expression === expression && target.reading === reading) continue;
-    return { formLabel: form.label, target };
-  }
-  throw new Error('No usable conjugation form found for test fixture');
-}
 
 // Mirrors ReviewPage's private PITCH_ACCENT_PATTERN_LABELS (not exported,
 // same "this file only imports the page component" convention noted above).
@@ -612,7 +582,19 @@ describe('ReviewPage', () => {
     expect(review?.expectedAnswer).toBe('よむ');
   });
 
-  it('renders a sentence-transformation card for a conjugable vocabulary item and checks the typed conjugated reading (Phase 7.9)', async () => {
+  const PAST_DUE_FSRS_STATE = {
+    due: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    stability: 1,
+    difficulty: 1,
+    elapsedDays: 0,
+    scheduledDays: 0,
+    learningSteps: 0,
+    reps: 1,
+    lapses: 0,
+    state: 'review' as const,
+  };
+
+  it('lazily seeds a contextual conjugation card for the form the sentence uses, and records the review', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
@@ -627,32 +609,31 @@ describe('ReviewPage', () => {
       createdAt: now,
       updatedAt: now,
     });
+    await db.sentences.update('sent-1', { japanese: '友達と話して、帰った。' });
     await db.sentenceVocabulary.add({
       id: 'sv-hanasu',
       sentenceId: 'sent-1',
       vocabularyItemId: 'vocab-hanasu',
-      surfaceForm: '話す',
+      // Read here in te-form — that, not some hashed form, is what the card asks.
+      surfaceForm: '話して',
       createdAt: now,
       updatedAt: now,
     });
-    // Suppress reading_retrieval/cloze/reading_production so only
-    // sentence_transformation seeds for this word.
+    // Suppress reading_retrieval/cloze/reading_production so only the
+    // conjugation card seeds for this word (and mark the word proficient so
+    // the sentence passes the Phase 7.11 full-review gate).
     await suppressVocabularyActivityTypes('vocab-hanasu');
-
-    const { formLabel, target } = expectedTransformation('話す', 'はなす', 'vocab-hanasu', 'godan');
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText(`Conjugate to: ${formLabel}`);
-    expect(screen.getByText('話す')).toBeInTheDocument();
+    await screen.findByText('Produce: Te-form');
+    expect(screen.getByText('Dictionary form: 話す')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Type the conjugated reading'), target.reading);
+    await user.type(screen.getByLabelText('Type the reading of the te-form'), 'はなして');
     await user.click(screen.getByRole('button', { name: 'Check' }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
-    expect(screen.getByText(target.expression)).toBeInTheDocument();
-    expect(screen.getByText(target.reading)).toBeInTheDocument();
     expect(screen.getByText('to speak')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Good' }));
@@ -661,96 +642,187 @@ describe('ReviewPage', () => {
       expect(await db.reviews.count()).toBe(1);
     });
     const [review] = await db.reviews.toArray();
-    expect(review?.responseRaw).toBe(target.reading);
-    expect(review?.expectedAnswer).toBe(target.reading);
+    expect(review?.responseRaw).toBe('はなして');
+    expect(review?.expectedAnswer).toBe('はなして');
 
-    const studyItems = await db.studyItems
-      .where('subjectId')
-      .equals('vocab-hanasu')
-      .toArray();
-    const transformationItem = studyItems.find(
+    const seeded = (await db.studyItems.toArray()).find(
       (item) => item.activityType === 'sentence_transformation',
     );
-    expect(transformationItem?.subjectType).toBe('vocabularyItem');
+    expect(seeded?.subjectType).toBe('sentenceVocabulary');
+    expect(seeded?.subjectId).toBe('sv-hanasu');
   });
 
-  it('quizzes a different word on whichever form its own id hashes to, deterministically', async () => {
+  it('schedules one conjugation card per encounter — same verb, two sentences, two forms', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
 
+    await db.sentences.update('sent-1', { japanese: '友達と話して、帰った。' });
+    await db.sentences.add({
+      id: 'sent-2',
+      normalizedKey: 'sent-2',
+      japanese: '昨日、先生と話した。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I spoke with the teacher yesterday.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 1,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-2',
+      bookId: 'book-1',
+      sentenceId: 'sent-2',
+      position: 1,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 'sent-2',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-2');
+
     await db.vocabularyItems.add({
-      id: 'vocab-tabeta',
-      expression: '食べる',
-      reading: 'たべる',
-      meaning: 'to eat',
-      partOfSpeech: 'v1',
+      id: 'vocab-hanasu',
+      expression: '話す',
+      reading: 'はなす',
+      meaning: 'to speak',
+      partOfSpeech: 'v5s; vt',
       createdAt: now,
       updatedAt: now,
     });
-    await db.sentenceVocabulary.add({
-      id: 'sv-tabeta',
-      sentenceId: 'sent-1',
-      vocabularyItemId: 'vocab-tabeta',
-      surfaceForm: '食べる',
-      createdAt: now,
-      updatedAt: now,
-    });
-    await suppressVocabularyActivityTypes('vocab-tabeta');
+    await db.sentenceVocabulary.bulkAdd([
+      {
+        id: 'sv-hanasu-te',
+        sentenceId: 'sent-1',
+        vocabularyItemId: 'vocab-hanasu',
+        surfaceForm: '話して',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sv-hanasu-ta',
+        sentenceId: 'sent-2',
+        vocabularyItemId: 'vocab-hanasu',
+        surfaceForm: '話した',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await suppressVocabularyActivityTypes('vocab-hanasu');
 
-    const { formLabel, target } = expectedTransformation(
-      '食べる',
-      'たべる',
-      'vocab-tabeta',
-      'ichidan',
-    );
+    // Both occurrences pre-scheduled and due, so both surface without
+    // fighting the lazy-seed new-card limiter.
+    await db.studyItems.bulkAdd([
+      {
+        id: 'si-conj-te',
+        subjectType: 'sentenceVocabulary',
+        subjectId: 'sv-hanasu-te',
+        activityType: 'sentence_transformation',
+        fsrsState: PAST_DUE_FSRS_STATE,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'si-conj-ta',
+        subjectType: 'sentenceVocabulary',
+        subjectId: 'sv-hanasu-ta',
+        activityType: 'sentence_transformation',
+        fsrsState: { ...PAST_DUE_FSRS_STATE, due: new Date(Date.now() - 1000).toISOString() },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
 
+    const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText(`Conjugate to: ${formLabel}`);
-    expect(screen.getByLabelText('Type the conjugated reading')).toBeInTheDocument();
-
-    // Confirms the pick is stable across a fresh mount too — same word,
-    // same hash, same form, not re-rolled on every render.
-    const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Type the conjugated reading'), target.reading);
+    // Two separately-scheduled cards, one per encounter — each quizzing the
+    // form that its own sentence used, not a shared/hashed one. Te-form is
+    // due earlier, so it comes first; completing it reveals the past-form
+    // card for the other sentence.
+    await screen.findByText('Produce: Te-form');
+    await user.type(screen.getByLabelText('Type the reading of the te-form'), 'はなして');
     await user.click(screen.getByRole('button', { name: 'Check' }));
-    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await screen.findByText('Produce: Plain past');
+
+    const conjugationItems = (await db.studyItems.toArray()).filter(
+      (item) => item.activityType === 'sentence_transformation',
+    );
+    expect(conjugationItems.map((item) => item.subjectId).sort()).toEqual([
+      'sv-hanasu-ta',
+      'sv-hanasu-te',
+    ]);
+    expect(conjugationItems.every((item) => item.subjectType === 'sentenceVocabulary')).toBe(true);
   });
 
-  it('does not seed a sentence-transformation card for a non-conjugable (or non-conjugating) vocabulary item', async () => {
+  it('gives no conjugation card to a non-conjugable word or a stacked/compound surface', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
 
-    await db.vocabularyItems.add({
-      id: 'vocab-hon',
-      expression: '本',
-      reading: 'ほん',
-      meaning: 'book',
-      partOfSpeech: 'n',
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.sentenceVocabulary.add({
-      id: 'sv-hon',
-      sentenceId: 'sent-1',
-      vocabularyItemId: 'vocab-hon',
-      surfaceForm: '本',
-      createdAt: now,
-      updatedAt: now,
-    });
+    await db.vocabularyItems.bulkAdd([
+      {
+        id: 'vocab-hon',
+        expression: '本',
+        reading: 'ほん',
+        meaning: 'book',
+        partOfSpeech: 'n',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'vocab-taberu',
+        expression: '食べる',
+        reading: 'たべる',
+        meaning: 'to eat',
+        partOfSpeech: 'v1',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.sentenceVocabulary.bulkAdd([
+      {
+        id: 'sv-hon',
+        sentenceId: 'sent-1',
+        vocabularyItemId: 'vocab-hon',
+        surfaceForm: '本',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sv-taberu',
+        sentenceId: 'sent-1',
+        vocabularyItemId: 'vocab-taberu',
+        // A stacked auxiliary chain — not a single form the engine produces.
+        surfaceForm: '食べられなかった',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByText('Reveal reading');
     await waitFor(async () => {
-      const studyItems = await db.studyItems
-        .where('subjectId')
-        .equals('vocab-hon')
-        .toArray();
+      const studyItems = await db.studyItems.toArray();
       expect(studyItems.length).toBeGreaterThan(0);
       expect(
         studyItems.some((item) => item.activityType === 'sentence_transformation'),

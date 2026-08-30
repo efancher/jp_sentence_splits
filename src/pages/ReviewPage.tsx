@@ -19,6 +19,7 @@ import {
   getDb,
   getDueStudyItems,
   getSentenceFullReviewReadiness,
+  getVocabularyOccurrenceCandidates,
   getVocabularyTargetCandidates,
   pickContextSentenceForGrammarPattern,
   readSettings,
@@ -26,6 +27,7 @@ import {
   reportCardIssue,
   settleSessionStep,
   type ConfusionPairCandidate,
+  type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
@@ -44,9 +46,9 @@ import type {
 } from '../domain/types';
 import {
   conjugate,
-  conjugationFormsForWordClass,
   conjugationWordClassFromPartOfSpeech,
-  type ConjugatedForm,
+  identifyConjugationForm,
+  type ConjugationForm,
   type ConjugationWordClass,
 } from '../lib/conjugation';
 import {
@@ -117,26 +119,25 @@ const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
 const CONFUSION_ACTIVITY_TYPES: StudyActivityType[] = ['contrastive'];
 
 /**
- * Sentence transformation (Phase 7.9, sentence-transformations slice, docs
- * brief §12): subjectType stays `vocabularyItem` (a fourth activity type
- * alongside reading_retrieval/cloze/reading_production for the same
- * subject, distinguished by activityType like those three already are from
- * each other) — but eligibility is narrower: only words whose
- * `partOfSpeech` maps to a conjugation word class (see
- * conjugationWordClassFromPartOfSpeech, src/lib/conjugation.ts) and whose
- * conjugated form actually differs from the dictionary form. The first
- * slice fixed every word to a single form (plain past); which form gets
- * quizzed is now picked per word — deterministically, from a hash of the
- * vocabulary item's id, so the same word always asks the same form (stable
- * across reloads/re-renders) while different words spread across the 13
- * verb/10 adjective forms `conjugationFormsForWordClass` already exposes —
- * see pickTransformationTarget.
+ * Contextual conjugation (docs/STATUS.md — supersedes the Phase 7.9b
+ * "sentence transformation" design and its per-word-hash follow-up). One
+ * card per *occurrence* of a conjugable word in a sentence — subjectType
+ * `sentenceVocabulary`, subjectId a `SentenceVocabulary.id` — quizzing the
+ * form that sentence actually uses. A verb read in a te-form sentence and a
+ * conditional sentence gets one card for each; a form never encountered is
+ * never drilled. The `activityType` string stays `'sentence_transformation'`
+ * (so `classifyReviewError`, the session planner's practice pool, and
+ * `ACTIVITY_LABELS` keep working unchanged). Eligibility: `partOfSpeech`
+ * maps to a conjugation word class *and* `identifyConjugationForm`
+ * (src/lib/conjugation.ts) recognizes the surface as exactly one form —
+ * stacked/compound surfaces (話している, 食べられなかった) get no card. See
+ * getSentenceConjugationCandidates.
  */
-const TRANSFORMATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
+const CONJUGATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformation'];
 
 /**
  * Pitch-accent review (docs/STATUS.md): subjectType stays `vocabularyItem`,
- * like reading_retrieval/cloze/reading_production/sentence_transformation —
+ * like reading_retrieval/cloze/reading_production —
  * but eligibility is narrower still: only words with dictionary-backed
  * `pitchAccentPositions` data (Kanjium, via
  * scripts/backfill-pitch-accent.ts — a subset of confirmed vocabulary, not
@@ -194,73 +195,68 @@ const ACTIVITY_LABELS: Record<string, string> = {
   reading_production: 'Reading production',
   listening: 'Listening',
   contrastive: 'Contrastive pair',
-  sentence_transformation: 'Sentence transformation',
+  sentence_transformation: 'Conjugation in context',
   pitch_accent: 'Pitch accent',
   grammar_comprehension: 'Grammar comprehension',
   grammar_completion: 'Grammar completion',
   grammar_contrast: 'Grammar contrast',
 };
 
-interface SentenceTransformationCandidate {
+interface SentenceConjugationCandidate {
+  link: VocabularyOccurrenceCandidate['link'];
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
   wordClass: ConjugationWordClass;
-  target: ConjugatedForm;
-  formLabel: string;
+  /** The form this occurrence is in, per identifyConjugationForm. */
+  form: ConjugationForm;
+  /** Readings accepted as correct — the in-context inflected reading, and the engine's own as a fallback. */
+  expectedReadings: string[];
 }
 
 /**
- * Picks which conjugation form a word gets quizzed on: starts at a form
- * index derived from a stable hash of the vocabulary item's id (so the
- * same word always picks the same form), then tries the remaining forms in
- * order if the chosen one doesn't actually conjugate to anything (some
- * forms aren't implemented for every word class) or produces no visible
- * change from the dictionary form — same skip conditions the original
- * fixed-to-plain-past version used, just no longer giving up after one try.
+ * Pure filter over per-occurrence vocabulary candidates (no DB access) — an
+ * occurrence is a candidate only if its `partOfSpeech` maps to a conjugation
+ * word class and `identifyConjugationForm` recognizes the surface as exactly
+ * one form (i.e. it's a single conjugation step off the dictionary form, not
+ * a stacked/compound surface). See CONJUGATION_ACTIVITY_TYPES.
  */
-function pickTransformationTarget(
-  vocabularyItem: VocabularyItem,
-  wordClass: ConjugationWordClass,
-): { target: ConjugatedForm; formLabel: string } | null {
-  const forms = conjugationFormsForWordClass(wordClass);
-  if (forms.length === 0) return null;
-  const startIndex = Number.parseInt(hashString(vocabularyItem.id), 16) % forms.length;
-  for (let offset = 0; offset < forms.length; offset += 1) {
-    const form = forms[(startIndex + offset) % forms.length]!;
-    const target = conjugate(
+function getSentenceConjugationCandidates(
+  occurrences: VocabularyOccurrenceCandidate[],
+): SentenceConjugationCandidate[] {
+  const result: SentenceConjugationCandidate[] = [];
+  for (const occurrence of occurrences) {
+    const { vocabularyItem, sentence, surfaceForm } = occurrence;
+    const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
+    if (!wordClass) continue;
+    const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
+    const identified = identifyConjugationForm(
       vocabularyItem.expression,
       vocabularyItem.reading,
       wordClass,
-      form.key,
+      surfaceForm,
+      inContextReading ?? undefined,
     );
-    if (!target) continue;
-    if (target.expression === vocabularyItem.expression && target.reading === vocabularyItem.reading) {
-      continue;
-    }
-    return { target, formLabel: form.label };
-  }
-  return null;
-}
-
-/**
- * Pure filter over already-fetched vocabulary-target candidates (no DB
- * access needed, unlike getConfusionPairCandidates) — a word is a
- * candidate only if its partOfSpeech is conjugable and pickTransformationTarget
- * finds a usable form for it.
- */
-function getSentenceTransformationCandidates(
-  candidates: VocabularyTargetCandidate[],
-): SentenceTransformationCandidate[] {
-  const result: SentenceTransformationCandidate[] = [];
-  for (const candidate of candidates) {
-    const wordClass = conjugationWordClassFromPartOfSpeech(
-      candidate.vocabularyItem.partOfSpeech,
-    );
-    if (!wordClass) continue;
-    const picked = pickTransformationTarget(candidate.vocabularyItem, wordClass);
-    if (!picked) continue;
-    result.push({ ...candidate, wordClass, target: picked.target, formLabel: picked.formLabel });
+    if (!identified) continue;
+    const engineReading = conjugate(
+      vocabularyItem.expression,
+      vocabularyItem.reading,
+      wordClass,
+      identified.form.key,
+    )?.reading;
+    const expectedReadings = [...new Set([inContextReading, engineReading].filter(
+      (value): value is string => !!value,
+    ))];
+    if (expectedReadings.length === 0) continue;
+    result.push({
+      link: occurrence.link,
+      vocabularyItem,
+      sentence,
+      surfaceForm,
+      wordClass,
+      form: identified.form,
+      expectedReadings,
+    });
   }
   return result;
 }
@@ -279,7 +275,7 @@ interface PitchAccentReviewCandidate {
 
 /**
  * Pure filter over already-fetched vocabulary-target candidates (no DB
- * access needed), mirroring getSentenceTransformationCandidates's shape —
+ * access needed), mirroring getSentenceConjugationCandidates's shape —
  * a word is a candidate only if it has dictionary pitch-accent data and a
  * segmentable reading. Choice order is shuffled by a stable per-word hash
  * (same sort-key mechanic buildGrammarCompletionChoices uses for its own
@@ -346,8 +342,8 @@ interface QueueCard {
   audio?: SentenceAudio;
   /** Set only for contrastive-pair cards (Phase 7.7). */
   confusionPair?: ConfusionPairCandidate;
-  /** Set only for sentence-transformation cards (Phase 7.9). */
-  transformation?: SentenceTransformationCandidate;
+  /** Set only for contextual conjugation cards (per-occurrence sentence_transformation). */
+  conjugation?: SentenceConjugationCandidate;
   /** Set only for pitch-accent cards. */
   pitchAccent?: PitchAccentReviewCandidate;
   /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
@@ -389,6 +385,13 @@ interface ActivityDescriptor {
   subjectId: (candidate: unknown) => string;
   buildCard: (studyItem: StudyItem, candidate: unknown) => QueueCard;
   ensure: (candidate: unknown, activityType: StudyActivityType) => Promise<StudyItem>;
+  /**
+   * When set, the candidate's card is a "full sentence" card subject to
+   * Phase 7.11 gating — withheld (from both seeding and the due queue) while
+   * that sentence isn't ready for full review. Returns the sentence id to
+   * check, or undefined to never gate this candidate.
+   */
+  gateSentenceId?: (candidate: unknown) => string | undefined;
 }
 
 /**
@@ -406,6 +409,7 @@ function defineActivityDescriptor<C>(descriptor: {
   subjectId: (candidate: C) => string;
   buildCard: (studyItem: StudyItem, candidate: C) => QueueCard;
   ensure: (candidate: C, activityType: StudyActivityType) => Promise<StudyItem>;
+  gateSentenceId?: (candidate: C) => string | undefined;
 }): ActivityDescriptor {
   return descriptor as unknown as ActivityDescriptor;
 }
@@ -425,8 +429,8 @@ interface ReviewScope {
   existingAudioItems: StudyItem[];
   confusionPairCandidates: ConfusionPairCandidate[];
   existingConfusionItems: StudyItem[];
-  sentenceTransformationCandidates: SentenceTransformationCandidate[];
-  existingTransformationItems: StudyItem[];
+  sentenceConjugationCandidates: SentenceConjugationCandidate[];
+  existingConjugationItems: StudyItem[];
   pitchAccentCandidates: PitchAccentReviewCandidate[];
   existingPitchAccentItems: StudyItem[];
   grammarCandidates: GrammarReviewCandidate[];
@@ -445,6 +449,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       subjectId: (sentence) => sentence.id,
       buildCard: (studyItem, sentence) => ({ studyItem, sentence }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
+      gateSentenceId: (sentence) => sentence.id,
     }),
     defineActivityDescriptor<VocabularyTargetCandidate>({
       key: 'vocabulary',
@@ -488,19 +493,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       ensure: (candidate, activityType) =>
         ensureStudyItem('vocabularyConfusion', candidate.confusion.id, activityType),
     }),
-    defineActivityDescriptor<SentenceTransformationCandidate>({
-      key: 'transformation',
-      activityTypes: TRANSFORMATION_ACTIVITY_TYPES,
-      candidates: scope.sentenceTransformationCandidates,
-      existingItems: scope.existingTransformationItems,
-      subjectId: (candidate) => candidate.vocabularyItem.id,
+    defineActivityDescriptor<SentenceConjugationCandidate>({
+      key: 'conjugation',
+      activityTypes: CONJUGATION_ACTIVITY_TYPES,
+      candidates: scope.sentenceConjugationCandidates,
+      existingItems: scope.existingConjugationItems,
+      subjectId: (candidate) => candidate.link.id,
       buildCard: (studyItem, candidate) => ({
         studyItem,
         sentence: candidate.sentence,
-        transformation: candidate,
+        conjugation: candidate,
       }),
       ensure: (candidate, activityType) =>
-        ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+        ensureStudyItem('sentenceVocabulary', candidate.link.id, activityType),
+      gateSentenceId: (candidate) => candidate.sentence.id,
     }),
     defineActivityDescriptor<PitchAccentReviewCandidate>({
       key: 'pitchAccent',
@@ -701,21 +707,21 @@ export function ReviewPage() {
         confusionPairIdSet.has(item.subjectId),
     );
 
-    const sentenceTransformationCandidates = getSentenceTransformationCandidates(
-      vocabularyTargetCandidates,
+    const sentenceConjugationCandidates = getSentenceConjugationCandidates(
+      await getVocabularyOccurrenceCandidates(sentenceIds),
     );
-    const transformationVocabularyItemIdSet = new Set(
-      sentenceTransformationCandidates.map((candidate) => candidate.vocabularyItem.id),
+    const conjugationLinkIdSet = new Set(
+      sentenceConjugationCandidates.map((candidate) => candidate.link.id),
     );
-    const existingTransformationItems = (
+    const existingConjugationItems = (
       await db.studyItems
         .where('activityType')
-        .anyOf(TRANSFORMATION_ACTIVITY_TYPES)
+        .anyOf(CONJUGATION_ACTIVITY_TYPES)
         .toArray()
     ).filter(
       (item) =>
-        item.subjectType === 'vocabularyItem' &&
-        transformationVocabularyItemIdSet.has(item.subjectId),
+        item.subjectType === 'sentenceVocabulary' &&
+        conjugationLinkIdSet.has(item.subjectId),
     );
 
     const pitchAccentCandidates = getPitchAccentReviewCandidates(
@@ -835,8 +841,8 @@ export function ReviewPage() {
       existingAudioItems,
       confusionPairCandidates,
       existingConfusionItems,
-      sentenceTransformationCandidates,
-      existingTransformationItems,
+      sentenceConjugationCandidates,
+      existingConjugationItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
       grammarCandidates,
@@ -882,6 +888,18 @@ export function ReviewPage() {
         ),
       );
 
+      // Phase 7.11 gating: a "full sentence" card (see descriptor.gateSentenceId
+      // — the sentence-subject cards, and the contextual conjugation card,
+      // which is per-sentence-occurrence) is withheld while its sentence isn't
+      // ready for full review. deferUnreadySentenceReviews above pushes out
+      // existing sentence-subject due items; this check also covers the
+      // conjugation card (no defer pass of its own) and is belt-and-braces for
+      // sentence cards.
+      const isGatedOut = (descriptor: ActivityDescriptor, candidate: unknown): boolean => {
+        const gateSentenceId = descriptor.gateSentenceId?.(candidate);
+        return !!gateSentenceId && sentenceReadiness.get(gateSentenceId) === false;
+      };
+
       const due: QueueCard[] = [];
       descriptors.forEach((descriptor, index) => {
         const byId = new Map(
@@ -889,7 +907,9 @@ export function ReviewPage() {
         );
         for (const studyItem of dueByDescriptor[index]!) {
           const candidate = byId.get(studyItem.subjectId);
-          if (candidate) due.push(descriptor.buildCard(studyItem, candidate));
+          if (candidate && !isGatedOut(descriptor, candidate)) {
+            due.push(descriptor.buildCard(studyItem, candidate));
+          }
         }
       });
       due.sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
@@ -921,9 +941,10 @@ export function ReviewPage() {
         for (const candidate of descriptor.candidates) {
           const subjectId = descriptor.subjectId(candidate);
           // A not-yet-ready sentence (Phase 7.11) never gets a *new*
-          // full-sentence study item lazily seeded — existing ones are
-          // handled by deferUnreadySentenceReviews above.
-          if (descriptor.key === 'sentence' && sentenceReadiness.get(subjectId) === false) {
+          // full-sentence study item lazily seeded (existing ones are
+          // handled above) — same rule for the per-occurrence conjugation
+          // card, see descriptor.gateSentenceId.
+          if (isGatedOut(descriptor, candidate)) {
             continue;
           }
           for (const activityType of descriptor.activityTypes) {
@@ -1041,8 +1062,8 @@ export function ReviewPage() {
     try {
       const expectedAnswerValue =
         typedResponseExpected ??
-        (current.transformation
-          ? current.transformation.target.reading
+        (current.conjugation
+          ? current.conjugation.expectedReadings[0]
           : current.pitchAccent
             ? current.pitchAccent.correctLabel
             : current.grammar
@@ -1254,13 +1275,14 @@ export function ReviewPage() {
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
               />
-            ) : current.transformation ? (
-              <SentenceTransformationCard
+            ) : current.conjugation ? (
+              <SentenceConjugationCard
                 key={current.studyItem.id}
-                candidate={current.transformation}
+                candidate={current.conjugation}
                 revealed={revealed}
-                onCheck={(value) => {
+                onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
+                  setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
               />
@@ -1630,50 +1652,54 @@ function ReadingProductionCard({
 }
 
 /**
- * Sentence transformation (Phase 7.9, sentence-transformations slice): the
- * "production ladder"'s second rung — instead of recalling the dictionary
- * reading, the learner has to produce a specific conjugated form (which
- * form varies per word, see pickTransformationTarget). Same typed-input
- * + check + reveal + self-rate shape as ReadingProductionCard, but checks
- * against the pre-computed target reading (candidate.target.reading) and
- * reveals both the conjugated expression and reading on top of the usual
- * meaning, since the conjugated kanji form is itself part of the answer a
- * learner would want to see, unlike reading_production where the dictionary
- * expression was already shown.
+ * Contextual conjugation (docs/STATUS.md — supersedes Phase 7.9b's per-word
+ * "sentence transformation"): the sentence is shown with the target word
+ * blanked, the dictionary form and the form-name are given, and the learner
+ * types the reading of the form *this sentence uses*. The form is never
+ * forced — it's whichever one `identifyConjugationForm` found this occurrence
+ * to be in (see getSentenceConjugationCandidates). Same typed-input + check
+ * + reveal + self-rate shape as ReadingProductionCard; accepts either the
+ * in-context inflected reading or the engine's own (candidate.expectedReadings),
+ * and `onCheck`'s second argument is the reading actually matched, threaded up
+ * as `Review.expectedAnswer` (see `typedResponseExpected`).
  */
-function SentenceTransformationCard({
+function SentenceConjugationCard({
   candidate,
   revealed,
   onCheck,
 }: {
-  candidate: SentenceTransformationCandidate;
+  candidate: SentenceConjugationCandidate;
   revealed: boolean;
-  onCheck: (typedReading: string) => void;
+  onCheck: (typedReading: string, gradedAgainst: string) => void;
 }) {
   const [value, setValue] = useState('');
   const [wasCorrect, setWasCorrect] = useState(false);
-  const { vocabularyItem, sentence, surfaceForm, target, formLabel } = candidate;
-  const [before, dictionaryForm, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  const { vocabularyItem, sentence, surfaceForm, form, expectedReadings } = candidate;
+  const [before, , after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
 
   return (
     <>
       <div className="jp jp-lg">
         {before}
-        <mark>{dictionaryForm || surfaceForm}</mark>
+        <mark>{revealed ? surfaceForm : '_____'}</mark>
         {after}
       </div>
-      <div className="muted">Conjugate to: {formLabel}</div>
+      <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
+      <div className="muted">Produce: {form.label}</div>
       {!revealed ? (
         <form
           className="row"
           onSubmit={(event) => {
             event.preventDefault();
-            setWasCorrect(isReadingAnswerCorrect(value, target.reading));
-            onCheck(value);
+            const matched = expectedReadings.find((reading) =>
+              isReadingAnswerCorrect(value, reading),
+            );
+            setWasCorrect(Boolean(matched));
+            onCheck(value, matched ?? expectedReadings[0]!);
           }}
         >
           <label>
-            Type the conjugated reading
+            Type the reading of the {form.label.toLowerCase()}
             <input
               type="text"
               value={value}
@@ -1691,8 +1717,8 @@ function SentenceTransformationCard({
               You typed: <span className="jp">{value.trim() || '(blank)'}</span>
             </div>
           ) : null}
-          <div className="jp">{target.expression}</div>
-          <div className="jp">{target.reading}</div>
+          <div className="jp">{surfaceForm}</div>
+          <div className="jp">{expectedReadings[0]}</div>
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}

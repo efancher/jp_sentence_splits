@@ -3028,6 +3028,46 @@ export async function getVocabularyTargetCandidates(
   return candidates;
 }
 
+export interface VocabularyOccurrenceCandidate {
+  link: SentenceVocabulary;
+  vocabularyItem: VocabularyItem;
+  sentence: Sentence;
+  surfaceForm: string;
+}
+
+/**
+ * Like `getVocabularyTargetCandidates`, but one entry per *occurrence* (per
+ * `surfaceForm`-bearing `sentence_vocabulary` link) rather than one per
+ * distinct word. The contextual conjugation card (docs/STATUS.md) schedules
+ * a separate study item for each occurrence — a verb read in three sentences
+ * is three cards — so it needs every link, not just the first per word.
+ * Still bounded: only surface-form-bearing links, only within `sentenceIds`.
+ */
+export async function getVocabularyOccurrenceCandidates(
+  sentenceIds: string[],
+): Promise<VocabularyOccurrenceCandidate[]> {
+  if (sentenceIds.length === 0) return [];
+  const db = getDb();
+  const links = (
+    await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
+  ).filter((link) => !!link.surfaceForm);
+  if (links.length === 0) return [];
+
+  const [vocabularyItems, sentences] = await Promise.all([
+    db.vocabularyItems.bulkGet(links.map((link) => link.vocabularyItemId)),
+    db.sentences.bulkGet(links.map((link) => link.sentenceId)),
+  ]);
+
+  const candidates: VocabularyOccurrenceCandidate[] = [];
+  links.forEach((link, index) => {
+    const vocabularyItem = vocabularyItems[index];
+    const sentence = sentences[index];
+    if (!vocabularyItem || !sentence || !link.surfaceForm) return;
+    candidates.push({ link, vocabularyItem, sentence, surfaceForm: link.surfaceForm });
+  });
+  return candidates;
+}
+
 /**
  * Fetches the data `computeContextDiversity` (src/lib/maturity.ts) needs for
  * a set of sentence ids and calls it — the Dexie-querying half of maturity
@@ -3314,6 +3354,12 @@ export type StudyItemDebugSubject =
       grammarPattern: GrammarPattern;
       maturity: { diversity: ContextDiversity; level: MaturityLevel };
     }
+  | {
+      kind: 'sentenceVocabulary';
+      vocabularyItem: VocabularyItem;
+      sentence: Sentence;
+      surfaceForm: string | undefined;
+    }
   | { kind: 'unknown' };
 
 export interface StudyItemDebugInfo {
@@ -3382,6 +3428,22 @@ export async function getStudyItemDebugInfo(
           studyItem.fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS,
       });
       subject = { kind: 'grammarPattern', grammarPattern, maturity: { diversity, level } };
+    }
+  } else if (studyItem.subjectType === 'sentenceVocabulary') {
+    const link = await db.sentenceVocabulary.get(studyItem.subjectId);
+    if (link) {
+      const [vocabularyItem, sentence] = await Promise.all([
+        db.vocabularyItems.get(link.vocabularyItemId),
+        db.sentences.get(link.sentenceId),
+      ]);
+      if (vocabularyItem && sentence) {
+        subject = {
+          kind: 'sentenceVocabulary',
+          vocabularyItem,
+          sentence,
+          surfaceForm: link.surfaceForm,
+        };
+      }
     }
   }
 
@@ -4050,15 +4112,25 @@ async function buildReviewPriorityInputs(
   const grammarIds = studyItems
     .filter((item) => item.subjectType === 'grammarPattern')
     .map((item) => item.subjectId);
+  const occurrenceLinkIds = studyItems
+    .filter((item) => item.subjectType === 'sentenceVocabulary')
+    .map((item) => item.subjectId);
 
-  const [vocabLinks, grammarLinks] = await Promise.all([
+  const [vocabLinks, grammarLinks, occurrenceLinks] = await Promise.all([
     vocabIds.length
       ? db.sentenceVocabulary.where('vocabularyItemId').anyOf(vocabIds).toArray()
       : Promise.resolve([]),
     grammarIds.length
       ? db.sentenceGrammar.where('grammarPatternId').anyOf(grammarIds).toArray()
       : Promise.resolve([]),
+    occurrenceLinkIds.length
+      ? db.sentenceVocabulary.bulkGet(occurrenceLinkIds)
+      : Promise.resolve([]),
   ]);
+  const sentenceIdByOccurrenceLinkId = new Map<string, string>();
+  for (const link of occurrenceLinks) {
+    if (link) sentenceIdByOccurrenceLinkId.set(link.id, link.sentenceId);
+  }
   const sentenceIdsByVocabId = new Map<string, string[]>();
   for (const link of vocabLinks) {
     const list = sentenceIdsByVocabId.get(link.vocabularyItemId);
@@ -4076,7 +4148,12 @@ async function buildReviewPriorityInputs(
     .filter((item) => item.subjectType === 'sentence')
     .map((item) => item.subjectId);
   const allReferencedSentenceIds = [
-    ...new Set([...directSentenceIds, ...vocabLinks.map((l) => l.sentenceId), ...grammarLinks.map((l) => l.sentenceId)]),
+    ...new Set([
+      ...directSentenceIds,
+      ...vocabLinks.map((l) => l.sentenceId),
+      ...grammarLinks.map((l) => l.sentenceId),
+      ...sentenceIdByOccurrenceLinkId.values(),
+    ]),
   ];
   const referencedBookSentences = allReferencedSentenceIds.length
     ? await db.bookSentences.where('sentenceId').anyOf(allReferencedSentenceIds).toArray()
@@ -4124,7 +4201,10 @@ async function buildReviewPriorityInputs(
     if (item.subjectType === 'sentence') sentenceIds = [item.subjectId];
     else if (item.subjectType === 'vocabularyItem') sentenceIds = sentenceIdsByVocabId.get(item.subjectId) ?? [];
     else if (item.subjectType === 'grammarPattern') sentenceIds = sentenceIdsByGrammarId.get(item.subjectId) ?? [];
-    else sentenceIds = [];
+    else if (item.subjectType === 'sentenceVocabulary') {
+      const sentenceId = sentenceIdByOccurrenceLinkId.get(item.subjectId);
+      sentenceIds = sentenceId ? [sentenceId] : [];
+    } else sentenceIds = [];
     const diversity = diversityFor(sentenceIds);
 
     return {
