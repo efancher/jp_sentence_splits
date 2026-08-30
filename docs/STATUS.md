@@ -1,6 +1,22 @@
 # Status
 
-Last updated: 2026-08-30 (Mining pipeline v2 slice A — ASR transcript +
+Last updated: 2026-08-30 (Pitch-accent UniDic gap-fill + mining-review
+merge. (1) `unidic-lite` carries `aType` (accent nucleus mora, 0 = heiban);
+`MorphemeToken.accentType` now surfaces it (plain integer only).
+`scripts/backfill-vocabulary-pitch-accent-unidic.ts` (`npm run
+backfill:pitch-accent-unidic`) fills `pitch_accent_positions` for items
+Kanjium missed — but *after* `backfill-pitch-accent.ts` and only from a
+single dictionary-form content token with an agreeing reading and integer
+aType (proper nouns get a bogus "1"/"0" default → skipped; compounds' per-
+token aType ≠ the compound accent → skipped). Ran against production:
+Kanjium `--apply` caught 44 newly-unscored items, then UniDic filled 46 of
+the remaining 125 (先生[3], 教える[0], 今日きょう[1]…), 79 left blank.
+`tests/backfillPitchAccentUnidic.test.ts` (7), `test_morphology.py` +1.
+(2) `YouTubeMinePage` "+ Merge next" folds the following cue into the
+current one (`?through=` audio preview, Keep & clip spans the merged
+range). 67 py / 1035 ts.
+
+Before that: 2026-08-30 (Mining pipeline v2 slice A — ASR transcript +
 cue audio in review. Two things: (1) `shadowing-analysis-api` gained `POST
 /transcribe-source` (separate repo, deployed) — Whisper `small`, timed
 segments, a distinct lazily-loaded model from the `base` diagnostic

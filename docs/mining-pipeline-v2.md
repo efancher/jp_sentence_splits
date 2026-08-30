@@ -167,9 +167,12 @@ the mining service just wasn't reading those fields.
   chain existed to paper over — a *new* mine now gets 読む/よむ, 見つける/みつける,
   行く/いく, 書く/かく right at import. `test_morphology.py`,
   `vocabularySuggestions.test.ts`.
-- **remaining:** parse `aType` → `pitchAccentPositions` on the suggestion
-  (needs the "mining vs `backfill-pitch-accent` Kanjium authority" call —
-  who wins on disagreement, and whether the confirm flow carries it).
+- **[done 2026-08-30]** `aType` → pitch accent, but *not* in the import path
+  (`backfill-pitch-accent.ts` is fill-only-empty, so a mining-set accent
+  would wrongly outrank Kanjium). Instead `MorphemeToken.accentType` +
+  `scripts/backfill-vocabulary-pitch-accent-unidic.ts`, a gap-fill that runs
+  *after* Kanjium: single dictionary-form content token, reading agrees,
+  integer aType, no proper nouns. Filled 46 production items.
 - **remaining:** JMnedict proper-noun reading check + Kanjium cross-check
   *inline* (both in `scripts/lib/` today, post-hoc). Bigger — needs the
   datasets available to the Python service.
