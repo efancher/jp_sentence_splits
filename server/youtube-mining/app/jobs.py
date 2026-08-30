@@ -172,19 +172,29 @@ def _run_job(job: Job, url: str) -> None:
         job.status = "parsing"
         subtitle_dir = job.dir / "subtitles"
         caption_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
+        is_music = "Music" in (info.get("categories") or [])
 
         # A real (human) subtitle track beats Whisper — correct kanji, names,
         # no hallucination — and skips the slow ASR pass. YouTube's Japanese
         # auto-captions carry no sentence-final punctuation; a human track
-        # does, so punctuation density tells them apart.
-        if _looks_human_captioned(caption_cues):
+        # does, so punctuation density tells them apart. For a Music-category
+        # upload the caption track is the synced lyrics and Whisper would
+        # hallucinate over the instrumentation, so prefer captions there even
+        # without the punctuation signal.
+        if caption_cues and (is_music or _looks_human_captioned(caption_cues)):
             logger.info(
-                "Mining job %s: human caption track (%d cues), skipping ASR",
+                "Mining job %s: %s caption track (%d cues), skipping ASR",
                 job.id,
+                "lyrics" if is_music else "human",
                 len(caption_cues),
             )
-            job.stage = "Splitting sentences…"
-            raw_cues = [c.model_copy(update={"isAuto": False}) for c in caption_cues]
+            job.stage = "Reading lyrics…" if is_music else "Splitting sentences…"
+            keep_auto = is_music and not _looks_human_captioned(caption_cues)
+            raw_cues = (
+                caption_cues
+                if keep_auto
+                else [c.model_copy(update={"isAuto": False}) for c in caption_cues]
+            )
         else:
             job.stage = "Transcribing audio…"
             raw_cues = asr_client.transcribe_source(
@@ -200,12 +210,12 @@ def _run_job(job: Job, url: str) -> None:
                 job.stage = "Splitting sentences…"
                 raw_cues = caption_cues
 
-        # Punctuation-free text (song lyrics, some auto-captions ASR couldn't
-        # rescue) — skip the merge pass, which would otherwise fuse every
-        # line into one cue since none ends on 。
-        merge = _terminal_punct_ratio(raw_cues) >= 0.15
+        # Skip the merge pass for lyrics — a Music upload, or any transcript
+        # with almost no sentence-final punctuation, where merge_incomplete_cues
+        # would fuse every line into one cue since none ends on 。
+        merge = not is_music and _terminal_punct_ratio(raw_cues) >= 0.15
         if not merge:
-            logger.info("Mining job %s: no punctuation, keeping lines unmerged", job.id)
+            logger.info("Mining job %s: keeping lines unmerged (lyrics)", job.id)
         job.cues = resegment.resegment_cues(raw_cues, merge=merge)
         job.english_by_index = subtitles.load_parallel_text_from_dir(
             subtitle_dir, job.cues, language="en"
