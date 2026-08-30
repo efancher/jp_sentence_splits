@@ -534,7 +534,10 @@ export function ProgressiveShadowingPanel({
       ) : null}
 
       {stage === 'delayed' || stage === 'close' ? (
-        <div className="stack">
+        // Fixed footprint so the page doesn't jump as the controls below
+        // swap between record / loop / stop-loop, or as the rep counter
+        // ticks — on mobile a reflow here scrolls the sentence out of view.
+        <div className="stack" style={{ minHeight: '9rem' }}>
           {isLoopingReps ? (
             <div className="row" style={{ alignItems: 'center' }}>
               <button
@@ -545,11 +548,7 @@ export function ProgressiveShadowingPanel({
               >
                 ⏹ Stop loop
               </button>
-              <span className="muted">
-                {isRecording || isRequestingMic
-                  ? `Rep ${repCount} — shadow along…`
-                  : `Rep ${repCount} done — next one starting…`}
-              </span>
+              <span className="muted">Rep {repCount} — shadow along…</span>
             </div>
           ) : (
             <>
