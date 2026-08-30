@@ -107,20 +107,29 @@ the existing `VocabularyPicker`, run at mine time.
 ### A. ASR transcript (stage 1 primary; captions the fallback)
 
 **[done 2026-08-30]** `shadowing-analysis-api` gained `POST /transcribe-source`
-(`asr.transcribe_source`) — Whisper `small` (`ANALYSIS_SOURCE_WHISPER_MODEL`),
-timed segments `{text,startMs,endMs,avgLogprob,noSpeechProb}`, `vad_filter` +
-`condition_on_previous_text=False`. Separate lazily-loaded model instance so
-the `base` diagnostic `/transcribe` keeps its ~270 MB footprint (`small` ≈
-700 MB RSS int8). The mining service (`app/asr_client.py`) POSTs the cached
-Opus and `_run_job` uses those cues in place of the caption track; falls back
-to captions on any failure (`MINING_USE_ASR_TRANSCRIPT=0` forces captions).
+(`asr.transcribe_source`) — Whisper `large-v3-turbo`
+(`ANALYSIS_SOURCE_WHISPER_MODEL`), timed segments
+`{text,startMs,endMs,avgLogprob,noSpeechProb}`. Separate lazily-loaded model
+instance (the `base` diagnostic `/transcribe` keeps its ~270 MB footprint),
+released after each run (`ANALYSIS_SOURCE_WHISPER_UNLOAD`, reclaims ~half of
+turbo's ~1.8 GB — CT2 pools the rest). The mining service
+(`app/asr_client.py`) POSTs the cached Opus; `_run_job` uses those cues in
+place of the caption track, falling back to captions on any failure
+(`MINING_USE_ASR_TRANSCRIPT=0` forces captions).
 
-Measured on the real After Work source: 105 punctuated, speech-aligned
-segments in ~2m20s (7.8-min video, ~3.3× realtime). The **punctuation is the
-structural win** — `resegment.py` merge/split finally has boundaries to work
-with. `small` is weaker on kanji than hoped (同い年 → おないどし) and still
-fumbles names (草野弘子 for 草野浩) — but that's what the review step (with
-audio) is for, and `medium` is one env var away.
+**Model choice:** started at `small` — too weak on Japanese kanji (同い年 →
+おないどし, 敬語 → 傾語, 担任 → 単人). `large-v3-turbo` has only 4 decoder
+layers so on CPU it's no slower (~1.5–3.6× realtime measured) but gets those
+right, plus better names (佐藤裕二, 上村玲香). Peaks ~1.84 GB RSS.
+`large-v3` is one env var away for max quality (much slower on CPU).
+
+**VAD:** `vad_filter=True` first, but Silero VAD classified a whole *song*
+track as non-speech and dropped everything (GLIM SPANKY → 0 segments), so
+`transcribe_source` retries with VAD off when the first pass is empty.
+
+The **punctuation is the structural win** — `resegment.py` merge/split
+finally has boundaries. Names still get fumbled by every source; that's what
+the review step (with audio) is for.
 
 Still open:
 - **Confidence flags in the UI** from `avgLogprob` / `noSpeechProb` — the

@@ -9,10 +9,14 @@ the cached source Opus and uses those cues instead of YouTube's
 auto-caption track, which for Japanese has no reliable kanji and — the
 bigger problem — no punctuation, so `resegment.py`'s merge/split was inert
 (this is why "After Work" imported so fragmented). Falls back to captions
-on any failure; `MINING_USE_ASR_TRANSCRIPT=0` forces captions. Verified on
-the real After Work source: 105 punctuated speech-aligned segments in
-~2m20s. `small` is weak on kanji (同い年→おないどし) and names (草野弘子 for
-草野浩) — the review step is where that gets fixed. (2) `YouTubeMinePage`
+on any failure; `MINING_USE_ASR_TRANSCRIPT=0` forces captions. Model is
+`large-v3-turbo` (started at `small`, which garbled common kanji —
+同い年→おないどし, 敬語→傾語; turbo has 4 decoder layers so it's no slower on CPU
+and gets them right, ~1.84 GB RSS, released after each run). VAD-off retry
+when Silero drops a whole song track. Verified on real After Work + First
+Day at Work sources (105 / 99 punctuated segments; 佐藤裕二, 上村玲香
+correct). Names still fumbled by every source — the review step fixes that.
+(2) `YouTubeMinePage`
 cue-review now plays the cue's audio (`GET /jobs/{id}/cues/{i}/audio`) so
 a mis-transcription is catchable by ear. Tests: analysis `test_asr.py` +6,
 mining `test_jobs_api.py` +2 — 28 / 60 py, 1028 ts. Both services running.
