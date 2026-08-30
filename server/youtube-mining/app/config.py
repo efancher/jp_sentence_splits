@@ -41,20 +41,20 @@ SILENT_SOURCE_MAX_DB = float(
 # it, only cloud-hosted deployments do.
 YTDLP_COOKIES_FILE = os.environ.get("MINING_YTDLP_COOKIES_FILE") or None
 
-# Passing cookies currently trips YouTube's "The page needs to be
-# reloaded." error on yt-dlp's default/`web` player client (yt-dlp #17389
-# / #17405), so we force a client list that excludes it. `web_safari`
-# yields downloadable HLS audio; `mweb` is a fallback. Comma-separated;
-# set to empty to let yt-dlp pick its own default once the upstream bug
-# is fixed.
+# yt-dlp player client(s), comma-separated. Empty = let yt-dlp choose.
 #
-# NB: if jobs succeed but the audio comes out silent (peak ~-91 dBFS —
-# SILENT_SOURCE_MAX_DB now fails the job when this happens), YouTube is
-# serving a poison silent stream because it doesn't trust the request.
-# Refresh the cookies first (that's usually it); if that doesn't fix it,
-# try a different client here — `tv`, or `web_safari,tv,mweb`.
+# History: `web`/`tv` hit "The page needs to be reloaded." (yt-dlp #17389)
+# so this was pinned to `web_safari,mweb` — but those now only offer
+# progressive audio behind a GVS PO token, so `bestaudio` falls through to
+# a combined video format (or nothing). yt-dlp's own default currently
+# resolves a real audio-only format (tested 2026-08-30). Revisit if the
+# reload bug resurfaces on the default; `tv` is the usual next try but was
+# still broken as of that date.
+#
+# If a job fails with "source audio is silent" (SILENT_SOURCE_MAX_DB),
+# YouTube served a poison silent stream — refresh the cookies first.
 YTDLP_PLAYER_CLIENT = os.environ.get(
-    "MINING_YTDLP_PLAYER_CLIENT", "web_safari,mweb"
+    "MINING_YTDLP_PLAYER_CLIENT", ""
 ).strip()
 
 # yt-dlp needs an external JavaScript runtime to solve YouTube's `n`
