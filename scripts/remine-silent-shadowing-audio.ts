@@ -309,9 +309,12 @@ async function remineBook(
     if (opts.apply && prior?.length) {
       const paths = prior.map((r) => r.storage_path).filter(Boolean) as string[];
       if (paths.length) await supabase.storage.from(AUDIO_BUCKET).remove(paths);
+      // Soft-delete, never raw DELETE — a hard delete emits no sync_event,
+      // so any device that already pulled these rows keeps them (and their
+      // silent blobs) forever. See feedback_supabase_hard_delete_bypasses_sync.
       const { error } = await supabase
         .from('reference_audio')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .in('id', prior.map((r) => r.id));
       if (error) throw new Error(`--redo delete: ${error.message}`);
       if (restorableIds.length) {
