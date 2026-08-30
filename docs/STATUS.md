@@ -1,6 +1,24 @@
 # Status
 
-Last updated: 2026-08-30 (ShadowPage mora/hiragana row — three fixes for
+Last updated: 2026-08-30 (Truncated reference-audio repair. Card-issue
+triage surfaced 4 reports of "After Work" review audio cutting off
+mid-word. Root: the 2026-08-29 `backfill-resegment-audio` run left 18
+`audio_reseg_*` clips whose file is far shorter than the video span they
+claim (`duration_ms / (source_end_ms - source_start_ms)` down to 0.17) —
+`/resegment` fed `concatCut` wrong parents/timings. The silent-clip
+re-mine missed them (audible, just short) and its yt-dlp re-download path
+is dead (YouTube bot-blocks the datacenter mining box). New
+`scripts/recut-truncated-reseg-audio.ts` re-cuts each from the original
+pre-resegmentation fragment clips still in Storage — their
+`source_start_ms`/`source_end_ms` map 1:1 to the file (no padding), so a
+timeline-overlap match + `concatCut` gives the right window, all via local
+ffmpeg. Ran `--apply`: 18 `audio_remine_*` rows written, truncated
+`audio_reseg_*` rows soft-deleted; `silencedetect` confirms continuous
+speech across the 3 user-reported clips. Reports still need marking
+resolved in-app. No test suite for the one-off; `npm run check` still
+green.)
+
+Before that: 2026-08-30 (ShadowPage mora/hiragana row — three fixes for
 kanji / digits silently dropped out of it, from "some cards that have
 proper names don't get the proper name hiragana". `segmentIntoMorae`
 skips anything non-kana, so whatever these bugs left un-annotated just
