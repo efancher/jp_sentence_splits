@@ -57,6 +57,20 @@ YTDLP_PLAYER_CLIENT = os.environ.get(
     "MINING_YTDLP_PLAYER_CLIENT", ""
 ).strip()
 
+# Route yt-dlp + subtitle/info fetches through a Tailscale exit node for the
+# duration of each download. YouTube bot-blocks this datacenter IP (see the
+# cookies note above); a personal device on a home connection, already on
+# the tailnet and advertising an exit node, gives yt-dlp a residential IP
+# with none of the cookie fragility. The value is a Tailscale device name
+# (as in `tailscale status`, e.g. "eds-macbook-pro") or IP. Requires the
+# `tailscale` CLI on PATH and this service's user set as the Tailscale
+# operator (`sudo tailscale set --operator=<user>`, one-time). Unset = no
+# routing (local dev, or a box with a clean egress IP). See app/exit_node.py.
+MINING_EXIT_NODE = os.environ.get("MINING_EXIT_NODE") or None
+# Used when MINING_EXIT_NODE is offline / not advertising an exit node
+# (laptop asleep → fall back to the phone). Optional.
+MINING_EXIT_NODE_FALLBACK = os.environ.get("MINING_EXIT_NODE_FALLBACK") or None
+
 # yt-dlp needs an external JavaScript runtime to solve YouTube's `n`
 # signature challenge (required since yt-dlp 2025.11.12; without it every
 # format is dropped and extraction fails). Node >= 22, Deno, Bun or

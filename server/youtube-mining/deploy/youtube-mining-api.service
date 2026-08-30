@@ -6,6 +6,13 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/projects/jp_sentence_splits/server/youtube-mining
 Environment=MINING_YTDLP_COOKIES_FILE=%h/projects/jp_sentence_splits/server/youtube-mining/youtube-cookies.txt
+# Route YouTube downloads through a home-connection device on the tailnet —
+# this box's datacenter IP is bot-blocked. Primary = laptop, fallback =
+# phone (used when the laptop is asleep). Needs `sudo tailscale set
+# --operator=<user>` run once by an admin. See app/exit_node.py + the
+# deploy README. Clear these to fall back to cookie-only auth.
+Environment=MINING_EXIT_NODE=eds-macbook-pro
+Environment=MINING_EXIT_NODE_FALLBACK=iphone174
 # yt-dlp's JS challenge solver needs a node >= 22 binary; the systemd
 # user PATH doesn't include nvm's. Point at a stable symlink the user
 # maintains: ln -sfn "$(nvm which default)" ~/.local/bin/node

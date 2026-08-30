@@ -70,8 +70,45 @@ posture.
 ### YouTube's bot-check (cloud/datacenter IPs)
 
 YouTube blocks yt-dlp requests from most cloud/datacenter IPs (this box
-included) with "Sign in to confirm you're not a bot" unless yt-dlp
-presents cookies from a real logged-in browser session. Export one from
+included) with "Sign in to confirm you're not a bot". Two ways around it:
+a **Tailscale exit node** (preferred — no credentials, no rotation) or
+**cookies** (fallback). They stack; configure whichever you can.
+
+#### Tailscale exit node (preferred)
+
+If a personal device already on the tailnet (laptop, phone) advertises a
+Tailscale exit node, the service routes each download through it — yt-dlp
+then sees that device's residential IP. `app/exit_node.py` flips the box's
+exit node on just around the audio/subtitle/info fetches and clears it
+after, so the rest of the box's traffic only detours for a minute or two
+per job. Concurrent jobs are serialized.
+
+Setup:
+
+1. **On the device(s):** enable "run as exit node" — macOS: Tailscale menu
+   bar → *Exit Nodes* → *Run as Exit Node*; iOS/Android: Tailscale app →
+   the device's settings → *Use as exit node*. Approve each in the
+   [admin console](https://login.tailscale.com/admin/machines) (or
+   auto-approve via an ACL `autoApprovers` rule).
+2. **On this box, one-time:** `sudo tailscale set --operator=$USER` so the
+   service (running as your user, not root) may switch exit nodes without
+   sudo.
+3. **Config:** the systemd unit sets `MINING_EXIT_NODE=eds-macbook-pro`
+   (primary) and `MINING_EXIT_NODE_FALLBACK=iphone174` (used when the
+   laptop is offline). Values are device names as shown in
+   `tailscale status`. Unset both to disable routing.
+
+Behaviour when it can't route: if neither configured node is online and
+advertising an exit node, the job logs a warning and downloads direct
+(then usually fails the silent-stream check). Wake the laptop / foreground
+the phone's Tailscale app and retry — or fall back to cookies below. The
+device must stay connected for the whole download (~50–200 MB); a phone on
+cellular spends mobile data, and iOS may suspend the VPN extension in the
+background.
+
+#### Cookies (fallback)
+
+Export one from
 your own browser (already signed into YouTube) — e.g. the "Get
 cookies.txt LOCALLY" extension, or on a machine with a real browser
 profile:
@@ -174,6 +211,9 @@ challenges using node` with no `n challenge solving failed` warning.
 - `MINING_JOB_TTL_SECONDS` / `MINING_JOB_SWEEP_INTERVAL_SECONDS` — how
   long an abandoned job's scratch directory (downloaded audio, clips)
   survives before automatic cleanup, and how often the sweep runs.
+- `MINING_EXIT_NODE` / `MINING_EXIT_NODE_FALLBACK` — Tailscale device
+  name(s) to route each download through (primary, then fallback if the
+  primary is offline). See "Tailscale exit node" above. Unset by default.
 - `MINING_YTDLP_COOKIES_FILE` — path to a cookies.txt for yt-dlp; see
   "YouTube's bot-check" above. Unset by default.
 - `MINING_YTDLP_PLAYER_CLIENT` — comma-separated yt-dlp

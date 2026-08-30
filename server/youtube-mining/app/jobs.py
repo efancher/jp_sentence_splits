@@ -25,7 +25,16 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app import clip, config, morphology, readings, resegment, subtitles, youtube
+from app import (
+    clip,
+    config,
+    exit_node,
+    morphology,
+    readings,
+    resegment,
+    subtitles,
+    youtube,
+)
 from app.models import (
     ClipAudioInfo,
     ClipRequest,
@@ -104,21 +113,25 @@ def _run_job(job: Job, url: str) -> None:
     try:
         job.status = "fetching"
         job.stage = "Downloading audio…"
-        job.source_audio_path = youtube.fetch_audio(url, job.dir)
+        # All three YouTube fetches (audio, subtitles, info) share one exit
+        # node detour — flipping it per-call would thrash the box's routing.
+        with exit_node.routed_for_download():
+            job.source_audio_path = youtube.fetch_audio(url, job.dir)
 
-        peak_db = clip.probe_max_volume_db(job.source_audio_path)
-        if peak_db < config.SILENT_SOURCE_MAX_DB:
-            raise RuntimeError(
-                f"Downloaded source audio is silent (peak {peak_db:.0f} dBFS). "
-                "YouTube likely served a silent stream — refresh the yt-dlp "
-                "cookies (see README 'YouTube's bot-check') and retry."
-            )
+            peak_db = clip.probe_max_volume_db(job.source_audio_path)
+            if peak_db < config.SILENT_SOURCE_MAX_DB:
+                raise RuntimeError(
+                    f"Downloaded source audio is silent (peak {peak_db:.0f} dBFS). "
+                    "YouTube likely served a silent stream — check the exit "
+                    "node (README 'YouTube's bot-check') or refresh cookies "
+                    "and retry."
+                )
 
-        job.stage = "Fetching subtitles…"
-        youtube.download_subtitles(url, job.dir)
+            job.stage = "Fetching subtitles…"
+            youtube.download_subtitles(url, job.dir)
 
-        job.stage = "Reading video info…"
-        info = youtube.inspect_url(url)
+            job.stage = "Reading video info…"
+            info = youtube.inspect_url(url)
         job.source = youtube.info_to_source(info)
 
         job.status = "parsing"
