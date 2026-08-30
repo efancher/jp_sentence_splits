@@ -85,6 +85,22 @@ async def clip_cue(job_id: str, cue_index: int, req: ClipRequest):
         raise HTTPException(status_code=409, detail=str(exc))
 
 
+@app.post("/jobs/{job_id}/clip", response_model=ClipResponse)
+async def clip_range(job_id: str, req: ClipRequest):
+    """Clip an explicit (startMs, endMs) span from the job's downloaded
+    source audio, independent of any parsed subtitle cue. For callers that
+    supply their own text + timings (e.g. re-cutting reference audio for a
+    source with no fetchable subtitle track)."""
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        return await asyncio.to_thread(jobs.clip_range, job, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
 @app.get("/jobs/{job_id}/clips/{sentence_id}/audio")
 async def get_clip_audio(job_id: str, sentence_id: str):
     try:

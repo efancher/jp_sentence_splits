@@ -154,7 +154,24 @@ def clip_cue(job: Job, cue_index: int, req: ClipRequest) -> ClipResponse:
 
     start_ms = req.startMs if req.startMs is not None else cue.startMs
     end_ms = req.endMs if req.endMs is not None else cue.endMs
+    return _clip_range(job, req, start_ms, end_ms)
 
+
+def clip_range(job: Job, req: ClipRequest) -> ClipResponse:
+    """Clip an explicit (startMs, endMs) span from the job's source audio,
+    without reference to a parsed subtitle cue — for callers that already
+    have the sentence text and timings (e.g. re-mining reference audio whose
+    source has no fetchable subtitle track)."""
+    if job.status != "ready" or job.source_audio_path is None:
+        raise ValueError("Job is not ready for clipping yet")
+    if req.startMs is None or req.endMs is None:
+        raise ValueError("startMs and endMs are required")
+    return _clip_range(job, req, req.startMs, req.endMs)
+
+
+def _clip_range(
+    job: Job, req: ClipRequest, start_ms: int, end_ms: int
+) -> ClipResponse:
     reading = readings.generate_reading(req.japanese) if req.generateKana else None
     tokens = morphology.tokenize_japanese(req.japanese) if req.generateKana else []
 

@@ -132,3 +132,35 @@ def test_clip_unknown_cue_returns_404(client: TestClient) -> None:
 def test_unknown_job_returns_404(client: TestClient) -> None:
     response = client.get("/jobs/does-not-exist")
     assert response.status_code == 404
+
+
+def test_clip_range_without_cue(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    response = client.post(
+        f"/jobs/{job_id}/clip",
+        json={"japanese": "佐藤ゆうじです。", "startMs": 1500, "endMs": 3200, "generateKana": False},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["startMs"] == 1500
+    assert body["endMs"] == 3200
+    assert body["audio"]["durationMs"] > 0
+
+    audio_response = client.get(f"/jobs/{job_id}/clips/{body['sentenceId']}/audio")
+    assert audio_response.status_code == 200
+    assert audio_response.content == b"fake-clip"
+
+
+def test_clip_range_requires_timings(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    response = client.post(
+        f"/jobs/{job_id}/clip",
+        json={"japanese": "test", "startMs": 1000, "generateKana": False},
+    )
+    assert response.status_code == 409
