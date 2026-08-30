@@ -134,29 +134,26 @@ sentence and compare the file length to the span it should cover:
 ratio = duration_ms / (source_end_ms - source_start_ms)
 ```
 
-`ratio` well below ~0.5 (e.g. a 694 ms clip for 草野って草野浩先生だよな。, span
+`ratio` well below ~0.55 (e.g. a 694 ms clip for 草野って草野浩先生だよな。, span
 3548 ms) = **truncated clip**. This is the residue of the 2026-08-29
 `backfill-resegment-audio.ts` run on *Easy Japanese Drama: After Work*
 (`book_30cac126-7197-4dd8-934f-53a0798c2326`): `concatCut` in
-`src/lib/resegmentPlan.ts` assumes each source-fragment clip's file duration
-equals its video span, so a cue spanning a gap or a short fragment gets a
-collapsed cut window. A separate earlier symptom of the same run was ~27
-*silent* clips (fixed by `remine-silent-shadowing-audio.ts`). ~14 more clips
-in that book are truncated-but-audible and slipped past that re-mine because
-its candidate filter only detects silence, not short duration.
+`src/lib/resegmentPlan.ts` was fed wrong parent clips / cue timings by
+`/resegment`, so the cut window collapsed. A separate earlier symptom of the
+same run was ~27 *silent* clips (fixed by `remine-silent-shadowing-audio.ts`).
+18 more clips in that book were truncated-but-audible and slipped past that
+re-mine because its candidate filter only detects silence, not short duration.
 
-To confirm the scope, sweep the book's `audio_reseg_*` rows (live, not
-deleted) and flag any with a low duration/span ratio — write a throwaway
-`scripts/_tmp_*.ts` for it.
-
-**Fix path:** re-cut the flagged sentences from the real source at their
-stored `source_start_ms`/`source_end_ms` (those values are trustworthy).
-`remine-silent-shadowing-audio.ts` does exactly this operation but needs a
-duration-vs-span candidate filter added (or a one-off variant), plus either
-the youtube-mining service reachable or `--local-source <dir>` holding the
-source audio downloaded on a residential IP. Writes new `reference_audio`
-rows + soft-deletes the bad ones (an in-place update wouldn't reach devices
-that already cached the bad blob).
+**Fixed 2026-08-30** by `scripts/recut-truncated-reseg-audio.ts` — all 18
+`audio_reseg_*` clips re-cut and replaced with `audio_remine_*` rows. If a
+*new* truncated clip turns up (in this book or another re-segmented one),
+that script is the tool: it finds truncation suspects by the
+duration/span ratio, then re-cuts each from the *original* pre-resegmentation
+fragment clips still in Storage (their `source_start_ms`/`source_end_ms` map
+1:1 to the file, no padding) via local ffmpeg — **no youtube-mining service
+needed** (YouTube bot-blocks the datacenter box, so the `/jobs` re-download
+path is dead). Dry-run by default, `--apply` to write, idempotent. Needs the
+original fragment rows to still exist (soft-deleted is fine).
 
 Not every audio complaint is this bug: also check that `source_start_ms` /
 `source_end_ms` themselves look sane for the sentence, and that a clip exists
