@@ -256,11 +256,14 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      full staged wizard (job state machine, transcript stage, waveform,
      unify with `ResegmentSourcePage`).
 4. **A — ASR.** **[done 2026-08-30]** `POST /transcribe-source` on
-   `shadowing-analysis-api` (Whisper `small`); mining `_run_job` uses it as
-   the cue source, captions as fallback. Confidence flags not surfaced yet;
-   manual-caption preference + song gating still open (see slice A section).
-5. **Stages 3–5 polish.** `sentence-realign` at mine time, vocab picker at
-   mine time, SRS-impact summary, `ResegmentSourcePage` component merge.
+   `shadowing-analysis-api` (Whisper `large-v3-turbo`, word timestamps);
+   `_run_job` prefers it over captions, with a human-caption-track and a
+   music-video gate in front and confidence flags surfaced in the review
+   step. All sub-items of slice A closed.
+5. **The staged wizard.** The one remaining piece — job state machine,
+   transcript/segment/translate/commit stages, waveform boundary editing,
+   `sentence-realign` at mine time, and unifying stage 2 with
+   `ResegmentSourcePage`. Full brief: **`docs/mining-wizard-spec.md`**.
 
 Slices 1–2 are pure wins with no redesign. 3 is the redesign. 4–5 build on it.
 
