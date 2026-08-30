@@ -145,8 +145,11 @@ Still open:
   dense music though — a real music-video gate (yt-dlp `categories` / `track`
   metadata → prefer the lyrics caption track over ASR) is still open, held
   until the exit node's up to verify the yt-dlp fields.
-- `word_timestamps=True` for exact split boundaries (kills the
-  char-proportional guess in `split_multi_sentence_cues`).
+- ~~`word_timestamps=True`~~ **[done 2026-08-30]** —
+  `/transcribe-source` returns per-word timings; `split_multi_sentence_cues`
+  cuts a multi-sentence cue (~17% of turbo segments) at the real word gap.
+  Costs ~2.5–3× transcription time (2m20s → 6m20s / 8-min source);
+  `ANALYSIS_SOURCE_WORD_TIMESTAMPS=0` disables it.
 
 ### B. Dictionary-form reading + accent from UniDic (stages 1, 4)
 
