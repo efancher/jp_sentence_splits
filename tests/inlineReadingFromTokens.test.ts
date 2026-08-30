@@ -53,10 +53,29 @@ describe('inlineReadingFromTokens', () => {
     expect(inlineReadingFromTokens(jp, [tok('映画', 0, 'えいが')])).toBe('');
   });
 
-  it('handles the ヶ counter run', () => {
-    const jp = '1ヶ月';
-    expect(inlineReadingFromTokens(jp, [tok('1', 0), tok('ヶ月', 1, 'かげつ')])).toBe(
-      '1ヶ月[かげつ]',
+  it('fuses a digit and its counter into one ruby span', () => {
+    expect(inlineReadingFromTokens('1ヶ月', [tok('1', 0), tok('ヶ月', 1, 'かげつ')])).toBe(
+      '1ヶ月[いっかげつ]',
     );
+    expect(
+      inlineReadingFromTokens('2人で', [tok('2', 0), tok('人', 1, 'にん'), tok('で', 2, 'で')]),
+    ).toBe('2人[ふたり]で');
+    expect(
+      inlineReadingFromTokens('20歳です', [
+        tok('20', 0),
+        tok('歳', 2, 'さい'),
+        tok('です', 3, 'です'),
+      ]),
+    ).toBe('20歳[はたち]です');
+  });
+
+  it('reads a bare numeral so it survives mora segmentation', () => {
+    expect(inlineReadingFromTokens('22歳', [tok('22', 0), tok('歳', 2, 'さい')])).toBe(
+      '22歳[にじゅうにさい]',
+    );
+    // "1つ" and "下" are separate words — not one number+counter span.
+    expect(
+      inlineReadingFromTokens('1つ下', [tok('1', 0), tok('つ', 1, 'つ'), tok('下', 2, 'した')]),
+    ).toBe('1つ[ひとつ]下[した]');
   });
 });

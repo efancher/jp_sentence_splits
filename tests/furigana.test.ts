@@ -56,6 +56,47 @@ describe('parseInlineReadings', () => {
     ]);
   });
 
+  it('starts the base at the first kanji, keeping a leading honorific as text', () => {
+    // "お先[さき]" is お + 先[さき] (→ おさき), not お先[...] (→ おさきさき).
+    expect(parseInlineReadings('お先[さき]失礼します')).toEqual([
+      { kind: 'text', base: 'お' },
+      { kind: 'ruby', base: '先', reading: 'さき' },
+      { kind: 'text', base: '失礼します' },
+    ]);
+    // A katakana word before the kanji stays out of the base.
+    expect(parseInlineReadings('コーヒー飲[の]む')).toEqual([
+      { kind: 'text', base: 'コーヒー' },
+      { kind: 'ruby', base: '飲', reading: 'の' },
+      { kind: 'text', base: 'む' },
+    ]);
+  });
+
+  it('only pulls a leading digit run into the base when a kanji follows it', () => {
+    // "1つ下" — "1つ" is its own word, the reading sits on 下 alone.
+    expect(parseInlineReadings('1つ下[した]だから')).toEqual([
+      { kind: 'text', base: '1つ' },
+      { kind: 'ruby', base: '下', reading: 'した' },
+      { kind: 'text', base: 'だから' },
+    ]);
+    // "22歳" — digit run directly before a kanji is a number + counter.
+    expect(parseInlineReadings('22歳[にじゅうにさい]だよ')).toEqual([
+      { kind: 'ruby', base: '22歳', reading: 'にじゅうにさい' },
+      { kind: 'text', base: 'だよ' },
+    ]);
+  });
+
+  it('keeps a digit + kana counter together as its own ruby base', () => {
+    expect(parseInlineReadings('私[わたし]は2人[ふたり]の1つ[ひとつ]下[した]だから')).toEqual([
+      { kind: 'ruby', base: '私', reading: 'わたし' },
+      { kind: 'text', base: 'は' },
+      { kind: 'ruby', base: '2人', reading: 'ふたり' },
+      { kind: 'text', base: 'の' },
+      { kind: 'ruby', base: '1つ', reading: 'ひとつ' },
+      { kind: 'ruby', base: '下', reading: 'した' },
+      { kind: 'text', base: 'だから' },
+    ]);
+  });
+
   it('leaves a bracketed stage direction with no kanji base as text', () => {
     const segments = parseInlineReadings('もう[音楽]です');
     expect(segments.every((item) => item.kind === 'text')).toBe(true);

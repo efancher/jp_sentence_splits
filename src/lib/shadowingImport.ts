@@ -16,6 +16,7 @@ import {
   displayJapanese,
   normalizeSentenceKey,
 } from './normalize';
+import { fixNumeralsInReadingOnly } from './fixNumeralReadings';
 import { inlineReadingFromTokens } from './inlineReadingFromTokens';
 import { suggestionsFromTokens } from './vocabularySuggestions';
 
@@ -275,12 +276,15 @@ function buildDrafts(
     const normalizedKey = normalizeSentenceKey(japanese);
     if (!normalizedKey) return;
     const ref = sourceReference(source, sentence);
+    // fugashi leaves a bare digit's reading unfused ("2にん", "1かげつ") — fix
+    // it here so a re-mine can't reintroduce it (see fixNumeralReadings.ts).
+    const readingOnly = fixNumeralsInReadingOnly(sentence.reading?.trim() ?? '');
     const current = byKey.get(normalizedKey);
     if (!current) {
       byKey.set(normalizedKey, {
         normalizedKey,
         japanese,
-        readingOnly: sentence.reading?.trim() ?? '',
+        readingOnly,
         inlineReading: inlineReadingFromTokens(japanese, sentence.tokens ?? []),
         translation: sentence.english?.trim() ?? '',
         targetVocabulary: [],
@@ -308,10 +312,10 @@ function buildDrafts(
       conflicts,
       'readingOnly',
       current.readingOnly,
-      sentence.reading?.trim() ?? '',
+      readingOnly,
     );
     current.translation ||= sentence.english?.trim() ?? '';
-    current.readingOnly ||= sentence.reading?.trim() ?? '';
+    current.readingOnly ||= readingOnly;
     current.conflicts = conflicts;
     current.sourceReferences.push(ref);
     if (sentence.tokens?.length) {

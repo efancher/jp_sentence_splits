@@ -6,6 +6,7 @@ import {
   loadResegmentSourceContext,
   type ResegmentSourceContext,
 } from '../db/repository';
+import { fixNumeralsInReadingOnly } from '../lib/fixNumeralReadings';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { resegmentSentences } from '../lib/miningApi';
 import {
@@ -200,7 +201,7 @@ export function ResegmentSourcePage() {
         return {
           japanese: row.japanese,
           translation: row.translation.trim(),
-          readingOnly: cue?.reading?.trim() ?? row.readingOnly,
+          readingOnly: fixNumeralsInReadingOnly(cue?.reading?.trim() ?? row.readingOnly),
           inlineReading: inlineReadingFromTokens(row.japanese, tokens),
           tokens,
           startMs: row.startMs,

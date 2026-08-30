@@ -42,9 +42,17 @@ def _timestamp_to_ms(value: str) -> int:
     return ((hours * 60 + minutes) * 60 + seconds) * 1000 + ms
 
 
+# Non-speech caption annotations: [音楽], ［拍手］, 【ため息】, and stray ♪ from
+# song lyrics. Japanese subs use 「」for speech and these for sound effects /
+# mood cues, which are not part of the sentence and must not reach the mora
+# row or the vocabulary tokenizer.
+_NON_SPEECH_RE = re.compile(r"[\[［【][^\]］】]*[\]］】]|[♪♬]")
+
+
 def _clean_text(text: str) -> str:
     cleaned = re.sub(r"<[^>]+>", "", text)
     cleaned = cleaned.replace("&nbsp;", " ").replace("&amp;", "&")
+    cleaned = _NON_SPEECH_RE.sub("", cleaned)
     return " ".join(cleaned.split()).strip()
 
 

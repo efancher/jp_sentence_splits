@@ -22,6 +22,22 @@ def test_parse_webvtt_basic() -> None:
     assert "今日" in cues[0].text
 
 
+def test_parse_webvtt_strips_non_speech_captions() -> None:
+    content = """WEBVTT
+
+1
+00:00:01.000 --> 00:00:03.000
+[音楽]私の時はスナックに寄ってました。
+
+2
+00:00:03.000 --> 00:00:05.000
+♪ ラーラーラー ♪ もう1ヶ月。
+"""
+    cues = parse_webvtt(content)
+    assert cues[0].text == "私の時はスナックに寄ってました。"
+    assert cues[1].text == "ラーラーラー もう1ヶ月。"
+
+
 def test_parse_srt_basic() -> None:
     content = """1
 00:00:01,000 --> 00:00:02,500

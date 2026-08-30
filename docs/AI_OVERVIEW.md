@@ -85,6 +85,16 @@ Two model "eras" coexist, both live in `src/domain/types.ts`:
   per book.
 - `Sentence` carries `japanese`/`readingOnly`/`inlineReading`/`translation`,
   `targetVocabulary` (Satori-CSV-derived vocab chips),
+  - `inlineReading` is Satori-style `漢字[かな]` markup, parsed by
+    `src/lib/parseInlineReadings.ts` (ruby base = the run's first kanji
+    onward, keeping interior/trailing okurigana). For mining / re-segmented
+    sentences it's built from morphology tokens by
+    `src/lib/inlineReadingFromTokens.ts`, which fuses an Arabic numeral with
+    its counter into one ruby span via `src/lib/japaneseNumberReading.ts`
+    (`2人[ふたり]`, `1ヶ月[いっかげつ]`); `src/lib/fixNumeralReadings.ts`
+    repairs the same in already-stored strings (import path + `npm run
+    fix:numeral-readings`). Non-speech caption cues (`[音楽]`, `♪`) are
+    stripped at subtitle-parse time and by `npm run fix:caption-artifacts`.
   `vocabularySuggestions` (tokenizer-derived, clickable, used by the
   vocabulary picker), `sourceReferences` (provenance from Anki-era
   imports), `conflicts` (merge conflicts across repeated imports).
