@@ -15,7 +15,7 @@ const { CUES } = vi.hoisted(() => ({
   CUES: [
     { index: 0, startMs: 0, endMs: 1000, japanese: '今日は', isAuto: false, englishGuess: 'Today' },
     { index: 1, startMs: 1000, endMs: 2000, japanese: '晴れです。', isAuto: false, englishGuess: 'it is sunny.', lowConfidence: true },
-    { index: 2, startMs: 2000, endMs: 3200, japanese: '散歩に行きましょう。', isAuto: false, englishGuess: "Let's go for a walk." },
+    { index: 2, startMs: 2000, endMs: 3200, japanese: 'そうですね。行きましょう。', isAuto: false, englishGuess: "Right. Let's go." },
   ],
 }));
 
@@ -109,7 +109,23 @@ describe('YouTube mining page', () => {
 
     // Advanced past both merged cues, straight to cue 3.
     expect(await screen.findByText('Cue 3 / 3')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
+
+    // Split cue 3 into its two sentences and clip both over its span.
+    (clipMiningCue as ReturnType<typeof vi.fn>).mockClear();
+    await user.click(screen.getByRole('button', { name: '⁄ Split' }));
+    expect(await screen.findByDisplayValue('そうですね。')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('行きましょう。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Keep & clip (2)' }));
+
+    expect(clipMiningCue).toHaveBeenCalledTimes(2);
+    expect(clipMiningCue).toHaveBeenNthCalledWith(
+      1, 'job-1', 2,
+      expect.objectContaining({ japanese: 'そうですね。', startMs: 2000 }),
+    );
+    expect(clipMiningCue).toHaveBeenNthCalledWith(
+      2, 'job-1', 2,
+      expect.objectContaining({ japanese: '行きましょう。', endMs: 3200 }),
+    );
 
     expect(await screen.findByText('Import preview')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Import complete project' }));

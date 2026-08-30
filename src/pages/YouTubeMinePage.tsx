@@ -48,6 +48,9 @@ export function YouTubeMinePage() {
   const [previewFailed, setPreviewFailed] = useState(false);
   /** How many *following* cues the reviewer has merged into the current one. */
   const [mergedCount, setMergedCount] = useState(0);
+  /** When set, the working text is split into these pieces, each clipped as
+   *  its own sentence over a char-proportional slice of the cue span. */
+  const [splitParts, setSplitParts] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState<{
     sentences: ShadowingSentenceInput[];
     audio: ShadowingAudioDraft[];
@@ -108,6 +111,7 @@ export function YouTubeMinePage() {
     setJapaneseText(currentCue.japanese);
     setEnglishText(currentCue.englishGuess ?? '');
     setMergedCount(0);
+    setSplitParts(null);
   }, [currentCue]);
 
   // Pull the cue's audio so it can be heard before deciding to keep it —
@@ -161,6 +165,37 @@ export function YouTubeMinePage() {
     setMergedCount((c) => c - 1);
   }
 
+  /** Break `text` in two — after the first internal sentence-ender if there
+   *  is one, else at the midpoint. */
+  function splitOnce(text: string): [string, string] {
+    const t = text.trim();
+    const m = /[。．！？!?…」』]/g;
+    let at = -1;
+    for (let r = m.exec(t); r; r = m.exec(t)) {
+      if (r.index + 1 < t.length) {
+        at = r.index + 1;
+        break;
+      }
+    }
+    if (at < 0) at = Math.max(1, Math.round(t.length / 2));
+    return [t.slice(0, at).trim(), t.slice(at).trim()];
+  }
+
+  function split() {
+    setSplitParts((prev) => {
+      if (prev === null) return splitOnce(japaneseText);
+      const last = prev[prev.length - 1] ?? '';
+      const [a, b] = splitOnce(last);
+      return b ? [...prev.slice(0, -1), a, b] : prev;
+    });
+  }
+
+  function unsplit() {
+    if (!splitParts) return;
+    setJapaneseText(splitParts.join(''));
+    setSplitParts(null);
+  }
+
   async function handleStart() {
     setError('');
     setPhase('fetching');
@@ -175,12 +210,13 @@ export function YouTubeMinePage() {
     }
   }
 
-  async function finish(withCue?: { sentence: ShadowingSentenceInput; audio: ShadowingAudioDraft }) {
+  async function finish(extra?: {
+    sentences: ShadowingSentenceInput[];
+    audio: ShadowingAudioDraft[];
+  }) {
     if (!jobStatus?.source) return;
-    const sentences = withCue
-      ? [...confirmed.sentences, withCue.sentence]
-      : confirmed.sentences;
-    const audio = withCue ? [...confirmed.audio, withCue.audio] : confirmed.audio;
+    const sentences = [...confirmed.sentences, ...(extra?.sentences ?? [])];
+    const audio = [...confirmed.audio, ...(extra?.audio ?? [])];
     const existing = await getDb().sentences.toArray();
     const nextPreview = buildShadowingPreview(
       {
@@ -208,47 +244,65 @@ export function YouTubeMinePage() {
   }
 
   async function handleKeepAndClip() {
-    if (!jobId || !currentCue || !japaneseText.trim()) return;
+    if (!jobId || !currentCue) return;
+    const parts = (splitParts ?? [japaneseText]).map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return;
     setClipping(true);
     setError('');
     try {
-      const result = await clipMiningCue(jobId, currentCue.index, {
-        japanese: japaneseText.trim(),
-        english: englishText.trim() || undefined,
-        generateKana,
-        ...(mergedCount > 0 && lastMergedCue
-          ? { startMs: currentCue.startMs, endMs: lastMergedCue.endMs }
-          : {}),
-      });
-      const blob = await fetchMiningClipAudio(jobId, result.sentenceId);
-      const japanese = displayJapanese(result.japanese);
-      const sentence: ShadowingSentenceInput = {
-        id: result.sentenceId,
-        japanese: result.japanese,
-        reading: result.reading ?? undefined,
-        english: result.english ?? undefined,
-        startMs: result.startMs,
-        endMs: result.endMs,
-        tags: [],
-        transcriptStatus: result.transcriptStatus,
-        tokens: result.tokens ?? undefined,
-      };
-      const audioDraft: ShadowingAudioDraft = {
-        sourceSentenceId: result.sentenceId,
-        normalizedKey: normalizeSentenceKey(japanese),
-        path: `clips/${result.sentenceId}.m4a`,
-        mimeType: result.audio.mimeType,
-        durationMs: result.audio.durationMs,
-        startMs: result.startMs,
-        endMs: result.endMs,
-        blob,
-      };
+      // A plain single unmerged cue keeps the server's own boundary logic;
+      // a merge or a manual split needs explicit spans.
+      const custom = parts.length > 1 || mergedCount > 0;
+      const viewStart = currentCue.startMs;
+      const viewEnd = (lastMergedCue ?? currentCue).endMs;
+      const totalChars = parts.reduce((n, p) => n + p.length, 0) || 1;
+
+      const newSentences: ShadowingSentenceInput[] = [];
+      const newAudio: ShadowingAudioDraft[] = [];
+      let cursor = viewStart;
+      for (let i = 0; i < parts.length; i += 1) {
+        const isLast = i === parts.length - 1;
+        const segEnd = isLast
+          ? viewEnd
+          : Math.round(cursor + (viewEnd - viewStart) * (parts[i]!.length / totalChars));
+        const result = await clipMiningCue(jobId, currentCue.index, {
+          japanese: parts[i]!,
+          english: i === 0 ? englishText.trim() || undefined : undefined,
+          generateKana,
+          ...(custom ? { startMs: cursor, endMs: Math.max(segEnd, cursor + 1) } : {}),
+        });
+        cursor = segEnd;
+        const blob = await fetchMiningClipAudio(jobId, result.sentenceId);
+        const japanese = displayJapanese(result.japanese);
+        newSentences.push({
+          id: result.sentenceId,
+          japanese: result.japanese,
+          reading: result.reading ?? undefined,
+          english: result.english ?? undefined,
+          startMs: result.startMs,
+          endMs: result.endMs,
+          tags: [],
+          transcriptStatus: result.transcriptStatus,
+          tokens: result.tokens ?? undefined,
+        });
+        newAudio.push({
+          sourceSentenceId: result.sentenceId,
+          normalizedKey: normalizeSentenceKey(japanese),
+          path: `clips/${result.sentenceId}.m4a`,
+          mimeType: result.audio.mimeType,
+          durationMs: result.audio.durationMs,
+          startMs: result.startMs,
+          endMs: result.endMs,
+          blob,
+        });
+      }
+
       if (throughIndex + 1 >= cues.length) {
-        await finish({ sentence, audio: audioDraft });
+        await finish({ sentences: newSentences, audio: newAudio });
       } else {
         setConfirmed((prev) => ({
-          sentences: [...prev.sentences, sentence],
-          audio: [...prev.audio, audioDraft],
+          sentences: [...prev.sentences, ...newSentences],
+          audio: [...prev.audio, ...newAudio],
         }));
         setCueIndex((index) => index + 1 + mergedCount);
       }
@@ -347,14 +401,51 @@ export function YouTubeMinePage() {
               ⚠ Low transcription confidence — check this line against the audio.
             </div>
           ) : null}
-          <label>
-            Japanese
-            <textarea
-              value={japaneseText}
-              rows={2}
-              onChange={(event) => setJapaneseText(event.target.value)}
-            />
-          </label>
+          {splitParts === null ? (
+            <label>
+              Japanese
+              <textarea
+                value={japaneseText}
+                rows={2}
+                onChange={(event) => setJapaneseText(event.target.value)}
+              />
+            </label>
+          ) : (
+            <div className="stack">
+              <span className="muted">
+                Japanese — splitting into {splitParts.length} sentences
+              </span>
+              {splitParts.map((part, i) => (
+                <div className="row" key={i}>
+                  <textarea
+                    style={{ flex: 1 }}
+                    value={part}
+                    rows={2}
+                    onChange={(event) =>
+                      setSplitParts((prev) =>
+                        prev
+                          ? prev.map((p, j) => (j === i ? event.target.value : p))
+                          : prev,
+                      )
+                    }
+                  />
+                  {splitParts.length > 2 ? (
+                    <button
+                      type="button"
+                      disabled={clipping}
+                      onClick={() =>
+                        setSplitParts((prev) =>
+                          prev ? prev.filter((_, j) => j !== i) : prev,
+                        )
+                      }
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
           <label>
             English (optional)
             <input
@@ -373,7 +464,7 @@ export function YouTubeMinePage() {
           <div className="row">
             <button
               type="button"
-              disabled={clipping || !canMergeNext}
+              disabled={clipping || !canMergeNext || splitParts !== null}
               onClick={mergeNext}
               title="Fold the next cue into this one"
             >
@@ -384,15 +475,33 @@ export function YouTubeMinePage() {
                 Unmerge
               </button>
             ) : null}
+            <button
+              type="button"
+              disabled={clipping}
+              onClick={split}
+              title="Clip this as two or more separate sentences"
+            >
+              ⁄ Split
+            </button>
+            {splitParts !== null ? (
+              <button type="button" disabled={clipping} onClick={unsplit}>
+                Unsplit
+              </button>
+            ) : null}
           </div>
           <div className="row">
             <button
               type="button"
               className="primary"
-              disabled={clipping || !japaneseText.trim()}
+              disabled={
+                clipping ||
+                !(splitParts ?? [japaneseText]).some((p) => p.trim())
+              }
               onClick={() => void handleKeepAndClip()}
             >
-              Keep &amp; clip
+              {splitParts !== null
+                ? `Keep & clip (${splitParts.filter((p) => p.trim()).length})`
+                : 'Keep & clip'}
             </button>
             <button type="button" disabled={clipping} onClick={handleSkip}>
               Skip
