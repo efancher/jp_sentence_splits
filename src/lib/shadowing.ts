@@ -131,12 +131,14 @@ export class ShadowingController {
 
   /**
    * Hands-free shadow-rep loop (guided-shadowing stages 3-4). Unlike
-   * `startRecording('shadow')` run repeatedly, this acquires the mic
-   * **once** (under the caller's tap) and starts a plain looping `<audio>`
-   * for the reference — no AudioContext, no per-rep `play()`. After the
-   * tap nothing is user-gesture-gated, which is what makes it hold up on
-   * iOS Safari. Each time the reference wraps we cycle the recorder so
-   * `onRep` gets one take per rep. End with `stopShadowLoop()`.
+   * `startRecording('shadow')` run repeatedly, all the gesture-gated setup
+   * — `getUserMedia`, `AudioContext.resume()`, the first reference
+   * `play()` — happens **once**, under the caller's tap; after that the
+   * reference `<audio loop>` re-plays itself and only `MediaRecorder`
+   * cycling runs, so it survives on iOS Safari. Each time the reference
+   * wraps we cycle the recorder so `onRep` gets one take per rep. The
+   * shared mic analyser stays up, so the live waveform works. End with
+   * `stopShadowLoop()`.
    */
   async startShadowLoop(
     blob: Blob,
@@ -181,9 +183,7 @@ export class ShadowingController {
       cycling: false,
     };
     this.recordingStartedAt = Date.now();
-    // Not `shadowActive` — loop mode runs no AudioContext, so there's no
-    // analyser for the live waveform; the rep counter is the feedback.
-    this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: false });
+    this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -222,10 +222,11 @@ export class ShadowingController {
   private tickShadowLoop(loop: NonNullable<ShadowingController['shadowLoop']>): void {
     const now = this.shadowPlayer.currentTime();
     // The reference wrapped (loop=true restarts silently) when playback
-    // position jumps back by more than half the clip.
+    // position jumps back by more than half the clip. No per-tick notify —
+    // nothing in loop mode shows elapsed time, and a 10 Hz snapshot churn
+    // re-renders the panel + waveform enough to scroll on mobile.
     const wrapped = loop.lastCurrentTime - now > loop.clipSeconds / 2;
     loop.lastCurrentTime = now;
-    this.notify({ recordingElapsedMs: Date.now() - this.recordingStartedAt });
     if (wrapped && !loop.cycling) {
       loop.cycling = true;
       void this.recordingService

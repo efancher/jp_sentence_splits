@@ -477,7 +477,7 @@ describe('ShadowReferencePlayer loop mode', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('loop mode: plain <audio loop> playback, no AudioContext at all', async () => {
+  it('loop mode: <audio loop> + one shared analyser graph, torn down on teardown()', async () => {
     const { ShadowReferencePlayer } = await import('../src/lib/recording');
     const player = new ShadowReferencePlayer();
     const stream = new FakeMediaStream() as unknown as MediaStream;
@@ -486,16 +486,15 @@ describe('ShadowReferencePlayer loop mode', () => {
     const audio = ShadowFakeAudio.instances[0]!;
     expect(audio.loop).toBe(true);
     expect(audio.play).toHaveBeenCalledOnce();
-    expect(ShadowFakeContext.instances).toHaveLength(0); // no Web Audio
-
-    player.stop(); // end of a rep — element keeps looping
-    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(ShadowFakeContext.instances).toHaveLength(1); // one shared graph
+    expect(player.getAnalyser()).toBeDefined();
 
     player.teardown();
+    expect(ShadowFakeContext.instances[0]!.close).toHaveBeenCalledOnce();
     expect(audio.loop).toBe(false);
   });
 
-  it('non-loop start builds a graph and closes the previous context on restart', async () => {
+  it('restarting closes the previous context', async () => {
     const { ShadowReferencePlayer } = await import('../src/lib/recording');
     const player = new ShadowReferencePlayer();
     const stream = new FakeMediaStream() as unknown as MediaStream;
