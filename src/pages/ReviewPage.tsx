@@ -7,6 +7,7 @@ import { MnemonicText } from '../components/MnemonicText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
+import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
@@ -18,7 +19,9 @@ import {
   getConfusionPairCandidates,
   getDb,
   getDueStudyItems,
+  getProficientVocabularyItemIds,
   getSentenceFullReviewReadiness,
+  getSentenceListeningReadiness,
   getVocabularyOccurrenceCandidates,
   getVocabularyTargetCandidates,
   pickContextSentenceForGrammarPattern,
@@ -108,6 +111,22 @@ const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
 const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
 
 /**
+ * Word-in-context listening (user request): subjectType `sentenceVocabulary`,
+ * subjectId a `SentenceVocabulary.id` — one card per surface-form occurrence
+ * of a word in a sentence that has reference audio, like the contextual
+ * conjugation card. The card loops just that word's span of the recording
+ * (SegmentLoopPlayer) and asks the learner to recall its reading/meaning.
+ * A two-tier listening ladder: these are gated behind the word's own reading
+ * proficiency (tier 1, ActivityDescriptor.isReady →
+ * getProficientVocabularyItemIds), and in turn the full-sentence `listening`
+ * card is gated behind *these* (tier 2, getSentenceListeningReadiness) — so
+ * the learner hears every content word in isolation before parsing the whole
+ * clip. Isolation needs forced alignment; when it can't be isolated the card
+ * still seeds and falls back to whole-sentence playback (SegmentLoopPlayer).
+ */
+const WORD_LISTENING_ACTIVITY_TYPES: StudyActivityType[] = ['word_listening'];
+
+/**
  * Contrastive pair review (Phase 7.7, docs brief §10): subjectType
  * `vocabularyConfusion`, subjectId a VocabularyConfusion.id — one study item
  * per pair, not per word, so FSRS scheduling reflects "can this learner tell
@@ -194,6 +213,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   cloze: 'Cloze',
   reading_production: 'Reading production',
   listening: 'Listening',
+  word_listening: 'Word listening',
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Conjugation in context',
   pitch_accent: 'Pitch accent',
@@ -256,6 +276,39 @@ function getSentenceConjugationCandidates(
       wordClass,
       form: identified.form,
       expectedReadings,
+    });
+  }
+  return result;
+}
+
+interface WordListeningCandidate {
+  link: VocabularyOccurrenceCandidate['link'];
+  vocabularyItem: VocabularyItem;
+  sentence: Sentence;
+  surfaceForm: string;
+  /** The sentence's first reference recording — required (see getWordListeningCandidates). */
+  audio: SentenceAudio;
+}
+
+/**
+ * Pure filter over per-occurrence vocabulary candidates (no DB access) — an
+ * occurrence is a word-listening candidate only if its sentence has a
+ * reference recording. See WORD_LISTENING_ACTIVITY_TYPES.
+ */
+function getWordListeningCandidates(
+  occurrences: VocabularyOccurrenceCandidate[],
+  audioBySentenceId: Map<string, SentenceAudio>,
+): WordListeningCandidate[] {
+  const result: WordListeningCandidate[] = [];
+  for (const occurrence of occurrences) {
+    const audio = audioBySentenceId.get(occurrence.sentence.id);
+    if (!audio) continue;
+    result.push({
+      link: occurrence.link,
+      vocabularyItem: occurrence.vocabularyItem,
+      sentence: occurrence.sentence,
+      surfaceForm: occurrence.surfaceForm,
+      audio,
     });
   }
   return result;
@@ -340,6 +393,8 @@ interface QueueCard {
   target?: { vocabularyItem: VocabularyItem; surfaceForm: string };
   /** Set only for audio-comprehension cards (listening). */
   audio?: SentenceAudio;
+  /** Set only for word-in-context listening cards (per-occurrence word_listening). */
+  wordListening?: WordListeningCandidate;
   /** Set only for contrastive-pair cards (Phase 7.7). */
   confusionPair?: ConfusionPairCandidate;
   /** Set only for contextual conjugation cards (per-occurrence sentence_transformation). */
@@ -392,6 +447,22 @@ interface ActivityDescriptor {
    * check, or undefined to never gate this candidate.
    */
   gateSentenceId?: (candidate: unknown) => string | undefined;
+  /**
+   * A finer-grained gate than `gateSentenceId`'s sentence-readiness map:
+   * returns false to withhold this candidate (from both seeding and the due
+   * queue). Used for the two-tier listening ladder — tier-1 `word_listening`
+   * waits on the word's own reading proficiency, tier-2 `listening` waits on
+   * every tier-1 item. Evaluated in addition to `gateSentenceId`.
+   */
+  isReady?: (candidate: unknown, ctx: GateContext) => boolean;
+}
+
+/** Shared inputs for ActivityDescriptor.isReady, built once per queue build. */
+interface GateContext {
+  /** Vocabulary item ids (in scope) whose reading has reached FSRS proficiency. */
+  proficientVocabularyItemIds: Set<string>;
+  /** Sentence id -> every surface-form occurrence has a proficient `word_listening` item. */
+  listeningReadiness: Map<string, boolean>;
 }
 
 /**
@@ -410,6 +481,7 @@ function defineActivityDescriptor<C>(descriptor: {
   buildCard: (studyItem: StudyItem, candidate: C) => QueueCard;
   ensure: (candidate: C, activityType: StudyActivityType) => Promise<StudyItem>;
   gateSentenceId?: (candidate: C) => string | undefined;
+  isReady?: (candidate: C, ctx: GateContext) => boolean;
 }): ActivityDescriptor {
   return descriptor as unknown as ActivityDescriptor;
 }
@@ -431,6 +503,8 @@ interface ReviewScope {
   existingConfusionItems: StudyItem[];
   sentenceConjugationCandidates: SentenceConjugationCandidate[];
   existingConjugationItems: StudyItem[];
+  wordListeningCandidates: WordListeningCandidate[];
+  existingWordListeningItems: StudyItem[];
   pitchAccentCandidates: PitchAccentReviewCandidate[];
   existingPitchAccentItems: StudyItem[];
   grammarCandidates: GrammarReviewCandidate[];
@@ -478,6 +552,30 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
+      // Tier 2 of the listening ladder: withheld until the sentence is ready
+      // for full review (gateSentenceId) *and* every word_listening item for
+      // its occurrences is proficient (isReady).
+      gateSentenceId: (candidate) => candidate.sentence.id,
+      isReady: (candidate, ctx) =>
+        ctx.listeningReadiness.get(candidate.sentence.id) !== false,
+    }),
+    defineActivityDescriptor<WordListeningCandidate>({
+      key: 'wordListening',
+      activityTypes: WORD_LISTENING_ACTIVITY_TYPES,
+      candidates: scope.wordListeningCandidates,
+      existingItems: scope.existingWordListeningItems,
+      subjectId: (candidate) => candidate.link.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        wordListening: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureStudyItem('sentenceVocabulary', candidate.link.id, activityType),
+      // Tier 1: withheld until the learner has demonstrated recall of the
+      // word's reading (see WORD_LISTENING_ACTIVITY_TYPES).
+      isReady: (candidate, ctx) =>
+        ctx.proficientVocabularyItemIds.has(candidate.vocabularyItem.id),
     }),
     defineActivityDescriptor<ConfusionPairCandidate>({
       key: 'confusion',
@@ -707,9 +805,10 @@ export function ReviewPage() {
         confusionPairIdSet.has(item.subjectId),
     );
 
-    const sentenceConjugationCandidates = getSentenceConjugationCandidates(
-      await getVocabularyOccurrenceCandidates(sentenceIds),
-    );
+    const occurrenceCandidates = await getVocabularyOccurrenceCandidates(sentenceIds);
+
+    const sentenceConjugationCandidates =
+      getSentenceConjugationCandidates(occurrenceCandidates);
     const conjugationLinkIdSet = new Set(
       sentenceConjugationCandidates.map((candidate) => candidate.link.id),
     );
@@ -722,6 +821,24 @@ export function ReviewPage() {
       (item) =>
         item.subjectType === 'sentenceVocabulary' &&
         conjugationLinkIdSet.has(item.subjectId),
+    );
+
+    const wordListeningCandidates = getWordListeningCandidates(
+      occurrenceCandidates,
+      audioBySentenceId,
+    );
+    const wordListeningLinkIdSet = new Set(
+      wordListeningCandidates.map((candidate) => candidate.link.id),
+    );
+    const existingWordListeningItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(WORD_LISTENING_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'sentenceVocabulary' &&
+        wordListeningLinkIdSet.has(item.subjectId),
     );
 
     const pitchAccentCandidates = getPitchAccentReviewCandidates(
@@ -843,6 +960,8 @@ export function ReviewPage() {
       existingConfusionItems,
       sentenceConjugationCandidates,
       existingConjugationItems,
+      wordListeningCandidates,
+      existingWordListeningItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
       grammarCandidates,
@@ -875,9 +994,22 @@ export function ReviewPage() {
       // otherwise bypass it entirely via lazy seeding below — sentenceReadiness
       // covers that path.
       await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
-      const sentenceReadiness = await getSentenceFullReviewReadiness(
-        scope.sentences.map((sentence) => sentence.id),
-      );
+      const sentenceIds = scope.sentences.map((sentence) => sentence.id);
+      const sentenceReadiness = await getSentenceFullReviewReadiness(sentenceIds);
+
+      // Listening-ladder gates (ActivityDescriptor.isReady). Tier 1
+      // (word_listening) waits on the word's reading proficiency; tier 2
+      // (listening) waits on every tier-1 item. Like the conjugation card,
+      // these have no defer pass of their own — the isGatedOut filter below
+      // keeps them out of the queue and the pending-seed pool.
+      const gateContext: GateContext = {
+        proficientVocabularyItemIds: await getProficientVocabularyItemIds([
+          ...new Set(
+            scope.wordListeningCandidates.map((candidate) => candidate.vocabularyItem.id),
+          ),
+        ]),
+        listeningReadiness: await getSentenceListeningReadiness(sentenceIds),
+      };
 
       const dueByDescriptor = await Promise.all(
         descriptors.map((descriptor) =>
@@ -897,7 +1029,9 @@ export function ReviewPage() {
       // sentence cards.
       const isGatedOut = (descriptor: ActivityDescriptor, candidate: unknown): boolean => {
         const gateSentenceId = descriptor.gateSentenceId?.(candidate);
-        return !!gateSentenceId && sentenceReadiness.get(gateSentenceId) === false;
+        if (!!gateSentenceId && sentenceReadiness.get(gateSentenceId) === false) return true;
+        if (descriptor.isReady && !descriptor.isReady(candidate, gateContext)) return true;
+        return false;
       };
 
       const due: QueueCard[] = [];
@@ -1268,6 +1402,13 @@ export function ReviewPage() {
                 onReplay={() => markAssistance('audio_replayed')}
                 playbackRate={audioSpeed}
                 onPlaybackRateChange={setAudioSpeed}
+              />
+            ) : current.wordListening ? (
+              <WordListeningCard
+                key={current.studyItem.id}
+                candidate={current.wordListening}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
               />
             ) : current.confusionPair ? (
               <ContrastivePairCard
@@ -1929,6 +2070,68 @@ function AudioComprehensionCard({
               <VocabChips items={sentence.targetVocabulary} />
             </>
           )}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Word-in-context listening (user request): tier 1 of the listening ladder.
+ * Loops just the target word's span of the sentence's reference recording
+ * (SegmentLoopPlayer — falls back to whole-sentence playback when forced
+ * alignment can't isolate it) with all text hidden, so the learner practises
+ * hearing that one word before being asked to parse the whole clip
+ * (`listening`, tier 2, gated behind every one of these). Reveal shows the
+ * reading/meaning and the word in its sentence; the 4-point self-rate
+ * afterward is the scheduling signal, same as the other reveal-based cards.
+ */
+function WordListeningCard({
+  candidate,
+  revealed,
+  onReveal,
+}: {
+  candidate: WordListeningCandidate;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const { sentence, audio, surfaceForm, vocabularyItem } = candidate;
+  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  const isInflected =
+    !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
+  return (
+    <>
+      <SegmentLoopPlayer
+        audio={audio}
+        japanese={sentence.japanese}
+        surfaceForm={surfaceForm}
+        loopLabel="Loop word"
+        loopingLabel="Looping word…"
+      />
+      {!revealed ? (
+        <>
+          <p className="muted">
+            Listen to the word on its own and recall its reading and meaning.
+          </p>
+          <button type="button" onClick={onReveal}>
+            Reveal
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="jp jp-lg">
+            {before}
+            <mark>{target || surfaceForm}</mark>
+            {after}
+          </div>
+          <div className="jp">{vocabularyItem.reading || '(no reading recorded)'}</div>
+          {vocabularyItem.meaning ? (
+            <div className="muted">{vocabularyItem.meaning}</div>
+          ) : null}
+          {isInflected ? (
+            <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
+          ) : null}
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
         </>
       )}
     </>

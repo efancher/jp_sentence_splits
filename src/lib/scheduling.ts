@@ -198,8 +198,8 @@ export function isSentenceReadyForFullReview(
  * - A failed (`again`) contrastive-pair review — the card's entire premise
  *   is "can you tell these two words apart," so a miss is definitionally a
  *   `vocabulary_confusion`, no text comparison needed.
- * Comprehension/listening/reading_in_context/grammar_comprehension stay
- * unclassified: a bare
+ * Comprehension/listening/word_listening/reading_in_context/
+ * grammar_comprehension stay unclassified: a bare
  * "again" there could mean anything, and guessing would be noise, not
  * signal.
  */

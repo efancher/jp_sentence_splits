@@ -1581,6 +1581,163 @@ describe('ReviewPage', () => {
     expect(screen.getByText('ほんをよみます。')).toBeInTheDocument();
   });
 
+  async function seedWordListeningFixture(opts: { readingProficient: boolean }) {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-hon',
+      expression: '本',
+      reading: 'ほん',
+      meaning: 'book',
+      partOfSpeech: 'n',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hon',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hon',
+      surfaceForm: '本',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceAudio.add({
+      id: 'audio-1',
+      sentenceId: 'sent-1',
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+    // suppressVocabularyActivityTypes seeds reading_retrieval/cloze/
+    // reading_production at state 'review' (far future) — which also makes the
+    // word count as reading-proficient for the tier-1 word_listening gate.
+    if (opts.readingProficient) await suppressVocabularyActivityTypes('vocab-hon');
+  }
+
+  const FAR_FUTURE_FSRS = (state: 'new' | 'learning' | 'review') => ({
+    due: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    stability: 1,
+    difficulty: 1,
+    elapsedDays: 0,
+    scheduledDays: 0,
+    learningSteps: 0,
+    reps: 1,
+    lapses: 0,
+    state,
+  });
+
+  it('does not seed a word_listening card until the word\'s reading is proficient (tier 1)', async () => {
+    await seedWordListeningFixture({ readingProficient: false });
+    const db = getDb();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // The vocabulary reading cards build/seed as normal...
+    await waitFor(async () => {
+      expect(await db.studyItems.where('activityType').equals('reading_retrieval').count()).toBe(1);
+    });
+    // ...but the word_listening card is withheld while the reading is unproven.
+    expect(await db.studyItems.where('activityType').equals('word_listening').count()).toBe(0);
+    expect(
+      screen.queryByText('Listen to the word on its own and recall its reading and meaning.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('seeds and reviews a word_listening card once the word\'s reading is proficient', async () => {
+    await seedWordListeningFixture({ readingProficient: true });
+    const db = getDb();
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(
+      'Listen to the word on its own and recall its reading and meaning.',
+    );
+    await waitFor(async () => {
+      const seeded = await db.studyItems.where('activityType').equals('word_listening').toArray();
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0]?.subjectType).toBe('sentenceVocabulary');
+      expect(seeded[0]?.subjectId).toBe('sv-hon');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(screen.getByText('ほん')).toBeInTheDocument();
+    expect(screen.getByText('book')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+  });
+
+  it('withholds the full-sentence listening card until its word_listening items are proficient (tier 2)', async () => {
+    await seedWordListeningFixture({ readingProficient: true });
+    const db = getDb();
+    const now = new Date().toISOString();
+    // A word_listening item exists but is not yet proficient...
+    await db.studyItems.add({
+      id: 'si-wl',
+      subjectType: 'sentenceVocabulary',
+      subjectId: 'sv-hon',
+      activityType: 'word_listening',
+      fsrsState: FAR_FUTURE_FSRS('learning'),
+      createdAt: now,
+      updatedAt: now,
+    });
+    // ...and a full-sentence listening card is due.
+    await db.studyItems.add({
+      id: 'si-listening',
+      subjectType: 'sentence',
+      subjectId: 'sent-1',
+      activityType: 'listening',
+      fsrsState: { ...FAR_FUTURE_FSRS('new'), due: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('All caught up.');
+    expect(
+      screen.queryByRole('button', { name: /Play native sentence recording/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('surfaces the full-sentence listening card once every word_listening item is proficient (tier 2)', async () => {
+    await seedWordListeningFixture({ readingProficient: true });
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.studyItems.add({
+      id: 'si-wl',
+      subjectType: 'sentenceVocabulary',
+      subjectId: 'sv-hon',
+      activityType: 'word_listening',
+      fsrsState: FAR_FUTURE_FSRS('review'),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.add({
+      id: 'si-listening',
+      subjectType: 'sentence',
+      subjectId: 'sent-1',
+      activityType: 'listening',
+      fsrsState: { ...FAR_FUTURE_FSRS('new'), due: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByRole('button', { name: /Play native sentence recording/ });
+    expect(screen.getByRole('button', { name: 'Reveal text' })).toBeInTheDocument();
+  });
+
   it('never leaks the aligner\'s <unk> token into the displayed sentence', async () => {
     await seedBookWithSentence();
     const db = getDb();
