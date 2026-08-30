@@ -40,7 +40,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -248,6 +248,7 @@ function createLocalCutter(sourcePath: string, scratch: string): ClipCutter {
 
 /** Find "<dir>/<videoId>.<ext>" for a book's source video. */
 function resolveLocalSource(dir: string, sourceUrl: string | null): string | undefined {
+  if (!existsSync(dir)) throw new Error(`--local-source dir does not exist: ${dir}`);
   const vid = youtubeVideoId(sourceUrl);
   if (!vid) return undefined;
   const hit = readdirSync(dir).find((name) => name.startsWith(`${vid}.`));
@@ -277,14 +278,17 @@ async function remineBook(
   }
   console.log(`\n=== ${book.title} (${bookId})`);
 
+  // Originals a prior run soft-deleted when it wrote its remine rows. Under
+  // --redo we drop the remine rows and treat these as live again (restored
+  // for real only under --apply; the detector below includes them either
+  // way so a dry run shows the true post-redo plan).
+  const restorableIds: string[] = [];
   if (opts.redo) {
     const { data: prior } = await supabase
       .from('reference_audio')
       .select('id, storage_path, sentence_id')
       .eq('book_id', bookId)
       .like('id', `${REMINE_ID_PREFIX}%`);
-    // Originals a prior run soft-deleted when it wrote those remine rows —
-    // restore them so the silence detector can find and re-mine them again.
     const { data: orphaned } = await supabase
       .from('reference_audio')
       .select('id')
@@ -292,9 +296,10 @@ async function remineBook(
       .not('deleted_at', 'is', null)
       .not('id', 'like', `${REMINE_ID_PREFIX}%`)
       .in('sentence_id', [...new Set((prior ?? []).map((r) => r.sentence_id))]);
+    restorableIds.push(...(orphaned ?? []).map((r) => String(r.id)));
     console.log(
       `  --redo: clearing ${prior?.length ?? 0} prior remine row(s), ` +
-        `restoring ${orphaned?.length ?? 0} soft-deleted original(s)`,
+        `restoring ${restorableIds.length} soft-deleted original(s)`,
     );
     if (opts.apply && prior?.length) {
       const paths = prior.map((r) => r.storage_path).filter(Boolean) as string[];
@@ -304,27 +309,36 @@ async function remineBook(
         .delete()
         .in('id', prior.map((r) => r.id));
       if (error) throw new Error(`--redo delete: ${error.message}`);
-      if (orphaned?.length) {
+      if (restorableIds.length) {
         const { error: restoreErr } = await supabase
           .from('reference_audio')
           .update({ deleted_at: null })
-          .in('id', orphaned.map((r) => r.id));
+          .in('id', restorableIds);
         if (restoreErr) throw new Error(`--redo restore: ${restoreErr.message}`);
       }
     }
   }
 
-  const { data: rowsData, error: rowsErr } = await supabase
+  const cols =
+    'id, sentence_id, book_id, source_id, source_sentence_id, source_title, source_url, storage_path, mime_type, duration_ms, size_bytes, source_start_ms, source_end_ms';
+  const { data: liveData, error: rowsErr } = await supabase
     .from('reference_audio')
-    .select(
-      'id, sentence_id, book_id, source_id, source_sentence_id, source_title, source_url, storage_path, mime_type, duration_ms, size_bytes, source_start_ms, source_end_ms',
-    )
+    .select(cols)
     .eq('book_id', bookId)
     .eq('owner_id', userId)
     .is('deleted_at', null)
     .not('id', 'like', `${REMINE_ID_PREFIX}%`);
   if (rowsErr) throw new Error(`fetch reference_audio: ${rowsErr.message}`);
-  const rows = (rowsData ?? []) as AudioRow[];
+  const rows = [...((liveData ?? []) as AudioRow[])];
+  if (restorableIds.length) {
+    const { data: restored } = await supabase
+      .from('reference_audio')
+      .select(cols)
+      .in('id', restorableIds);
+    for (const r of (restored ?? []) as AudioRow[]) {
+      if (!rows.some((existing) => existing.id === r.id)) rows.push(r);
+    }
+  }
 
   // Identify the silent clips: quick byte-rate prefilter, then verify each
   // candidate with ffmpeg volumedetect so we never re-mine an audible clip.
