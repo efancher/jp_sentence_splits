@@ -132,8 +132,10 @@ finally has boundaries. Names still get fumbled by every source; that's what
 the review step (with audio) is for.
 
 Still open:
-- **Confidence flags in the UI** from `avgLogprob` / `noSpeechProb` — the
-  segments carry them; nothing surfaces them yet.
+- ~~Confidence flags in the UI~~ **[done 2026-08-30]** — a shaky segment
+  (`avgLogprob < -0.55` or `noSpeechProb > 0.6`) becomes `Cue.lowConfidence`,
+  OR'd through merge/split, shown as a "⚠ check against the audio" line in
+  the review step.
 - **Manual-caption preference** — currently ASR always wins when available;
   a real fan-sub/official track should beat Whisper. Detecting one reliably
   from yt-dlp output is fuzzy (rolling-caption detection is the one clear
