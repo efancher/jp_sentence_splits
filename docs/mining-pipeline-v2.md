@@ -136,12 +136,15 @@ Still open:
   (`avgLogprob < -0.55` or `noSpeechProb > 0.6`) becomes `Cue.lowConfidence`,
   OR'd through merge/split, shown as a "⚠ check against the audio" line in
   the review step.
-- **Manual-caption preference** — currently ASR always wins when available;
-  a real fan-sub/official track should beat Whisper. Detecting one reliably
-  from yt-dlp output is fuzzy (rolling-caption detection is the one clear
-  signal).
-- **Songs** (GLIM SPANKY) — Whisper hallucinates on music; the lyrics path
-  should skip ASR. Not yet gated.
+- ~~Manual-caption preference~~ **[done 2026-08-30]** — `_looks_human_captioned`
+  (≥50% of ≥5 cues end on sentence punctuation) → use the caption track and
+  skip ASR entirely (correct kanji/names, and instant vs minutes).
+- **Songs** — partly handled **[2026-08-30]**: a punctuation-free transcript
+  (<15% terminal punctuation) skips the merge pass, so lyrics stay
+  line-by-line instead of fusing into one cue. Whisper still hallucinates on
+  dense music though — a real music-video gate (yt-dlp `categories` / `track`
+  metadata → prefer the lyrics caption track over ASR) is still open, held
+  until the exit node's up to verify the yt-dlp fields.
 - `word_timestamps=True` for exact split boundaries (kills the
   char-proportional guess in `split_multi_sentence_cues`).
 
