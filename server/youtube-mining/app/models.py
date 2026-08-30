@@ -16,6 +16,12 @@ TranscriptStatus = Literal[
 ]
 
 
+class CueWord(BaseModel):
+    text: str
+    startMs: int
+    endMs: int
+
+
 class Cue(BaseModel):
     index: int
     startMs: int
@@ -29,6 +35,10 @@ class Cue(BaseModel):
     # came from a low-confidence ASR segment — the review UI marks it for a
     # careful listen. Set by app/asr_client.py, OR'd through merge/split.
     lowConfidence: bool = False
+    # Whisper per-word timings (ASR only), carried so split_multi_sentence_cues
+    # can put a boundary at a real word gap instead of a char-proportional
+    # guess. Concatenated on merge. Not sent to the client.
+    words: list[CueWord] | None = None
 
 
 class MorphemeToken(BaseModel):

@@ -70,10 +70,11 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
     buffer_auto = False
     buffer_low_conf = False
     buffer_sources: list[int] = []
+    buffer_words: list = []
 
     def flush() -> None:
         nonlocal buffer_text, buffer_start, buffer_auto, buffer_low_conf
-        nonlocal buffer_sources
+        nonlocal buffer_sources, buffer_words
         merged.append(
             Cue(
                 index=len(merged),
@@ -83,6 +84,7 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
                 isAuto=buffer_auto,
                 lowConfidence=buffer_low_conf,
                 sourceIndexes=sorted(set(buffer_sources)),
+                words=buffer_words or None,
             )
         )
         buffer_text = ""
@@ -90,6 +92,7 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
         buffer_auto = False
         buffer_low_conf = False
         buffer_sources = []
+        buffer_words = []
 
     for cue in cues:
         if buffer_start is None:
@@ -99,12 +102,41 @@ def merge_incomplete_cues(cues: list[Cue]) -> list[Cue]:
         buffer_auto = buffer_auto or cue.isAuto
         buffer_low_conf = buffer_low_conf or cue.lowConfidence
         buffer_sources.extend(_source_indexes(cue))
+        buffer_words.extend(cue.words or [])
         if _ends_sentence(buffer_text):
             flush()
 
     if buffer_text and buffer_start is not None and buffer_end is not None:
         flush()
     return merged
+
+
+def _split_ends_from_words(cue: Cue, pieces: list[str]) -> list[int] | None:
+    """`endMs` for each of `pieces[:-1]` taken from Whisper's per-word
+    timings — a real word gap instead of a char-proportional guess. None
+    when the cue has no words or the words don't line up with the pieces
+    (the caller then falls back to proportional)."""
+    if not cue.words:
+        return None
+    cum_chars, cum_end = 0, []
+    for word in cue.words:
+        cum_chars += len(word.text)
+        cum_end.append((cum_chars, word.endMs))
+    # Whisper's word tokens concatenate back to the segment text (modulo the
+    # leading spaces we strip), so they should line up near-exactly; a real
+    # mismatch means the words are for a different segment — bail.
+    piece_chars = sum(len(p) for p in pieces)
+    if not cum_end or abs(cum_chars - piece_chars) > max(2, round(piece_chars * 0.05)):
+        return None
+    ends: list[int] = []
+    target = 0
+    for piece in pieces[:-1]:
+        target += len(piece)
+        end = next((ms for chars, ms in cum_end if chars >= target), None)
+        if end is None or (ends and end <= ends[-1]):
+            return None
+        ends.append(end)
+    return ends
 
 
 def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
@@ -131,16 +163,18 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
             )
             continue
 
+        word_ends = _split_ends_from_words(cue, pieces)
         total_chars = sum(len(piece) for piece in pieces) or 1
         duration_ms = cue.endMs - cue.startMs
         cursor = cue.startMs
         for position, piece in enumerate(pieces):
             is_last = position == len(pieces) - 1
-            piece_end = (
-                cue.endMs
-                if is_last
-                else cursor + round(duration_ms * len(piece) / total_chars)
-            )
+            if is_last:
+                piece_end = cue.endMs
+            elif word_ends is not None:
+                piece_end = word_ends[position]
+            else:
+                piece_end = cursor + round(duration_ms * len(piece) / total_chars)
             piece_end = max(piece_end, cursor + 1)
             result.append(
                 Cue(

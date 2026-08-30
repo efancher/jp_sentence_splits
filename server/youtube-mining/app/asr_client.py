@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 
 from app import config
-from app.models import Cue
+from app.models import Cue, CueWord
 
 logger = logging.getLogger("youtube_mining_api.asr")
 
@@ -46,6 +46,15 @@ def transcribe_source(audio_path: Path) -> list[Cue] | None:
             ns is not None and ns > config.ASR_HIGH_NO_SPEECH_PROB
         )
 
+    def _words(seg: dict) -> list[CueWord] | None:
+        raw = seg.get("words") or []
+        out = [
+            CueWord(text=str(w["text"]), startMs=int(w["startMs"]), endMs=int(w["endMs"]))
+            for w in raw
+            if str(w.get("text", "")).strip()
+        ]
+        return out or None
+
     cues = [
         Cue(
             index=i,
@@ -54,6 +63,7 @@ def transcribe_source(audio_path: Path) -> list[Cue] | None:
             text=str(seg["text"]).strip(),
             isAuto=True,
             lowConfidence=_low_confidence(seg),
+            words=_words(seg),
         )
         for i, seg in enumerate(segments)
         if str(seg.get("text", "")).strip()

@@ -135,3 +135,44 @@ def test_resegment_cues_skips_merge_for_punctuationless_lyrics() -> None:
         "あげるからほら調子に乗れ",
         "最低なセリフで",
     ]
+
+
+def test_split_uses_word_timings_when_available() -> None:
+    from app.models import CueWord
+
+    # "それはすごい。今日は晴れです。" — real boundary at 1500ms, but a
+    # char-proportional split (7 vs 9 chars over 5000ms) would guess ~2187ms.
+    cue = Cue(
+        index=0,
+        startMs=0,
+        endMs=5000,
+        text="それはすごい。今日は晴れです。",
+        words=[
+            CueWord(text="それは", startMs=0, endMs=700),
+            CueWord(text="すごい", startMs=700, endMs=1400),
+            CueWord(text="。", startMs=1400, endMs=1500),
+            CueWord(text="今日は", startMs=1500, endMs=2600),
+            CueWord(text="晴れです", startMs=2600, endMs=4700),
+            CueWord(text="。", startMs=4700, endMs=5000),
+        ],
+    )
+    out = split_multi_sentence_cues([cue])
+    assert [c.text for c in out] == ["それはすごい。", "今日は晴れです。"]
+    assert out[0].endMs == 1500  # the word gap, not ~2187
+    assert out[1].startMs == 1500
+
+
+def test_split_falls_back_to_proportional_when_words_dont_line_up() -> None:
+    from app.models import CueWord
+
+    cue = Cue(
+        index=0,
+        startMs=0,
+        endMs=4000,
+        text="はい。そうだね。",
+        words=[CueWord(text="まったく", startMs=0, endMs=2000)],  # unrelated
+    )
+    out = split_multi_sentence_cues([cue])
+    assert [c.text for c in out] == ["はい。", "そうだね。"]
+    # char-proportional: 3/8 * 4000 = 1500
+    assert out[0].endMs == 1500
