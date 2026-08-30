@@ -110,7 +110,7 @@ function parseMaxVol(out: string): number {
   return m ? Number(m[1]) : NaN;
 }
 
-async function waitForJob(jobId: string): Promise<{ cueCount: number }> {
+async function waitForJob(jobId: string): Promise<void> {
   const deadline = Date.now() + 8 * 60_000;
   let lastStage = '';
   for (;;) {
@@ -120,13 +120,15 @@ async function waitForJob(jobId: string): Promise<{ cueCount: number }> {
       status: string;
       stage: string;
       error?: string | null;
-      cues?: { index: number }[] | null;
     };
     if (job.stage !== lastStage) {
       console.log(`    [${job.status}] ${job.stage}`);
       lastStage = job.stage;
     }
-    if (job.status === 'ready') return { cueCount: job.cues?.length ?? 0 };
+    // "ready" is enough — this repair supplies its own text + timings and
+    // cuts via POST /jobs/{id}/clip, so a source with no fetchable
+    // subtitle track (0 parsed cues) is fine.
+    if (job.status === 'ready') return;
     if (job.status === 'error') throw new Error(`Mining job failed: ${job.error}`);
     if (Date.now() > deadline) throw new Error('Mining job timed out (8 min)');
     await sleep(3000);
@@ -247,12 +249,11 @@ async function remineBook(
   const { jobId } = await postJson<{ jobId: string }>('/jobs', { url: sourceUrl });
   let written = 0;
   try {
-    const { cueCount } = await waitForJob(jobId);
-    if (cueCount === 0) throw new Error('Job ready but parsed 0 cues — cannot clip');
+    await waitForJob(jobId);
 
     // 2. Re-cut each sentence from the fresh source at its stored timing.
     for (const j of jobs) {
-      const clip = await postJson<ClipResponse>(`/jobs/${jobId}/cues/0/clip`, {
+      const clip = await postJson<ClipResponse>(`/jobs/${jobId}/clip`, {
         japanese: j.japanese,
         startMs: j.startMs,
         endMs: j.endMs,
