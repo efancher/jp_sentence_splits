@@ -995,11 +995,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     back"/"Compare" reflect the latest one); nothing is persisted. The rep
     chain is driven from the same "recording stopped" effect that sets the
     ephemeral take: on stop, if the loop is still active, a timeout
-    (`LOOP_GAP_MS` — ~1s on Delayed Shadow, 0 on Close, on top of the
-    unavoidable ~0.5s mic + play-along-graph rebuild each rep) starts the
-    next rep. Stopping mid-rep keeps that rep; a failed rep start (mic
-    denied) tears the loop down instead of spinning. The loop is also
-    cancelled on stage change / unmount.
+    (`LOOP_GAP_MS` — ~1s on Delayed Shadow, 0 on Close) starts the next
+    rep. The loop passes `reuseStream: true` to `startRecording`, so
+    `RecordingService` holds the mic open across reps instead of a
+    `getUserMedia` every rep (which added latency and, on some browsers,
+    transiently threw `NotAllowedError` for a rep or two); the panel calls
+    `releaseRecordingStream()` when the loop ends. Stopping mid-rep keeps
+    that rep; a failed rep start (mic denied) tears the loop down instead
+    of spinning. The loop is also cancelled on stage change / unmount.
   - Recording auto-stops shortly after the reference clip's expected
     duration (with a fixed trailing buffer), but the single
     `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now

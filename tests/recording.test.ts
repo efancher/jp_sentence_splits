@@ -8,7 +8,10 @@ import {
 } from '../src/lib/recording';
 
 class FakeMediaStreamTrack {
-  stop = vi.fn();
+  readyState: 'live' | 'ended' = 'live';
+  stop = vi.fn(() => {
+    this.readyState = 'ended';
+  });
 }
 
 class FakeMediaStream {
@@ -129,6 +132,36 @@ describe('RecordingService', () => {
     service.cancel();
     expect(stream.getTracks()[0]?.stop).toHaveBeenCalledOnce();
     expect(service.getStream()).toBeUndefined();
+  });
+
+  it('reuseStream: keeps the mic across stop(), skips getUserMedia next start()', async () => {
+    const getUserMedia = (navigator.mediaDevices as unknown as { getUserMedia: ReturnType<typeof vi.fn> })
+      .getUserMedia;
+    const service = new RecordingService();
+
+    await service.start({ micMode: 'shadow', reuseStream: true });
+    await service.stop();
+    expect(stream.getTracks()[0]?.stop).not.toHaveBeenCalled();
+    expect(service.getStream()).toBe(stream);
+
+    await service.start({ micMode: 'shadow', reuseStream: true });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    await service.stop();
+
+    service.releaseStream();
+    expect(stream.getTracks()[0]?.stop).toHaveBeenCalledOnce();
+    expect(service.getStream()).toBeUndefined();
+  });
+
+  it('reuseStream: re-acquires if the mic mode changes', async () => {
+    const getUserMedia = (navigator.mediaDevices as unknown as { getUserMedia: ReturnType<typeof vi.fn> })
+      .getUserMedia;
+    const service = new RecordingService();
+    await service.start({ micMode: 'shadow', reuseStream: true });
+    await service.stop();
+    await service.start({ micMode: 'default', reuseStream: true });
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    service.releaseStream();
   });
 });
 

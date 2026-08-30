@@ -13,16 +13,24 @@ Each finished rep replaces the stage's ephemeral take (so Hear/Compare
 show the latest); nothing is persisted, "Past attempts" stays clean. The
 chain runs off the existing "recording stopped" effect: on stop, if the
 loop is still active, a `setTimeout(LOOP_GAP_MS[stage])` (~1s Delayed, 0
-Close — plus the unavoidable ~0.5s mic + play-along-graph rebuild per
-rep) fires the next rep. A live rep counter shows in place of the record
-button while looping; the Hear/Compare/Retry/Next row is hidden until you
-stop. Stopping mid-rep keeps that rep; a mic-denied rep start tears the
-loop down; stage change / unmount cancel it. Loop continuation reads
-stage/speed from refs to avoid a stale-closure bug. **Verified**: `npm
-run check` green (993 passing + 2 skipped, +2 in
-`tests/progressiveShadowingPanel.test.tsx`). Not manually verified in a
-real browser — the per-rep mic re-acquisition gap in particular wants a
-feel check. AI_OVERVIEW.md §6 updated.)
+Close) fires the next rep. A live rep counter shows in place of the
+record button while looping; the Hear/Compare/Retry/Next row is hidden
+until you stop. Stopping mid-rep keeps that rep; a mic-denied rep start
+tears the loop down; stage change / unmount cancel it. Loop continuation
+reads stage/speed from refs to avoid a stale-closure bug. **Follow-up
+(same session)**, after the user hit intermittent `NotAllowedError`
+("the request is not allowed by the user agent or platform") for a rep
+or two: `RecordingService` now takes `start({ reuseStream: true })` +
+`releaseStream()`, keeping the mic open across loop reps instead of a
+`getUserMedia` per rep (which caused both the flakiness and most of the
+inter-rep gap). Threaded through `ShadowingController.startRecording`
+(new 3rd `options` arg) + `releaseRecordingStream()` and `useShadowing`.
+Non-loop recordings are unchanged (still stop the mic on stop).
+**Verified**: `npm run check` green (996 passing + 2 skipped; +2
+`progressiveShadowingPanel`, +2 `shadowing`, +2 `recording`). Note:
+`tests/shadowPage.test.tsx` "lists every ranked observation" is
+pre-existing flaky (fails ~1/4 with changes stashed too) — unrelated.
+Not manually verified in a real browser. AI_OVERVIEW.md §6 updated.)
 
 Before that: 2026-08-30 (Progressive listening — a two-tier ladder. From
 "i like the listening cards, but i find the sentences [too] long. i wonder

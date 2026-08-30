@@ -25,7 +25,10 @@ vi.mock('../src/lib/recording', async (importOriginal) => {
 });
 
 class FakeMediaStreamTrack {
-  stop = vi.fn();
+  readyState: 'live' | 'ended' = 'live';
+  stop = vi.fn(() => {
+    this.readyState = 'ended';
+  });
 }
 
 class FakeMediaStream {
@@ -222,6 +225,47 @@ describe('ShadowingController shadow mode', () => {
       shadowActive: false,
       error: 'Reference audio failed to load.',
     });
+  });
+
+  it('reuseStream keeps the mic open across reps; releaseRecordingStream closes it', async () => {
+    let acquired: FakeMediaStream[] = [];
+    stubMediaDevices(async () => {
+      const stream = new FakeMediaStream();
+      acquired.push(stream);
+      return stream;
+    });
+    acquired = [];
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+
+    await controller.startRecording('shadow', { blob }, { reuseStream: true });
+    await controller.stopRecording();
+    // Second rep reuses the same stream — no new getUserMedia.
+    await controller.startRecording('shadow', { blob }, { reuseStream: true });
+    expect(acquired).toHaveLength(1);
+    expect(acquired[0]!.getTracks()[0]!.stop).not.toHaveBeenCalled();
+
+    await controller.stopRecording();
+    controller.releaseRecordingStream();
+    expect(acquired[0]!.getTracks()[0]!.stop).toHaveBeenCalledOnce();
+
+    // A fresh rep after release acquires again.
+    await controller.startRecording('shadow', { blob }, { reuseStream: true });
+    expect(acquired).toHaveLength(2);
+  });
+
+  it('a non-reused shadow recording still closes the mic on stop', async () => {
+    let acquired: FakeMediaStream[] = [];
+    stubMediaDevices(async () => {
+      const stream = new FakeMediaStream();
+      acquired.push(stream);
+      return stream;
+    });
+    acquired = [];
+    const controller = new ShadowingController();
+    await controller.startRecording('shadow', { blob: new Blob(['ref']) });
+    await controller.stopRecording();
+    expect(acquired[0]!.getTracks()[0]!.stop).toHaveBeenCalledOnce();
   });
 
   it('exposes the shadow player analyser, media time, and sample rate', () => {

@@ -225,6 +225,7 @@ export function ProgressiveShadowingPanel({
     cancelPendingGap();
     clearAutoStop();
     teardownRepLoop();
+    shadowing.releaseRecordingStream();
     setActionError(null);
     setPendingFinalAttempt(null);
     setFinalNotes('');
@@ -264,7 +265,7 @@ export function ProgressiveShadowingPanel({
         loopGapTimerRef.current = null;
         if (!loopActiveRef.current) return;
         setRepCount((n) => n + 1);
-        startShadowRep();
+        startShadowRep(true);
       }, LOOP_GAP_MS[stageRef.current] ?? 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -275,6 +276,7 @@ export function ProgressiveShadowingPanel({
   useEffect(() => {
     if (loopActiveRef.current && shadowing.status === 'idle' && shadowing.error) {
       teardownRepLoop();
+      shadowing.releaseRecordingStream();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shadowing.status, shadowing.error]);
@@ -333,13 +335,19 @@ export function ProgressiveShadowingPanel({
    * graph while recording the mic, and arm the auto-stop for a bit past the
    * clip's expected length. Shared by the "Shadow along" button and the
    * hands-free rep loop. Reads speed from a ref so a loop continuation
-   * running from a timeout stays current.
+   * running from a timeout stays current. `reuseStream` keeps the mic open
+   * between loop reps (avoids the per-rep getUserMedia, which is both slow
+   * and flaky on repeat).
    */
-  function startShadowRep() {
+  function startShadowRep(reuseStream: boolean) {
     setActionError(null);
     const audio = referenceAudioRef.current;
     void shadowing
-      .startRecording('shadow', { blob: referenceAudio.blob, playbackRate: speedRef.current })
+      .startRecording(
+        'shadow',
+        { blob: referenceAudio.blob, playbackRate: speedRef.current },
+        { reuseStream },
+      )
       .then(() => {
         const fullDurationMs =
           audio?.duration && Number.isFinite(audio.duration)
@@ -350,26 +358,31 @@ export function ProgressiveShadowingPanel({
   }
 
   function handleStartShadowAlong() {
-    startShadowRep();
+    startShadowRep(false);
   }
 
   /**
    * Hands-free shadow practice for stages 3-4: keep running full
    * shadow-along reps (native audio + mic recording) back to back, each
    * one becoming the current ephemeral take, until stopped. The rep chain
-   * is driven from the "recording stopped" effect above. Stopping while a
-   * rep is recording keeps that rep.
+   * is driven from the "recording stopped" effect above; the mic stream is
+   * held open across reps and released here. Stopping while a rep is
+   * recording keeps that rep.
    */
   function handleToggleRepLoop() {
     if (loopActiveRef.current) {
       teardownRepLoop();
-      if (isRecording) void shadowing.stopRecording();
+      if (isRecording || isRequestingMic) {
+        void shadowing.stopRecording().finally(() => shadowing.releaseRecordingStream());
+      } else {
+        shadowing.releaseRecordingStream();
+      }
       return;
     }
     loopActiveRef.current = true;
     setIsLoopingReps(true);
     setRepCount(1);
-    startShadowRep();
+    startShadowRep(true);
   }
 
   function handleStartFinalRecording() {

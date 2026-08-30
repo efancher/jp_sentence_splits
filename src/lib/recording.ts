@@ -35,6 +35,9 @@ export function micConstraintsForRecording(
 export class RecordingService {
   private recorder?: MediaRecorder;
   private stream?: MediaStream;
+  private streamMicMode?: RecordingMicMode;
+  /** True while the current stream should outlive a stop() (loop reps). */
+  private holdStream = false;
   private chunks: Blob[] = [];
   private startedAtMs = 0;
 
@@ -45,18 +48,40 @@ export class RecordingService {
     );
   }
 
-  async start(options?: { micMode?: RecordingMicMode }): Promise<void> {
+  private streamIsLive(): boolean {
+    return (
+      Boolean(this.stream) &&
+      this.stream!.getTracks().some((track) => track.readyState === 'live')
+    );
+  }
+
+  /**
+   * `reuseStream: true` keeps the mic open across a stop() so the next
+   * start() can skip getUserMedia — for back-to-back loop reps, where
+   * re-acquiring the mic every rep both adds latency and (on some
+   * browsers) transiently fails with NotAllowedError. Call releaseStream()
+   * when the loop ends.
+   */
+  async start(options?: {
+    micMode?: RecordingMicMode;
+    reuseStream?: boolean;
+  }): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microphone recording is not supported in this browser.');
     }
     const micMode = options?.micMode ?? 'default';
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: micConstraintsForRecording(micMode),
-    });
+    this.holdStream = Boolean(options?.reuseStream);
+    if (!(this.holdStream && this.streamIsLive() && this.streamMicMode === micMode)) {
+      this.stopStream();
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: micConstraintsForRecording(micMode),
+      });
+      this.streamMicMode = micMode;
+    }
     const mimeType = RecordingService.supportedMimeType();
     this.recorder = mimeType
-      ? new MediaRecorder(this.stream, { mimeType })
-      : new MediaRecorder(this.stream);
+      ? new MediaRecorder(this.stream!, { mimeType })
+      : new MediaRecorder(this.stream!);
     this.chunks = [];
     this.recorder.ondataavailable = (event) => {
       if (event.data.size) this.chunks.push(event.data);
@@ -65,9 +90,18 @@ export class RecordingService {
     this.recorder.start();
   }
 
-  /** Active mic stream while recording; undefined after stop/cancel. */
+  /**
+   * Active mic stream while recording; also kept between reps when the last
+   * start() passed `reuseStream`. Otherwise undefined after stop/cancel.
+   */
   getStream(): MediaStream | undefined {
     return this.stream;
+  }
+
+  /** Close a stream kept alive by `reuseStream: true`. Safe to call anytime. */
+  releaseStream(): void {
+    this.holdStream = false;
+    this.stopStream();
   }
 
   async stop(): Promise<{ blob: Blob; durationMs: number }> {
@@ -95,13 +129,20 @@ export class RecordingService {
 
   cancel(): void {
     if (this.recorder?.state !== 'inactive') this.recorder?.stop();
+    this.holdStream = false;
     this.cleanup();
   }
 
   private cleanup(): void {
+    this.recorder = undefined;
+    this.chunks = [];
+    if (!this.holdStream) this.stopStream();
+  }
+
+  private stopStream(): void {
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = undefined;
-    this.recorder = undefined;
+    this.streamMicMode = undefined;
   }
 }
 

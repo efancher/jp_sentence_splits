@@ -74,6 +74,7 @@ export class ShadowingController {
   async startRecording(
     micMode?: RecordingMicMode,
     shadowReference?: ShadowReferenceOptions,
+    options?: { reuseStream?: boolean },
   ): Promise<void> {
     if (
       this.snapshot.status === 'recording' ||
@@ -89,7 +90,10 @@ export class ShadowingController {
       shadowActive: false,
     });
     try {
-      await this.recordingService.start(micMode ? { micMode } : undefined);
+      await this.recordingService.start({
+        ...(micMode ? { micMode } : {}),
+        ...(options?.reuseStream ? { reuseStream: true } : {}),
+      });
     } catch (error) {
       this.notify({ status: 'idle', error: messageFor(error) });
       return;
@@ -160,6 +164,15 @@ export class ShadowingController {
       error: null,
       shadowActive: false,
     });
+  }
+
+  /**
+   * Close a mic stream held open across loop reps (see
+   * `startRecording`'s `reuseStream`). Call when a hands-free rep loop
+   * ends; a no-op otherwise.
+   */
+  releaseRecordingStream(): void {
+    this.recordingService.releaseStream();
   }
 
   /** Shared analyser from the active shadow-mode session (do not open a second AudioContext). */
