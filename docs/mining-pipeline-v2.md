@@ -219,6 +219,11 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`
    range endpoint, transcript + segmentation panels with inline playback and
    waveform. Auto-captions still the text source at this point.
+   - **[done 2026-08-30]** first increment, no state machine yet: the
+     current cue-review step now plays the cue's audio
+     (`GET /jobs/{id}/cues/{i}/audio`, `<audio>` on cue load) so a
+     mis-transcription is catchable by ear. Next: merge/split in that step
+     (reuse `resegmentPlan.ts`), then the full staged wizard.
 4. **A — ASR.** `/transcribe` on `shadowing-analysis-api`; wire as stage-1
    primary with the caption fallback. Confidence flags light up.
 5. **Stages 3–5 polish.** `sentence-realign` at mine time, vocab picker at
