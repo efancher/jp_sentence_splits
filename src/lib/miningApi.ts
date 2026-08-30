@@ -174,6 +174,22 @@ export async function fetchMiningClipAudio(
 }
 
 /**
+ * A cue's audio for playback during review — before it's kept/clipped — so
+ * the reviewer can hear the caption and catch a mis-transcription. Cut from
+ * the job's source at the cue's raw span; cached server-side per cue.
+ */
+export async function fetchCuePreviewAudio(
+  jobId: string,
+  cueIndex: number,
+): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/cues/${cueIndex}/audio`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch cue audio: ${await readErrorDetail(response)}`);
+  }
+  return response.blob();
+}
+
+/**
  * Re-segment an already-imported source's sentences without re-downloading
  * (server/youtube-mining `POST /resegment`, stateless). `merge`/`split`
  * default true — full resegmentation for drama transcripts; pass both false

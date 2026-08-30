@@ -244,6 +244,28 @@ def clip_audio_path(job: Job, sentence_id: str) -> Path:
     return record.path
 
 
+def preview_cue_audio(job: Job, cue_index: int) -> Path:
+    """Cut a cue's raw span from the source audio for playback during review —
+    so the reviewer can hear a caption before deciding to keep it. Cached
+    under the job dir (swept with the job); does not touch `job.clips` or the
+    sentence sequence like `clip_cue` does."""
+    if job.status != "ready" or job.source_audio_path is None:
+        raise ValueError("Job is not ready for clipping yet")
+    if cue_index < 0 or cue_index >= len(job.cues):
+        raise CueIndexError(cue_index)
+    out = job.dir / "previews" / f"{cue_index}.m4a"
+    if out.exists():
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cue = job.cues[cue_index]
+    media_ms = clip.probe_duration_ms(job.source_audio_path)
+    _, _, adj_start, adj_end = clip.compute_boundaries(
+        cue.startMs, cue.endMs, media_duration_ms=media_ms
+    )
+    clip.clip_audio(job.source_audio_path, out, start_ms=adj_start, end_ms=adj_end)
+    return out
+
+
 def _sweep_loop() -> None:
     while True:
         time.sleep(config.JOB_SWEEP_INTERVAL_SECONDS)

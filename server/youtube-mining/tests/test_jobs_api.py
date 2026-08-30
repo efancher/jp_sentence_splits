@@ -130,6 +130,20 @@ def test_clip_unknown_cue_returns_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_cue_preview_audio(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    resp = client.get(f"/jobs/{job_id}/cues/0/audio")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/mp4"
+    assert resp.content == b"fake-clip"
+    # Cached — a second request serves the same file without re-clipping.
+    assert client.get(f"/jobs/{job_id}/cues/0/audio").status_code == 200
+    assert client.get(f"/jobs/{job_id}/cues/99/audio").status_code == 404
+
+
 def test_unknown_job_returns_404(client: TestClient) -> None:
     response = client.get("/jobs/does-not-exist")
     assert response.status_code == 404

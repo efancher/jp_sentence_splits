@@ -8,6 +8,7 @@ import {
   clipMiningCue,
   createMiningJob,
   deleteMiningJob,
+  fetchCuePreviewAudio,
   fetchMiningClipAudio,
   getMiningJob,
   type MiningCue,
@@ -43,6 +44,8 @@ export function YouTubeMinePage() {
   const [englishText, setEnglishText] = useState('');
   const [generateKana, setGenerateKana] = useState(true);
   const [clipping, setClipping] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [confirmed, setConfirmed] = useState<{
     sentences: ShadowingSentenceInput[];
     audio: ShadowingAudioDraft[];
@@ -99,6 +102,30 @@ export function YouTubeMinePage() {
     setJapaneseText(currentCue.japanese);
     setEnglishText(currentCue.englishGuess ?? '');
   }, [currentCue]);
+
+  // Pull the cue's audio so it can be heard before deciding to keep it —
+  // the review step's whole point is catching a mis-transcription by ear.
+  useEffect(() => {
+    if (phase !== 'reviewing' || !jobId || !currentCue) return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setPreviewUrl(null);
+    setPreviewFailed(false);
+    void fetchCuePreviewAudio(jobId, currentCue.index).then(
+      (blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      },
+      () => {
+        if (!cancelled) setPreviewFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [phase, jobId, currentCue]);
 
   async function handleStart() {
     setError('');
@@ -268,6 +295,14 @@ export function YouTubeMinePage() {
             {formatTimestamp(currentCue.endMs)}
             {currentCue.isAuto ? ' · auto captions' : ''}
           </div>
+          {previewUrl ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <audio controls src={previewUrl} style={{ width: '100%' }} />
+          ) : previewFailed ? (
+            <div className="muted">Cue audio unavailable.</div>
+          ) : (
+            <div className="muted">Loading cue audio…</div>
+          )}
           <label>
             Japanese
             <textarea

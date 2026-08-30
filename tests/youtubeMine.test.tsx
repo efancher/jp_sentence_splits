@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { fetchCuePreviewAudio } from '../src/lib/miningApi';
 
 import App from '../src/App';
 import { resetDbForTests } from '../src/db/database';
@@ -52,6 +54,7 @@ vi.mock('../src/lib/miningApi', () => ({
     };
   }),
   fetchMiningClipAudio: vi.fn(async () => new Blob(['fake-clip'], { type: 'audio/mp4' })),
+  fetchCuePreviewAudio: vi.fn(async () => new Blob(['fake-cue'], { type: 'audio/mp4' })),
   deleteMiningJob: vi.fn(async () => undefined),
 }));
 
@@ -79,9 +82,17 @@ describe('YouTube mining page', () => {
 
     expect(await screen.findByText('Cue 1 / 2')).toBeInTheDocument();
     expect(await screen.findByDisplayValue('今日は晴れです。')).toBeInTheDocument();
+
+    // The cue's audio is fetched and rendered so it can be heard before keeping.
+    await waitFor(() =>
+      expect(document.querySelector('audio')).toBeInTheDocument(),
+    );
+    expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0);
+
     await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
 
     expect(await screen.findByText('Cue 2 / 2')).toBeInTheDocument();
+    await waitFor(() => expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 1));
     await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
 
     expect(await screen.findByText('Import preview')).toBeInTheDocument();
