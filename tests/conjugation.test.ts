@@ -6,6 +6,7 @@ import {
   conjugate,
   conjugationFormsForWordClass,
   conjugationWordClassFromPartOfSpeech,
+  identifyConjugationForm,
   type ConjugationFormKey,
   type ConjugationWordClass,
 } from '../src/lib/conjugation';
@@ -91,5 +92,41 @@ describe('conjugate edge cases (Phase 7.9)', () => {
   it('returns null when the word class does not match the actual word shape', () => {
     // Not a verb/adjective at all — no godan-style okurigana to split on.
     expect(conjugate('学校', 'がっこう', 'godan', 'plain_past')).toBeNull();
+  });
+});
+
+describe('identifyConjugationForm (contextual conjugation card)', () => {
+  it('identifies the form a surface occurrence is in', () => {
+    expect(identifyConjugationForm('話す', 'はなす', 'godan', '話して')?.form.key).toBe('te_form');
+    expect(identifyConjugationForm('食べる', 'たべる', 'ichidan', '食べた')?.form.key).toBe('plain_past');
+    expect(identifyConjugationForm('する', 'する', 'suru', 'すれば')?.form.key).toBe('ba_form');
+    expect(identifyConjugationForm('行く', 'いく', 'godan', '行かない')?.form.key).toBe('plain_negative');
+    expect(identifyConjugationForm('大きい', 'おおきい', 'i_adjective', '大きかった')?.form.key).toBe(
+      'plain_past',
+    );
+  });
+
+  it('matches on reading when the sentence writes a kanji verb in kana', () => {
+    expect(identifyConjugationForm('話す', 'はなす', 'godan', 'はなして', 'はなして')?.form.key).toBe(
+      'te_form',
+    );
+  });
+
+  it('returns null for a stacked/compound surface this engine does not produce', () => {
+    expect(identifyConjugationForm('話す', 'はなす', 'godan', '話している')).toBeNull();
+    expect(identifyConjugationForm('食べる', 'たべる', 'ichidan', '食べられなかった')).toBeNull();
+    expect(identifyConjugationForm('話す', 'はなす', 'godan', '話してしまった')).toBeNull();
+  });
+
+  it('returns null when the surface is just the dictionary form', () => {
+    expect(identifyConjugationForm('話す', 'はなす', 'godan', '話す')).toBeNull();
+  });
+
+  it('picks the first matching form when several produce the same string', () => {
+    // ichidan potential and passive are both 食べられる — canonical order lists
+    // potential first.
+    expect(identifyConjugationForm('食べる', 'たべる', 'ichidan', '食べられる')?.form.key).toBe(
+      'potential',
+    );
   });
 });

@@ -489,6 +489,59 @@ function conjugateNaAdjective(
   return { expression: expression + suffix, reading: reading + suffix };
 }
 
+/**
+ * The inverse of `conjugate`: given a dictionary form and the exact
+ * inflected text of one of its occurrences in a sentence, work out which
+ * conjugation form that occurrence is — by conjugating the dictionary form
+ * to every form the word class offers and seeing which one the surface
+ * reproduces. Used by the contextual conjugation review card (per-occurrence
+ * `sentence_transformation`, docs/STATUS.md) so a verb is only ever quizzed
+ * on a form it has actually been read in.
+ *
+ * A form matches when either the conjugated `expression` equals
+ * `surfaceExpression` or (when given) the conjugated `reading` equals
+ * `surfaceReading` — the reading path covers a sentence writing a
+ * normally-kanji verb in kana (dict 話す, surface はなして).
+ *
+ * Returns null when:
+ * - the surface just *is* the dictionary expression (nothing was conjugated), or
+ * - no form matches (a stacked/compound surface like 話している,
+ *   食べられなかった, 〜てしまった — those aren't a single form this engine
+ *   produces, and are deliberately left un-quizzed).
+ *
+ * When several form keys match (e.g. ichidan potential and passive both give
+ * 食べられる) the first in `conjugationFormsForWordClass` order wins — the
+ * conjugated string is identical, so the distinction is academic for a
+ * type-the-reading card.
+ */
+export function identifyConjugationForm(
+  expression: string,
+  reading: string,
+  wordClass: ConjugationWordClass,
+  surfaceExpression: string,
+  surfaceReading?: string,
+): { form: ConjugationForm } | null {
+  if (!expression || !reading || !surfaceExpression) return null;
+  if (surfaceExpression === expression) return null;
+  for (const form of conjugationFormsForWordClass(wordClass)) {
+    const conjugated = conjugate(expression, reading, wordClass, form.key);
+    if (!conjugated) continue;
+    if (
+      conjugated.expression === surfaceExpression ||
+      (!!surfaceReading && conjugated.reading === surfaceReading)
+    ) {
+      if (
+        conjugated.expression === expression &&
+        conjugated.reading === reading
+      ) {
+        continue;
+      }
+      return { form };
+    }
+  }
+  return null;
+}
+
 export function conjugate(
   expression: string,
   reading: string,
