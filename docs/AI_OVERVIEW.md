@@ -993,22 +993,24 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     one ephemeral take per rep (replaces the stage's take each time, so
     "Hear that back"/"Compare" reflect the latest; nothing persisted).
     `ShadowingController.startShadowLoop` is a distinct path from
-    `startRecording('shadow')` run repeatedly: it acquires the mic and
-    builds the play-along graph **once**, under the starting tap, then
-    sets the reference `<audio loop>` so it replays itself with no further
-    `play()` call. On its 100 ms tick the controller watches the
-    reference's `currentTime`; when it jumps back past half the clip (a
-    loop wrap) it calls `RecordingService.cycleRecorder()` — stop + fresh
-    `MediaRecorder` on the *same* held-open stream — so each rep is a
-    separate blob. This structure is what survives **iOS Safari**, where
-    `getUserMedia`, `AudioContext.resume()` and `HTMLMediaElement.play()`
-    all need a transient user activation: nothing after the tap does any
-    of those (`MediaRecorder` start/stop and `<audio loop>` don't), where
-    the earlier per-rep-`startRecording` version reliably died a few reps
-    in with "the request is not allowed by the user agent or platform."
-    `stopShadowLoop()` captures the final rep and tears everything down
-    (`ShadowReferencePlayer.teardown()` + `RecordingService.releaseStream()`);
-    stage change / unmount cancel via `cancelRecording()`.
+    `startRecording('shadow')` run repeatedly: under the starting tap it
+    acquires the mic **once** and starts a plain looping `<audio>` for the
+    reference — **no AudioContext, no per-rep `play()`**. On its 100 ms
+    tick the controller watches the reference's `currentTime`; when it
+    jumps back past half the clip (a loop wrap) it calls
+    `RecordingService.cycleRecorder()` — stop + fresh `MediaRecorder` on
+    the *same* held-open stream — so each rep is a separate blob. Nothing
+    after the tap is user-gesture-gated (`MediaRecorder` start/stop and
+    `<audio loop>` aren't), which is what it takes on **iOS Safari**,
+    where `getUserMedia` / `AudioContext.resume()` / `HTMLMediaElement.
+    play()` all need a transient activation that lapses seconds after the
+    tap — two earlier per-rep-setup versions reliably died ~6 reps in with
+    "the request is not allowed by the user agent or platform." Trade-off:
+    no analyser, so **no live waveform during the loop** (the rep counter
+    is the feedback). `stopShadowLoop()` captures the final rep and tears
+    down; a dead-mic cycle failure ends the loop via `endShadowLoop()`
+    rather than spinning; stage change / unmount go through
+    `cancelRecording()`.
   - Recording auto-stops shortly after the reference clip's expected
     duration (with a fixed trailing buffer), but the single
     `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now

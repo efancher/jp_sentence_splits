@@ -287,7 +287,7 @@ describe('ShadowingController shadow mode', () => {
       playbackRate: 1,
       onRep: (take) => takes.push(take),
     });
-    expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: true });
+    expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: false });
     const player = FakeShadowReferencePlayer.instances.at(-1)!;
     expect(player.start).toHaveBeenCalledWith(expect.anything(), blob, 1, { loop: true });
 

@@ -131,12 +131,12 @@ export class ShadowingController {
 
   /**
    * Hands-free shadow-rep loop (guided-shadowing stages 3-4). Unlike
-   * `startRecording('shadow')` run repeatedly, this acquires the mic and
-   * builds the play-along graph **once** (under the caller's tap) and then
-   * lets the reference `<audio>` loop itself — nothing after the tap needs
-   * a user gesture, which is what makes it survive on iOS Safari. Each
-   * time the reference wraps we cycle the recorder so `onRep` gets one
-   * take per rep. End with `stopShadowLoop()`.
+   * `startRecording('shadow')` run repeatedly, this acquires the mic
+   * **once** (under the caller's tap) and starts a plain looping `<audio>`
+   * for the reference — no AudioContext, no per-rep `play()`. After the
+   * tap nothing is user-gesture-gated, which is what makes it hold up on
+   * iOS Safari. Each time the reference wraps we cycle the recorder so
+   * `onRep` gets one take per rep. End with `stopShadowLoop()`.
    */
   async startShadowLoop(
     blob: Blob,
@@ -181,7 +181,9 @@ export class ShadowingController {
       cycling: false,
     };
     this.recordingStartedAt = Date.now();
-    this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
+    // Not `shadowActive` — loop mode runs no AudioContext, so there's no
+    // analyser for the live waveform; the rep counter is the feedback.
+    this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: false });
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -229,11 +231,33 @@ export class ShadowingController {
       void this.recordingService
         .cycleRecorder()
         .then((take) => loop.onRep(take))
-        .catch((error) => this.notify({ error: messageFor(error) }))
+        .catch((error) => {
+          // A rep that captured nothing (a quiet pass) is fine — keep going.
+          // Anything else (mic track ended, recorder wedged) ends the loop
+          // cleanly instead of spinning with the same error every wrap.
+          if (error instanceof Error && error.message === 'No audio was captured.') {
+            return;
+          }
+          this.endShadowLoop({ error: messageFor(error) });
+        })
         .finally(() => {
           loop.cycling = false;
         });
     }
+  }
+
+  private endShadowLoop(opts: { error?: string } = {}): void {
+    if (!this.shadowLoop) return;
+    this.shadowLoop = undefined;
+    this.clearTimer();
+    this.recordingService.cancel();
+    this.shadowPlayer.teardown();
+    this.notify({
+      status: 'idle',
+      recordingElapsedMs: 0,
+      shadowActive: false,
+      ...(opts.error ? { error: opts.error } : {}),
+    });
   }
 
   async stopRecording(): Promise<{ blob: Blob; durationMs: number } | null> {

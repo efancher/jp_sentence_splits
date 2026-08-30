@@ -324,22 +324,13 @@ export class ShadowReferencePlayer {
     this.teardown();
     this.looping = Boolean(options?.loop);
 
-    const context = new AudioContext();
-    this.context = context;
-    if (context.state === 'suspended') await context.resume();
-
-    const micSource = context.createMediaStreamSource(stream);
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 2048;
-    micSource.connect(analyser);
-    this.micSource = micSource;
-    this.analyser = analyser;
-
     const objectUrl = URL.createObjectURL(blob);
     this.objectUrl = objectUrl;
     const audio = new Audio(objectUrl);
     audio.preload = 'auto';
     audio.loop = this.looping;
+    audio.playbackRate = playbackRate;
+    audio.preservesPitch = true;
     this.audio = audio;
 
     await new Promise<void>((resolve, reject) => {
@@ -360,7 +351,30 @@ export class ShadowReferencePlayer {
       audio.load();
     });
 
-    // Media element output must go through this context (not a second graph).
+    if (this.looping) {
+      // Loop mode: plain element playback — no AudioContext at all, so
+      // nothing after the starting tap is user-gesture-gated and there's
+      // no Web Audio graph for iOS to suspend and starve. The mic goes
+      // straight to MediaRecorder; the live waveform is skipped.
+      audio.currentTime = 0;
+      await audio.play();
+      return;
+    }
+
+    // One shadow-along rep: route mic + reference through a single
+    // AudioContext so the live waveform shares the graph and a second
+    // context can't chop the opener.
+    const context = new AudioContext();
+    this.context = context;
+    if (context.state === 'suspended') await context.resume();
+
+    const micSource = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048;
+    micSource.connect(analyser);
+    this.micSource = micSource;
+    this.analyser = analyser;
+
     const elementSource = context.createMediaElementSource(audio);
     elementSource.connect(context.destination);
     this.elementSource = elementSource;
