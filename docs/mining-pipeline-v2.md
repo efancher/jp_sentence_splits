@@ -244,11 +244,12 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`
    range endpoint, transcript + segmentation panels with inline playback and
    waveform. Auto-captions still the text source at this point.
-   - **[done 2026-08-30]** first increment, no state machine yet: the
-     current cue-review step now plays the cue's audio
-     (`GET /jobs/{id}/cues/{i}/audio`, `<audio>` on cue load) so a
-     mis-transcription is catchable by ear. Next: merge/split in that step
-     (reuse `resegmentPlan.ts`), then the full staged wizard.
+   - **[done 2026-08-30]** increments on the current cue-review step (no
+     state machine yet): plays the cue's audio (`GET
+     /jobs/{id}/cues/{i}/audio`); shows the low-confidence flag;
+     **"+ Merge next"** folds the following cue in (`?through=` audio
+     preview, Keep & clip spans the merged range). Still to do here:
+     manual split (auto-only today), then the full staged wizard.
 4. **A — ASR.** **[done 2026-08-30]** `POST /transcribe-source` on
    `shadowing-analysis-api` (Whisper `small`); mining `_run_job` uses it as
    the cue source, captions as fallback. Confidence flags not surfaced yet;
