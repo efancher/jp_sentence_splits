@@ -100,20 +100,28 @@ Cookies expire periodically — re-export and re-copy when jobs start
 failing with the same bot-check error again. They can also rotate within
 minutes of first use from a datacenter IP, so export and run promptly.
 
-**Silent audio.** If a job *succeeds* but every clip is soundless (peak
-~-91 dBFS), YouTube served a poison silent stream because it didn't trust
-the request — stale or barely-valid cookies from this IP. The job now
-fails with a "source audio is silent" error instead (`SILENT_SOURCE_MAX_DB`
-in `app/config.py`). Refresh the cookies and retry; if fresh cookies
-don't fix it, try another `MINING_YTDLP_PLAYER_CLIENT` (e.g. `tv`). Verify
-a raw download's volume with:
+**Silent audio.** If a job *fails* with "source audio is silent"
+(`SILENT_SOURCE_MAX_DB` in `app/config.py`, ~-80 dBFS), the download's
+audio track is silent. Usual cause: stale/untrusted cookies from this IP.
+Refresh the cookies and retry; verify a raw download's volume with:
 
 ```
-yt-dlp --cookies youtube-cookies.txt \
-  --extractor-args "youtube:player_client=web_safari,mweb" \
-  -f bestaudio -o /tmp/probe.m4a "<watch-url>"
+yt-dlp --cookies youtube-cookies.txt -f bestaudio -o /tmp/probe.m4a "<watch-url>"
 ffmpeg -hide_banner -i /tmp/probe.m4a -af volumedetect -f null - 2>&1 | grep max_volume
 ```
+
+(A `clip_audio` bug that silenced *every faded clip* regardless of the
+source — `-ss` after `-i` moving the `afade` window out of range — was
+fixed 2026-08-30. If soundless clips reappear, re-check that first.)
+
+**Future: PO-token provider.** The cookie fragility on this datacenter IP
+(instant rotation, 429s, formats gated behind a GVS PO token) is best
+solved long-term by running [`bgutil-ytdlp-pot-provider`](https://github.com/Brainicism/bgutil-ytdlp-pot-provider):
+a small Node service that runs YouTube's BotGuard VM to mint Proof-of-Origin
+tokens, plus a `pip install bgutil-ytdlp-pot-provider` plugin that yt-dlp
+auto-discovers. With it, public videos need few/no cookies and sessions
+last. Cost: another systemd unit to keep updated (BotGuard breaks it every
+few months). Not set up yet — revisit if mining keeps failing here.
 
 **Use a secondary/throwaway Google account for this, not your primary
 one.** YouTube sees requests carrying that account's session cookie
@@ -127,11 +135,14 @@ just expired cookies.
 
 ### Player-client and "The page needs to be reloaded."
 
-With cookies attached, yt-dlp's default/`web` player client currently
-fails every video with `ERROR: [youtube] <id>: The page needs to be
-reloaded.` (yt-dlp #17389 / #17405). We work around it by forcing
-`player_client=web_safari,mweb` (`MINING_YTDLP_PLAYER_CLIENT`), which
-returns downloadable HLS audio. Revisit once the upstream bug is fixed.
+The `tv` (and historically `web`) player client fails every video with
+`ERROR: [youtube] <id>: The page needs to be reloaded.` (yt-dlp #17389 /
+#17405). We were pinned to `player_client=web_safari,mweb` to dodge it,
+but those clients' audio now needs a GVS PO token, so `bestaudio` came up
+empty. As of 2026-08-30 yt-dlp's own default resolves a real audio-only
+format (opus, format 251), so `MINING_YTDLP_PLAYER_CLIENT` now defaults to
+empty (let yt-dlp choose). Set it back to a specific client here if the
+default regresses.
 
 ### JavaScript runtime (required)
 
