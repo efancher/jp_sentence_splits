@@ -443,3 +443,67 @@ describe('PlaybackCoordinator.dualEar / playDualEar', () => {
     await done;
   });
 });
+
+describe('ShadowReferencePlayer persistent mode', () => {
+  class ShadowFakeAudio extends FakeAudioElement {
+    static instances: ShadowFakeAudio[] = [];
+    readyState = 2;
+    constructor() {
+      super();
+      ShadowFakeAudio.instances.push(this);
+    }
+    load = vi.fn(() => this.dispatch('canplaythrough'));
+  }
+  class ShadowFakeContext extends FakeAudioContext {
+    static instances: ShadowFakeContext[] = [];
+    createMediaStreamSource = vi.fn(() => chainableNode());
+    createAnalyser = vi.fn(() => ({ fftSize: 0, ...chainableNode() }));
+    constructor() {
+      super();
+      ShadowFakeContext.instances.push(this);
+    }
+  }
+
+  beforeEach(() => {
+    ShadowFakeAudio.instances = [];
+    ShadowFakeContext.instances = [];
+    vi.stubGlobal('AudioContext', ShadowFakeContext);
+    vi.stubGlobal('Audio', ShadowFakeAudio);
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn((blob: Blob) => `blob:${blob.size}`),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reuses one context + element across reps, tears down only on teardown()', async () => {
+    const { ShadowReferencePlayer } = await import('../src/lib/recording');
+    const player = new ShadowReferencePlayer();
+    const stream = new FakeMediaStream() as unknown as MediaStream;
+    const blob = new Blob(['ref'], { type: 'audio/mp4' });
+
+    await player.start(stream, blob, 1, { persistent: true });
+    await player.stop(); // end of rep 1 — must NOT close the context
+    await player.start(stream, blob, 1, { persistent: true }); // rep 2 — fast path
+
+    expect(ShadowFakeContext.instances).toHaveLength(1);
+    expect(ShadowFakeAudio.instances).toHaveLength(1);
+    expect(ShadowFakeContext.instances[0]!.close).not.toHaveBeenCalled();
+    expect(ShadowFakeAudio.instances[0]!.play).toHaveBeenCalledTimes(2);
+
+    player.teardown();
+    expect(ShadowFakeContext.instances[0]!.close).toHaveBeenCalledOnce();
+  });
+
+  it('non-persistent start closes the previous context (original behavior)', async () => {
+    const { ShadowReferencePlayer } = await import('../src/lib/recording');
+    const player = new ShadowReferencePlayer();
+    const stream = new FakeMediaStream() as unknown as MediaStream;
+
+    await player.start(stream, new Blob(['a']), 1);
+    await player.start(stream, new Blob(['b']), 1);
+
+    expect(ShadowFakeContext.instances).toHaveLength(2);
+    expect(ShadowFakeContext.instances[0]!.close).toHaveBeenCalledOnce();
+  });
+});

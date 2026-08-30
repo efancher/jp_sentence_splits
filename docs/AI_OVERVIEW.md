@@ -996,13 +996,20 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     chain is driven from the same "recording stopped" effect that sets the
     ephemeral take: on stop, if the loop is still active, a timeout
     (`LOOP_GAP_MS` — ~1s on Delayed Shadow, 0 on Close) starts the next
-    rep. The loop passes `reuseStream: true` to `startRecording`, so
-    `RecordingService` holds the mic open across reps instead of a
-    `getUserMedia` every rep (which added latency and, on some browsers,
-    transiently threw `NotAllowedError` for a rep or two); the panel calls
-    `releaseRecordingStream()` when the loop ends. Stopping mid-rep keeps
-    that rep; a failed rep start (mic denied) tears the loop down instead
-    of spinning. The loop is also cancelled on stage change / unmount.
+    rep. The loop passes `{ reuseStream: true, persistentShadow: true }`
+    to `startRecording`: `RecordingService` holds the mic open across reps
+    (no `getUserMedia` per rep) and `ShadowReferencePlayer` keeps its
+    whole graph — `AudioContext`, mic source, reference `<audio>` — alive
+    across reps, replaying rather than rebuilding. This is what makes the
+    loop work on **iOS Safari**, where `getUserMedia` / `AudioContext.
+    resume()` / `HTMLMediaElement.play()` all need a user gesture, so a
+    timer-fired rep can only reuse the element + context that the starting
+    tap unlocked (recreating them throws "the request is not allowed by
+    the user agent or platform" after the activation lapses — the user hit
+    this around rep 6). The panel calls `releaseRecordingStream()` (→ mic
+    stream + `ShadowReferencePlayer.teardown()`) when the loop ends.
+    Stopping mid-rep keeps that rep; a failed rep start (mic denied) tears
+    the loop down; stage change / unmount also cancel it.
   - Recording auto-stops shortly after the reference clip's expected
     duration (with a fixed trailing buffer), but the single
     `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now

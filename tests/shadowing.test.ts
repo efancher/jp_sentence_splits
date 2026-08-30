@@ -6,8 +6,16 @@ import { ShadowingController } from '../src/lib/shadowing';
 const FakeShadowReferencePlayer = vi.hoisted(() => {
   class FakeShadowReferencePlayer {
     static instances: FakeShadowReferencePlayer[] = [];
-    start = vi.fn(async (_stream: MediaStream, _blob: Blob, _playbackRate?: number) => undefined);
+    start = vi.fn(
+      async (
+        _stream: MediaStream,
+        _blob: Blob,
+        _playbackRate?: number,
+        _options?: { persistent?: boolean },
+      ) => undefined,
+    );
     stop = vi.fn();
+    teardown = vi.fn();
     getAnalyser = vi.fn(() => undefined);
     currentTime = vi.fn(() => 0);
     getSampleRate = vi.fn(() => 48_000);
@@ -178,7 +186,12 @@ describe('ShadowingController shadow mode', () => {
 
     expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: true });
     const player = FakeShadowReferencePlayer.instances[0]!;
-    expect(player.start).toHaveBeenCalledWith(expect.anything(), blob, 0.75);
+    expect(player.start).toHaveBeenCalledWith(
+      expect.anything(),
+      blob,
+      0.75,
+      expect.objectContaining({ persistent: undefined }),
+    );
   });
 
   it('does not start the shadow player without shadow micMode', async () => {
@@ -201,14 +214,14 @@ describe('ShadowingController shadow mode', () => {
     expect(FakeShadowReferencePlayer.instances[0]?.stop).toHaveBeenCalledOnce();
   });
 
-  it('cancelRecording stops the shadow player and clears shadowActive', async () => {
+  it('cancelRecording tears the shadow player down and clears shadowActive', async () => {
     const controller = new ShadowingController();
     const blob = new Blob(['ref'], { type: 'audio/webm' });
     await controller.startRecording('shadow', { blob });
 
     controller.cancelRecording();
     expect(controller.getSnapshot().shadowActive).toBe(false);
-    expect(FakeShadowReferencePlayer.instances[0]?.stop).toHaveBeenCalledOnce();
+    expect(FakeShadowReferencePlayer.instances[0]?.teardown).toHaveBeenCalledOnce();
   });
 
   it('surfaces a non-fatal error if the shadow player fails to start, recording continues', async () => {

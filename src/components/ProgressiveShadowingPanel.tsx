@@ -339,14 +339,14 @@ export function ProgressiveShadowingPanel({
    * between loop reps (avoids the per-rep getUserMedia, which is both slow
    * and flaky on repeat).
    */
-  function startShadowRep(reuseStream: boolean) {
+  function startShadowRep(loop: boolean) {
     setActionError(null);
     const audio = referenceAudioRef.current;
     void shadowing
       .startRecording(
         'shadow',
         { blob: referenceAudio.blob, playbackRate: speedRef.current },
-        { reuseStream },
+        { reuseStream: loop, persistentShadow: loop },
       )
       .then(() => {
         const fullDurationMs =

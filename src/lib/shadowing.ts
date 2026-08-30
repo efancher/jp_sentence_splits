@@ -74,7 +74,7 @@ export class ShadowingController {
   async startRecording(
     micMode?: RecordingMicMode,
     shadowReference?: ShadowReferenceOptions,
-    options?: { reuseStream?: boolean },
+    options?: { reuseStream?: boolean; persistentShadow?: boolean },
   ): Promise<void> {
     if (
       this.snapshot.status === 'recording' ||
@@ -110,6 +110,7 @@ export class ShadowingController {
             stream,
             shadowReference.blob,
             shadowReference.playbackRate,
+            { persistent: options?.persistentShadow },
           );
           this.notify({ shadowActive: true });
         } catch (error) {
@@ -156,7 +157,7 @@ export class ShadowingController {
   cancelRecording(): void {
     this.clearTimer();
     this.recordingService.cancel();
-    this.shadowPlayer.stop();
+    this.shadowPlayer.teardown();
     this.notify({
       status: 'idle',
       recordingElapsedMs: 0,
@@ -167,12 +168,13 @@ export class ShadowingController {
   }
 
   /**
-   * Close a mic stream held open across loop reps (see
-   * `startRecording`'s `reuseStream`). Call when a hands-free rep loop
-   * ends; a no-op otherwise.
+   * Close the mic stream and shadow-play-along graph held open across loop
+   * reps (see `startRecording`'s `reuseStream` / `persistentShadow`). Call
+   * when a hands-free rep loop ends; a no-op otherwise.
    */
   releaseRecordingStream(): void {
     this.recordingService.releaseStream();
+    this.shadowPlayer.teardown();
   }
 
   /** Shared analyser from the active shadow-mode session (do not open a second AudioContext). */

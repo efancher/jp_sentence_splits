@@ -255,6 +255,15 @@ export async function playReferenceForShadowing(
 /**
  * Play-along reference while recording: one AudioContext for mic analysis +
  * reference playback so a second context cannot chop the sentence opener.
+ *
+ * `persistent` mode keeps the whole graph — AudioContext, mic source,
+ * reference `<audio>` element — alive across many `start()` calls, tearing
+ * it down only on `teardown()`. This is what makes the hands-free shadow
+ * loop work on iOS Safari: `getUserMedia`, `AudioContext.resume()` and
+ * `HTMLMediaElement.play()` all need a user gesture there, so the loop
+ * (which fires reps from a timer) can only reuse the element/context that
+ * were unlocked by the tap that started it — recreating them each rep
+ * throws "the request is not allowed by the user agent or platform."
  */
 export class ShadowReferencePlayer {
   private audio?: HTMLAudioElement;
@@ -263,6 +272,9 @@ export class ShadowReferencePlayer {
   private analyser?: AnalyserNode;
   private micSource?: MediaStreamAudioSourceNode;
   private elementSource?: MediaElementAudioSourceNode;
+  private persistent = false;
+  private loadedBlob?: Blob;
+  private loadedStream?: MediaStream;
 
   currentTime(): number {
     return this.audio?.currentTime ?? 0;
@@ -276,8 +288,30 @@ export class ShadowReferencePlayer {
     return this.context?.sampleRate ?? 48_000;
   }
 
-  async start(stream: MediaStream, blob: Blob, playbackRate = 1): Promise<void> {
-    this.stop();
+  async start(
+    stream: MediaStream,
+    blob: Blob,
+    playbackRate = 1,
+    options?: { persistent?: boolean },
+  ): Promise<void> {
+    // Fast path: a persistent graph for this exact stream + clip is already
+    // up (a subsequent loop rep). Just replay the reference.
+    if (
+      this.persistent &&
+      this.context &&
+      this.audio &&
+      this.loadedBlob === blob &&
+      this.loadedStream === stream
+    ) {
+      if (this.context.state === 'suspended') await this.context.resume();
+      await playReferenceForShadowing(this.audio, playbackRate);
+      return;
+    }
+
+    this.teardown();
+    this.persistent = Boolean(options?.persistent);
+    this.loadedBlob = blob;
+    this.loadedStream = stream;
 
     const context = new AudioContext();
     this.context = context;
@@ -315,6 +349,8 @@ export class ShadowReferencePlayer {
     });
 
     // Media element output must go through this context (not a second graph).
+    // createMediaElementSource can only ever be called once per element —
+    // another reason persistent mode has to reuse the same element.
     const elementSource = context.createMediaElementSource(audio);
     elementSource.connect(context.destination);
     this.elementSource = elementSource;
@@ -323,7 +359,20 @@ export class ShadowReferencePlayer {
     await playReferenceForShadowing(audio, playbackRate);
   }
 
+  /** End a rep: pause (persistent) or fully tear the graph down. */
   stop(): void {
+    if (this.persistent) {
+      this.audio?.pause();
+      return;
+    }
+    this.teardown();
+  }
+
+  /** Fully release the graph — AudioContext, element, object URL. */
+  teardown(): void {
+    this.persistent = false;
+    this.loadedBlob = undefined;
+    this.loadedStream = undefined;
     if (this.audio) {
       this.audio.pause();
       this.audio.removeAttribute('src');

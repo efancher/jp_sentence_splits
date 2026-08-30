@@ -17,20 +17,26 @@ Close) fires the next rep. A live rep counter shows in place of the
 record button while looping; the Hear/Compare/Retry/Next row is hidden
 until you stop. Stopping mid-rep keeps that rep; a mic-denied rep start
 tears the loop down; stage change / unmount cancel it. Loop continuation
-reads stage/speed from refs to avoid a stale-closure bug. **Follow-up
+reads stage/speed from refs to avoid a stale-closure bug. **Follow-ups
 (same session)**, after the user hit intermittent `NotAllowedError`
-("the request is not allowed by the user agent or platform") for a rep
-or two: `RecordingService` now takes `start({ reuseStream: true })` +
-`releaseStream()`, keeping the mic open across loop reps instead of a
-`getUserMedia` per rep (which caused both the flakiness and most of the
-inter-rep gap). Threaded through `ShadowingController.startRecording`
-(new 3rd `options` arg) + `releaseRecordingStream()` and `useShadowing`.
-Non-loop recordings are unchanged (still stop the mic on stop).
-**Verified**: `npm run check` green (996 passing + 2 skipped; +2
-`progressiveShadowingPanel`, +2 `shadowing`, +2 `recording`). Note:
-`tests/shadowPage.test.tsx` "lists every ranked observation" is
-pre-existing flaky (fails ~1/4 with changes stashed too) — unrelated.
-Not manually verified in a real browser. AI_OVERVIEW.md §6 updated.)
+("the request is not allowed by the user agent or platform") — first for
+a rep or two, then reliably around rep 6 on iPhone: (1) `RecordingService`
+takes `start({ reuseStream })` + `releaseStream()`, keeping the mic open
+across loop reps instead of `getUserMedia` per rep; (2) `ShadowReference-
+Player` gained a `persistent` mode + `teardown()` — it keeps its
+AudioContext + mic source + reference `<audio>` element alive across
+reps and just replays, instead of `new AudioContext()` / `new Audio()`
+every rep. Both matter on **iOS Safari**, where getUserMedia /
+AudioContext.resume / audio.play need a user gesture, so a timer-fired
+rep can only reuse the graph the starting tap unlocked. Threaded through
+`ShadowingController.startRecording` (3rd arg `{ reuseStream,
+persistentShadow }`), `releaseRecordingStream()`, `cancelRecording`
+(now `teardown()` not `stop()`), and `useShadowing`. One-off "Shadow
+along" and all other recordings are unchanged. **Verified**: `npm run
+check` green (999 passing + 2 skipped; +2 `progressiveShadowingPanel`,
++3 `shadowing`, +4 `recording` incl. a persistent-graph reuse test).
+Not manually verified on-device yet — the iPhone is where it needs the
+check. AI_OVERVIEW.md §6 updated.)
 
 Before that: 2026-08-30 (Progressive listening — a two-tier ladder. From
 "i like the listening cards, but i find the sentences [too] long. i wonder

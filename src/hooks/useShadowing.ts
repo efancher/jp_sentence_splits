@@ -12,7 +12,7 @@ export function useShadowing() {
     (
       micMode?: RecordingMicMode,
       shadowReference?: ShadowReferenceOptions,
-      options?: { reuseStream?: boolean },
+      options?: { reuseStream?: boolean; persistentShadow?: boolean },
     ) => shadowingController.startRecording(micMode, shadowReference, options),
     [],
   );
