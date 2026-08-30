@@ -16,11 +16,38 @@ vi.mock('../src/lib/analysisApi', async (importOriginal) => ({
   transcribeAudio: vi.fn(),
 }));
 
+// jsdom has no Web Audio, so swap the shadow play-along graph for a fake
+// whose currentTime the test drives (to simulate the reference wrapping).
+const FakeShadowRefPlayer = vi.hoisted(() => {
+  class FakeShadowRefPlayer {
+    static latest: FakeShadowRefPlayer | null = null;
+    fakeTime = 0;
+    start = vi.fn(async () => {
+      FakeShadowRefPlayer.latest = this;
+    });
+    stop = vi.fn();
+    teardown = vi.fn();
+    getAnalyser = vi.fn(() => undefined);
+    currentTime = vi.fn(() => this.fakeTime);
+    duration = vi.fn((): number | undefined => 2);
+    getSampleRate = vi.fn(() => 48_000);
+  }
+  return FakeShadowRefPlayer;
+});
+
+vi.mock('../src/lib/recording', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/recording')>()),
+  ShadowReferencePlayer: FakeShadowRefPlayer,
+}));
+
 // Same fakes as tests/shadowing.test.ts, needed here to exercise the
 // Repeat/Compare stages' actual record -> stop lifecycle through the real
 // ShadowingController that ShadowPage/ProgressiveShadowingPanel share.
 class FakeMediaStreamTrack {
-  stop = vi.fn();
+  readyState: 'live' | 'ended' = 'live';
+  stop = vi.fn(() => {
+    this.readyState = 'ended';
+  });
 }
 
 class FakeMediaStream {
@@ -221,7 +248,7 @@ describe('ProgressiveShadowingPanel (via ShadowPage)', () => {
 
     afterEach(() => vi.unstubAllGlobals());
 
-    it('Loop shadow reps runs shadow-along reps back to back until stopped, keeping only the last as an ephemeral take', async () => {
+    it('Loop shadow reps cycles a take each time the looping reference wraps, until stopped', async () => {
       const user = userEvent.setup();
       renderShadowPage();
       await enterGuidedMode(user);
@@ -232,16 +259,22 @@ describe('ProgressiveShadowingPanel (via ShadowPage)', () => {
       expect(screen.getByRole('button', { name: '⏹ Stop loop' })).toBeInTheDocument();
       expect(screen.getByText(/Rep 1/)).toBeInTheDocument();
 
-      // First rep records, auto-stops, then a second rep begins on its own.
+      const player = FakeShadowRefPlayer.latest!;
+      expect(player.start).toHaveBeenCalled();
+
+      // Drive the reference to near the end, then wrap it back to the start.
+      player.fakeTime = 1.9;
+      await new Promise((r) => setTimeout(r, 150));
+      player.fakeTime = 0.05;
       await waitFor(() => expect(screen.getByText(/Rep 2/)).toBeInTheDocument(), {
-        timeout: 5_000,
+        timeout: 3_000,
       });
 
       await user.click(screen.getByRole('button', { name: '⏹ Stop loop' }));
       await screen.findByRole('button', { name: /Loop shadow reps/ });
+      expect(player.teardown).toHaveBeenCalled();
 
-      // Nothing persisted — stages 1-4 stay ephemeral — but a take is kept
-      // for review.
+      // Reps are ephemeral (nothing in "Past attempts"), last take kept.
       expect(await getDb().attempts.count()).toBe(0);
       await waitFor(() =>
         expect(screen.getByRole('button', { name: '▶ Hear that back' })).toBeInTheDocument(),

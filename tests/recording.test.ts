@@ -444,10 +444,11 @@ describe('PlaybackCoordinator.dualEar / playDualEar', () => {
   });
 });
 
-describe('ShadowReferencePlayer persistent mode', () => {
+describe('ShadowReferencePlayer loop mode', () => {
   class ShadowFakeAudio extends FakeAudioElement {
     static instances: ShadowFakeAudio[] = [];
     readyState = 2;
+    loop = false;
     constructor() {
       super();
       ShadowFakeAudio.instances.push(this);
@@ -476,26 +477,26 @@ describe('ShadowReferencePlayer persistent mode', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('reuses one context + element across reps, tears down only on teardown()', async () => {
+  it('loop mode: sets <audio loop>, stop() only pauses, teardown() closes', async () => {
     const { ShadowReferencePlayer } = await import('../src/lib/recording');
     const player = new ShadowReferencePlayer();
     const stream = new FakeMediaStream() as unknown as MediaStream;
-    const blob = new Blob(['ref'], { type: 'audio/mp4' });
 
-    await player.start(stream, blob, 1, { persistent: true });
-    await player.stop(); // end of rep 1 — must NOT close the context
-    await player.start(stream, blob, 1, { persistent: true }); // rep 2 — fast path
+    await player.start(stream, new Blob(['ref']), 1, { loop: true });
+    const audio = ShadowFakeAudio.instances[0]!;
+    const context = ShadowFakeContext.instances[0]!;
+    expect(audio.loop).toBe(true);
+    expect(audio.play).toHaveBeenCalledOnce();
 
-    expect(ShadowFakeContext.instances).toHaveLength(1);
-    expect(ShadowFakeAudio.instances).toHaveLength(1);
-    expect(ShadowFakeContext.instances[0]!.close).not.toHaveBeenCalled();
-    expect(ShadowFakeAudio.instances[0]!.play).toHaveBeenCalledTimes(2);
+    player.stop(); // end of a rep — graph stays up
+    expect(context.close).not.toHaveBeenCalled();
 
     player.teardown();
-    expect(ShadowFakeContext.instances[0]!.close).toHaveBeenCalledOnce();
+    expect(context.close).toHaveBeenCalledOnce();
+    expect(audio.loop).toBe(false);
   });
 
-  it('non-persistent start closes the previous context (original behavior)', async () => {
+  it('non-loop start closes the previous context', async () => {
     const { ShadowReferencePlayer } = await import('../src/lib/recording');
     const player = new ShadowReferencePlayer();
     const stream = new FakeMediaStream() as unknown as MediaStream;

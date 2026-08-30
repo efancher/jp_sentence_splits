@@ -73,11 +73,21 @@ export class RecordingService {
     this.holdStream = Boolean(options?.reuseStream);
     if (!(this.holdStream && this.streamIsLive() && this.streamMicMode === micMode)) {
       this.stopStream();
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: micConstraintsForRecording(micMode),
-      });
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: micConstraintsForRecording(micMode),
+        });
+      } catch (error) {
+        throw new Error(
+          `Microphone access failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       this.streamMicMode = micMode;
     }
+    this.makeRecorder();
+  }
+
+  private makeRecorder(): void {
     const mimeType = RecordingService.supportedMimeType();
     this.recorder = mimeType
       ? new MediaRecorder(this.stream!, { mimeType })
@@ -88,6 +98,20 @@ export class RecordingService {
     };
     this.startedAtMs = Date.now();
     this.recorder.start();
+  }
+
+  /**
+   * Close the current recording and immediately open a fresh one on the
+   * same held-open mic stream — for a hands-free loop that wants a
+   * separate take per rep without a `getUserMedia` (or any user gesture)
+   * in between. Requires a stream kept alive by `reuseStream: true`.
+   */
+  async cycleRecorder(): Promise<{ blob: Blob; durationMs: number }> {
+    if (!this.streamIsLive()) throw new Error('No live mic stream to cycle.');
+    this.holdStream = true;
+    const take = await this.stop();
+    this.makeRecorder();
+    return take;
   }
 
   /**
@@ -256,14 +280,13 @@ export async function playReferenceForShadowing(
  * Play-along reference while recording: one AudioContext for mic analysis +
  * reference playback so a second context cannot chop the sentence opener.
  *
- * `persistent` mode keeps the whole graph — AudioContext, mic source,
- * reference `<audio>` element — alive across many `start()` calls, tearing
- * it down only on `teardown()`. This is what makes the hands-free shadow
- * loop work on iOS Safari: `getUserMedia`, `AudioContext.resume()` and
- * `HTMLMediaElement.play()` all need a user gesture there, so the loop
- * (which fires reps from a timer) can only reuse the element/context that
- * were unlocked by the tap that started it — recreating them each rep
- * throws "the request is not allowed by the user agent or platform."
+ * `loop` mode (the hands-free shadow-rep loop, iOS-safe): the reference
+ * `<audio>` element is set `loop = true` and started once, so it replays
+ * itself with no further `play()` calls, and `stop()` only pauses instead
+ * of closing the graph — `teardown()` does the real cleanup. iOS Safari
+ * gates `getUserMedia`, `AudioContext.resume()` and `HTMLMediaElement.
+ * play()` on a user gesture, so anything the loop does after the starting
+ * tap (from a timer) has to reuse the already-unlocked graph.
  */
 export class ShadowReferencePlayer {
   private audio?: HTMLAudioElement;
@@ -272,12 +295,16 @@ export class ShadowReferencePlayer {
   private analyser?: AnalyserNode;
   private micSource?: MediaStreamAudioSourceNode;
   private elementSource?: MediaElementAudioSourceNode;
-  private persistent = false;
-  private loadedBlob?: Blob;
-  private loadedStream?: MediaStream;
+  private looping = false;
 
   currentTime(): number {
     return this.audio?.currentTime ?? 0;
+  }
+
+  /** Reference clip length in seconds once loaded, else undefined. */
+  duration(): number | undefined {
+    const value = this.audio?.duration;
+    return value && Number.isFinite(value) ? value : undefined;
   }
 
   getAnalyser(): AnalyserNode | undefined {
@@ -292,26 +319,10 @@ export class ShadowReferencePlayer {
     stream: MediaStream,
     blob: Blob,
     playbackRate = 1,
-    options?: { persistent?: boolean },
+    options?: { loop?: boolean },
   ): Promise<void> {
-    // Fast path: a persistent graph for this exact stream + clip is already
-    // up (a subsequent loop rep). Just replay the reference.
-    if (
-      this.persistent &&
-      this.context &&
-      this.audio &&
-      this.loadedBlob === blob &&
-      this.loadedStream === stream
-    ) {
-      if (this.context.state === 'suspended') await this.context.resume();
-      await playReferenceForShadowing(this.audio, playbackRate);
-      return;
-    }
-
     this.teardown();
-    this.persistent = Boolean(options?.persistent);
-    this.loadedBlob = blob;
-    this.loadedStream = stream;
+    this.looping = Boolean(options?.loop);
 
     const context = new AudioContext();
     this.context = context;
@@ -328,6 +339,7 @@ export class ShadowReferencePlayer {
     this.objectUrl = objectUrl;
     const audio = new Audio(objectUrl);
     audio.preload = 'auto';
+    audio.loop = this.looping;
     this.audio = audio;
 
     await new Promise<void>((resolve, reject) => {
@@ -349,8 +361,6 @@ export class ShadowReferencePlayer {
     });
 
     // Media element output must go through this context (not a second graph).
-    // createMediaElementSource can only ever be called once per element —
-    // another reason persistent mode has to reuse the same element.
     const elementSource = context.createMediaElementSource(audio);
     elementSource.connect(context.destination);
     this.elementSource = elementSource;
@@ -359,9 +369,9 @@ export class ShadowReferencePlayer {
     await playReferenceForShadowing(audio, playbackRate);
   }
 
-  /** End a rep: pause (persistent) or fully tear the graph down. */
+  /** End a rep: in loop mode just pause (graph stays up); else tear down. */
   stop(): void {
-    if (this.persistent) {
+    if (this.looping) {
       this.audio?.pause();
       return;
     }
@@ -370,11 +380,10 @@ export class ShadowReferencePlayer {
 
   /** Fully release the graph — AudioContext, element, object URL. */
   teardown(): void {
-    this.persistent = false;
-    this.loadedBlob = undefined;
-    this.loadedStream = undefined;
+    this.looping = false;
     if (this.audio) {
       this.audio.pause();
+      this.audio.loop = false;
       this.audio.removeAttribute('src');
       this.audio.load();
     }

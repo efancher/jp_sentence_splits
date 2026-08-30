@@ -6,18 +6,20 @@ import { ShadowingController } from '../src/lib/shadowing';
 const FakeShadowReferencePlayer = vi.hoisted(() => {
   class FakeShadowReferencePlayer {
     static instances: FakeShadowReferencePlayer[] = [];
+    fakeCurrentTime = 0;
     start = vi.fn(
       async (
         _stream: MediaStream,
         _blob: Blob,
         _playbackRate?: number,
-        _options?: { persistent?: boolean },
+        _options?: { loop?: boolean },
       ) => undefined,
     );
     stop = vi.fn();
     teardown = vi.fn();
     getAnalyser = vi.fn(() => undefined);
-    currentTime = vi.fn(() => 0);
+    currentTime = vi.fn(() => this.fakeCurrentTime);
+    duration = vi.fn((): number | undefined => 2);
     getSampleRate = vi.fn(() => 48_000);
 
     constructor() {
@@ -135,7 +137,7 @@ describe('ShadowingController recording lifecycle', () => {
     await controller.startRecording();
     expect(controller.getSnapshot()).toMatchObject({
       status: 'idle',
-      error: 'Permission denied',
+      error: 'Microphone access failed: Permission denied',
     });
   });
 
@@ -186,12 +188,7 @@ describe('ShadowingController shadow mode', () => {
 
     expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: true });
     const player = FakeShadowReferencePlayer.instances[0]!;
-    expect(player.start).toHaveBeenCalledWith(
-      expect.anything(),
-      blob,
-      0.75,
-      expect.objectContaining({ persistent: undefined }),
-    );
+    expect(player.start).toHaveBeenCalledWith(expect.anything(), blob, 0.75);
   });
 
   it('does not start the shadow player without shadow micMode', async () => {
@@ -279,6 +276,46 @@ describe('ShadowingController shadow mode', () => {
     await controller.startRecording('shadow', { blob: new Blob(['ref']) });
     await controller.stopRecording();
     expect(acquired[0]!.getTracks()[0]!.stop).toHaveBeenCalledOnce();
+  });
+
+  it('startShadowLoop loops the reference and cycles one take per wrap', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    const takes: Array<{ blob: Blob; durationMs: number }> = [];
+
+    await controller.startShadowLoop(blob, {
+      playbackRate: 1,
+      onRep: (take) => takes.push(take),
+    });
+    expect(controller.getSnapshot()).toMatchObject({ status: 'recording', shadowActive: true });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+    expect(player.start).toHaveBeenCalledWith(expect.anything(), blob, 1, { loop: true });
+
+    // Advance playback, then wrap it (currentTime jumps back past half the clip).
+    player.fakeCurrentTime = 1.9;
+    await new Promise((r) => setTimeout(r, 150));
+    player.fakeCurrentTime = 0.1;
+    await new Promise((r) => setTimeout(r, 250));
+    expect(takes).toHaveLength(1);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(takes).toHaveLength(2); // final take captured on stop
+    expect(controller.getSnapshot()).toMatchObject({ status: 'stopped', shadowActive: false });
+    expect(player.teardown).toHaveBeenCalled();
+  });
+
+  it('startShadowLoop surfaces a fatal error if the reference graph fails', async () => {
+    const controller = new ShadowingController();
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+    player.start = vi.fn(async () => {
+      throw new Error('Audio context resume failed: NotAllowedError');
+    });
+    await controller.startShadowLoop(new Blob(['ref']), { onRep: () => {} });
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'idle',
+      error: 'Audio context resume failed: NotAllowedError',
+    });
   });
 
   it('exposes the shadow player analyser, media time, and sample rate', () => {

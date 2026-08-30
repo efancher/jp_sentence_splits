@@ -58,6 +58,14 @@ export class ShadowingController {
   private timer: ReturnType<typeof setInterval> | undefined;
   private recordingStartedAt = 0;
   private stopping = false;
+  private shadowLoop:
+    | {
+        onRep: (take: { blob: Blob; durationMs: number }) => void;
+        clipSeconds: number;
+        lastCurrentTime: number;
+        cycling: boolean;
+      }
+    | undefined;
 
   getSnapshot = (): ShadowingSnapshot => this.snapshot;
 
@@ -74,7 +82,7 @@ export class ShadowingController {
   async startRecording(
     micMode?: RecordingMicMode,
     shadowReference?: ShadowReferenceOptions,
-    options?: { reuseStream?: boolean; persistentShadow?: boolean },
+    options?: { reuseStream?: boolean },
   ): Promise<void> {
     if (
       this.snapshot.status === 'recording' ||
@@ -110,7 +118,6 @@ export class ShadowingController {
             stream,
             shadowReference.blob,
             shadowReference.playbackRate,
-            { persistent: options?.persistentShadow },
           );
           this.notify({ shadowActive: true });
         } catch (error) {
@@ -122,7 +129,85 @@ export class ShadowingController {
     }
   }
 
+  /**
+   * Hands-free shadow-rep loop (guided-shadowing stages 3-4). Unlike
+   * `startRecording('shadow')` run repeatedly, this acquires the mic and
+   * builds the play-along graph **once** (under the caller's tap) and then
+   * lets the reference `<audio>` loop itself — nothing after the tap needs
+   * a user gesture, which is what makes it survive on iOS Safari. Each
+   * time the reference wraps we cycle the recorder so `onRep` gets one
+   * take per rep. End with `stopShadowLoop()`.
+   */
+  async startShadowLoop(
+    blob: Blob,
+    opts: {
+      playbackRate?: number;
+      onRep: (take: { blob: Blob; durationMs: number }) => void;
+    },
+  ): Promise<void> {
+    if (this.snapshot.status === 'recording' || this.snapshot.status === 'requesting-mic') {
+      return;
+    }
+    this.notify({
+      status: 'requesting-mic',
+      recordingElapsedMs: 0,
+      lastRecording: null,
+      error: null,
+      shadowActive: false,
+    });
+    try {
+      await this.recordingService.start({ micMode: 'shadow', reuseStream: true });
+    } catch (error) {
+      this.notify({ status: 'idle', error: messageFor(error) });
+      return;
+    }
+    const stream = this.recordingService.getStream();
+    if (!stream) {
+      this.recordingService.cancel();
+      this.notify({ status: 'idle', error: 'No microphone stream available.' });
+      return;
+    }
+    try {
+      await this.shadowPlayer.start(stream, blob, opts.playbackRate ?? 1, { loop: true });
+    } catch (error) {
+      this.recordingService.cancel();
+      this.notify({ status: 'idle', error: messageFor(error), shadowActive: false });
+      return;
+    }
+    this.shadowLoop = {
+      onRep: opts.onRep,
+      clipSeconds: this.shadowPlayer.duration() ?? 3,
+      lastCurrentTime: this.shadowPlayer.currentTime(),
+      cycling: false,
+    };
+    this.recordingStartedAt = Date.now();
+    this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
+    this.timer = setInterval(() => this.tick(), TICK_MS);
+  }
+
+  stopShadowLoop(): void {
+    const loop = this.shadowLoop;
+    this.shadowLoop = undefined;
+    this.clearTimer();
+    if (!loop) return;
+    void this.recordingService
+      .stop()
+      .then((take) => {
+        loop.onRep(take);
+        this.notify({ status: 'stopped', lastRecording: take, error: null, shadowActive: false });
+      })
+      .catch(() => this.notify({ status: 'idle', shadowActive: false }))
+      .finally(() => {
+        this.recordingService.releaseStream();
+        this.shadowPlayer.teardown();
+      });
+  }
+
   private tick(): void {
+    if (this.shadowLoop) {
+      this.tickShadowLoop(this.shadowLoop);
+      return;
+    }
     const elapsed = Date.now() - this.recordingStartedAt;
     if (elapsed >= MAX_RECORDING_DURATION_MS) {
       this.notify({ recordingElapsedMs: MAX_RECORDING_DURATION_MS });
@@ -130,6 +215,25 @@ export class ShadowingController {
       return;
     }
     this.notify({ recordingElapsedMs: elapsed });
+  }
+
+  private tickShadowLoop(loop: NonNullable<ShadowingController['shadowLoop']>): void {
+    const now = this.shadowPlayer.currentTime();
+    // The reference wrapped (loop=true restarts silently) when playback
+    // position jumps back by more than half the clip.
+    const wrapped = loop.lastCurrentTime - now > loop.clipSeconds / 2;
+    loop.lastCurrentTime = now;
+    this.notify({ recordingElapsedMs: Date.now() - this.recordingStartedAt });
+    if (wrapped && !loop.cycling) {
+      loop.cycling = true;
+      void this.recordingService
+        .cycleRecorder()
+        .then((take) => loop.onRep(take))
+        .catch((error) => this.notify({ error: messageFor(error) }))
+        .finally(() => {
+          loop.cycling = false;
+        });
+    }
   }
 
   async stopRecording(): Promise<{ blob: Blob; durationMs: number } | null> {
@@ -155,6 +259,7 @@ export class ShadowingController {
   }
 
   cancelRecording(): void {
+    this.shadowLoop = undefined;
     this.clearTimer();
     this.recordingService.cancel();
     this.shadowPlayer.teardown();
@@ -168,11 +273,12 @@ export class ShadowingController {
   }
 
   /**
-   * Close the mic stream and shadow-play-along graph held open across loop
-   * reps (see `startRecording`'s `reuseStream` / `persistentShadow`). Call
-   * when a hands-free rep loop ends; a no-op otherwise.
+   * Close the mic stream and shadow play-along graph. `stopShadowLoop`
+   * already does this; kept as an explicit safety-net for callers that
+   * tear down out-of-band (panel unmount / stage change).
    */
   releaseRecordingStream(): void {
+    this.shadowLoop = undefined;
     this.recordingService.releaseStream();
     this.shadowPlayer.teardown();
   }

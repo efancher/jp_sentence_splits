@@ -12,8 +12,22 @@ export function useShadowing() {
     (
       micMode?: RecordingMicMode,
       shadowReference?: ShadowReferenceOptions,
-      options?: { reuseStream?: boolean; persistentShadow?: boolean },
+      options?: { reuseStream?: boolean },
     ) => shadowingController.startRecording(micMode, shadowReference, options),
+    [],
+  );
+  const startShadowLoop = useCallback(
+    (
+      blob: Blob,
+      opts: {
+        playbackRate?: number;
+        onRep: (take: { blob: Blob; durationMs: number }) => void;
+      },
+    ) => shadowingController.startShadowLoop(blob, opts),
+    [],
+  );
+  const stopShadowLoop = useCallback(
+    () => shadowingController.stopShadowLoop(),
     [],
   );
   const stopRecording = useCallback(
@@ -77,6 +91,8 @@ export function useShadowing() {
     stopRecording,
     cancelRecording,
     releaseRecordingStream,
+    startShadowLoop,
+    stopShadowLoop,
     playAlternate,
     playDualEar,
     stopComparison,
