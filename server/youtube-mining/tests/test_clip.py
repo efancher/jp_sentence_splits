@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.clip import clip_audio, compute_boundaries
+from app.clip import clip_audio, compute_boundaries, probe_max_volume_db
 
 
 def test_compute_boundaries_pads() -> None:
@@ -58,3 +58,22 @@ def test_clip_audio_roundtrip(tmp_path: Path) -> None:
     duration_ms = clip_audio(m4a, output, start_ms=1000, end_ms=2000)
     assert output.exists()
     assert duration_ms > 0
+
+
+@pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg/ffprobe required")
+def test_probe_max_volume_db_detects_silence(tmp_path: Path) -> None:
+    wav = tmp_path / "silent.wav"
+    _write_silent_wav(wav, seconds=2.0)
+    assert probe_max_volume_db(wav) < -80
+
+
+@pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg/ffprobe required")
+def test_probe_max_volume_db_detects_tone(tmp_path: Path) -> None:
+    tone = tmp_path / "tone.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+         str(tone)],
+        check=True,
+        capture_output=True,
+    )
+    assert probe_max_volume_db(tone) > -20

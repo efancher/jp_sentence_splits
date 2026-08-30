@@ -97,7 +97,23 @@ never commit it — it's equivalent to a session credential). The systemd
 unit already points `MINING_YTDLP_COOKIES_FILE` at that path; without the
 file present, mining jobs from this host will fail at the download step.
 Cookies expire periodically — re-export and re-copy when jobs start
-failing with the same bot-check error again.
+failing with the same bot-check error again. They can also rotate within
+minutes of first use from a datacenter IP, so export and run promptly.
+
+**Silent audio.** If a job *succeeds* but every clip is soundless (peak
+~-91 dBFS), YouTube served a poison silent stream because it didn't trust
+the request — stale or barely-valid cookies from this IP. The job now
+fails with a "source audio is silent" error instead (`SILENT_SOURCE_MAX_DB`
+in `app/config.py`). Refresh the cookies and retry; if fresh cookies
+don't fix it, try another `MINING_YTDLP_PLAYER_CLIENT` (e.g. `tv`). Verify
+a raw download's volume with:
+
+```
+yt-dlp --cookies youtube-cookies.txt \
+  --extractor-args "youtube:player_client=web_safari,mweb" \
+  -f bestaudio -o /tmp/probe.m4a "<watch-url>"
+ffmpeg -hide_banner -i /tmp/probe.m4a -af volumedetect -f null - 2>&1 | grep max_volume
+```
 
 **Use a secondary/throwaway Google account for this, not your primary
 one.** YouTube sees requests carrying that account's session cookie

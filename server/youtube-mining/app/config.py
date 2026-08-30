@@ -21,6 +21,16 @@ JOB_SWEEP_INTERVAL_SECONDS = int(
     os.environ.get("MINING_JOB_SWEEP_INTERVAL_SECONDS", "600")
 )
 
+# Fail a job whose downloaded source audio peaks below this (dBFS) — it's
+# silent. YouTube serves a valid-looking but silent stream to yt-dlp
+# requests it doesn't trust (stale/untrusted cookies from a datacenter
+# IP), and clipping that yields a book of soundless reference audio with
+# no other error. -80 dB is well below real speech (~-20) and well above
+# digital silence (~-91). Set to -inf to disable the check.
+SILENT_SOURCE_MAX_DB = float(
+    os.environ.get("MINING_SILENT_SOURCE_MAX_DB", "-80")
+)
+
 # YouTube blocks datacenter/cloud IPs (this box included) with a bot-check
 # unless yt-dlp presents cookies from a real logged-in browser session —
 # export a cookies.txt (e.g. the "Get cookies.txt LOCALLY" browser
@@ -37,6 +47,12 @@ YTDLP_COOKIES_FILE = os.environ.get("MINING_YTDLP_COOKIES_FILE") or None
 # yields downloadable HLS audio; `mweb` is a fallback. Comma-separated;
 # set to empty to let yt-dlp pick its own default once the upstream bug
 # is fixed.
+#
+# NB: if jobs succeed but the audio comes out silent (peak ~-91 dBFS —
+# SILENT_SOURCE_MAX_DB now fails the job when this happens), YouTube is
+# serving a poison silent stream because it doesn't trust the request.
+# Refresh the cookies first (that's usually it); if that doesn't fix it,
+# try a different client here — `tv`, or `web_safari,tv,mweb`.
 YTDLP_PLAYER_CLIENT = os.environ.get(
     "MINING_YTDLP_PLAYER_CLIENT", "web_safari,mweb"
 ).strip()

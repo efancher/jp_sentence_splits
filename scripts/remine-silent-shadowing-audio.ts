@@ -30,7 +30,7 @@
  *   npx tsx scripts/remine-silent-shadowing-audio.ts [--apply] [--redo] \
  *     [--book <id>] [--max-silent-db -50]
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -87,27 +87,29 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await resp.json()) as T;
 }
 
-/** max_volume in dB via ffmpeg volumedetect; -Infinity-ish (~-91) means silent. */
+/**
+ * max_volume in dB via ffmpeg volumedetect; ~-91 dB means digital silence.
+ * volumedetect writes its report to stderr and ffmpeg exits 0, so we must
+ * capture stderr on success too (spawnSync, not execFileSync — the latter
+ * discards stderr unless the process fails). Throws if the report can't be
+ * parsed, so a broken probe never silently passes the caller's guard.
+ */
 function maxVolumeDb(bytes: Buffer, scratch: string): number {
   const f = join(scratch, `probe-${randomUUID().slice(0, 8)}.m4a`);
   writeFileSync(f, bytes);
   try {
-    const r = execFileSync(
+    const r = spawnSync(
       'ffmpeg',
       ['-hide_banner', '-nostdin', '-i', f, '-af', 'volumedetect', '-f', 'null', '-'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      { encoding: 'utf8' },
     );
-    return parseMaxVol(r);
-  } catch (e) {
-    return parseMaxVol((e as { stderr?: string }).stderr ?? '');
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    const m = out.match(/max_volume:\s*(-?[\d.]+) dB/);
+    if (!m) throw new Error(`could not read max_volume from ffmpeg output:\n${out.slice(-400)}`);
+    return Number(m[1]);
   } finally {
     rmSync(f, { force: true });
   }
-}
-
-function parseMaxVol(out: string): number {
-  const m = out.match(/max_volume:\s*(-?[\d.]+) dB/);
-  return m ? Number(m[1]) : NaN;
 }
 
 async function waitForJob(jobId: string): Promise<void> {
@@ -160,10 +162,22 @@ async function remineBook(
   if (opts.redo) {
     const { data: prior } = await supabase
       .from('reference_audio')
-      .select('id, storage_path')
+      .select('id, storage_path, sentence_id')
       .eq('book_id', bookId)
       .like('id', `${REMINE_ID_PREFIX}%`);
-    console.log(`  --redo: clearing ${prior?.length ?? 0} prior remine row(s)`);
+    // Originals a prior run soft-deleted when it wrote those remine rows —
+    // restore them so the silence detector can find and re-mine them again.
+    const { data: orphaned } = await supabase
+      .from('reference_audio')
+      .select('id')
+      .eq('book_id', bookId)
+      .not('deleted_at', 'is', null)
+      .not('id', 'like', `${REMINE_ID_PREFIX}%`)
+      .in('sentence_id', [...new Set((prior ?? []).map((r) => r.sentence_id))]);
+    console.log(
+      `  --redo: clearing ${prior?.length ?? 0} prior remine row(s), ` +
+        `restoring ${orphaned?.length ?? 0} soft-deleted original(s)`,
+    );
     if (opts.apply && prior?.length) {
       const paths = prior.map((r) => r.storage_path).filter(Boolean) as string[];
       if (paths.length) await supabase.storage.from(AUDIO_BUCKET).remove(paths);
@@ -172,6 +186,13 @@ async function remineBook(
         .delete()
         .in('id', prior.map((r) => r.id));
       if (error) throw new Error(`--redo delete: ${error.message}`);
+      if (orphaned?.length) {
+        const { error: restoreErr } = await supabase
+          .from('reference_audio')
+          .update({ deleted_at: null })
+          .in('id', orphaned.map((r) => r.id));
+        if (restoreErr) throw new Error(`--redo restore: ${restoreErr.message}`);
+      }
     }
   }
 
@@ -201,7 +222,7 @@ async function remineBook(
       .download(r.storage_path);
     if (!blob) continue;
     const db = maxVolumeDb(Buffer.from(await blob.arrayBuffer()), opts.scratch);
-    if (Number.isNaN(db) || db < opts.maxSilentDb) silent.push(r);
+    if (db < opts.maxSilentDb) silent.push(r);
   }
   console.log(`  ${silent.length} confirmed-silent clip(s) to re-mine`);
   if (silent.length === 0) return;
@@ -265,7 +286,7 @@ async function remineBook(
       if (!audioResp.ok) throw new Error(`fetch clip audio -> ${audioResp.status}`);
       const bytes = Buffer.from(await audioResp.arrayBuffer());
       const db = maxVolumeDb(bytes, opts.scratch);
-      if (!Number.isNaN(db) && db < opts.maxSilentDb) {
+      if (db < opts.maxSilentDb) {
         console.log(`    ! still silent (${db}dB) after re-mine: ${j.japanese} — leaving old row`);
         continue;
       }

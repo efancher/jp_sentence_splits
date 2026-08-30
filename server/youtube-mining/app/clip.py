@@ -8,6 +8,7 @@ persistence).
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -33,6 +34,36 @@ def probe_duration_ms(path: Path) -> int:
     payload = json.loads(result.stdout)
     duration = float(payload["format"]["duration"])
     return max(1, int(round(duration * 1000)))
+
+
+def probe_max_volume_db(path: Path) -> float:
+    """Peak volume of `path` in dBFS via ffmpeg's volumedetect filter.
+
+    Digital silence reports about -91 dB. Returns -inf if the filter emits
+    no max_volume line (e.g. a zero-sample stream). Used to reject a
+    downloaded source whose audio track is silent — YouTube serves a
+    valid-looking but silent stream to yt-dlp requests it doesn't trust,
+    and clipping that produces a book full of soundless reference audio.
+    """
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            str(path),
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    match = re.search(r"max_volume:\s*(-?\d+(?:\.\d+)?) dB", result.stderr)
+    return float(match.group(1)) if match else float("-inf")
 
 
 def compute_boundaries(

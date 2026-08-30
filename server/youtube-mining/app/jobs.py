@@ -106,6 +106,14 @@ def _run_job(job: Job, url: str) -> None:
         job.stage = "Downloading audio…"
         job.source_audio_path = youtube.fetch_audio(url, job.dir)
 
+        peak_db = clip.probe_max_volume_db(job.source_audio_path)
+        if peak_db < config.SILENT_SOURCE_MAX_DB:
+            raise RuntimeError(
+                f"Downloaded source audio is silent (peak {peak_db:.0f} dBFS). "
+                "YouTube likely served a silent stream — refresh the yt-dlp "
+                "cookies (see README 'YouTube's bot-check') and retry."
+            )
+
         job.stage = "Fetching subtitles…"
         youtube.download_subtitles(url, job.dir)
 

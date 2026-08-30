@@ -73,6 +73,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(youtube, "inspect_url", fake_inspect_url)
     monkeypatch.setattr(clip, "probe_duration_ms", fake_probe_duration_ms)
     monkeypatch.setattr(clip, "clip_audio", fake_clip_audio)
+    monkeypatch.setattr(clip, "probe_max_volume_db", lambda _path: -18.0)
 
     return TestClient(app)
 
@@ -152,6 +153,15 @@ def test_clip_range_without_cue(client: TestClient) -> None:
     audio_response = client.get(f"/jobs/{job_id}/clips/{body['sentenceId']}/audio")
     assert audio_response.status_code == 200
     assert audio_response.content == b"fake-clip"
+
+
+def test_silent_source_fails_job(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(jobs.clip, "probe_max_volume_db", lambda _path: -91.0)
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    status = _wait_until_ready(client, job_id)
+    assert status["status"] == "error"
+    assert "silent" in status["error"].lower()
 
 
 def test_clip_range_requires_timings(client: TestClient) -> None:
