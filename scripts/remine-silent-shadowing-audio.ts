@@ -10,31 +10,39 @@
  *     2026-08-29 re-segmentation backfill (cut ranges that landed entirely
  *     in a silent region of the parent fragment clip).
  *
- * Fix: re-mine each affected book's source video through the youtube-mining
- * `/jobs` API (fresh yt-dlp download + ffmpeg cut), re-cutting each broken
- * sentence from the real source audio at its stored
- * source_start_ms/source_end_ms. Writes NEW reference_audio rows (new ids +
- * storage paths) and soft-deletes the silent ones — an in-place update
- * would not reach devices that already cached the silent blob (sync keeps
- * the existing local blob on a reference_audio update, see
+ * Fix: re-cut each broken sentence from the real source audio at its
+ * stored source_start_ms/source_end_ms. Writes NEW reference_audio rows
+ * (new ids + storage paths) and soft-deletes the silent ones — an in-place
+ * update would not reach devices that already cached the silent blob (sync
+ * keeps the existing local blob on a reference_audio update, see
  * src/sync/engine.ts).
+ *
+ * Two ways to get the source audio:
+ *   1. Default: drive the youtube-mining `/jobs` API (fresh yt-dlp
+ *      download). Fragile — YouTube throttles / serves silent streams to
+ *      the datacenter-hosted mining box.
+ *   2. --local-source <dir>: clip locally with ffmpeg from source files
+ *      you've already downloaded (e.g. yt-dlp on a residential IP), one
+ *      per video, named "<youtubeVideoId>.<ext>" (m4a/webm/opus/mp3/…).
+ *      No mining service, no network beyond Supabase.
  *
  * Dry-run by default; --apply to write. Idempotent: a sentence that already
  * has a verified-audible non-deleted clip is skipped. --redo clears this
- * script's prior output (audio_remine_* rows) for the book first.
+ * script's prior output (audio_remine_* rows) and restores the originals a
+ * prior failed run soft-deleted.
  *
- * Needs the mining service reachable (tailnet) and ffmpeg on PATH (silence
- * verification). Override the mining URL with MINING_API_BASE.
+ * Needs ffmpeg + ffprobe on PATH. Override the mining URL with
+ * MINING_API_BASE.
  *
  * Usage:
  *   npx tsx scripts/remine-silent-shadowing-audio.ts [--apply] [--redo] \
- *     [--book <id>] [--max-silent-db -50]
+ *     [--book <id>] [--max-silent-db -50] [--local-source <dir>]
  */
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
@@ -142,11 +150,121 @@ interface ClipResponse {
   audio: { durationMs: number };
 }
 
+interface JobEntry {
+  row: AudioRow;
+  japanese: string;
+  startMs: number;
+  endMs: number;
+}
+
+interface CutClip {
+  bytes: Buffer;
+  durationMs: number;
+}
+
+/** Produces one re-cut clip per sentence, from a mining job or a local file. */
+interface ClipCutter {
+  label: string;
+  cut(entry: JobEntry): Promise<CutClip>;
+  close?(): Promise<void>;
+}
+
+// Mirrors server/youtube-mining/app/clip.py so local cuts match the mining
+// path's boundaries and encoding exactly.
+const START_PAD_MS = 300;
+const END_PAD_MS = 250;
+const FADE_MS = 20;
+
+function ffprobeDurationMs(path: string): number {
+  const r = spawnSync(
+    'ffprobe',
+    ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', path],
+    { encoding: 'utf8' },
+  );
+  if (r.status !== 0) throw new Error(`ffprobe failed on ${path}: ${(r.stderr ?? '').slice(-300)}`);
+  const duration = Number((JSON.parse(r.stdout) as { format?: { duration?: string } }).format?.duration);
+  if (!Number.isFinite(duration)) throw new Error(`ffprobe gave no duration for ${path}`);
+  return Math.max(1, Math.round(duration * 1000));
+}
+
+async function createMiningCutter(sourceUrl: string): Promise<ClipCutter> {
+  console.log('  Creating mining job…');
+  const { jobId } = await postJson<{ jobId: string }>('/jobs', { url: sourceUrl });
+  await waitForJob(jobId);
+  return {
+    label: `mining job ${jobId}`,
+    async cut(entry) {
+      const clip = await postJson<ClipResponse>(`/jobs/${jobId}/clip`, {
+        japanese: entry.japanese,
+        startMs: entry.startMs,
+        endMs: entry.endMs,
+        generateKana: false,
+      });
+      const resp = await fetch(`${API_BASE}/jobs/${jobId}/clips/${clip.sentenceId}/audio`);
+      if (!resp.ok) throw new Error(`fetch clip audio -> ${resp.status}`);
+      return { bytes: Buffer.from(await resp.arrayBuffer()), durationMs: clip.audio.durationMs };
+    },
+    async close() {
+      await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' }).catch(() => {});
+    },
+  };
+}
+
+function youtubeVideoId(url: string | null): string | undefined {
+  return url?.match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1];
+}
+
+function createLocalCutter(sourcePath: string, scratch: string): ClipCutter {
+  const mediaMs = ffprobeDurationMs(sourcePath);
+  return {
+    label: `local source ${basename(sourcePath)} (${(mediaMs / 1000).toFixed(0)}s)`,
+    async cut(entry) {
+      const adjStart = Math.max(0, entry.startMs - START_PAD_MS);
+      const adjEnd = Math.min(entry.endMs + END_PAD_MS, mediaMs);
+      if (adjEnd <= adjStart) throw new Error(`empty clip range for "${entry.japanese}"`);
+      const durS = (adjEnd - adjStart) / 1000;
+      const fadeS = FADE_MS > 0 ? Math.min(FADE_MS / 1000, durS / 4) : 0;
+      const out = join(scratch, `cut-${randomUUID().slice(0, 8)}.m4a`);
+      const args = [
+        '-y', '-i', sourcePath,
+        '-ss', (adjStart / 1000).toFixed(3),
+        '-t', durS.toFixed(3),
+        '-vn', '-c:a', 'aac', '-b:a', '192k',
+      ];
+      if (fadeS > 0) {
+        args.push('-af', `afade=t=out:st=${Math.max(0, durS - fadeS).toFixed(3)}:d=${fadeS.toFixed(3)}`);
+      }
+      args.push(out);
+      const r = spawnSync('ffmpeg', args, { encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(`ffmpeg cut failed: ${(r.stderr ?? '').slice(-300)}`);
+      try {
+        return { bytes: readFileSync(out), durationMs: ffprobeDurationMs(out) };
+      } finally {
+        rmSync(out, { force: true });
+      }
+    },
+  };
+}
+
+/** Find "<dir>/<videoId>.<ext>" for a book's source video. */
+function resolveLocalSource(dir: string, sourceUrl: string | null): string | undefined {
+  const vid = youtubeVideoId(sourceUrl);
+  if (!vid) return undefined;
+  const hit = readdirSync(dir).find((name) => name.startsWith(`${vid}.`));
+  return hit ? join(dir, hit) : undefined;
+}
+
 async function remineBook(
   supabase: Supabase,
   userId: string,
   bookId: string,
-  opts: { apply: boolean; redo: boolean; maxSilentDb: number; scratch: string },
+  opts: {
+    apply: boolean;
+    redo: boolean;
+    maxSilentDb: number;
+    scratch: string;
+    localSourceDir?: string;
+  },
 ) {
   const { data: book } = await supabase
     .from('books')
@@ -224,13 +342,24 @@ async function remineBook(
     const db = maxVolumeDb(Buffer.from(await blob.arrayBuffer()), opts.scratch);
     if (db < opts.maxSilentDb) silent.push(r);
   }
-  console.log(`  ${silent.length} confirmed-silent clip(s) to re-mine`);
+  console.log(`  ${silent.length} confirmed-silent clip(s) to re-cut`);
   if (silent.length === 0) return;
 
-  const sourceUrl = silent.find((r) => r.source_url)?.source_url;
+  const sourceUrl = silent.find((r) => r.source_url)?.source_url ?? null;
   if (!sourceUrl) {
-    console.log('  no source_url on any silent row — cannot re-mine, skipping');
+    console.log('  no source_url on any silent row — cannot re-cut, skipping');
     return;
+  }
+
+  let localSource: string | undefined;
+  if (opts.localSourceDir) {
+    localSource = resolveLocalSource(opts.localSourceDir, sourceUrl);
+    if (!localSource) {
+      console.log(
+        `  no local source file for ${youtubeVideoId(sourceUrl)} in ${opts.localSourceDir} — skipping`,
+      );
+      return;
+    }
   }
 
   // Sentence text for each silent clip.
@@ -240,54 +369,46 @@ async function remineBook(
     .in('id', [...new Set(silent.map((r) => r.sentence_id))]);
   const textById = new Map((sents ?? []).map((s) => [String(s.id), String(s.japanese)]));
 
-  const jobs = silent
+  const entries: JobEntry[] = silent
     .map((r) => ({
       row: r,
       japanese: textById.get(r.sentence_id) ?? '',
-      startMs: r.source_start_ms,
-      endMs: r.source_end_ms,
+      startMs: r.source_start_ms ?? Number.NaN,
+      endMs: r.source_end_ms ?? Number.NaN,
     }))
     .filter((j) => {
       if (!j.japanese) console.log(`  ! ${j.row.sentence_id}: no sentence text, skipping`);
-      if (j.startMs == null || j.endMs == null) {
+      if (Number.isNaN(j.startMs) || Number.isNaN(j.endMs)) {
         console.log(`  ! ${j.row.sentence_id}: no source timing, skipping`);
       }
-      return j.japanese && j.startMs != null && j.endMs != null;
+      return j.japanese && !Number.isNaN(j.startMs) && !Number.isNaN(j.endMs);
     });
 
-  console.log(`\n  Plan: re-mine ${jobs.length} clip(s) from ${sourceUrl}`);
-  for (const j of jobs) {
+  console.log(
+    `\n  Plan: re-cut ${entries.length} clip(s) ` +
+      `${localSource ? `from ${basename(localSource)}` : `via mining job from ${sourceUrl}`}`,
+  );
+  for (const j of entries) {
     console.log(`    ${String(j.startMs).padStart(7)}–${String(j.endMs).padStart(7)}ms  ${j.japanese}`);
   }
 
   if (!opts.apply) {
-    console.log('  (dry run — pass --apply to re-mine and write)');
+    console.log('  (dry run — pass --apply to re-cut and write)');
     return;
   }
 
-  // 1. Create the mining job, wait for the source download + subtitle parse.
-  console.log('\n  Creating mining job…');
-  const { jobId } = await postJson<{ jobId: string }>('/jobs', { url: sourceUrl });
+  const cutter = localSource
+    ? createLocalCutter(localSource, opts.scratch)
+    : await createMiningCutter(sourceUrl);
+  console.log(`  Cutting from ${cutter.label}`);
+
   let written = 0;
   try {
-    await waitForJob(jobId);
-
-    // 2. Re-cut each sentence from the fresh source at its stored timing.
-    for (const j of jobs) {
-      const clip = await postJson<ClipResponse>(`/jobs/${jobId}/clip`, {
-        japanese: j.japanese,
-        startMs: j.startMs,
-        endMs: j.endMs,
-        generateKana: false,
-      });
-      const audioResp = await fetch(
-        `${API_BASE}/jobs/${jobId}/clips/${clip.sentenceId}/audio`,
-      );
-      if (!audioResp.ok) throw new Error(`fetch clip audio -> ${audioResp.status}`);
-      const bytes = Buffer.from(await audioResp.arrayBuffer());
+    for (const j of entries) {
+      const { bytes, durationMs } = await cutter.cut(j);
       const db = maxVolumeDb(bytes, opts.scratch);
       if (db < opts.maxSilentDb) {
-        console.log(`    ! still silent (${db}dB) after re-mine: ${j.japanese} — leaving old row`);
+        console.log(`    ! still silent (${db}dB): ${j.japanese} — leaving old row`);
         continue;
       }
 
@@ -310,14 +431,13 @@ async function remineBook(
         source_url: template.source_url,
         storage_path: path,
         mime_type: 'audio/mp4',
-        duration_ms: clip.audio.durationMs,
+        duration_ms: durationMs,
         size_bytes: bytes.length,
         source_start_ms: j.startMs,
         source_end_ms: j.endMs,
       });
       if (insErr) throw new Error(`insert ${audioId}: ${insErr.message}`);
 
-      // 3. Soft-delete the silent row it replaces.
       const { error: delErr } = await supabase
         .from('reference_audio')
         .update({ deleted_at: new Date().toISOString() })
@@ -325,12 +445,12 @@ async function remineBook(
       if (delErr) throw new Error(`soft-delete ${template.id}: ${delErr.message}`);
 
       written += 1;
-      console.log(`    + ${clip.audio.durationMs}ms  ${bytes.length}B  max=${db}dB  ${j.japanese}`);
+      console.log(`    + ${durationMs}ms  ${bytes.length}B  max=${db.toFixed(1)}dB  ${j.japanese}`);
     }
   } finally {
-    await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' }).catch(() => {});
+    await cutter.close?.();
   }
-  console.log(`\n  Done: ${written}/${jobs.length} clip(s) re-mined and replaced.`);
+  console.log(`\n  Done: ${written}/${entries.length} clip(s) re-cut and replaced.`);
 }
 
 async function main() {
@@ -339,6 +459,7 @@ async function main() {
   const redo = argv.includes('--redo');
   const maxSilentDb = Number(arg(argv, '--max-silent-db') ?? -50);
   const bookIds = arg(argv, '--book') ? [arg(argv, '--book')!] : DEFAULT_BOOK_IDS;
+  const localSourceDir = arg(argv, '--local-source');
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
@@ -346,7 +467,13 @@ async function main() {
 
   try {
     for (const bookId of bookIds) {
-      await remineBook(supabase, user.id, bookId, { apply, redo, maxSilentDb, scratch });
+      await remineBook(supabase, user.id, bookId, {
+        apply,
+        redo,
+        maxSilentDb,
+        scratch,
+        localSourceDir,
+      });
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true });
