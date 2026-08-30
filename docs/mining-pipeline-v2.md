@@ -251,8 +251,10 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      state machine yet): plays the cue's audio (`GET
      /jobs/{id}/cues/{i}/audio`); shows the low-confidence flag;
      **"+ Merge next"** folds the following cue in (`?through=` audio
-     preview, Keep & clip spans the merged range). Still to do here:
-     manual split (auto-only today), then the full staged wizard.
+     preview); **"⁄ Split"** divides the working text into N sentences,
+     each clipped over a char-proportional slice of the span. Next: the
+     full staged wizard (job state machine, transcript stage, waveform,
+     unify with `ResegmentSourcePage`).
 4. **A — ASR.** **[done 2026-08-30]** `POST /transcribe-source` on
    `shadowing-analysis-api` (Whisper `small`); mining `_run_job` uses it as
    the cue source, captions as fallback. Confidence flags not surfaced yet;
