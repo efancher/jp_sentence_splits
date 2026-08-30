@@ -9,6 +9,8 @@ import {
   createBook,
   createBookChapter,
   deferUnreadySentenceReviews,
+  getProficientVocabularyItemIds,
+  getSentenceListeningReadiness,
   deleteAttempt,
   deleteBookChapter,
   computeGrammarPatternContextDiversity,
@@ -1971,3 +1973,130 @@ describe('getStudyItemDebugInfo (Phase 7.10)', () => {
 function nowIsoForTest(): string {
   return new Date().toISOString();
 }
+
+describe('getProficientVocabularyItemIds', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-proficient-vocab-${createId('db')}`);
+  });
+
+  async function makeProficient(studyItemId: string) {
+    const item = await getDb().studyItems.get(studyItemId);
+    await getDb().studyItems.update(studyItemId, {
+      fsrsState: { ...item!.fsrsState, state: 'review' },
+    });
+  }
+
+  it('returns an empty set for no ids', async () => {
+    expect(await getProficientVocabularyItemIds([])).toEqual(new Set());
+  });
+
+  it('includes a word with a proficient study item and excludes a still-new one', async () => {
+    const proficient = await ensureStudyItem('vocabularyItem', 'v-good', 'reading_retrieval');
+    await makeProficient(proficient.id);
+    await ensureStudyItem('vocabularyItem', 'v-new', 'reading_retrieval'); // stays 'new'
+
+    const result = await getProficientVocabularyItemIds(['v-good', 'v-new']);
+    expect(result).toEqual(new Set(['v-good']));
+  });
+
+  it('counts a word proficient once any one of its activity types is proficient', async () => {
+    const reading = await ensureStudyItem('vocabularyItem', 'v-1', 'reading_retrieval');
+    await ensureStudyItem('vocabularyItem', 'v-1', 'cloze'); // stays 'new'
+    await makeProficient(reading.id);
+
+    expect(await getProficientVocabularyItemIds(['v-1'])).toEqual(new Set(['v-1']));
+  });
+});
+
+describe('getSentenceListeningReadiness (word_listening tier-2 gate)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-listening-readiness-${createId('db')}`);
+  });
+
+  async function addAudio(sentenceId: string) {
+    await getDb().sentenceAudio.add({
+      id: createId('audio'),
+      sentenceId,
+      sourceId: 'src',
+      sourceSentenceId: 'src-sent',
+      sourceTitle: 'Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['x'], { type: 'audio/mp3' }),
+      importedAt: nowIsoForTest(),
+    });
+  }
+
+  async function linkVocab(sentenceId: string, surfaceForm: string): Promise<string> {
+    const now = nowIsoForTest();
+    const id = createId('svoc');
+    await getDb().sentenceVocabulary.add({
+      id,
+      sentenceId,
+      vocabularyItemId: createId('vocab'),
+      surfaceForm,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  }
+
+  async function addWordListeningItem(linkId: string, state: 'new' | 'learning' | 'review') {
+    const item = await ensureStudyItem('sentenceVocabulary', linkId, 'word_listening');
+    if (state !== 'new') {
+      await getDb().studyItems.update(item.id, {
+        fsrsState: { ...item.fsrsState, state },
+      });
+    }
+  }
+
+  it('is not ready when a surface-form occurrence has no word_listening item yet', async () => {
+    await addAudio('sent-1');
+    await linkVocab('sent-1', '本');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(false);
+  });
+
+  it('is ready once every occurrence has a proficient word_listening item', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本');
+    const b = await linkVocab('sent-1', '読み');
+    await addWordListeningItem(a, 'review');
+    await addWordListeningItem(b, 'review');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(true);
+  });
+
+  it('is not ready while one occurrence is still learning', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本');
+    const b = await linkVocab('sent-1', '読み');
+    await addWordListeningItem(a, 'review');
+    await addWordListeningItem(b, 'learning');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(false);
+  });
+
+  it('is ready for an audio sentence with no surface-form vocabulary (nothing to gate on)', async () => {
+    await addAudio('sent-1');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(true);
+  });
+
+  it('ignores links with no surfaceForm', async () => {
+    await addAudio('sent-1');
+    const now = nowIsoForTest();
+    await getDb().sentenceVocabulary.add({
+      id: createId('svoc'),
+      sentenceId: 'sent-1',
+      vocabularyItemId: createId('vocab'),
+      surfaceForm: undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(true);
+  });
+});

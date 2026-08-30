@@ -2531,6 +2531,84 @@ export async function getReviewableVocabularyItemIdsBySentence(
 }
 
 /**
+ * The subset of `vocabularyItemIds` that have at least one
+ * vocabulary-item-subject study item at FSRS proficiency (review/
+ * relearning) — i.e. the learner has demonstrated recall of the word at
+ * least once. Shared by getSentenceFullReviewReadiness and the
+ * `word_listening` review card's tier-1 gate (a word's listening card is
+ * withheld until its reading is proven — see ReviewPage).
+ */
+export async function getProficientVocabularyItemIds(
+  vocabularyItemIds: string[],
+): Promise<Set<string>> {
+  if (vocabularyItemIds.length === 0) return new Set();
+  const db = getDb();
+  const idSet = new Set(vocabularyItemIds);
+  return new Set(
+    (await db.studyItems.where('subjectType').equals('vocabularyItem').toArray())
+      .filter(
+        (item) =>
+          idSet.has(item.subjectId) && isVocabularyItemProficient(item.fsrsState.state),
+      )
+      .map((item) => item.subjectId),
+  );
+}
+
+/**
+ * Tier-2 gate for the `listening` (full-sentence audio) review card, layered
+ * on top of getSentenceFullReviewReadiness: a sentence isn't ready until
+ * every one of its surface-form vocabulary occurrences has a `word_listening`
+ * study item that has itself reached FSRS proficiency — the learner has
+ * shown they can hear each word in isolation before being asked to parse
+ * the whole clip. A missing `word_listening` item counts as not-ready
+ * (mirrors isSentenceReadyForFullReview treating 'unreviewed' as gating).
+ * Only sentences with a SentenceAudio row matter; one with audio but no
+ * surface-form vocabulary has nothing to gate on and is ready.
+ */
+export async function getSentenceListeningReadiness(
+  sentenceIds: string[],
+): Promise<Map<string, boolean>> {
+  const readiness = new Map<string, boolean>();
+  if (sentenceIds.length === 0) return readiness;
+  const db = getDb();
+  const audioSentenceIds = new Set(
+    (await db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray()).map(
+      (row) => row.sentenceId,
+    ),
+  );
+  const links = (
+    await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
+  ).filter((link) => !!link.surfaceForm && audioSentenceIds.has(link.sentenceId));
+  const linkIdSet = new Set(links.map((link) => link.id));
+  const proficientLinkIds = new Set(
+    linkIdSet.size
+      ? (await db.studyItems.where('activityType').equals('word_listening').toArray())
+          .filter(
+            (item) =>
+              item.subjectType === 'sentenceVocabulary' &&
+              linkIdSet.has(item.subjectId) &&
+              isVocabularyItemProficient(item.fsrsState.state),
+          )
+          .map((item) => item.subjectId)
+      : [],
+  );
+  const linkIdsBySentence = new Map<string, string[]>();
+  for (const link of links) {
+    const arr = linkIdsBySentence.get(link.sentenceId) ?? [];
+    arr.push(link.id);
+    linkIdsBySentence.set(link.sentenceId, arr);
+  }
+  for (const sentenceId of sentenceIds) {
+    const ids = linkIdsBySentence.get(sentenceId) ?? [];
+    readiness.set(
+      sentenceId,
+      ids.every((id) => proficientLinkIds.has(id)),
+    );
+  }
+  return readiness;
+}
+
+/**
  * Full-sentence review readiness (Phase 7.11) for each of `sentenceIds` —
  * shared by deferUnreadySentenceReviews (existing due items) and
  * ReviewPage's pending-seed filtering (items that don't exist yet), so a
@@ -2544,16 +2622,7 @@ export async function getSentenceFullReviewReadiness(
   const db = getDb();
   const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
   const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const vocabularyStudyItems = allVocabularyItemIds.length
-    ? (await db.studyItems.where('subjectType').equals('vocabularyItem').toArray()).filter(
-        (item) => allVocabularyItemIds.includes(item.subjectId),
-      )
-    : [];
-  const proficientVocabularyItemIds = new Set(
-    vocabularyStudyItems
-      .filter((item) => isVocabularyItemProficient(item.fsrsState.state))
-      .map((item) => item.subjectId),
-  );
+  const proficientVocabularyItemIds = await getProficientVocabularyItemIds(allVocabularyItemIds);
   const analysesBySentenceId = new Map(
     (await db.analyses.bulkGet(sentenceIds))
       .filter((item): item is SentenceAnalysis => Boolean(item))
