@@ -18,10 +18,14 @@ Day at Work sources (105 / 99 punctuated segments; 佐藤裕二, 上村玲香
 correct). Names still fumbled by every source — the review step fixes that.
 (2) `YouTubeMinePage`
 cue-review now plays the cue's audio (`GET /jobs/{id}/cues/{i}/audio`) so
-a mis-transcription is catchable by ear. Tests: analysis `test_asr.py` +6,
-mining `test_jobs_api.py` +2 — 28 / 60 py, 1028 ts. Both services running.
-Open: confidence flags from avgLogprob, manual-caption preference, song
-gating, `word_timestamps`.
+a mis-transcription is catchable by ear, and shows "⚠ low transcription
+confidence" on cues whose ASR segment was shaky (avgLogprob < -0.55 /
+noSpeechProb > 0.6, OR'd through resegment merge/split). (3) A human
+caption track (≥50% of cues end on 。) is now preferred over ASR and skips
+the slow ASR pass entirely; a punctuation-free transcript (songs) skips the
+merge pass so lyrics stay line-by-line. Tests across analysis + mining
+(28 / 63 py, 1028 ts). Both services running. Still open: a real
+music-video gate (yt-dlp categories), `word_timestamps`, the staged wizard.
 
 Before that: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
 reading from the tokenizer. `unidic-lite` already exposes `kanaBase` (the
