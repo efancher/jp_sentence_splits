@@ -157,8 +157,15 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
     return result
 
 
-def resegment_cues(cues: list[Cue]) -> list[Cue]:
-    """Merge cut-off cues, then split any that still bundle multiple sentences."""
-    merged = merge_incomplete_cues(cues)
-    split = split_multi_sentence_cues(merged)
-    return [cue.model_copy(update={"index": index}) for index, cue in enumerate(split)]
+def resegment_cues(
+    cues: list[Cue], *, merge: bool = True, split: bool = True
+) -> list[Cue]:
+    """Merge cut-off cues, then split any that still bundle multiple sentences.
+
+    `merge=False` for punctuation-free text (song lyrics) — `merge_incomplete_cues`
+    would otherwise fuse every line into one cue, since none ends on 。
+    """
+    out = merge_incomplete_cues(cues) if merge else list(cues)
+    if split:
+        out = split_multi_sentence_cues(out)
+    return [cue.model_copy(update={"index": index}) for index, cue in enumerate(out)]

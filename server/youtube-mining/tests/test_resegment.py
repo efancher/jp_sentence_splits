@@ -118,3 +118,20 @@ def test_low_confidence_flag_propagates_through_merge_and_split() -> None:
     result = resegment_cues(cues)
     assert [c.text for c in result] == ["よく聞こえないです。", "はっきり。", "別の話。"]
     assert [c.lowConfidence for c in result] == [True, True, False]
+
+
+def test_resegment_cues_skips_merge_for_punctuationless_lyrics() -> None:
+    cues = [
+        Cue(index=0, startMs=0, endMs=1000, text="鈍感なふりして"),
+        Cue(index=1, startMs=1000, endMs=2000, text="あげるからほら調子に乗れ"),
+        Cue(index=2, startMs=2000, endMs=3000, text="最低なセリフで"),
+    ]
+    # Default would fuse all three (no 。); merge=False keeps them line-by-line.
+    fused = resegment_cues(cues)
+    assert len(fused) == 1
+    kept = resegment_cues(cues, merge=False)
+    assert [c.text for c in kept] == [
+        "鈍感なふりして",
+        "あげるからほら調子に乗れ",
+        "最低なセリフで",
+    ]

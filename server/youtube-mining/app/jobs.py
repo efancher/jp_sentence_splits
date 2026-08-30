@@ -114,17 +114,21 @@ def delete_job(job_id: str) -> None:
 _SENTENCE_END_CHARS = "。｡．.！!？?…」』"
 
 
+def _terminal_punct_ratio(cues: list[Cue]) -> float:
+    if not cues:
+        return 0.0
+    ending = sum(
+        1 for cue in cues if cue.text.rstrip()[-1:] in _SENTENCE_END_CHARS
+    )
+    return ending / len(cues)
+
+
 def _looks_human_captioned(cues: list[Cue]) -> bool:
     """True when the JA caption track looks human-authored, not YouTube's
     auto-captions — the latter carry no sentence-final punctuation at all,
     a real track ends most cues on it. Used to skip ASR when good subs
     already exist."""
-    if len(cues) < 5:
-        return False
-    ending = sum(
-        1 for cue in cues if cue.text.rstrip()[-1:] in _SENTENCE_END_CHARS
-    )
-    return ending / len(cues) >= 0.5
+    return len(cues) >= 5 and _terminal_punct_ratio(cues) >= 0.5
 
 
 def _run_job(job: Job, url: str) -> None:
@@ -196,7 +200,13 @@ def _run_job(job: Job, url: str) -> None:
                 job.stage = "Splitting sentences…"
                 raw_cues = caption_cues
 
-        job.cues = resegment.resegment_cues(raw_cues)
+        # Punctuation-free text (song lyrics, some auto-captions ASR couldn't
+        # rescue) — skip the merge pass, which would otherwise fuse every
+        # line into one cue since none ends on 。
+        merge = _terminal_punct_ratio(raw_cues) >= 0.15
+        if not merge:
+            logger.info("Mining job %s: no punctuation, keeping lines unmerged", job.id)
+        job.cues = resegment.resegment_cues(raw_cues, merge=merge)
         job.english_by_index = subtitles.load_parallel_text_from_dir(
             subtitle_dir, job.cues, language="en"
         )
