@@ -1,6 +1,28 @@
 # Status
 
-Last updated: 2026-08-30 (Mining downloads via Tailscale exit node.
+Last updated: 2026-08-30 (Mining pipeline v2 slice C — retained source
+audio. Design: `docs/mining-pipeline-v2.md`. A mining job's downloaded
+source is swept after 2h, so a later re-segment / audio-repair re-cut from
+lossy fragment clips via `concatCut` — the path that produced the 18
+truncated "After Work" clips. Now: `server/youtube-mining/app/source_cache.py`
+stashes a compressed Opus of every mined source in a persistent,
+LRU-evicted cache (`POST /source-audio` ensure, `GET
+/source-audio/{videoId}` stream, `POST /source-audio/clip {url,cuts}` cut
+absolute spans); `_run_job` populates it on every successful mine.
+`applyResegmentation` (`repository.ts`) now cuts each new sentence straight
+from the source via `miningApi.clipFromSource` when the book has a
+reachable `sourceUrl`, falling back to the fragment `concatCut` path only
+on failure. `scripts/backfill-source-audio.ts` (`npm run
+backfill:source-audio --apply`) primed the cache for all 3 shadowing books
+(~4.6 MB). Tests: `server/youtube-mining/tests/test_source_cache.py` (6),
+`tests/applyResegmentation.test.ts` +2, `tests/miningApi.test.ts` +2 —
+56 py / 1026 ts green. Verified E2E via the phone exit node: `POST
+/source-audio` for After Work downloaded+transcoded in ~63s,
+`/source-audio/clip` cut 3 sentences clean. Deferred (durability only):
+a `source_audio` Supabase table + Storage mirror so the cache can restore
+without re-hitting YouTube.
+
+Before that: 2026-08-30 (Mining downloads via Tailscale exit node.
 YouTube bot-blocks the datacenter mining box's IP and datacenter-IP
 cookies rotate within minutes, so fresh from-source mining (the pending
 auto-caption re-mine, any new book) was stuck. New `app/exit_node.py` in
