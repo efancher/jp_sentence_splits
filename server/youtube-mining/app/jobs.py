@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app import (
+    asr_client,
     clip,
     config,
     exit_node,
@@ -138,17 +139,33 @@ def _run_job(job: Job, url: str) -> None:
         # Stash a compressed copy of the source outside the job sweep so a
         # later re-segment / audio repair re-cuts from the original, not from
         # lossy fragment clips. Best effort — never fail the job over it.
+        cached_source: Path | None = None
         try:
-            source_cache.store(job.source.videoId, job.source_audio_path)
+            cached_source = source_cache.store(
+                job.source.videoId, job.source_audio_path
+            )
         except Exception:  # noqa: BLE001
             logger.warning(
                 "source_cache.store failed for %s", job.source.videoId, exc_info=True
             )
 
         job.status = "parsing"
-        job.stage = "Splitting sentences…"
         subtitle_dir = job.dir / "subtitles"
-        raw_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
+
+        # Prefer an ASR transcript (kanji + punctuation) over YouTube's
+        # auto-caption track; fall back to captions when ASR is unavailable.
+        job.stage = "Transcribing audio…"
+        raw_cues = asr_client.transcribe_source(
+            cached_source or job.source_audio_path
+        )
+        if raw_cues is not None:
+            logger.info(
+                "Mining job %s: ASR transcript, %d segment(s)", job.id, len(raw_cues)
+            )
+        else:
+            job.stage = "Splitting sentences…"
+            raw_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
+
         job.cues = resegment.resegment_cues(raw_cues)
         job.english_by_index = subtitles.load_parallel_text_from_dir(
             subtitle_dir, job.cues, language="en"

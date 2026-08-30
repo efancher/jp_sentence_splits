@@ -1,5 +1,9 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
+# ASR-transcript client → shadowing-analysis-api (app/asr_client.py). Already
+# present transitively via starlette's test client; pinned here now it's a
+# direct dependency.
+httpx>=0.27
 yt-dlp>=2025.11.12
 # Solver scripts for YouTube's JS `n` challenge. Also requires an
 # external JS runtime on PATH (node >= 22 / deno / bun) — see README

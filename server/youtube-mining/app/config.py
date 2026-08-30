@@ -57,6 +57,18 @@ YTDLP_PLAYER_CLIENT = os.environ.get(
     "MINING_YTDLP_PLAYER_CLIENT", ""
 ).strip()
 
+# Transcribe the mined source with ASR (shadowing-analysis-api
+# POST /transcribe-source) and use *that* as the cue text, not YouTube's
+# Japanese auto-caption track (no reliable kanji, no punctuation — the
+# latter being what resegment.py's merge/split needs). Falls back to the
+# caption track whenever the analysis service is unreachable or slow.
+# See app/asr_client.py. Set MINING_USE_ASR_TRANSCRIPT=0 to force captions.
+ANALYSIS_API_BASE = (
+    os.environ.get("MINING_ANALYSIS_API_BASE", "http://127.0.0.1:8002").rstrip("/")
+)
+USE_ASR_TRANSCRIPT = os.environ.get("MINING_USE_ASR_TRANSCRIPT", "1") != "0"
+ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1200"))
+
 # Persistent per-video source-audio cache (app/source_cache.py). Unlike a
 # job's scratch dir this is never swept: a re-segment / audio-repair pass
 # months later re-cuts from the original source stashed here instead of from

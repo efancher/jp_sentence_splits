@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import clip, jobs, youtube
+from app import asr_client, clip, jobs, youtube
 from app.main import app
 
 JA_VTT = """WEBVTT
@@ -74,6 +74,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(clip, "probe_duration_ms", fake_probe_duration_ms)
     monkeypatch.setattr(clip, "clip_audio", fake_clip_audio)
     monkeypatch.setattr(clip, "probe_max_volume_db", lambda _path: -18.0)
+    # Default: ASR unavailable → caption path. Individual tests override.
+    monkeypatch.setattr(asr_client, "transcribe_source", lambda _path: None)
 
     return TestClient(app)
 
@@ -128,6 +130,30 @@ def test_clip_unknown_cue_returns_404(client: TestClient) -> None:
         json={"japanese": "test", "generateKana": False},
     )
     assert response.status_code == 404
+
+
+def test_uses_asr_transcript_over_captions_when_available(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.models import Cue
+
+    monkeypatch.setattr(
+        jobs.asr_client,
+        "transcribe_source",
+        lambda _path: [
+            Cue(index=0, startMs=0, endMs=1800, text="全然違う文だよ。", isAuto=True),
+            Cue(index=1, startMs=1800, endMs=3600, text="キャプションじゃない。", isAuto=True),
+        ],
+    )
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    status = _wait_until_ready(client, job_id)
+    assert status["status"] == "ready"
+    # The ASR text, not こんにちは。/ 元気ですか。 from the caption fixture.
+    assert [c["japanese"] for c in status["cues"]] == [
+        "全然違う文だよ。",
+        "キャプションじゃない。",
+    ]
 
 
 def test_cue_preview_audio(client: TestClient) -> None:
