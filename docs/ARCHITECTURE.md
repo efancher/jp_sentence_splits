@@ -176,11 +176,13 @@ maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`
 is a thin wrapper with no knowledge of sentences/chunks — it only ever sees
 `StudyItem.fsrsState` (shaped to match `ts-fsrs`'s `Card`) and a rating.
 Live since Phase 4 (`comprehension`/`reading_in_context`), extended through
-Phase 7 to `vocabularyItem` and `vocabularyConfusion` subjects and several
-more `activityType`s (`reading_production`, `sentence_transformation`,
-listening, cloze), and to the `grammarPattern` subject (grammar-learning
-system Phase 5, `grammar_comprehension`/`grammar_completion`) — see
-`docs/STATUS.md` for the full list. Also includes
+Phase 7 to `vocabularyItem`, `vocabularyConfusion` and `sentenceVocabulary`
+subjects and several
+more `activityType`s (`reading_production`, `sentence_transformation` — now
+one card per word-in-sentence occurrence, quizzing the conjugation form that
+sentence used — listening, cloze), and to the `grammarPattern` subject
+(grammar-learning system Phase 5, `grammar_comprehension`/`grammar_completion`)
+— see `docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
 (`isGraduated`, retiring a study item from the due rotation past a
 configurable FSRS-interval threshold).

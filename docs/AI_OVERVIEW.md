@@ -26,8 +26,9 @@ shapes that make Japanese clause structure legible rather than just
 glossed. On top of that sentence-analysis workspace, the app has grown a
 full **unified spaced-repetition system** (FSRS via `ts-fsrs`) that
 schedules many distinct activity types — sentence comprehension,
-reading-in-context, listening, cloze/reading-retrieval/reading-production/
-sentence-transformation on individual vocabulary items, contrastive-pair
+reading-in-context, listening, cloze/reading-retrieval/reading-production
+on individual vocabulary items, contextual conjugation drills per
+word-occurrence, contrastive-pair
 drills for confusable words — all sharing one due-queue and one evidence
 log, plus a from-scratch **shadowing/pronunciation-practice** feature
 (record yourself, compare to reference audio, get ranked
@@ -671,10 +672,7 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   graded against as `Review.expectedAnswer` so `classifyReviewError` stays
   consistent; `reading_retrieval` gets the same dictionary-form label, `cloze`
   does not since it would spoil the blanked word),
-  `sentence_transformation`
-  (conjugate a word to a per-word-hashed target form — 13 verb/10
-  adjective forms via `src/lib/conjugation.ts`, a ported/validated
-  engine), `pitch_accent` (narrower eligibility than the other four — only
+  `pitch_accent` (narrower eligibility than the other three — only
   words with dictionary pitch-accent data, `VocabularyItem.pitchAccentPositions`
   — multiple choice among the pitch-accent categories actually
   distinguishable at the word's own mora count,
@@ -702,6 +700,26 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   playback when alignment is unavailable or the word can't be located.
   Plays through a local `<audio>` + `PlaybackCoordinator`, not the
   `nativeAudioController` singleton (no range support there).
+- **SentenceVocabulary subject**: `sentence_transformation` (activity-type
+  string kept for continuity; label displays as "Conjugation in context").
+  One StudyItem **per occurrence** of a conjugable word in a sentence
+  (subjectId a `SentenceVocabulary.id`), not per word. Quizzes the
+  conjugation form *that sentence actually used* — a verb read in a te-form
+  sentence and a conditional sentence gets a separate card for each, and a
+  form never encountered in the corpus is never drilled. The form is
+  recognized by `identifyConjugationForm` (`src/lib/conjugation.ts`), the
+  reverse of `conjugate`: it conjugates the dictionary form to every form
+  the word class offers (13 verb / 10 adjective) and returns the one the
+  surface reproduces, or null — so stacked/compound surfaces (話している,
+  食べられなかった) and bare dictionary-form occurrences get no card. The card
+  is a cloze: sentence with the verb blanked, "Dictionary form: X" +
+  "Produce: {form}", type the reading (accepts the in-context inflected
+  reading via `surfaceReadingFromInline` or the engine's own). Candidates
+  come from `getVocabularyOccurrenceCandidates` (one entry per surface-form
+  link, unlike `getVocabularyTargetCandidates`) → `getSentenceConjugationCandidates`.
+  Subject to the same Phase 7.11 full-sentence gate as the sentence's own
+  cards (via `ActivityDescriptor.gateSentenceId`): withheld until the
+  sentence's vocabulary is confirmed and proficient.
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
   apart," fed by `getConfusionPairCandidates`.

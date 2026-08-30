@@ -1,6 +1,56 @@
 # Status
 
-Last updated: 2026-08-29 (Search: "Not in a book" filter. From "is there
+Last updated: 2026-08-30 (Contextual conjugation cards — per encounter, not
+per word. From "i think it would be best to save the conjugation cards for
+where they actually appear in a book... if a verb hasn't shown up in
+conditional form we don't try and force it into a different sentence."
+Supersedes Phase 7.9b's `sentence_transformation` design (one card per
+vocabulary item, form picked by `hashString(id) % formCount` — arbitrary,
+unrelated to the borrowed sentence) and its "form variety" follow-up. Now:
+one study item **per occurrence** of a conjugable word in a sentence —
+`StudySubjectType` gains `'sentenceVocabulary'`, subjectId a
+`SentenceVocabulary.id` — quizzing the form *that sentence actually used*. A
+verb read in a te-form sentence and a conditional sentence gets one card for
+each; a form never encountered is never drilled. New
+`identifyConjugationForm(expression, reading, wordClass, surfaceExpression,
+surfaceReading?)` in `src/lib/conjugation.ts` is the reverse of `conjugate`:
+it conjugates the dictionary form to every form the word class offers and
+returns the one the surface reproduces (matching on expression or, for a
+kanji verb written kana, reading), or null — so stacked/compound surfaces
+(話している, 食べられなかった, 〜てしまった) get no card, and an occurrence
+that's just the dictionary form gets none either. `activityType` stays the
+string `'sentence_transformation'` (so `classifyReviewError`, the session
+planner's `PRACTICE_ACTIVITY_TYPES` pool, and `ACTIVITY_LABELS` keep working
+unchanged — the label display text is now "Conjugation in context").
+`ReviewPage.tsx`: `getVocabularyOccurrenceCandidates` (new, in
+`repository.ts` — sibling to `getVocabularyTargetCandidates` but one entry
+per surface-form link, not deduped per word) → `getSentenceConjugationCandidates`
+(pure filter, runs `identifyConjugationForm` + pulls the in-context reading
+via `surfaceReadingFromInline`). The card is a true cloze: the sentence with
+the verb blanked, "Dictionary form: X" + "Produce: {form}", type the reading
+(accepts the in-context inflected reading or the engine's own). Phase 7.11
+full-sentence gating is reused via a new optional
+`ActivityDescriptor.gateSentenceId` — a conjugation card is withheld (from
+both seeding and the due queue) until its sentence's vocabulary is confirmed
+and proficient, same as the sentence's own full-sentence cards (this also
+replaced the hard-coded `descriptor.key === 'sentence'` seeding check).
+`getStudyItemDebugInfo`/`StudyItemDebugPage` and
+`buildReviewPriorityInputs` gain a `sentenceVocabulary` branch. Migration
+`20260901000000_study_item_sentence_vocabulary_subject.sql` widens the
+`study_items_subject_type_check` constraint (same precedent as the
+`vocabularyConfusion`/`grammarPattern` widenings). One-time cleanup script
+`scripts/retire-per-word-conjugation-items.ts` soft-deletes the old per-word
+`sentence_transformation` study items (unreachable from ReviewPage now, but
+still counted by the session planner's practice pool). **Verified**: `npm
+run check` + `npm run build` green, `tests/reviewPage.test.tsx` +
+`tests/conjugation.test.ts` rewritten/extended (per-occurrence seeding,
+one-card-per-encounter with distinct forms, no card for a
+noun/compound-surface, `identifyConjugationForm` unit cases). **Not yet
+manually verified in a real browser**; **retire script not yet run against
+production** (run its dry-run first). AI_OVERVIEW.md §review +
+ARCHITECTURE.md + ROADMAP.md updated.)
+
+Before that: 2026-08-29 (Search: "Not in a book" filter. From "is there
 a way to filter for sentences not in books so i can [as]sign them?" The
 existing "Unassigned" filter (renamed "In inbox") only matched sentences
 with a row in the `inbox` table — populated solely by import → "Leave in
@@ -2262,6 +2312,13 @@ test behavior changed. `npm run build` green.
 
 ## Phase 7.9b — Sentence transformations (production ladder, second slice): done
 
+> **Superseded 2026-08-30** by the contextual-conjugation rework (see the
+> top of this file). The conjugation *engine* (`src/lib/conjugation.ts`, the
+> 86-fixture suite) is unchanged and still central; what changed is the card
+> that consumes it — from one hash-picked form per word to one attested form
+> per occurrence. `pickTransformationTarget` / `getSentenceTransformationCandidates`
+> / `SentenceTransformationCard` were removed.
+
 The second and final slice of the roadmap's originally bundled "production
 ladder/sentence transformations" line — completes Phase 7.9. Ports
 `~/projects/anki/wk_decks.py`'s `conjugate_vocab_form()` (godan/ichidan/
@@ -4401,6 +4458,8 @@ as deferred elsewhere in this doc, landed together:
   verb/10 adjective forms `conjugationFormsForWordClass` exposes; falls
   through to the next form if the picked one doesn't conjugate or produces
   no visible change (same skip conditions the fixed-form version used).
+  **Superseded 2026-08-30** — the per-word hash is gone; the quizzed form is
+  now whichever one the occurrence is actually in (see the top of this file).
 - **Delayed shadowing + meaning→production** (`ShadowPage.tsx`) — the two
   practice modes flagged, in the Phase 9 wrap-up above, as "genuinely not
   built at all" from the design brief's named taxonomy. Delayed shadowing:
