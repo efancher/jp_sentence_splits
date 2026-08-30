@@ -225,9 +225,14 @@ function createLocalCutter(sourcePath: string, scratch: string): ClipCutter {
       const durS = (adjEnd - adjStart) / 1000;
       const fadeS = FADE_MS > 0 ? Math.min(FADE_MS / 1000, durS / 4) : 0;
       const out = join(scratch, `cut-${randomUUID().slice(0, 8)}.m4a`);
+      // -ss BEFORE -i: with output-side seeking the decoded frames keep
+      // their ~adjStart timestamps and afade's st= (relative to 0) fades
+      // the whole clip to silence. Same fix as clip.py in the mining
+      // service.
       const args = [
-        '-y', '-i', sourcePath,
+        '-y',
         '-ss', (adjStart / 1000).toFixed(3),
+        '-i', sourcePath,
         '-t', durS.toFixed(3),
         '-vn', '-c:a', 'aac', '-b:a', '192k',
       ];

@@ -77,3 +77,19 @@ def test_probe_max_volume_db_detects_tone(tmp_path: Path) -> None:
         capture_output=True,
     )
     assert probe_max_volume_db(tone) > -20
+
+
+@pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg/ffprobe required")
+def test_clip_audio_keeps_sound_with_fade(tmp_path: Path) -> None:
+    """Regression: -ss after -i + afade faded whole clips to -91 dBFS."""
+    source = tmp_path / "tone.m4a"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=30",
+         "-c:a", "aac", "-b:a", "128k", str(source)],
+        check=True,
+        capture_output=True,
+    )
+    out = tmp_path / "clip.m4a"
+    # A cut well away from t=0, where the bug silenced everything.
+    clip_audio(source, out, start_ms=20_000, end_ms=23_000)
+    assert probe_max_volume_db(out) > -20

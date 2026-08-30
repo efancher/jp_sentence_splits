@@ -103,14 +103,20 @@ def clip_audio(
     # Fade out only — an in-fade can erase short sentence-initial vowels.
     if fade_s > 0:
         af_parts.append(f"afade=t=out:st={max(0.0, duration_s - fade_s):.3f}:d={fade_s:.3f}")
-    # -ss after -i for accurate audio cuts (pre-input -ss can skip the opener on AAC).
+    # -ss BEFORE -i (input seeking). With -ss *after* -i the decoded frames
+    # keep their original ~start_s timestamps, so `afade`'s st= (relative to
+    # 0) sits far in the filter's past and it fades the whole clip to
+    # silence — every faded clip came out -91 dBFS. Input seeking resets the
+    # timeline to 0; it's sample-accurate enough on the mp4/webm containers
+    # yt-dlp produces (never raw ADTS here), and compute_boundaries already
+    # pads 300 ms each side.
     command = [
         "ffmpeg",
         "-y",
-        "-i",
-        str(source_path),
         "-ss",
         f"{start_s:.3f}",
+        "-i",
+        str(source_path),
         "-t",
         f"{duration_s:.3f}",
         "-vn",
