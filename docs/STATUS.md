@@ -1,6 +1,31 @@
 # Status
 
-Last updated: 2026-08-30 (Session runner: shadow steps show a live
+Last updated: 2026-08-30 (Furigana parser: whole-word ruby bases. From
+"some cards that have proper names don't get the proper name hiragana" —
+the ShadowPage mora/hiragana row was silently dropping kanji for ~32
+sentences. Root cause was in `src/lib/parseInlineReadings.ts`, not the
+data: its ruby-base regex excluded *all* hiragana (`[^\s[\]ぁ-ゟ]+?`), so
+a whole-word span from `inlineReadingFromTokens` (mining / re-segmentation
+style — `歩い[あるい]`, `同い年[おないどし]`, `焼き鳥[やきとり]`) either
+matched only its trailing kanji (`年`, dropping the leading `同い`) or, when
+the char before `[` was kana, matched nothing at all (`歩い[あるい]` fell
+through to literal text — `歩` dropped, brackets rendered raw). Fix: the
+base is now the maximal non-space/non-bracket run before `[..]` with only a
+*leading* hiragana prefix stripped off (still splits `でもう1ヶ月[いっか
+げつ]` → text `でもう` + ruby `1ヶ月`, the case the old exclusion guarded).
+Interior/trailing okurigana stays in the base so the reading lines up with
+the whole written word. Satori CSV's kanji-only style (`作[つく]りました`)
+is unchanged. `parseInlineReadings` feeds mora segmentation, `FuriganaText`
+(AnalyzePage), and `surfaceReadingFromInline` (reading_production leniency)
+— all benefit. No data migration needed; the readings were always present,
+just mis-parsed. New cases in `tests/furigana.test.ts`. Not fixed here
+(separate, pre-existing): numeral+counter readings still drop the numeral
+(`1ヶ月[かげつ]`, `5分[ふん]` — see `scripts/fix-numeral-readings.ts`), and
+`japanese` strings that embed a bracketed stage direction (`[音楽[おんが
+く]]…`) still leak that caption into the row. **Verified**: `npm run check`
+green (1005 passing + 2 skipped).)
+
+Before that: 2026-08-30 (Session runner: shadow steps show a live
 "shadowed Nx" subtitle. Bug: `SessionRunnerPage` rendered `step.reason`
 verbatim, but the planner freezes that string at plan time, so a shadow
 step kept saying "Not shadowed yet" even after the learner had recorded

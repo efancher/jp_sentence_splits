@@ -33,6 +33,35 @@ describe('parseInlineReadings', () => {
     expect(segments.some((item) => item.base.includes('りました'))).toBe(true);
   });
 
+  it('keeps interior and trailing okurigana in a whole-word base', () => {
+    // inlineReadingFromTokens (mining / re-segmentation) annotates the whole
+    // written word, not just its kanji core.
+    expect(parseInlineReadings('同い年[おないどし]')).toEqual([
+      { kind: 'ruby', base: '同い年', reading: 'おないどし' },
+    ]);
+    expect(parseInlineReadings('焼き鳥[やきとり]')).toEqual([
+      { kind: 'ruby', base: '焼き鳥', reading: 'やきとり' },
+    ]);
+    expect(parseInlineReadings('歩い[あるい]て')).toEqual([
+      { kind: 'ruby', base: '歩い', reading: 'あるい' },
+      { kind: 'text', base: 'て' },
+    ]);
+  });
+
+  it('splits a leading particle run off a spaceless whole-word base', () => {
+    expect(parseInlineReadings('に焼き鳥[やきとり]がある')).toEqual([
+      { kind: 'text', base: 'に' },
+      { kind: 'ruby', base: '焼き鳥', reading: 'やきとり' },
+      { kind: 'text', base: 'がある' },
+    ]);
+  });
+
+  it('leaves a bracketed stage direction with no kanji base as text', () => {
+    const segments = parseInlineReadings('もう[音楽]です');
+    expect(segments.every((item) => item.kind === 'text')).toBe(true);
+    expect(segments.map((item) => item.base).join('')).toBe('もう[音楽]です');
+  });
+
   it('does not swallow a preceding hiragana run into the next ruby base when there is no separating space', () => {
     // Real production data: "でもう1ヶ月[いっかげつ]", no space before "1ヶ月".
     const segments = parseInlineReadings(
