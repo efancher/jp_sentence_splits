@@ -1,6 +1,25 @@
 # Status
 
-Last updated: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
+Last updated: 2026-08-30 (Mining pipeline v2 slice A — ASR transcript +
+cue audio in review. Two things: (1) `shadowing-analysis-api` gained `POST
+/transcribe-source` (separate repo, deployed) — Whisper `small`, timed
+segments, a distinct lazily-loaded model from the `base` diagnostic
+`/transcribe`. `youtube-mining`'s `_run_job` (`app/asr_client.py`) POSTs
+the cached source Opus and uses those cues instead of YouTube's
+auto-caption track, which for Japanese has no reliable kanji and — the
+bigger problem — no punctuation, so `resegment.py`'s merge/split was inert
+(this is why "After Work" imported so fragmented). Falls back to captions
+on any failure; `MINING_USE_ASR_TRANSCRIPT=0` forces captions. Verified on
+the real After Work source: 105 punctuated speech-aligned segments in
+~2m20s. `small` is weak on kanji (同い年→おないどし) and names (草野弘子 for
+草野浩) — the review step is where that gets fixed. (2) `YouTubeMinePage`
+cue-review now plays the cue's audio (`GET /jobs/{id}/cues/{i}/audio`) so
+a mis-transcription is catchable by ear. Tests: analysis `test_asr.py` +6,
+mining `test_jobs_api.py` +2 — 28 / 60 py, 1028 ts. Both services running.
+Open: confidence flags from avgLogprob, manual-caption preference, song
+gating, `word_timestamps`.
+
+Before that: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
 reading from the tokenizer. `unidic-lite` already exposes `kanaBase` (the
 lemma's reading — 読ん→ヨム, not the surface ヨン) and `aType` (pitch
 accent); the mining service just wasn't reading them. `morphology.py` now

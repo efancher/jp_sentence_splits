@@ -1268,6 +1268,13 @@ aren't JSON-serializable/aren't worth backing up).
   Tailscale exit node advertised by a personal device on the tailnet
   (`MINING_EXIT_NODE` / `_FALLBACK`), with cookie auth
   (`MINING_YTDLP_COOKIES_FILE`) as the fallback — see the service README.
+  The cue text comes from an ASR transcript of the audio
+  (`app/asr_client.py` → `shadowing-analysis-api` `POST /transcribe-source`,
+  Whisper `small`), not YouTube's punctuation-free Japanese auto-captions;
+  captions are the fallback. Every mined source is also kept as a
+  compressed Opus (`app/source_cache.py`) so re-cuts come from the
+  original. Cue audio is playable during review. Full design +
+  what's-still-open: `docs/mining-pipeline-v2.md`.
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`,
   manual-dispatch `import-wanikani-kanji.yml`) of the full non-hidden

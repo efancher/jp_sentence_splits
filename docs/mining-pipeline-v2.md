@@ -104,27 +104,35 @@ the existing `VocabularyPicker`, run at mine time.
 
 ## The three quality upgrades (slot into the stages)
 
-### A. ASR transcript (stage 1 primary; captions demoted to fallback/timing)
+### A. ASR transcript (stage 1 primary; captions the fallback)
 
-Run Whisper on the downloaded audio. `faster-whisper` is already installed on
-the `shadowing-analysis-api` box (Hetzner) — currently only `base` for ASR
-observations; scoping notes (STATUS 2026, "Researched MFA and faster-whisper")
-found `small` runs in ~2 GB RAM at ~6× realtime CPU there.
+**[done 2026-08-30]** `shadowing-analysis-api` gained `POST /transcribe-source`
+(`asr.transcribe_source`) — Whisper `small` (`ANALYSIS_SOURCE_WHISPER_MODEL`),
+timed segments `{text,startMs,endMs,avgLogprob,noSpeechProb}`, `vad_filter` +
+`condition_on_previous_text=False`. Separate lazily-loaded model instance so
+the `base` diagnostic `/transcribe` keeps its ~270 MB footprint (`small` ≈
+700 MB RSS int8). The mining service (`app/asr_client.py`) POSTs the cached
+Opus and `_run_job` uses those cues in place of the caption track; falls back
+to captions on any failure (`MINING_USE_ASR_TRANSCRIPT=0` forces captions).
 
-- Source priority: **manual/human caption track › ASR › auto-caption**.
-  `subtitles.load_cues_from_dir` already prefers `orig`/`manual`.
-- Two deployment options:
-  1. mining service (`codex-dev`) POSTs the audio to a new
-     `/transcribe` endpoint on `shadowing-analysis-api` (has the model + RAM);
-  2. run `whisper.cpp` (large-v3-turbo q5, ~1.5 GB, fast on CPU) on the
-     mining box itself.
-  Prefer (1) — no new model on the datacenter box, reuses infra.
-- Use `word_timestamps=True` → exact boundaries, kills stage-2's
-  char-proportional split guess.
-- Gate on `no_speech_prob` / `avg_logprob`; **songs still use the manual
-  lyrics path** — Whisper hallucinates on music (see GLIM SPANKY note,
-  STATUS "casual contractions that MFA's dictionary").
-- Per-segment `avg_logprob` becomes stage-1's confidence signal.
+Measured on the real After Work source: 105 punctuated, speech-aligned
+segments in ~2m20s (7.8-min video, ~3.3× realtime). The **punctuation is the
+structural win** — `resegment.py` merge/split finally has boundaries to work
+with. `small` is weaker on kanji than hoped (同い年 → おないどし) and still
+fumbles names (草野弘子 for 草野浩) — but that's what the review step (with
+audio) is for, and `medium` is one env var away.
+
+Still open:
+- **Confidence flags in the UI** from `avgLogprob` / `noSpeechProb` — the
+  segments carry them; nothing surfaces them yet.
+- **Manual-caption preference** — currently ASR always wins when available;
+  a real fan-sub/official track should beat Whisper. Detecting one reliably
+  from yt-dlp output is fuzzy (rolling-caption detection is the one clear
+  signal).
+- **Songs** (GLIM SPANKY) — Whisper hallucinates on music; the lyrics path
+  should skip ASR. Not yet gated.
+- `word_timestamps=True` for exact split boundaries (kills the
+  char-proportional guess in `split_multi_sentence_cues`).
 
 ### B. Dictionary-form reading + accent from UniDic (stages 1, 4)
 
@@ -224,8 +232,10 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      (`GET /jobs/{id}/cues/{i}/audio`, `<audio>` on cue load) so a
      mis-transcription is catchable by ear. Next: merge/split in that step
      (reuse `resegmentPlan.ts`), then the full staged wizard.
-4. **A — ASR.** `/transcribe` on `shadowing-analysis-api`; wire as stage-1
-   primary with the caption fallback. Confidence flags light up.
+4. **A — ASR.** **[done 2026-08-30]** `POST /transcribe-source` on
+   `shadowing-analysis-api` (Whisper `small`); mining `_run_job` uses it as
+   the cue source, captions as fallback. Confidence flags not surfaced yet;
+   manual-caption preference + song gating still open (see slice A section).
 5. **Stages 3–5 polish.** `sentence-realign` at mine time, vocab picker at
    mine time, SRS-impact summary, `ResegmentSourcePage` component merge.
 
