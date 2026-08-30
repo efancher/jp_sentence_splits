@@ -74,7 +74,11 @@ import {
 } from '../lib/maturity';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { nowIso, normalizeSentenceKey } from '../lib/normalize';
-import { concatCut, type ResegmentPlan } from '../lib/resegmentPlan';
+import {
+  concatCut,
+  type ResegmentPlan,
+  type ResegmentPlannedSentence,
+} from '../lib/resegmentPlan';
 import { suggestionsFromTokens } from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
@@ -510,10 +514,15 @@ type ReclipFn = (
   options?: { trimSilence?: boolean },
 ) => Promise<{ blob: Blob; durationMs: number }[]>;
 
+type SourceClipFn = (
+  url: string,
+  cuts: { startMs: number; endMs: number }[],
+) => Promise<{ blob: Blob; durationMs: number }[]>;
+
 export async function applyResegmentation(
   bookId: string,
   plan: ResegmentPlan,
-  options: { reclip?: ReclipFn } = {},
+  options: { reclip?: ReclipFn; clipFromSource?: SourceClipFn } = {},
 ): Promise<{ batchId: string; newSentenceIds: string[] }> {
   const db = getDb();
   const timestamp = nowIso();
@@ -583,11 +592,6 @@ export async function applyResegmentation(
   const newAudioRecords: SentenceAudio[] = [];
   const retiredAudioIds: string[] = [];
   try {
-    const reclip: ReclipFn =
-      options.reclip ??
-      (async (...args) =>
-        (await import('../lib/miningApi')).reclipResegmentedAudio(...args));
-
     const oldAudio = (
       await db.sentenceAudio
         .where('sentenceId')
@@ -597,48 +601,98 @@ export async function applyResegmentation(
       .filter((row) => row.blob != null && row.blob.size !== 0)
       .sort((a, b) => a.startMs - b.startMs);
 
-    for (let index = 0; index < plan.plannedSentences.length; index += 1) {
-      const planned = plan.plannedSentences[index]!;
-      const newId = newIds[index]!;
-      if (
-        planned.startMs == null ||
-        planned.endMs == null ||
-        planned.endMs <= planned.startMs
-      ) {
-        continue;
-      }
-      // A split assigns `inheritsFrom` only to the largest piece, so pick
-      // parent clips by video-timeline overlap instead: any old clip whose
-      // source range intersects this new sentence's span.
-      const parents = oldAudio.filter(
-        (row) => row.endMs > planned.startMs! && row.startMs < planned.endMs!,
+    const timedPlanned = plan.plannedSentences
+      .map((planned, index) => ({ planned, newId: newIds[index]! }))
+      .filter(
+        (entry): entry is { planned: ResegmentPlannedSentence; newId: string } =>
+          entry.planned.startMs != null &&
+          entry.planned.endMs != null &&
+          entry.planned.endMs > entry.planned.startMs,
       );
-      if (parents.length === 0) continue;
 
-      const cut = concatCut(planned.startMs, planned.endMs, parents);
-      if (cut.endMs <= cut.startMs) continue;
-      const [result] = await reclip(
-        parents.map((row) => row.blob),
-        [cut],
-        { trimSilence: true },
-      );
-      if (!result) continue;
+    const audioTemplate = oldAudio[0];
+    const sourceUrl =
+      oldAudio.find((row) => row.sourceUrl)?.sourceUrl ??
+      (await db.books.get(bookId))?.sourceUrl;
 
-      const template = parents[0]!;
+    const pushRecord = (
+      newId: string,
+      planned: ResegmentPlannedSentence,
+      clip: { blob: Blob; durationMs: number },
+      template: SentenceAudio,
+    ) => {
       newAudioRecords.push({
         id: `audio_reseg_${hashString(`${template.sourceId}:${newId}`)}`,
         sentenceId: newId,
         sourceId: template.sourceId,
         sourceSentenceId: `${template.sourceId}:reseg-${newId}`,
         sourceTitle: template.sourceTitle,
-        sourceUrl: template.sourceUrl,
+        sourceUrl: template.sourceUrl ?? sourceUrl,
         mimeType: 'audio/mp4',
-        durationMs: result.durationMs,
-        startMs: planned.startMs,
-        endMs: planned.endMs,
-        blob: result.blob,
+        durationMs: clip.durationMs,
+        startMs: planned.startMs!,
+        endMs: planned.endMs!,
+        blob: clip.blob,
         importedAt: timestamp,
       });
+    };
+
+    // Preferred: cut each new sentence straight from the pristine source at
+    // its absolute video-timeline span (needs a reachable `sourceUrl`). Falls
+    // back to concatenating the old fragment clips — which relies on
+    // `concatCut`'s "fragment file duration == its video span" assumption and
+    // caused the 2026-08-30 truncation bug.
+    let cutFromSource = false;
+    if (sourceUrl && audioTemplate && timedPlanned.length > 0) {
+      try {
+        const clipFromSource: SourceClipFn =
+          options.clipFromSource ??
+          (async (...args) =>
+            (await import('../lib/miningApi')).clipFromSource(...args));
+        const clips = await clipFromSource(
+          sourceUrl,
+          timedPlanned.map(({ planned }) => ({
+            startMs: planned.startMs!,
+            endMs: planned.endMs!,
+          })),
+        );
+        timedPlanned.forEach(({ planned, newId }, i) => {
+          const clip = clips[i];
+          if (clip) pushRecord(newId, planned, clip, audioTemplate);
+        });
+        cutFromSource = newAudioRecords.length === timedPlanned.length;
+        if (!cutFromSource) newAudioRecords.length = 0;
+      } catch (error) {
+        console.warn(
+          'Re-segmentation: cut from source failed, falling back to fragments:',
+          error,
+        );
+        newAudioRecords.length = 0;
+      }
+    }
+
+    if (!cutFromSource) {
+      const reclip: ReclipFn =
+        options.reclip ??
+        (async (...args) =>
+          (await import('../lib/miningApi')).reclipResegmentedAudio(...args));
+      for (const { planned, newId } of timedPlanned) {
+        // A split assigns `inheritsFrom` only to the largest piece, so pick
+        // parent clips by video-timeline overlap: any old clip whose source
+        // range intersects this new sentence's span.
+        const parents = oldAudio.filter(
+          (row) => row.endMs > planned.startMs! && row.startMs < planned.endMs!,
+        );
+        if (parents.length === 0) continue;
+        const cut = concatCut(planned.startMs!, planned.endMs!, parents);
+        if (cut.endMs <= cut.startMs) continue;
+        const [result] = await reclip(
+          parents.map((row) => row.blob),
+          [cut],
+          { trimSilence: true },
+        );
+        if (result) pushRecord(newId, planned, result, parents[0]!);
+      }
     }
 
     for (const row of oldAudio) {

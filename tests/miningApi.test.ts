@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clipFromSource,
   clipMiningCue,
   createMiningJob,
   deleteMiningJob,
@@ -110,6 +111,42 @@ describe('clipMiningCue', () => {
       expect.stringContaining('/jobs/job1/cues/0/clip'),
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+describe('clipFromSource', () => {
+  it('POSTs the cuts and decodes the base64 clips', async () => {
+    const b64 = btoa('cut-bytes');
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            clips: [{ audioBase64: b64, mimeType: 'audio/mp4', durationMs: 1500 }],
+          }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const [clip] = await clipFromSource('https://youtu.be/VID12345678', [
+      { startMs: 1000, endMs: 2500 },
+    ]);
+    expect(clip!.durationMs).toBe(1500);
+    expect(await clip!.blob.text()).toBe('cut-bytes');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/source-audio/clip'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('throws with the server detail on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ detail: 'not cached' }), { status: 502 })),
+    );
+    await expect(
+      clipFromSource('https://youtu.be/VID12345678', [{ startMs: 0, endMs: 1 }]),
+    ).rejects.toThrow('not cached');
   });
 });
 

@@ -268,6 +268,111 @@ describe('applyResegmentation', () => {
     expect(clips.every((c) => c.durationMs === 900 && c.sourceId === 'source-VID')).toBe(true);
   });
 
+  it('cuts new clips from the source when a sourceUrl is present', async () => {
+    const db = getDb();
+    const book = await createBook({ title: 'After Work' });
+    const s = shadowingSentence('さすがです。水希。たったの1ヶ月だよ。', 0);
+    await db.sentences.put(s);
+    await db.bookSentences.put({
+      id: createId('bs'),
+      bookId: book.id,
+      sentenceId: s.id,
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIso(),
+    });
+    await db.sentenceAudio.put({
+      id: 'audio_old',
+      sentenceId: s.id,
+      sourceId: 'source-VID',
+      sourceSentenceId: 'source-VID:sentence-000',
+      sourceTitle: 'After Work',
+      sourceUrl: 'https://youtube.com/watch?v=VID12345678',
+      mimeType: 'audio/mp4',
+      durationMs: 3000,
+      startMs: 1000,
+      endMs: 4000,
+      blob: new Blob(['parent-audio'], { type: 'audio/mp4' }),
+      importedAt: nowIso(),
+    });
+
+    const reclip = vi.fn();
+    const clipFromSource = vi
+      .fn()
+      .mockImplementation(async (_url: string, cuts: { startMs: number; endMs: number }[]) =>
+        cuts.map((c) => ({
+          blob: new Blob(['src-cut'], { type: 'audio/mp4' }),
+          durationMs: c.endMs - c.startMs,
+        })),
+      );
+
+    const plan = await planFor(
+      [s.id],
+      ['さすがです。', '水希。', 'たったの1ヶ月だよ。'],
+      [[1000, 1800], [1800, 2400], [2400, 4000]],
+    );
+    await applyResegmentation(book.id, plan, { reclip, clipFromSource });
+
+    expect(clipFromSource).toHaveBeenCalledTimes(1);
+    expect(clipFromSource.mock.calls[0]![0]).toBe('https://youtube.com/watch?v=VID12345678');
+    expect(clipFromSource.mock.calls[0]![1]).toHaveLength(3);
+    expect(reclip).not.toHaveBeenCalled();
+
+    const clips = await db.sentenceAudio.toArray();
+    expect(clips).toHaveLength(3);
+    expect(await db.sentenceAudio.get('audio_old')).toBeUndefined();
+    expect(clips.map((c) => c.durationMs).sort((x, y) => x - y)).toEqual([600, 800, 1600]);
+  });
+
+  it('falls back to fragment concat when source cutting fails', async () => {
+    const db = getDb();
+    const book = await createBook({ title: 'After Work' });
+    const s = shadowingSentence('さすがです。水希。たったの1ヶ月だよ。', 0);
+    await db.sentences.put(s);
+    await db.bookSentences.put({
+      id: createId('bs'),
+      bookId: book.id,
+      sentenceId: s.id,
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIso(),
+    });
+    await db.sentenceAudio.put({
+      id: 'audio_old',
+      sentenceId: s.id,
+      sourceId: 'source-VID',
+      sourceSentenceId: 'source-VID:sentence-000',
+      sourceTitle: 'After Work',
+      sourceUrl: 'https://youtube.com/watch?v=VID12345678',
+      mimeType: 'audio/mp4',
+      durationMs: 3000,
+      startMs: 1000,
+      endMs: 4000,
+      blob: new Blob(['parent-audio'], { type: 'audio/mp4' }),
+      importedAt: nowIso(),
+    });
+
+    const clipFromSource = vi.fn().mockRejectedValue(new Error('source unreachable'));
+    const reclip = vi
+      .fn()
+      .mockImplementation(async (_clips: Blob[], cuts: { startMs: number; endMs: number }[]) =>
+        cuts.map(() => ({ blob: new Blob(['cut'], { type: 'audio/mp4' }), durationMs: 900 })),
+      );
+
+    const plan = await planFor(
+      [s.id],
+      ['さすがです。', '水希。', 'たったの1ヶ月だよ。'],
+      [[1000, 1800], [1800, 2400], [2400, 4000]],
+    );
+    await applyResegmentation(book.id, plan, { reclip, clipFromSource });
+
+    expect(clipFromSource).toHaveBeenCalledTimes(1);
+    expect(reclip).toHaveBeenCalledTimes(3);
+    const clips = await db.sentenceAudio.toArray();
+    expect(clips).toHaveLength(3);
+    expect(clips.every((c) => c.durationMs === 900)).toBe(true);
+  });
+
   it('still applies when audio re-cutting throws (mining service down)', async () => {
     const { book, a, b } = await seedSource();
     const db = getDb();

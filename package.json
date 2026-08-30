@@ -27,6 +27,7 @@
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
     "backfill:pitch-accent": "tsx scripts/backfill-pitch-accent.ts",
     "backfill:resegment-audio": "tsx scripts/backfill-resegment-audio.ts",
+    "backfill:source-audio": "tsx scripts/backfill-source-audio.ts",
     "backfill:wanikani-mnemonics": "tsx scripts/backfill-wanikani-mnemonics.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts",
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",

@@ -253,6 +253,34 @@ export async function reclipResegmentedAudio(
   }));
 }
 
+/**
+ * Cut absolute (startMs, endMs) spans straight out of a video's cached
+ * source audio (server/youtube-mining `POST /source-audio/clip`). The
+ * service downloads + caches the source on first use, so the first call for
+ * a given video is slow. Preferred over {@link reclipResegmentedAudio} for
+ * re-segmentation when the book still has a reachable `sourceUrl` — it cuts
+ * from the pristine original rather than concatenating lossy fragment clips.
+ * Returns one m4a Blob per cut, in order.
+ */
+export async function clipFromSource(
+  url: string,
+  cuts: { startMs: number; endMs: number }[],
+): Promise<{ blob: Blob; durationMs: number }[]> {
+  const response = await fetch(`${API_BASE}/source-audio/clip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, cuts }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clip from source: ${await readErrorDetail(response)}`);
+  }
+  const { clips } = reclipResponseSchema.parse(await response.json());
+  return clips.map((clip) => ({
+    blob: base64ToBlob(clip.audioBase64, clip.mimeType),
+    durationMs: clip.durationMs,
+  }));
+}
+
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */
 export async function deleteMiningJob(jobId: string): Promise<void> {
   try {

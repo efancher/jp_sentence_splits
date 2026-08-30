@@ -189,13 +189,19 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      every successful mine; `POST /source-audio` (ensure), `GET
      /source-audio/{videoId}` (stream), `POST /source-audio/clip {url,cuts}`
      (cut absolute spans). `tests/test_source_cache.py`.
-   - **remaining:** `source_audio` Supabase table (cloud-only, not synced —
-     like `wanikani_subjects`) recording `book_id → videoId`; client writes
-     it + mirrors the Opus to the `reference-audio` bucket at import commit;
-     `applyResegmentation` switches to `POST /source-audio/clip` when a
-     book has a retained source (drop the `concatCut` fragment path);
-     `scripts/backfill-source-audio.ts` to retro-fill existing shadowing
-     books (exit node makes the re-download possible).
+   - **[done 2026-08-30]** `applyResegmentation` (`src/db/repository.ts`)
+     now cuts each new sentence straight from the source via
+     `miningApi.clipFromSource` → `POST /source-audio/clip` when the book has
+     a reachable `sourceUrl`, falling back to the `concatCut` fragment path
+     only on failure. `scripts/backfill-source-audio.ts` primes the cache
+     for pre-existing books — run `--apply` for all 3 shadowing books
+     (After Work, First Day at Work, GLIM SPANKY).
+   - **remaining (durability only):** the mining box's cache is the source
+     of truth and self-heals via re-download, so it's optional — a
+     `source_audio` Supabase table + Storage mirror (`reference-audio`
+     bucket, `source/{videoId}.opus`) so `source_cache.ensure` can restore
+     from Storage instead of re-hitting YouTube if the box disk is wiped.
+     Cloud-only table (like `wanikani_subjects`), client writes it at import.
 2. **B — full UniDic + inline lookups.** Server-only; measure the
    reading/accent quality delta on one re-mined book vs its current state.
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`
