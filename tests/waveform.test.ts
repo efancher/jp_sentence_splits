@@ -5,6 +5,7 @@ import {
   computePeaks,
   crossCorrelateOffset,
   detectOnsetSeconds,
+  detectSilences,
   emptyLivePeaks,
   emptyLivePitchBuckets,
   energyEnvelope,
@@ -196,6 +197,43 @@ describe('detectOnsetSeconds', () => {
     const sampleRate = 16_000;
     const tone = sineWave(220, sampleRate, sampleRate);
     expect(detectOnsetSeconds(tone, sampleRate)).toBe(0);
+  });
+});
+
+describe('detectSilences', () => {
+  const sampleRate = 16_000;
+
+  function toneGapTone(): Float32Array {
+    const tone = sineWave(220, Math.round(sampleRate * 0.4), sampleRate);
+    const gap = new Float32Array(Math.round(sampleRate * 0.3));
+    const out = new Float32Array(tone.length + gap.length + tone.length);
+    out.set(tone, 0);
+    out.set(gap, tone.length);
+    out.set(tone, tone.length + gap.length);
+    return out;
+  }
+
+  it('finds the quiet gap between two tone bursts', () => {
+    const spans = detectSilences(toneGapTone(), sampleRate);
+    expect(spans).toHaveLength(1);
+    // gap runs ~0.4s..0.7s → mid ~0.55s
+    expect(spans[0]!.midSeconds).toBeGreaterThan(0.45);
+    expect(spans[0]!.midSeconds).toBeLessThan(0.65);
+  });
+
+  it('ignores a gap shorter than minSilenceSeconds', () => {
+    const tone = sineWave(220, Math.round(sampleRate * 0.4), sampleRate);
+    const gap = new Float32Array(Math.round(sampleRate * 0.02));
+    const out = new Float32Array(tone.length + gap.length + tone.length);
+    out.set(tone, 0);
+    out.set(tone, tone.length + gap.length);
+    expect(detectSilences(out, sampleRate, { minSilenceSeconds: 0.1 })).toHaveLength(0);
+  });
+
+  it('treats an all-silent clip as one big pause', () => {
+    const spans = detectSilences(new Float32Array(sampleRate), sampleRate);
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.midSeconds).toBeCloseTo(0.5, 1);
   });
 });
 

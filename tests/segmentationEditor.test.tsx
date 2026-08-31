@@ -108,6 +108,25 @@ describe('SegmentationEditor', () => {
     expect(screen.getByDisplayValue('とり。')).toBeInTheDocument();
   });
 
+  it('renders the boundary waveform when given an audio fetcher', async () => {
+    const audioForRange = vi.fn(async () => new Blob(['x'], { type: 'audio/mp4' }));
+    render(
+      <SegmentationEditor
+        rows={[row({ startMs: 0, endMs: 1000 }), row({ startMs: 1000, endMs: 2000 })]}
+        onRowsChange={vi.fn()}
+        audioForRange={audioForRange}
+      />,
+    );
+    expect(await screen.findByRole('img', { name: /span waveform/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /snap to pauses/i })).toBeInTheDocument();
+    expect(audioForRange).toHaveBeenCalledWith(0, 2000);
+  });
+
+  it('has no waveform without an audio fetcher', () => {
+    render(<SegmentationEditor rows={[row()]} onRowsChange={vi.fn()} />);
+    expect(screen.queryByRole('img', { name: /span waveform/i })).not.toBeInTheDocument();
+  });
+
   it('freezes every control when disabled', () => {
     render(
       <SegmentationEditor

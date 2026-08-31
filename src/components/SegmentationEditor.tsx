@@ -4,6 +4,7 @@ import {
   splitReviewRow,
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
+import { SegmentationWaveform } from './SegmentationWaveform';
 
 /**
  * The reviewed-segment row list shared by the re-segment-existing-book flow
@@ -30,6 +31,12 @@ interface SegmentationEditorProps {
   showAllRows?: boolean;
   /** Freeze all editing while an apply/commit is in flight. */
   disabled?: boolean;
+  /**
+   * When set, a waveform of the whole reviewed span with draggable
+   * boundary handles renders above the list (the mining wizard passes
+   * `(s, e) => fetchJobAudioRange(jobId, s, e)`). Omitted = no waveform.
+   */
+  audioForRange?: (startMs: number, endMs: number) => Promise<Blob>;
 }
 
 export function SegmentationEditor({
@@ -38,6 +45,7 @@ export function SegmentationEditor({
   rowsWithProgress = NO_ROWS,
   showAllRows = false,
   disabled = false,
+  audioForRange,
 }: SegmentationEditorProps) {
   const filteringActive = rowsWithProgress.size > 0 && !showAllRows;
   const hiddenRowCount = filteringActive
@@ -49,6 +57,15 @@ export function SegmentationEditor({
 
   return (
     <>
+      {audioForRange && rows.length > 0 ? (
+        <SegmentationWaveform
+          rows={rows}
+          onRowsChange={onRowsChange}
+          audioForRange={audioForRange}
+          disabled={disabled}
+        />
+      ) : null}
+
       {rows.map((row, index) =>
         !filteringActive || rowsWithProgress.has(index) ? (
           <section className="panel stack" key={index}>

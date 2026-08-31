@@ -10,6 +10,8 @@ import {
   overlapRatio,
   removeReviewRow,
   seedResegmentReview,
+  setRowBoundary,
+  snapBoundariesToSilences,
   splitReviewRow,
   type ResegmentOldSentence,
   type ResegmentReviewedSegment,
@@ -373,6 +375,50 @@ describe('review-row editing helpers', () => {
       expect(removeReviewRow([row(), row(), row()], 1)).toHaveLength(2);
       const one = [row()];
       expect(removeReviewRow(one, 0)).toBe(one);
+    });
+  });
+
+  describe('setRowBoundary', () => {
+    const pair = () => [
+      row({ startMs: 0, endMs: 1000 }),
+      row({ startMs: 1000, endMs: 2000 }),
+    ];
+
+    it('moves both sides of the shared edge and flags them', () => {
+      const out = setRowBoundary(pair(), 1, 1300);
+      expect(out[0]).toMatchObject({ endMs: 1300, needsTranslationReview: true });
+      expect(out[1]).toMatchObject({ startMs: 1300, needsTranslationReview: true });
+    });
+
+    it('clamps so neither row collapses', () => {
+      expect(setRowBoundary(pair(), 1, -50)[0]!.endMs).toBe(1);
+      expect(setRowBoundary(pair(), 1, 99999)[1]!.startMs).toBe(1999);
+    });
+
+    it('is a no-op at the ends or when unchanged', () => {
+      const rows = pair();
+      expect(setRowBoundary(rows, 0, 500)).toBe(rows);
+      expect(setRowBoundary(rows, 2, 500)).toBe(rows);
+      expect(setRowBoundary(rows, 1, 1000)).toBe(rows);
+    });
+  });
+
+  describe('snapBoundariesToSilences', () => {
+    it('pulls each boundary onto the nearest pause within range', () => {
+      const rows = [
+        row({ startMs: 0, endMs: 1000 }),
+        row({ startMs: 1000, endMs: 2000 }),
+        row({ startMs: 2000, endMs: 3000 }),
+      ];
+      const out = snapBoundariesToSilences(rows, [1120, 2450], 400);
+      expect(out[0]!.endMs).toBe(1120);
+      expect(out[1]!.startMs).toBe(1120);
+      expect(out[1]!.endMs).toBe(2000); // 2450 is >400ms away, left alone
+    });
+
+    it('returns the same array when nothing is close enough', () => {
+      const rows = [row({ startMs: 0, endMs: 1000 }), row({ startMs: 1000, endMs: 2000 })];
+      expect(snapBoundariesToSilences(rows, [50], 100)).toBe(rows);
     });
   });
 });

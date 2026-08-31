@@ -239,6 +239,68 @@ export function energyEnvelope(samples: Float32Array, windowSize = 256): Float32
   return envelope;
 }
 
+export interface SilenceSpan {
+  startSeconds: number;
+  endSeconds: number;
+  /** Midpoint — the natural place to put a sentence boundary. */
+  midSeconds: number;
+}
+
+/**
+ * Approximate ffmpeg's `silencedetect`: runs of the energy envelope that
+ * sit below `thresholdRatio` of the envelope's own peak for at least
+ * `minSilenceSeconds`. Used to snap re-segmentation boundaries onto real
+ * pauses instead of the char-proportional guess. Pure — operates on
+ * canonicalized samples, no Web Audio.
+ */
+export function detectSilences(
+  samples: Float32Array,
+  sampleRate: number,
+  {
+    thresholdRatio = 0.08,
+    minSilenceSeconds = 0.12,
+    windowSize = 256,
+  }: { thresholdRatio?: number; minSilenceSeconds?: number; windowSize?: number } = {},
+): SilenceSpan[] {
+  const envelope = energyEnvelope(samples, windowSize);
+  if (envelope.length === 0) return [];
+  let peak = 0;
+  for (const value of envelope) peak = Math.max(peak, value);
+  if (peak <= 0) {
+    return [
+      {
+        startSeconds: 0,
+        endSeconds: samples.length / sampleRate,
+        midSeconds: samples.length / sampleRate / 2,
+      },
+    ];
+  }
+  const threshold = peak * thresholdRatio;
+  const secondsPerWindow = windowSize / sampleRate;
+  const minWindows = Math.max(1, Math.round(minSilenceSeconds / secondsPerWindow));
+
+  const spans: SilenceSpan[] = [];
+  let runStart = -1;
+  const closeRun = (endExclusive: number) => {
+    if (runStart < 0) return;
+    if (endExclusive - runStart >= minWindows) {
+      const startSeconds = runStart * secondsPerWindow;
+      const endSeconds = endExclusive * secondsPerWindow;
+      spans.push({ startSeconds, endSeconds, midSeconds: (startSeconds + endSeconds) / 2 });
+    }
+    runStart = -1;
+  };
+  for (let i = 0; i < envelope.length; i += 1) {
+    if ((envelope[i] ?? 0) <= threshold) {
+      if (runStart < 0) runStart = i;
+    } else {
+      closeRun(i);
+    }
+  }
+  closeRun(envelope.length);
+  return spans;
+}
+
 export function detectOnsetSeconds(
   samples: Float32Array,
   sampleRate: number,
