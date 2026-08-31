@@ -23,6 +23,7 @@ from app.models import (
     ReclipResponse,
     ResegmentedCue,
     ResegmentRequest,
+    SegmentJobRequest,
     SourceAudioInfo,
     SourceAudioRequest,
     SourceClipRequest,
@@ -67,14 +68,44 @@ async def get_job(job_id: str):
         job = jobs.get_job(job_id)
     except jobs.JobNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
-    return JobStatusResponse(
-        jobId=job.id,
-        status=job.status,
-        stage=job.stage,
-        error=job.error,
-        source=job.source,
-        cues=jobs.cues_out(job) if job.status == "ready" else None,
-    )
+    return jobs.job_status(job)
+
+
+@app.post("/jobs/{job_id}/segment", response_model=JobStatusResponse)
+async def segment_job(job_id: str, req: SegmentJobRequest):
+    """Accept a (corrected) transcript and re-run resegmentation on it.
+    Re-runnable — drops any downstream translation, since the sentence set
+    changed. See docs/mining-wizard-spec.md W1."""
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        await asyncio.to_thread(
+            jobs.run_segment,
+            job,
+            req.segments,
+            merge=req.merge,
+            split=req.split,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return jobs.job_status(job)
+
+
+@app.post("/jobs/{job_id}/translate", response_model=JobStatusResponse)
+async def translate_job(job_id: str):
+    """Align the EN subtitle track onto the current sentence boundaries and
+    return the per-sentence rows. Re-runnable."""
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        await asyncio.to_thread(jobs.run_translate, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return jobs.job_status(job)
 
 
 @app.post("/jobs/{job_id}/cues/{cue_index}/clip", response_model=ClipResponse)

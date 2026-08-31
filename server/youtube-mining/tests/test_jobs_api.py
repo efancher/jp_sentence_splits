@@ -288,3 +288,46 @@ def test_clip_range_requires_timings(client: TestClient) -> None:
         json={"japanese": "test", "startMs": 1000, "generateKana": False},
     )
     assert response.status_code == 409
+
+
+def test_ready_job_exposes_stage_transcript_and_rows(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    body = _wait_until_ready(client, job_id)
+
+    # The auto-advance pipeline lands at the `ready` stage with every
+    # stage's payload populated.
+    assert body["stage"] == "ready"
+    assert body["message"].startswith("Ready")
+    assert [seg["text"] for seg in body["transcript"]] == ["こんにちは。", "元気ですか。"]
+    assert [row["japanese"] for row in body["rows"]] == ["こんにちは。", "元気ですか。"]
+    assert body["rows"][0]["english"] == "Hello."
+
+
+def test_segment_endpoint_reruns_on_corrected_transcript(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    # Feed a corrected transcript whose one cue bundles two sentences —
+    # resegmentation splits it back into two.
+    response = client.post(
+        f"/jobs/{job_id}/segment",
+        json={
+            "segments": [
+                {"text": "田中さんです。よろしく。", "startMs": 0, "endMs": 2000},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stage"] == "segment"
+    assert [cue["japanese"] for cue in body["cues"]] == ["田中さんです。", "よろしく。"]
+    # Re-segmenting drops the stale translation until /translate re-runs.
+    assert body["rows"] is None
+
+    translated = client.post(f"/jobs/{job_id}/translate")
+    assert translated.status_code == 200
+    tbody = translated.json()
+    assert tbody["stage"] == "translate"
+    assert [row["japanese"] for row in tbody["rows"]] == ["田中さんです。", "よろしく。"]

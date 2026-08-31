@@ -16,7 +16,11 @@ ALLOWED_ORIGINS = os.environ.get(
 # Where each job's scratch directory (downloaded audio, subtitles, clips)
 # lives. One subdirectory per job id, swept on a timer (see app/jobs.py).
 JOBS_ROOT = os.environ.get("MINING_JOBS_ROOT", "/tmp/youtube-mining-jobs")
-JOB_TTL_SECONDS = int(os.environ.get("MINING_JOB_TTL_SECONDS", str(2 * 60 * 60)))
+# ~6 h: the staged mining wizard (docs/mining-wizard-spec.md) keeps a job
+# live across an interactive review that can span a sitting. No disk
+# checkpointing — a swept mid-wizard job means restarting the mine, and the
+# source is cached so re-download is the only cost.
+JOB_TTL_SECONDS = int(os.environ.get("MINING_JOB_TTL_SECONDS", str(6 * 60 * 60)))
 JOB_SWEEP_INTERVAL_SECONDS = int(
     os.environ.get("MINING_JOB_SWEEP_INTERVAL_SECONDS", "600")
 )

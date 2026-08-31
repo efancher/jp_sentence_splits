@@ -361,7 +361,7 @@ export function YouTubeMinePage() {
         ) : null}
         {phase === 'fetching' ? (
           <div className="stack">
-            <div className="muted">{jobStatus?.stage ?? 'Starting…'}</div>
+            <div className="muted">{jobStatus?.message ?? 'Starting…'}</div>
             <button
               type="button"
               onClick={() => {

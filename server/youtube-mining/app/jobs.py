@@ -43,8 +43,13 @@ from app.models import (
     ClipResponse,
     Cue,
     CueOut,
+    JobStage,
     JobState,
+    JobStatusResponse,
     SourceInfo,
+    TranscriptSegment,
+    TranscriptSegmentInput,
+    TranslatedRow,
 )
 
 logger = logging.getLogger("youtube_mining_api.jobs")
@@ -69,12 +74,25 @@ class Job:
     id: str
     dir: Path
     created_at: float = field(default_factory=time.time)
+    # Coarse lifecycle flag the linear review UI polls.
     status: JobState = "pending"
-    stage: str = "queued"
+    # Finer, re-runnable pipeline position each wizard panel drives.
+    stage: JobStage = "fetching"
+    # Human-readable progress line for both UIs.
+    message: str = "Queued…"
     error: str | None = None
     source: SourceInfo | None = None
+    is_music: bool = False
+    # Transcript stage. `raw_cues` keeps Whisper per-word timings (not
+    # serialised) for the auto-advance segment pass; `transcript` is the
+    # serialisable view the wizard's transcript panel edits.
+    raw_cues: list[Cue] = field(default_factory=list)
+    transcript: list[TranscriptSegment] = field(default_factory=list)
+    # Segment stage.
     cues: list[Cue] = field(default_factory=list)
+    # Translate stage.
     english_by_index: dict[int, str] = field(default_factory=dict)
+    rows: list[TranslatedRow] = field(default_factory=list)
     source_audio_path: Path | None = None
     clips: dict[str, ClipRecord] = field(default_factory=dict)
     next_sentence_seq: int = 1
@@ -133,101 +151,215 @@ def _looks_human_captioned(cues: list[Cue]) -> bool:
 
 def _run_job(job: Job, url: str) -> None:
     try:
-        job.status = "fetching"
-        job.stage = "Downloading audio…"
-        # All three YouTube fetches (audio, subtitles, info) share one exit
-        # node detour — flipping it per-call would thrash the box's routing.
-        with exit_node.routed_for_download():
-            job.source_audio_path = youtube.fetch_audio(url, job.dir)
-
-            peak_db = clip.probe_max_volume_db(job.source_audio_path)
-            if peak_db < config.SILENT_SOURCE_MAX_DB:
-                raise RuntimeError(
-                    f"Downloaded source audio is silent (peak {peak_db:.0f} dBFS). "
-                    "YouTube likely served a silent stream — check the exit "
-                    "node (README 'YouTube's bot-check') or refresh cookies "
-                    "and retry."
-                )
-
-            job.stage = "Fetching subtitles…"
-            youtube.download_subtitles(url, job.dir)
-
-            job.stage = "Reading video info…"
-            info = youtube.inspect_url(url)
-        job.source = youtube.info_to_source(info)
-
-        # Stash a compressed copy of the source outside the job sweep so a
-        # later re-segment / audio repair re-cuts from the original, not from
-        # lossy fragment clips. Best effort — never fail the job over it.
-        cached_source: Path | None = None
-        try:
-            cached_source = source_cache.store(
-                job.source.videoId, job.source_audio_path
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "source_cache.store failed for %s", job.source.videoId, exc_info=True
-            )
-
-        job.status = "parsing"
-        subtitle_dir = job.dir / "subtitles"
-        caption_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
-        is_music = "Music" in (info.get("categories") or [])
-
-        # A real (human) subtitle track beats Whisper — correct kanji, names,
-        # no hallucination — and skips the slow ASR pass. YouTube's Japanese
-        # auto-captions carry no sentence-final punctuation; a human track
-        # does, so punctuation density tells them apart. For a Music-category
-        # upload the caption track is the synced lyrics and Whisper would
-        # hallucinate over the instrumentation, so prefer captions there even
-        # without the punctuation signal.
-        if caption_cues and (is_music or _looks_human_captioned(caption_cues)):
-            logger.info(
-                "Mining job %s: %s caption track (%d cues), skipping ASR",
-                job.id,
-                "lyrics" if is_music else "human",
-                len(caption_cues),
-            )
-            job.stage = "Reading lyrics…" if is_music else "Splitting sentences…"
-            keep_auto = is_music and not _looks_human_captioned(caption_cues)
-            raw_cues = (
-                caption_cues
-                if keep_auto
-                else [c.model_copy(update={"isAuto": False}) for c in caption_cues]
-            )
-        else:
-            job.stage = "Transcribing audio…"
-            raw_cues = asr_client.transcribe_source(
-                cached_source or job.source_audio_path
-            )
-            if raw_cues is not None:
-                logger.info(
-                    "Mining job %s: ASR transcript, %d segment(s)",
-                    job.id,
-                    len(raw_cues),
-                )
-            else:
-                job.stage = "Splitting sentences…"
-                raw_cues = caption_cues
-
-        # Skip the merge pass for lyrics — a Music upload, or any transcript
-        # with almost no sentence-final punctuation, where merge_incomplete_cues
-        # would fuse every line into one cue since none ends on 。
-        merge = not is_music and _terminal_punct_ratio(raw_cues) >= 0.15
-        if not merge:
-            logger.info("Mining job %s: keeping lines unmerged (lyrics)", job.id)
-        job.cues = resegment.resegment_cues(raw_cues, merge=merge)
-        job.english_by_index = subtitles.load_parallel_text_from_dir(
-            subtitle_dir, job.cues, language="en"
-        )
-
+        _fetch_transcript(job, url)
+        # Auto-advance through segmentation + translation so the current
+        # linear review UI (polls for status == "ready", then reads `cues`)
+        # keeps working unchanged. The staged wizard
+        # (docs/mining-wizard-spec.md W5) stops here at `transcript` and
+        # drives `run_segment` / `run_translate` explicitly instead.
+        run_segment(job, None)
+        run_translate(job)
         job.status = "ready"
-        job.stage = f"Ready — {len(job.cues)} sentence(s) found."
+        job.stage = "ready"
+        job.message = f"Ready — {len(job.cues)} sentence(s) found."
     except Exception as exc:  # noqa: BLE001 - surfaced to the client as job.error
         logger.exception("Mining job %s failed", job.id)
         job.status = "error"
-        job.stage = "Failed"
+        job.stage = "error"
+        job.message = "Failed"
         job.error = str(exc)
+
+
+def _fetch_transcript(job: Job, url: str) -> None:
+    """Download → cache → ASR/caption. Stops at the `transcript` stage with
+    `job.raw_cues` / `job.transcript` populated — no resegmentation yet."""
+    job.status = "fetching"
+    job.stage = "fetching"
+    job.message = "Downloading audio…"
+    # All three YouTube fetches (audio, subtitles, info) share one exit
+    # node detour — flipping it per-call would thrash the box's routing.
+    with exit_node.routed_for_download():
+        job.source_audio_path = youtube.fetch_audio(url, job.dir)
+
+        peak_db = clip.probe_max_volume_db(job.source_audio_path)
+        if peak_db < config.SILENT_SOURCE_MAX_DB:
+            raise RuntimeError(
+                f"Downloaded source audio is silent (peak {peak_db:.0f} dBFS). "
+                "YouTube likely served a silent stream — check the exit "
+                "node (README 'YouTube's bot-check') or refresh cookies "
+                "and retry."
+            )
+
+        job.message = "Fetching subtitles…"
+        youtube.download_subtitles(url, job.dir)
+
+        job.message = "Reading video info…"
+        info = youtube.inspect_url(url)
+    job.source = youtube.info_to_source(info)
+
+    # Stash a compressed copy of the source outside the job sweep so a
+    # later re-segment / audio repair re-cuts from the original, not from
+    # lossy fragment clips. Best effort — never fail the job over it.
+    cached_source: Path | None = None
+    try:
+        cached_source = source_cache.store(
+            job.source.videoId, job.source_audio_path
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "source_cache.store failed for %s", job.source.videoId, exc_info=True
+        )
+
+    job.status = "parsing"
+    subtitle_dir = job.dir / "subtitles"
+    caption_cues = subtitles.load_cues_from_dir(subtitle_dir, language="ja")
+    job.is_music = "Music" in (info.get("categories") or [])
+
+    # A real (human) subtitle track beats Whisper — correct kanji, names,
+    # no hallucination — and skips the slow ASR pass. YouTube's Japanese
+    # auto-captions carry no sentence-final punctuation; a human track
+    # does, so punctuation density tells them apart. For a Music-category
+    # upload the caption track is the synced lyrics and Whisper would
+    # hallucinate over the instrumentation, so prefer captions there even
+    # without the punctuation signal.
+    if caption_cues and (job.is_music or _looks_human_captioned(caption_cues)):
+        logger.info(
+            "Mining job %s: %s caption track (%d cues), skipping ASR",
+            job.id,
+            "lyrics" if job.is_music else "human",
+            len(caption_cues),
+        )
+        job.message = (
+            "Reading lyrics…" if job.is_music else "Splitting sentences…"
+        )
+        keep_auto = job.is_music and not _looks_human_captioned(caption_cues)
+        raw_cues = (
+            caption_cues
+            if keep_auto
+            else [c.model_copy(update={"isAuto": False}) for c in caption_cues]
+        )
+    else:
+        job.message = "Transcribing audio…"
+        raw_cues = asr_client.transcribe_source(
+            cached_source or job.source_audio_path
+        )
+        if raw_cues is not None:
+            logger.info(
+                "Mining job %s: ASR transcript, %d segment(s)",
+                job.id,
+                len(raw_cues),
+            )
+        else:
+            job.message = "Splitting sentences…"
+            raw_cues = caption_cues
+
+    job.raw_cues = [
+        cue.model_copy(update={"index": i, "sourceIndexes": [i]})
+        for i, cue in enumerate(raw_cues)
+    ]
+    job.transcript = [_to_transcript_segment(cue) for cue in job.raw_cues]
+    job.cues = []
+    job.english_by_index = {}
+    job.rows = []
+    job.stage = "transcript"
+    job.message = f"Transcript ready — {len(job.transcript)} segment(s)."
+
+
+def _to_transcript_segment(cue: Cue) -> TranscriptSegment:
+    return TranscriptSegment(
+        text=cue.text,
+        startMs=cue.startMs,
+        endMs=cue.endMs,
+        isAuto=cue.isAuto,
+        lowConfidence=cue.lowConfidence,
+    )
+
+
+def run_segment(
+    job: Job,
+    segments: list[TranscriptSegmentInput] | None,
+    *,
+    merge: bool | None = None,
+    split: bool = True,
+) -> None:
+    """(Re-)run resegmentation. `segments=None` uses the stored transcript
+    (Whisper word timings intact); a list replaces it with the reviewer's
+    corrected text. Clears any downstream translation — the sentence set
+    changed. Re-runnable at any point after `transcript`."""
+    if job.source is None:
+        raise ValueError("Job is still fetching")
+
+    if segments is None:
+        base = list(job.raw_cues)
+    else:
+        base = [
+            Cue(
+                index=i,
+                startMs=seg.startMs,
+                endMs=seg.endMs,
+                text=seg.text,
+                isAuto=seg.isAuto,
+                lowConfidence=seg.lowConfidence,
+                sourceIndexes=[i],
+            )
+            for i, seg in enumerate(segments)
+        ]
+        job.transcript = [_to_transcript_segment(cue) for cue in base]
+
+    # Skip the merge pass for lyrics — a Music upload, or any transcript with
+    # almost no sentence-final punctuation, where merge_incomplete_cues would
+    # fuse every line into one cue since none ends on 。 A Music upload never
+    # merges regardless of what the client asked for.
+    if merge is None:
+        merge = not job.is_music and _terminal_punct_ratio(base) >= 0.15
+    elif job.is_music:
+        merge = False
+    if not merge:
+        logger.info("Mining job %s: keeping lines unmerged", job.id)
+
+    job.cues = resegment.resegment_cues(base, merge=merge, split=split)
+    job.english_by_index = {}
+    job.rows = []
+    job.stage = "segment"
+    job.message = f"{len(job.cues)} sentence(s) segmented."
+
+
+def run_translate(job: Job) -> None:
+    """Align the EN subtitle track onto the current sentence boundaries.
+    Re-runnable — a client can also redistribute translations itself and
+    re-`run_segment` first."""
+    if not job.cues:
+        raise ValueError("Job has no segmented sentences to translate")
+    subtitle_dir = job.dir / "subtitles"
+    job.english_by_index = subtitles.load_parallel_text_from_dir(
+        subtitle_dir, job.cues, language="en"
+    )
+    job.rows = [
+        TranslatedRow(
+            index=cue.index,
+            japanese=cue.text,
+            english=job.english_by_index.get(cue.index),
+            startMs=cue.startMs,
+            endMs=cue.endMs,
+        )
+        for cue in job.cues
+    ]
+    job.stage = "translate"
+    job.message = f"{len(job.rows)} row(s) translated."
+
+
+def job_status(job: Job) -> JobStatusResponse:
+    return JobStatusResponse(
+        jobId=job.id,
+        status=job.status,
+        stage=job.stage,
+        message=job.message,
+        error=job.error,
+        source=job.source,
+        transcript=job.transcript or None,
+        cues=cues_out(job) if job.cues else None,
+        rows=job.rows or None,
+    )
 
 
 def cues_out(job: Job) -> list[CueOut]:

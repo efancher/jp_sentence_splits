@@ -84,14 +84,62 @@ class CueOut(BaseModel):
 
 JobState = Literal["pending", "fetching", "parsing", "ready", "error"]
 
+# The wizard's re-runnable pipeline position (docs/mining-wizard-spec.md).
+# `status` above stays the coarse lifecycle flag the linear review UI polls;
+# `stage` is the finer state machine each wizard panel drives.
+JobStage = Literal[
+    "fetching", "transcript", "segment", "translate", "ready", "error"
+]
+
+
+class TranscriptSegment(BaseModel):
+    """One raw ASR/caption segment before resegmentation — what the wizard's
+    transcript stage lets the reviewer correct by ear."""
+
+    text: str
+    startMs: int
+    endMs: int
+    isAuto: bool = False
+    lowConfidence: bool = False
+
+
+class TranscriptSegmentInput(BaseModel):
+    text: str = Field(min_length=1)
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=1)
+    isAuto: bool = False
+    lowConfidence: bool = False
+
+
+class SegmentJobRequest(BaseModel):
+    """Accept a corrected transcript and (re-)run resegmentation on it."""
+
+    segments: list[TranscriptSegmentInput] = Field(min_length=1)
+    # None → server heuristic (skip the merge pass for a Music upload or a
+    # punctuation-free transcript, same as the initial pipeline run).
+    merge: bool | None = None
+    split: bool = True
+
+
+class TranslatedRow(BaseModel):
+    index: int
+    japanese: str
+    english: str | None = None
+    startMs: int
+    endMs: int
+
 
 class JobStatusResponse(BaseModel):
     jobId: str
     status: JobState
-    stage: str
+    stage: JobStage
+    # Human-readable progress line (was `stage` before the wizard rework).
+    message: str
     error: str | None = None
     source: SourceInfo | None = None
+    transcript: list[TranscriptSegment] | None = None
     cues: list[CueOut] | None = None
+    rows: list[TranslatedRow] | None = None
 
 
 class CreateJobRequest(BaseModel):

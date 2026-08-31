@@ -38,7 +38,8 @@ describe('getMiningJob', () => {
   const readyResponse = {
     jobId: 'abc123',
     status: 'ready',
-    stage: 'Ready — 2 sentence(s) found.',
+    stage: 'ready',
+    message: 'Ready — 2 sentence(s) found.',
     source: {
       id: 'source-vid123',
       type: 'youtube',

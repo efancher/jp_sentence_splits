@@ -46,13 +46,45 @@ const cueSchema = z.object({
   lowConfidence: z.boolean().optional(),
 });
 
+const transcriptSegmentSchema = z.object({
+  text: z.string(),
+  startMs: z.number(),
+  endMs: z.number(),
+  isAuto: z.boolean().optional(),
+  lowConfidence: z.boolean().optional(),
+});
+
+const translatedRowSchema = z.object({
+  index: z.number(),
+  japanese: z.string(),
+  english: z.string().nullable().optional(),
+  startMs: z.number(),
+  endMs: z.number(),
+});
+
+/**
+ * `status` is the coarse lifecycle flag the linear review UI polls;
+ * `stage` is the staged wizard's re-runnable pipeline position
+ * (docs/mining-wizard-spec.md). `message` is the human-readable progress
+ * line (it was sent as `stage` before the wizard rework).
+ */
 const jobStatusSchema = z.object({
   jobId: z.string(),
   status: z.enum(['pending', 'fetching', 'parsing', 'ready', 'error']),
-  stage: z.string(),
+  stage: z.enum([
+    'fetching',
+    'transcript',
+    'segment',
+    'translate',
+    'ready',
+    'error',
+  ]),
+  message: z.string(),
   error: z.string().nullable().optional(),
   source: sourceInfoSchema.nullable().optional(),
+  transcript: z.array(transcriptSegmentSchema).nullable().optional(),
   cues: z.array(cueSchema).nullable().optional(),
+  rows: z.array(translatedRowSchema).nullable().optional(),
 });
 
 const clipResponseSchema = z.object({
@@ -90,7 +122,10 @@ const resegmentedCueSchema = z.object({
 
 export type MiningSourceInfo = z.infer<typeof sourceInfoSchema>;
 export type MiningCue = z.infer<typeof cueSchema>;
+export type MiningTranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
+export type MiningTranslatedRow = z.infer<typeof translatedRowSchema>;
 export type MiningJobStatus = z.infer<typeof jobStatusSchema>;
+export type MiningJobStage = MiningJobStatus['stage'];
 export type MiningClipResult = z.infer<typeof clipResponseSchema>;
 export type ResegmentedCue = z.infer<typeof resegmentedCueSchema>;
 

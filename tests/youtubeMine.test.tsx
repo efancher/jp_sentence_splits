@@ -24,7 +24,8 @@ vi.mock('../src/lib/miningApi', () => ({
   getMiningJob: vi.fn(async () => ({
     jobId: 'job-1',
     status: 'ready' as const,
-    stage: 'Ready — 3 sentence(s) found.',
+    stage: 'ready' as const,
+    message: 'Ready — 3 sentence(s) found.',
     source: {
       id: 'source-vidmocked',
       type: 'youtube' as const,
