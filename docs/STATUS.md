@@ -27,6 +27,14 @@ form/reading/accent, C: retained source audio) and the staged wizard
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-08-31 — Mining: JMnedict proper-noun reading cross-check.**
+  `morphology.tokenize_japanese` consults a shipped ~220k-name table
+  (`app/data/name_readings.json.gz`, built by `npm run build:name-readings`
+  from JMnedict — person names with exactly one reading) and overrides a
+  固有名詞 token's reading when UniDic-lite disagrees, dropping the stale
+  UniDic accent (Kanjium fills it post-hoc). `MINING_NAME_READING_CHECK=0`
+  off. Closes the last slice-B item. `test_morphology.py` +3 → 73 py.
+
 - **2026-08-31 — Mining wizard deferred polish.** (1) `POST /jobs/{id}/commit`
   clips every reviewed row in one request with audio inline (base64) — the
   wizard's commit stage was a per-row clip+fetch loop. (2) `POST
@@ -75,24 +83,24 @@ is trimmed.)
 | WaniKani mnemonics | done, deployed 2026-08-29/30/31 (vocab + kanji + subject cache) |
 | Contextual conjugation cards | done; migration live 2026-08-30 |
 | Progressive listening (`word_listening`) | done 2026-08-30 |
-| Mining pipeline v2 | slices A/B/C + wizard W1–W6 + polish done 2026-08-31; two durability/dictionary items still deferred |
+| Mining pipeline v2 | slices A/B/C + wizard W1–W6 + polish + JMnedict reading check done 2026-08-31; one durability item deferred |
 
 Phase-by-phase detail is in `docs/STATUS_ARCHIVE.md`; the ROADMAP entries
 carry a one-paragraph summary each.
 
 ## Open / deferred
 
-**Mining pipeline v2 — two items still deferred** (the smaller polish —
-batch commit, per-row audio, resegment-page waveform, provenance-grouped
-realign — landed 2026-08-31):
-- In-import JMnedict/Kanjium reading cross-check (morphology emits
-  UniDic form/reading/accent directly now; a dictionary second opinion at
-  import time is still unbuilt — needs a ~100 MB dataset on the mining box).
+**Mining pipeline v2 — one item still deferred** (everything else —
+wizard W1–W6, batch commit, per-row audio, resegment-page waveform,
+provenance-grouped realign, JMnedict proper-noun reading check — landed
+2026-08-31):
 - Durability-only: a `source_audio` Supabase table + Storage mirror so the
   LRU source-audio cache can restore without re-hitting YouTube. Blocked on
   a decision — the Python service deliberately has no Supabase creds, so
   restore-from-Storage needs either a public read path or the client
-  proxying the restore.
+  proxying the restore. (Recommendation on file: enable box-level backups
+  of the cache dir instead; if building anyway, do upload-only and defer
+  auto-restore.)
 
 **Not yet browser-verified** (typecheck/build/tests green, and the sandbox
 has no browser system libs):

@@ -175,9 +175,13 @@ the mining service just wasn't reading those fields.
   `scripts/backfill-vocabulary-pitch-accent-unidic.ts`, a gap-fill that runs
   *after* Kanjium: single dictionary-form content token, reading agrees,
   integer aType, no proper nouns. Filled 46 production items.
-- **remaining:** JMnedict proper-noun reading check + Kanjium cross-check
-  *inline* (both in `scripts/lib/` today, post-hoc). Bigger — needs the
-  datasets available to the Python service.
+- **[done 2026-08-31]** JMnedict proper-noun reading check *inline*:
+  `scripts/build-name-readings.ts` filters JMnedict to ~220k person names
+  with exactly one reading → `server/youtube-mining/app/data/name_readings.json.gz`
+  (committed, ~1.5 MB). `morphology.tokenize_japanese` overrides a 固有名詞
+  token's reading when UniDic-lite disagrees (and drops its now-stale
+  accent). `MINING_NAME_READING_CHECK=0` off. Kanjium stays post-hoc for
+  pitch (the decision above).
 - **maybe:** `READING_OVERRIDES` (1 entry) → a small curated table of
   context-ambiguous readings (何 なに/なん, 方 かた/ほう…). Low frequency;
   `kanaBase` doesn't help here (it's a fugashi-context problem).
@@ -243,9 +247,10 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      from Storage instead of re-hitting YouTube if the box disk is wiped.
      Cloud-only table (like `wanikani_subjects`), client writes it at import.
 2. **B — dictionary-form reading (`lemmaReading` from UniDic `kanaBase`).**
-   **[done 2026-08-30]** — the conjugation reading-mismatch class is fixed
-   at the source for new mines. `aType` pitch accent + inline JMnedict/Kanjium
-   still open (see slice B section).
+   **[done 2026-08-30]** — conjugation reading-mismatch fixed at the
+   source; `aType` pitch accent post-hoc (2026-08-30); inline JMnedict
+   proper-noun reading check **[done 2026-08-31]** (see slice B section).
+   Slice B fully closed.
 3. **Stage 1 + 2 as the interactive core.** Job state machine, `/audio`
    range endpoint, transcript + segmentation panels with inline playback and
    waveform. Auto-captions still the text source at this point.
@@ -270,10 +275,10 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
    with `ResegmentSourcePage` (which now also gets the waveform, fed by a
    new streaming `POST /source-audio/range`); `sentence-realign` runs at
    mine time in the translate stage grouped by transcript-segment
-   provenance; commit is one batch `POST /jobs/{id}/commit`. Still
-   deferred: an in-import JMnedict/Kanjium reading cross-check; a
-   `source_audio` Supabase table + Storage mirror for cache durability
-   (needs a Supabase-creds decision for the Python service).
+   provenance; commit is one batch `POST /jobs/{id}/commit`; proper-noun
+   readings cross-checked against a shipped JMnedict table. Only still
+   deferred: a `source_audio` Supabase table + Storage mirror for cache
+   durability (needs a Supabase-creds decision for the Python service).
 
 Slices 1–2 are pure wins with no redesign. 3 is the redesign. 4–5 build on it.
 

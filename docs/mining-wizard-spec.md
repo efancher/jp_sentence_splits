@@ -4,9 +4,10 @@
 > pass: batch `POST /jobs/{id}/commit`, streaming `POST /source-audio/range`
 > + the `/books/:id/resegment` boundary waveform (W6's "consider"), per-row
 > audio on the segment/translate stages, and provenance-grouped
-> "Auto-fill (AI)". Kept as the design record. Still deferred (own line in
-> `docs/ROADMAP.md`): in-import JMnedict/Kanjium cross-check; a
-> `source_audio` Supabase durability table.
+> "Auto-fill (AI)", and a JMnedict proper-noun reading cross-check in
+> `morphology.tokenize_japanese`. Kept as the design record. Only still
+> deferred (own line in `docs/ROADMAP.md`): a `source_audio` Supabase
+> durability table.
 
 
 Self-contained brief for implementing the staged wizard from

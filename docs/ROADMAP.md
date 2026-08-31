@@ -77,7 +77,9 @@ detail, this file the at-a-glance list.
   2026-08-31): batch `POST /jobs/{id}/commit`, `POST /source-audio/range`
   streaming endpoint + the `/books/:id/resegment` boundary waveform,
   per-row audio on the segment/translate stages, provenance-grouped
-  "Auto-fill (AI)". Still deferred: an in-import JMnedict/Kanjium reading
-  cross-check (~100 MB dataset on the box); a `source_audio` Supabase
-  table + Storage mirror for cache durability (blocked on a Supabase-creds
-  decision for the Python service).
+  "Auto-fill (AI)", and a JMnedict proper-noun reading cross-check in
+  `morphology.tokenize_japanese` (shipped ~220k-name table, closing the
+  last slice-B item). Still deferred: a `source_audio` Supabase table +
+  Storage mirror for cache durability (blocked on a Supabase-creds
+  decision for the Python service — recommendation is box-level backups
+  instead).

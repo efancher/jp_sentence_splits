@@ -1298,7 +1298,11 @@ aren't JSON-serializable/aren't worth backing up).
   Whisper `small`), not YouTube's punctuation-free Japanese auto-captions;
   captions are the fallback. Every mined source is also kept as a
   compressed Opus (`app/source_cache.py`) so re-cuts come from the
-  original. A job carries a re-runnable `stage` state machine
+  original. Tokenization (`app/morphology.py`, fugashi/UniDic-lite) emits
+  dictionary-form reading + accent directly and overrides a proper-noun
+  token's reading from a shipped JMnedict name table
+  (`app/name_readings.py`) when UniDic-lite disagrees. A job carries a
+  re-runnable `stage` state machine
   (`fetching`→`transcript`→`segment`→`translate`→`ready`) the wizard
   drives: `POST /jobs/{id}/segment` accepts a corrected transcript and
   re-resegments, `POST /jobs/{id}/translate` re-aligns EN,
