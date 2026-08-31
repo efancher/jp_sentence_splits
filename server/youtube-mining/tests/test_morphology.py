@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app import morphology, name_readings
 from app.morphology import tokenize_japanese
 from app.readings import reading_engine_available
 
@@ -64,3 +65,39 @@ def test_accent_type_is_a_plain_integer_or_blank() -> None:
     # A conjugated/particle token or an unknown-accent word yields "".
     ta = next(t for t in tokenize_japanese("食べた") if t.surface == "た")
     assert ta.accentType == ""
+
+
+def test_proper_noun_reading_overridden_from_name_dictionary(monkeypatch) -> None:
+    """A 固有名詞 token whose UniDic reading disagrees with JMnedict takes
+    the dictionary reading, and its (now-stale) UniDic accent is dropped.
+    A deliberately impossible reading proves the override fired regardless
+    of UniDic-lite's own guess for 水希."""
+    monkeypatch.setattr(
+        name_readings, "_table", {"水希": "ぜったいちがう"}, raising=False
+    )
+    monkeypatch.setattr(name_readings.config, "NAME_READING_CHECK", True)
+
+    tokens = {t.surface: t for t in tokenize_japanese("水希さんです。")}
+    mizuki = tokens["水希"]
+    assert "固有名詞" in mizuki.pos
+    assert mizuki.reading == "ぜったいちがう"
+    assert mizuki.lemmaReading == "ぜったいちがう"
+    assert mizuki.accentType == ""
+    # A common word is untouched by the name check.
+    assert tokens["さん"].reading == "さん"
+
+
+def test_name_check_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        name_readings, "_table", {"水希": "ぜったいちがう"}, raising=False
+    )
+    monkeypatch.setattr(name_readings.config, "NAME_READING_CHECK", False)
+    mizuki = next(t for t in tokenize_japanese("水希さん") if t.surface == "水希")
+    assert mizuki.reading != "ぜったいちがう"  # UniDic's own reading, unchanged
+
+
+def test_name_lookup_is_a_noop_without_the_data_file(monkeypatch) -> None:
+    monkeypatch.setattr(name_readings, "_table", {}, raising=False)
+    monkeypatch.setattr(name_readings.config, "NAME_READING_CHECK", True)
+    # Just shouldn't raise; whatever UniDic gives stands.
+    assert tokenize_japanese("田中さんです。")

@@ -61,6 +61,13 @@ YTDLP_PLAYER_CLIENT = os.environ.get(
     "MINING_YTDLP_PLAYER_CLIENT", ""
 ).strip()
 
+# Cross-check a 固有名詞 (proper-noun) token's reading against JMnedict at
+# tokenize time and prefer the dictionary's when it disagrees — UniDic-lite
+# fumbles distinctive names and a re-mine never improves them. Data ships in
+# app/data/name_readings.json.gz (see app/name_readings.py). Set
+# MINING_NAME_READING_CHECK=0 to disable.
+NAME_READING_CHECK = os.environ.get("MINING_NAME_READING_CHECK", "1") != "0"
+
 # Transcribe the mined source with ASR (shadowing-analysis-api
 # POST /transcribe-source) and use *that* as the cue text, not YouTube's
 # Japanese auto-caption track (no reliable kanji, no punctuation — the

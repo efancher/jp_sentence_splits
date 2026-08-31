@@ -9,6 +9,7 @@ app's vocabulary-suggestion picker already consumes
 from __future__ import annotations
 
 from app.models import MorphemeToken
+from app.name_readings import lookup_name_reading
 from app.readings import READING_OVERRIDES, _load_engine, has_kanji
 
 
@@ -102,16 +103,32 @@ def tokenize_japanese(text: str) -> list[MorphemeToken]:
             continue
         feature = word.feature
         lemma = _lemma_from_feature(feature, surface)
+        pos = _pos_from_feature(feature)
+        reading = _reading_from_feature(feature, surface, kata2hira)
+        lemma_reading = _lemma_reading_from_feature(feature, lemma, kata2hira)
+        accent_type = _accent_type_from_feature(feature)
+
+        # JMnedict second opinion for a proper-noun reading UniDic-lite
+        # likely fumbled (distinctive given names / surnames). Only when it
+        # actually disagrees; drop the UniDic accent, which was derived for
+        # its own — now overridden — reading (Kanjium fills it back post-hoc).
+        if "固有名詞" in pos and has_kanji(surface):
+            name_reading = lookup_name_reading(surface)
+            if name_reading and name_reading != reading:
+                reading = name_reading
+                lemma_reading = name_reading
+                accent_type = ""
+
         tokens.append(
             MorphemeToken(
                 surface=surface,
                 start=start,
                 end=end,
                 lemma=lemma,
-                reading=_reading_from_feature(feature, surface, kata2hira),
-                lemmaReading=_lemma_reading_from_feature(feature, lemma, kata2hira),
-                pos=_pos_from_feature(feature),
-                accentType=_accent_type_from_feature(feature),
+                reading=reading,
+                lemmaReading=lemma_reading,
+                pos=pos,
+                accentType=accent_type,
             )
         )
         cursor = end

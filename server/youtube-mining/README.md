@@ -31,6 +31,14 @@ in `MINING_YTDLP_JS_RUNTIME_PATH`. See "JavaScript runtime" under
 import or initialize, readings/tokens are simply omitted rather than
 erroring (same contract as the original CLI).
 
+`app/data/name_readings.json.gz` (committed, ~1.5 MB) is a proper-noun
+reading table the tokenizer consults to override UniDic-lite's guess for
+distinctive names it fumbles. It's built from JMnedict by
+`npm run build:name-readings` at the repo root (needs the JMnedict cache,
+which that script downloads); regenerate + commit it when JMnedict is
+bumped. Missing file or `MINING_NAME_READING_CHECK=0` just disables the
+cross-check.
+
 Point the frontend at a local instance via a dev override:
 
 ```bash

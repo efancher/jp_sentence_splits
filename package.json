@@ -17,6 +17,7 @@
     "ci": "npm run check && npm run build:pages",
     "import:wanikani-kanji": "tsx scripts/import-wanikani-kanji.ts",
     "jmdict:lookup": "tsx scripts/lookup-jmdict.ts",
+    "build:name-readings": "tsx scripts/build-name-readings.ts",
     "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
     "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts",
     "backfill:vocabulary-meanings": "tsx scripts/backfill-vocabulary-meanings.ts",
