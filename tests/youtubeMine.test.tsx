@@ -100,30 +100,30 @@ vi.mock('../src/lib/miningApi', () => {
         { index: 3, japanese: '行きましょう。', english: "Let's go.", startMs: 2600, endMs: 3200 },
       ],
     })),
-    clipMiningRange: vi.fn(
+    commitMiningJob: vi.fn(
       async (
         _jobId: string,
-        options: { japanese: string; english?: string; startMs?: number; endMs?: number },
-      ) => ({
-        sentenceId: `sentence-${options.startMs}-mocked`,
-        japanese: options.japanese,
-        reading: null,
-        english: options.english ?? null,
-        startMs: options.startMs ?? 0,
-        endMs: options.endMs ?? 1,
-        subtitleStartMs: options.startMs ?? 0,
-        subtitleEndMs: options.endMs ?? 1,
-        adjustedStartMs: options.startMs ?? 0,
-        adjustedEndMs: options.endMs ?? 1,
-        transcriptStatus: 'manually-corrected' as const,
-        tokens: null,
-        audio: {
-          mimeType: 'audio/mp4' as const,
-          durationMs: (options.endMs ?? 1) - (options.startMs ?? 0) + 300,
-        },
-      }),
+        rows: { japanese: string; english?: string; startMs: number; endMs: number }[],
+      ) =>
+        rows.map((row) => ({
+          clip: {
+            sentenceId: `sentence-${row.startMs}-mocked`,
+            japanese: row.japanese,
+            reading: null,
+            english: row.english ?? null,
+            startMs: row.startMs,
+            endMs: row.endMs,
+            subtitleStartMs: row.startMs,
+            subtitleEndMs: row.endMs,
+            adjustedStartMs: row.startMs,
+            adjustedEndMs: row.endMs,
+            transcriptStatus: 'manually-corrected' as const,
+            tokens: null,
+            audio: { mimeType: 'audio/mp4' as const, durationMs: row.endMs - row.startMs + 300 },
+          },
+          blob: new Blob(['fake-clip'], { type: 'audio/mp4' }),
+        })),
     ),
-    fetchMiningClipAudio: vi.fn(async () => new Blob(['fake-clip'], { type: 'audio/mp4' })),
     fetchJobAudioRange: vi.fn(async () => new Blob(['fake-span'], { type: 'audio/mp4' })),
     deleteMiningJob: vi.fn(async () => undefined),
   };
@@ -140,7 +140,7 @@ beforeEach(() => {
 
 describe('YouTube mining wizard', () => {
   it('walks transcript → segment → translate → commit and imports', async () => {
-    const { applyJobSegments, translateJob, clipMiningRange } = await import(
+    const { applyJobSegments, translateJob, commitMiningJob } = await import(
       '../src/lib/miningApi'
     );
     const user = userEvent.setup();
@@ -182,12 +182,14 @@ describe('YouTube mining wizard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next →' }));
 
-    // Stage 4 — one clip per reviewed row, then the import preview.
+    // Stage 4 — every reviewed row clipped in one commit call, then preview.
     expect(await screen.findByText('Import preview')).toBeInTheDocument();
-    await waitFor(() => expect(clipMiningRange).toHaveBeenCalledTimes(4));
-    expect(clipMiningRange).toHaveBeenCalledWith(
+    await waitFor(() => expect(commitMiningJob).toHaveBeenCalledTimes(1));
+    expect(commitMiningJob).toHaveBeenCalledWith(
       'job-1',
-      expect.objectContaining({ japanese: '行きましょう。', endMs: 3200 }),
+      expect.arrayContaining([
+        expect.objectContaining({ japanese: '行きましょう。', endMs: 3200 }),
+      ]),
     );
 
     await user.click(screen.getByRole('button', { name: 'Import complete project' }));

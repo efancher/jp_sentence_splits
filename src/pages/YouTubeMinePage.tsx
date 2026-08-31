@@ -3,23 +3,26 @@ import { useNavigate } from 'react-router-dom';
 
 import { SegmentationEditor } from '../components/SegmentationEditor';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
+import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
 import { getDb } from '../db/repository';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
   applyJobSegments,
-  clipMiningRange,
+  commitMiningJob,
   createMiningJob,
   deleteMiningJob,
   fetchJobAudioRange,
-  fetchMiningClipAudio,
   getMiningJob,
   translateJob,
   type MiningCue,
   type MiningSourceInfo,
 } from '../lib/miningApi';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
-import type { ResegmentReviewRow } from '../lib/resegmentPlan';
+import {
+  buildMiningRealignGroups,
+  type ResegmentReviewRow,
+} from '../lib/resegmentPlan';
 import { realignTranslations } from '../lib/sentenceRealign';
 import {
   buildShadowingPreview,
@@ -216,24 +219,21 @@ export function YouTubeMinePage() {
   const autoFillTranslations = () =>
     runApply('Asking the translation AI…', async () => {
       setRealignNote('');
-      const result = await realignTranslations([
-        {
-          originalJapanese: rows.map((row) => row.japanese).join(''),
-          originalTranslation: rows
-            .map((row) => row.translation.trim())
-            .filter(Boolean)
-            .join(' '),
-          pieces: rows.map((row) => row.japanese),
-        },
-      ]);
+      // Group by transcript-segment provenance so each group's EN is
+      // redistributed only across its own sentences — a single whole-span
+      // group lets unrelated translations bleed.
+      const { groups, assignments } = buildMiningRealignGroups(rows);
+      const result = await realignTranslations(groups);
       if (!result.ok) {
         setRealignNote(result.reason);
         return;
       }
-      const pieces = result.groups[0]?.pieceTranslations ?? [];
       setRows((current) =>
         current.map((row, index) => {
-          const next = pieces[index]?.trim();
+          const assignment = assignments[index];
+          const next =
+            assignment &&
+            result.groups[assignment.groupIndex]?.pieceTranslations[assignment.rank]?.trim();
           return next ? { ...row, translation: next, needsTranslationReview: true } : row;
         }),
       );
@@ -241,64 +241,66 @@ export function YouTubeMinePage() {
     });
 
   const buildPreview = () =>
-    runApply('Clipping sentences…', async () => {
-      if (!source) throw new Error('Source metadata is missing.');
-      const sentences: ShadowingSentenceInput[] = [];
-      const audio: ShadowingAudioDraft[] = [];
-      for (let i = 0; i < rows.length; i += 1) {
-        const row = rows[i]!;
-        setBusyNote(`Clipping sentence ${i + 1} / ${rows.length}…`);
-        const clip = await clipMiningRange(jobId!, {
-          japanese: row.japanese,
-          english: row.translation.trim() || undefined,
-          startMs: row.startMs,
-          endMs: row.endMs,
-          generateKana: true,
-        });
-        const blob = await fetchMiningClipAudio(jobId!, clip.sentenceId);
-        const japanese = displayJapanese(clip.japanese);
-        sentences.push({
-          id: clip.sentenceId,
-          japanese: clip.japanese,
-          reading: clip.reading ?? undefined,
-          english: clip.english ?? undefined,
-          startMs: clip.startMs,
-          endMs: clip.endMs,
-          tags: [],
-          transcriptStatus: clip.transcriptStatus,
-          tokens: clip.tokens ?? undefined,
-        });
-        audio.push({
-          sourceSentenceId: clip.sentenceId,
-          normalizedKey: normalizeSentenceKey(japanese),
-          path: `clips/${clip.sentenceId}.m4a`,
-          mimeType: clip.audio.mimeType,
-          durationMs: clip.audio.durationMs,
-          startMs: clip.startMs,
-          endMs: clip.endMs,
-          blob,
-        });
-      }
-      const existing = await getDb().sentences.toArray();
-      setPreview(
-        buildShadowingPreview(
-          {
-            id: source.id,
-            type: 'youtube',
-            url: source.url,
-            videoId: source.videoId,
-            title: source.title,
-            channel: source.channel ?? undefined,
-            durationMs: source.durationMs ?? undefined,
-          },
-          { ...MANIFEST, createdAt: new Date().toISOString() },
-          sentences,
-          audio,
-          existing,
-        ),
-      );
-      setStage('commit');
-    });
+    runApply(
+      `Clipping ${rows.length} sentences from the source (up to a minute for a long video)…`,
+      async () => {
+        if (!source) throw new Error('Source metadata is missing.');
+        const clipped = await commitMiningJob(
+          jobId!,
+          rows.map((row) => ({
+            japanese: row.japanese,
+            english: row.translation.trim() || undefined,
+            startMs: row.startMs,
+            endMs: row.endMs,
+          })),
+        );
+        const sentences: ShadowingSentenceInput[] = [];
+        const audio: ShadowingAudioDraft[] = [];
+        for (const { clip, blob } of clipped) {
+          const japanese = displayJapanese(clip.japanese);
+          sentences.push({
+            id: clip.sentenceId,
+            japanese: clip.japanese,
+            reading: clip.reading ?? undefined,
+            english: clip.english ?? undefined,
+            startMs: clip.startMs,
+            endMs: clip.endMs,
+            tags: [],
+            transcriptStatus: clip.transcriptStatus,
+            tokens: clip.tokens ?? undefined,
+          });
+          audio.push({
+            sourceSentenceId: clip.sentenceId,
+            normalizedKey: normalizeSentenceKey(japanese),
+            path: `clips/${clip.sentenceId}.m4a`,
+            mimeType: clip.audio.mimeType,
+            durationMs: clip.audio.durationMs,
+            startMs: clip.startMs,
+            endMs: clip.endMs,
+            blob,
+          });
+        }
+        const existing = await getDb().sentences.toArray();
+        setPreview(
+          buildShadowingPreview(
+            {
+              id: source.id,
+              type: 'youtube',
+              url: source.url,
+              videoId: source.videoId,
+              title: source.title,
+              channel: source.channel ?? undefined,
+              durationMs: source.durationMs ?? undefined,
+            },
+            { ...MANIFEST, createdAt: new Date().toISOString() },
+            sentences,
+            audio,
+            existing,
+          ),
+        );
+        setStage('commit');
+      },
+    );
 
   const vocabPreview = (() => {
     if (!preview) return { count: 0, sample: [] as string[] };
@@ -464,7 +466,13 @@ export function YouTubeMinePage() {
           </section>
           {rows.map((row, index) => (
             <section className="panel stack" key={index}>
-              <span className="jp">{row.japanese}</span>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <span className="jp">{row.japanese}</span>
+                <SpanAudioButton
+                  fetchAudio={() => fetchJobAudioRange(jobId!, row.startMs, row.endMs)}
+                  disabled={busy}
+                />
+              </div>
               <input
                 value={row.translation}
                 disabled={busy}

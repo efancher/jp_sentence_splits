@@ -5,6 +5,7 @@ import {
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
 import { SegmentationWaveform } from './SegmentationWaveform';
+import { SpanAudioButton } from './SpanAudioButton';
 
 /**
  * The reviewed-segment row list shared by the re-segment-existing-book flow
@@ -76,6 +77,12 @@ export function SegmentationEditor({
                 {rowsWithProgress.has(index) ? ' · has study progress' : ''}
               </span>
               <div className="row">
+                {audioForRange ? (
+                  <SpanAudioButton
+                    fetchAudio={() => audioForRange(row.startMs, row.endMs)}
+                    disabled={disabled}
+                  />
+                ) : null}
                 <button
                   type="button"
                   disabled={index === 0 || disabled}

@@ -9,7 +9,7 @@ import {
 } from '../db/repository';
 import { fixNumeralsInReadingOnly } from '../lib/fixNumeralReadings';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
-import { resegmentSentences } from '../lib/miningApi';
+import { fetchSourceAudioRange, resegmentSentences } from '../lib/miningApi';
 import {
   buildRealignGroups,
   buildResegmentPlan,
@@ -286,6 +286,12 @@ export function ResegmentSourcePage() {
             rowsWithProgress={rowsWithProgress}
             showAllRows={showAllRows}
             disabled={phase === 'applying'}
+            audioForRange={
+              context?.sourceUrl
+                ? (startMs, endMs) =>
+                    fetchSourceAudioRange(context.sourceUrl!, startMs, endMs)
+                : undefined
+            }
           />
         </>
       ) : null}

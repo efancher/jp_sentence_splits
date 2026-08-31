@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildMiningRealignGroups,
   buildRealignGroups,
   buildResegmentPlan,
   concatCut,
@@ -163,6 +164,25 @@ describe('buildRealignGroups', () => {
       originalTranslation: 'Ex. Why.',
       pieces: ['XY一。', 'XY二。'],
     });
+  });
+});
+
+describe('buildMiningRealignGroups', () => {
+  it('takes original text/translation from the rows themselves', () => {
+    const rows = [
+      { japanese: 'ねこ。', translation: 'Cat.', sourceIndexes: [0] },
+      { japanese: 'いぬ。', translation: 'Dog.', sourceIndexes: [0] },
+      { japanese: 'とり。', translation: 'Bird.', sourceIndexes: [1] },
+    ];
+    const { groups, assignments } = buildMiningRealignGroups(rows);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toEqual({
+      originalJapanese: 'ねこ。いぬ。',
+      originalTranslation: 'Cat. Dog.',
+      pieces: ['ねこ。', 'いぬ。'],
+    });
+    expect(groups[1]!.originalTranslation).toBe('Bird.');
+    expect(assignments[2]).toEqual({ groupIndex: 1, rank: 0 });
   });
 });
 

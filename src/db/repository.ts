@@ -414,6 +414,9 @@ export interface ResegmentSourceContext {
   bookTitle: string;
   /** e.g. `source-FkX4A-ZLBrc` — prefix of the shadowing sourceReference cardIds. */
   sourceId: string;
+  /** The book's YouTube URL, when set — lets the re-segment page pull a
+   *  boundary waveform from the cached source (`fetchSourceAudioRange`). */
+  sourceUrl?: string;
   sentences: ResegmentSourceSentence[];
 }
 
@@ -480,7 +483,7 @@ export async function loadResegmentSourceContext(
       ),
     });
   }
-  return { bookTitle: book.title, sourceId, sentences };
+  return { bookTitle: book.title, sourceId, sourceUrl: book.sourceUrl, sentences };
 }
 
 /**
