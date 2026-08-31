@@ -102,9 +102,16 @@ def test_job_lifecycle_fetch_to_clip(client: TestClient) -> None:
     assert [cue["japanese"] for cue in status["cues"]] == ["こんにちは。", "元気ですか。"]
     assert status["cues"][0]["englishGuess"] == "Hello."
 
+    # The wizard's commit stage clips each reviewed row by explicit span.
     clip_response = client.post(
-        f"/jobs/{job_id}/cues/0/clip",
-        json={"japanese": "こんにちは。", "english": "Hello.", "generateKana": False},
+        f"/jobs/{job_id}/clip",
+        json={
+            "japanese": "こんにちは。",
+            "english": "Hello.",
+            "startMs": 0,
+            "endMs": 1000,
+            "generateKana": False,
+        },
     )
     assert clip_response.status_code == 200
     clip_body = clip_response.json()
@@ -118,18 +125,6 @@ def test_job_lifecycle_fetch_to_clip(client: TestClient) -> None:
 
     delete_response = client.delete(f"/jobs/{job_id}")
     assert delete_response.status_code == 200
-
-
-def test_clip_unknown_cue_returns_404(client: TestClient) -> None:
-    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
-    job_id = create.json()["jobId"]
-    _wait_until_ready(client, job_id)
-
-    response = client.post(
-        f"/jobs/{job_id}/cues/99/clip",
-        json={"japanese": "test", "generateKana": False},
-    )
-    assert response.status_code == 404
 
 
 def test_uses_asr_transcript_over_captions_when_available(
@@ -227,29 +222,12 @@ def test_human_caption_track_skips_asr(client: TestClient, monkeypatch) -> None:
     assert status["cues"][0]["japanese"] == "文0です。"
 
 
-def test_cue_preview_audio(client: TestClient) -> None:
-    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
-    job_id = create.json()["jobId"]
-    _wait_until_ready(client, job_id)
-
-    resp = client.get(f"/jobs/{job_id}/cues/0/audio")
-    assert resp.status_code == 200
-    assert resp.headers["content-type"] == "audio/mp4"
-    assert resp.content == b"fake-clip"
-    # Cached — a second request serves the same file without re-clipping.
-    assert client.get(f"/jobs/{job_id}/cues/0/audio").status_code == 200
-    assert client.get(f"/jobs/{job_id}/cues/99/audio").status_code == 404
-    # ?through extends the span for a merge preview (still needs 2+ cues).
-    assert client.get(f"/jobs/{job_id}/cues/0/audio?through=1").status_code == 200
-    assert client.get(f"/jobs/{job_id}/cues/1/audio?through=0").status_code == 404
-
-
 def test_unknown_job_returns_404(client: TestClient) -> None:
     response = client.get("/jobs/does-not-exist")
     assert response.status_code == 404
 
 
-def test_clip_range_without_cue(client: TestClient) -> None:
+def test_clip_range_by_explicit_span(client: TestClient) -> None:
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
     job_id = create.json()["jobId"]
     _wait_until_ready(client, job_id)

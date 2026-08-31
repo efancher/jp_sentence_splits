@@ -124,26 +124,11 @@ async def get_job_audio(job_id: str, startMs: int, endMs: int):  # noqa: N803
     return FileResponse(path, media_type="audio/mp4")
 
 
-@app.post("/jobs/{job_id}/cues/{cue_index}/clip", response_model=ClipResponse)
-async def clip_cue(job_id: str, cue_index: int, req: ClipRequest):
-    try:
-        job = jobs.get_job(job_id)
-    except jobs.JobNotFoundError:
-        raise HTTPException(status_code=404, detail="Job not found")
-    try:
-        return await asyncio.to_thread(jobs.clip_cue, job, cue_index, req)
-    except jobs.CueIndexError:
-        raise HTTPException(status_code=404, detail="Cue not found")
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-
-
 @app.post("/jobs/{job_id}/clip", response_model=ClipResponse)
 async def clip_range(job_id: str, req: ClipRequest):
     """Clip an explicit (startMs, endMs) span from the job's downloaded
-    source audio, independent of any parsed subtitle cue. For callers that
-    supply their own text + timings (e.g. re-cutting reference audio for a
-    source with no fetchable subtitle track)."""
+    source audio with the sentence text supplied — the wizard's commit
+    stage cuts every reviewed row this way."""
     try:
         job = jobs.get_job(job_id)
     except jobs.JobNotFoundError:
@@ -152,26 +137,6 @@ async def clip_range(job_id: str, req: ClipRequest):
         return await asyncio.to_thread(jobs.clip_range, job, req)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-
-
-@app.get("/jobs/{job_id}/cues/{cue_index}/audio")
-async def get_cue_preview_audio(
-    job_id: str, cue_index: int, through: int | None = None
-):
-    """A cue's audio for playback during review (before it's kept/clipped).
-    `?through=<j>` extends the span to cue j's end, for previewing a merge."""
-    try:
-        job = jobs.get_job(job_id)
-        path = await asyncio.to_thread(
-            jobs.preview_cue_audio, job, cue_index, through
-        )
-    except jobs.JobNotFoundError:
-        raise HTTPException(status_code=404, detail="Job not found")
-    except jobs.CueIndexError:
-        raise HTTPException(status_code=404, detail="Cue not found")
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    return FileResponse(path, media_type="audio/mp4")
 
 
 @app.get("/jobs/{job_id}/clips/{sentence_id}/audio")

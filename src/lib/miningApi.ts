@@ -251,28 +251,6 @@ export async function clipMiningRange(
   return clipResponseSchema.parse(await response.json());
 }
 
-export async function clipMiningCue(
-  jobId: string,
-  cueIndex: number,
-  options: ClipCueOptions,
-): Promise<MiningClipResult> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/cues/${cueIndex}/clip`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      japanese: options.japanese,
-      english: options.english,
-      startMs: options.startMs,
-      endMs: options.endMs,
-      generateKana: options.generateKana ?? true,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to clip sentence: ${await readErrorDetail(response)}`);
-  }
-  return clipResponseSchema.parse(await response.json());
-}
-
 export async function fetchMiningClipAudio(
   jobId: string,
   sentenceId: string,
@@ -287,32 +265,10 @@ export async function fetchMiningClipAudio(
 }
 
 /**
- * A cue's audio for playback during review — before it's kept/clipped — so
- * the reviewer can hear the caption and catch a mis-transcription. Cut from
- * the job's source at the cue's raw span; cached server-side per cue.
- */
-export async function fetchCuePreviewAudio(
-  jobId: string,
-  cueIndex: number,
-  throughIndex?: number,
-): Promise<Blob> {
-  const query =
-    throughIndex != null && throughIndex > cueIndex ? `?through=${throughIndex}` : '';
-  const response = await fetch(
-    `${API_BASE}/jobs/${jobId}/cues/${cueIndex}/audio${query}`,
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to fetch cue audio: ${await readErrorDetail(response)}`);
-  }
-  return response.blob();
-}
-
-/**
  * An arbitrary span of the job's source audio, cut from the cached
  * download (server/youtube-mining `GET /jobs/{id}/audio?startMs&endMs`).
- * This is what every staged-wizard panel plays — it replaces the per-cue
- * {@link fetchCuePreviewAudio} pre-clipping. Available as soon as the
- * download lands, before resegmentation.
+ * Every staged-wizard panel plays the source through this. Available as
+ * soon as the download lands, before resegmentation.
  */
 export async function fetchJobAudioRange(
   jobId: string,

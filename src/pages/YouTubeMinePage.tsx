@@ -418,6 +418,14 @@ export function YouTubeMinePage() {
               </button>
               <button
                 type="button"
+                disabled={busy}
+                onClick={() => void applyAndSegment()}
+                title="Discard the edits below and re-split from the transcript"
+              >
+                ↻ Re-split from transcript
+              </button>
+              <button
+                type="button"
                 className="primary"
                 disabled={busy || rows.length === 0}
                 onClick={() => void applyAndTranslate()}
@@ -434,13 +442,23 @@ export function YouTubeMinePage() {
           <section className="panel stack">
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <strong>{rows.length} sentences</strong>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void autoFillTranslations()}
-              >
-                Auto-fill translations (AI)
-              </button>
+              <div className="row">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void applyAndTranslate()}
+                  title="Discard edits and re-align EN from the subtitle track"
+                >
+                  ↻ Re-align
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void autoFillTranslations()}
+                >
+                  Auto-fill translations (AI)
+                </button>
+              </div>
             </div>
             {realignNote ? <div className="muted">{realignNote}</div> : null}
           </section>
@@ -488,8 +506,11 @@ export function YouTubeMinePage() {
         <section className="panel stack">
           <h3 style={{ margin: 0 }}>Import preview</h3>
           <p className="muted" style={{ margin: 0 }}>
-            {preview.counts.uniqueSentences} sentences · ~{vocabPreview.count} vocab
-            suggestion{vocabPreview.count === 1 ? '' : 's'} for later review
+            {preview.counts.uniqueSentences} sentences (
+            {preview.counts.newSentences} new,{' '}
+            {preview.counts.updatedSentences} existing) · ~{vocabPreview.count} vocab
+            suggestion{vocabPreview.count === 1 ? '' : 's'} to confirm when you first
+            study the book
             {vocabPreview.sample.length
               ? `: ${vocabPreview.sample.join('、')}${
                   vocabPreview.count > vocabPreview.sample.length ? '…' : ''

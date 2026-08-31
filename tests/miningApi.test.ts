@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyJobSegments,
   clipFromSource,
-  clipMiningCue,
   clipMiningRange,
   createMiningJob,
   deleteMiningJob,
@@ -83,39 +82,6 @@ describe('getMiningJob', () => {
       vi.fn(async () => new Response('not found', { status: 404, statusText: 'Not Found' })),
     );
     await expect(getMiningJob('missing')).rejects.toThrow('404');
-  });
-});
-
-describe('clipMiningCue', () => {
-  it('returns the parsed clip result', async () => {
-    const body = {
-      sentenceId: 'sentence-001-abc123',
-      japanese: 'こんにちは。',
-      reading: null,
-      english: 'Hello.',
-      startMs: 0,
-      endMs: 1000,
-      subtitleStartMs: 0,
-      subtitleEndMs: 1000,
-      adjustedStartMs: 0,
-      adjustedEndMs: 1250,
-      transcriptStatus: 'manually-corrected',
-      tokens: null,
-      audio: { mimeType: 'audio/mp4', durationMs: 1250 },
-    };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await clipMiningCue('job1', 0, {
-      japanese: 'こんにちは。',
-      english: 'Hello.',
-      generateKana: true,
-    });
-    expect(result.sentenceId).toBe('sentence-001-abc123');
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/jobs/job1/cues/0/clip'),
-      expect.objectContaining({ method: 'POST' }),
-    );
   });
 });
 

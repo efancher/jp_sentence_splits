@@ -59,10 +59,6 @@ class JobNotFoundError(Exception):
     pass
 
 
-class CueIndexError(Exception):
-    pass
-
-
 @dataclass
 class ClipRecord:
     path: Path
@@ -378,23 +374,11 @@ def cues_out(job: Job) -> list[CueOut]:
     ]
 
 
-def clip_cue(job: Job, cue_index: int, req: ClipRequest) -> ClipResponse:
-    if job.status != "ready" or job.source_audio_path is None:
-        raise ValueError("Job is not ready for clipping yet")
-    if cue_index < 0 or cue_index >= len(job.cues):
-        raise CueIndexError(cue_index)
-    cue = job.cues[cue_index]
-
-    start_ms = req.startMs if req.startMs is not None else cue.startMs
-    end_ms = req.endMs if req.endMs is not None else cue.endMs
-    return _clip_range(job, req, start_ms, end_ms)
-
-
 def clip_range(job: Job, req: ClipRequest) -> ClipResponse:
-    """Clip an explicit (startMs, endMs) span from the job's source audio,
-    without reference to a parsed subtitle cue — for callers that already
-    have the sentence text and timings (e.g. re-mining reference audio whose
-    source has no fetchable subtitle track)."""
+    """Clip an explicit (startMs, endMs) span from the job's source audio
+    with the sentence text supplied — the wizard's commit stage cuts every
+    reviewed row this way, and the re-mine-reference-audio flow uses it for
+    a source with no fetchable subtitle track."""
     if job.status != "ready" or job.source_audio_path is None:
         raise ValueError("Job is not ready for clipping yet")
     if req.startMs is None or req.endMs is None:
@@ -443,32 +427,6 @@ def clip_audio_path(job: Job, sentence_id: str) -> Path:
     if record is None:
         raise JobNotFoundError(sentence_id)
     return record.path
-
-
-def preview_cue_audio(job: Job, cue_index: int, through_index: int | None = None) -> Path:
-    """Cut a cue's raw span from the source audio for playback during review —
-    so the reviewer can hear a caption before deciding to keep it. With
-    `through_index` the span runs from cue `cue_index`'s start to cue
-    `through_index`'s end, for previewing a merge. Cached under the job dir
-    (swept with the job); does not touch `job.clips` or the sentence sequence
-    like `clip_cue` does."""
-    if job.status != "ready" or job.source_audio_path is None:
-        raise ValueError("Job is not ready for clipping yet")
-    end_index = cue_index if through_index is None else through_index
-    if cue_index < 0 or end_index >= len(job.cues) or end_index < cue_index:
-        raise CueIndexError(cue_index)
-    out = job.dir / "previews" / f"{cue_index}-{end_index}.m4a"
-    if out.exists():
-        return out
-    out.parent.mkdir(parents=True, exist_ok=True)
-    media_ms = clip.probe_duration_ms(job.source_audio_path)
-    _, _, adj_start, adj_end = clip.compute_boundaries(
-        job.cues[cue_index].startMs,
-        job.cues[end_index].endMs,
-        media_duration_ms=media_ms,
-    )
-    clip.clip_audio(job.source_audio_path, out, start_ms=adj_start, end_ms=adj_end)
-    return out
 
 
 def source_audio_range(job: Job, start_ms: int, end_ms: int) -> Path:
