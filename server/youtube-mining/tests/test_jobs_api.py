@@ -331,3 +331,22 @@ def test_segment_endpoint_reruns_on_corrected_transcript(client: TestClient) -> 
     tbody = translated.json()
     assert tbody["stage"] == "translate"
     assert [row["japanese"] for row in tbody["rows"]] == ["田中さんです。", "よろしく。"]
+
+
+def test_job_audio_range_endpoint(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    resp = client.get(f"/jobs/{job_id}/audio", params={"startMs": 200, "endMs": 1800})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/mp4"
+    assert resp.content == b"fake-clip"
+    # Cached — a second request serves the same span without re-clipping.
+    assert client.get(f"/jobs/{job_id}/audio", params={"startMs": 200, "endMs": 1800}).status_code == 200
+
+    bad = client.get(f"/jobs/{job_id}/audio", params={"startMs": 1800, "endMs": 200})
+    assert bad.status_code == 409
+
+    missing = client.get("/jobs/does-not-exist/audio", params={"startMs": 0, "endMs": 1000})
+    assert missing.status_code == 404

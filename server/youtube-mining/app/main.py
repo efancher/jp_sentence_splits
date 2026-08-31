@@ -108,6 +108,22 @@ async def translate_job(job_id: str):
     return jobs.job_status(job)
 
 
+@app.get("/jobs/{job_id}/audio")
+async def get_job_audio(job_id: str, startMs: int, endMs: int):  # noqa: N803
+    """Stream an arbitrary (startMs, endMs) span of the job's source audio —
+    what every wizard panel plays. See docs/mining-wizard-spec.md W2."""
+    try:
+        job = jobs.get_job(job_id)
+        path = await asyncio.to_thread(
+            jobs.source_audio_range, job, startMs, endMs
+        )
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return FileResponse(path, media_type="audio/mp4")
+
+
 @app.post("/jobs/{job_id}/cues/{cue_index}/clip", response_model=ClipResponse)
 async def clip_cue(job_id: str, cue_index: int, req: ClipRequest):
     try:

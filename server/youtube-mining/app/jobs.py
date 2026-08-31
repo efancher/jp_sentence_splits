@@ -470,6 +470,31 @@ def preview_cue_audio(job: Job, cue_index: int, through_index: int | None = None
     return out
 
 
+def source_audio_range(job: Job, start_ms: int, end_ms: int) -> Path:
+    """Cut an arbitrary (start_ms, end_ms) span out of the job's downloaded
+    source audio, for inline playback in any wizard stage — this is what
+    every panel plays, replacing per-cue pre-clipping. Available as soon as
+    the download lands (before resegmentation). Cached under the job dir and
+    swept with the job; padded like every other clip via compute_boundaries.
+    """
+    if job.source_audio_path is None:
+        raise ValueError("Job source audio is not available yet")
+    if end_ms <= start_ms:
+        raise ValueError("endMs must be greater than startMs")
+    out = job.dir / "ranges" / f"{start_ms}-{end_ms}.m4a"
+    if out.exists():
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    media_ms = clip.probe_duration_ms(job.source_audio_path)
+    _, _, adj_start, adj_end = clip.compute_boundaries(
+        start_ms, end_ms, media_duration_ms=media_ms
+    )
+    clip.clip_audio(
+        job.source_audio_path, out, start_ms=adj_start, end_ms=adj_end
+    )
+    return out
+
+
 def _sweep_loop() -> None:
     while True:
         time.sleep(config.JOB_SWEEP_INTERVAL_SECONDS)

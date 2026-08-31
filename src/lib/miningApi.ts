@@ -231,6 +231,26 @@ export async function fetchCuePreviewAudio(
 }
 
 /**
+ * An arbitrary span of the job's source audio, cut from the cached
+ * download (server/youtube-mining `GET /jobs/{id}/audio?startMs&endMs`).
+ * This is what every staged-wizard panel plays — it replaces the per-cue
+ * {@link fetchCuePreviewAudio} pre-clipping. Available as soon as the
+ * download lands, before resegmentation.
+ */
+export async function fetchJobAudioRange(
+  jobId: string,
+  startMs: number,
+  endMs: number,
+): Promise<Blob> {
+  const query = `?startMs=${Math.round(startMs)}&endMs=${Math.round(endMs)}`;
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/audio${query}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch job audio: ${await readErrorDetail(response)}`);
+  }
+  return response.blob();
+}
+
+/**
  * Re-segment an already-imported source's sentences without re-downloading
  * (server/youtube-mining `POST /resegment`, stateless). `merge`/`split`
  * default true — full resegmentation for drama transcripts; pass both false

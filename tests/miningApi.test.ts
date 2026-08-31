@@ -5,6 +5,7 @@ import {
   clipMiningCue,
   createMiningJob,
   deleteMiningJob,
+  fetchJobAudioRange,
   fetchMiningClipAudio,
   getMiningJob,
 } from '../src/lib/miningApi';
@@ -167,6 +168,29 @@ describe('fetchMiningClipAudio', () => {
       vi.fn(async () => new Response('gone', { status: 404, statusText: 'Not Found' })),
     );
     await expect(fetchMiningClipAudio('job1', 'missing')).rejects.toThrow();
+  });
+});
+
+describe('fetchJobAudioRange', () => {
+  it('requests the rounded span and returns a blob', async () => {
+    const fetchMock = vi.fn(async () => new Response('span-audio', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const blob = await fetchJobAudioRange('job1', 1000.4, 2500.9);
+    expect(await blob.text()).toBe('span-audio');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/jobs/job1/audio?startMs=1000&endMs=2501'),
+    );
+  });
+
+  it('throws with the server detail on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ detail: 'endMs must be greater than startMs' }), { status: 409 })),
+    );
+    await expect(fetchJobAudioRange('job1', 5000, 4000)).rejects.toThrow(
+      'endMs must be greater than startMs',
+    );
   });
 });
 
