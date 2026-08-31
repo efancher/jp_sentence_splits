@@ -112,6 +112,21 @@ caption track over ASR, never merge lines; verified end-to-end mining
 GLIM SPANKY through the exit node. Still open: merge/split in the review
 UI, the full staged wizard, `aType` pitch accent.
 
+Also 2026-08-31: **`pitch_accent` review cards now require a native
+reference recording.** User feedback — the dictionary-contour-only pitch
+cards (no `SentenceAudio` on the context sentence) weren't useful without
+a model of how a native realizes the accent. `getPitchAccentReviewCandidates`
+(`ReviewPage.tsx`) now skips any candidate whose sentence has no entry in
+`audioBySentenceId`, exactly like `getWordListeningCandidates` — so the
+eligible set is effectively the YouTube-mined vocabulary with a clip.
+`PitchAccentReviewCandidate.audio` is now required (was optional) and
+`PitchAccentCard`'s `{audio ? …}` guard dropped. Existing `pitch_accent`
+StudyItems for now-ineligible words stay in the DB but fall out of the
+queue (same as any other gated card). Tests: `reviewPage.test.tsx` — the
+four existing pitch tests gained `addReferenceAudio` + `suppressAudioCards`
+helpers, one new negative test ("no reference audio → no card"); 44 in
+that file, full suite 1067 green.
+
 Before that: 2026-08-30 (Mining pipeline v2 slice B — dictionary-form
 reading from the tokenizer. `unidic-lite` already exposes `kanaBase` (the
 lemma's reading — 読ん→ヨム, not the surface ヨン) and `aType` (pitch

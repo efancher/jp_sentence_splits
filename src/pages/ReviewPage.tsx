@@ -160,7 +160,10 @@ const CONJUGATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformatio
  * but eligibility is narrower still: only words with dictionary-backed
  * `pitchAccentPositions` data (Kanjium, via
  * scripts/backfill-pitch-accent.ts — a subset of confirmed vocabulary, not
- * all of it). Multiple choice among the pitch-accent categories
+ * all of it) *and* whose context sentence has a native reference recording
+ * to model the accent on the reveal — a dictionary-contour-only card was
+ * judged not worth its slot in the queue (docs/STATUS.md). Multiple choice
+ * among the pitch-accent categories
  * (heiban/atamadaka/nakadaka/odaka) that are actually distinguishable for
  * the word's own mora count (possiblePitchPatternsForMoraCount,
  * src/lib/pitchAccentShape.ts) — not a fixed 4-way choice, since e.g.
@@ -318,8 +321,8 @@ interface PitchAccentReviewCandidate {
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
-  /** The sentence's first reference recording, when it has one — powers the reveal's "loop the native word" control. */
-  audio?: SentenceAudio;
+  /** The sentence's first reference recording — required (see getPitchAccentReviewCandidates); powers the reveal's "loop the native word" control. */
+  audio: SentenceAudio;
   moraCount: number;
   correctLabel: PitchAccentPattern;
   /** Every pattern distinguishable at this word's mora count, in a per-word-stable shuffled order (see below) — not the raw fixed enum order, so the correct answer isn't always in the same button position. */
@@ -337,8 +340,9 @@ interface PitchAccentReviewCandidate {
  * small and fully determined by moraCount, so only ordering varies.
  *
  * `audioBySentenceId` is the same first-recording-per-sentence map the
- * audio-comprehension candidates use; a matching entry is attached so the
- * reveal can offer to loop the native realization of the word.
+ * audio-comprehension candidates use; a matching entry is *required* (like
+ * getWordListeningCandidates) — the reveal loops the native realization of
+ * the word, and a card without that model isn't worth a queue slot.
  */
 function getPitchAccentReviewCandidates(
   candidates: VocabularyTargetCandidate[],
@@ -348,6 +352,8 @@ function getPitchAccentReviewCandidates(
   for (const candidate of candidates) {
     const positions = candidate.vocabularyItem.pitchAccentPositions;
     if (!positions?.length) continue;
+    const audio = audioBySentenceId.get(candidate.sentence.id);
+    if (!audio) continue;
     const moraCount = segmentIntoMorae(candidate.vocabularyItem.reading).length;
     if (moraCount === 0) continue;
     const correctLabel = pitchPatternLabel(positions[0]!, moraCount);
@@ -358,7 +364,7 @@ function getPitchAccentReviewCandidates(
     });
     result.push({
       ...candidate,
-      audio: audioBySentenceId.get(candidate.sentence.id),
+      audio,
       moraCount,
       correctLabel,
       choices,
@@ -1960,13 +1966,11 @@ function PitchAccentCard({
               })()}
             </>
           ) : null}
-          {audio ? (
-            <PitchAccentNativeAudio
-              audio={audio}
-              japanese={sentence.japanese}
-              surfaceForm={surfaceForm}
-            />
-          ) : null}
+          <PitchAccentNativeAudio
+            audio={audio}
+            japanese={sentence.japanese}
+            surfaceForm={surfaceForm}
+          />
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}

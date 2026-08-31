@@ -712,8 +712,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   consistent; `reading_retrieval` gets the same dictionary-form label, `cloze`
   does not since it would spoil the blanked word),
   `pitch_accent` (narrower eligibility than the other three — only
-  words with dictionary pitch-accent data, `VocabularyItem.pitchAccentPositions`
-  — multiple choice among the pitch-accent categories actually
+  words with dictionary pitch-accent data (`VocabularyItem.pitchAccentPositions`)
+  *and* whose context sentence has a native reference recording
+  (`SentenceAudio`) to model the accent on the reveal; a
+  dictionary-contour-only card was dropped as not worth its queue slot —
+  multiple choice among the pitch-accent categories actually
   distinguishable at the word's own mora count,
   `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts`; the
   reveal draws the mora-by-mora H/L contour via `PitchAccentDiagram`
@@ -726,8 +729,7 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   and the verb / i-adjective two-class system — a "why this pattern" note,
   each cross-checked against the word's real Kanjium position and
   suppressed on disagreement; plain native nouns get a "memorized, no
-  rule" fallback). When the sentence has a native recording
-  (`SentenceAudio`), the reveal also renders `PitchAccentNativeAudio`
+  rule" fallback). The reveal also renders `PitchAccentNativeAudio`
   (`src/components/PitchAccentNativeAudio.tsx`) — a "Loop native word"
   toggle that plays just the target word's span on repeat as a model of
   the real realization next to the dictionary contour, with a

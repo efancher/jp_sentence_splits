@@ -121,6 +121,25 @@ async function seedBookWithSentence() {
   });
 }
 
+/** Attaches a (fake-blob) reference recording to `sentenceId` — required for
+ * listening and pitch-accent candidates. */
+async function addReferenceAudio(sentenceId: string) {
+  const db = getDb();
+  await db.sentenceAudio.add({
+    id: `audio-${sentenceId}`,
+    sentenceId,
+    sourceId: 'source-1',
+    sourceSentenceId: `src-${sentenceId}`,
+    sourceTitle: 'Test Source',
+    mimeType: 'audio/mp3',
+    durationMs: 1500,
+    startMs: 0,
+    endMs: 1500,
+    blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+    importedAt: new Date().toISOString(),
+  });
+}
+
 /**
  * Seeds far-future comprehension/reading_in_context study items for
  * `sentenceId` so those two unconditional activity types never occupy the
@@ -186,6 +205,46 @@ async function suppressVocabularyActivityTypes(vocabularyItemId: string) {
       updatedAt: now,
     });
   }
+}
+
+/**
+ * Seeds far-future `listening` (sentence) and `word_listening` (occurrence)
+ * study items so neither audio card occupies the queue — used by the
+ * pitch-accent tests, which now require reference audio (which also makes the
+ * sentence/occurrence audio-eligible) but want to isolate the pitch card.
+ */
+async function suppressAudioCards(sentenceId: string, linkId: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const farFutureFsrsState = {
+    due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    stability: 1,
+    difficulty: 1,
+    elapsedDays: 0,
+    scheduledDays: 0,
+    learningSteps: 0,
+    reps: 1,
+    lapses: 0,
+    state: 'review' as const,
+  };
+  await db.studyItems.add({
+    id: `si-${sentenceId}-listening`,
+    subjectType: 'sentence',
+    subjectId: sentenceId,
+    activityType: 'listening',
+    fsrsState: farFutureFsrsState,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.studyItems.add({
+    id: `si-${linkId}-word_listening`,
+    subjectType: 'sentenceVocabulary',
+    subjectId: linkId,
+    activityType: 'word_listening',
+    fsrsState: farFutureFsrsState,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 function renderReviewPage(path: string, routePath: string) {
@@ -835,6 +894,7 @@ describe('ReviewPage', () => {
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
 
     await db.vocabularyItems.add({
       id: 'vocab-hana',
@@ -855,6 +915,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressVocabularyActivityTypes('vocab-hana');
+    await suppressAudioCards('sent-1', 'sv-hana');
 
     const { correctLabel } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana');
 
@@ -894,6 +955,7 @@ describe('ReviewPage', () => {
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
 
     await db.vocabularyItems.add({
       id: 'vocab-hana2',
@@ -914,6 +976,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressVocabularyActivityTypes('vocab-hana2');
+    await suppressAudioCards('sent-1', 'sv-hana2');
 
     const { correctLabel, choices } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana2');
     const wrongLabel = choices.find((choice) => choice !== correctLabel)!;
@@ -975,11 +1038,52 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('does not seed a pitch-accent card when the sentence has no reference audio', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    // No addReferenceAudio('sent-1') — the word has dictionary pitch data but
+    // there's no native recording to model the accent on the reveal.
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana-noaudio',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana-noaudio',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana-noaudio',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal reading');
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-hana-noaudio')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+    });
+  });
+
   it('excludes odaka/nakadaka as choices for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
 
     // 目 (め) — 1 mora: only heiban/atamadaka are reachable.
     await db.vocabularyItems.add({
@@ -1001,6 +1105,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressVocabularyActivityTypes('vocab-me');
+    await suppressAudioCards('sent-1', 'sv-me');
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
@@ -1024,6 +1129,7 @@ describe('ReviewPage', () => {
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
 
     // 花 (はな) — 2 morae: heiban/atamadaka/odaka reachable, not nakadaka.
     await db.vocabularyItems.add({
@@ -1045,6 +1151,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
     await suppressVocabularyActivityTypes('vocab-hana3');
+    await suppressAudioCards('sent-1', 'sv-hana3');
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
