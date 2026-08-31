@@ -8,6 +8,7 @@ exercised for real; only the I/O edges are faked.
 
 from __future__ import annotations
 
+import base64
 import time
 from pathlib import Path
 
@@ -328,3 +329,29 @@ def test_job_audio_range_endpoint(client: TestClient) -> None:
 
     missing = client.get("/jobs/does-not-exist/audio", params={"startMs": 0, "endMs": 1000})
     assert missing.status_code == 404
+
+
+def test_commit_endpoint_clips_every_row_inline(client: TestClient) -> None:
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    resp = client.post(
+        f"/jobs/{job_id}/commit",
+        json={
+            "generateKana": False,
+            "rows": [
+                {"japanese": "こんにちは。", "english": "Hello.", "startMs": 0, "endMs": 1000},
+                {"japanese": "元気ですか。", "startMs": 1000, "endMs": 2000},
+            ],
+        },
+    )
+    assert resp.status_code == 200
+    sentences = resp.json()["sentences"]
+    assert [s["japanese"] for s in sentences] == ["こんにちは。", "元気ですか。"]
+    assert sentences[0]["english"] == "Hello."
+    # Audio is inline (base64), no follow-up GET needed.
+    assert base64.b64decode(sentences[0]["audioBase64"]) == b"fake-clip"
+    # …but the clip is still fetchable the old way too.
+    audio = client.get(f"/jobs/{job_id}/clips/{sentences[1]['sentenceId']}/audio")
+    assert audio.status_code == 200

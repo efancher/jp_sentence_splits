@@ -236,6 +236,16 @@ class SourceClipRequest(BaseModel):
     cuts: list[ReclipCut] = Field(min_length=1)
 
 
+class SourceRangeRequest(BaseModel):
+    """Stream one (startMs, endMs) span of a video's cached source audio —
+    for the re-segment page's boundary waveform (the wizard uses the
+    job-scoped GET /jobs/{id}/audio instead). Ensures the source first."""
+
+    url: str = Field(min_length=1)
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=1)
+
+
 class ClipAudioInfo(BaseModel):
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int
@@ -255,3 +265,29 @@ class ClipResponse(BaseModel):
     transcriptStatus: TranscriptStatus
     tokens: list[MorphemeToken] | None = None
     audio: ClipAudioInfo
+
+
+class CommitRow(BaseModel):
+    japanese: str = Field(min_length=1)
+    english: str | None = None
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=1)
+
+
+class CommitJobRequest(BaseModel):
+    """Clip every reviewed row from the source in one request — the wizard's
+    commit stage, instead of a per-row round trip."""
+
+    rows: list[CommitRow] = Field(min_length=1)
+    generateKana: bool = True
+
+
+class CommitSentence(ClipResponse):
+    """A committed sentence with its clipped audio inline (base64 m4a), so
+    the client needs no follow-up per-clip GET."""
+
+    audioBase64: str
+
+
+class CommitJobResponse(BaseModel):
+    sentences: list[CommitSentence]

@@ -112,6 +112,12 @@ const clipResponseSchema = z.object({
   }),
 });
 
+const commitResponseSchema = z.object({
+  sentences: z.array(
+    clipResponseSchema.extend({ audioBase64: z.string() }),
+  ),
+});
+
 const resegmentedCueSchema = z.object({
   japanese: z.string(),
   startMs: z.number(),
@@ -249,6 +255,40 @@ export async function clipMiningRange(
     throw new Error(`Failed to clip sentence: ${await readErrorDetail(response)}`);
   }
   return clipResponseSchema.parse(await response.json());
+}
+
+export interface CommitRowInput {
+  japanese: string;
+  english?: string;
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Clip every reviewed row from the source in one request
+ * (`POST /jobs/{id}/commit`), each with its audio inline — the wizard's
+ * commit stage, replacing a per-row {@link clipMiningRange} +
+ * {@link fetchMiningClipAudio} round trip. ffmpeg still runs serially
+ * server-side, so a long video still takes a bit.
+ */
+export async function commitMiningJob(
+  jobId: string,
+  rows: CommitRowInput[],
+  options: { generateKana?: boolean } = {},
+): Promise<{ clip: MiningClipResult; blob: Blob }[]> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows, generateKana: options.generateKana ?? true }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clip sentences: ${await readErrorDetail(response)}`);
+  }
+  const { sentences } = commitResponseSchema.parse(await response.json());
+  return sentences.map(({ audioBase64, ...clip }) => ({
+    clip,
+    blob: base64ToBlob(audioBase64, clip.audio.mimeType),
+  }));
 }
 
 export async function fetchMiningClipAudio(
@@ -390,6 +430,34 @@ export async function clipFromSource(
     blob: base64ToBlob(clip.audioBase64, clip.mimeType),
     durationMs: clip.durationMs,
   }));
+}
+
+/**
+ * Stream one (startMs, endMs) span of a video's cached source audio
+ * (server/youtube-mining `POST /source-audio/range`) — for the re-segment
+ * page's boundary waveform. Like {@link clipFromSource} but a single
+ * streamed m4a rather than base64, so it's cheap enough to pull a whole
+ * multi-minute span. The service downloads + caches the source on first
+ * use (slow first call per video).
+ */
+export async function fetchSourceAudioRange(
+  url: string,
+  startMs: number,
+  endMs: number,
+): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/source-audio/range`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      startMs: Math.round(startMs),
+      endMs: Math.round(endMs),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch source audio: ${await readErrorDetail(response)}`);
+  }
+  return response.blob();
 }
 
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */

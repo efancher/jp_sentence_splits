@@ -1,19 +1,24 @@
 import asyncio
 import base64
 import logging
+import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from app import clip, config, jobs, morphology, readings, reclip, resegment, source_cache, youtube
 from app.models import (
     ClipRequest,
     ClipResponse,
+    CommitJobRequest,
+    CommitJobResponse,
     CreateJobRequest,
     CreateJobResponse,
     Cue,
@@ -27,6 +32,7 @@ from app.models import (
     SourceAudioInfo,
     SourceAudioRequest,
     SourceClipRequest,
+    SourceRangeRequest,
 )
 
 logger = logging.getLogger("youtube_mining_api")
@@ -137,6 +143,23 @@ async def clip_range(job_id: str, req: ClipRequest):
         return await asyncio.to_thread(jobs.clip_range, job, req)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.post("/jobs/{job_id}/commit", response_model=CommitJobResponse)
+async def commit_job(job_id: str, req: CommitJobRequest):
+    """Clip every reviewed row from the source in one request, each with its
+    audio inline (base64). The wizard's commit stage."""
+    try:
+        job = jobs.get_job(job_id)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        sentences = await asyncio.to_thread(jobs.commit_job, job, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except subprocess.CalledProcessError as exc:
+        raise HTTPException(status_code=500, detail=f"ffmpeg failed: {exc.stderr}")
+    return CommitJobResponse(sentences=sentences)
 
 
 @app.get("/jobs/{job_id}/clips/{sentence_id}/audio")
@@ -264,6 +287,36 @@ async def get_source_audio(video_id: str):
     if path is None:
         raise HTTPException(status_code=404, detail="Source audio not cached")
     return FileResponse(path, media_type=source_cache.MIME_TYPE)
+
+
+def _source_range_sync(req: SourceRangeRequest) -> tuple[Path, Callable[[], None]]:
+    if req.endMs <= req.startMs:
+        raise ValueError("endMs must be greater than startMs")
+    cached = source_cache.ensure(req.url)
+    media_ms = clip.probe_duration_ms(cached)
+    _, _, adj_start, adj_end = clip.compute_boundaries(
+        req.startMs, req.endMs, media_duration_ms=media_ms
+    )
+    tmp = Path(tempfile.mkdtemp(prefix="source-range-"))
+    out = tmp / "range.m4a"
+    clip.clip_audio(cached, out, start_ms=adj_start, end_ms=adj_end)
+    return out, lambda: shutil.rmtree(tmp, ignore_errors=True)
+
+
+@app.post("/source-audio/range")
+async def source_audio_range(req: SourceRangeRequest):
+    """Stream one (startMs, endMs) span of a video's cached source audio for
+    the re-segment page's boundary waveform. Ensures the source is cached
+    first (a slow first call per video)."""
+    try:
+        out, cleanup = await asyncio.to_thread(_source_range_sync, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return FileResponse(
+        out, media_type="audio/mp4", background=BackgroundTask(cleanup)
+    )
 
 
 @app.post("/source-audio/clip", response_model=ReclipResponse)

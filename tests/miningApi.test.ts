@@ -4,10 +4,12 @@ import {
   applyJobSegments,
   clipFromSource,
   clipMiningRange,
+  commitMiningJob,
   createMiningJob,
   deleteMiningJob,
   fetchJobAudioRange,
   fetchMiningClipAudio,
+  fetchSourceAudioRange,
   getMiningJob,
   translateJob,
 } from '../src/lib/miningApi';
@@ -232,6 +234,62 @@ describe('clipMiningRange', () => {
       expect.stringContaining('/jobs/job1/clip'),
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+describe('commitMiningJob', () => {
+  it('POSTs the rows once and decodes the inline audio', async () => {
+    const clip = {
+      sentenceId: 's-1',
+      japanese: 'ねこ。',
+      reading: null,
+      english: 'Cat.',
+      startMs: 0,
+      endMs: 900,
+      subtitleStartMs: 0,
+      subtitleEndMs: 900,
+      adjustedStartMs: 0,
+      adjustedEndMs: 900,
+      transcriptStatus: 'manually-corrected',
+      tokens: null,
+      audio: { mimeType: 'audio/mp4', durationMs: 800 },
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ sentences: [{ ...clip, audioBase64: btoa('clip-bytes') }] }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await commitMiningJob('job1', [
+      { japanese: 'ねこ。', english: 'Cat.', startMs: 0, endMs: 900 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.clip.sentenceId).toBe('s-1');
+    expect(await out[0]!.blob.text()).toBe('clip-bytes');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/jobs/job1/commit'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+});
+
+describe('fetchSourceAudioRange', () => {
+  it('POSTs url + rounded span and returns a blob', async () => {
+    const fetchMock = vi.fn(async () => new Response('span', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const blob = await fetchSourceAudioRange('https://youtu.be/VID', 1000.6, 4000.2);
+    expect(await blob.text()).toBe('span');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain('/source-audio/range');
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      url: 'https://youtu.be/VID',
+      startMs: 1001,
+      endMs: 4000,
+    });
   });
 });
 

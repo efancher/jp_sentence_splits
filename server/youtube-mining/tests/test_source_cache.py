@@ -132,3 +132,19 @@ def test_ensure_endpoint_then_fetch_and_clip(client: TestClient):
 
 def test_get_missing_source_audio_404(client: TestClient):
     assert client.get("/source-audio/notcachedxx").status_code == 404
+
+
+def test_source_audio_range_streams_a_span(client: TestClient):
+    resp = client.post(
+        "/source-audio/range",
+        json={"url": URL, "startMs": 1000, "endMs": 3000},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "audio/mp4"
+    assert len(resp.content) > 0
+
+    bad = client.post(
+        "/source-audio/range",
+        json={"url": URL, "startMs": 3000, "endMs": 1000},
+    )
+    assert bad.status_code == 422

@@ -17,6 +17,7 @@ calls; a real thread has no such lifetime coupling).
 
 from __future__ import annotations
 
+import base64
 import logging
 import shutil
 import threading
@@ -41,6 +42,8 @@ from app.models import (
     ClipAudioInfo,
     ClipRequest,
     ClipResponse,
+    CommitJobRequest,
+    CommitSentence,
     Cue,
     CueOut,
     JobStage,
@@ -420,6 +423,33 @@ def _clip_range(
         tokens=tokens or None,
         audio=ClipAudioInfo(durationMs=duration_ms),
     )
+
+
+def commit_job(job: Job, req: CommitJobRequest) -> list[CommitSentence]:
+    """Clip every reviewed row from the source in one call and return each
+    with its audio inline (base64), so the wizard's commit stage needs no
+    per-row round trip. ffmpeg still runs serially — this only removes the
+    HTTP overhead."""
+    if job.status != "ready" or job.source_audio_path is None:
+        raise ValueError("Job is not ready for clipping yet")
+    out: list[CommitSentence] = []
+    for row in req.rows:
+        clip_req = ClipRequest(
+            japanese=row.japanese,
+            english=row.english,
+            startMs=row.startMs,
+            endMs=row.endMs,
+            generateKana=req.generateKana,
+        )
+        result = _clip_range(job, clip_req, row.startMs, row.endMs)
+        audio_bytes = job.clips[result.sentenceId].path.read_bytes()
+        out.append(
+            CommitSentence(
+                **result.model_dump(),
+                audioBase64=base64.b64encode(audio_bytes).decode("ascii"),
+            )
+        )
+    return out
 
 
 def clip_audio_path(job: Job, sentence_id: str) -> Path:
