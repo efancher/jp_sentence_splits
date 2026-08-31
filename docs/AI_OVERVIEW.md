@@ -472,17 +472,21 @@ observed from outside `ReviewPage`'s own due-queue state.
   (matches by source ID, doesn't duplicate the book).
 - **Import from YouTube** (`YouTubeMinePage.tsx`, route
   `/import/youtube`) — an in-app alternative to the `.shadowing.zip`
-  upload above that needs no separate CLI: paste a YouTube URL, and the
+  upload above that needs no separate CLI. Paste a YouTube URL and the
   self-hosted `server/youtube-mining/` service downloads audio +
-  subtitles, resegments captions onto real sentence boundaries (fixing
-  cues that get cut off mid-sentence or bundle several sentences
-  together), and lets you review/edit/skip each sentence one at a time
-  before clipping its audio. Finishing assembles the same
-  `ShadowingImportPreview` shape as the zip path
-  (`buildShadowingPreview()`) and commits through the identical
-  `commitShadowingPackageImport()` — same book-per-source,
-  idempotent-on-reimport behavior as above; only how the preview gets
-  built differs.
+  subtitles + runs ASR, then a **4-step wizard** walks the job's
+  re-runnable `stage` machine (`docs/mining-wizard-spec.md`):
+  **Transcript** (correct the ASR/caption segments against per-segment
+  audio, with low-confidence flags and coarse merge/split) → **Segment**
+  (`<SegmentationEditor>` — sentence rows with a waveform whose per-boundary
+  handles drag onto pauses, "Snap to pauses") → **Translate** (EN per row,
+  editable, "Auto-fill translations (AI)" reuses `sentence-realign`) →
+  **Commit** (clip every row from source, preview + vocab-suggestion
+  count). Back/forward + per-stage re-run. Finishing assembles the same
+  `ShadowingImportPreview` (`buildShadowingPreview()`) and commits through
+  the identical `commitShadowingPackageImport()` — same book-per-source,
+  idempotent-on-reimport behavior; only how the preview gets built
+  differs.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on
@@ -1261,9 +1265,9 @@ aren't JSON-serializable/aren't worth backing up).
   the same tailnet-only way as `shadowing-analysis-api` (own systemd unit
   + tailscale path, separate process/port), called from
   `src/lib/miningApi.ts`. Given a YouTube URL, downloads audio + subtitles
-  (yt-dlp), splits/resegments into sentence-sized cues, and clips
-  per-sentence audio on demand (ffmpeg) as the user reviews cues in
-  `YouTubeMinePage.tsx`. Ported from the sibling `shadowmine` CLI below —
+  (yt-dlp), runs ASR, and clips per-sentence audio (ffmpeg) as the user
+  drives the 4-step wizard in `YouTubeMinePage.tsx`. Ported from the
+  sibling `shadowmine` CLI below —
   copied, not imported, so this app has no runtime dependency on that
   repo for this feature. YouTube bot-blocks the datacenter host's IP;
   `app/exit_node.py` works around it by routing each download through a
@@ -1275,15 +1279,14 @@ aren't JSON-serializable/aren't worth backing up).
   Whisper `small`), not YouTube's punctuation-free Japanese auto-captions;
   captions are the fallback. Every mined source is also kept as a
   compressed Opus (`app/source_cache.py`) so re-cuts come from the
-  original. Cue audio is playable during review. A job carries a
-  re-runnable `stage` state machine
-  (`fetching`→`transcript`→`segment`→`translate`→`ready`) for the staged
-  mining wizard: `POST /jobs/{id}/segment` accepts a corrected transcript
-  and re-resegments, `POST /jobs/{id}/translate` re-aligns EN, and
+  original. A job carries a re-runnable `stage` state machine
+  (`fetching`→`transcript`→`segment`→`translate`→`ready`) the wizard
+  drives: `POST /jobs/{id}/segment` accepts a corrected transcript and
+  re-resegments, `POST /jobs/{id}/translate` re-aligns EN,
   `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
-  source. The initial run still auto-advances every stage, so the current
-  linear `YouTubeMinePage` is unchanged until the wizard shell lands. Full
-  design + what's-still-open: `docs/mining-pipeline-v2.md`,
+  source for inline playback, `POST /jobs/{id}/clip` cuts a final row.
+  `_run_job` still auto-advances every stage on creation as a fallback.
+  Full design + what's-still-open: `docs/mining-pipeline-v2.md`,
   `docs/mining-wizard-spec.md`.
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`,

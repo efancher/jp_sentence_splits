@@ -1,8 +1,10 @@
 # Mining pipeline v2 — design
 
-Status: **proposed** (2026-08-30). Supersedes nothing yet; the current
-pipeline (`server/youtube-mining/`, `src/pages/YouTubeMinePage.tsx`,
-`src/pages/ResegmentSourcePage.tsx`) keeps working until slices land.
+Status: **implemented** (slices A–C + the staged wizard W1–W6 landed
+2026-08-30/31). This doc is kept as the design rationale;
+`docs/mining-wizard-spec.md` was the wizard's implementation brief.
+Remaining open items are called out inline below and in
+`docs/ROADMAP.md`.
 
 ## Why
 
@@ -260,10 +262,14 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
    `_run_job` prefers it over captions, with a human-caption-track and a
    music-video gate in front and confidence flags surfaced in the review
    step. All sub-items of slice A closed.
-5. **The staged wizard.** The one remaining piece — job state machine,
-   transcript/segment/translate/commit stages, waveform boundary editing,
-   `sentence-realign` at mine time, and unifying stage 2 with
-   `ResegmentSourcePage`. Full brief: **`docs/mining-wizard-spec.md`**.
+5. **The staged wizard.** **[done 2026-08-31]** — W1–W6 of
+   `docs/mining-wizard-spec.md`. `YouTubeMinePage` is a 4-step stepper
+   (Transcript → Segment → Translate → Commit) over a re-runnable server
+   `stage` machine; `<SegmentationEditor>` (+ a boundary-drag waveform with
+   "snap to pauses") is shared with `ResegmentSourcePage`;
+   `sentence-realign` runs at mine time in the translate stage. Deferred:
+   the waveform on `/books/:id/resegment` (needs a streaming source-range
+   endpoint, not the base64 `/source-audio/clip`).
 
 Slices 1–2 are pure wins with no redesign. 3 is the redesign. 4–5 build on it.
 

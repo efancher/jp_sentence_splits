@@ -1,9 +1,31 @@
 # Status
 
-Last updated: 2026-08-31 (Mining wizard W1–W3 — server job state machine,
-source-range audio, `<SegmentationEditor>` extraction. Groundwork for the
-staged mining wizard (`docs/mining-wizard-spec.md`); no user-visible
-change yet.
+Last updated: 2026-08-31 (Mining wizard W1–W6 — the staged wizard
+(`docs/mining-wizard-spec.md`) fully replaces `YouTubeMinePage`'s linear
+cue-by-cue march. `/import/youtube` is now a 4-step stepper: **Transcript**
+(`<TranscriptStage>` — ASR/caption segments, editable, each playing its
+own span, `⚠` low-confidence badges, segment-level merge/split) →
+**Segment** (`<SegmentationEditor>` with a boundary-drag waveform) →
+**Translate** (EN per row + "Auto-fill (AI)" via `sentence-realign`) →
+**Commit** (clip every row from source, `<ShadowingPreviewCard>` + an
+"N sentences · ~M vocab suggestions" line). Back/forward between stages;
+each apply + a "↻ Re-run" button are re-runnable. Server: `Job` carries a
+re-runnable `stage` state machine
+(`fetching`→`transcript`→`segment`→`translate`→`ready`); `_run_job` still
+auto-advances all stages so nothing else breaks. New endpoints
+`POST /jobs/{id}/segment` / `/translate`, `GET /jobs/{id}/audio?startMs&endMs`
+(streams any span of the cached source). The old `/jobs/{id}/cues/{i}/clip`
++ `/audio` and `clipMiningCue` / `fetchCuePreviewAudio` are retired.
+`JOB_TTL_SECONDS` 2 h → 6 h. `<SegmentationEditor>` + the merge/split/drag
+transforms (`resegmentPlan.ts`) + `detectSilences` (`waveform.ts`) are
+shared with `ResegmentSourcePage` — that flow is ~200 lines thinner, no
+behaviour change; its own waveform is deferred (needs a streaming
+source-range endpoint, not the base64 `/source-audio/clip`).
+Browser-verify was blocked (sandbox has no browser system libs) — covered
+by integration tests + `npm run build` + typecheck. Redeployed
+(`systemctl --user restart youtube-mining-api`). 68 py / ~1066 ts.
+
+Superseded groundwork notes (same session):
 (1) **W1** — `Job` gains a re-runnable `stage`
 (`fetching`→`transcript`→`segment`→`translate`→`ready`) alongside the
 coarse `status` the linear review UI still polls. `_run_job` is split:
@@ -34,7 +56,13 @@ the list; no behaviour change (browser-verify blocked here — no browser
 system libs — but the page integration tests + build + typecheck cover
 it). Tests: `test_jobs_api.py` +3, `miningApi.test.ts` +2,
 `resegmentPlan.test.ts` +8, new `segmentationEditor.test.tsx` (6).
-70 py / 1051 ts.
+(4) **W4** — `<SegmentationWaveform>`: a waveform of the reviewed span with
+draggable per-boundary handles + "Snap to pauses" (`waveform.ts`
+`detectSilences`, client-side, no new endpoint). Pure helpers
+`setRowBoundary` / `snapBoundariesToSilences`.
+(5) **W5** — the wizard shell (above). `CueOut` gained `sourceIndexes`.
+(6) **W6** — re-run buttons, richer commit summary, retired the old
+cue-clip endpoints + client fns + their tests.
 
 Before that: 2026-08-30 (Pitch-accent UniDic gap-fill + mining-review
 merge. (1) `unidic-lite` carries `aType` (accent nucleus mora, 0 = heiban);

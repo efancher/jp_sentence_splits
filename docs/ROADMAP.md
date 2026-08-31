@@ -67,9 +67,12 @@ detailed record, this file as the at-a-glance list.
   `docs/mining-pipeline-v2.md`. Order: C → B → interactive core → A →
   polish. C and B are pure wins with no redesign. Slices C, B, and A are
   **done**; the staged wizard is the last piece — brief in
-  `docs/mining-wizard-spec.md`, commit sequence W1–W6. **W1** (job `stage`
-  state machine + `/segment` + `/translate`), **W2** (`/jobs/{id}/audio`
-  source-range endpoint), and **W3** (`<SegmentationEditor>` extracted
-  from `ResegmentSourcePage`, row transforms → pure helpers) landed
-  2026-08-31; W4–W6 (waveform + boundary drag in the editor, the wizard
-  shell, polish) remain.
+  `docs/mining-wizard-spec.md`, commit sequence W1–W6 — **all landed
+  2026-08-31**: W1 job `stage` state machine + `/segment` + `/translate`,
+  W2 `/jobs/{id}/audio` source-range endpoint, W3 `<SegmentationEditor>`
+  extraction, W4 waveform + boundary drag + "snap to pauses", W5 the
+  4-step `YouTubeMinePage` wizard (replaces the linear cue march), W6
+  polish + retired the old cue-clip endpoints. Deferred: the
+  `/books/:id/resegment` waveform (wants a streaming source-range endpoint
+  rather than the base64 `/source-audio/clip`); an in-import JMnedict/Kanjium
+  reading cross-check.

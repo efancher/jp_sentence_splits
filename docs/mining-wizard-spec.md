@@ -1,5 +1,11 @@
 # Mining wizard rework — implementation spec
 
+> **Status: done (2026-08-31).** W1–W6 all landed. Kept as the design
+> record. One deferral: the boundary waveform on `/books/:id/resegment`
+> (W6's "consider") — it needs a streaming source-range endpoint for the
+> cached source, not the base64 `POST /source-audio/clip`.
+
+
 Self-contained brief for implementing the staged wizard from
 `docs/mining-pipeline-v2.md` §"Target architecture". Everything else in that
 doc (slices A/B/C, the quality upgrades, the "lighter" review-step
