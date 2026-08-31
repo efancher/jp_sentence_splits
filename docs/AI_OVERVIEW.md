@@ -1273,8 +1273,16 @@ aren't JSON-serializable/aren't worth backing up).
   Whisper `small`), not YouTube's punctuation-free Japanese auto-captions;
   captions are the fallback. Every mined source is also kept as a
   compressed Opus (`app/source_cache.py`) so re-cuts come from the
-  original. Cue audio is playable during review. Full design +
-  what's-still-open: `docs/mining-pipeline-v2.md`.
+  original. Cue audio is playable during review. A job carries a
+  re-runnable `stage` state machine
+  (`fetching`→`transcript`→`segment`→`translate`→`ready`) for the staged
+  mining wizard: `POST /jobs/{id}/segment` accepts a corrected transcript
+  and re-resegments, `POST /jobs/{id}/translate` re-aligns EN, and
+  `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
+  source. The initial run still auto-advances every stage, so the current
+  linear `YouTubeMinePage` is unchanged until the wizard shell lands. Full
+  design + what's-still-open: `docs/mining-pipeline-v2.md`,
+  `docs/mining-wizard-spec.md`.
 - **WaniKani API** — one-time/re-runnable bulk catalog import
   (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`,
   manual-dispatch `import-wanikani-kanji.yml`) of the full non-hidden

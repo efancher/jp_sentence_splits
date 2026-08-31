@@ -211,6 +211,16 @@ configurable FSRS-interval threshold).
   from `shadowmine` above (copied, not imported — no runtime dependency on
   that repo), deployed the same tailnet-only way as
   `shadowing-analysis-api` below (own systemd unit + tailscale path).
+  A job (`app/jobs.py`, in-process dict, single-worker uvicorn) carries a
+  re-runnable `stage` state machine
+  (`fetching`→`transcript`→`segment`→`translate`→`ready`) for the staged
+  mining wizard (`docs/mining-wizard-spec.md`): `_fetch_transcript` stops
+  after ASR/caption with an editable `transcript`; `run_segment`
+  (`POST /jobs/{id}/segment`) and `run_translate`
+  (`POST /jobs/{id}/translate`) are independent re-runnable passes;
+  `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
+  source for inline playback. `_run_job` still auto-advances all stages so
+  the current linear review UI is unchanged pending the wizard shell.
   `src/lib/miningApi.ts` is the frontend client; unlike `analysisApi.ts`,
   failures throw rather than degrading silently, since this is the whole
   feature the page is driving, not an optional enhancement. Also serves a

@@ -65,4 +65,10 @@ detailed record, this file as the at-a-glance list.
   pristine source, not fragment clips. Unifies mine stage 2 with
   `ResegmentSourcePage`. Full design + slice order in
   `docs/mining-pipeline-v2.md`. Order: C → B → interactive core → A →
-  polish. C and B are pure wins with no redesign.
+  polish. C and B are pure wins with no redesign. Slices C, B, and A are
+  **done**; the staged wizard is the last piece — brief in
+  `docs/mining-wizard-spec.md`, commit sequence W1–W6. **W1** (job `stage`
+  state machine + `/segment` + `/translate`) and **W2**
+  (`/jobs/{id}/audio` source-range endpoint) landed 2026-08-31; W3–W6
+  (extract `<SegmentationEditor>`, waveform + boundary drag, the wizard
+  shell, polish) remain.

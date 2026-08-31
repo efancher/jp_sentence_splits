@@ -1,6 +1,30 @@
 # Status
 
-Last updated: 2026-08-30 (Pitch-accent UniDic gap-fill + mining-review
+Last updated: 2026-08-31 (Mining wizard W1+W2 — server job state machine
++ source-range audio. Groundwork for the staged mining wizard
+(`docs/mining-wizard-spec.md`); no user-visible change yet.
+(1) **W1** — `Job` gains a re-runnable `stage`
+(`fetching`→`transcript`→`segment`→`translate`→`ready`) alongside the
+coarse `status` the linear review UI still polls. `_run_job` is split:
+`_fetch_transcript` stops after download → cache → ASR/caption with
+`job.transcript` (the editable segment list) populated; `run_segment` /
+`run_translate` are separate re-runnable passes. New endpoints
+`POST /jobs/{id}/segment {segments,merge,split}` (accept a corrected
+transcript, re-resegment, honouring the music/no-punctuation merge-skip)
+and `POST /jobs/{id}/translate` (re-align EN onto current boundaries).
+`_run_job` still auto-advances all three so `YouTubeMinePage` is
+unchanged. `GET /jobs/{id}` now returns `{stage, message, transcript?,
+cues?, rows?}` — the human progress string moved from `stage` to
+`message`. `JOB_TTL_SECONDS` 2 h → 6 h for the interactive window.
+(2) **W2** — `GET /jobs/{id}/audio?startMs&endMs` streams an arbitrary
+span of the cached source (`jobs.source_audio_range`, cached per span,
+swept with the job); `miningApi.fetchJobAudioRange`. This is what every
+wizard panel will play, replacing per-cue pre-clipping (the old
+`/cues/{i}/audio` stays for now). Tests: `test_jobs_api.py` +3,
+`miningApi.test.ts` +2. 70 py / 1039 ts. Not yet redeployed at time of
+writing → `systemctl --user restart youtube-mining-api`.
+
+Before that: 2026-08-30 (Pitch-accent UniDic gap-fill + mining-review
 merge. (1) `unidic-lite` carries `aType` (accent nucleus mora, 0 = heiban);
 `MorphemeToken.accentType` now surfaces it (plain integer only).
 `scripts/backfill-vocabulary-pitch-accent-unidic.ts` (`npm run
