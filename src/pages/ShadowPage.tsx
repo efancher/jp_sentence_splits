@@ -403,6 +403,7 @@ export function ShadowPage() {
                 referenceAudio={referenceAudio}
                 japanese={sentence.japanese}
                 moraUnits={moraUnits}
+                sentenceId={sentence.id}
               />
             )}
           </div>

@@ -373,6 +373,56 @@ strong.jp {
   font-size: 11px;
 }
 
+/* SentencePitchAccentRow — per-word H/L marks under the kana (shadowing
+   panels, AnalysisPanel, pitch_accent card). */
+.pa-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.6rem;
+  align-items: flex-end;
+  margin: 0.25rem 0;
+}
+
+.pa-word {
+  display: inline-flex;
+  align-items: flex-end;
+  padding: 0 0.15rem;
+  border-radius: 4px;
+}
+
+.pa-word[data-highlight] {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.pa-mora {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.pa-kana {
+  font-size: 0.9rem;
+}
+
+.pa-hl {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pa-hl[data-c='h'] {
+  color: var(--accent);
+}
+
+.pa-hl[data-c='l'] {
+  color: var(--text-muted);
+}
+
+.pa-particle .pa-kana {
+  color: var(--text-muted);
+}
+
 /* KaraokeSentenceText (ReviewPage listening card) — word-by-word playback highlight. */
 .karaoke-word {
   transition: background-color 0.1s ease-out;

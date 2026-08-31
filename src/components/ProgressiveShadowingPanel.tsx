@@ -477,6 +477,7 @@ export function ProgressiveShadowingPanel({
         referenceAudio={referenceAudio}
         japanese={japanese}
         moraUnits={moraUnits}
+        sentenceId={sentenceId}
       />
 
       {stage === 'listen' ? (

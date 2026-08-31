@@ -741,7 +741,9 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   post-word pitch is audible); it falls back to whole-sentence-only
   playback when alignment is unavailable or the word can't be located.
   Plays through a local `<audio>` + `PlaybackCoordinator`, not the
-  `nativeAudioController` singleton (no range support there).
+  `nativeAudioController` singleton (no range support there). The reveal
+  also shows `SentencePitchAccentRow` (see below) for the whole sentence,
+  with the card's target word highlighted.
 - **SentenceVocabulary subject**: `sentence_transformation` (activity-type
   string kept for continuity; label displays as "Conjugation in context").
   One StudyItem **per occurrence** of a conjugable word in a sentence
@@ -981,6 +983,17 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   buttons — kept close to the buttons deliberately, so the text being
   practiced stays in view while pressing Shadow along/Hear that
   back/Compare/Retry, not just while reading.
+- **Per-word pitch-accent H/L marks** (`SentencePitchAccentRow.tsx`,
+  `sentencePitchAccent.ts`): beneath `SyncedShadowText`, and in
+  `AnalysisPanel`'s pitch-accent section, a compact "H"/"L"-per-mora
+  contour for each confirmed sentence word that carries Kanjium/UniDic
+  accent data, plus a following-particle mark. Deliberately one
+  independent contour per word (from that word's dictionary reading), not
+  a joined sentence line — Japanese compound/cross-word accent isn't
+  computed anywhere in this codebase (see `pitchAccentRules.ts`). Words
+  with no accent data and particles are simply absent; renders nothing
+  when the sentence has no accented words. Word order under the sentence
+  is by first unclaimed `indexOf` of the surface form.
 - **Practice-mode variants**: "Delayed shadow" (listen in full, then
   auto-record after a configurable 0.5–2.0s gap) and "Show meaning
   instead" (swap Japanese transcript for English translation, forcing

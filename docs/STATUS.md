@@ -22,6 +22,26 @@ Its three quality slices (A: ASR transcript, B: full UniDic
 form/reading/accent, C: retained source audio) and the staged wizard
 (W1–W6) all landed 2026-08-31. What's left is deferred polish (below).
 
+## Recent changes
+
+(New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
+is trimmed.)
+
+- **2026-08-31 — Pitch-accent H/L marks on the sentence.**
+  `src/lib/sentencePitchAccent.ts` (`buildSentencePitchAccents`) +
+  `src/components/SentencePitchAccentRow.tsx` render a per-word
+  high/low-per-mora contour ("H"/"L" letters under the kana, plus a
+  following-particle mark) for the confirmed sentence vocabulary that
+  carries Kanjium/UniDic accent data. Deliberately per-word, not a joined
+  sentence contour (no compound/cross-word accent computation — same
+  stance as `pitchAccentRules.ts`); particles and dataless words are left
+  unmarked, and the row renders nothing when a sentence has no accented
+  words. Wired into `SyncedShadowText` (ShadowPage + guided
+  ProgressiveShadowingPanel), `AnalysisPanel`'s pitch-accent section, and
+  the `pitch_accent` review-card reveal (highlighting the card's target
+  word). `tests/sentencePitchAccent.test.ts` (4). Not browser-verified
+  (no browser libs in the sandbox) — typecheck/lint/build/1071 tests green.
+
 ## Phase completion
 
 | Phase | State |

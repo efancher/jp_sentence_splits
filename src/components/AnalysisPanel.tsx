@@ -25,6 +25,7 @@ import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
 import { categorizeObservations } from '../lib/pronunciationHistory';
+import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
@@ -638,9 +639,12 @@ export function AnalysisPanel({
           ))}
         </div>
       ) : null}
-      {pitchAccentObservations.length > 0 ? (
+      {pitchAccentTargets.length > 0 || pitchAccentObservations.length > 0 ? (
         <div className="stack">
           <strong>Pitch accent (dictionary)</strong>
+          {pitchAccentTargets.length > 0 ? (
+            <SentencePitchAccentRow japanese={transcript} targets={pitchAccentTargets} />
+          ) : null}
           {pitchAccentObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>
               <strong>{item.confidence} confidence:</strong> {item.message}

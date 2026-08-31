@@ -4,6 +4,7 @@ import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository'
 import type { SentenceAudio } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import type { MoraUnit } from '../lib/mora';
+import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 
 /** Shadowing pronunciation-feedback Milestone 1 (docs/STATUS.md Phase 9). */
 function MoraBreakdown({ units }: { units: MoraUnit[] }) {
@@ -54,11 +55,13 @@ export function SyncedShadowText({
   referenceAudio,
   japanese,
   moraUnits,
+  sentenceId,
 }: {
   audioRef: { current: HTMLAudioElement | null };
   referenceAudio: SentenceAudio | undefined;
   japanese: string;
   moraUnits: MoraUnit[];
+  sentenceId?: string;
 }) {
   const [words, setWords] = useState<AlignedWord[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -134,6 +137,7 @@ export function SyncedShadowText({
       <div className="stack" style={{ flex: 1, gap: '0.25rem' }}>
         <div className="jp jp-lg">{japanese}</div>
         <MoraBreakdown units={moraUnits} />
+        <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
       </div>
     );
   }
@@ -169,6 +173,7 @@ export function SyncedShadowText({
           ))}
         </div>
       )}
+      <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
     </div>
   );
 }

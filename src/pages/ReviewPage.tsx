@@ -8,6 +8,7 @@ import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
+import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { VocabChips } from '../components/VocabChips';
 import {
   computeVocabularyContextDiversity,
@@ -1946,6 +1947,11 @@ function PitchAccentCard({
               <PitchAccentDiagram
                 reading={vocabularyItem.reading}
                 position={vocabularyItem.pitchAccentPositions[0]!}
+              />
+              <SentencePitchAccentRow
+                japanese={sentence.japanese}
+                sentenceId={sentence.id}
+                highlightSurfaceForm={surfaceForm}
               />
               {(() => {
                 const explanation = explainPitchAccent({
