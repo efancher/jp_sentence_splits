@@ -27,6 +27,25 @@ form/reading/accent, C: retained source audio) and the staged wizard
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-08-31 — Planner: new-card backlog awareness.** The session
+  planner was blind to confirmed vocabulary that has never been introduced
+  to the SRS (no `vocabularyItem` study item) — it sized the review bucket
+  from existing due `study_items` only, so a large first-review backlog lost
+  its minutes to glossing and the `due_review_batch` step auto-settled
+  before ReviewPage ever seeded a new card. Now `countNewVocabularyCardBacklog()`
+  (`repository.ts`) feeds `SessionPlannerInput.newCardBacklogCount` /
+  `newCardsPerSessionLimit`; `buildRecommendedSession` reserves
+  `min(backlog, limit)` retain-costed minutes in the review ceiling, folds
+  that slice into the review step's `targetCount` + label ("Review N due +
+  introduce M new"), and adds an explanation line. `ReviewPage.handleRate`
+  also holds the review step open (no auto-advance) while the pending-seed
+  pool still has never-introduced words and the per-session cap isn't hit,
+  since `targetCount` undercounts them (one increment per word, ~3 cards
+  seeded). `sessionPlanner.test.ts` +3, `sessionPlannerRepository.test.ts`
+  +1. Docs/ROADMAP compacted + Planned section added the same pass. Not yet
+  browser-verified. Backlog still drains at `newCardsPerSessionLimit`
+  (default 20) per sitting by design.
+
 - **2026-08-31 — Mining: JMnedict proper-noun reading cross-check.**
   `morphology.tokenize_japanese` consults a shipped ~220k-name table
   (`app/data/name_readings.json.gz`, built by `npm run build:name-readings`
@@ -110,9 +129,12 @@ has no browser system libs):
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS
-  card; the planner can't see the backlog, seeds too slowly, and the
-  session review step can auto-complete before the queue drains. Needs a
-  planner fix, not just a one-off seed.
+  card. The planner fix landed 2026-08-31 (see Recent changes): the review
+  bucket now reserves minutes for the backlog and the review step stays
+  open through seeding, so ~`newCardsPerSessionLimit` new words enter per
+  daily session instead of a handful. Still drains over multiple sessions
+  by design; raise the limit in Settings to go faster. Diagnostic:
+  `scripts/analyze-due-by-book.ts`.
 - **Auto-caption fragmentation re-mine** — pre-2026-08-23 shadowing
   imports (After Work, First Day at Work, GLIM SPANKY) were systemically
   mis-segmented (auto-captions, no punctuation). Bulk re-mine through the

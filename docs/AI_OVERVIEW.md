@@ -323,7 +323,16 @@ walking the combined ranked list and summing each item's own per-item cost
 (retain-style recognition cards are quicker than practice-style production
 cards) rather than a uniform count-based pack, since the merged pool is
 heterogeneous — the chosen count is stored on the step as `targetCount` for
-`ReviewPage`'s own tracking (see below) -> **coherent-chain grouping**
+`ReviewPage`'s own tracking (see below). The review bucket also reserves
+minutes for the **new-card backlog** (2026-08-31) — confirmed vocabulary
+with no `vocabularyItem` study item yet, invisible to the due-item scan:
+`countNewVocabularyCardBacklog` feeds `newCardBacklogCount`, and
+`buildReviewBatchStep` adds `min(backlog, newCardsPerSessionLimit)`
+retain-costed minutes plus the same count into `targetCount` and the label
+("Review N due + introduce M new"), so a big first-review backlog no longer
+loses its minutes to glossing. `ReviewPage` separately holds the review
+step open (no auto-advance) while its pending-seed pool still has
+never-introduced words and the per-session cap isn't reached -> **coherent-chain grouping**
 (steps that share a sentence id, e.g. a grammar pattern and a shadowing
 candidate from the same sentence, run back to back) -> a short
 human-readable explanation ("You haven't touched shadowing in 6 days, so

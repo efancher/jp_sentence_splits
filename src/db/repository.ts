@@ -4537,6 +4537,32 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
  * more per-activity-type branching to do, unlike the old ACTIVITY_TYPE_MODE
  * lookup this replaced).
  */
+/**
+ * How many distinct vocabulary words are confirmed (a `surfaceForm`-bearing
+ * `sentence_vocabulary` link exists — the same eligibility
+ * `getVocabularyTargetCandidates` uses) but have never been introduced to
+ * the SRS: no `vocabularyItem`-subject study item for any activity type.
+ * This is the backlog ReviewPage seeds lazily once the due queue drains; the
+ * planner needs the raw count to reserve review-bucket minutes for it (see
+ * getSessionPlannerInput / buildRecommendedSession), since it's otherwise
+ * invisible to the "size the review bucket from due study_items" logic.
+ */
+export async function countNewVocabularyCardBacklog(): Promise<number> {
+  const db = getDb();
+  const [links, vocabularyStudyItems] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+  ]);
+  const introduced = new Set(vocabularyStudyItems.map((item) => item.subjectId));
+  const backlog = new Set<string>();
+  for (const link of links) {
+    if (!link.surfaceForm) continue;
+    if (introduced.has(link.vocabularyItemId)) continue;
+    backlog.add(link.vocabularyItemId);
+  }
+  return backlog.size;
+}
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -4604,23 +4630,30 @@ export async function getSessionPlannerInput(
   const db = getDb();
   const settings = await readSettings(db);
 
-  const [recentActivity, retainDueItems, practiceDueItems, exploreCandidatesRaw, understandCandidatesRaw] =
-    await Promise.all([
-      getRecentActivityEvents(now),
-      getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
-        now,
-        limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
-        graduationMinScheduledDays: settings.graduationMinScheduledDays,
-      }),
-      getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
-        now,
-        limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
-        graduationMinScheduledDays: settings.graduationMinScheduledDays,
-      }),
-      // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
-      findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
-      findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
-    ]);
+  const [
+    recentActivity,
+    retainDueItems,
+    practiceDueItems,
+    exploreCandidatesRaw,
+    understandCandidatesRaw,
+    newCardBacklogCount,
+  ] = await Promise.all([
+    getRecentActivityEvents(now),
+    getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
+      now,
+      limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
+      graduationMinScheduledDays: settings.graduationMinScheduledDays,
+    }),
+    getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
+      now,
+      limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
+      graduationMinScheduledDays: settings.graduationMinScheduledDays,
+    }),
+    // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
+    findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
+    findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
+    countNewVocabularyCardBacklog(),
+  ]);
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
@@ -4655,6 +4688,8 @@ export async function getSessionPlannerInput(
     exploreCandidates,
     understandCandidates,
     shadowCandidates,
+    newCardBacklogCount,
+    newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
   };
 }

@@ -1223,9 +1223,19 @@ export function ReviewPage() {
       // review completes the active session's `review` step's target
       // count, settle the step and jump straight to the next one, instead
       // of leaving the learner to notice and go back to Mark it complete.
+      // But hold the step open while never-introduced words are still
+      // waiting to be seeded this sitting (docs/STATUS.md "Review new-card
+      // backlog") — the planner reserves review minutes for them, and
+      // `targetCount` undercounts them (one increment per word, ~3 cards
+      // seeded), so without this guard the step would settle before
+      // ReviewPage ever drains the pending-seed pool.
+      const moreNewCardsThisSession =
+        pool.length > 0 &&
+        !!settings &&
+        newCardsIntroduced < settings.newCardsPerSessionLimit;
       if (activeSession && reviewStep?.targetCount) {
         const doneCount = (reviewsDoneThisStep ?? 0) + 1;
-        if (doneCount >= reviewStep.targetCount) {
+        if (doneCount >= reviewStep.targetCount && !moreNewCardsThisSession) {
           const result = await settleSessionStep(activeSession.session.id, reviewStep.id, 'completed');
           const nextPath = result?.nextStep ? sessionStepTargetPath(result.nextStep) : null;
           if (nextPath) navigate(nextPath);

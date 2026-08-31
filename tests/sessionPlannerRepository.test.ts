@@ -7,6 +7,7 @@ import {
   computeLearningBalance,
   confirmSentenceVocabulary,
   countAttemptsForSentences,
+  countNewVocabularyCardBacklog,
   createBook,
   deleteTodayPlannerSession,
   endPlannerSessionEarly,
@@ -66,6 +67,45 @@ describe('Learning Orchestrator repository layer', () => {
     const exploreStep = recommended.steps.find((step) => step.bucket === 'glossing');
     expect(exploreStep).toBeDefined();
     expect(exploreStep!.bookId).toBe(book.id);
+  });
+
+  it('counts confirmed-but-never-introduced words as the new-card backlog, and the planner reserves review minutes for them', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const book = await createBook({ title: 'Old Book' });
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    // Three confirmed words (surface-form-bearing links); one already has a
+    // study item, so only two are backlog.
+    for (let i = 0; i < 3; i += 1) {
+      await db.vocabularyItems.put({
+        id: `vi_${i}`,
+        expression: `語${i}`,
+        reading: `ご${i}`,
+        meaning: 'word',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.sentenceVocabulary.put({
+        id: `sv_${i}`,
+        sentenceId: sentence.id,
+        vocabularyItemId: `vi_${i}`,
+        surfaceForm: `語${i}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await ensureStudyItem('vocabularyItem', 'vi_0', 'reading_retrieval');
+
+    expect(await countNewVocabularyCardBacklog()).toBe(2);
+
+    const recommended = await planRecommendedSession(60);
+    const reviewStep = recommended.steps.find((step) => step.targetKind === 'review');
+    expect(reviewStep).toBeDefined();
+    expect(reviewStep!.targetCount).toBe(2);
+    expect(recommended.allocation.review).toBeGreaterThan(0);
   });
 
   it('tracks step completion/skip explicitly, and only completes the session once every step is settled', async () => {

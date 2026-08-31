@@ -389,6 +389,22 @@ export interface SessionPlannerInput {
   exploreCandidates: ExploreCandidate[];
   understandCandidates: UnderstandCandidate[];
   shadowCandidates: ShadowCandidate[];
+  /**
+   * Distinct confirmed vocabulary words that have never been introduced to
+   * the SRS (no `vocabularyItem` study item yet). The planner is otherwise
+   * blind to this backlog — `retainDue`/`practiceDue` only carry study items
+   * that already exist — so a large first-review backlog used to lose the
+   * review bucket's minutes to glossing and the `due_review_batch` step
+   * would auto-settle before ReviewPage ever seeded a new card (docs/STATUS.md
+   * "Review new-card backlog"). Defaults to 0 when omitted.
+   */
+  newCardBacklogCount?: number;
+  /**
+   * How many brand-new subjects ReviewPage will actually introduce this
+   * sitting (`settings.newCardsPerSessionLimit`) — bounds how much of
+   * `newCardBacklogCount` today's plan reserves room for. Defaults to 0.
+   */
+  newCardsPerSessionLimit?: number;
   reviewLimit?: number;
   /** User-adjustable override for BASELINE_SESSION_ALLOCATION (set directly on Home) — see AllocateTimeInput.baseline. */
   baseline?: Record<SessionBucket, number>;
@@ -447,8 +463,18 @@ function reviewBatchCostMinutes(ranked: ReviewPriorityResult[], limit: number): 
  * different amounts per item — a plain count-based pack would misprice a
  * batch that's mostly one type or the other.
  */
-function buildReviewBatchStep(ranked: ReviewPriorityResult[], budgetMinutes: number): PlannerStepDraft | null {
-  let used = 0;
+function buildReviewBatchStep(
+  ranked: ReviewPriorityResult[],
+  budgetMinutes: number,
+  newCardSlots = 0,
+): PlannerStepDraft | null {
+  // Never-introduced words are seeded by ReviewPage after the due queue
+  // drains; reserve their minutes up front (retain-costed — a first pass at a
+  // word is a reveal/self-rate, like a recognition card) so a big backlog
+  // doesn't get squeezed out by due items, then fold the slice into
+  // targetCount so ReviewPage's auto-advance waits for the new cards too
+  // (countReviewsSince already counts newly-seeded card reviews).
+  let used = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
   const chosen: ReviewPriorityResult[] = [];
   for (const item of ranked) {
     const cost = reviewItemCostMinutes(item.activityType);
@@ -456,18 +482,27 @@ function buildReviewBatchStep(ranked: ReviewPriorityResult[], budgetMinutes: num
     used += cost;
     chosen.push(item);
   }
-  if (chosen.length === 0) return null;
+  if (chosen.length === 0 && newCardSlots === 0) return null;
   const topReasons = [...new Set(chosen.flatMap((item) => item.reasons))].slice(0, 2);
+  const newCardReason =
+    newCardSlots > 0 ? `${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} to introduce` : null;
+  const reasons = [...topReasons, ...(newCardReason ? [newCardReason] : [])].slice(0, 2);
+  const label =
+    chosen.length > 0 && newCardSlots > 0
+      ? `Review ${chosen.length} due + introduce ${newCardSlots} new`
+      : newCardSlots > 0
+        ? `Introduce ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'}`
+        : `Review ${chosen.length} high-priority item${chosen.length === 1 ? '' : 's'}`;
   return {
     id: draftStepId(),
     bucket: 'review',
     activityType: 'due_review_batch',
     targetKind: 'review',
-    label: `Review ${chosen.length} high-priority item${chosen.length === 1 ? '' : 's'}`,
+    label,
     estimatedMinutes: used,
-    reason: topReasons.length > 0 ? topReasons.join(', ') : 'Due for review',
+    reason: reasons.length > 0 ? reasons.join(', ') : 'Due for review',
     status: 'pending',
-    targetCount: chosen.length,
+    targetCount: chosen.length + newCardSlots,
   };
 }
 
@@ -786,7 +821,14 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   // either (one shared due-queue). reviewLimit still caps the combined pool
   // to "the best N," not both pools' worth.
   const rankedReview = rankReviewPriorities([...input.retainDue, ...input.practiceDue], reviewLimit);
-  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit);
+  // How many never-introduced words today's plan makes room for: the whole
+  // backlog, capped at what ReviewPage will actually seed this sitting.
+  const newCardSlots = Math.max(
+    0,
+    Math.min(input.newCardBacklogCount ?? 0, input.newCardsPerSessionLimit ?? 0),
+  );
+  const newCardMinutes = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
+  const reviewCeiling = reviewBatchCostMinutes(rankedReview, reviewLimit) + newCardMinutes;
 
   // Every bucket — not just review — is clamped to what its candidate list
   // can actually spend. Without this, minutes freed by a capped bucket get
@@ -806,7 +848,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     },
   });
 
-  const reviewStep = buildReviewBatchStep(rankedReview, allocation.review);
+  const reviewStep = buildReviewBatchStep(rankedReview, allocation.review, newCardSlots);
 
   const shadowSteps = buildShadowSteps(
     input.shadowCandidates,
@@ -835,7 +877,16 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     allocation,
     input.baseline ?? BASELINE_SESSION_ALLOCATION,
   );
-  if (reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain && rankedReview.length < reviewLimit) {
+  if (newCardSlots > 0) {
+    explanation.push(
+      (input.newCardBacklogCount ?? 0) > newCardSlots
+        ? `${input.newCardBacklogCount} words are waiting for a first review — today's plan introduces ${newCardSlots} of them once the due queue is clear.`
+        : `Today's plan introduces ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} that haven't been reviewed yet.`,
+    );
+  } else if (
+    reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain &&
+    rankedReview.length < reviewLimit
+  ) {
     explanation.push("No large review backlog right now, so review is a small part of today's plan.");
   }
   const plannedMinutes = ALL_SESSION_BUCKETS.reduce((sum, mode) => sum + allocation[mode], 0);

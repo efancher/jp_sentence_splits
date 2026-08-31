@@ -226,6 +226,63 @@ describe('buildRecommendedSession', () => {
     expect(reviewStep!.targetCount).toBeLessThanOrEqual(15);
   });
 
+  it('a new-card backlog produces a review step even with zero due items, capped by the session limit', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        newCardBacklogCount: 193,
+        newCardsPerSessionLimit: 20,
+      }),
+    );
+    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
+    expect(reviewStep).toBeDefined();
+    expect(reviewStep!.targetCount).toBe(20);
+    expect(reviewStep!.label).toContain('20 new');
+    expect(reviewStep!.estimatedMinutes).toBeGreaterThan(0);
+    expect(session.explanation.some((line) => line.includes('193 words'))).toBe(true);
+  });
+
+  it('the new-card backlog reserves review minutes that would otherwise go to glossing', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Episode 4',
+        reason: 'Continue',
+        sentences: Array.from({ length: 20 }, (_, i) => ({
+          sentenceId: `sent_${i}`,
+          preview: 'x',
+          vocabularyConfirmed: false,
+          vocabularyReady: false,
+        })),
+      },
+    ];
+    const withoutBacklog = buildRecommendedSession(emptyPlannerInput({ exploreCandidates, totalMinutes: 60 }));
+    const withBacklog = buildRecommendedSession(
+      emptyPlannerInput({
+        exploreCandidates,
+        totalMinutes: 60,
+        newCardBacklogCount: 50,
+        newCardsPerSessionLimit: 20,
+      }),
+    );
+    expect(withoutBacklog.allocation.review).toBe(0);
+    expect(withBacklog.allocation.review).toBeGreaterThan(0);
+  });
+
+  it('combines due items and new-card slots into one review step targetCount', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        retainDue: Array.from({ length: 5 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+        newCardBacklogCount: 8,
+        newCardsPerSessionLimit: 20,
+      }),
+    );
+    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
+    expect(reviewStep!.targetCount).toBe(13);
+    expect(reviewStep!.label).toContain('introduce 8 new');
+  });
+
   it('a recently-encountered, not-yet-tracked grammar pattern surfaces as a grammar step with a reason', () => {
     const understandCandidates: UnderstandCandidate[] = [
       {
