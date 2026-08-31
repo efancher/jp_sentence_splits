@@ -1,85 +1,162 @@
 # Roadmap
 
-Phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15 (adjusted after
-inspection; see that doc for full rationale). Update the checkbox and add a
-one-line note when a phase's status changes. `STATUS.md` is the
-current-state snapshot, `STATUS_ARCHIVE.md` the frozen chronological
-detail, this file the at-a-glance list.
+At-a-glance list. `STATUS.md` is the current-state snapshot,
+`STATUS_ARCHIVE.md` the frozen chronological detail (files touched, test
+counts, production-run logs), `AI_OVERVIEW.md` the feature-oriented
+reference. Each entry here is one or two lines — follow the pointer for the
+rest. Update the checkbox and the one-line note when a phase's status
+changes.
+
+Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
+
+## Done
 
 - [x] **Phase 0 — Repository analysis.** `docs/UNIFIED_APP_ARCHITECTURE.md`.
-- [x] **Phase 1 — Unified data model.** New Dexie/Postgres tables, additive, tested. Migration applied to live Supabase (2026-08-13).
-- [x] **Phase 2 — Existing data migration.** WaniKani kanji catalog importer run against production (2101 rows). One-time `anki_headless`-mediated import of Satori/Shadowing Anki notes run against production (16 new sentences, 142 merged, 332 new vocabulary items, 500 links, 158 inbox entries — idempotency-verified). JMDict scoped down to a local lookup tool (`npm run jmdict:lookup`) — bulk-populating `vocabulary_items` deliberately deferred to Phase 5 (see STATUS.md), not a gap in this phase.
-- [x] **Phase 3 — Unified shadowing.** Core loop done and manually verified (record/save/compare/rate, new local-only `attempts` table, `ShadowPage` route) — real-browser smoke test on Mac passed 2026-08-14. Pitch-analysis (`pitch.ts`/`japanese.ts`) and the live recording overlay deliberately deferred to a follow-up pass.
-- [x] **Phase 4 — FSRS.** `ts-fsrs` integrated (`src/lib/scheduling.ts`); two activity types wired end-to-end (`comprehension`, `reading_in_context`) via a new `/review` (global) and `/books/:bookId/review` (scoped) queue — see STATUS.md. Real-browser verified (2026-08-16, extensively, as part of the Phase 7.x review-system work). Real UI differentiation between activity types, further activity types, and error-classification population all deferred.
-- [~] **Phase 5 — Vocabulary/kanji relationships.** `VocabularyPicker`'s confirm action now materializes real `vocabulary_items`/`sentence_vocabulary`/`kanji`/`vocabulary_kanji` rows (all four sync-wired), plus new `/vocabulary` and `/kanji/:character` browsing pages — see STATUS.md. "Phase 5 part 2" (JMDict meaning backfill + retroactive materialization for pre-Phase-5 confirms) run for real against production (2026-08-15): 10 meanings backfilled, 1 sentence retroactively materialized. **Still not verified**: the interactive confirm-vocabulary flow itself (`AnalyzePage.tsx`, the only writer of `surface_form`) — checked directly against production (2026-08-16) and found 0 of 503 `sentence_vocabulary` links had ever come from it; every real link so far came from the one-time Anki import instead (worked around for review purposes via `scripts/backfill-vocabulary-surface-forms.ts`, see STATUS.md, but that doesn't substitute for confirming the live picker UI itself works).
-- [x] **Phase 6 — Anki interoperability cleanup.** Verified no further content needed (no `anki` commits since the 2026-08-14 migration tooling landed; Phase 2's import already ran clean, 0 skipped) and archived `efancher/anki` on GitHub — see STATUS.md. No export-back-to-Anki planned.
-- [x] **Phase 7 — Adaptive learning.** Sub-phased per a detailed comparison against the user's review-system design brief — see STATUS.md. 7.1 (evidence-model foundation) done. 7.2 (reading retrieval) done, migration applied to production. 7.3 (contextual cloze) done. 7.4 (audio comprehension) done, no migration needed. 7.5 (mnemonic gating on vocabulary-target cards via `computeMaturityLevel`; first real `Review.assistance` writes — `mnemonic_shown`, `audio_replayed`) done, no migration needed. 7.6 (interference detection foundation: `scripts/lib/verbPairs.ts` ports `anki`'s transitive/intransitive pairing algorithm, `scripts/backfill-verb-pair-confusions.ts` seeds `vocabulary_confusions`, `StudySubjectType` gains `'vocabularyConfusion'`) done — backfill run against production (4 pairs inserted), migration applied. 7.7 (contrastive pair review: `ContrastivePairCard` in `ReviewPage.tsx`, one StudyItem per confusion pair via `getConfusionPairCandidates`) done, no migration needed. 7.8 (natural-encounter evidence: `recordNaturalEncounter` in `src/db/repository.ts`, first writer of `Review.source`/`contextSentenceId`; a new "Recognized these without hints?" panel on `PracticePage.tsx`) done, no migration needed. 7.9 ("production ladder/sentence transformations", split into slices, both done): 7.9a (reading production — new `reading_production` activity type, typed-answer checking via `isReadingAnswerCorrect`); 7.9b (sentence transformations — `src/lib/conjugation.ts` ports `anki/wk_decks.py`'s `conjugate_vocab_form()`, validated against its own 86-row fixture set; new `sentence_transformation` activity type quizzes a word's plain-past conjugation). No migration needed for either. 7.10 ("session planner, graduation, explainability, debug view", split into slices, all done): 7.10a (explainability + debug view combined — `getStudyItemDebugInfo` in `src/db/repository.ts`, new `StudyItemDebugPage` at `/study-items/:studyItemId`, a "Why?" link on `ReviewPage.tsx`'s current card); 7.10b (activity-descriptor refactor generalizing `ReviewPage.tsx`'s five hand-duplicated categories, plus the session planner itself — `AppSettings.newCardsPerSessionLimit`, new number field on `SettingsPage.tsx`, caps new-subject introduction per sitting; also fixed the pending-seed pool to interleave categories round-robin instead of draining sentences first, a real-data bug found post-deploy); 7.10c (graduation — `isGraduated` in `src/lib/scheduling.ts`, `AppSettings.graduationMinScheduledDays` default 180, retires a study item from the due rotation once its FSRS interval crosses the threshold). No migration needed for any of 7.10's slices. All of 7.6–7.10c manually verified in a real browser, including by the user directly against production data (2026-08-16, see STATUS.md). Phase 7 — and with it the full original roadmap (Phase 0 through 7) — is now done. **7.11 — Full-sentence review gating** (added later the same day, user request): a sentence's full-sentence cards (`comprehension`/`reading_in_context`) wait until its vocabulary is both confirmed (`SentenceAnalysis.vocabularyReviewStatus`) and shown proficient — corrected mid-flight after the user caught a real bug in the first version (a never-reviewed sentence with zero vocabulary links was wrongly treated as "ready" instead of gated, letting brand-new sentences skip the line); also closed a second bug where lazily-seeded cards bypassed the gate entirely. `BookDetailPage.tsx` gained a `vocab: needs review`/`vocab: confirmed` indicator pill per sentence. One-time production reset (`scripts/defer-unready-sentence-reviews.ts`) run twice, once per correction — see STATUS.md for full detail.
-- [x] **Phase 8 — Shadowing feature parity + practice-target isolation.** Fully complete (8.1-8.5, all manually verified in a real browser) — see STATUS.md for full detail on each sub-phase. Scoped and ordered 2026-08-16 after a real-browser check found the Phase 3 shadowing port thinner than the original standalone `~/projects/shadowing/web` app, plus a user-requested new (not-a-port) beginner feature. 8.1 playback speed control. 8.2 practice-target isolation (manual "mark start"/"mark end" loop-point marking on a scrubbable reference player, replacing the old tap-to-play button; loops the range and scopes Alternate/Dual-ear comparisons to it, learner's attempt always plays in full). 8.3 mic calibration + shadow-mode play-along recording + live waveform (one shared `AudioContext` for mic analyser + reference playback, preserving the source's ordering constraint). 8.4a/8.4b pitch/waveform comparison analysis, split since it's two UIs sharing one DSP port: 8.4a ports the YIN pitch-detection algorithm (`src/lib/pitch.ts`, validated against synthetic pure-tone signals — the source repo has no fixtures for this module) and wires the live pitch-contour overlay 8.3 had deferred; 8.4b adds the post-hoc `AnalysisPanel` for reference-vs-saved-attempt comparison, verified against synthetic clips with known ground-truth duration ratio and onset offset that both computed exactly correctly. 8.5 polish (favorite-marking, attempt notes, hide/show transcript). Deliberately not ported: chunk practice (redundant with this app's own chunk/role analysis engine), word/mora-precise practice-target isolation (deferred, not ruled out), and the source's "default comparison attempt" concept (inapplicable — this app's UI lets you act on any attempt directly, no single "selected" one).
-- [x] **Learning Orchestrator.** A "what should I do?" recommended-session
-  planner (four learning modes, neglect-aware time allocation, generalized
-  review-priority scoring, a new `HomePage` dashboard replacing Books as
-  the index route, `SessionRunnerPage` sequencing) — see `docs/STATUS.md`'s
-  2026-08-20 entry for full detail and deliberately-deferred items
-  (no "replace activity" action, no settings UI for tuning constants,
-  `PlannerSession` is local-only). **Follow-up (2026-08-21)**: switched
-  from a fixed-length Quick/Normal/Deep sitting to one growing **daily**
-  session (`addMinutesToTodaySession`, one `PlannerSession` per local
-  calendar day, topped up in 20/30-minute increments rather than starting
-  over) — matches real usage better than a single uninterrupted sitting.
-  See `docs/STATUS.md`'s dedicated 2026-08-21 entry. **Follow-up
-  (2026-08-29)**: vocabulary confirmations now get first claim on the
-  glossing bucket's minutes — `buildExploreSteps` reserves up to
-  `VOCAB_CONFIRM_MIN_GLOSSING_SHARE` for `vocabulary_review` steps before any
-  `continue_book`, and `findExploreCandidates` floats books with a
-  confirmation backlog above caught-up ones. See STATUS.md 2026-08-29.
-- [x] **Phase 9 — Shadowing pronunciation/prosody feedback.** Complete, all 9 milestones, per a detailed user design brief (reference-vs-learner mora/timing/pitch comparison, ranked "fix one thing" feedback) — see STATUS.md for the full architecture decision and milestone-by-milestone detail. 1: mora-unit segmentation (`src/lib/mora.ts`). 2a: forced-alignment service (`~/projects/shadowing-analysis-api`, MFA-backed, `systemd --user` on the user's Hetzner box, tailnet-only via `tailscale serve`). 2b: frontend wiring (`src/lib/analysisApi.ts`, Dexie-cached alignment, required graceful fallback when unreachable). 3: phone-tier timing feedback (`src/lib/wordTimingObservations.ts` — っ/long-vowel/word-pace). 4: pitch-movement timing feedback (`src/lib/pitchTimingObservations.ts`). 5/6: ranking + "FOCUS ON THIS" one-tap practice (`src/lib/feedbackRanking.ts`, driving the existing `targetRange` loop mechanism, no second practice workflow). 7: ASR as a secondary, non-authoritative signal (`src/lib/asrObservations.ts`, faster-whisper `base`, chosen after a real memory check on the shared host). 8: pronunciation history/trend labels (`src/lib/pronunciationHistory.ts`). 9: PASQA investigated and documented (CC0, real weights, but needs PyTorch+s3prl — a resource-driven "not yet" on this memory-constrained box; architecture left ready). Deliberately deferred, each with real reasoning recorded in STATUS.md (not just a bare mention here): cross-sentence learner profile (brief's Phase 15), a dedicated debug/diagnostic view (brief's Phase 25), and the brief's named practice-mode taxonomy (brief's Phase 13). **Follow-up (2026-08-18)**: two of the three named practice modes that were "genuinely not built at all" are now done — delayed shadowing and meaning→production, both in `ShadowPage.tsx` — plus a cross-recording "Focus on this" comparison and a full ranked-observations disclosure in `AnalysisPanel.tsx` (partially closing the debug-view gap). Cross-sentence learner profile remains the one fully open item. Also landed the same day: card issue reports (a "Report issue" action on any review card, new `/issues` triage page, new `cardIssueReports` table, sync-wired) and two small bug fixes (a chunk-boundary-move bug and a vocabulary-picker whitespace-gap merge bug, both in the Analyze/Vocabulary-picker editors). See STATUS.md. **Follow-up (2026-08-21)**: ground-truth pitch-accent scoring added (`src/lib/pitchAccentShape.ts`/`pitchAccentObservations.ts`, backed by the Kanjium dictionary via `scripts/backfill-pitch-accent.ts` -> `VocabularyItem.pitchAccentPositions`) — the first observation kind that scores against real dictionary accent data instead of only a reference recording, and the first that needs no reference clip at all (works from the learner's own alignment alone). Wired into the existing `AnalysisPanel.tsx`. The standalone audio-less pronunciation-drill mode this sets up (practice pitch accent on Satori-imported sentences, which have no reference audio) is a deliberately separate, not-yet-started follow-up. See STATUS.md. **Also done (2026-08-21)**: the same `pitchAccentPositions` data now backs a new `pitch_accent` SRS review activity type (`ReviewPage.tsx`) — a passive multiple-choice recall flashcard, not the audio-less production/recording drill mode described above, which remains the one still-open item from this line. **Follow-up (2026-08-24)**: the brief's named practice-mode taxonomy is now substantially closed — a guided/progressive practice mode (`ProgressiveShadowingPanel.tsx`, `useProgressiveShadowing.ts`) sequences Listen → Pause&Repeat → Delayed Shadow → Close Shadow → Record&Compare as one low-friction flow, reusing every existing recording/playback primitive rather than building a parallel one (see STATUS.md and AI_OVERVIEW.md §6 for the full breakdown, including the deliberate choice not to persist every rep and not to build artificial concurrent-delay audio mixing). Also merged the free-form Record/Stop controls into a single toggle button (`RecordToggleButton.tsx`) app-wide, fixing a specific "too many things to think about while recording" usability complaint.
-- [x] **Re-segment an existing shadowing source.** In-app flow
-  (`ResegmentSourcePage.tsx`, `/books/:bookId/resegment`) to rebuild a
-  source's sentences on real boundaries for imports that predate
-  `resegment.py` ("After Work", "First Day at Work", GLIM SPANKY). New
-  stateless `POST /resegment` on `server/youtube-mining`; pure
-  `src/lib/resegmentPlan.ts` maps study progress onto the best-text-overlap
-  replacement; `applyResegmentation`/`deleteSentenceCascade` in
-  `repository.ts` (first sentence-delete path). Song mode is manual
-  (lyrics lack sentence-final punctuation). **Run against production**
-  ("After Work") 2026-08-29; that surfaced two regressions since fixed —
-  the morphology service was reading the bare pronoun 私 as わたくし, and
-  `applyResegmentation` dropped reference audio. It now carries audio across
-  by re-cutting each new sentence's clip from the old fragment clips via a
-  new `POST /reclip` on `server/youtube-mining`, plus a one-off
-  `scripts/backfill-resegment-audio.ts` for the already-re-segmented book.
-  See STATUS.md 2026-08-29 / 2026-08-28.
-- [x] **Vocabulary meaning glossing.** YouTube-mined vocabulary came in with every English meaning blank (fugashi gives no gloss). Two paths now fill it: a POS-aware JMDict matcher + JMnedict proper-noun fallback for the offline `backfill:vocabulary-*` scripts (`scripts/lib/jmdict.ts` / `jmnedict.ts`), and a runtime `vocab-assist` Claude Haiku Edge Function (second AI integration after `grammar-assist`) that glosses words in sentence context — fired just-in-time on `VocabularyReviewPage` and via a per-word "Suggest (AI)" button. See STATUS.md's 2026-08-28 entry.
-- [x] **WaniKani mnemonics on review cards.** Bring back the WaniKani meaning/reading mnemonics the archived `anki` project had. Shipped and deployed 2026-08-29 (vocab + kanji slices, Supabase subject cache, deferral fall-through). **Vocab slice (done, 2026-08-29)**: `VocabularyItem.meaningMnemonic`/`readingMnemonic`, `scripts/backfill-wanikani-mnemonics.ts` + manual-dispatch workflow, `src/components/MnemonicText.tsx` markup renderer, `CardMnemonic` in `ReviewPage` (reading mnemonic for reading-focused cards, meaning mnemonic for `cloze`, learner note still wins). **Kanji slice (done, 2026-08-30)**: `Kanji` gains `meaningMnemonic`/`meaningHint`/`readingMnemonic`/`readingHint` (hints are kanji-only in the WK API — vocab subjects have none), filled by re-running the existing `scripts/import-wanikani-kanji.ts` catalog importer (+ new `import-wanikani-kanji.yml` workflow); `CardMnemonic` falls back to a word's component-kanji mnemonics (with hint lines) when the word itself has no WK vocab mnemonic. **Subject cache (done, 2026-08-31)**: script-only `wanikani_subjects` Supabase table (`20260831000000_...`) + `scripts/lib/wanikaniCache.ts` — both ingestion scripts now pull raw WaniKani payloads through it with an incremental `updated_after` cursor instead of re-paging the whole catalog every run; not synced to the client; `--skip-wk-sync` reads it with no API call. **Deployed 2026-08-29**: all three migrations applied, `WANIKANI_API_TOKEN` secret added, both workflows run — 303 vocab items and 2101 kanji rows now carry mnemonics. **Deferral fall-through (done, 2026-08-31)**: WaniKani's "you already know the kanji" placeholder reading mnemonics (`src/lib/wanikaniMnemonic.ts` `isDeferralMnemonic`) are treated as absent so `CardMnemonic` shows the component-kanji mnemonics instead, with the placeholder as a lead-in.
-- [x] **Contextual conjugation cards.** Reworked the `sentence_transformation` card from one-per-word / hash-picked form (Phase 7.9b) to one **per word-in-sentence occurrence**, quizzing the conjugation form that sentence actually used — a form never read in the corpus is never drilled. New `StudySubjectType 'sentenceVocabulary'` (migration `20260901000000_...`), new `identifyConjugationForm` (reverse of `conjugate`) in `src/lib/conjugation.ts`, `getVocabularyOccurrenceCandidates` in `repository.ts`, cloze-style card, Phase 7.11 gating reused via `ActivityDescriptor.gateSentenceId`. Migration applied to production and `scripts/retire-per-word-conjugation-items.ts` run (10 old per-word rows retired), both 2026-08-30. `npm run check`/`build` green; **not yet browser-verified**. See STATUS.md 2026-08-30.
-- [x] **Progressive listening (two-tier ladder).** User found full-sentence listening cards too long, wanted the vocabulary-before-glossing treatment. New `word_listening` activity type (subjectType `sentenceVocabulary`, one card per surface-form occurrence in an audio sentence) loops just that word's span of the recording via a new `SegmentLoopPlayer` (extracted from `PitchAccentNativeAudio`), with a whole-sentence fallback when alignment can't isolate it. Tier 1 (`word_listening`) is gated behind the word's reading proficiency; tier 2 (the existing full-sentence `listening` card) is gated behind every `word_listening` occurrence being proficient (`getSentenceListeningReadiness`) — both via a new generic `ActivityDescriptor.isReady` hook, no `deferUnreadySentenceReviews` pass (same as the conjugation card). No migration (subjectType already exists). `npm run check` green (+8 tests); **not yet browser-verified**. See STATUS.md 2026-08-30.
-- [ ] **Mining pipeline v2.** Make YouTube mining a staged, interactive,
-  re-runnable process (transcript → segment → translate → vocab → commit,
-  audio in the loop at every stage) and fix the root quality issue —
-  auto-caption tracks as source of truth. Three quality upgrades slot into
-  the stages: (A) ASR transcript via `faster-whisper` on
-  `shadowing-analysis-api`, captions demoted to fallback/timing; (B) full
-  UniDic + inline JMnedict/Kanjium so morphology emits dictionary
-  form/reading/accent directly (retires `deriveDictionaryReading` +
-  `fix-vocabulary-*` + `backfill-pitch-accent` for new mines); (C) retain a
-  compressed source-audio copy per book so re-cuts/re-segments come from
-  pristine source, not fragment clips. Unifies mine stage 2 with
-  `ResegmentSourcePage`. Full design + slice order in
-  `docs/mining-pipeline-v2.md`. Order: C → B → interactive core → A →
-  polish. C and B are pure wins with no redesign. Slices C, B, and A are
-  **done**; the staged wizard is the last piece — brief in
-  `docs/mining-wizard-spec.md`, commit sequence W1–W6 — **all landed
-  2026-08-31**: W1 job `stage` state machine + `/segment` + `/translate`,
-  W2 `/jobs/{id}/audio` source-range endpoint, W3 `<SegmentationEditor>`
-  extraction, W4 waveform + boundary drag + "snap to pauses", W5 the
-  4-step `YouTubeMinePage` wizard (replaces the linear cue march), W6
-  polish + retired the old cue-clip endpoints. Post-W6 polish (also
-  2026-08-31): batch `POST /jobs/{id}/commit`, `POST /source-audio/range`
-  streaming endpoint + the `/books/:id/resegment` boundary waveform,
-  per-row audio on the segment/translate stages, provenance-grouped
-  "Auto-fill (AI)", and a JMnedict proper-noun reading cross-check in
-  `morphology.tokenize_japanese` (shipped ~220k-name table, closing the
-  last slice-B item). Still deferred: a `source_audio` Supabase table +
-  Storage mirror for cache durability (blocked on a Supabase-creds
-  decision for the Python service — recommendation is box-level backups
-  instead).
+- [x] **Phase 1 — Unified data model.** Additive Dexie/Postgres tables;
+  migration live on Supabase 2026-08-13.
+- [x] **Phase 2 — Existing data migration.** WaniKani kanji catalog (2101
+  rows) + one-time Anki note import (16 new sentences, 332 vocab items, 500
+  links) run against production. JMDict scoped to a local lookup tool
+  (`npm run jmdict:lookup`), not bulk-imported — see STATUS.md.
+- [x] **Phase 3 — Unified shadowing.** Record/save/compare/rate loop,
+  `attempts` table, `ShadowPage`. Live overlay + pitch analysis delivered
+  later under Phase 8.
+- [x] **Phase 4 — FSRS.** `ts-fsrs` integrated (`src/lib/scheduling.ts`);
+  `/review` (global) + `/books/:bookId/review` (scoped) queue. Real
+  per-activity-type UI differentiation still deferred (see STATUS.md gaps).
+- [~] **Phase 5 — Vocabulary/kanji relationships.** `VocabularyPicker`
+  confirm materializes `vocabulary_items`/`sentence_vocabulary`/`kanji`/
+  `vocabulary_kanji` (all sync-wired); `/vocabulary` + `/kanji/:character`
+  browsing. Part 2 (JMDict meaning backfill + retroactive materialization)
+  run against production 2026-08-15. **Still unverified**: the interactive
+  confirm-vocabulary flow itself (`AnalyzePage.tsx`/`VocabularyReviewPage`)
+  — see STATUS.md.
+- [x] **Phase 6 — Anki interoperability cleanup.** Verified no further
+  content needed; `efancher/anki` archived. No export-back planned.
+- [x] **Phase 7 — Adaptive learning.** All slices 7.1–7.11 done and
+  verified against production (evidence model, reading retrieval, contextual
+  cloze, audio comprehension, mnemonic gating, interference detection,
+  contrastive pairs, natural-encounter evidence, production ladder, session
+  planner/graduation/explainability, full-sentence review gating). Slice
+  detail in STATUS_ARCHIVE.md.
+- [x] **Phase 8 — Shadowing feature parity + practice-target isolation.**
+  8.1–8.5 done, browser-verified (playback speed, loop-point marking, mic
+  calibration + shadow-mode recording + live waveform, pitch/waveform
+  comparison analysis, polish). Detail in STATUS_ARCHIVE.md.
+- [x] **Phase 9 — Shadowing pronunciation/prosody feedback.** All 9
+  milestones (mora segmentation, forced-alignment service, phone/pitch
+  timing feedback, ranked "fix one thing" + one-tap practice, ASR secondary
+  signal, pronunciation history, ground-truth pitch-accent scoring,
+  progressive/guided practice mode). One milestone still open — see
+  **Cross-sentence shadowing learner profile** below. Detail in
+  STATUS_ARCHIVE.md.
+- [x] **Learning Orchestrator.** "What should I do?" planner — four learning
+  modes, neglect-aware allocation, review-priority scoring, `HomePage`
+  dashboard, `SessionRunnerPage`. Reworked to one growing **daily** session;
+  vocabulary confirmations get first claim on the glossing bucket. Detail
+  in STATUS.md's 2026-08-20 / 2026-08-21 / 2026-08-29 entries.
+- [x] **Re-segment an existing shadowing source.** `ResegmentSourcePage`,
+  `/books/:bookId/resegment` — rebuild a source's sentences on real
+  boundaries for pre-`resegment.py` imports; carries study progress + audio
+  across. Run against "After Work" 2026-08-29. Detail in STATUS.md.
+- [x] **Vocabulary meaning glossing.** POS-aware JMDict + JMnedict matcher
+  for offline backfill scripts, plus a runtime `vocab-assist` Claude Haiku
+  Edge Function that glosses in sentence context. Detail in STATUS.md's
+  2026-08-28 entry.
+- [x] **WaniKani mnemonics on review cards.** Vocab + kanji mnemonic/hint
+  slices + a script-only `wanikani_subjects` Supabase cache + deferral
+  fall-through. Deployed 2026-08-29/30/31 (303 vocab, 2101 kanji). Detail
+  in STATUS.md.
+- [x] **Contextual conjugation cards.** `sentence_transformation` reworked
+  to one card per word-in-sentence occurrence, quizzing the form that
+  sentence actually used. Migration `20260901000000_...` live 2026-08-30.
+  Not yet browser-verified.
+- [x] **Progressive listening (two-tier ladder).** `word_listening`
+  activity type (one card per surface-form occurrence, loops just that
+  word's audio span) gated behind reading proficiency; full-sentence
+  `listening` gated behind every `word_listening` occurrence. Done
+  2026-08-30, not yet browser-verified.
+- [x] **Grammar-learning system.** Phases 1–9-Contrast-slice: schema/
+  repository/sync foundation, manual annotation from Analyze, `/grammar`
+  browser + personalized curriculum dashboard, AI-assisted suggestion/
+  explanation, `grammar_comprehension`/`grammar_completion`/
+  `grammar_contrast` review cards, derived learner-state ladder,
+  `GrammarRelationship` browsing/creation. Prediction/transformation/
+  production activity types deliberately not started — see **Grammar
+  production ladder** below.
+
+## In progress
+
+- [ ] **Mining pipeline v2.** Staged, re-runnable YouTube mining
+  (transcript → segment → translate → commit, audio at every stage) fixing
+  the auto-caption-as-source-of-truth quality issue. Slices A (ASR
+  transcript), B (full UniDic form/reading/accent + JMnedict proper-noun
+  check), C (retained source audio), and the wizard W1–W6 + deferred-polish
+  pass **all landed 2026-08-31**. Full design in
+  `docs/mining-pipeline-v2.md` / `docs/mining-wizard-spec.md`.
+  - Still deferred: a `source_audio` Supabase table + Storage mirror for
+    cache durability (blocked on a Supabase-creds decision for the Python
+    service; recommendation on file is box-level backups of the cache dir
+    instead).
+
+## Planned
+
+Ordered by value. Detail/rationale for each in `docs/STATUS.md`'s "Open /
+deferred" section and the notes below.
+
+- [ ] **Review new-card backlog fix.** ~193 confirmed vocab words have no
+  SRS card; the session planner is blind to the backlog (sizes the review
+  bucket from existing due `study_items` only), seeds too slowly (only
+  after the due queue drains, `newCardsPerSessionLimit`/session), and the
+  `due_review_batch` step auto-settles at its `targetCount` before seeding
+  starts. Fix: make the planner count the never-introduced backlog, reserve
+  review-bucket minutes for a bounded slice of it, and fold that slice into
+  the review step's `targetCount` so it doesn't auto-advance early.
+  Actively undermines the core loop — do first. Related:
+  `scripts/analyze-due-by-book.ts`.
+- [ ] **Re-mine the 3 auto-caption-fragmented sources.** After Work, First
+  Day at Work, GLIM SPANKY were systemically mis-segmented (pre-2026-08-23,
+  auto-captions, no punctuation). The ASR pipeline + `ResegmentSourcePage`
+  + audio carry-across now exist; this is mostly mechanical. Content
+  quality on material studied daily.
+- [ ] **Cross-sentence shadowing learner profile.** The one open Phase 9
+  milestone (brief's Phase 15). Aggregate the per-sentence pronunciation/
+  timing/pitch-accent signal already captured into a durable profile —
+  "you consistently short っ", "odaka words are your weak accent class",
+  "word-pace improving over 3 weeks" — so feedback becomes cumulative
+  instead of per-attempt. Synthesis of data already logged; inherently
+  explainable.
+- [ ] **Grammar production ladder.** The grammar system stops at
+  recognition (`grammar_comprehension`/`completion`/`contrast`) while the
+  vocab side has a real production ladder. Add a produce-a-sentence-using-
+  this-pattern drill (Build-mode-adjacent), gated on the pattern reaching
+  `distinguished`. Closes a visible asymmetry. Bigger build.
+
+### Smaller / opportunistic
+
+- [ ] **Audio-less pitch-accent production drill.** Practice pitch accent
+  on Satori-imported sentences that have no reference audio, using
+  `VocabularyItem.pitchAccentPositions` + the learner's own alignment
+  (which is all `pitchAccentObservations.ts` already needs). Extends a
+  strong feature to the majority of the corpus. Distinct from the shipped
+  passive `pitch_accent` SRS card.
+- [ ] **`comprehension` vs `reading_in_context` differentiation.** Open
+  since Phase 4 — the two still share one interaction. Give each a distinct
+  UI (e.g. `reading_in_context` shows surrounding chapter context). Low
+  urgency; current behavior works.
+- [ ] **Retention / progress-over-time view.** One honest "how am I doing"
+  screen — words learned over time, retention rate, grammar patterns
+  matured, shadowing trend — from the evidence data already logged. Home's
+  14-day balance meters are the only aggregate view today. Deliberately
+  minimal (dedicated debug/diagnostic views have been declined before).
+
+## Not planned (deliberate)
+
+- No export-back-to-Anki path; migration away from Anki was one-way.
+- No Anki review-history migration — FSRS starts from zero prior signal for
+  pre-app words (permanent, accepted).
+- **PASQA** speech-quality model — investigated, architecture left ready,
+  blocked on PyTorch + s3prl footprint on the memory-constrained analysis
+  host.
+- "Which words share a reading" kanji drill (reverse of
+  `KanjiDetailPage`'s current view) — not built, low value.
