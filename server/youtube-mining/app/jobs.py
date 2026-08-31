@@ -372,6 +372,7 @@ def cues_out(job: Job) -> list[CueOut]:
             isAuto=cue.isAuto,
             englishGuess=job.english_by_index.get(cue.index),
             lowConfidence=cue.lowConfidence,
+            sourceIndexes=cue.sourceIndexes,
         )
         for cue in job.cues
     ]

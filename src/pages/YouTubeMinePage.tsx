@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { SegmentationEditor } from '../components/SegmentationEditor';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
+import { TranscriptStage } from '../components/TranscriptStage';
 import { getDb } from '../db/repository';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
-  clipMiningCue,
+  applyJobSegments,
+  clipMiningRange,
   createMiningJob,
   deleteMiningJob,
-  fetchCuePreviewAudio,
+  fetchJobAudioRange,
   fetchMiningClipAudio,
   getMiningJob,
+  translateJob,
   type MiningCue,
-  type MiningJobStatus,
+  type MiningSourceInfo,
 } from '../lib/miningApi';
+import type { WizardTranscriptSeg } from '../lib/miningTranscript';
+import type { ResegmentReviewRow } from '../lib/resegmentPlan';
+import { realignTranslations } from '../lib/sentenceRealign';
 import {
   buildShadowingPreview,
   type ShadowingAudioDraft,
@@ -23,46 +30,56 @@ import {
 
 const POLL_INTERVAL_MS = 1500;
 
-type Phase = 'idle' | 'fetching' | 'reviewing' | 'preview';
+type Stage = 'idle' | 'starting' | 'transcript' | 'segment' | 'translate' | 'commit';
 
-function formatTimestamp(ms: number): string {
-  const totalSeconds = ms / 1000;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = (totalSeconds % 60).toFixed(2).padStart(5, '0');
-  return `${minutes}:${seconds}`;
+const STAGE_LABELS: { key: Stage; label: string }[] = [
+  { key: 'transcript', label: 'Transcript' },
+  { key: 'segment', label: 'Segment' },
+  { key: 'translate', label: 'Translate' },
+  { key: 'commit', label: 'Commit' },
+];
+
+const MANIFEST = {
+  format: 'japanese-shadowing-package',
+  version: 2,
+  createdAt: '',
+  generator: { name: 'jp-sentence-splits-youtube-mining', version: '2' },
+} as const;
+
+function rowsFromCues(cues: MiningCue[]): ResegmentReviewRow[] {
+  return cues.map((cue) => ({
+    japanese: cue.japanese,
+    translation: cue.englishGuess?.trim() ?? '',
+    readingOnly: '',
+    inlineReading: '',
+    tokens: [],
+    sourceIndexes: cue.sourceIndexes ?? [cue.index],
+    startMs: cue.startMs,
+    endMs: cue.endMs,
+    sourceTranslations: [],
+    needsTranslationReview: !cue.englishGuess?.trim(),
+  }));
 }
 
 export function YouTubeMinePage() {
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [stage, setStage] = useState<Stage>('idle');
   const [url, setUrl] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<MiningJobStatus | null>(null);
+  const [source, setSource] = useState<MiningSourceInfo | null>(null);
+  const [progress, setProgress] = useState('Starting…');
   const [error, setError] = useState('');
-  const [cueIndex, setCueIndex] = useState(0);
-  const [japaneseText, setJapaneseText] = useState('');
-  const [englishText, setEnglishText] = useState('');
-  const [generateKana, setGenerateKana] = useState(true);
-  const [clipping, setClipping] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  /** How many *following* cues the reviewer has merged into the current one. */
-  const [mergedCount, setMergedCount] = useState(0);
-  /** When set, the working text is split into these pieces, each clipped as
-   *  its own sentence over a char-proportional slice of the cue span. */
-  const [splitParts, setSplitParts] = useState<string[] | null>(null);
-  const [confirmed, setConfirmed] = useState<{
-    sentences: ShadowingSentenceInput[];
-    audio: ShadowingAudioDraft[];
-  }>({ sentences: [], audio: [] });
+  const [busy, setBusy] = useState(false);
+  const [busyNote, setBusyNote] = useState('');
+  const [transcript, setTranscript] = useState<WizardTranscriptSeg[]>([]);
+  const [rows, setRows] = useState<ResegmentReviewRow[]>([]);
+  const [realignNote, setRealignNote] = useState('');
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
   const jobIdRef = useRef<string | null>(null);
   jobIdRef.current = jobId;
 
-  // Best-effort cleanup of the server-side scratch dir if the user
-  // navigates away mid-job — the server also sweeps abandoned jobs on a
-  // timer, this just avoids leaving it around unnecessarily.
+  // Best-effort cleanup of the server-side job if the user navigates away.
   useEffect(() => {
     return () => {
       if (jobIdRef.current) void deleteMiningJob(jobIdRef.current);
@@ -70,25 +87,35 @@ export function YouTubeMinePage() {
   }, []);
 
   useEffect(() => {
-    if (phase !== 'fetching' || !jobId) return;
+    if (stage !== 'starting' || !jobId) return;
     let cancelled = false;
     const timer = setInterval(() => {
       void getMiningJob(jobId).then(
-        (status) => {
+        (job) => {
           if (cancelled) return;
-          setJobStatus(status);
-          if (status.status === 'ready') {
-            setPhase('reviewing');
-            setCueIndex(0);
-          } else if (status.status === 'error') {
-            setError(status.error ?? 'Mining failed');
-            setPhase('idle');
+          setProgress(job.message);
+          if (job.status === 'error') {
+            setError(job.error ?? 'Mining failed');
+            setStage('idle');
+          } else if (job.status === 'ready') {
+            setSource(job.source ?? null);
+            setTranscript(
+              (job.transcript ?? []).map((seg) => ({
+                text: seg.text,
+                startMs: seg.startMs,
+                endMs: seg.endMs,
+                isAuto: seg.isAuto ?? false,
+                lowConfidence: seg.lowConfidence ?? false,
+              })),
+            );
+            setRows(rowsFromCues(job.cues ?? []));
+            setStage('transcript');
           }
         },
         (err: unknown) => {
           if (cancelled) return;
           setError(err instanceof Error ? err.message : 'Failed to check job status');
-          setPhase('idle');
+          setStage('idle');
         },
       );
     }, POLL_INTERVAL_MS);
@@ -96,252 +123,206 @@ export function YouTubeMinePage() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [phase, jobId]);
+  }, [stage, jobId]);
 
-  const cues: MiningCue[] = jobStatus?.cues ?? [];
-  const currentCue = cues[cueIndex];
-  const throughIndex = cueIndex + mergedCount;
-  const lastMergedCue = cues[throughIndex];
-  const canMergeNext = throughIndex + 1 < cues.length;
-
-  // Reset the per-cue edit fields (and any pending merge) whenever the cue
-  // under review changes.
-  useEffect(() => {
-    if (!currentCue) return;
-    setJapaneseText(currentCue.japanese);
-    setEnglishText(currentCue.englishGuess ?? '');
-    setMergedCount(0);
-    setSplitParts(null);
-  }, [currentCue]);
-
-  // Pull the cue's audio so it can be heard before deciding to keep it —
-  // the review step's whole point is catching a mis-transcription by ear.
-  // Covers the full span when the reviewer has merged following cues in.
-  useEffect(() => {
-    if (phase !== 'reviewing' || !jobId || !currentCue) return;
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    setPreviewUrl(null);
-    setPreviewFailed(false);
-    void fetchCuePreviewAudio(jobId, currentCue.index, currentCue.index + mergedCount).then(
-      (blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPreviewUrl(objectUrl);
-      },
-      () => {
-        if (!cancelled) setPreviewFailed(true);
-      },
-    );
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [phase, jobId, currentCue, mergedCount]);
-
-  function mergeNext() {
-    const next = cues[throughIndex + 1];
-    if (!next) return;
-    setJapaneseText((prev) => `${prev.trimEnd()}${next.japanese}`);
-    setEnglishText((prev) =>
-      next.englishGuess ? `${prev} ${next.englishGuess}`.trim() : prev,
-    );
-    setMergedCount((c) => c + 1);
-  }
-
-  function unmerge() {
-    if (mergedCount === 0 || !currentCue) return;
-    const to = cueIndex + mergedCount - 1;
-    setJapaneseText(
-      cues.slice(cueIndex, to + 1).map((c) => c.japanese).join(''),
-    );
-    setEnglishText(
-      cues
-        .slice(cueIndex, to + 1)
-        .map((c) => c.englishGuess ?? '')
-        .filter(Boolean)
-        .join(' '),
-    );
-    setMergedCount((c) => c - 1);
-  }
-
-  /** Break `text` in two — after the first internal sentence-ender if there
-   *  is one, else at the midpoint. */
-  function splitOnce(text: string): [string, string] {
-    const t = text.trim();
-    const m = /[。．！？!?…」』]/g;
-    let at = -1;
-    for (let r = m.exec(t); r; r = m.exec(t)) {
-      if (r.index + 1 < t.length) {
-        at = r.index + 1;
-        break;
-      }
-    }
-    if (at < 0) at = Math.max(1, Math.round(t.length / 2));
-    return [t.slice(0, at).trim(), t.slice(at).trim()];
-  }
-
-  function split() {
-    setSplitParts((prev) => {
-      if (prev === null) return splitOnce(japaneseText);
-      const last = prev[prev.length - 1] ?? '';
-      const [a, b] = splitOnce(last);
-      return b ? [...prev.slice(0, -1), a, b] : prev;
-    });
-  }
-
-  function unsplit() {
-    if (!splitParts) return;
-    setJapaneseText(splitParts.join(''));
-    setSplitParts(null);
+  function reset() {
+    if (jobId) void deleteMiningJob(jobId);
+    setStage('idle');
+    setUrl('');
+    setJobId(null);
+    setSource(null);
+    setError('');
+    setBusy(false);
+    setBusyNote('');
+    setTranscript([]);
+    setRows([]);
+    setRealignNote('');
+    setPreview(null);
   }
 
   async function handleStart() {
     setError('');
-    setPhase('fetching');
+    setProgress('Starting…');
+    setStage('starting');
     try {
       const id = await createMiningJob(url.trim());
       setJobId(id);
-      setJobStatus(null);
-      setConfirmed({ sentences: [], audio: [] });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start mining job');
-      setPhase('idle');
+      setStage('idle');
     }
   }
 
-  async function finish(extra?: {
-    sentences: ShadowingSentenceInput[];
-    audio: ShadowingAudioDraft[];
-  }) {
-    if (!jobStatus?.source) return;
-    const sentences = [...confirmed.sentences, ...(extra?.sentences ?? [])];
-    const audio = [...confirmed.audio, ...(extra?.audio ?? [])];
-    const existing = await getDb().sentences.toArray();
-    const nextPreview = buildShadowingPreview(
-      {
-        id: jobStatus.source.id,
-        type: 'youtube',
-        url: jobStatus.source.url,
-        videoId: jobStatus.source.videoId,
-        title: jobStatus.source.title,
-        channel: jobStatus.source.channel ?? undefined,
-        durationMs: jobStatus.source.durationMs ?? undefined,
-      },
-      {
-        format: 'japanese-shadowing-package',
-        version: 2,
-        createdAt: new Date().toISOString(),
-        generator: { name: 'jp-sentence-splits-youtube-mining', version: '1' },
-      },
-      sentences,
-      audio,
-      existing,
-    );
-    setPreview(nextPreview);
-    setPhase('preview');
-    if (jobId) void deleteMiningJob(jobId);
-  }
-
-  async function handleKeepAndClip() {
-    if (!jobId || !currentCue) return;
-    const parts = (splitParts ?? [japaneseText]).map((p) => p.trim()).filter(Boolean);
-    if (!parts.length) return;
-    setClipping(true);
+  async function runApply(note: string, fn: () => Promise<void>) {
+    if (!jobId) return;
+    setBusy(true);
+    setBusyNote(note);
     setError('');
     try {
-      // A plain single unmerged cue keeps the server's own boundary logic;
-      // a merge or a manual split needs explicit spans.
-      const custom = parts.length > 1 || mergedCount > 0;
-      const viewStart = currentCue.startMs;
-      const viewEnd = (lastMergedCue ?? currentCue).endMs;
-      const totalChars = parts.reduce((n, p) => n + p.length, 0) || 1;
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setBusy(false);
+      setBusyNote('');
+    }
+  }
 
-      const newSentences: ShadowingSentenceInput[] = [];
-      const newAudio: ShadowingAudioDraft[] = [];
-      let cursor = viewStart;
-      for (let i = 0; i < parts.length; i += 1) {
-        const isLast = i === parts.length - 1;
-        const segEnd = isLast
-          ? viewEnd
-          : Math.round(cursor + (viewEnd - viewStart) * (parts[i]!.length / totalChars));
-        const result = await clipMiningCue(jobId, currentCue.index, {
-          japanese: parts[i]!,
-          english: i === 0 ? englishText.trim() || undefined : undefined,
-          generateKana,
-          ...(custom ? { startMs: cursor, endMs: Math.max(segEnd, cursor + 1) } : {}),
+  const applyAndSegment = () =>
+    runApply('Segmenting…', async () => {
+      const job = await applyJobSegments(
+        jobId!,
+        transcript.map((seg) => ({
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          isAuto: seg.isAuto,
+          lowConfidence: seg.lowConfidence,
+        })),
+      );
+      setRows(rowsFromCues(job.cues ?? []));
+      setRealignNote('');
+      setStage('segment');
+    });
+
+  const applyAndTranslate = () =>
+    runApply('Aligning translations…', async () => {
+      // Sync the job's cues to the reviewed rows (no further merge/split),
+      // then align the EN subtitle track onto them.
+      await applyJobSegments(
+        jobId!,
+        rows.map((row) => ({
+          text: row.japanese,
+          startMs: row.startMs,
+          endMs: row.endMs,
+        })),
+        { merge: false, split: false },
+      );
+      const job = await translateJob(jobId!);
+      const aligned = job.rows ?? [];
+      setRows((current) =>
+        current.map((row, index) => {
+          const english = aligned[index]?.english?.trim() ?? '';
+          return {
+            ...row,
+            translation: english || row.translation,
+            needsTranslationReview: !(english || row.translation.trim()),
+          };
+        }),
+      );
+      setStage('translate');
+    });
+
+  const autoFillTranslations = () =>
+    runApply('Asking the translation AI…', async () => {
+      setRealignNote('');
+      const result = await realignTranslations([
+        {
+          originalJapanese: rows.map((row) => row.japanese).join(''),
+          originalTranslation: rows
+            .map((row) => row.translation.trim())
+            .filter(Boolean)
+            .join(' '),
+          pieces: rows.map((row) => row.japanese),
+        },
+      ]);
+      if (!result.ok) {
+        setRealignNote(result.reason);
+        return;
+      }
+      const pieces = result.groups[0]?.pieceTranslations ?? [];
+      setRows((current) =>
+        current.map((row, index) => {
+          const next = pieces[index]?.trim();
+          return next ? { ...row, translation: next, needsTranslationReview: true } : row;
+        }),
+      );
+      setRealignNote('Filled by AI from the aligned subtitles — give them a glance.');
+    });
+
+  const buildPreview = () =>
+    runApply('Clipping sentences…', async () => {
+      if (!source) throw new Error('Source metadata is missing.');
+      const sentences: ShadowingSentenceInput[] = [];
+      const audio: ShadowingAudioDraft[] = [];
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i]!;
+        setBusyNote(`Clipping sentence ${i + 1} / ${rows.length}…`);
+        const clip = await clipMiningRange(jobId!, {
+          japanese: row.japanese,
+          english: row.translation.trim() || undefined,
+          startMs: row.startMs,
+          endMs: row.endMs,
+          generateKana: true,
         });
-        cursor = segEnd;
-        const blob = await fetchMiningClipAudio(jobId, result.sentenceId);
-        const japanese = displayJapanese(result.japanese);
-        newSentences.push({
-          id: result.sentenceId,
-          japanese: result.japanese,
-          reading: result.reading ?? undefined,
-          english: result.english ?? undefined,
-          startMs: result.startMs,
-          endMs: result.endMs,
+        const blob = await fetchMiningClipAudio(jobId!, clip.sentenceId);
+        const japanese = displayJapanese(clip.japanese);
+        sentences.push({
+          id: clip.sentenceId,
+          japanese: clip.japanese,
+          reading: clip.reading ?? undefined,
+          english: clip.english ?? undefined,
+          startMs: clip.startMs,
+          endMs: clip.endMs,
           tags: [],
-          transcriptStatus: result.transcriptStatus,
-          tokens: result.tokens ?? undefined,
+          transcriptStatus: clip.transcriptStatus,
+          tokens: clip.tokens ?? undefined,
         });
-        newAudio.push({
-          sourceSentenceId: result.sentenceId,
+        audio.push({
+          sourceSentenceId: clip.sentenceId,
           normalizedKey: normalizeSentenceKey(japanese),
-          path: `clips/${result.sentenceId}.m4a`,
-          mimeType: result.audio.mimeType,
-          durationMs: result.audio.durationMs,
-          startMs: result.startMs,
-          endMs: result.endMs,
+          path: `clips/${clip.sentenceId}.m4a`,
+          mimeType: clip.audio.mimeType,
+          durationMs: clip.audio.durationMs,
+          startMs: clip.startMs,
+          endMs: clip.endMs,
           blob,
         });
       }
+      const existing = await getDb().sentences.toArray();
+      setPreview(
+        buildShadowingPreview(
+          {
+            id: source.id,
+            type: 'youtube',
+            url: source.url,
+            videoId: source.videoId,
+            title: source.title,
+            channel: source.channel ?? undefined,
+            durationMs: source.durationMs ?? undefined,
+          },
+          { ...MANIFEST, createdAt: new Date().toISOString() },
+          sentences,
+          audio,
+          existing,
+        ),
+      );
+      setStage('commit');
+    });
 
-      if (throughIndex + 1 >= cues.length) {
-        await finish({ sentences: newSentences, audio: newAudio });
-      } else {
-        setConfirmed((prev) => ({
-          sentences: [...prev.sentences, ...newSentences],
-          audio: [...prev.audio, ...newAudio],
-        }));
-        setCueIndex((index) => index + 1 + mergedCount);
+  const vocabPreview = (() => {
+    if (!preview) return { count: 0, sample: [] as string[] };
+    const seen = new Set<string>();
+    for (const item of preview.drafts) {
+      for (const suggestion of item.draft.vocabularySuggestions) {
+        seen.add(suggestion.expression);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to clip sentence');
-    } finally {
-      setClipping(false);
     }
-  }
+    return { count: seen.size, sample: [...seen].slice(0, 12) };
+  })();
 
-  function handleSkip() {
-    if (throughIndex + 1 >= cues.length) {
-      void finish();
-    } else {
-      setCueIndex((index) => index + 1 + mergedCount);
-    }
-  }
-
-  function reset() {
-    setPhase('idle');
-    setUrl('');
-    setJobId(null);
-    setJobStatus(null);
-    setError('');
-    setCueIndex(0);
-    setConfirmed({ sentences: [], audio: [] });
-    setPreview(null);
-  }
+  const currentStepIndex = STAGE_LABELS.findIndex((s) => s.key === stage);
 
   return (
     <div className="stack">
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Import from YouTube</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Paste a YouTube URL. Glossbook downloads the audio and subtitles,
-          splits them into sentences, and lets you review each one — with
-          its own audio clip — before adding it to a book.
+          Paste a YouTube URL. Glossbook downloads the audio and transcript,
+          then walks you through fixing the transcript, the sentence
+          boundaries, and the translations before adding a book.
         </p>
-        {phase === 'idle' ? (
+        {stage === 'idle' ? (
           <div className="row">
             <input
               style={{ flex: 1 }}
@@ -359,16 +340,10 @@ export function YouTubeMinePage() {
             </button>
           </div>
         ) : null}
-        {phase === 'fetching' ? (
+        {stage === 'starting' ? (
           <div className="stack">
-            <div className="muted">{jobStatus?.message ?? 'Starting…'}</div>
-            <button
-              type="button"
-              onClick={() => {
-                if (jobId) void deleteMiningJob(jobId);
-                reset();
-              }}
-            >
+            <div className="muted">{progress}</div>
+            <button type="button" onClick={reset}>
               Cancel
             </button>
           </div>
@@ -376,162 +351,159 @@ export function YouTubeMinePage() {
         {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
       </section>
 
-      {phase === 'reviewing' && currentCue ? (
+      {currentStepIndex >= 0 ? (
         <section className="panel stack">
-          <h3 style={{ margin: 0 }}>
-            Cue {cueIndex + 1}
-            {mergedCount > 0 ? `–${throughIndex + 1}` : ''} / {cues.length}
-          </h3>
-          <div className="muted">
-            {formatTimestamp(currentCue.startMs)} –{' '}
-            {formatTimestamp((lastMergedCue ?? currentCue).endMs)}
-            {currentCue.isAuto ? ' · auto captions' : ''}
-            {mergedCount > 0 ? ` · ${mergedCount + 1} cues merged` : ''}
-          </div>
-          {previewUrl ? (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <audio controls src={previewUrl} style={{ width: '100%' }} />
-          ) : previewFailed ? (
-            <div className="muted">Cue audio unavailable.</div>
-          ) : (
-            <div className="muted">Loading cue audio…</div>
-          )}
-          {currentCue.lowConfidence ? (
-            <div style={{ color: 'var(--warning)' }}>
-              ⚠ Low transcription confidence — check this line against the audio.
-            </div>
-          ) : null}
-          {splitParts === null ? (
-            <label>
-              Japanese
-              <textarea
-                value={japaneseText}
-                rows={2}
-                onChange={(event) => setJapaneseText(event.target.value)}
-              />
-            </label>
-          ) : (
-            <div className="stack">
-              <span className="muted">
-                Japanese — splitting into {splitParts.length} sentences
-              </span>
-              {splitParts.map((part, i) => (
-                <div className="row" key={i}>
-                  <textarea
-                    style={{ flex: 1 }}
-                    value={part}
-                    rows={2}
-                    onChange={(event) =>
-                      setSplitParts((prev) =>
-                        prev
-                          ? prev.map((p, j) => (j === i ? event.target.value : p))
-                          : prev,
-                      )
-                    }
-                  />
-                  {splitParts.length > 2 ? (
-                    <button
-                      type="button"
-                      disabled={clipping}
-                      onClick={() =>
-                        setSplitParts((prev) =>
-                          prev ? prev.filter((_, j) => j !== i) : prev,
-                        )
-                      }
-                    >
-                      ✕
-                    </button>
-                  ) : null}
-                </div>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <strong>
+              {source?.title ?? 'Mining'} — step {currentStepIndex + 1} of{' '}
+              {STAGE_LABELS.length}: {STAGE_LABELS[currentStepIndex]!.label}
+            </strong>
+            <div className="row">
+              {STAGE_LABELS.map((step, index) => (
+                <span
+                  key={step.key}
+                  className="muted"
+                  style={{
+                    fontWeight: index === currentStepIndex ? 700 : 400,
+                    color: index < currentStepIndex ? 'var(--accent)' : undefined,
+                  }}
+                >
+                  {index + 1}.{step.label}
+                </span>
               ))}
             </div>
-          )}
-          <label>
-            English (optional)
-            <input
-              value={englishText}
-              onChange={(event) => setEnglishText(event.target.value)}
-            />
-          </label>
-          <label className="row">
-            <input
-              type="checkbox"
-              checked={generateKana}
-              onChange={(event) => setGenerateKana(event.target.checked)}
-            />
-            Generate kana reading
-          </label>
-          <div className="row">
-            <button
-              type="button"
-              disabled={clipping || !canMergeNext || splitParts !== null}
-              onClick={mergeNext}
-              title="Fold the next cue into this one"
-            >
-              + Merge next
-            </button>
-            {mergedCount > 0 ? (
-              <button type="button" disabled={clipping} onClick={unmerge}>
-                Unmerge
-              </button>
-            ) : null}
-            <button
-              type="button"
-              disabled={clipping}
-              onClick={split}
-              title="Clip this as two or more separate sentences"
-            >
-              ⁄ Split
-            </button>
-            {splitParts !== null ? (
-              <button type="button" disabled={clipping} onClick={unsplit}>
-                Unsplit
-              </button>
-            ) : null}
           </div>
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              disabled={
-                clipping ||
-                !(splitParts ?? [japaneseText]).some((p) => p.trim())
-              }
-              onClick={() => void handleKeepAndClip()}
-            >
-              {splitParts !== null
-                ? `Keep & clip (${splitParts.filter((p) => p.trim()).length})`
-                : 'Keep & clip'}
-            </button>
-            <button type="button" disabled={clipping} onClick={handleSkip}>
-              Skip
-            </button>
-            <button
-              type="button"
-              disabled={clipping || cueIndex === 0}
-              onClick={() => setCueIndex((index) => Math.max(0, index - 1))}
-            >
-              Prev
-            </button>
-            <button
-              type="button"
-              disabled={clipping || confirmed.sentences.length === 0}
-              onClick={() => void finish()}
-            >
-              Finish now ({confirmed.sentences.length} kept)
-            </button>
-          </div>
+          {busy ? <div className="muted">{busyNote || 'Working…'}</div> : null}
         </section>
       ) : null}
 
-      {phase === 'preview' && preview ? (
+      {stage === 'transcript' ? (
+        <>
+          <TranscriptStage
+            segs={transcript}
+            onSegsChange={setTranscript}
+            fetchAudio={(s, e) => fetchJobAudioRange(jobId!, s, e)}
+            disabled={busy}
+          />
+          <section className="panel">
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || transcript.length === 0}
+                onClick={() => void applyAndSegment()}
+              >
+                Apply &amp; segment →
+              </button>
+              <button type="button" disabled={busy} onClick={reset}>
+                Start over
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {stage === 'segment' ? (
+        <>
+          <SegmentationEditor
+            rows={rows}
+            onRowsChange={setRows}
+            disabled={busy}
+            audioForRange={(s, e) => fetchJobAudioRange(jobId!, s, e)}
+          />
+          <section className="panel">
+            <div className="row">
+              <button type="button" disabled={busy} onClick={() => setStage('transcript')}>
+                ← Back
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || rows.length === 0}
+                onClick={() => void applyAndTranslate()}
+              >
+                Apply &amp; translate →
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {stage === 'translate' ? (
+        <>
+          <section className="panel stack">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <strong>{rows.length} sentences</strong>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void autoFillTranslations()}
+              >
+                Auto-fill translations (AI)
+              </button>
+            </div>
+            {realignNote ? <div className="muted">{realignNote}</div> : null}
+          </section>
+          {rows.map((row, index) => (
+            <section className="panel stack" key={index}>
+              <span className="jp">{row.japanese}</span>
+              <input
+                value={row.translation}
+                disabled={busy}
+                placeholder="English"
+                onChange={(event) =>
+                  setRows((current) =>
+                    current.map((r, i) =>
+                      i === index
+                        ? { ...r, translation: event.target.value, needsTranslationReview: false }
+                        : r,
+                    ),
+                  )
+                }
+                style={
+                  row.needsTranslationReview ? { borderColor: 'var(--warning)' } : undefined
+                }
+              />
+            </section>
+          ))}
+          <section className="panel">
+            <div className="row">
+              <button type="button" disabled={busy} onClick={() => setStage('segment')}>
+                ← Back
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy}
+                onClick={() => void buildPreview()}
+              >
+                Next →
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {stage === 'commit' && preview ? (
         <section className="panel stack">
           <h3 style={{ margin: 0 }}>Import preview</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            {preview.counts.uniqueSentences} sentences · ~{vocabPreview.count} vocab
+            suggestion{vocabPreview.count === 1 ? '' : 's'} for later review
+            {vocabPreview.sample.length
+              ? `: ${vocabPreview.sample.join('、')}${
+                  vocabPreview.count > vocabPreview.sample.length ? '…' : ''
+                }`
+              : ''}
+          </p>
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
-            onImported={(result) => navigate(`/books/${result.bookId}`)}
-            onCancel={reset}
+            onImported={(result) => {
+              if (jobId) void deleteMiningJob(jobId);
+              navigate(`/books/${result.bookId}`);
+            }}
+            onCancel={() => setStage('translate')}
           />
         </section>
       ) : null}

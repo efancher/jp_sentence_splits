@@ -44,6 +44,7 @@ const cueSchema = z.object({
   isAuto: z.boolean(),
   englishGuess: z.string().nullable().optional(),
   lowConfidence: z.boolean().optional(),
+  sourceIndexes: z.array(z.number()).nullable().optional(),
 });
 
 const transcriptSegmentSchema = z.object({
@@ -172,6 +173,82 @@ export async function getMiningJob(jobId: string): Promise<MiningJobStatus> {
     throw new Error(`Failed to fetch mining job status: ${await readErrorDetail(response)}`);
   }
   return jobStatusSchema.parse(await response.json());
+}
+
+export interface MiningSegmentInput {
+  text: string;
+  startMs: number;
+  endMs: number;
+  isAuto?: boolean;
+  lowConfidence?: boolean;
+}
+
+/**
+ * Stage the wizard's corrected transcript and (re-)run resegmentation
+ * (`POST /jobs/{id}/segment`). `merge`/`split` default to the server's
+ * music/punctuation heuristic; pass `merge:false, split:false` to keep the
+ * segments exactly as given (syncing the job's cues to the reviewed rows
+ * before translate/commit). Returns the full job status with fresh `cues`.
+ */
+export async function applyJobSegments(
+  jobId: string,
+  segments: MiningSegmentInput[],
+  options: { merge?: boolean; split?: boolean } = {},
+): Promise<MiningJobStatus> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/segment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      segments,
+      merge: options.merge ?? null,
+      split: options.split ?? true,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to segment: ${await readErrorDetail(response)}`);
+  }
+  return jobStatusSchema.parse(await response.json());
+}
+
+/**
+ * Align the EN subtitle track onto the job's current sentence boundaries
+ * (`POST /jobs/{id}/translate`). Returns the job status with `rows`
+ * populated. Re-runnable.
+ */
+export async function translateJob(jobId: string): Promise<MiningJobStatus> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/translate`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to align translations: ${await readErrorDetail(response)}`);
+  }
+  return jobStatusSchema.parse(await response.json());
+}
+
+/**
+ * Clip an explicit (startMs, endMs) span straight from the job's source
+ * audio (`POST /jobs/{id}/clip`), with the sentence text supplied — no cue
+ * index. The wizard's commit stage cuts every reviewed row this way.
+ */
+export async function clipMiningRange(
+  jobId: string,
+  options: ClipCueOptions,
+): Promise<MiningClipResult> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/clip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      japanese: options.japanese,
+      english: options.english,
+      startMs: options.startMs,
+      endMs: options.endMs,
+      generateKana: options.generateKana ?? true,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clip sentence: ${await readErrorDetail(response)}`);
+  }
+  return clipResponseSchema.parse(await response.json());
 }
 
 export async function clipMiningCue(

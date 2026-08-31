@@ -80,6 +80,10 @@ class CueOut(BaseModel):
     isAuto: bool
     englishGuess: str | None = None
     lowConfidence: bool = False
+    # Transcript-segment positions this cue descends from (resegment.py's
+    # merge/split provenance) — the wizard groups rows by this for the
+    # translate stage.
+    sourceIndexes: list[int] | None = None
 
 
 JobState = Literal["pending", "fetching", "parsing", "ready", "error"]

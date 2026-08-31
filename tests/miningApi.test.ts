@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyJobSegments,
   clipFromSource,
   clipMiningCue,
+  clipMiningRange,
   createMiningJob,
   deleteMiningJob,
   fetchJobAudioRange,
   fetchMiningClipAudio,
   getMiningJob,
+  translateJob,
 } from '../src/lib/miningApi';
 
 afterEach(() => {
@@ -190,6 +193,78 @@ describe('fetchJobAudioRange', () => {
     );
     await expect(fetchJobAudioRange('job1', 5000, 4000)).rejects.toThrow(
       'endMs must be greater than startMs',
+    );
+  });
+});
+
+describe('applyJobSegments / translateJob', () => {
+  const jobStatus = {
+    jobId: 'job1',
+    status: 'ready',
+    stage: 'segment',
+    message: '',
+    cues: [
+      { index: 0, startMs: 0, endMs: 1000, japanese: 'ねこ。', isAuto: false, sourceIndexes: [0] },
+    ],
+  };
+
+  it('POSTs the segments and parses the job status back', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(jobStatus), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const out = await applyJobSegments('job1', [{ text: 'ねこ。', startMs: 0, endMs: 1000 }], {
+      merge: false,
+      split: false,
+    });
+    expect(out.cues?.[0]?.sourceIndexes).toEqual([0]);
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      merge: false,
+      split: false,
+    });
+  });
+
+  it('translateJob POSTs to the translate route', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ ...jobStatus, stage: 'translate', rows: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await translateJob('job1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/jobs/job1/translate'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+});
+
+describe('clipMiningRange', () => {
+  it('POSTs text + span to the cue-less clip route', async () => {
+    const body = {
+      sentenceId: 's-1',
+      japanese: 'ねこ。',
+      reading: null,
+      english: 'Cat.',
+      startMs: 100,
+      endMs: 900,
+      subtitleStartMs: 100,
+      subtitleEndMs: 900,
+      adjustedStartMs: 100,
+      adjustedEndMs: 900,
+      transcriptStatus: 'manually-corrected',
+      tokens: null,
+      audio: { mimeType: 'audio/mp4', durationMs: 800 },
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await clipMiningRange('job1', {
+      japanese: 'ねこ。',
+      english: 'Cat.',
+      startMs: 100,
+      endMs: 900,
+    });
+    expect(result.sentenceId).toBe('s-1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/jobs/job1/clip'),
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 });

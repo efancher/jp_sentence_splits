@@ -2,65 +2,132 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchCuePreviewAudio } from '../src/lib/miningApi';
-
 import App from '../src/App';
 import { resetDbForTests } from '../src/db/database';
 import { withAppProviders } from '../src/test/providers';
 
-// vi.mock factories are hoisted above other top-level declarations, so
-// data the factory closes over must go through vi.hoisted() — a plain
-// top-level const here would throw "cannot access before initialization".
-const { CUES } = vi.hoisted(() => ({
-  CUES: [
-    { index: 0, startMs: 0, endMs: 1000, japanese: '今日は', isAuto: false, englishGuess: 'Today' },
-    { index: 1, startMs: 1000, endMs: 2000, japanese: '晴れです。', isAuto: false, englishGuess: 'it is sunny.', lowConfidence: true },
-    { index: 2, startMs: 2000, endMs: 3200, japanese: 'そうですね。行きましょう。', isAuto: false, englishGuess: "Right. Let's go." },
+const { SOURCE, TRANSCRIPT } = vi.hoisted(() => ({
+  SOURCE: {
+    id: 'source-vidmocked',
+    type: 'youtube' as const,
+    url: 'https://www.youtube.com/watch?v=vidmocked',
+    videoId: 'vidmocked',
+    title: 'Mocked Mining Video',
+    channel: 'Mocked Channel',
+    durationMs: 5000,
+  },
+  TRANSCRIPT: [
+    { text: '今日は', startMs: 0, endMs: 1000, isAuto: false, lowConfidence: false },
+    { text: '晴れです。', startMs: 1000, endMs: 2000, isAuto: false, lowConfidence: true },
+    {
+      text: 'そうですね。行きましょう。',
+      startMs: 2000,
+      endMs: 3200,
+      isAuto: false,
+      lowConfidence: false,
+    },
   ],
 }));
 
-vi.mock('../src/lib/miningApi', () => ({
-  createMiningJob: vi.fn(async () => 'job-1'),
-  getMiningJob: vi.fn(async () => ({
-    jobId: 'job-1',
-    status: 'ready' as const,
-    stage: 'ready' as const,
-    message: 'Ready — 3 sentence(s) found.',
-    source: {
-      id: 'source-vidmocked',
-      type: 'youtube' as const,
-      url: 'https://www.youtube.com/watch?v=vidmocked',
-      videoId: 'vidmocked',
-      title: 'Mocked Mining Video',
-      channel: 'Mocked Channel',
-      durationMs: 5000,
-    },
-    cues: CUES,
-  })),
-  clipMiningCue: vi.fn(async (_jobId: string, cueIndex: number, options: { japanese: string; english?: string; startMs?: number; endMs?: number }) => {
-    const cue = CUES[cueIndex]!;
-    const startMs = options.startMs ?? cue.startMs;
-    const endMs = options.endMs ?? cue.endMs;
-    return {
-      sentenceId: `sentence-00${cueIndex + 1}-mocked`,
-      japanese: options.japanese,
-      reading: null,
-      english: options.english ?? null,
-      startMs,
-      endMs,
-      subtitleStartMs: startMs,
-      subtitleEndMs: endMs,
-      adjustedStartMs: startMs,
-      adjustedEndMs: endMs,
-      transcriptStatus: 'manually-corrected' as const,
-      tokens: null,
-      audio: { mimeType: 'audio/mp4' as const, durationMs: endMs - startMs + 300 },
-    };
-  }),
-  fetchMiningClipAudio: vi.fn(async () => new Blob(['fake-clip'], { type: 'audio/mp4' })),
-  fetchCuePreviewAudio: vi.fn(async () => new Blob(['fake-cue'], { type: 'audio/mp4' })),
-  deleteMiningJob: vi.fn(async () => undefined),
-}));
+vi.mock('../src/lib/miningApi', () => {
+  const cuesFromSegments = (
+    segments: { text: string; startMs: number; endMs: number }[],
+    passthrough: boolean,
+  ) => {
+    const cues: Record<string, unknown>[] = [];
+    segments.forEach((seg, segIndex) => {
+      const pieces = passthrough
+        ? [seg.text]
+        : seg.text
+            .split(/(?<=[。！？])/)
+            .map((t) => t.trim())
+            .filter(Boolean);
+      const per = (seg.endMs - seg.startMs) / Math.max(1, pieces.length);
+      pieces.forEach((text, k) => {
+        cues.push({
+          index: cues.length,
+          startMs: Math.round(seg.startMs + k * per),
+          endMs: Math.round(seg.startMs + (k + 1) * per),
+          japanese: text,
+          isAuto: false,
+          englishGuess: null,
+          sourceIndexes: [segIndex],
+        });
+      });
+    });
+    return cues;
+  };
+
+  return {
+    createMiningJob: vi.fn(async () => 'job-1'),
+    getMiningJob: vi.fn(async () => ({
+      jobId: 'job-1',
+      status: 'ready' as const,
+      stage: 'ready' as const,
+      message: 'Ready — 3 segment(s).',
+      source: SOURCE,
+      transcript: TRANSCRIPT,
+      cues: [],
+      rows: [],
+    })),
+    applyJobSegments: vi.fn(
+      async (
+        _jobId: string,
+        segments: { text: string; startMs: number; endMs: number }[],
+        options: { merge?: boolean | null; split?: boolean } = {},
+      ) => ({
+        jobId: 'job-1',
+        status: 'ready' as const,
+        stage: 'segment' as const,
+        message: '',
+        source: SOURCE,
+        cues: cuesFromSegments(
+          segments,
+          options.merge === false && options.split === false,
+        ),
+      }),
+    ),
+    translateJob: vi.fn(async () => ({
+      jobId: 'job-1',
+      status: 'ready' as const,
+      stage: 'translate' as const,
+      message: '',
+      source: SOURCE,
+      rows: [
+        { index: 0, japanese: '今日は', english: 'Today', startMs: 0, endMs: 1000 },
+        { index: 1, japanese: '晴れです。', english: 'It is sunny.', startMs: 1000, endMs: 2000 },
+        { index: 2, japanese: 'そうですね。', english: 'Right.', startMs: 2000, endMs: 2600 },
+        { index: 3, japanese: '行きましょう。', english: "Let's go.", startMs: 2600, endMs: 3200 },
+      ],
+    })),
+    clipMiningRange: vi.fn(
+      async (
+        _jobId: string,
+        options: { japanese: string; english?: string; startMs?: number; endMs?: number },
+      ) => ({
+        sentenceId: `sentence-${options.startMs}-mocked`,
+        japanese: options.japanese,
+        reading: null,
+        english: options.english ?? null,
+        startMs: options.startMs ?? 0,
+        endMs: options.endMs ?? 1,
+        subtitleStartMs: options.startMs ?? 0,
+        subtitleEndMs: options.endMs ?? 1,
+        adjustedStartMs: options.startMs ?? 0,
+        adjustedEndMs: options.endMs ?? 1,
+        transcriptStatus: 'manually-corrected' as const,
+        tokens: null,
+        audio: {
+          mimeType: 'audio/mp4' as const,
+          durationMs: (options.endMs ?? 1) - (options.startMs ?? 0) + 300,
+        },
+      }),
+    ),
+    fetchMiningClipAudio: vi.fn(async () => new Blob(['fake-clip'], { type: 'audio/mp4' })),
+    fetchJobAudioRange: vi.fn(async () => new Blob(['fake-span'], { type: 'audio/mp4' })),
+    deleteMiningJob: vi.fn(async () => undefined),
+  };
+});
 
 async function openNavMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
@@ -71,9 +138,11 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/#/');
 });
 
-describe('YouTube mining page', () => {
-  it('merges a cut-off cue with the next, then reviews and imports', async () => {
-    const { clipMiningCue } = await import('../src/lib/miningApi');
+describe('YouTube mining wizard', () => {
+  it('walks transcript → segment → translate → commit and imports', async () => {
+    const { applyJobSegments, translateJob, clipMiningRange } = await import(
+      '../src/lib/miningApi'
+    );
     const user = userEvent.setup();
     render(withAppProviders(<App />));
     await openNavMenu(user);
@@ -85,50 +154,42 @@ describe('YouTube mining page', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Start' }));
 
-    expect(await screen.findByText('Cue 1 / 3')).toBeInTheDocument();
+    // Stage 1 — transcript segments are editable.
+    expect(await screen.findByText(/step 1 of 4: Transcript/)).toBeInTheDocument();
     expect(await screen.findByDisplayValue('今日は')).toBeInTheDocument();
+    expect(screen.getByText(/⚠ low confidence/)).toBeInTheDocument();
 
-    // The cue's audio is fetched so it can be heard before keeping.
-    await waitFor(() => expect(document.querySelector('audio')).toBeInTheDocument());
-    expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0, 0);
+    // Fix a segment, then hand the corrected transcript to the segmenter.
+    await user.clear(screen.getByDisplayValue('今日は'));
+    await user.type(screen.getByDisplayValue(''), '今日は、');
+    await user.click(screen.getByRole('button', { name: /Apply & segment/ }));
 
-    // Fold cue 2 into cue 1 — text joins, header shows the range, audio
-    // preview re-fetches over the merged span.
-    await user.click(screen.getByRole('button', { name: '+ Merge next' }));
-    expect(await screen.findByText('Cue 1–2 / 3')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('今日は晴れです。')).toBeInTheDocument();
-    await waitFor(() => expect(fetchCuePreviewAudio).toHaveBeenCalledWith('job-1', 0, 1));
-
-    await user.click(screen.getByRole('button', { name: 'Keep & clip' }));
-
-    // The merged clip spans cue 1's start to cue 2's end.
-    expect(clipMiningCue).toHaveBeenCalledWith(
+    // Stage 2 — the server split the bundled cue into two sentences.
+    expect(await screen.findByText(/step 2 of 4: Segment/)).toBeInTheDocument();
+    expect(applyJobSegments).toHaveBeenCalledWith(
       'job-1',
-      0,
-      expect.objectContaining({ japanese: '今日は晴れです。', startMs: 0, endMs: 2000 }),
+      expect.arrayContaining([expect.objectContaining({ text: '今日は、' })]),
     );
-
-    // Advanced past both merged cues, straight to cue 3.
-    expect(await screen.findByText('Cue 3 / 3')).toBeInTheDocument();
-
-    // Split cue 3 into its two sentences and clip both over its span.
-    (clipMiningCue as ReturnType<typeof vi.fn>).mockClear();
-    await user.click(screen.getByRole('button', { name: '⁄ Split' }));
     expect(await screen.findByDisplayValue('そうですね。')).toBeInTheDocument();
     expect(screen.getByDisplayValue('行きましょう。')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Keep & clip (2)' }));
 
-    expect(clipMiningCue).toHaveBeenCalledTimes(2);
-    expect(clipMiningCue).toHaveBeenNthCalledWith(
-      1, 'job-1', 2,
-      expect.objectContaining({ japanese: 'そうですね。', startMs: 2000 }),
-    );
-    expect(clipMiningCue).toHaveBeenNthCalledWith(
-      2, 'job-1', 2,
+    await user.click(screen.getByRole('button', { name: /Apply & translate/ }));
+
+    // Stage 3 — EN aligned onto the final boundaries.
+    expect(await screen.findByText(/step 3 of 4: Translate/)).toBeInTheDocument();
+    expect(translateJob).toHaveBeenCalledWith('job-1');
+    expect(await screen.findByDisplayValue("Let's go.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next →' }));
+
+    // Stage 4 — one clip per reviewed row, then the import preview.
+    expect(await screen.findByText('Import preview')).toBeInTheDocument();
+    await waitFor(() => expect(clipMiningRange).toHaveBeenCalledTimes(4));
+    expect(clipMiningRange).toHaveBeenCalledWith(
+      'job-1',
       expect.objectContaining({ japanese: '行きましょう。', endMs: 3200 }),
     );
 
-    expect(await screen.findByText('Import preview')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Import complete project' }));
     expect(
       await screen.findByRole('heading', { name: 'Mocked Mining Video' }),
