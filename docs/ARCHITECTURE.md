@@ -154,7 +154,7 @@ schema-adjusted v15), records what was actually recommended/executed — one
 row per local calendar day (`date`, at most one `in_progress`/settled
 session per day, topped up in place via `addMinutesToTodaySession` rather
 than a new row per "Start Session" click) — see `docs/AI_OVERVIEW.md` for
-the full design and `docs/STATUS.md`'s 2026-08-20, 2026-08-21, and
+the full design and `docs/STATUS_ARCHIVE.md`'s 2026-08-20, 2026-08-21, and
 2026-08-25 entries for what shipped and what's deliberately deferred.
 `PlannerSession` syncs to Supabase (2026-08-25) with last-write-wins
 conflict resolution (`src/sync/engine.ts`'s `LAST_WRITE_WINS_ENTITIES`)

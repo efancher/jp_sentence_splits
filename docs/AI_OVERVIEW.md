@@ -2,8 +2,9 @@
 
 *Prepared as context for an outside AI assistant (e.g. pasted into ChatGPT)
 to reason about new features. Present-tense, system-oriented — not a
-changelog. For chronology and implementation detail behind any claim here,
-see `docs/STATUS.md`; for the original cross-repo planning analysis, see
+changelog. For current implementation state see `docs/STATUS.md`, and for
+the chronological detail behind any claim here `docs/STATUS_ARCHIVE.md`;
+for the original cross-repo planning analysis, see
 `docs/UNIFIED_APP_ARCHITECTURE.md`; for the short living architecture
 summary, see `docs/ARCHITECTURE.md`. This document is a snapshot — verify
 specific file/function names against the code before relying on them for
@@ -405,8 +406,8 @@ confirmations, reviews) — never its source of truth, and the planner's
 vocabulary-first gating reads that real state, not step status. A step
 opened and left is never counted as done. "Replace an
 activity" was deliberately not built for v1 (Skip plus a
-later top-up covers the same need) — see `docs/STATUS.md`'s 2026-08-20 and
-2026-08-21 entries for this and other known limitations (no time-tracking
+later top-up covers the same need) — see `docs/STATUS_ARCHIVE.md`'s
+2026-08-20 and 2026-08-21 entries for this and other known limitations (no time-tracking
 infrastructure — glossing/grammar activity is inferred from existing row
 timestamps). `PlannerSession` syncs to Supabase (2026-08-25 follow-up,
 so the SessionBar "continue where you left off" state follows the learner
@@ -1198,7 +1199,7 @@ aren't JSON-serializable/aren't worth backing up).
   sandbox.
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
-- **Learning Orchestrator known limitations** (see docs/STATUS.md's
+- **Learning Orchestrator known limitations** (see docs/STATUS_ARCHIVE.md's
   2026-08-20, 2026-08-21, 2026-08-22, and 2026-08-26 entries for full
   detail): no "replace this activity" action; `dailyBudgetMinutes` is
   user-editable on the Settings page (2026-08-22), and

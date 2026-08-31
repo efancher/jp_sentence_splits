@@ -2,8 +2,9 @@
 
 Phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15 (adjusted after
 inspection; see that doc for full rationale). Update the checkbox and add a
-one-line note when a phase's status changes — keep `STATUS.md` as the
-detailed record, this file as the at-a-glance list.
+one-line note when a phase's status changes. `STATUS.md` is the
+current-state snapshot, `STATUS_ARCHIVE.md` the frozen chronological
+detail, this file the at-a-glance list.
 
 - [x] **Phase 0 — Repository analysis.** `docs/UNIFIED_APP_ARCHITECTURE.md`.
 - [x] **Phase 1 — Unified data model.** New Dexie/Postgres tables, additive, tested. Migration applied to live Supabase (2026-08-13).

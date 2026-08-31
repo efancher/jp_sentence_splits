@@ -3,7 +3,9 @@
 Read these before making substantial changes:
 
 - docs/ARCHITECTURE.md — architecture and design decisions
-- docs/STATUS.md — current implementation state
+- docs/STATUS.md — current implementation state (snapshot; the frozen
+  chronological detail lives in docs/STATUS_ARCHIVE.md — append new detail
+  to STATUS.md, not the archive)
 - docs/ROADMAP.md — planned work
 - docs/AI_OVERVIEW.md — present-tense, feature-oriented reference meant to
   be pasted into another AI's context (not a changelog); keep it in sync
