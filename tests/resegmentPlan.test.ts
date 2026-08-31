@@ -5,10 +5,15 @@ import {
   buildResegmentPlan,
   concatCut,
   distributeTranslation,
+  joinJapanese,
+  mergeReviewRowUp,
   overlapRatio,
+  removeReviewRow,
   seedResegmentReview,
+  splitReviewRow,
   type ResegmentOldSentence,
   type ResegmentReviewedSegment,
+  type ResegmentReviewRow,
 } from '../src/lib/resegmentPlan';
 
 const seg = (japanese: string, translation = ''): ResegmentReviewedSegment => ({
@@ -291,6 +296,83 @@ describe('concatCut', () => {
     expect(concatCut(2000, 4000, [clip(1000, 3000), clip(3000, 5000)])).toEqual({
       startMs: 1000,
       endMs: 3000,
+    });
+  });
+});
+
+describe('review-row editing helpers', () => {
+  const row = (over: Partial<ResegmentReviewRow> = {}): ResegmentReviewRow => ({
+    japanese: 'あいうえお。',
+    translation: 'Vowels.',
+    readingOnly: '',
+    inlineReading: '',
+    tokens: [],
+    sourceIndexes: [0],
+    startMs: 0,
+    endMs: 1000,
+    sourceTranslations: ['Vowels.'],
+    needsTranslationReview: false,
+    ...over,
+  });
+
+  describe('joinJapanese', () => {
+    it('omits the space between CJK, keeps it otherwise', () => {
+      expect(joinJapanese('あい', 'うえ')).toBe('あいうえ');
+      expect(joinJapanese('ok', 'go')).toBe('ok go');
+      expect(joinJapanese('', 'x')).toBe('x');
+    });
+  });
+
+  describe('mergeReviewRowUp', () => {
+    it('folds a row into its predecessor and flags the result', () => {
+      const rows = [
+        row({ japanese: 'A。', translation: 'a', sourceIndexes: [0], startMs: 0, endMs: 500, sourceTranslations: ['a'] }),
+        row({ japanese: 'B。', translation: 'b', sourceIndexes: [1], startMs: 500, endMs: 900, sourceTranslations: ['b'] }),
+      ];
+      const merged = mergeReviewRowUp(rows, 1);
+      expect(merged).toHaveLength(1);
+      expect(merged[0]).toMatchObject({
+        japanese: 'A。B。',
+        translation: 'a b',
+        sourceIndexes: [0, 1],
+        startMs: 0,
+        endMs: 900,
+        needsTranslationReview: true,
+      });
+    });
+
+    it('is a no-op at index 0 or out of range', () => {
+      const rows = [row(), row()];
+      expect(mergeReviewRowUp(rows, 0)).toBe(rows);
+      expect(mergeReviewRowUp(rows, 5)).toBe(rows);
+    });
+  });
+
+  describe('splitReviewRow', () => {
+    it('splits on internal sentence-enders and divides the span by length', () => {
+      const out = splitReviewRow(
+        [row({ japanese: 'ねこ。いぬ。', translation: 'Cat. Dog.', startMs: 0, endMs: 900 })],
+        0,
+      );
+      expect(out.map((r) => r.japanese)).toEqual(['ねこ。', 'いぬ。']);
+      expect(out.map((r) => r.translation)).toEqual(['Cat.', 'Dog.']);
+      expect(out[0]!.startMs).toBe(0);
+      expect(out[0]!.endMs).toBe(out[1]!.startMs);
+      expect(out[1]!.endMs).toBe(900);
+      expect(out.every((r) => r.needsTranslationReview)).toBe(true);
+    });
+
+    it('is a no-op when there is nothing to split', () => {
+      const rows = [row({ japanese: 'ねこだけ。' })];
+      expect(splitReviewRow(rows, 0)).toBe(rows);
+    });
+  });
+
+  describe('removeReviewRow', () => {
+    it('drops the row but never the last one', () => {
+      expect(removeReviewRow([row(), row(), row()], 1)).toHaveLength(2);
+      const one = [row()];
+      expect(removeReviewRow(one, 0)).toBe(one);
     });
   });
 });

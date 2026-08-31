@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { SegmentationEditor } from '../components/SegmentationEditor';
 import {
   applyResegmentation,
   loadResegmentSourceContext,
@@ -12,39 +13,13 @@ import { resegmentSentences } from '../lib/miningApi';
 import {
   buildRealignGroups,
   buildResegmentPlan,
-  distributeTranslation,
   seedResegmentReview,
   type ResegmentReviewedSegment,
+  type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
 import { realignTranslations } from '../lib/sentenceRealign';
 
 type Phase = 'loading' | 'mode' | 'segmenting' | 'review' | 'applying' | 'error';
-
-interface ReviewRow {
-  japanese: string;
-  translation: string;
-  /** From the initial /resegment pass; stale after a manual edit — apply re-annotates. */
-  readingOnly: string;
-  sourceIndexes: number[];
-  /** Video-timeline span of this row, carried through so its reference audio
-   *  can be re-cut on apply. Merges/splits below keep it in sync. */
-  startMs: number;
-  endMs: number;
-  /** Contributing old sentences' translations — shown as a hint, not the field value. */
-  sourceTranslations: string[];
-  needsTranslationReview: boolean;
-}
-
-/** Split on the character *after* each sentence-final mark, keeping the mark. */
-const SENTENCE_SPLIT_RE = /(?<=[。！？!?…])/;
-
-function joinJapanese(a: string, b: string): string {
-  if (!a) return b;
-  if (!b) return a;
-  return /[　-鿿＀-￯]$/.test(a) || /^[　-鿿]/.test(b)
-    ? a + b
-    : `${a} ${b}`;
-}
 
 export function ResegmentSourcePage() {
   const { bookId = '' } = useParams();
@@ -52,7 +27,7 @@ export function ResegmentSourcePage() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState('');
   const [context, setContext] = useState<ResegmentSourceContext | null>(null);
-  const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [rows, setRows] = useState<ResegmentReviewRow[]>([]);
   const [realigning, setRealigning] = useState(false);
   const [realignNote, setRealignNote] = useState('');
   const [showAllRows, setShowAllRows] = useState(false);
@@ -94,94 +69,12 @@ export function ResegmentSourcePage() {
         })),
         mode === 'lyrics' ? { merge: false, split: false } : {},
       );
-      const seeded = seedResegmentReview(context.sentences, cues);
-      setRows(
-        seeded.map((row) => ({
-          japanese: row.japanese,
-          translation: row.translation,
-          readingOnly: row.readingOnly,
-          sourceIndexes: row.sourceIndexes,
-          startMs: row.startMs,
-          endMs: row.endMs,
-          sourceTranslations: row.sourceTranslations,
-          needsTranslationReview: row.needsTranslationReview,
-        })),
-      );
+      setRows(seedResegmentReview(context.sentences, cues));
       setPhase('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Re-segmentation failed');
       setPhase('mode');
     }
-  }
-
-  function updateRow(index: number, patch: Partial<ReviewRow>) {
-    setRows((current) =>
-      current.map((row, i) => (i === index ? { ...row, ...patch } : row)),
-    );
-  }
-
-  function removeRow(index: number) {
-    setRows((current) => current.filter((_, i) => i !== index));
-  }
-
-  function mergeUp(index: number) {
-    setRows((current) => {
-      if (index === 0) return current;
-      const next = [...current];
-      const prev = next[index - 1]!;
-      const row = next[index]!;
-      next[index - 1] = {
-        japanese: joinJapanese(prev.japanese, row.japanese),
-        translation: [prev.translation, row.translation].filter(Boolean).join(' '),
-        readingOnly: '',
-        sourceIndexes: [...new Set([...prev.sourceIndexes, ...row.sourceIndexes])],
-        startMs: Math.min(prev.startMs, row.startMs),
-        endMs: Math.max(prev.endMs, row.endMs),
-        sourceTranslations: [
-          ...new Set([...prev.sourceTranslations, ...row.sourceTranslations]),
-        ],
-        needsTranslationReview: true,
-      };
-      next.splice(index, 1);
-      return next;
-    });
-  }
-
-  function splitRow(index: number) {
-    setRows((current) => {
-      const row = current[index]!;
-      const pieces = row.japanese
-        .split(SENTENCE_SPLIT_RE)
-        .map((piece) => piece.trim())
-        .filter(Boolean);
-      if (pieces.length <= 1) return current;
-      const translations = distributeTranslation(row.translation, pieces.length);
-      // Divide the row's time span proportionally by piece length, mirroring
-      // the server's split-cue timing (server/youtube-mining resegment.py).
-      const totalChars = pieces.reduce((n, p) => n + p.length, 0) || 1;
-      const span = row.endMs - row.startMs;
-      let cursor = row.startMs;
-      const replacements: ReviewRow[] = pieces.map((japanese, pieceIndex) => {
-        const pieceStart = cursor;
-        cursor =
-          pieceIndex === pieces.length - 1
-            ? row.endMs
-            : Math.round(pieceStart + (span * japanese.length) / totalChars);
-        return {
-          japanese,
-          translation: translations[pieceIndex] ?? '',
-          readingOnly: '',
-          sourceIndexes: row.sourceIndexes,
-          startMs: pieceStart,
-          endMs: cursor,
-          sourceTranslations: row.sourceTranslations,
-          needsTranslationReview: true,
-        };
-      });
-      const next = [...current];
-      next.splice(index, 1, ...replacements);
-      return next;
-    });
   }
 
   async function apply() {
@@ -277,10 +170,10 @@ export function ResegmentSourcePage() {
     return indexes;
   }, [summary]);
 
+  // `SegmentationEditor` owns the row list + the collapsed-rows view; the
+  // page keeps this derived count only for the header's translation-review
+  // nudge.
   const filteringActive = rowsWithProgress.size > 0 && !showAllRows;
-  const hiddenRowCount = filteringActive
-    ? rows.length - rows.filter((_, i) => rowsWithProgress.has(i)).length
-    : 0;
   const unresolvedTranslations = rows.filter(
     (row, i) =>
       row.needsTranslationReview && (!filteringActive || rowsWithProgress.has(i)),
@@ -387,118 +280,13 @@ export function ResegmentSourcePage() {
             ) : null}
           </section>
 
-          {rows.map((row, index) =>
-            !filteringActive || rowsWithProgress.has(index) ? (
-              <section className="panel stack" key={index}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span className="muted">
-                    #{index + 1} · from original{' '}
-                    {row.sourceIndexes.map((i) => i + 1).join(', ')}
-                    {rowsWithProgress.has(index) ? ' · has study progress' : ''}
-                  </span>
-                  <div className="row">
-                    <button
-                      type="button"
-                      disabled={index === 0 || phase === 'applying'}
-                      onClick={() => mergeUp(index)}
-                    >
-                      Merge up
-                    </button>
-                    <button
-                      type="button"
-                      disabled={phase === 'applying'}
-                      onClick={() => splitRow(index)}
-                    >
-                      Split by 。
-                    </button>
-                    <button
-                      type="button"
-                      disabled={phase === 'applying' || rows.length === 1}
-                      onClick={() => removeRow(index)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  className="jp"
-                  rows={2}
-                  value={row.japanese}
-                  disabled={phase === 'applying'}
-                  onChange={(event) =>
-                    updateRow(index, { japanese: event.target.value })
-                  }
-                />
-                <label>
-                  Translation
-                  <input
-                    value={row.translation}
-                    disabled={phase === 'applying'}
-                    onChange={(event) =>
-                      updateRow(index, {
-                        translation: event.target.value,
-                        needsTranslationReview: false,
-                      })
-                    }
-                    style={
-                      row.needsTranslationReview
-                        ? { borderColor: 'var(--warning)' }
-                        : undefined
-                    }
-                  />
-                </label>
-                {row.needsTranslationReview ? (
-                  <span className="muted" style={{ color: 'var(--warning)' }}>
-                    verify translation
-                  </span>
-                ) : null}
-                {row.sourceTranslations.length > 0 &&
-                !row.sourceTranslations.includes(row.translation.trim()) ? (
-                  <span className="muted" style={{ fontSize: '0.85em' }}>
-                    original: {row.sourceTranslations.join(' / ')}
-                  </span>
-                ) : null}
-              </section>
-            ) : null,
-          )}
-
-          {filteringActive && hiddenRowCount > 0 ? (
-            <section className="panel stack">
-              <span className="muted">
-                {hiddenRowCount} other sentence{hiddenRowCount === 1 ? '' : 's'} —
-                no study progress, will apply with the seeded translation.
-              </span>
-              {rows.map((row, index) =>
-                rowsWithProgress.has(index) ? null : (
-                  <div
-                    key={index}
-                    className="row"
-                    style={{ justifyContent: 'space-between', gap: '0.5rem' }}
-                  >
-                    <span className="jp jp-sm">{row.japanese}</span>
-                    <span
-                      className="muted"
-                      style={{
-                        fontSize: '0.85em',
-                        color: row.needsTranslationReview
-                          ? 'var(--warning)'
-                          : undefined,
-                      }}
-                    >
-                      {row.translation || '—'}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={phase === 'applying' || rows.length === 1}
-                      onClick={() => removeRow(index)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ),
-              )}
-            </section>
-          ) : null}
+          <SegmentationEditor
+            rows={rows}
+            onRowsChange={setRows}
+            rowsWithProgress={rowsWithProgress}
+            showAllRows={showAllRows}
+            disabled={phase === 'applying'}
+          />
         </>
       ) : null}
     </div>
