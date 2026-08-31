@@ -68,7 +68,8 @@ detailed record, this file as the at-a-glance list.
   polish. C and B are pure wins with no redesign. Slices C, B, and A are
   **done**; the staged wizard is the last piece — brief in
   `docs/mining-wizard-spec.md`, commit sequence W1–W6. **W1** (job `stage`
-  state machine + `/segment` + `/translate`) and **W2**
-  (`/jobs/{id}/audio` source-range endpoint) landed 2026-08-31; W3–W6
-  (extract `<SegmentationEditor>`, waveform + boundary drag, the wizard
+  state machine + `/segment` + `/translate`), **W2** (`/jobs/{id}/audio`
+  source-range endpoint), and **W3** (`<SegmentationEditor>` extracted
+  from `ResegmentSourcePage`, row transforms → pure helpers) landed
+  2026-08-31; W4–W6 (waveform + boundary drag in the editor, the wizard
   shell, polish) remain.

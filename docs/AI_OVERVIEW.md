@@ -490,7 +490,9 @@ observed from outside `ReviewPage`'s own due-queue state.
   resegmentation pass. Calls the stateless `POST /resegment` on
   `server/youtube-mining` (re-segment + kana + tokens, no re-download;
   `merge:false split:false` = annotate-only for song lyrics), lets the
-  user merge/split/edit in a review step, then `applyResegmentation()`
+  user merge/split/edit in a review step (`SegmentationEditor.tsx`, a pure
+  row-list component shared with the mining wizard's segment stage), then
+  `applyResegmentation()`
   (`src/db/repository.ts`) creates the new sentences, retires the old
   ones (`deleteSentenceCascade`; soft delete, never raw DELETE), carries
   study progress onto the

@@ -1,8 +1,9 @@
 # Status
 
-Last updated: 2026-08-31 (Mining wizard W1+W2 — server job state machine
-+ source-range audio. Groundwork for the staged mining wizard
-(`docs/mining-wizard-spec.md`); no user-visible change yet.
+Last updated: 2026-08-31 (Mining wizard W1–W3 — server job state machine,
+source-range audio, `<SegmentationEditor>` extraction. Groundwork for the
+staged mining wizard (`docs/mining-wizard-spec.md`); no user-visible
+change yet.
 (1) **W1** — `Job` gains a re-runnable `stage`
 (`fetching`→`transcript`→`segment`→`translate`→`ready`) alongside the
 coarse `status` the linear review UI still polls. `_run_job` is split:
@@ -20,9 +21,20 @@ cues?, rows?}` — the human progress string moved from `stage` to
 span of the cached source (`jobs.source_audio_range`, cached per span,
 swept with the job); `miningApi.fetchJobAudioRange`. This is what every
 wizard panel will play, replacing per-cue pre-clipping (the old
-`/cues/{i}/audio` stays for now). Tests: `test_jobs_api.py` +3,
-`miningApi.test.ts` +2. 70 py / 1039 ts. Not yet redeployed at time of
-writing → `systemctl --user restart youtube-mining-api`.
+`/cues/{i}/audio` stays for now). Redeployed
+(`systemctl --user restart youtube-mining-api`).
+(3) **W3** — the reviewed-row list is now `src/components/SegmentationEditor.tsx`,
+a pure component over `ResegmentReviewRow[]` (merge-up / split / remove /
+edit + the "collapse rows with no study progress" view) shared by
+`ResegmentSourcePage` and — from wizard stage 2 on — a fresh mine. The
+merge/split/remove row transforms moved to pure helpers in
+`resegmentPlan.ts` (`mergeReviewRowUp`, `splitReviewRow`, `removeReviewRow`,
+`joinJapanese`). `ResegmentSourcePage` is ~200 lines thinner and delegates
+the list; no behaviour change (browser-verify blocked here — no browser
+system libs — but the page integration tests + build + typecheck cover
+it). Tests: `test_jobs_api.py` +3, `miningApi.test.ts` +2,
+`resegmentPlan.test.ts` +8, new `segmentationEditor.test.tsx` (6).
+70 py / 1051 ts.
 
 Before that: 2026-08-30 (Pitch-accent UniDic gap-fill + mining-review
 merge. (1) `unidic-lite` carries `aType` (accent nucleus mora, 0 = heiban);

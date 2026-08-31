@@ -227,7 +227,11 @@ configurable FSRS-interval threshold).
   stateless `POST /resegment` (no download/ffmpeg) that
   `ResegmentSourcePage.tsx` uses to re-split an *already-imported* source's
   sentences — the same `resegment.py` + `readings.py` + `morphology.py`
-  the mining pipeline runs, over plain text.
+  the mining pipeline runs, over plain text. The reviewed-row editor for
+  that flow is `src/components/SegmentationEditor.tsx` (pure component over
+  `ResegmentReviewRow[]`; merge/split/remove transforms are pure helpers in
+  `src/lib/resegmentPlan.ts`), shared with the mining wizard's segment
+  stage so re-segment-existing-book and mine-a-new-source use one editor.
 - **`anki` repo**: archived (Phase 6, read-only on GitHub) — existing
   Satori/Shadowing sentence notes were imported once via `anki_headless/`
   and verified (Phase 2). WaniKani-catalog and JMDict vocabulary/kanji
