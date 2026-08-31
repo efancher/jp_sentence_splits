@@ -263,13 +263,17 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
    music-video gate in front and confidence flags surfaced in the review
    step. All sub-items of slice A closed.
 5. **The staged wizard.** **[done 2026-08-31]** — W1–W6 of
-   `docs/mining-wizard-spec.md`. `YouTubeMinePage` is a 4-step stepper
-   (Transcript → Segment → Translate → Commit) over a re-runnable server
-   `stage` machine; `<SegmentationEditor>` (+ a boundary-drag waveform with
-   "snap to pauses") is shared with `ResegmentSourcePage`;
-   `sentence-realign` runs at mine time in the translate stage. Deferred:
-   the waveform on `/books/:id/resegment` (needs a streaming source-range
-   endpoint, not the base64 `/source-audio/clip`).
+   `docs/mining-wizard-spec.md` + a post-W6 polish pass. `YouTubeMinePage`
+   is a 4-step stepper (Transcript → Segment → Translate → Commit) over a
+   re-runnable server `stage` machine; `<SegmentationEditor>` (+ a
+   boundary-drag waveform with "snap to pauses", + per-row audio) is shared
+   with `ResegmentSourcePage` (which now also gets the waveform, fed by a
+   new streaming `POST /source-audio/range`); `sentence-realign` runs at
+   mine time in the translate stage grouped by transcript-segment
+   provenance; commit is one batch `POST /jobs/{id}/commit`. Still
+   deferred: an in-import JMnedict/Kanjium reading cross-check; a
+   `source_audio` Supabase table + Storage mirror for cache durability
+   (needs a Supabase-creds decision for the Python service).
 
 Slices 1–2 are pure wins with no redesign. 3 is the redesign. 4–5 build on it.
 

@@ -1,9 +1,12 @@
 # Mining wizard rework — implementation spec
 
-> **Status: done (2026-08-31).** W1–W6 all landed. Kept as the design
-> record. One deferral: the boundary waveform on `/books/:id/resegment`
-> (W6's "consider") — it needs a streaming source-range endpoint for the
-> cached source, not the base64 `POST /source-audio/clip`.
+> **Status: done (2026-08-31).** W1–W6 all landed, plus a post-W6 polish
+> pass: batch `POST /jobs/{id}/commit`, streaming `POST /source-audio/range`
+> + the `/books/:id/resegment` boundary waveform (W6's "consider"), per-row
+> audio on the segment/translate stages, and provenance-grouped
+> "Auto-fill (AI)". Kept as the design record. Still deferred (own line in
+> `docs/ROADMAP.md`): in-import JMnedict/Kanjium cross-check; a
+> `source_audio` Supabase durability table.
 
 
 Self-contained brief for implementing the staged wizard from

@@ -479,11 +479,13 @@ observed from outside `ReviewPage`'s own due-queue state.
   re-runnable `stage` machine (`docs/mining-wizard-spec.md`):
   **Transcript** (correct the ASR/caption segments against per-segment
   audio, with low-confidence flags and coarse merge/split) → **Segment**
-  (`<SegmentationEditor>` — sentence rows with a waveform whose per-boundary
-  handles drag onto pauses, "Snap to pauses") → **Translate** (EN per row,
-  editable, "Auto-fill translations (AI)" reuses `sentence-realign`) →
-  **Commit** (clip every row from source, preview + vocab-suggestion
-  count). Back/forward + per-stage re-run. Finishing assembles the same
+  (`<SegmentationEditor>` — sentence rows, each playing its span, above a
+  waveform whose per-boundary handles drag onto pauses, "Snap to pauses")
+  → **Translate** (EN per row, editable, "Auto-fill translations (AI)"
+  reuses `sentence-realign`, grouped by transcript-segment provenance) →
+  **Commit** (one `POST /jobs/{id}/commit` clips every row from source
+  with audio inline; preview + vocab-suggestion count). Back/forward +
+  per-stage re-run. Finishing assembles the same
   `ShadowingImportPreview` (`buildShadowingPreview()`) and commits through
   the identical `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior; only how the preview gets built
@@ -496,8 +498,9 @@ observed from outside `ReviewPage`'s own due-queue state.
   `server/youtube-mining` (re-segment + kana + tokens, no re-download;
   `merge:false split:false` = annotate-only for song lyrics), lets the
   user merge/split/edit in a review step (`SegmentationEditor.tsx`, a pure
-  row-list component shared with the mining wizard's segment stage), then
-  `applyResegmentation()`
+  row-list component shared with the mining wizard's segment stage — with
+  the same boundary-drag waveform when the book has a `sourceUrl`, fed by
+  `POST /source-audio/range`), then `applyResegmentation()`
   (`src/db/repository.ts`) creates the new sentences, retires the old
   ones (`deleteSentenceCascade`; soft delete, never raw DELETE), carries
   study progress onto the
@@ -1300,8 +1303,11 @@ aren't JSON-serializable/aren't worth backing up).
   drives: `POST /jobs/{id}/segment` accepts a corrected transcript and
   re-resegments, `POST /jobs/{id}/translate` re-aligns EN,
   `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
-  source for inline playback, `POST /jobs/{id}/clip` cuts a final row.
-  `_run_job` still auto-advances every stage on creation as a fallback.
+  source for inline playback, `POST /jobs/{id}/commit` clips every
+  reviewed row in one request (audio inline). `POST /source-audio/range`
+  is the equivalent span stream for an already-imported book's source
+  (the re-segment page's waveform). `_run_job` still auto-advances every
+  stage on creation as a fallback.
   Full design + what's-still-open: `docs/mining-pipeline-v2.md`,
   `docs/mining-wizard-spec.md`.
 - **WaniKani API** — one-time/re-runnable bulk catalog import

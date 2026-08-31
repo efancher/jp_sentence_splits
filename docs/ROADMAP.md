@@ -73,7 +73,11 @@ detail, this file the at-a-glance list.
   W2 `/jobs/{id}/audio` source-range endpoint, W3 `<SegmentationEditor>`
   extraction, W4 waveform + boundary drag + "snap to pauses", W5 the
   4-step `YouTubeMinePage` wizard (replaces the linear cue march), W6
-  polish + retired the old cue-clip endpoints. Deferred: the
-  `/books/:id/resegment` waveform (wants a streaming source-range endpoint
-  rather than the base64 `/source-audio/clip`); an in-import JMnedict/Kanjium
-  reading cross-check.
+  polish + retired the old cue-clip endpoints. Post-W6 polish (also
+  2026-08-31): batch `POST /jobs/{id}/commit`, `POST /source-audio/range`
+  streaming endpoint + the `/books/:id/resegment` boundary waveform,
+  per-row audio on the segment/translate stages, provenance-grouped
+  "Auto-fill (AI)". Still deferred: an in-import JMnedict/Kanjium reading
+  cross-check (~100 MB dataset on the box); a `source_audio` Supabase
+  table + Storage mirror for cache durability (blocked on a Supabase-creds
+  decision for the Python service).

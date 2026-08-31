@@ -27,6 +27,19 @@ form/reading/accent, C: retained source audio) and the staged wizard
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-08-31 — Mining wizard deferred polish.** (1) `POST /jobs/{id}/commit`
+  clips every reviewed row in one request with audio inline (base64) — the
+  wizard's commit stage was a per-row clip+fetch loop. (2) `POST
+  /source-audio/range` streams one span of a cached source; `/books/:id/resegment`
+  now shows the boundary-drag waveform when the book has a `sourceUrl`
+  (`ResegmentSourceContext.sourceUrl` → `fetchSourceAudioRange`). (3) Per-row
+  `SpanAudioButton` on the segment + translate stage rows. (4) The
+  translate stage's "Auto-fill (AI)" groups rows by transcript-segment
+  provenance (`buildMiningRealignGroups`) instead of one whole-span group.
+  `test_jobs_api.py`/`test_source_cache.py` +2, `miningApi.test.ts` +2,
+  `resegmentPlan.test.ts` +1. 70 py / ~1074 ts. Redeployed. Still not
+  browser-verified.
+
 - **2026-08-31 — Pitch-accent H/L marks on the sentence.**
   `src/lib/sentencePitchAccent.ts` (`buildSentencePitchAccents`) +
   `src/components/SentencePitchAccentRow.tsx` render a per-word
@@ -62,23 +75,24 @@ is trimmed.)
 | WaniKani mnemonics | done, deployed 2026-08-29/30/31 (vocab + kanji + subject cache) |
 | Contextual conjugation cards | done; migration live 2026-08-30 |
 | Progressive listening (`word_listening`) | done 2026-08-30 |
-| Mining pipeline v2 | slices A/B/C + wizard W1–W6 done 2026-08-31; polish deferred |
+| Mining pipeline v2 | slices A/B/C + wizard W1–W6 + polish done 2026-08-31; two durability/dictionary items still deferred |
 
 Phase-by-phase detail is in `docs/STATUS_ARCHIVE.md`; the ROADMAP entries
 carry a one-paragraph summary each.
 
 ## Open / deferred
 
-**Mining pipeline v2 polish:**
-- `/books/:id/resegment` waveform — `ResegmentSourcePage` shares
-  `<SegmentationEditor>` and the resegment transforms with the wizard but
-  not the waveform; that wants a streaming source-range endpoint rather
-  than the base64 `/source-audio/clip` it currently has.
+**Mining pipeline v2 — two items still deferred** (the smaller polish —
+batch commit, per-row audio, resegment-page waveform, provenance-grouped
+realign — landed 2026-08-31):
 - In-import JMnedict/Kanjium reading cross-check (morphology emits
   UniDic form/reading/accent directly now; a dictionary second opinion at
-  import time is still unbuilt).
+  import time is still unbuilt — needs a ~100 MB dataset on the mining box).
 - Durability-only: a `source_audio` Supabase table + Storage mirror so the
-  LRU source-audio cache can restore without re-hitting YouTube.
+  LRU source-audio cache can restore without re-hitting YouTube. Blocked on
+  a decision — the Python service deliberately has no Supabase creds, so
+  restore-from-Storage needs either a public read path or the client
+  proxying the restore.
 
 **Not yet browser-verified** (typecheck/build/tests green, and the sandbox
 has no browser system libs):
