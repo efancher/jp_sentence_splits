@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Mining: services retuned + "Segment with AI help".** A
+  32-min Nakata source hit the mining client's 1800s ASR timeout and fell
+  back to punctuation-free auto-captions — the word-timestamp DTW pass in
+  `faster-whisper` is single-threaded Python and ~tripled the run on this
+  4-core box. Fixed at the deploy layer: `ANALYSIS_SOURCE_WORD_TIMESTAMPS=0`
+  on `shadowing-analysis-api` (the real speedup; wizard waveform editor +
+  char-proportional split cover the loss) and `MINING_ASR_TIMEOUT_SECONDS=3600`
+  on `youtube-mining-api` (both in the systemd units +
+  `server/youtube-mining/deploy/`). Plus a **"Segment with AI help"**
+  collapsible on the wizard's transcript stage: `formatTranscriptForAI`
+  emits a `[m:ss] fragment` prompt to paste into any assistant,
+  `parseAiSegmentedTranscript` reads the `[m:ss] sentence` reply back into
+  `WizardTranscriptSeg[]` (manual copy/paste, no Edge Function).
+  `miningTranscript.test.ts` +6. Also `deleteBookCascade`-equivalent
+  soft-deletes run against production for "After Work" (172 sentences) and
+  "GLIM SPANKY" (20) — vocab-level study items kept, sentence-level dropped
+  per the user's call.
+
 - **2026-09-01 — Audio-less pitch-accent production drill.** The
   `pitch_accent` SRS card and the shadowing analysis both need a
   `SentenceAudio` reference; `buildPitchAccentShapeObservations` never did

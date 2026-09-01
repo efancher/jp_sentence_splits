@@ -497,7 +497,13 @@ observed from outside `ReviewPage`'s own due-queue state.
   subtitles + runs ASR, then a **4-step wizard** walks the job's
   re-runnable `stage` machine (`docs/mining-wizard-spec.md`):
   **Transcript** (correct the ASR/caption segments against per-segment
-  audio, with low-confidence flags and coarse merge/split) → **Segment**
+  audio, with low-confidence flags and coarse merge/split — plus a
+  **"Segment with AI help"** panel that formats the fragments as a
+  copy-pasteable `[m:ss] text` prompt for an external assistant and parses
+  its `[m:ss] sentence` reply back into segments, for when the transcript
+  fell back to punctuation-free auto-captions; `formatTranscriptForAI` /
+  `parseAiSegmentedTranscript` in `src/lib/miningTranscript.ts`, manual
+  copy/paste, no Edge Function) → **Segment**
   (`<SegmentationEditor>` — sentence rows, each playing its span, above a
   waveform whose per-boundary handles drag onto pauses, "Snap to pauses")
   → **Translate** (EN per row, editable, "Auto-fill translations (AI)"
