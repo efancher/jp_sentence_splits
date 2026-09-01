@@ -51,6 +51,10 @@ import type {
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
 import {
+  buildPronunciationProfile,
+  type PronunciationProfile,
+} from '../lib/pronunciationProfile';
+import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
   type ImportPreview,
@@ -2521,6 +2525,32 @@ export async function listAttemptAnalysisSummariesForSentence(
   const db = getDb();
   const rows = await db.attemptAnalysisSummaries.where('sentenceId').equals(sentenceId).toArray();
   return rows.filter((row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION);
+}
+
+/**
+ * Cross-sentence shadowing learner profile (docs/ROADMAP.md) — aggregates
+ * every analyzed attempt across every sentence into a recurring-focus-area
+ * ranking + overall timing/pitch trend. `sinceDays` optionally restricts to
+ * recent attempts (default: all history). Pure derivation lives in
+ * `src/lib/pronunciationProfile.ts`.
+ */
+export async function getPronunciationProfile(
+  options: { sinceDays?: number; now?: Date } = {},
+): Promise<PronunciationProfile> {
+  const db = getDb();
+  const rows = (await db.attemptAnalysisSummaries.toArray()).filter(
+    (row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION,
+  );
+  const now = options.now ?? new Date();
+  const cutoff =
+    options.sinceDays !== undefined
+      ? now.getTime() - options.sinceDays * 24 * 60 * 60 * 1000
+      : undefined;
+  const scoped =
+    cutoff === undefined
+      ? rows
+      : rows.filter((row) => new Date(row.createdAt).getTime() >= cutoff);
+  return buildPronunciationProfile(scoped);
 }
 
 // ---------------------------------------------------------------------------

@@ -976,6 +976,18 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     trend labels ("close"/"needs work"/"improving"/"much closer") per
     sentence over time, not full detail forever (recomputable on demand
     from cached alignment).
+  - **Cross-sentence pronunciation profile** (`pronunciationProfile.ts`,
+    `PronunciationProfilePage` at `/pronunciation`) — the aggregate view
+    the per-sentence history can't give: `buildPronunciationProfile` folds
+    every `AttemptAnalysisSummary` across every sentence into a ranked
+    recurring-focus-area list (which `primaryIssueKind` leads most often,
+    over how many distinct sentences, with an improving/worsening/steady
+    trend from the recent vs earlier half of attempts) plus overall
+    timing/pitch trend lines and a one-line headline. All-time / 30d / 90d
+    window. Built only from severities (already per-speaker-normalized
+    upstream), so it never compares absolute pitch or loudness. Linked from
+    Home's shortcut row and ShadowPage's "Past attempts" header. Closes
+    Phase 9's one open milestone (brief's Phase 15).
 - **Word-synced text/mora highlighting during reference playback**
   (`SyncedShadowText.tsx`, a shared component): as the clip plays, the
   currently-spoken portion of the Japanese sentence and the mora/hiragana
@@ -1177,10 +1189,6 @@ aren't JSON-serializable/aren't worth backing up).
 - **Anki review history was never migrated** — a permanent, explicitly-
   accepted gap; the FSRS scheduler starts from zero prior signal for words
   the user studied for years in Anki before this app existed.
-- **No cross-sentence learner profile** (aggregate pronunciation/error
-  trends across all sentences, not just per-sentence history) — flagged
-  repeatedly as the one fully open item from the Phase 9 pronunciation-
-  feedback brief.
 - **No dedicated shadowing debug/diagnostic view** — most of the raw
   signal (alignment, phone timing, pitch movement, ASR output) is already
   visible inline in `AnalysisPanel`, but there's no single view of the

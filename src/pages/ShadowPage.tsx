@@ -604,7 +604,12 @@ export function ShadowPage() {
         )}
 
         <div className="stack">
-          <strong>Past attempts</strong>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <strong>Past attempts</strong>
+            <Link to="/pronunciation" className="muted" style={{ fontSize: '0.85rem' }}>
+              Pronunciation profile →
+            </Link>
+          </div>
           {attempts.length === 0 ? (
             <p className="muted">No shadowing attempts recorded yet.</p>
           ) : (

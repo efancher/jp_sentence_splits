@@ -59,6 +59,7 @@ const SHORTCUTS = [
   { to: '/grammar', label: 'Grammar' },
   { to: '/review', label: 'Review' },
   { to: '/vocabulary', label: 'Words' },
+  { to: '/pronunciation', label: 'Pronunciation' },
   { to: '/search', label: 'Library / Search' },
 ] as const;
 

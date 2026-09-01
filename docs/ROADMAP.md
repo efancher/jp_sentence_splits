@@ -47,8 +47,10 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   milestones (mora segmentation, forced-alignment service, phone/pitch
   timing feedback, ranked "fix one thing" + one-tap practice, ASR secondary
   signal, pronunciation history, ground-truth pitch-accent scoring,
-  progressive/guided practice mode). One milestone still open — see
-  **Cross-sentence shadowing learner profile** below. Detail in
+  progressive/guided practice mode) plus the **cross-sentence learner
+  profile** (2026-08-31, brief's Phase 15) — `pronunciationProfile.ts` +
+  `/pronunciation`, a ranked recurring-focus-area view + timing/pitch trend
+  aggregated across every analyzed attempt. Detail in STATUS.md /
   STATUS_ARCHIVE.md.
 - [x] **Learning Orchestrator.** "What should I do?" planner — four learning
   modes, neglect-aware allocation, review-priority scoring, `HomePage`
@@ -84,6 +86,21 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   `GrammarRelationship` browsing/creation. Prediction/transformation/
   production activity types deliberately not started — see **Grammar
   production ladder** below.
+- [x] **Review new-card backlog fix.** (2026-08-31) The session planner
+  counts confirmed-but-never-introduced vocabulary
+  (`countNewVocabularyCardBacklog`), reserves `min(backlog, session limit)`
+  retain-costed minutes in the review bucket, folds that slice into the
+  review step's `targetCount`/label, and `ReviewPage` holds the review step
+  open through seeding. Backlog still drains at `newCardsPerSessionLimit`
+  (default 20) per daily session by design. Detail in STATUS.md.
+- [x] **Cross-sentence shadowing learner profile.** (2026-08-31)
+  `src/lib/pronunciationProfile.ts` + `PronunciationProfilePage`
+  (`/pronunciation`) — ranked recurring focus areas (which
+  `primaryIssueKind` leads most often, over how many sentences, with an
+  improving/worsening/steady trend) + overall timing/pitch trend,
+  aggregated across every analyzed attempt. Closes Phase 9's last
+  milestone. Future extension: finer-grained per-word accent-class stats
+  need more persisted in `AttemptAnalysisSummary` than v1 stores.
 
 ## In progress
 
@@ -102,30 +119,16 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 ## Planned
 
 Ordered by value. Detail/rationale for each in `docs/STATUS.md`'s "Open /
-deferred" section and the notes below.
+deferred" section and the notes below. Two items from this list shipped
+2026-08-31 — see **Review new-card backlog fix** and **Cross-sentence
+learner profile** under Done above.
 
-- [ ] **Review new-card backlog fix.** ~193 confirmed vocab words have no
-  SRS card; the session planner is blind to the backlog (sizes the review
-  bucket from existing due `study_items` only), seeds too slowly (only
-  after the due queue drains, `newCardsPerSessionLimit`/session), and the
-  `due_review_batch` step auto-settles at its `targetCount` before seeding
-  starts. Fix: make the planner count the never-introduced backlog, reserve
-  review-bucket minutes for a bounded slice of it, and fold that slice into
-  the review step's `targetCount` so it doesn't auto-advance early.
-  Actively undermines the core loop — do first. Related:
-  `scripts/analyze-due-by-book.ts`.
 - [ ] **Re-mine the 3 auto-caption-fragmented sources.** After Work, First
   Day at Work, GLIM SPANKY were systemically mis-segmented (pre-2026-08-23,
   auto-captions, no punctuation). The ASR pipeline + `ResegmentSourcePage`
-  + audio carry-across now exist; this is mostly mechanical. Content
-  quality on material studied daily.
-- [ ] **Cross-sentence shadowing learner profile.** The one open Phase 9
-  milestone (brief's Phase 15). Aggregate the per-sentence pronunciation/
-  timing/pitch-accent signal already captured into a durable profile —
-  "you consistently short っ", "odaka words are your weak accent class",
-  "word-pace improving over 3 weeks" — so feedback becomes cumulative
-  instead of per-attempt. Synthesis of data already logged; inherently
-  explainable.
+  + audio carry-across now exist; this is mostly mechanical, but needs the
+  mining + analysis services running and YouTube access via an exit-node
+  device. Content quality on material studied daily.
 - [ ] **Grammar production ladder.** The grammar system stops at
   recognition (`grammar_comprehension`/`completion`/`contrast`) while the
   vocab side has a real production ladder. Add a produce-a-sentence-using-

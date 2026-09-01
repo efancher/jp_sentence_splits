@@ -27,6 +27,21 @@ form/reading/accent, C: retained source audio) and the staged wizard
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-08-31 — Cross-sentence pronunciation profile.** Closes Phase 9's
+  one still-open milestone (brief's Phase 15). `src/lib/pronunciationProfile.ts`
+  (`buildPronunciationProfile`, pure) aggregates every `AttemptAnalysisSummary`
+  across all sentences into a recurring-focus-area ranking (which
+  `primaryIssueKind` leads most often, over how many distinct sentences,
+  with an improving/worsening/steady trend from the recent vs earlier half)
+  plus overall timing/pitch trend lines and a one-line headline.
+  `getPronunciationProfile({ sinceDays })` in `repository.ts`; new
+  `PronunciationProfilePage` at `/pronunciation` (All-time / 30d / 90d
+  window select), linked from Home's shortcut row and ShadowPage's "Past
+  attempts" header. Built only from severities, which are already
+  per-speaker-normalized upstream (pitch register scored 0), so nothing
+  compares absolute pitch/loudness across speakers. `pronunciationProfile.test.ts`
+  (8). Not browser-verified.
+
 - **2026-08-31 — Planner: new-card backlog awareness.** The session
   planner was blind to confirmed vocabulary that has never been introduced
   to the SRS (no `vocabularyItem` study item) — it sized the review bucket
@@ -95,7 +110,7 @@ is trimmed.)
 | 6 — Anki interoperability cleanup | done; `efancher/anki` archived, no export-back planned |
 | 7 — Adaptive learning | done, all slices 7.1–7.11, verified against prod |
 | 8 — Shadowing feature parity | done, all slices 8.1–8.5, browser-verified |
-| 9 — Shadowing pronunciation/prosody feedback | done, all 9 milestones |
+| 9 — Shadowing pronunciation/prosody feedback | done, all 9 milestones + cross-sentence learner profile (2026-08-31) |
 | Learning Orchestrator | done; daily-session model, vocab-confirm priority |
 | Re-segment an existing source | done; run against "After Work" 2026-08-29 |
 | Vocabulary meaning glossing | done; JMDict/JMnedict offline + `vocab-assist` Edge Function |
@@ -126,6 +141,8 @@ has no browser system libs):
 - Mining wizard W1–W6 (covered by integration tests + build + typecheck).
 - Contextual conjugation cards (`sentence_transformation` rework).
 - Progressive listening `word_listening` cards.
+- Cross-sentence pronunciation profile (`/pronunciation`).
+- Planner new-card backlog reservation + ReviewPage seed-hold.
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS
@@ -151,8 +168,6 @@ has no browser system libs):
   downloads route through a personal-device exit node).
 
 **Larger not-started items (deliberate, reasoning in the archive):**
-- Cross-sentence shadowing learner profile (Phase 9's one still-open
-  milestone; brief's Phase 15).
 - Audio-less pitch-accent production/recording drill mode (practice pitch
   accent on Satori sentences that have no reference audio) — distinct from
   the shipped passive `pitch_accent` SRS card.
