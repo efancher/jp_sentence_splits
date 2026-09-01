@@ -94,8 +94,10 @@ live job:
   compressed source (see "source retention").
 - `DELETE /jobs/{id}` unchanged.
 
-Bump `JOB_TTL_SECONDS` for interactive jobs, or checkpoint stage artifacts to
-`JOBS_ROOT` so a swept job can resume.
+Done (2026-09-01): `JOB_TTL_SECONDS` is an idle TTL *and* every stage
+transition is checkpointed to `<JOBS_ROOT>/checkpoints/<id>/`, so a job
+resumes after an idle sweep or a restart — and, via `GET /jobs`, on a
+different machine. `JOB_HARD_TTL_SECONDS` (48h) is the backstop.
 
 ### Client
 

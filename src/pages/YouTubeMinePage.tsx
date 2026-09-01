@@ -14,9 +14,11 @@ import {
   deleteMiningJob,
   fetchJobAudioRange,
   getMiningJob,
+  listMiningJobs,
   translateJob,
   type MiningCue,
   type MiningJobStatus,
+  type MiningJobSummary,
   type MiningSourceInfo,
 } from '../lib/miningApi';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
@@ -37,11 +39,13 @@ const POLL_INTERVAL_MS = 1500;
 /**
  * The in-flight job id is kept in `localStorage` so a refresh / accidental
  * nav-away / phone unloading the tab can reconnect instead of restarting a
- * 20-minute mine. The server keeps the job for `JOB_TTL_SECONDS` (6h); this
- * pointer is ignored once older than that.
+ * 20-minute mine. The server checkpoints jobs to disk and keeps them
+ * resumable up to `JOB_HARD_TTL_SECONDS` (48h); resuming on a *different*
+ * machine goes through the `GET /jobs` picker on the idle screen instead of
+ * this pointer.
  */
 const ACTIVE_JOB_KEY = 'ytmine.activeJob';
-const ACTIVE_JOB_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 function storeActiveJob(jobId: string): void {
   try {
@@ -166,6 +170,7 @@ export function YouTubeMinePage() {
   const [realignNote, setRealignNote] = useState('');
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
   const [resuming, setResuming] = useState(true);
+  const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -201,11 +206,7 @@ export function YouTubeMinePage() {
           setError(job.error ?? 'The previous mining job failed.');
           clearActiveJob();
         } else {
-          setJobId(savedJobId);
-          setSource(job.source ?? null);
-          setProgress(job.message);
-          progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
-          hydrateStageFromJob(job);
+          applyResumedJob(savedJobId, job);
         }
         setResuming(false);
       },
@@ -220,6 +221,48 @@ export function YouTubeMinePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Offer to resume any import the service still holds — including one whose
+  // transcription was kicked off on another device (the server checkpoints
+  // jobs to disk). Refreshed whenever we return to the idle screen.
+  useEffect(() => {
+    if (stage !== 'idle') return;
+    let cancelled = false;
+    void listMiningJobs().then(
+      (list) => {
+        if (!cancelled) setResumable(list.filter((job) => job.status !== 'error'));
+      },
+      () => {
+        /* service down / offline — nothing to resume */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [stage]);
+
+  function applyResumedJob(id: string, job: MiningJobStatus): void {
+    setJobId(id);
+    setSource(job.source ?? null);
+    setProgress(job.message);
+    progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
+    hydrateStageFromJob(job);
+    storeActiveJob(id);
+  }
+
+  async function resumeJob(id: string): Promise<void> {
+    setError('');
+    try {
+      const job = await getMiningJob(id);
+      if (job.status === 'error') {
+        setError(job.error ?? 'That mining job failed.');
+        return;
+      }
+      applyResumedJob(id, job);
+    } catch {
+      setError('Could not resume that import — it may have expired.');
+    }
+  }
 
   function hydrateStageFromJob(job: MiningJobStatus): void {
     switch (job.stage) {
@@ -499,6 +542,28 @@ export function YouTubeMinePage() {
             >
               Start
             </button>
+          </div>
+        ) : null}
+        {!resuming && stage === 'idle' && resumable.length > 0 ? (
+          <div className="stack" style={{ gap: '0.4rem' }}>
+            <div className="muted" style={{ fontSize: '0.85rem' }}>
+              Or pick up an import already in progress — transcription runs on
+              the server, so you can start it on one device and finish here:
+            </div>
+            {resumable.map((job) => (
+              <button
+                key={job.jobId}
+                type="button"
+                className="row"
+                style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
+                onClick={() => void resumeJob(job.jobId)}
+              >
+                <span>{job.title || job.url}</span>
+                <span className="muted">
+                  {job.status === 'ready' ? 'ready to review' : job.message}
+                </span>
+              </button>
+            ))}
           </div>
         ) : null}
         {stage === 'starting' ? (

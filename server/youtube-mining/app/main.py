@@ -23,6 +23,7 @@ from app.models import (
     CreateJobResponse,
     Cue,
     JobStatusResponse,
+    JobSummary,
     ReclipClip,
     ReclipRequest,
     ReclipResponse,
@@ -66,6 +67,25 @@ async def health():
 async def create_job(req: CreateJobRequest):
     job = jobs.create_job(req.url)
     return CreateJobResponse(jobId=job.id)
+
+
+@app.get("/jobs", response_model=list[JobSummary])
+async def list_jobs():
+    """Every resumable job — in memory or checkpointed on disk — newest
+    first, so the wizard can offer to continue an import started on another
+    machine."""
+    return [
+        JobSummary(
+            jobId=job.id,
+            url=job.url,
+            title=job.source.title if job.source else None,
+            status=job.status,
+            stage=job.stage,
+            message=job.message,
+            createdAt=job.created_at,
+        )
+        for job in jobs.list_jobs()
+    ]
 
 
 @app.get("/jobs/{job_id}", response_model=JobStatusResponse)

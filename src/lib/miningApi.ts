@@ -175,6 +175,32 @@ export async function createMiningJob(url: string): Promise<string> {
   return data.jobId;
 }
 
+const jobSummarySchema = z.object({
+  jobId: z.string(),
+  url: z.string(),
+  title: z.string().nullable().optional(),
+  status: z.enum(['pending', 'fetching', 'parsing', 'ready', 'error']),
+  stage: z.enum(['fetching', 'transcript', 'segment', 'translate', 'ready', 'error']),
+  message: z.string(),
+  createdAt: z.number(),
+});
+
+export type MiningJobSummary = z.infer<typeof jobSummarySchema>;
+
+/**
+ * Every resumable job the service still holds — in memory or checkpointed
+ * to disk (`GET /jobs`). The wizard offers these on its idle screen so an
+ * import whose transcription was kicked off on one machine can be finished
+ * on another.
+ */
+export async function listMiningJobs(): Promise<MiningJobSummary[]> {
+  const response = await fetch(`${API_BASE}/jobs`);
+  if (!response.ok) {
+    throw new Error(`Failed to list mining jobs: ${await readErrorDetail(response)}`);
+  }
+  return z.array(jobSummarySchema).parse(await response.json());
+}
+
 export async function getMiningJob(jobId: string): Promise<MiningJobStatus> {
   const response = await fetch(`${API_BASE}/jobs/${jobId}`);
   if (!response.ok) {

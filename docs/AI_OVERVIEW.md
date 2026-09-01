@@ -511,12 +511,20 @@ observed from outside `ReviewPage`'s own due-queue state.
   **Commit** (one `POST /jobs/{id}/commit` clips every row from source
   with audio inline; preview + vocab-suggestion count). Back/forward +
   per-stage re-run. The in-flight job id is persisted to `localStorage`
-  (`ytmine.activeJob`, ignored past the server's 6h job TTL) so a refresh /
-  accidental nav / phone tab-unload **reconnects** by rehydrating from the
-  job's server-side `stage` rather than restarting a 20-minute mine — the
-  job is no longer deleted on plain unmount (TTL sweep + explicit
-  Start-over/Cancel/finish handle cleanup). During the long download/ASR
-  step the panel shows a live `N:NN elapsed` (`job.message_started_at` →
+  (`ytmine.activeJob`, 48h max-age) so a refresh / accidental nav / phone
+  tab-unload **reconnects** by rehydrating from the job's server-side
+  `stage` rather than restarting a 20-minute mine — the job is no longer
+  deleted on plain unmount. The **server checkpoints each stage** to
+  `JOBS_ROOT/checkpoints/<id>/` (`jobs._write_checkpoint`), so `get_job`
+  rehydrates a job that's been dropped from memory by a process restart or
+  an idle sweep; `JOB_TTL_SECONDS` is an *idle* TTL (bumped by every request
+  via `Job.touched_at`), a mid-pipeline job is only reaped by the 48h
+  `JOB_HARD_TTL_SECONDS`. `GET /jobs` (`listMiningJobs`) lists resumable
+  jobs and the wizard's idle screen offers them as "pick up an import
+  already in progress" — so a transcription kicked off on one device is
+  finished on another; `POST /jobs` for a URL that already has a live job
+  reconnects instead of re-mining. During the long download/ASR step the
+  panel shows a live `N:NN elapsed` (`job.message_started_at` →
   `elapsedSeconds` in the status response) with a soft per-step ETA.
   Finishing assembles the same
   `ShadowingImportPreview` (`buildShadowingPreview()`) and commits through

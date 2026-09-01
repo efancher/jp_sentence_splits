@@ -16,11 +16,22 @@ ALLOWED_ORIGINS = os.environ.get(
 # Where each job's scratch directory (downloaded audio, subtitles, clips)
 # lives. One subdirectory per job id, swept on a timer (see app/jobs.py).
 JOBS_ROOT = os.environ.get("MINING_JOBS_ROOT", "/tmp/youtube-mining-jobs")
-# ~6 h: the staged mining wizard (docs/mining-wizard-spec.md) keeps a job
-# live across an interactive review that can span a sitting. No disk
-# checkpointing — a swept mid-wizard job means restarting the mine, and the
-# source is cached so re-download is the only cost.
+# Idle TTL: a job is swept once it has gone this long without a single
+# client request (every GET/POST bumps `touched_at`). The staged mining
+# wizard (docs/mining-wizard-spec.md) keeps a job live across an
+# interactive review that can span a sitting; a wizard tab left polling
+# never ages out, and one closed overnight is rehydrated from its on-disk
+# checkpoint (see app/jobs.py `_write_checkpoint`). A job still mid-pipeline
+# (transcription can run the better part of an hour) is never swept on the
+# idle TTL — only on the hard ceiling below.
 JOB_TTL_SECONDS = int(os.environ.get("MINING_JOB_TTL_SECONDS", str(6 * 60 * 60)))
+# Absolute ceiling from job creation, regardless of activity or stage — the
+# backstop for a job wedged in a non-terminal stage (a hung download thread)
+# that the idle TTL would never touch. Also when the job's checkpoint is
+# discarded, so a resume is no longer possible past this age.
+JOB_HARD_TTL_SECONDS = int(
+    os.environ.get("MINING_JOB_HARD_TTL_SECONDS", str(48 * 60 * 60))
+)
 JOB_SWEEP_INTERVAL_SECONDS = int(
     os.environ.get("MINING_JOB_SWEEP_INTERVAL_SECONDS", "600")
 )

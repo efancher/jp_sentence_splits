@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import asr_client, clip, jobs, youtube
+from app import asr_client, clip, jobs, source_cache, youtube
 from app.main import app
 
 JA_VTT = """WEBVTT
@@ -40,6 +40,10 @@ How are you?
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs.config, "JOBS_ROOT", str(tmp_path))
+    # _JOBS is a module-level dict; isolate it per test so create_job's
+    # reuse-by-video-id doesn't reconnect to a prior test's job.
+    jobs._JOBS.clear()
+    monkeypatch.setattr(source_cache, "get", lambda _video_id: None)
 
     def fake_fetch_audio(url: str, job_dir: Path) -> Path:
         audio_path = job_dir / "source_audio.m4a"
@@ -226,6 +230,66 @@ def test_human_caption_track_skips_asr(client: TestClient, monkeypatch) -> None:
 def test_unknown_job_returns_404(client: TestClient) -> None:
     response = client.get("/jobs/does-not-exist")
     assert response.status_code == 404
+
+
+def _evict(job_id: str) -> None:
+    """Simulate the idle sweep: drop the in-memory job + scratch dir, keep
+    the checkpoint."""
+    import shutil
+
+    jobs._JOBS.pop(job_id, None)
+    shutil.rmtree(jobs._job_dir(job_id), ignore_errors=True)
+
+
+def test_job_resumes_from_checkpoint_after_eviction(client: TestClient) -> None:
+    job_id = client.post(
+        "/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"}
+    ).json()["jobId"]
+    _wait_until_ready(client, job_id)
+    _evict(job_id)
+
+    # A GET from "another machine" rehydrates the job from its checkpoint.
+    resumed = client.get(f"/jobs/{job_id}")
+    assert resumed.status_code == 200
+    body = resumed.json()
+    assert body["status"] == "ready"
+    assert [seg["text"] for seg in body["transcript"]] == ["こんにちは。", "元気ですか。"]
+
+    # …and the pipeline is still re-runnable (subtitles were checkpointed).
+    _evict(job_id)
+    seg = client.post(
+        f"/jobs/{job_id}/segment",
+        json={"segments": [{"text": "田中さんです。よろしく。", "startMs": 0, "endMs": 2000}]},
+    )
+    assert seg.status_code == 200
+    assert [c["japanese"] for c in seg.json()["cues"]] == ["田中さんです。", "よろしく。"]
+    translated = client.post(f"/jobs/{job_id}/translate")
+    assert translated.status_code == 200
+
+
+def test_list_jobs_includes_checkpointed_job(client: TestClient) -> None:
+    job_id = client.post(
+        "/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"}
+    ).json()["jobId"]
+    _wait_until_ready(client, job_id)
+    _evict(job_id)
+
+    listed = client.get("/jobs")
+    assert listed.status_code == 200
+    entries = {j["jobId"]: j for j in listed.json()}
+    assert job_id in entries
+    assert entries[job_id]["title"] == "Fixture Video"
+    assert entries[job_id]["status"] == "ready"
+
+
+def test_same_url_reconnects_instead_of_duplicating(client: TestClient) -> None:
+    url = "https://www.youtube.com/watch?v=vid12345678"
+    first = client.post("/jobs", json={"url": url}).json()["jobId"]
+    _wait_until_ready(client, first)
+    _evict(first)
+
+    second = client.post("/jobs", json={"url": url}).json()["jobId"]
+    assert second == first
 
 
 def test_clip_range_by_explicit_span(client: TestClient) -> None:

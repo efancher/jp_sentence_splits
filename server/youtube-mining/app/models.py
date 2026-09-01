@@ -149,6 +149,19 @@ class JobStatusResponse(BaseModel):
     rows: list[TranslatedRow] | None = None
 
 
+class JobSummary(BaseModel):
+    """A resumable job, for the wizard's cross-machine 'resume in progress'
+    picker (GET /jobs)."""
+
+    jobId: str
+    url: str
+    title: str | None = None
+    status: JobState
+    stage: JobStage
+    message: str
+    createdAt: float
+
+
 class CreateJobRequest(BaseModel):
     url: str = Field(min_length=1)
 

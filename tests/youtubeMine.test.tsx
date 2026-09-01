@@ -126,6 +126,7 @@ vi.mock('../src/lib/miningApi', () => {
     ),
     fetchJobAudioRange: vi.fn(async () => new Blob(['fake-span'], { type: 'audio/mp4' })),
     deleteMiningJob: vi.fn(async () => undefined),
+    listMiningJobs: vi.fn(async () => []),
   };
 });
 
@@ -245,5 +246,42 @@ describe('YouTube mining wizard', () => {
     expect(
       screen.queryByPlaceholderText('https://www.youtube.com/watch?v=…'),
     ).not.toBeInTheDocument();
+  }, 30000);
+
+  it('offers server-held jobs on the idle screen and resumes the picked one', async () => {
+    const { listMiningJobs, getMiningJob } = await import('../src/lib/miningApi');
+    // No local pointer (started on another device) — the job comes from GET /jobs.
+    vi.mocked(listMiningJobs).mockResolvedValueOnce([
+      {
+        jobId: 'job-elsewhere',
+        url: 'https://www.youtube.com/watch?v=vidmocked',
+        title: 'Started This Morning',
+        status: 'ready',
+        stage: 'ready',
+        message: 'Ready — 2 sentence(s) found.',
+        createdAt: Date.now() / 1000,
+      },
+    ]);
+    vi.mocked(getMiningJob).mockResolvedValue({
+      jobId: 'job-elsewhere',
+      status: 'ready',
+      stage: 'transcript',
+      message: 'Ready — 2 sentence(s) found.',
+      source: SOURCE,
+      transcript: TRANSCRIPT,
+      cues: [],
+      rows: [],
+    } as Awaited<ReturnType<typeof getMiningJob>>);
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    await user.click(await screen.findByRole('button', { name: /Started This Morning/ }));
+
+    expect(await screen.findByText(/step 1 of 4: Transcript/)).toBeInTheDocument();
+    expect(getMiningJob).toHaveBeenCalledWith('job-elsewhere');
+    expect(localStorage.getItem('ytmine.activeJob')).toContain('job-elsewhere');
   }, 30000);
 });

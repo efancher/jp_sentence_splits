@@ -18,7 +18,9 @@ calls; a real thread has no such lifetime coupling).
 from __future__ import annotations
 
 import base64
+import json
 import logging
+import os
 import shutil
 import threading
 import time
@@ -72,7 +74,10 @@ class ClipRecord:
 class Job:
     id: str
     dir: Path
+    url: str = ""
     created_at: float = field(default_factory=time.time)
+    # Bumped by every client request (see get_job) — the idle-sweep clock.
+    touched_at: float = field(default_factory=time.time)
     # Coarse lifecycle flag the linear review UI polls.
     status: JobState = "pending"
     # Finer, re-runnable pipeline position each wizard panel drives.
@@ -104,6 +109,9 @@ class Job:
         self.message = message
         self.message_started_at = time.time()
 
+    def touch(self) -> None:
+        self.touched_at = time.time()
+
 
 _JOBS: dict[str, Job] = {}
 
@@ -112,11 +120,149 @@ def _job_dir(job_id: str) -> Path:
     return Path(config.JOBS_ROOT) / job_id
 
 
+def _checkpoint_dir(job_id: str) -> Path:
+    return Path(config.JOBS_ROOT) / "checkpoints" / job_id
+
+
+def _checkpoint_root() -> Path:
+    return Path(config.JOBS_ROOT) / "checkpoints"
+
+
+def _write_checkpoint(job: Job) -> None:
+    """Persist everything needed to resume `job` from another machine (or
+    after a process restart / idle sweep) *except* the large source audio,
+    which is re-pulled from the persistent per-video cache
+    (app/source_cache.py) on demand. Best effort — a checkpoint failure must
+    never fail the pipeline."""
+    try:
+        ckpt = _checkpoint_dir(job.id)
+        ckpt.mkdir(parents=True, exist_ok=True)
+        state = {
+            "id": job.id,
+            "url": job.url,
+            "created_at": job.created_at,
+            "status": job.status,
+            "stage": job.stage,
+            "message": job.message,
+            "error": job.error,
+            "is_music": job.is_music,
+            "next_sentence_seq": job.next_sentence_seq,
+            "source": job.source.model_dump() if job.source else None,
+            "raw_cues": [c.model_dump() for c in job.raw_cues],
+            "transcript": [t.model_dump() for t in job.transcript],
+            "cues": [c.model_dump() for c in job.cues],
+            "rows": [r.model_dump() for r in job.rows],
+            "english_by_index": {
+                str(k): v for k, v in job.english_by_index.items()
+            },
+            "source_audio_path": (
+                str(job.source_audio_path) if job.source_audio_path else None
+            ),
+        }
+        tmp = ckpt / "state.json.tmp"
+        tmp.write_text(json.dumps(state), encoding="utf-8")
+        os.replace(tmp, ckpt / "state.json")
+        # The EN/JA subtitle tracks live only in the job's scratch dir; copy
+        # them alongside the checkpoint so run_translate still works after
+        # that dir is swept.
+        subs = job.dir / "subtitles"
+        if subs.is_dir():
+            dest = ckpt / "subtitles"
+            shutil.rmtree(dest, ignore_errors=True)
+            shutil.copytree(subs, dest)
+    except Exception:  # noqa: BLE001
+        logger.warning("Checkpoint write failed for job %s", job.id, exc_info=True)
+
+
+def _rehydrate(job_id: str) -> Job | None:
+    """Rebuild an evicted or never-seen-on-this-process job from its on-disk
+    checkpoint, or None if there is no usable checkpoint. The source audio is
+    restored from the persistent per-video cache; if that has been evicted
+    too, audio-dependent stages re-download it lazily on first use
+    (_ensure_source_audio)."""
+    state_path = _checkpoint_dir(job_id) / "state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    job_dir = _job_dir(job_id)
+    (job_dir / "clips").mkdir(parents=True, exist_ok=True)
+    ckpt_subs = _checkpoint_dir(job_id) / "subtitles"
+    if ckpt_subs.is_dir() and not (job_dir / "subtitles").is_dir():
+        shutil.copytree(ckpt_subs, job_dir / "subtitles")
+
+    job = Job(id=job_id, dir=job_dir, url=state.get("url", ""))
+    job.created_at = state.get("created_at", time.time())
+    job.status = state.get("status", "ready")
+    job.stage = state.get("stage", "ready")
+    job.message = state.get("message", "Resumed.")
+    job.error = state.get("error")
+    job.is_music = state.get("is_music", False)
+    job.next_sentence_seq = state.get("next_sentence_seq", 1)
+    job.source = SourceInfo(**state["source"]) if state.get("source") else None
+    job.raw_cues = [Cue(**c) for c in state.get("raw_cues", [])]
+    job.transcript = [
+        TranscriptSegment(**t) for t in state.get("transcript", [])
+    ]
+    job.cues = [Cue(**c) for c in state.get("cues", [])]
+    job.rows = [TranslatedRow(**r) for r in state.get("rows", [])]
+    job.english_by_index = {
+        int(k): v for k, v in state.get("english_by_index", {}).items()
+    }
+
+    stored_audio = state.get("source_audio_path")
+    if stored_audio and Path(stored_audio).is_file():
+        job.source_audio_path = Path(stored_audio)
+    elif job.source is not None:
+        job.source_audio_path = source_cache.get(job.source.videoId)
+    return job
+
+
+def _find_reusable_job(url: str) -> Job | None:
+    """An existing non-errored job for the same URL / video, so kicking off
+    the same import from a second machine reconnects to the running mine
+    instead of starting a duplicate download + transcription."""
+    video_id = youtube.extract_video_id(url)
+    for job in _JOBS.values():
+        if job.status == "error":
+            continue
+        if job.url == url or (
+            video_id and job.source and job.source.videoId == video_id
+        ):
+            return job
+    if not video_id:
+        return None
+    root = _checkpoint_root()
+    if not root.is_dir():
+        return None
+    for state_path in root.glob("*/state.json"):
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        src = state.get("source")
+        if (
+            state.get("status") != "error"
+            and src
+            and src.get("videoId") == video_id
+        ):
+            rehydrated = _rehydrate(state["id"])
+            if rehydrated is not None:
+                _JOBS[rehydrated.id] = rehydrated
+                return rehydrated
+    return None
+
+
 def create_job(url: str) -> Job:
+    existing = _find_reusable_job(url)
+    if existing is not None:
+        logger.info("Reusing mining job %s for %s", existing.id, url)
+        return existing
     job_id = uuid.uuid4().hex[:12]
     job_dir = _job_dir(job_id)
     (job_dir / "clips").mkdir(parents=True, exist_ok=True)
-    job = Job(id=job_id, dir=job_dir)
+    job = Job(id=job_id, dir=job_dir, url=url)
     _JOBS[job_id] = job
     threading.Thread(target=_run_job, args=(job, url), daemon=True).start()
     return job
@@ -125,15 +271,51 @@ def create_job(url: str) -> Job:
 def get_job(job_id: str) -> Job:
     job = _JOBS.get(job_id)
     if job is None:
-        raise JobNotFoundError(job_id)
+        job = _rehydrate(job_id)
+        if job is None:
+            raise JobNotFoundError(job_id)
+        _JOBS[job_id] = job
+        logger.info("Rehydrated mining job %s from checkpoint", job_id)
+    job.touch()
     return job
 
 
-def delete_job(job_id: str) -> None:
+def list_jobs() -> list[Job]:
+    """Every resumable job — in memory plus any on-disk checkpoint not
+    already loaded — newest first. Powers the wizard's cross-machine resume
+    picker. Rehydrated entries are not inserted into `_JOBS`; get_job does
+    that on demand."""
+    by_id: dict[str, Job] = dict(_JOBS)
+    root = _checkpoint_root()
+    if root.is_dir():
+        for state_path in root.glob("*/state.json"):
+            job_id = state_path.parent.name
+            if job_id in by_id:
+                continue
+            rehydrated = _rehydrate(job_id)
+            if rehydrated is not None:
+                by_id[job_id] = rehydrated
+    return sorted(by_id.values(), key=lambda j: j.created_at, reverse=True)
+
+
+def _ensure_source_audio(job: Job) -> Path:
+    """The job's source audio, re-fetching it into the persistent cache if
+    both the scratch copy and the cached copy are gone (a resumed job whose
+    cache entry was LRU-evicted). Blocking — callers already run in a
+    thread."""
+    if job.source_audio_path is not None and job.source_audio_path.is_file():
+        return job.source_audio_path
+    if job.url:
+        job.source_audio_path = source_cache.ensure(job.url)
+        return job.source_audio_path
+    raise ValueError("Job source audio is no longer available")
+
+
+def delete_job(job_id: str, *, keep_checkpoint: bool = False) -> None:
     job = _JOBS.pop(job_id, None)
-    if job is None:
-        return
-    shutil.rmtree(job.dir, ignore_errors=True)
+    shutil.rmtree(job.dir if job is not None else _job_dir(job_id), ignore_errors=True)
+    if not keep_checkpoint:
+        shutil.rmtree(_checkpoint_dir(job_id), ignore_errors=True)
 
 
 _SENTENCE_END_CHARS = "。｡．.！!？?…」』"
@@ -169,12 +351,14 @@ def _run_job(job: Job, url: str) -> None:
         job.status = "ready"
         job.stage = "ready"
         job.set_message(f"Ready — {len(job.cues)} sentence(s) found.")
+        _write_checkpoint(job)
     except Exception as exc:  # noqa: BLE001 - surfaced to the client as job.error
         logger.exception("Mining job %s failed", job.id)
         job.status = "error"
         job.stage = "error"
         job.set_message("Failed")
         job.error = str(exc)
+        _write_checkpoint(job)
 
 
 def _fetch_transcript(job: Job, url: str) -> None:
@@ -270,6 +454,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
     job.rows = []
     job.stage = "transcript"
     job.set_message(f"Transcript ready — {len(job.transcript)} segment(s).")
+    _write_checkpoint(job)
 
 
 def _to_transcript_segment(cue: Cue) -> TranscriptSegment:
@@ -329,6 +514,7 @@ def run_segment(
     job.rows = []
     job.stage = "segment"
     job.set_message(f"{len(job.cues)} sentence(s) segmented.")
+    _write_checkpoint(job)
 
 
 def run_translate(job: Job) -> None:
@@ -353,6 +539,7 @@ def run_translate(job: Job) -> None:
     ]
     job.stage = "translate"
     job.set_message(f"{len(job.rows)} row(s) translated.")
+    _write_checkpoint(job)
 
 
 def job_status(job: Job) -> JobStatusResponse:
@@ -391,10 +578,11 @@ def clip_range(job: Job, req: ClipRequest) -> ClipResponse:
     with the sentence text supplied — the wizard's commit stage cuts every
     reviewed row this way, and the re-mine-reference-audio flow uses it for
     a source with no fetchable subtitle track."""
-    if job.status != "ready" or job.source_audio_path is None:
+    if job.status != "ready":
         raise ValueError("Job is not ready for clipping yet")
     if req.startMs is None or req.endMs is None:
         raise ValueError("startMs and endMs are required")
+    _ensure_source_audio(job)
     return _clip_range(job, req, req.startMs, req.endMs)
 
 
@@ -439,8 +627,9 @@ def commit_job(job: Job, req: CommitJobRequest) -> list[CommitSentence]:
     with its audio inline (base64), so the wizard's commit stage needs no
     per-row round trip. ffmpeg still runs serially — this only removes the
     HTTP overhead."""
-    if job.status != "ready" or job.source_audio_path is None:
+    if job.status != "ready":
         raise ValueError("Job is not ready for clipping yet")
+    _ensure_source_audio(job)
     out: list[CommitSentence] = []
     for row in req.rows:
         clip_req = ClipRequest(
@@ -475,10 +664,9 @@ def source_audio_range(job: Job, start_ms: int, end_ms: int) -> Path:
     the download lands (before resegmentation). Cached under the job dir and
     swept with the job; padded like every other clip via compute_boundaries.
     """
-    if job.source_audio_path is None:
-        raise ValueError("Job source audio is not available yet")
     if end_ms <= start_ms:
         raise ValueError("endMs must be greater than startMs")
+    _ensure_source_audio(job)
     out = job.dir / "ranges" / f"{start_ms}-{end_ms}.m4a"
     if out.exists():
         return out
@@ -493,14 +681,46 @@ def source_audio_range(job: Job, start_ms: int, end_ms: int) -> Path:
     return out
 
 
+def _sweep_once() -> None:
+    now = time.time()
+    idle_cutoff = now - config.JOB_TTL_SECONDS
+    hard_cutoff = now - config.JOB_HARD_TTL_SECONDS
+    for job_id, job in list(_JOBS.items()):
+        if job.created_at < hard_cutoff:
+            logger.info("Sweeping mining job %s (hard TTL)", job_id)
+            delete_job(job_id)
+        elif job.status in ("ready", "error") and job.touched_at < idle_cutoff:
+            # An idle finished job: drop the scratch dir but keep the
+            # checkpoint so the wizard can still resume it (get_job
+            # rehydrates) until the hard ceiling.
+            logger.info("Sweeping idle mining job %s (checkpoint kept)", job_id)
+            delete_job(job_id, keep_checkpoint=True)
+    # Discard checkpoints for jobs that have passed the hard TTL and are no
+    # longer in memory.
+    root = _checkpoint_root()
+    if root.is_dir():
+        for state_path in root.glob("*/state.json"):
+            job_id = state_path.parent.name
+            if job_id in _JOBS:
+                continue
+            try:
+                created = json.loads(
+                    state_path.read_text(encoding="utf-8")
+                ).get("created_at", 0)
+            except (OSError, ValueError):
+                created = 0
+            if created < hard_cutoff:
+                logger.info("Discarding stale checkpoint %s", job_id)
+                delete_job(job_id)
+
+
 def _sweep_loop() -> None:
     while True:
         time.sleep(config.JOB_SWEEP_INTERVAL_SECONDS)
-        cutoff = time.time() - config.JOB_TTL_SECONDS
-        stale = [job_id for job_id, job in _JOBS.items() if job.created_at < cutoff]
-        for job_id in stale:
-            logger.info("Sweeping stale mining job %s", job_id)
-            delete_job(job_id)
+        try:
+            _sweep_once()
+        except Exception:  # noqa: BLE001 - a sweep error must not kill the thread
+            logger.warning("Mining job sweep failed", exc_info=True)
 
 
 def start_sweep_thread() -> None:

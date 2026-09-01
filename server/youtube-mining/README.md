@@ -216,9 +216,14 @@ challenges using node` with no `n challenge solving failed` warning.
   covers the deployed GitHub Pages origin + local Vite dev).
 - `MINING_JOBS_ROOT` — scratch directory for in-progress jobs (default
   `/tmp/youtube-mining-jobs`).
-- `MINING_JOB_TTL_SECONDS` / `MINING_JOB_SWEEP_INTERVAL_SECONDS` — how
-  long an abandoned job's scratch directory (downloaded audio, clips)
-  survives before automatic cleanup, and how often the sweep runs.
+- `MINING_JOB_TTL_SECONDS` / `MINING_JOB_HARD_TTL_SECONDS` /
+  `MINING_JOB_SWEEP_INTERVAL_SECONDS` — the first is the *idle* TTL: a
+  finished job's scratch dir is dropped once it has gone this long (default
+  6h) without a client request, but its checkpoint under
+  `<JOBS_ROOT>/checkpoints/` is kept so the wizard can still resume it. The
+  hard TTL (default 48h, from job creation) is the backstop that reaps a
+  job wedged mid-pipeline and discards its checkpoint. The last is how
+  often the sweep runs.
 - `MINING_EXIT_NODE` / `MINING_EXIT_NODE_FALLBACK` — Tailscale device
   name(s) to route each download through (primary, then fallback if the
   primary is offline). See "Tailscale exit node" above. Unset by default.

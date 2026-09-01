@@ -33,6 +33,26 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Mining jobs: disk checkpoints + cross-machine resume.** A
+  job whose transcription ran past the 6h `JOB_TTL_SECONDS` was swept
+  overnight (age from `created_at`, never bumped) — the next morning's
+  "Apply & segment" 404'd with "Job not found". Fixed: (1) `JOB_TTL_SECONDS`
+  is now an *idle* TTL — every client request bumps `Job.touched_at`, a job
+  polling in an open wizard never ages out, and a job still mid-pipeline is
+  never idle-swept (only the new `JOB_HARD_TTL_SECONDS`, 48h, reaps a wedged
+  one). (2) `jobs._write_checkpoint` persists each stage transition to
+  `JOBS_ROOT/checkpoints/<id>/` (state JSON + a copy of the subtitle tracks;
+  source audio re-pulled from `source_cache` / lazily re-downloaded via
+  `_ensure_source_audio`). `get_job` rehydrates from the checkpoint when the
+  in-memory job is gone (restart *or* idle sweep), so the same job resumes
+  after a process bounce. (3) `GET /jobs` lists resumable jobs (memory +
+  checkpoints); `POST /jobs` reconnects to an existing non-errored job for
+  the same URL/video instead of starting a duplicate mine. Wizard idle
+  screen shows a "pick up an import already in progress" list
+  (`listMiningJobs`) so a transcription kicked off on one device is finished
+  on another; `ytmine.activeJob` local pointer max-age 6h → 48h.
+  `test_jobs_api.py` +4, `youtubeMine.test.tsx` +1.
+
 - **2026-09-01 — Mining: services retuned + "Segment with AI help".** A
   32-min Nakata source hit the mining client's 1800s ASR timeout and fell
   back to punctuation-free auto-captions — the word-timestamp DTW pass in

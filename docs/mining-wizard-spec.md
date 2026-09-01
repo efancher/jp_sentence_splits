@@ -53,9 +53,12 @@ independently shippable and testable. Commit + push to `main` per
 
 - **Replace `YouTubeMinePage` in place**, same route. Don't keep two flows.
   But land it stage-by-stage so the page always works between commits.
-- **Job persistence: bump `JOB_TTL_SECONDS` to ~6 h** for the interactive
-  window. No disk checkpointing — a swept mid-wizard job means restart, and
-  the source is cached so re-download is the only cost. Defer.
+- **Job persistence** (done 2026-09-01, superseding the original "defer, no
+  checkpointing" call): `JOB_TTL_SECONDS` is now a 6h *idle* TTL and every
+  stage transition is checkpointed to `<JOBS_ROOT>/checkpoints/<id>/`, so
+  `get_job` rehydrates after a restart or an idle sweep and a job started on
+  one machine resumes on another (`GET /jobs` picker). A wedged mid-pipeline
+  job is reaped only by `JOB_HARD_TTL_SECONDS` (48h).
 - **Stage 0 (chapter/range scoping): not in v1.** Whole video only.
 - **Vocab stays a *preview* at stage 4, not full confirmation.** The import
   still lands sentences with `vocabularySuggestions`; the learner confirms
@@ -148,9 +151,12 @@ also gain the waveform (it's the same `<SegmentationEditor>` now).
 
 ## Gotchas
 
-- The job registry is an in-process dict; a service restart drops all
-  in-flight jobs. Fine for W1–W6 (interactive, short-lived) — just don't
-  assume persistence.
+- The job registry is an in-process dict, but each stage transition is
+  checkpointed to disk (`jobs._write_checkpoint`) and `get_job` rehydrates
+  from the checkpoint, so a service restart no longer loses a completed or
+  mid-review job (a job still *fetching*/*transcribing* when the process
+  dies is lost — no checkpoint yet). Source audio is re-pulled from
+  `source_cache` lazily.
 - `_run_job` and the stage handlers are CPU/IO-bound → `threading.Thread` /
   `asyncio.to_thread`, never bare `asyncio.create_task` (see the jobs.py
   docstring — TestClient doesn't keep a request loop alive).
