@@ -123,12 +123,16 @@ deferred" section and the notes below. Two items from this list shipped
 2026-08-31 — see **Review new-card backlog fix** and **Cross-sentence
 learner profile** under Done above.
 
-- [ ] **Re-mine the 3 auto-caption-fragmented sources.** After Work, First
-  Day at Work, GLIM SPANKY were systemically mis-segmented (pre-2026-08-23,
-  auto-captions, no punctuation). The ASR pipeline + `ResegmentSourcePage`
-  + audio carry-across now exist; this is mostly mechanical, but needs the
-  mining + analysis services running and YouTube access via an exit-node
-  device. Content quality on material studied daily.
+- [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
+  clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
+  "After Work" (`FkX4A-ZLBrc`, 116 sentences, **zero study progress**) is
+  still broken after the 2026-08-29 re-segment: garbled name ASR
+  (翔吾→"し吾"), human translations scrambled across sentences, gap
+  positions. Fix: fresh re-mine through the YouTubeMinePage wizard (ASR
+  `large-v3-turbo` → review segmentation → translate → commit into the
+  existing book, idempotent on `source_key`). Browser + human
+  translation-review — not safe to headless against production. Mac exit
+  node is up.
 - [ ] **Grammar production ladder.** The grammar system stops at
   recognition (`grammar_comprehension`/`completion`/`contrast`) while the
   vocab side has a real production ladder. Add a produce-a-sentence-using-
