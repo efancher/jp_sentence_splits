@@ -293,30 +293,50 @@ export interface CommitRowInput {
 }
 
 /**
- * Clip every reviewed row from the source in one request
- * (`POST /jobs/{id}/commit`), each with its audio inline — the wizard's
- * commit stage, replacing a per-row {@link clipMiningRange} +
- * {@link fetchMiningClipAudio} round trip. ffmpeg still runs serially
- * server-side, so a long video still takes a bit.
+ * Default rows per `POST /jobs/{id}/commit` request. ffmpeg runs serially
+ * server-side (~0.5 s/row), so a whole long video in one request blows past
+ * the tailnet proxy's response timeout and the browser reports a bare
+ * "Load failed". Chunking keeps every request short; the server's
+ * `commit_job` is incremental (it appends to the job's clip set), so the
+ * batches accumulate into the same result a single call would have given.
+ */
+const COMMIT_CHUNK_SIZE = 30;
+
+/**
+ * Clip every reviewed row from the source (`POST /jobs/{id}/commit`), each
+ * with its audio inline — the wizard's commit stage, replacing a per-row
+ * {@link clipMiningRange} + {@link fetchMiningClipAudio} round trip. Sent in
+ * batches of {@link COMMIT_CHUNK_SIZE}; `onProgress` fires after each batch
+ * with the running (done, total) count.
  */
 export async function commitMiningJob(
   jobId: string,
   rows: CommitRowInput[],
-  options: { generateKana?: boolean } = {},
+  options: {
+    generateKana?: boolean;
+    chunkSize?: number;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
 ): Promise<{ clip: MiningClipResult; blob: Blob }[]> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows, generateKana: options.generateKana ?? true }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to clip sentences: ${await readErrorDetail(response)}`);
+  const chunkSize = Math.max(1, options.chunkSize ?? COMMIT_CHUNK_SIZE);
+  const out: { clip: MiningClipResult; blob: Blob }[] = [];
+  for (let start = 0; start < rows.length; start += chunkSize) {
+    const batch = rows.slice(start, start + chunkSize);
+    const response = await fetch(`${API_BASE}/jobs/${jobId}/commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: batch, generateKana: options.generateKana ?? true }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to clip sentences: ${await readErrorDetail(response)}`);
+    }
+    const { sentences } = commitResponseSchema.parse(await response.json());
+    for (const { audioBase64, ...clip } of sentences) {
+      out.push({ clip, blob: base64ToBlob(audioBase64, clip.audio.mimeType) });
+    }
+    options.onProgress?.(out.length, rows.length);
   }
-  const { sentences } = commitResponseSchema.parse(await response.json());
-  return sentences.map(({ audioBase64, ...clip }) => ({
-    clip,
-    blob: base64ToBlob(audioBase64, clip.audio.mimeType),
-  }));
+  return out;
 }
 
 export async function fetchMiningClipAudio(

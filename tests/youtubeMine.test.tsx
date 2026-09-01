@@ -205,6 +205,7 @@ describe('YouTube mining wizard', () => {
       expect.arrayContaining([
         expect.objectContaining({ japanese: '行きましょう。', endMs: 3200 }),
       ]),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     );
 
     await user.click(screen.getByRole('button', { name: 'Import complete project' }));

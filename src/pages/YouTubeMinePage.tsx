@@ -465,6 +465,10 @@ export function YouTubeMinePage() {
             startMs: row.startMs,
             endMs: row.endMs,
           })),
+          {
+            onProgress: (done, total) =>
+              setBusyNote(`Clipping sentences from the source… ${done}/${total}`),
+          },
         );
         const sentences: ShadowingSentenceInput[] = [];
         const audio: ShadowingAudioDraft[] = [];

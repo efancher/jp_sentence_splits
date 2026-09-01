@@ -275,6 +275,57 @@ describe('commitMiningJob', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('sends rows in batches and reports running progress', async () => {
+    const clip = {
+      sentenceId: 's',
+      japanese: 'ねこ。',
+      reading: null,
+      english: null,
+      startMs: 0,
+      endMs: 900,
+      subtitleStartMs: 0,
+      subtitleEndMs: 900,
+      adjustedStartMs: 0,
+      adjustedEndMs: 900,
+      transcriptStatus: 'manually-corrected',
+      tokens: null,
+      audio: { mimeType: 'audio/mp4', durationMs: 800 },
+    };
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { rows: unknown[] };
+      return new Response(
+        JSON.stringify({
+          sentences: body.rows.map((_, i) => ({
+            ...clip,
+            sentenceId: `s-${i}`,
+            audioBase64: btoa('x'),
+          })),
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rows = Array.from({ length: 5 }, () => ({
+      japanese: 'ねこ。',
+      startMs: 0,
+      endMs: 900,
+    }));
+    const progress: Array<[number, number]> = [];
+    const out = await commitMiningJob('job1', rows, {
+      chunkSize: 2,
+      onProgress: (done, total) => progress.push([done, total]),
+    });
+
+    expect(out).toHaveLength(5);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(progress).toEqual([
+      [2, 5],
+      [4, 5],
+      [5, 5],
+    ]);
+  });
 });
 
 describe('fetchSourceAudioRange', () => {

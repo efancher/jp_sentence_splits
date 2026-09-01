@@ -33,6 +33,19 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Mining wizard: chunked commit.** The commit stage's single
+  `POST /jobs/{id}/commit` carrying every reviewed row (383 on a long video)
+  ran ffmpeg serially past the tailnet proxy's response timeout — the browser
+  surfaced a bare "Load failed" and the wizard never left the Translate
+  stage. `commitMiningJob` now sends rows in batches of `COMMIT_CHUNK_SIZE`
+  (30), accumulating into the same result (`commit_job` is incremental —
+  appends to `Job.clips`, bumps `next_sentence_seq`), and calls `onProgress`
+  after each batch so the wizard shows "Clipping sentences… N/total".
+  Server-side, `commit_job` probes the constant source duration once instead
+  of once per row (hundreds of redundant ffprobe spawns). `miningApi.test.ts`
+  +1, `youtubeMine.test.tsx` +1 assertion. Server change needs redeploy on
+  codex-dev to take effect; the client chunking alone fixes the hang.
+
 - **2026-09-01 — Mining wizard: "Translate with AI help".** The Translate
   stage now has a copy/paste panel mirroring the transcript stage's "Segment
   with AI help": `formatRowsForTranslationAI` emits every sentence numbered

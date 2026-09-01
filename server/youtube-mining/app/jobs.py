@@ -587,12 +587,18 @@ def clip_range(job: Job, req: ClipRequest) -> ClipResponse:
 
 
 def _clip_range(
-    job: Job, req: ClipRequest, start_ms: int, end_ms: int
+    job: Job,
+    req: ClipRequest,
+    start_ms: int,
+    end_ms: int,
+    *,
+    media_duration_ms: int | None = None,
 ) -> ClipResponse:
     reading = readings.generate_reading(req.japanese) if req.generateKana else None
     tokens = morphology.tokenize_japanese(req.japanese) if req.generateKana else []
 
-    media_duration_ms = clip.probe_duration_ms(job.source_audio_path)
+    if media_duration_ms is None:
+        media_duration_ms = clip.probe_duration_ms(job.source_audio_path)
     subtitle_start, subtitle_end, adjusted_start, adjusted_end = clip.compute_boundaries(
         start_ms, end_ms, media_duration_ms=media_duration_ms
     )
@@ -630,6 +636,9 @@ def commit_job(job: Job, req: CommitJobRequest) -> list[CommitSentence]:
     if job.status != "ready":
         raise ValueError("Job is not ready for clipping yet")
     _ensure_source_audio(job)
+    # Probe the (constant) source once rather than once per row — a batch of
+    # hundreds otherwise spawns hundreds of redundant ffprobe processes.
+    media_duration_ms = clip.probe_duration_ms(job.source_audio_path)
     out: list[CommitSentence] = []
     for row in req.rows:
         clip_req = ClipRequest(
@@ -639,7 +648,9 @@ def commit_job(job: Job, req: CommitJobRequest) -> list[CommitSentence]:
             endMs=row.endMs,
             generateKana=req.generateKana,
         )
-        result = _clip_range(job, clip_req, row.startMs, row.endMs)
+        result = _clip_range(
+            job, clip_req, row.startMs, row.endMs, media_duration_ms=media_duration_ms
+        )
         audio_bytes = job.clips[result.sentenceId].path.read_bytes()
         out.append(
             CommitSentence(

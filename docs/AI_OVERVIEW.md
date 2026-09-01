@@ -513,8 +513,9 @@ observed from outside `ReviewPage`'s own due-queue state.
   `src/lib/miningTranslate.ts`: numbered `JP` + current draft out, numbered
   `N. english` reply back, fills blanks and replaces weak/mis-scoped drafts,
   no Edge Function) →
-  **Commit** (one `POST /jobs/{id}/commit` clips every row from source
-  with audio inline; preview + vocab-suggestion count). Back/forward +
+  **Commit** (`POST /jobs/{id}/commit` clips rows from source with audio
+  inline, batched 30 at a time so a long video doesn't time out the tailnet
+  proxy; progress counter; preview + vocab-suggestion count). Back/forward +
   per-stage re-run. The in-flight job id is persisted to `localStorage`
   (`ytmine.activeJob`, 48h max-age) so a refresh / accidental nav / phone
   tab-unload **reconnects** by rehydrating from the job's server-side
@@ -1389,8 +1390,9 @@ aren't JSON-serializable/aren't worth backing up).
   drives: `POST /jobs/{id}/segment` accepts a corrected transcript and
   re-resegments, `POST /jobs/{id}/translate` re-aligns EN,
   `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
-  source for inline playback, `POST /jobs/{id}/commit` clips every
-  reviewed row in one request (audio inline). `POST /source-audio/range`
+  source for inline playback, `POST /jobs/{id}/commit` clips a batch of
+  reviewed rows (audio inline) and is incremental — the client sends ~30 at
+  a time and accumulates. `POST /source-audio/range`
   is the equivalent span stream for an already-imported book's source
   (the re-segment page's waveform). `_run_job` still auto-advances every
   stage on creation as a fallback.
