@@ -112,6 +112,9 @@ const AI_PROMPT_HEADER = [
   '- Add sentence-final punctuation (。！？) where it belongs.',
   '- Fix obvious mis-recognitions, but keep the wording faithful — do not paraphrase or translate.',
   '- Begin every line with the [m:ss] timestamp of the fragment where that sentence starts.',
+  '- Keep lines short enough to shadow: merge at most 2-3 source fragments into one line.',
+  '  Never combine a long run of fragments into one paragraph-length sentence, even if the',
+  '  original speech runs on without a clear break — split it at a natural pause instead.',
   '- Output only the sentence lines, nothing else.',
   '',
   '--- transcript ---',
@@ -134,6 +137,12 @@ const AI_LINE_RE = /^\[\s*(\d+):([0-5]?\d)(?:\.\d+)?\s*\]\s*(.*\S)?\s*$/;
  * timestamp is treated as a wrapped continuation of the previous sentence.
  * Returns `[]` when nothing parseable is found, so the caller can warn
  * rather than blow away the transcript.
+ *
+ * The source ASR only timestamps whole fragments, so when the assistant
+ * splits one fragment into several sentences, those sentences share a
+ * timestamp. Such a group is spread proportionally (by text length) across
+ * the gap to the next distinct timestamp, instead of every entry but the
+ * last collapsing to a 1ms clip.
  */
 export function parseAiSegmentedTranscript(
   reply: string,
@@ -157,18 +166,37 @@ export function parseAiSegmentedTranscript(
   }
   if (parsed.length === 0) return [];
   parsed.sort((a, b) => a.startMs - b.startMs);
-  return parsed.map((entry, index) => {
-    const nextStart = parsed[index + 1]?.startMs;
-    const end =
-      nextStart !== undefined
-        ? Math.max(nextStart, entry.startMs + 1)
-        : Math.max(fallbackEndMs, entry.startMs + 1);
-    return {
-      text: entry.text,
-      startMs: entry.startMs,
-      endMs: end,
-      isAuto: true,
-      lowConfidence: false,
-    };
+
+  const groups: { startMs: number; text: string }[][] = [];
+  for (const entry of parsed) {
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup && lastGroup[0]!.startMs === entry.startMs) {
+      lastGroup.push(entry);
+    } else {
+      groups.push([entry]);
+    }
+  }
+
+  const segs: WizardTranscriptSeg[] = [];
+  groups.forEach((group, groupIndex) => {
+    const groupStart = group[0]!.startMs;
+    const nextGroupStart = groups[groupIndex + 1]?.[0]?.startMs;
+    const groupEnd =
+      nextGroupStart !== undefined
+        ? Math.max(nextGroupStart, groupStart + group.length)
+        : Math.max(fallbackEndMs, groupStart + group.length);
+    const totalLen = group.reduce((sum, entry) => sum + entry.text.length, 0);
+    let cursor = groupStart;
+    let cumLen = 0;
+    group.forEach((entry, i) => {
+      cumLen += entry.text.length;
+      const isLast = i === group.length - 1;
+      const end = isLast
+        ? groupEnd
+        : Math.max(cursor + 1, Math.round(groupStart + (groupEnd - groupStart) * (cumLen / totalLen)));
+      segs.push({ text: entry.text, startMs: cursor, endMs: end, isAuto: true, lowConfidence: false });
+      cursor = end;
+    });
   });
+  return segs;
 }

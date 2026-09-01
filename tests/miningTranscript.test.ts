@@ -107,9 +107,13 @@ describe('formatTranscriptForAI / parseAiSegmentedTranscript round-trip', () => 
       'さぁ、今日も早速参りましょう。',
       'エクストリーム現代社会、説明が上手い人・下手な人。',
     ]);
+    // Both lines share a [0:00] fragment timestamp — spread proportionally
+    // by text length (10 vs 15 chars) across the 2000ms gap to the next
+    // distinct timestamp, instead of the first collapsing to a 1ms clip.
     expect(out[0]!.startMs).toBe(0);
-    expect(out[1]!.startMs).toBe(0);
-    expect(out[0]!.endMs).toBe(1); // same start as next → +1ms
+    expect(out[0]!.endMs).toBe(800);
+    expect(out[1]!.startMs).toBe(800);
+    expect(out[1]!.endMs).toBe(2000);
     expect(out[2]!.startMs).toBe(2000);
     expect(out[2]!.endMs).toBe(7850); // last runs to fallback end
     expect(out.every((s) => s.isAuto && !s.lowConfidence)).toBe(true);
