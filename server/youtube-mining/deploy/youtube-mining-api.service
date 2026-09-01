@@ -17,6 +17,12 @@ Environment=MINING_EXIT_NODE_FALLBACK=iphone174
 # user PATH doesn't include nvm's. Point at a stable symlink the user
 # maintains: ln -sfn "$(nvm which default)" ~/.local/bin/node
 Environment=MINING_YTDLP_JS_RUNTIME_PATH=%h/.local/bin/node
+# Source ASR on a small (4-core) analysis box can take longer than the
+# 1800s default for a 30-min+ video; a timeout silently falls back to
+# punctuation-free auto-captions. Pair with ANALYSIS_SOURCE_WORD_TIMESTAMPS=0
+# on shadowing-analysis-api (that's the real speedup — its word-timestamp
+# DTW pass is single-threaded Python).
+Environment=MINING_ASR_TIMEOUT_SECONDS=3600
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5
