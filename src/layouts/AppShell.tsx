@@ -16,6 +16,7 @@ const NAV = [
   { to: '/study-items', label: 'Study items' },
   { to: '/vocabulary', label: 'Words' },
   { to: '/grammar', label: 'Grammar' },
+  { to: '/progress', label: 'Progress' },
   { to: '/search', label: 'Search' },
   { to: '/import', label: 'Import' },
   { to: '/import/youtube', label: 'Import from YouTube' },

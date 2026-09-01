@@ -32,6 +32,24 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Retention / progress-over-time view.** Home's 14-day
+  balance meters were the only aggregate view. New `/progress`
+  (`ProgressPage`, in the AppShell nav + Home shortcut row) backed by
+  `src/lib/progressReport.ts` (`buildProgressReport`, pure): vocabulary
+  ladder counts (tracked / proficient / mature / first-recalled in the last
+  30d — "learned" moment = the earliest passing review across a word's
+  activities), FSRS recall-success rate (rating ≠ Again over scheduled
+  reviews; 30d + all-time, natural encounters excluded), grammar
+  tracked/recognized (`grammar_comprehension` proficiency), shadowing
+  attempt count + timing/pitch trend (delegates to
+  `getPronunciationProfile`), and an 8-week reviews-per-week +
+  cumulative-words-learned trend rendered with the existing `.progress-bar`
+  meter (no charting dependency — matches "deliberately minimal"). Every
+  number recomputed on load from `Review`/`StudyItem`/`AttemptAnalysisSummary`
+  rows; `getProgressReport` in `repository.ts` is the only fetch.
+  `progressReport.test.ts` (7), `progressPage.test.tsx` (2). Not
+  browser-verified.
+
 - **2026-09-01 — `reading_in_context` vs `comprehension`.** Open since
   Phase 4 — the two sentence-subject activity types shared one interaction.
   `reading_in_context` now embeds the sentence in its passage:

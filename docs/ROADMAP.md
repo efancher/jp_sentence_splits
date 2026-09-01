@@ -155,11 +155,16 @@ learner profile**, and **Grammar production ladder** under Done above.
   context · <book>" caption. Home book = the sentence's most recently
   opened book. Degrades to the isolated layout when no context is
   available. `comprehension` unchanged.
-- [ ] **Retention / progress-over-time view.** One honest "how am I doing"
-  screen — words learned over time, retention rate, grammar patterns
-  matured, shadowing trend — from the evidence data already logged. Home's
-  14-day balance meters are the only aggregate view today. Deliberately
-  minimal (dedicated debug/diagnostic views have been declined before).
+- [x] **Retention / progress-over-time view.** (2026-09-01)
+  `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
+  `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
+  ladder counts (tracked / proficient / mature / first-recalled-recently),
+  FSRS recall-success rate (30d + all-time, natural encounters excluded),
+  grammar tracked/recognized, shadowing attempt count + timing/pitch trend
+  (reuses `getPronunciationProfile`), and an 8-week reviews-per-week +
+  cumulative-words-learned trend rendered with the existing `.progress-bar`
+  meter (no charting dep). All recomputed from `Review`/`StudyItem`/
+  analysis-summary evidence — nothing seeded or stored.
 
 ## Not planned (deliberate)
 

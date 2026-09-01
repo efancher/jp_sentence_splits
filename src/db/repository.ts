@@ -54,6 +54,7 @@ import {
   buildPronunciationProfile,
   type PronunciationProfile,
 } from '../lib/pronunciationProfile';
+import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -2551,6 +2552,48 @@ export async function getPronunciationProfile(
       ? rows
       : rows.filter((row) => new Date(row.createdAt).getTime() >= cutoff);
   return buildPronunciationProfile(scoped);
+}
+
+/**
+ * "How am I doing" progress report (docs/ROADMAP.md) — every number is
+ * recomputed from `Review` rows, `StudyItem` FSRS state, and the shadowing
+ * analysis summaries, so there's nothing to seed or maintain. The heavy
+ * lifting is the pure `buildProgressReport`; this only fetches.
+ */
+export async function getProgressReport(
+  options: { now?: Date } = {},
+): Promise<ProgressReport> {
+  const db = getDb();
+  const now = options.now ?? new Date();
+  const [reviews, studyItems, pronunciation] = await Promise.all([
+    db.reviews.toArray(),
+    db.studyItems.toArray(),
+    getPronunciationProfile({ now }),
+  ]);
+  return buildProgressReport({
+    now,
+    reviews: reviews.map((review) => ({
+      studyItemId: review.studyItemId,
+      timestamp: review.timestamp,
+      rating: review.rating,
+      source: review.source,
+    })),
+    studyItems: studyItems.map((item) => ({
+      id: item.id,
+      subjectId: item.subjectId,
+      subjectType: item.subjectType,
+      activityType: item.activityType,
+      createdAt: item.createdAt,
+      state: item.fsrsState.state,
+      scheduledDays: item.fsrsState.scheduledDays,
+    })),
+    shadowing: {
+      attemptsAnalyzed: pronunciation.attemptsAnalyzed,
+      sentencesPracticed: pronunciation.sentencesPracticed,
+      timingTrend: pronunciation.timingTrend,
+      pitchTrend: pronunciation.pitchTrend,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

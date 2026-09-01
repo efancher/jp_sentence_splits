@@ -135,6 +135,11 @@ const PronunciationProfilePage = lazy(() =>
     default: module.PronunciationProfilePage,
   })),
 );
+const ProgressPage = lazy(() =>
+  import('./pages/ProgressPage').then((module) => ({
+    default: module.ProgressPage,
+  })),
+);
 
 export default function App() {
   useTheme();
@@ -155,6 +160,7 @@ export default function App() {
             <Route path="issues" element={<CardIssuesPage />} />
             <Route path="study-items" element={<StudyItemsListPage />} />
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
+            <Route path="progress" element={<ProgressPage />} />
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />
