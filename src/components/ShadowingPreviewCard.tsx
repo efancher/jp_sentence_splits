@@ -9,6 +9,13 @@ function formatAudioSize(bytes: number): string {
   return `${(bytes / BYTES_PER_MEBIBYTE).toFixed(1)} MB`;
 }
 
+const CONFLICT_FIELD_LABELS: Record<string, string> = {
+  translation: 'Translation',
+  readingOnly: 'Reading',
+  inlineReading: 'Inline reading',
+  japanese: 'Japanese',
+};
+
 interface ShadowingPreviewCardProps {
   preview: ShadowingImportPreview;
   onImported: (result: { bookId: string }) => void;
@@ -33,6 +40,10 @@ export function ShadowingPreviewCard({
 }: ShadowingPreviewCardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const conflicts = preview.drafts
+    .filter((item) => item.draft.conflicts.length > 0)
+    .map((item) => ({ japanese: item.draft.japanese, list: item.draft.conflicts }));
 
   return (
     <div className="stack">
@@ -61,6 +72,30 @@ export function ShadowingPreviewCard({
           {warning.message}
         </div>
       ))}
+      {conflicts.length > 0 ? (
+        <details className="stack" style={{ fontSize: '0.85rem' }}>
+          <summary style={{ cursor: 'pointer' }}>
+            Conflicting values ({conflicts.length} sentence
+            {conflicts.length === 1 ? '' : 's'}) — the first occurrence is kept
+          </summary>
+          <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem' }}>
+            {conflicts.map((entry) => (
+              <li key={entry.japanese} style={{ marginBottom: '0.4rem' }}>
+                <div lang="ja">{entry.japanese}</div>
+                {entry.list.map((conflict) => (
+                  <div key={conflict.field} className="muted">
+                    {CONFLICT_FIELD_LABELS[conflict.field] ?? conflict.field}:{' '}
+                    keeping “{conflict.preferred}”, dropping{' '}
+                    {conflict.alternatives
+                      .map((alternative) => `“${alternative}”`)
+                      .join(', ')}
+                  </div>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
         {retentionNote ?? (
           <>

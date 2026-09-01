@@ -33,6 +33,13 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Import preview: conflict detail.** `ShadowingPreviewCard`
+  now renders a collapsible list of the sentences whose repeated occurrences
+  disagreed (kept value vs. dropped alternative, per field) instead of only
+  the bare "N conflicting value(s)" pill — the shadowing-zip and mining
+  commit stages share the card. Display-only; resolution is unchanged (first
+  occurrence wins, edit post-import). `shadowingImport.test.ts` +1.
+
 - **2026-09-01 — Mining wizard: chunked commit.** The commit stage's single
   `POST /jobs/{id}/commit` carrying every reviewed row (383 on a long video)
   ran ffmpeg serially past the tailnet proxy's response timeout — the browser

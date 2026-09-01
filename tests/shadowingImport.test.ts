@@ -370,4 +370,49 @@ describe('shadowing project import', () => {
     expect(audioRows).toHaveLength(1);
     expect(audioRows[0]?.sentenceId).toBe(storedSentence?.id);
   });
+
+  it('flags a repeated sentence whose second occurrence disagrees', () => {
+    const common = {
+      japanese: 'そうですね。',
+      reading: 'そうですね。',
+      startMs: 0,
+      endMs: 1000,
+      tags: [] as string[],
+      transcriptStatus: 'manually-corrected' as const,
+    };
+    const sentences: ShadowingSentenceInput[] = [
+      { ...common, id: 's-1', english: 'That is right.', startMs: 0, endMs: 1000 },
+      { ...common, id: 's-2', english: 'I agree.', startMs: 5000, endMs: 6000 },
+    ];
+
+    const preview = buildShadowingPreview(
+      {
+        id: 'source-vid-dup',
+        type: 'youtube',
+        url: 'https://www.youtube.com/watch?v=dup',
+        videoId: 'dup',
+        title: 'Repeats',
+        channel: 'C',
+      },
+      {
+        format: 'japanese-shadowing-package',
+        version: 2,
+        createdAt: '2026-09-01T00:00:00Z',
+        generator: { name: 'jp-sentence-splits-youtube-mining', version: '1' },
+      },
+      sentences,
+      [],
+      [],
+    );
+
+    expect(preview.counts.uniqueSentences).toBe(1);
+    expect(preview.repeatedOccurrenceCount).toBe(1);
+    expect(preview.counts.conflictCount).toBe(1);
+    const conflict = preview.drafts[0]?.draft.conflicts[0];
+    expect(conflict).toMatchObject({
+      field: 'translation',
+      preferred: 'That is right.',
+      alternatives: ['I agree.'],
+    });
+  });
 });
