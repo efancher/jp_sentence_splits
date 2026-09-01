@@ -77,8 +77,11 @@ class Job:
     status: JobState = "pending"
     # Finer, re-runnable pipeline position each wizard panel drives.
     stage: JobStage = "fetching"
-    # Human-readable progress line for both UIs.
+    # Human-readable progress line for both UIs. `message_started_at` is
+    # bumped every time `message` changes (via `set_message`) so the wizard
+    # can show "N min elapsed" during the long transcription step.
     message: str = "Queued…"
+    message_started_at: float = field(default_factory=time.time)
     error: str | None = None
     source: SourceInfo | None = None
     is_music: bool = False
@@ -95,6 +98,11 @@ class Job:
     source_audio_path: Path | None = None
     clips: dict[str, ClipRecord] = field(default_factory=dict)
     next_sentence_seq: int = 1
+
+    def set_message(self, message: str) -> None:
+        """Set the progress line and reset its elapsed-time clock."""
+        self.message = message
+        self.message_started_at = time.time()
 
 
 _JOBS: dict[str, Job] = {}
@@ -160,12 +168,12 @@ def _run_job(job: Job, url: str) -> None:
         run_translate(job)
         job.status = "ready"
         job.stage = "ready"
-        job.message = f"Ready — {len(job.cues)} sentence(s) found."
+        job.set_message(f"Ready — {len(job.cues)} sentence(s) found.")
     except Exception as exc:  # noqa: BLE001 - surfaced to the client as job.error
         logger.exception("Mining job %s failed", job.id)
         job.status = "error"
         job.stage = "error"
-        job.message = "Failed"
+        job.set_message("Failed")
         job.error = str(exc)
 
 
@@ -174,7 +182,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
     `job.raw_cues` / `job.transcript` populated — no resegmentation yet."""
     job.status = "fetching"
     job.stage = "fetching"
-    job.message = "Downloading audio…"
+    job.set_message("Downloading audio…")
     # All three YouTube fetches (audio, subtitles, info) share one exit
     # node detour — flipping it per-call would thrash the box's routing.
     with exit_node.routed_for_download():
@@ -189,10 +197,10 @@ def _fetch_transcript(job: Job, url: str) -> None:
                 "and retry."
             )
 
-        job.message = "Fetching subtitles…"
+        job.set_message("Fetching subtitles…")
         youtube.download_subtitles(url, job.dir)
 
-        job.message = "Reading video info…"
+        job.set_message("Reading video info…")
         info = youtube.inspect_url(url)
     job.source = youtube.info_to_source(info)
 
@@ -228,7 +236,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
             "lyrics" if job.is_music else "human",
             len(caption_cues),
         )
-        job.message = (
+        job.set_message(
             "Reading lyrics…" if job.is_music else "Splitting sentences…"
         )
         keep_auto = job.is_music and not _looks_human_captioned(caption_cues)
@@ -238,7 +246,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
             else [c.model_copy(update={"isAuto": False}) for c in caption_cues]
         )
     else:
-        job.message = "Transcribing audio…"
+        job.set_message("Transcribing audio…")
         raw_cues = asr_client.transcribe_source(
             cached_source or job.source_audio_path
         )
@@ -249,7 +257,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
                 len(raw_cues),
             )
         else:
-            job.message = "Splitting sentences…"
+            job.set_message("Splitting sentences…")
             raw_cues = caption_cues
 
     job.raw_cues = [
@@ -261,7 +269,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
     job.english_by_index = {}
     job.rows = []
     job.stage = "transcript"
-    job.message = f"Transcript ready — {len(job.transcript)} segment(s)."
+    job.set_message(f"Transcript ready — {len(job.transcript)} segment(s).")
 
 
 def _to_transcript_segment(cue: Cue) -> TranscriptSegment:
@@ -320,7 +328,7 @@ def run_segment(
     job.english_by_index = {}
     job.rows = []
     job.stage = "segment"
-    job.message = f"{len(job.cues)} sentence(s) segmented."
+    job.set_message(f"{len(job.cues)} sentence(s) segmented.")
 
 
 def run_translate(job: Job) -> None:
@@ -344,7 +352,7 @@ def run_translate(job: Job) -> None:
         for cue in job.cues
     ]
     job.stage = "translate"
-    job.message = f"{len(job.rows)} row(s) translated."
+    job.set_message(f"{len(job.rows)} row(s) translated.")
 
 
 def job_status(job: Job) -> JobStatusResponse:
@@ -353,6 +361,7 @@ def job_status(job: Job) -> JobStatusResponse:
         status=job.status,
         stage=job.stage,
         message=job.message,
+        elapsedSeconds=round(max(0.0, time.time() - job.message_started_at), 1),
         error=job.error,
         source=job.source,
         transcript=job.transcript or None,

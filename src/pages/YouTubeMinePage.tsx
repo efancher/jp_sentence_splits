@@ -16,6 +16,7 @@ import {
   getMiningJob,
   translateJob,
   type MiningCue,
+  type MiningJobStatus,
   type MiningSourceInfo,
 } from '../lib/miningApi';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
@@ -32,6 +33,68 @@ import {
 } from '../lib/shadowingImport';
 
 const POLL_INTERVAL_MS = 1500;
+
+/**
+ * The in-flight job id is kept in `localStorage` so a refresh / accidental
+ * nav-away / phone unloading the tab can reconnect instead of restarting a
+ * 20-minute mine. The server keeps the job for `JOB_TTL_SECONDS` (6h); this
+ * pointer is ignored once older than that.
+ */
+const ACTIVE_JOB_KEY = 'ytmine.activeJob';
+const ACTIVE_JOB_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function storeActiveJob(jobId: string): void {
+  try {
+    localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify({ jobId, savedAt: Date.now() }));
+  } catch {
+    // Private mode / storage disabled — resume just won't be available.
+  }
+}
+
+function clearActiveJob(): void {
+  try {
+    localStorage.removeItem(ACTIVE_JOB_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function readActiveJob(): string | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_JOB_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { jobId?: unknown; savedAt?: unknown };
+    if (typeof parsed.jobId !== 'string') return null;
+    if (typeof parsed.savedAt === 'number' && Date.now() - parsed.savedAt > ACTIVE_JOB_MAX_AGE_MS) {
+      return null;
+    }
+    return parsed.jobId;
+  } catch {
+    return null;
+  }
+}
+
+/** m:ss for a live elapsed counter. */
+function formatElapsed(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * A soft "usually about this long" hint for the current step, so the long
+ * transcription wait is legible. Transcription scales with the video's
+ * length (~0.4x realtime with word timestamps off — see the analysis
+ * service config); the others are quick and get no hint.
+ */
+function stepEtaHint(message: string, durationMs: number | null | undefined): string | null {
+  if (message.startsWith('Transcribing')) {
+    if (!durationMs) return null;
+    const minutes = Math.max(1, Math.round((durationMs / 1000) * 0.4 / 60));
+    return `usually ~${minutes} min`;
+  }
+  if (message.startsWith('Downloading')) return 'usually under a minute';
+  return null;
+}
 
 type Stage = 'idle' | 'starting' | 'transcript' | 'segment' | 'translate' | 'commit';
 
@@ -64,6 +127,30 @@ function rowsFromCues(cues: MiningCue[]): ResegmentReviewRow[] {
   }));
 }
 
+function transcriptFromJob(job: MiningJobStatus): WizardTranscriptSeg[] {
+  return (job.transcript ?? []).map((seg) => ({
+    text: seg.text,
+    startMs: seg.startMs,
+    endMs: seg.endMs,
+    isAuto: seg.isAuto ?? false,
+    lowConfidence: seg.lowConfidence ?? false,
+  }));
+}
+
+/** Segment-stage rows with each row's EN overlaid from `job.rows` (same shape `applyAndTranslate` produces). */
+function translatedRowsFromJob(job: MiningJobStatus): ResegmentReviewRow[] {
+  const base = rowsFromCues(job.cues ?? []);
+  const aligned = job.rows ?? [];
+  return base.map((row, index) => {
+    const english = aligned[index]?.english?.trim() ?? '';
+    return {
+      ...row,
+      translation: english || row.translation,
+      needsTranslationReview: !(english || row.translation.trim()),
+    };
+  });
+}
+
 export function YouTubeMinePage() {
   const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>('idle');
@@ -78,16 +165,91 @@ export function YouTubeMinePage() {
   const [rows, setRows] = useState<ResegmentReviewRow[]>([]);
   const [realignNote, setRealignNote] = useState('');
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
+  const [resuming, setResuming] = useState(true);
+  // Wall-clock ms at which the current progress message started (server's
+  // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
+  const progressStartedAtRef = useRef<number>(Date.now());
+  const [, forceTick] = useState(0);
 
   const jobIdRef = useRef<string | null>(null);
   jobIdRef.current = jobId;
 
-  // Best-effort cleanup of the server-side job if the user navigates away.
+  // Persist the in-flight job id so a refresh can reconnect (see readActiveJob).
   useEffect(() => {
+    if (jobId) storeActiveJob(jobId);
+  }, [jobId]);
+
+  // Deliberately NOT cleaning up the job on unmount anymore — that's what
+  // made a refresh lose a 20-minute mine. Abandoned jobs are reclaimed by
+  // the server's TTL sweep; explicit "Start over" / "Cancel" / a finished
+  // import still delete right away.
+
+  // Resume an in-flight job on mount (refresh, accidental nav-away, phone
+  // reloading the PWA). The server's `stage` is authoritative for how far
+  // the pipeline got.
+  useEffect(() => {
+    const savedJobId = readActiveJob();
+    if (!savedJobId) {
+      setResuming(false);
+      return;
+    }
+    let cancelled = false;
+    void getMiningJob(savedJobId).then(
+      (job) => {
+        if (cancelled) return;
+        if (job.status === 'error') {
+          setError(job.error ?? 'The previous mining job failed.');
+          clearActiveJob();
+        } else {
+          setJobId(savedJobId);
+          setSource(job.source ?? null);
+          setProgress(job.message);
+          progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
+          hydrateStageFromJob(job);
+        }
+        setResuming(false);
+      },
+      () => {
+        if (cancelled) return;
+        clearActiveJob(); // gone / swept
+        setResuming(false);
+      },
+    );
     return () => {
-      if (jobIdRef.current) void deleteMiningJob(jobIdRef.current);
+      cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function hydrateStageFromJob(job: MiningJobStatus): void {
+    switch (job.stage) {
+      case 'fetching':
+        setStage('starting');
+        break;
+      case 'segment':
+        setRows(rowsFromCues(job.cues ?? []));
+        setStage('segment');
+        break;
+      case 'translate':
+        setRows(translatedRowsFromJob(job));
+        setStage('translate');
+        break;
+      case 'transcript':
+      case 'ready':
+      default:
+        setTranscript(transcriptFromJob(job));
+        setRows(rowsFromCues(job.cues ?? []));
+        setStage('transcript');
+        break;
+    }
+  }
+
+  // Live "N:NN elapsed" ticker while a step is in progress.
+  useEffect(() => {
+    if (stage !== 'starting') return;
+    const timer = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, [stage]);
 
   useEffect(() => {
     if (stage !== 'starting' || !jobId) return;
@@ -96,21 +258,14 @@ export function YouTubeMinePage() {
       void getMiningJob(jobId).then(
         (job) => {
           if (cancelled) return;
+          progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
           setProgress(job.message);
           if (job.status === 'error') {
             setError(job.error ?? 'Mining failed');
             setStage('idle');
           } else if (job.status === 'ready') {
             setSource(job.source ?? null);
-            setTranscript(
-              (job.transcript ?? []).map((seg) => ({
-                text: seg.text,
-                startMs: seg.startMs,
-                endMs: seg.endMs,
-                isAuto: seg.isAuto ?? false,
-                lowConfidence: seg.lowConfidence ?? false,
-              })),
-            );
+            setTranscript(transcriptFromJob(job));
             setRows(rowsFromCues(job.cues ?? []));
             setStage('transcript');
           }
@@ -130,6 +285,7 @@ export function YouTubeMinePage() {
 
   function reset() {
     if (jobId) void deleteMiningJob(jobId);
+    clearActiveJob();
     setStage('idle');
     setUrl('');
     setJobId(null);
@@ -324,7 +480,10 @@ export function YouTubeMinePage() {
           then walks you through fixing the transcript, the sentence
           boundaries, and the translations before adding a book.
         </p>
-        {stage === 'idle' ? (
+        {resuming && stage === 'idle' ? (
+          <div className="muted">Reconnecting to your last mining job…</div>
+        ) : null}
+        {!resuming && stage === 'idle' ? (
           <div className="row">
             <input
               style={{ flex: 1 }}
@@ -344,7 +503,19 @@ export function YouTubeMinePage() {
         ) : null}
         {stage === 'starting' ? (
           <div className="stack">
-            <div className="muted">{progress}</div>
+            <div className="muted">
+              {progress}
+              {' · '}
+              {formatElapsed((Date.now() - progressStartedAtRef.current) / 1000)} elapsed
+              {(() => {
+                const hint = stepEtaHint(progress, source?.durationMs);
+                return hint ? ` (${hint})` : '';
+              })()}
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              You can leave this page — the job keeps running and you'll reconnect to it when you
+              come back.
+            </p>
             <button type="button" onClick={reset}>
               Cancel
             </button>
@@ -530,6 +701,7 @@ export function YouTubeMinePage() {
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
             onImported={(result) => {
               if (jobId) void deleteMiningJob(jobId);
+              clearActiveJob();
               navigate(`/books/${result.bookId}`);
             }}
             onCancel={() => setStage('translate')}

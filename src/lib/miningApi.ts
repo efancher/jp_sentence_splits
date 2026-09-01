@@ -81,6 +81,8 @@ const jobStatusSchema = z.object({
     'error',
   ]),
   message: z.string(),
+  /** Seconds the current `message` has been showing — for the wizard's "N min elapsed" line. */
+  elapsedSeconds: z.number().optional().default(0),
   error: z.string().nullable().optional(),
   source: sourceInfoSchema.nullable().optional(),
   transcript: z.array(transcriptSegmentSchema).nullable().optional(),

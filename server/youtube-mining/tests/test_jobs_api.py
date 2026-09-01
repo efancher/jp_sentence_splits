@@ -281,6 +281,8 @@ def test_ready_job_exposes_stage_transcript_and_rows(client: TestClient) -> None
     assert [seg["text"] for seg in body["transcript"]] == ["こんにちは。", "元気ですか。"]
     assert [row["japanese"] for row in body["rows"]] == ["こんにちは。", "元気ですか。"]
     assert body["rows"][0]["english"] == "Hello."
+    # elapsedSeconds tracks how long the current message has been showing.
+    assert "elapsedSeconds" in body and body["elapsedSeconds"] >= 0.0
 
 
 def test_segment_endpoint_reruns_on_corrected_transcript(client: TestClient) -> None:

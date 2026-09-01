@@ -139,6 +139,9 @@ class JobStatusResponse(BaseModel):
     stage: JobStage
     # Human-readable progress line (was `stage` before the wizard rework).
     message: str
+    # Seconds the current `message` has been showing — lets the wizard render
+    # a live "N min elapsed" during the long transcription step.
+    elapsedSeconds: float = 0.0
     error: str | None = None
     source: SourceInfo | None = None
     transcript: list[TranscriptSegment] | None = None

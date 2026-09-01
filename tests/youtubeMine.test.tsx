@@ -136,6 +136,7 @@ async function openNavMenu(user: ReturnType<typeof userEvent.setup>): Promise<vo
 beforeEach(() => {
   resetDbForTests(`ytmine-${Date.now()}`);
   window.history.replaceState({}, '', '/#/');
+  localStorage.clear();
 });
 
 describe('YouTube mining wizard', () => {
@@ -197,5 +198,52 @@ describe('YouTube mining wizard', () => {
     expect(
       await screen.findByRole('heading', { name: 'Mocked Mining Video' }),
     ).toBeInTheDocument();
+  }, 30000);
+
+  it('reconnects to an in-flight job on mount instead of showing the URL field', async () => {
+    const { getMiningJob } = await import('../src/lib/miningApi');
+    // A job left mid-pipeline (user refreshed on the Segment step).
+    vi.mocked(getMiningJob).mockResolvedValue({
+      jobId: 'job-resume',
+      status: 'ready',
+      stage: 'segment',
+      message: '2 sentence(s) segmented.',
+      source: SOURCE,
+      cues: [
+        {
+          index: 0,
+          startMs: 0,
+          endMs: 1500,
+          japanese: 'おはよう。',
+          isAuto: true,
+          lowConfidence: false,
+          sourceIndexes: [0],
+        },
+        {
+          index: 1,
+          startMs: 1500,
+          endMs: 3000,
+          japanese: '元気ですか。',
+          isAuto: true,
+          lowConfidence: false,
+          sourceIndexes: [1],
+        },
+      ],
+    } as Awaited<ReturnType<typeof getMiningJob>>);
+    localStorage.setItem(
+      'ytmine.activeJob',
+      JSON.stringify({ jobId: 'job-resume', savedAt: Date.now() }),
+    );
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    expect(await screen.findByText(/step 2 of 4: Segment/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('おはよう。')).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('https://www.youtube.com/watch?v=…'),
+    ).not.toBeInTheDocument();
   }, 30000);
 });
