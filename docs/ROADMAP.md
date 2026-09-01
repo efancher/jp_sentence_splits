@@ -83,9 +83,9 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   browser + personalized curriculum dashboard, AI-assisted suggestion/
   explanation, `grammar_comprehension`/`grammar_completion`/
   `grammar_contrast` review cards, derived learner-state ladder,
-  `GrammarRelationship` browsing/creation. Prediction/transformation/
-  production activity types deliberately not started — see **Grammar
-  production ladder** below.
+  `GrammarRelationship` browsing/creation, plus a `grammar_production` card
+  (2026-09-01, the output rung — see below). Prediction/transformation
+  activity types deliberately not started.
 - [x] **Review new-card backlog fix.** (2026-08-31) The session planner
   counts confirmed-but-never-introduced vocabulary
   (`countNewVocabularyCardBacklog`), reserves `min(backlog, session limit)`
@@ -101,6 +101,11 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   aggregated across every analyzed attempt. Closes Phase 9's last
   milestone. Future extension: finer-grained per-word accent-class stats
   need more persisted in `AttemptAnalysisSummary` than v1 stores.
+- [x] **Grammar production ladder.** (2026-09-01) `grammar_production`
+  review card — produce a sentence using a recognized pattern, reveal a
+  model to self-rate against; gated on `grammar_comprehension` FSRS
+  proficiency. Weak `grammarPatternUsedIn` hint; self-rated. No
+  `GrammarLearnerState` `productive` rung yet. Detail in STATUS.md.
 
 ## In progress
 
@@ -118,10 +123,10 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## Planned
 
-Ordered by value. Detail/rationale for each in `docs/STATUS.md`'s "Open /
-deferred" section and the notes below. Two items from this list shipped
-2026-08-31 — see **Review new-card backlog fix** and **Cross-sentence
-learner profile** under Done above.
+Detail/rationale for each in `docs/STATUS.md`'s "Open / deferred" section
+and the notes below. Three items from the original list shipped
+2026-08-31/09-01 — see **Review new-card backlog fix**, **Cross-sentence
+learner profile**, and **Grammar production ladder** under Done above.
 
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
@@ -133,11 +138,6 @@ learner profile** under Done above.
   existing book, idempotent on `source_key`). Browser + human
   translation-review — not safe to headless against production. Mac exit
   node is up.
-- [ ] **Grammar production ladder.** The grammar system stops at
-  recognition (`grammar_comprehension`/`completion`/`contrast`) while the
-  vocab side has a real production ladder. Add a produce-a-sentence-using-
-  this-pattern drill (Build-mode-adjacent), gated on the pattern reaching
-  `distinguished`. Closes a visible asymmetry. Bigger build.
 
 ### Smaller / opportunistic
 

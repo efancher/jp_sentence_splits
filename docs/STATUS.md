@@ -27,6 +27,25 @@ form/reading/accent, C: retained source audio) and the staged wizard
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Grammar production ladder.** The grammar review system
+  had only recognition cards (`grammar_comprehension`/`grammar_completion`/
+  `grammar_contrast`) while the vocabulary side has reading→production. New
+  `grammar_production` activity type (subjectType `grammarPattern`, global
+  scope, in `PRACTICE_ACTIVITY_TYPES`): shows the pattern's meaning, takes a
+  free-form sentence, reveals a model (`pickContextSentenceForGrammarPattern`
+  — one of the learner's own tagged encounters) to self-rate against.
+  Eligibility: only a tracked pattern whose `grammar_comprehension` item is
+  FSRS-proficient (learner state `recognized`+) — production comes after
+  recognition. Lazily seeded by the generic pending-seed pool once a pattern
+  crosses that bar, like `grammar_contrast`. `grammarPatternUsedIn`
+  (`src/lib/grammarPatterns.ts`) is a weak "did you use the construction"
+  hint on reveal (every wave-dash fragment present); meaning/naturalness
+  stay the learner's call, so it's self-rated with no `expectedAnswer` →
+  `classifyReviewError` leaves it unclassified. `GrammarLearnerState`
+  unchanged for now (no `productive` rung — `distinguished` already needs a
+  relationship, so ordering is awkward; deferred). `grammarPatterns.test.ts`
+  +5, `reviewPage.test.tsx` +2. Not browser-verified.
+
 - **2026-08-31 — Cross-sentence pronunciation profile.** Closes Phase 9's
   one still-open milestone (brief's Phase 15). `src/lib/pronunciationProfile.ts`
   (`buildPronunciationProfile`, pure) aggregates every `AttemptAnalysisSummary`
@@ -143,6 +162,7 @@ has no browser system libs):
 - Progressive listening `word_listening` cards.
 - Cross-sentence pronunciation profile (`/pronunciation`).
 - Planner new-card backlog reservation + ReviewPage seed-hold.
+- Grammar production card (`grammar_production`).
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS

@@ -41,6 +41,28 @@ export function normalizeGrammarPatternKey(canonicalName: string): string {
   return text.replace(/^[~〜～\s]+|[~〜～\s]+$/g, '');
 }
 
+/**
+ * Weak, informational check for the `grammar_production` review card
+ * (docs/ROADMAP.md "Grammar production ladder"): did the learner's typed
+ * sentence actually use the construction? Normalizes both sides the same
+ * way `normalizeGrammarPatternKey` does, then requires every wave-dash-
+ * separated fragment of the pattern to appear in the response (in any
+ * position — surface order isn't checked, since a produced sentence
+ * legitimately reorders around the pattern). Purely a "you used it / you
+ * didn't" hint shown on reveal — the learner still self-rates meaning and
+ * naturalness, which no substring check can judge. Returns false for an
+ * empty/blank response or an un-normalizable pattern.
+ */
+export function grammarPatternUsedIn(response: string, canonicalName: string): boolean {
+  const core = normalizeGrammarPatternKey(canonicalName);
+  if (!core) return false;
+  const normalizedResponse = stripMarkup(response).normalize('NFC').trim();
+  if (!normalizedResponse) return false;
+  const fragments = core.split(/[~〜～]/).map((part) => part.trim()).filter(Boolean);
+  if (fragments.length === 0) return false;
+  return fragments.every((fragment) => normalizedResponse.includes(fragment));
+}
+
 export interface SentenceBlank {
   before: string;
   match: string;

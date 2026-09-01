@@ -58,9 +58,11 @@ import {
 import {
   blankPatternInSentence,
   buildGrammarCompletionChoices,
+  grammarPatternUsedIn,
 } from '../lib/grammarPatterns';
 import { hashString } from '../lib/ids';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
+import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
 import {
@@ -210,6 +212,22 @@ const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = [
  */
 const GRAMMAR_CONTRAST_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_contrast'];
 
+/**
+ * Grammar production (docs/ROADMAP.md "Grammar production ladder"): the
+ * grammar system otherwise stops at recognition
+ * (comprehension/completion/contrast) while the vocabulary side has a real
+ * production ladder. This card shows the pattern's meaning and asks the
+ * learner to *write* a sentence using it, then reveals a model (one of
+ * their own tagged encounters) to self-rate against. Eligibility is
+ * narrower than plain grammar review: only a tracked pattern whose
+ * `grammar_comprehension` study item has itself reached FSRS proficiency
+ * (learner state `recognized` or better — production comes after
+ * recognition, mirroring reading_retrieval → reading_production). Like
+ * grammar_contrast it *can* be lazily seeded by the generic pending-seed
+ * pool once a pattern crosses that bar. Global scope only.
+ */
+const GRAMMAR_PRODUCTION_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_production'];
+
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
   reading_in_context: 'Reading in context',
@@ -224,6 +242,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   grammar_comprehension: 'Grammar comprehension',
   grammar_completion: 'Grammar completion',
   grammar_contrast: 'Grammar contrast',
+  grammar_production: 'Grammar production',
 };
 
 interface SentenceConjugationCandidate {
@@ -518,6 +537,8 @@ interface ReviewScope {
   existingGrammarItems: StudyItem[];
   grammarContrastCandidates: GrammarReviewCandidate[];
   existingGrammarContrastItems: StudyItem[];
+  grammarProductionCandidates: GrammarReviewCandidate[];
+  existingGrammarProductionItems: StudyItem[];
 }
 
 function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
@@ -646,6 +667,20 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       activityTypes: GRAMMAR_CONTRAST_ACTIVITY_TYPES,
       candidates: scope.grammarContrastCandidates,
       existingItems: scope.existingGrammarContrastItems,
+      subjectId: (candidate) => candidate.pattern.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        grammar: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureGrammarStudyItem(candidate.pattern.id, activityType),
+    }),
+    defineActivityDescriptor<GrammarReviewCandidate>({
+      key: 'grammarProduction',
+      activityTypes: GRAMMAR_PRODUCTION_ACTIVITY_TYPES,
+      candidates: scope.grammarProductionCandidates,
+      existingItems: scope.existingGrammarProductionItems,
       subjectId: (candidate) => candidate.pattern.id,
       buildCard: (studyItem, candidate) => ({
         studyItem,
@@ -876,11 +911,17 @@ export function ReviewPage() {
     let existingGrammarItems: StudyItem[] = [];
     let grammarContrastCandidates: GrammarReviewCandidate[] = [];
     let existingGrammarContrastItems: StudyItem[] = [];
+    let grammarProductionCandidates: GrammarReviewCandidate[] = [];
+    let existingGrammarProductionItems: StudyItem[] = [];
     if (!bookId) {
       const allGrammarPatternStudyItems = (
         await db.studyItems
           .where('activityType')
-          .anyOf([...GRAMMAR_ACTIVITY_TYPES, ...GRAMMAR_CONTRAST_ACTIVITY_TYPES])
+          .anyOf([
+            ...GRAMMAR_ACTIVITY_TYPES,
+            ...GRAMMAR_CONTRAST_ACTIVITY_TYPES,
+            ...GRAMMAR_PRODUCTION_ACTIVITY_TYPES,
+          ])
           .toArray()
       ).filter((item) => item.subjectType === 'grammarPattern');
       const grammarStudyItems = allGrammarPatternStudyItems.filter((item) =>
@@ -888,6 +929,21 @@ export function ReviewPage() {
       );
       const grammarContrastStudyItems = allGrammarPatternStudyItems.filter(
         (item) => item.activityType === 'grammar_contrast',
+      );
+      const grammarProductionStudyItems = allGrammarPatternStudyItems.filter(
+        (item) => item.activityType === 'grammar_production',
+      );
+      // grammar_production comes after recognition: a pattern is only a
+      // candidate once its grammar_comprehension item is FSRS-proficient
+      // (learner state `recognized`+), same bar computeGrammarLearnerState uses.
+      const recognizedPatternIds = new Set(
+        grammarStudyItems
+          .filter(
+            (item) =>
+              item.activityType === 'grammar_comprehension' &&
+              isVocabularyItemProficient(item.fsrsState.state),
+          )
+          .map((item) => item.subjectId),
       );
       const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
       if (trackedPatternIds.length > 0) {
@@ -941,6 +997,13 @@ export function ReviewPage() {
               choices: buildGrammarCompletionChoices(pattern, relatedPatterns, 2),
             });
           }
+          if (recognizedPatternIds.has(pattern.id)) {
+            grammarProductionCandidates.push({
+              pattern,
+              sentence: context.sentence,
+              choices: [],
+            });
+          }
         }
         const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
         existingGrammarItems = grammarStudyItems.filter((item) =>
@@ -951,6 +1014,12 @@ export function ReviewPage() {
         );
         existingGrammarContrastItems = grammarContrastStudyItems.filter((item) =>
           grammarContrastCandidateIds.has(item.subjectId),
+        );
+        const grammarProductionCandidateIds = new Set(
+          grammarProductionCandidates.map((c) => c.pattern.id),
+        );
+        existingGrammarProductionItems = grammarProductionStudyItems.filter((item) =>
+          grammarProductionCandidateIds.has(item.subjectId),
         );
       }
     }
@@ -975,6 +1044,8 @@ export function ReviewPage() {
       existingGrammarItems,
       grammarContrastCandidates,
       existingGrammarContrastItems,
+      grammarProductionCandidates,
+      existingGrammarProductionItems,
     };
   }, [bookId]);
 
@@ -1210,12 +1281,17 @@ export function ReviewPage() {
             : current.grammar
               ? current.grammar.pattern.canonicalName
               : current.target?.vocabularyItem.reading);
+      // grammar_production's typed response is a free-form sentence the
+      // learner self-grades — there's no single expected string to compare,
+      // so record it as responseRaw only (no expectedAnswer → classifyReviewError
+      // leaves it unclassified, same as comprehension).
+      const isFreeformResponse = current.studyItem.activityType === 'grammar_production';
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
         responseRaw: typedResponse || undefined,
-        expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
+        expectedAnswer: typedResponse && !isFreeformResponse ? expectedAnswerValue : undefined,
       });
       setQueue((q) => q.slice(1));
 
@@ -1470,6 +1546,16 @@ export function ReviewPage() {
                 candidate={current.grammar}
                 revealed={revealed}
                 onCheck={(value) => {
+                  setTypedResponse(value);
+                  setRevealed(true);
+                }}
+              />
+            ) : current.grammar && current.studyItem.activityType === 'grammar_production' ? (
+              <GrammarProductionCard
+                key={current.studyItem.id}
+                candidate={current.grammar}
+                revealed={revealed}
+                onReveal={(value) => {
                   setTypedResponse(value);
                   setRevealed(true);
                 }}
@@ -2253,6 +2339,69 @@ function GrammarComprehensionCard({
             <div className="muted">{pattern.structuralNotes}</div>
           ) : null}
           {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Grammar production (docs/ROADMAP.md "Grammar production ladder"): the
+ * output rung the grammar system was missing — recognition cards
+ * (comprehension/completion/contrast) all ask the learner to *identify* a
+ * construction; this asks them to *use* one. Show the pattern's meaning,
+ * take a free-form sentence, then reveal a model (one of the learner's own
+ * tagged encounters of the pattern) to self-rate against. The
+ * `grammarPatternUsedIn` check on reveal is a "did you actually use the
+ * construction" hint only — meaning and naturalness are the learner's own
+ * call, so this stays a self-rated card (no auto ✓/✗ funnel into
+ * `classifyReviewError`, unlike grammar_completion). See
+ * GRAMMAR_PRODUCTION_ACTIVITY_TYPES.
+ */
+function GrammarProductionCard({
+  candidate,
+  revealed,
+  onReveal,
+}: {
+  candidate: GrammarReviewCandidate;
+  revealed: boolean;
+  onReveal: (value: string) => void;
+}) {
+  const { pattern, sentence } = candidate;
+  const [text, setText] = useState('');
+  const used = grammarPatternUsedIn(text, pattern.canonicalName);
+  return (
+    <>
+      <div className="muted">
+        Write a sentence that uses <span className="jp">{pattern.canonicalName}</span>.
+      </div>
+      {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+      <textarea
+        className="jp"
+        rows={2}
+        value={text}
+        placeholder="Your sentence…"
+        onChange={(event) => setText(event.target.value)}
+        disabled={revealed}
+      />
+      {!revealed ? (
+        <button type="button" onClick={() => onReveal(text.trim())}>
+          Reveal model
+        </button>
+      ) : (
+        <>
+          <div className="muted">
+            {used
+              ? `✓ ${pattern.canonicalName} appears in your sentence.`
+              : `Couldn't spot ${pattern.canonicalName} in your sentence — check the construction.`}
+          </div>
+          <div className="muted">Model (one of your encounters):</div>
+          <div className="jp jp-lg">{sentence.japanese}</div>
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
+          {pattern.structuralNotes ? (
+            <div className="muted">{pattern.structuralNotes}</div>
+          ) : null}
         </>
       )}
     </>

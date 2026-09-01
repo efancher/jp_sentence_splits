@@ -63,6 +63,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'contrastive',
   'grammar_completion',
   'grammar_contrast',
+  'grammar_production',
 ];
 
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */

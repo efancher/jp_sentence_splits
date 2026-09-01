@@ -174,10 +174,11 @@ built out Phases 1–9):
   explanation, `grammar_comprehension`/`grammar_completion`/
   `grammar_contrast` review cards, a derived learner-state ladder, a
   personalized `/grammar` curriculum dashboard, and `GrammarRelationship`
-  browsing/creation, see the Feature walkthrough below — are all done;
-  prediction/transformation/production activity types deliberately not
-  started, a scope decision made explicitly when asked rather than an
-  oversight — see `docs/STATUS.md`): a second layer on top of the
+  browsing/creation, see the Feature walkthrough below — are all done, plus
+  a `grammar_production` card (2026-09-01, the output rung — produce a
+  sentence using a recognized pattern, self-rated); prediction/
+  transformation activity types deliberately not started — see
+  `docs/STATUS.md`): a second layer on top of the
   Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
@@ -806,6 +807,23 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `GrammarPicker.tsx` change needed. Reaching FSRS proficiency on this
   study item is what lets `computeGrammarLearnerState` return
   `'distinguished'`, one rung above `'recognized'`.
+  `grammar_production` (docs/ROADMAP.md, 2026-09-01 — the output rung the
+  grammar system was missing; every other grammar card asks the learner to
+  *identify* a construction, this asks them to *use* one): shows the
+  pattern's meaning, takes a free-form sentence, then reveals a model (one
+  of the learner's own tagged encounters, `pickContextSentenceForGrammarPattern`)
+  to self-rate against. `grammarPatternUsedIn` (`src/lib/grammarPatterns.ts`)
+  is a weak "did you actually use it" hint on reveal (every wave-dash-
+  separated fragment of the tilde-stripped canonical name present, any
+  order) — meaning and naturalness are the learner's own call, so unlike
+  `grammar_completion`/`grammar_contrast` this is **self-rated with no
+  `expectedAnswer`** and `classifyReviewError` leaves it unclassified.
+  Eligibility is narrower than plain grammar review — only a tracked
+  pattern whose `grammar_comprehension` item is FSRS-proficient (learner
+  state `recognized`+), mirroring `reading_retrieval` → `reading_production`
+  — and like `grammar_contrast` it can be lazily seeded by the generic
+  pending-seed pool once a pattern crosses that bar. `computeGrammarLearnerState`
+  is unchanged (no `productive` rung yet).
 
 **Gating and mnemonic/assistance tracking**: a sentence's full-sentence
 cards (`comprehension`/`reading_in_context`) are deliberately withheld
