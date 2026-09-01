@@ -426,6 +426,84 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('frames a reading_in_context card with its surrounding passage (docs/ROADMAP.md)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    // Two more sentences around sent-1 in the same book.
+    await db.sentences.bulkAdd([
+      {
+        id: 'sent-0',
+        normalizedKey: 'sent-0',
+        japanese: '朝ごはんを食べました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'I ate breakfast.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sent-2',
+        normalizedKey: 'sent-2',
+        japanese: 'それから出かけました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'Then I went out.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.bookSentences.bulkAdd([
+      { id: 'bs-0', bookId: 'book-1', sentenceId: 'sent-0', position: -1, status: 'unstarted', addedAt: now },
+      { id: 'bs-2', bookId: 'book-1', sentenceId: 'sent-2', position: 1, status: 'unstarted', addedAt: now },
+    ]);
+    // Keep plain comprehension out of the queue so the reading_in_context
+    // card is the one under test.
+    await db.studyItems.add({
+      id: 'si-sent-1-comprehension',
+      subjectType: 'sentence',
+      subjectId: 'sent-1',
+      activityType: 'comprehension',
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    // Preceding sentence shown as context; caption names the book.
+    expect(screen.getByText('朝ごはんを食べました。')).toBeInTheDocument();
+    expect(screen.getByText(/In context · Test Book/)).toBeInTheDocument();
+    // Following sentence only appears after reveal.
+    expect(screen.queryByText('それから出かけました。')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(screen.getByText('それから出かけました。')).toBeInTheDocument();
+  });
+
   it('renders reading_retrieval, cloze, and reading_production cards for the same target word, each seeded once (Phase 7.2/7.3/7.9)', async () => {
     await seedBookWithSentence();
     const db = getDb();

@@ -61,6 +61,7 @@ import {
   grammarPatternUsedIn,
 } from '../lib/grammarPatterns';
 import { hashString } from '../lib/ids';
+import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
@@ -76,10 +77,10 @@ import { isDeferralMnemonic } from '../lib/wanikaniMnemonic';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
- * sentence-subject activity types sharing one interaction (see JP, reveal
- * EN + vocab, self-rate) — real differentiation between them (e.g. showing
- * surrounding chapter context for reading_in_context) is deliberately
- * deferred, see STATUS.md.
+ * sentence-subject activity types. Both reveal EN + vocab and are
+ * self-rated; they differ in the pre-reveal framing — `comprehension`
+ * shows the sentence in isolation, `reading_in_context` embeds it in its
+ * surrounding passage (see ReadingInContextCard / buildReadingContextMap).
  */
 const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
   'comprehension',
@@ -429,6 +430,8 @@ interface QueueCard {
   pitchAccent?: PitchAccentReviewCandidate;
   /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
   grammar?: GrammarReviewCandidate;
+  /** Set only for `reading_in_context` cards — the surrounding passage. */
+  readingContext?: ReadingContext;
 }
 
 /** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
@@ -521,6 +524,8 @@ interface ReviewScope {
   book: Book | undefined;
   sentences: Sentence[];
   existingSentenceItems: StudyItem[];
+  /** Reading-order neighbours per in-scope sentence, for `reading_in_context`. */
+  readingContextBySentenceId: Map<string, ReadingContext>;
   vocabularyTargetCandidates: VocabularyTargetCandidate[];
   existingVocabularyItems: StudyItem[];
   audioCandidates: AudioCandidate[];
@@ -549,7 +554,14 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       candidates: scope.sentences,
       existingItems: scope.existingSentenceItems,
       subjectId: (sentence) => sentence.id,
-      buildCard: (studyItem, sentence) => ({ studyItem, sentence }),
+      buildCard: (studyItem, sentence) => ({
+        studyItem,
+        sentence,
+        readingContext:
+          studyItem.activityType === 'reading_in_context'
+            ? scope.readingContextBySentenceId.get(sentence.id)
+            : undefined,
+      }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
     }),
@@ -1024,10 +1036,27 @@ export function ReviewPage() {
       }
     }
 
+    // Reading-order neighbours for `reading_in_context` cards
+    // (docs/ROADMAP.md). Book scope: the queue only holds one book's
+    // sentences, so context stays within that book. Global scope: load
+    // every membership + book so each sentence's home book (most recently
+    // opened) can be resolved.
+    const contextBookSentences = bookId
+      ? await db.bookSentences.where('bookId').equals(bookId).toArray()
+      : await db.bookSentences.toArray();
+    const contextBooks = bookId ? (book ? [book] : []) : await db.books.toArray();
+    const readingContextBySentenceId = buildReadingContextMap({
+      targetSentenceIds: sentenceIds,
+      bookSentences: contextBookSentences,
+      books: contextBooks,
+      sentencesById: bySentenceId,
+    });
+
     return {
       book,
       sentences,
       existingSentenceItems,
+      readingContextBySentenceId,
       vocabularyTargetCandidates,
       existingVocabularyItems,
       audioCandidates,
@@ -1566,6 +1595,13 @@ export function ReviewPage() {
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
               />
+            ) : current.studyItem.activityType === 'reading_in_context' ? (
+              <ReadingInContextCard
+                sentence={current.sentence}
+                context={current.readingContext}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
+              />
             ) : (
               <>
                 <div className="jp jp-lg">{current.sentence.japanese}</div>
@@ -1599,6 +1635,72 @@ export function ReviewPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * `reading_in_context` card body — the same reveal flow as plain
+ * `comprehension` (see JP, reveal EN + vocab, self-rate), but the sentence
+ * under test is framed by its reading-order neighbours (buildReadingContextMap):
+ * the preceding sentences are shown untranslated above it so the passage
+ * sets the scene without spoiling the answer, and the following sentence's
+ * translation joins the reveal. With no context available (inbox-only
+ * sentence, or a book-scoped queue whose neighbours aren't loaded) it
+ * degrades to the isolated layout.
+ */
+function ReadingInContextCard({
+  sentence,
+  context,
+  revealed,
+  onReveal,
+}: {
+  sentence: Sentence;
+  context: ReadingContext | undefined;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const before = context?.before ?? [];
+  const after = context?.after ?? [];
+  return (
+    <>
+      {context?.bookTitle ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          In context · {context.bookTitle}
+        </p>
+      ) : null}
+      {before.length ? (
+        <div className="reading-context">
+          {before.map((item) => (
+            <p key={item.id} className="jp jp-sm reading-context-line">
+              {item.japanese}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      <div className="jp jp-lg">{sentence.japanese}</div>
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal
+        </button>
+      ) : (
+        <>
+          <div>{sentence.translation || '(no translation)'}</div>
+          <VocabChips items={sentence.targetVocabulary} />
+          {after.length ? (
+            <div className="reading-context">
+              {after.map((item) => (
+                <p key={item.id} className="reading-context-line">
+                  <span className="jp jp-sm">{item.japanese}</span>
+                  {item.translation ? (
+                    <span className="muted"> — {item.translation}</span>
+                  ) : null}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }
 

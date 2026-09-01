@@ -147,10 +147,14 @@ learner profile**, and **Grammar production ladder** under Done above.
   (which is all `pitchAccentObservations.ts` already needs). Extends a
   strong feature to the majority of the corpus. Distinct from the shipped
   passive `pitch_accent` SRS card.
-- [ ] **`comprehension` vs `reading_in_context` differentiation.** Open
-  since Phase 4 — the two still share one interaction. Give each a distinct
-  UI (e.g. `reading_in_context` shows surrounding chapter context). Low
-  urgency; current behavior works.
+- [x] **`comprehension` vs `reading_in_context` differentiation.** (2026-09-01)
+  `reading_in_context` now frames the sentence under test with its
+  reading-order neighbours (`src/lib/readingContext.ts` +
+  `ReadingInContextCard`): preceding sentences shown untranslated above it,
+  the following sentence's translation folded into the reveal, a "In
+  context · <book>" caption. Home book = the sentence's most recently
+  opened book. Degrades to the isolated layout when no context is
+  available. `comprehension` unchanged.
 - [ ] **Retention / progress-over-time view.** One honest "how am I doing"
   screen — words learned over time, retention rate, grammar patterns
   matured, shadowing trend — from the evidence data already logged. Home's

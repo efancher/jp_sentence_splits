@@ -32,6 +32,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — `reading_in_context` vs `comprehension`.** Open since
+  Phase 4 — the two sentence-subject activity types shared one interaction.
+  `reading_in_context` now embeds the sentence in its passage:
+  `src/lib/readingContext.ts` (`buildReadingContextMap`, pure) resolves each
+  in-scope sentence's reading-order neighbours within its home book (most
+  recently opened book containing it, `Book.lastOpenedAt`); `ReviewScope`
+  carries `readingContextBySentenceId`, the sentence descriptor's `buildCard`
+  attaches it for `reading_in_context` only, and a new `ReadingInContextCard`
+  shows the preceding sentences untranslated above the target (scene without
+  spoiler), folds the following sentence's translation into the reveal, and
+  captions "In context · <book>". No context available (inbox-only sentence,
+  or book-scoped queue whose neighbours aren't loaded) → falls back to the
+  isolated layout. `comprehension` unchanged. `readingContext.test.ts` (5),
+  `reviewPage.test.tsx` +1. Not browser-verified.
+
 - **2026-09-01 — Grammar production ladder.** The grammar review system
   had only recognition cards (`grammar_comprehension`/`grammar_completion`/
   `grammar_contrast`) while the vocabulary side has reading→production. New
