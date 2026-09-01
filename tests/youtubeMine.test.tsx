@@ -160,8 +160,9 @@ describe('YouTube mining wizard', () => {
     expect(screen.getByText(/⚠ low confidence/)).toBeInTheDocument();
 
     // Fix a segment, then hand the corrected transcript to the segmenter.
-    await user.clear(screen.getByDisplayValue('今日は'));
-    await user.type(screen.getByDisplayValue(''), '今日は、');
+    const segBox = screen.getByDisplayValue('今日は');
+    await user.clear(segBox);
+    await user.type(segBox, '今日は、');
     await user.click(screen.getByRole('button', { name: /Apply & segment/ }));
 
     // Stage 2 — the server split the bundled cue into two sentences.

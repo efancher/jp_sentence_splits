@@ -81,3 +81,94 @@ export function editTranscriptSegText(
 ): WizardTranscriptSeg[] {
   return segs.map((seg, i) => (i === index ? { ...seg, text } : seg));
 }
+
+// ---------------------------------------------------------------------------
+// "Segment with AI help" round-trip
+//
+// When the transcript came from punctuation-free auto-captions (the ASR
+// fallback), the fragments break mid-sentence and the reviewer often can't
+// tell where sentences begin. `formatTranscriptForAI` produces a
+// copy-pasteable prompt for an external assistant; `parseAiSegmentedTranscript`
+// reads its reply back into segments. Deliberately a manual copy/paste flow,
+// not another Edge Function — no key, no deploy, works with whatever
+// assistant the user already has open.
+// ---------------------------------------------------------------------------
+
+/** `123456` ms -> `2:03` (whole seconds — the round-trip doesn't need sub-second). */
+export function formatWizardTimestamp(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+const AI_PROMPT_HEADER = [
+  'You are helping segment a Japanese transcript for shadowing practice.',
+  'Below are timed fragments from automatic transcription. They often break',
+  'mid-sentence and may lack punctuation or contain small recognition errors.',
+  '',
+  'Rewrite them as complete, natural sentences:',
+  '- One sentence per line.',
+  '- Add sentence-final punctuation (。！？) where it belongs.',
+  '- Fix obvious mis-recognitions, but keep the wording faithful — do not paraphrase or translate.',
+  '- Begin every line with the [m:ss] timestamp of the fragment where that sentence starts.',
+  '- Output only the sentence lines, nothing else.',
+  '',
+  '--- transcript ---',
+].join('\n');
+
+export function formatTranscriptForAI(segs: WizardTranscriptSeg[]): string {
+  const body = segs
+    .map((seg) => `[${formatWizardTimestamp(seg.startMs)}] ${seg.text.trim()}`)
+    .join('\n');
+  return `${AI_PROMPT_HEADER}\n${body}\n`;
+}
+
+/** `[2:03] text` or `[2:03.4] text` — tolerant of `00:03`, missing space. */
+const AI_LINE_RE = /^\[\s*(\d+):([0-5]?\d)(?:\.\d+)?\s*\]\s*(.*\S)?\s*$/;
+
+/**
+ * Parse an assistant's reply (`[m:ss] sentence` per line) back into wizard
+ * segments. `fallbackEndMs` is the original transcript's end (last segment's
+ * `endMs`) — the last parsed sentence runs to there. A line with no
+ * timestamp is treated as a wrapped continuation of the previous sentence.
+ * Returns `[]` when nothing parseable is found, so the caller can warn
+ * rather than blow away the transcript.
+ */
+export function parseAiSegmentedTranscript(
+  reply: string,
+  fallbackEndMs: number,
+): WizardTranscriptSeg[] {
+  const parsed: { startMs: number; text: string }[] = [];
+  for (const rawLine of reply.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = AI_LINE_RE.exec(line);
+    if (!match) {
+      if (parsed.length > 0) {
+        const prev = parsed[parsed.length - 1]!;
+        prev.text = joinJapanese(prev.text, line);
+      }
+      continue;
+    }
+    const startMs = (Number(match[1]) * 60 + Number(match[2])) * 1000;
+    const text = (match[3] ?? '').trim();
+    if (text) parsed.push({ startMs, text });
+  }
+  if (parsed.length === 0) return [];
+  parsed.sort((a, b) => a.startMs - b.startMs);
+  return parsed.map((entry, index) => {
+    const nextStart = parsed[index + 1]?.startMs;
+    const end =
+      nextStart !== undefined
+        ? Math.max(nextStart, entry.startMs + 1)
+        : Math.max(fallbackEndMs, entry.startMs + 1);
+    return {
+      text: entry.text,
+      startMs: entry.startMs,
+      endMs: end,
+      isAuto: true,
+      lowConfidence: false,
+    };
+  });
+}
