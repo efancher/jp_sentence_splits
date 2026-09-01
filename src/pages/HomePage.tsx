@@ -60,6 +60,7 @@ const SHORTCUTS = [
   { to: '/review', label: 'Review' },
   { to: '/vocabulary', label: 'Words' },
   { to: '/pronunciation', label: 'Pronunciation' },
+  { to: '/pitch-accent', label: 'Pitch-accent drill' },
   { to: '/progress', label: 'Progress' },
   { to: '/search', label: 'Library / Search' },
 ] as const;

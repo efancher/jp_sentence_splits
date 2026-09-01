@@ -396,8 +396,17 @@ rolling-14-day
 balance view as before (four `.progress-bar` meters — reusing the existing
 CSS component rather than a charting dependency — fill = how recently each
 bucket was touched) and a direct-access shortcut row
-(Books/Grammar/Review/Words/Search), so the recommendation guides without
-gating. **`SessionRunnerPage`** sequences today's steps, deep-linking into
+(Books/Grammar/Review/Words/Pronunciation/Pitch-accent drill/Progress/
+Search), so the recommendation guides without gating. The **`ProgressPage`**
+(`/progress`, also in the AppShell nav) is the standalone "how am I doing"
+screen the 14-day meters don't give: `buildProgressReport` (pure) folds
+`Review` rows + `StudyItem` FSRS state + the shadowing analysis summaries
+into a vocabulary ladder (tracked / proficient / mature / first-recalled
+recently), an FSRS recall-success rate (rating ≠ Again over scheduled
+reviews, 30d + all-time), grammar tracked/recognized, the shadowing
+timing/pitch trend, and an 8-week reviews-per-week + cumulative-words-learned
+trend on the same `.progress-bar` meter. Read-only, recomputed on load,
+nothing stored. **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
 end-early are real, tracked actions. A step settles **only by an explicit
@@ -650,9 +659,13 @@ content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
 rating). One `StudyItem` exists per `(subjectType, subjectId,
 activityType)` triple; multiple activity types can exist for the same
 subject. Activity types currently wired, grouped by subject/eligibility:
-- **Sentence subject**: `comprehension`, `reading_in_context` (currently
-  share one interaction — see JP, reveal EN+vocab, self-rate; deliberate
-  "start small," real differentiation deferred).
+- **Sentence subject**: `comprehension` (JP in isolation, reveal EN+vocab,
+  self-rate) and `reading_in_context` (same reveal flow, but the sentence
+  is framed by its reading-order neighbours — preceding sentences shown
+  untranslated above it, the following sentence folded into the reveal, via
+  `src/lib/readingContext.ts`'s `buildReadingContextMap` +
+  `ReadingInContextCard`; falls back to the isolated layout when no context
+  is available).
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
@@ -979,9 +992,16 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     than guessing at it. Renders as its own "Pitch accent (dictionary)"
     section in `AnalysisPanel.tsx` and feeds the same ranking as every
     other observation kind. The same `pitchAccentPositions` data also
-    feeds a second, independent consumer — the `pitch_accent` SRS review
-    activity type (§4) — so a word's pitch-accent data backs both passive
-    shadowing feedback and an active-recall flashcard.
+    feeds two other, independent consumers — the `pitch_accent` SRS review
+    activity type (§4), and the **audio-less pitch-accent drill**
+    (`PitchAccentDrillPage` at `/pitch-accent`, `getPitchAccentDrillSentences`):
+    a lightweight non-SRS practice loop over Satori sentences that have
+    confirmed pitch-accent-bearing vocabulary, no reference recording, and
+    proficient words — record the sentence, get each target word's realized
+    contour scored against the dictionary shape (same
+    `buildPitchAccentShapeObservations`, learner alignment only), nothing
+    saved. So a word's pitch-accent data backs passive shadowing feedback,
+    an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - Cross-recording "Focus on this" comparison — a re-record can say
@@ -1192,10 +1212,10 @@ aren't JSON-serializable/aren't worth backing up).
 
 ## Current known gaps / deliberately-deferred items
 
-- **Sentence/vocabulary-card real UI differentiation**: `comprehension`
-  vs `reading_in_context` still share one interaction; no activity type
-  currently shows surrounding chapter context, changes UI by type, etc. —
-  a real, still-open gap from Phase 4.
+- **Sentence/vocabulary-card real UI differentiation**: `reading_in_context`
+  now differs from `comprehension` (it shows the surrounding passage — see
+  the activity-type list above). Other same-subject pairs still share an
+  interaction, but this specific Phase 4 gap is closed.
 - **`sources` table** is schema-ready (Dexie + Postgres + RLS) but has no
   writer/reader anywhere; `Book.sourceKey`/`sourceUrl` remain the de facto
   source-tracking mechanism.

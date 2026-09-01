@@ -15,14 +15,15 @@ the later standalone efforts (Learning Orchestrator, re-segmentation,
 vocabulary glossing, WaniKani mnemonics, contextual conjugation cards,
 progressive listening, grammar-learning system incl. `grammar_production`)
 are shipped and, in almost every case, verified against production data by
-the user directly. ~1090 TS tests, green.
+the user directly. ~1117 TS tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
 awareness, cross-sentence pronunciation profile (`/pronunciation`, closes
 Phase 9's last milestone), grammar production ladder (`grammar_production`),
-and a ROADMAP compaction + re-scoping. Remaining planned work: re-mine
-"After Work" (browser + human review), plus the smaller opportunistic items
-in ROADMAP.md.
+`reading_in_context` passage framing (closes the Phase 4 differentiation
+gap), the retention/progress screen (`/progress`), the audio-less
+pitch-accent drill (`/pitch-accent`), and a ROADMAP compaction. Only
+remaining planned work: re-mine "After Work" (browser + human review).
 
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
@@ -31,6 +32,25 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-01 — Audio-less pitch-accent production drill.** The
+  `pitch_accent` SRS card and the shadowing analysis both need a
+  `SentenceAudio` reference; `buildPitchAccentShapeObservations` never did
+  (it scores the learner's realized contour against the Kanjium/UniDic
+  dictionary shape from `VocabularyItem.pitchAccentPositions` using only
+  the learner's own forced alignment + pitch). New
+  `getPitchAccentDrillSentences` (`repository.ts`) — Satori sentences with
+  a confirmed pitch-accent-bearing `sentence_vocabulary` link, **no**
+  `SentenceAudio`, and passing `getSentenceFullReviewReadiness` (same
+  vocab-confirmed-and-proficient gate as `findShadowCandidates`, per the
+  vocab-before-glossing stance) — and `PitchAccentDrillPage`
+  (`/pitch-accent`, Home shortcut row): shows the sentence + its dictionary
+  `SentencePitchAccentRow` contour, records via `useShadowing`, calls
+  `alignAudio` + `extractPitch` directly (no `Attempt`/cache — the take is
+  ephemeral), and renders the per-word mismatch observations. Non-SRS
+  practice loop, walks the list in reading order, nothing saved or
+  scheduled. `pitchAccentDrill.test.ts` (5), `pitchAccentDrillPage.test.tsx`
+  (2). Not browser-verified (no mic/AudioContext in the sandbox).
 
 - **2026-09-01 — Retention / progress-over-time view.** Home's 14-day
   balance meters were the only aggregate view. New `/progress`
@@ -201,6 +221,9 @@ has no browser system libs):
 - Cross-sentence pronunciation profile (`/pronunciation`).
 - Planner new-card backlog reservation + ReviewPage seed-hold.
 - Grammar production card (`grammar_production`).
+- `reading_in_context` passage framing (`ReadingInContextCard`).
+- Progress screen (`/progress`).
+- Audio-less pitch-accent drill (`/pitch-accent`).
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS
@@ -226,9 +249,6 @@ has no browser system libs):
   downloads route through a personal-device exit node).
 
 **Larger not-started items (deliberate, reasoning in the archive):**
-- Audio-less pitch-accent production/recording drill mode (practice pitch
-  accent on Satori sentences that have no reference audio) — distinct from
-  the shipped passive `pitch_accent` SRS card.
 - PASQA speech-quality model — architecture left ready; blocked on
   PyTorch+s3prl footprint on the memory-constrained analysis host.
 

@@ -140,6 +140,11 @@ const ProgressPage = lazy(() =>
     default: module.ProgressPage,
   })),
 );
+const PitchAccentDrillPage = lazy(() =>
+  import('./pages/PitchAccentDrillPage').then((module) => ({
+    default: module.PitchAccentDrillPage,
+  })),
+);
 
 export default function App() {
   useTheme();
@@ -161,6 +166,7 @@ export default function App() {
             <Route path="study-items" element={<StudyItemsListPage />} />
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
+            <Route path="pitch-accent" element={<PitchAccentDrillPage />} />
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />

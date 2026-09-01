@@ -106,6 +106,33 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   model to self-rate against; gated on `grammar_comprehension` FSRS
   proficiency. Weak `grammarPatternUsedIn` hint; self-rated. No
   `GrammarLearnerState` `productive` rung yet. Detail in STATUS.md.
+- [x] **`comprehension` vs `reading_in_context` differentiation.** (2026-09-01)
+  `reading_in_context` now frames the sentence under test with its
+  reading-order neighbours (`src/lib/readingContext.ts` +
+  `ReadingInContextCard`): preceding sentences shown untranslated above it,
+  the following sentence's translation folded into the reveal, a "In
+  context · <book>" caption. Home book = the sentence's most recently
+  opened book. Degrades to the isolated layout when no context is
+  available. `comprehension` unchanged. Closes the Phase 4 gap.
+- [x] **Audio-less pitch-accent production drill.** (2026-09-01)
+  `PitchAccentDrillPage` (`/pitch-accent`, Home shortcut) +
+  `getPitchAccentDrillSentences` — a non-SRS practice loop over Satori
+  sentences with confirmed pitch-accent-bearing vocabulary, no reference
+  recording, and words already reviewed to proficiency (same
+  `getSentenceFullReviewReadiness` gate as shadowing candidates). Record
+  the sentence; `buildPitchAccentShapeObservations` scores each target
+  word's realized contour against the dictionary shape using only the
+  learner's own forced alignment + pitch. Nothing saved or scheduled.
+- [x] **Retention / progress-over-time view.** (2026-09-01)
+  `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
+  `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
+  ladder counts (tracked / proficient / mature / first-recalled-recently),
+  FSRS recall-success rate (30d + all-time, natural encounters excluded),
+  grammar tracked/recognized, shadowing attempt count + timing/pitch trend
+  (reuses `getPronunciationProfile`), and an 8-week reviews-per-week +
+  cumulative-words-learned trend rendered with the existing `.progress-bar`
+  meter (no charting dep). All recomputed from `Review`/`StudyItem`/
+  analysis-summary evidence — nothing seeded or stored.
 
 ## In progress
 
@@ -123,10 +150,12 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## Planned
 
-Detail/rationale for each in `docs/STATUS.md`'s "Open / deferred" section
-and the notes below. Three items from the original list shipped
-2026-08-31/09-01 — see **Review new-card backlog fix**, **Cross-sentence
-learner profile**, and **Grammar production ladder** under Done above.
+Detail/rationale in `docs/STATUS.md`'s "Open / deferred" section and the
+note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
+**Review new-card backlog fix**, **Cross-sentence learner profile**,
+**Grammar production ladder**, **Audio-less pitch-accent production drill**,
+**`comprehension` vs `reading_in_context` differentiation**, and
+**Retention / progress-over-time view** under Done above.
 
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
@@ -138,33 +167,6 @@ learner profile**, and **Grammar production ladder** under Done above.
   existing book, idempotent on `source_key`). Browser + human
   translation-review — not safe to headless against production. Mac exit
   node is up.
-
-### Smaller / opportunistic
-
-- [ ] **Audio-less pitch-accent production drill.** Practice pitch accent
-  on Satori-imported sentences that have no reference audio, using
-  `VocabularyItem.pitchAccentPositions` + the learner's own alignment
-  (which is all `pitchAccentObservations.ts` already needs). Extends a
-  strong feature to the majority of the corpus. Distinct from the shipped
-  passive `pitch_accent` SRS card.
-- [x] **`comprehension` vs `reading_in_context` differentiation.** (2026-09-01)
-  `reading_in_context` now frames the sentence under test with its
-  reading-order neighbours (`src/lib/readingContext.ts` +
-  `ReadingInContextCard`): preceding sentences shown untranslated above it,
-  the following sentence's translation folded into the reveal, a "In
-  context · <book>" caption. Home book = the sentence's most recently
-  opened book. Degrades to the isolated layout when no context is
-  available. `comprehension` unchanged.
-- [x] **Retention / progress-over-time view.** (2026-09-01)
-  `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
-  `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
-  ladder counts (tracked / proficient / mature / first-recalled-recently),
-  FSRS recall-success rate (30d + all-time, natural encounters excluded),
-  grammar tracked/recognized, shadowing attempt count + timing/pitch trend
-  (reuses `getPronunciationProfile`), and an 8-week reviews-per-week +
-  cumulative-words-learned trend rendered with the existing `.progress-bar`
-  meter (no charting dep). All recomputed from `Review`/`StudyItem`/
-  analysis-summary evidence — nothing seeded or stored.
 
 ## Not planned (deliberate)
 

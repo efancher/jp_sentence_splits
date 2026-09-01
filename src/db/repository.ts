@@ -55,6 +55,7 @@ import {
   type PronunciationProfile,
 } from '../lib/pronunciationProfile';
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
+import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -3245,6 +3246,81 @@ export async function getVocabularyTargetCandidates(
     candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm });
   });
   return candidates;
+}
+
+export interface PitchAccentDrillSentence {
+  sentence: Sentence;
+  /** The sentence's confirmed words that carry dictionary pitch-accent data. */
+  targets: PitchAccentTarget[];
+}
+
+/**
+ * Sentences eligible for the audio-less pitch-accent production drill
+ * (docs/ROADMAP.md): confirmed vocabulary with dictionary
+ * `pitchAccentPositions` and **no** reference recording — so the majority
+ * of the Satori corpus, which the reference-audio-gated `pitch_accent` SRS
+ * card and the shadowing analysis can't reach. Scoring only needs the
+ * learner's own forced alignment + pitch (`buildPitchAccentShapeObservations`),
+ * never a reference clip.
+ *
+ * Gated on the same full-review readiness rule as shadowing candidates
+ * (`getSentenceFullReviewReadiness`) — pronunciation practice shouldn't
+ * compete for attention with vocabulary the learner hasn't shown recall of
+ * yet (see the `findShadowCandidates` precedent / the vocab-before-glossing
+ * stance).
+ */
+export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSentence[]> {
+  const db = getDb();
+  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
+  const linksBySentence = new Map<string, SentenceVocabulary[]>();
+  for (const link of links) {
+    const list = linksBySentence.get(link.sentenceId) ?? [];
+    list.push(link);
+    linksBySentence.set(link.sentenceId, list);
+  }
+  const sentenceIds = [...linksBySentence.keys()];
+  if (sentenceIds.length === 0) return [];
+
+  const [sentences, audioRows, vocabularyItems, readiness] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
+    getSentenceFullReviewReadiness(sentenceIds),
+  ]);
+  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const vocabularyItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  const result: PitchAccentDrillSentence[] = [];
+  for (const [sentenceId, sentenceLinks] of linksBySentence) {
+    if (audioSentenceIds.has(sentenceId)) continue;
+    if (readiness.get(sentenceId) !== true) continue;
+    const sentence = sentenceById.get(sentenceId);
+    if (!sentence) continue;
+    const targets: PitchAccentTarget[] = [];
+    for (const link of sentenceLinks) {
+      const item = vocabularyItemById.get(link.vocabularyItemId);
+      if (link.surfaceForm && item?.pitchAccentPositions?.length) {
+        targets.push({
+          surfaceForm: link.surfaceForm,
+          reading: item.reading,
+          pitchAccentPositions: item.pitchAccentPositions,
+        });
+      }
+    }
+    if (targets.length === 0) continue;
+    result.push({ sentence, targets });
+  }
+  result.sort(
+    (a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex,
+  );
+  return result;
 }
 
 export interface VocabularyOccurrenceCandidate {
