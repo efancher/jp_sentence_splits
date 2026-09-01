@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-01 — Mining wizard: "Translate with AI help".** The Translate
+  stage now has a copy/paste panel mirroring the transcript stage's "Segment
+  with AI help": `formatRowsForTranslationAI` emits every sentence numbered
+  with its current draft (`current: …` / `(none)`), `parseAiTranslations`
+  reads a numbered `N. english` reply back by line number — fills blank rows
+  and replaces weak/mis-scoped drafts, leaving rows the reply skipped
+  untouched (all flagged `needsTranslationReview`). No Edge Function, for
+  when the in-app "Auto-fill translations (AI)" isn't enough or the deploy
+  key is unavailable. `src/lib/miningTranslate.ts` +
+  `src/components/TranslateAiHelp.tsx`; `miningTranslate.test.ts` +8,
+  `youtubeMine.test.tsx` walk-through +1 assertion block.
+
 - **2026-09-01 — Mining jobs: disk checkpoints + cross-machine resume.** A
   job whose transcription ran past the 6h `JOB_TTL_SECONDS` was swept
   overnight (age from `created_at`, never bumped) — the next morning's

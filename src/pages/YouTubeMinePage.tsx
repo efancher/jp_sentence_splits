@@ -5,6 +5,7 @@ import { SegmentationEditor } from '../components/SegmentationEditor';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
+import { TranslateAiHelp } from '../components/TranslateAiHelp';
 import { getDb } from '../db/repository';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
@@ -439,6 +440,18 @@ export function YouTubeMinePage() {
       setRealignNote('Filled by AI from the aligned subtitles — give them a glance.');
     });
 
+  // Manual copy/paste counterpart to autoFillTranslations: apply a parsed
+  // reply from <TranslateAiHelp>. `translations[i] === null` -> leave row i.
+  const fillTranslationsFromAi = (translations: (string | null)[]) => {
+    setRealignNote('Filled from a pasted AI reply — give them a glance.');
+    setRows((current) =>
+      current.map((row, index) => {
+        const next = translations[index]?.trim();
+        return next ? { ...row, translation: next, needsTranslationReview: true } : row;
+      }),
+    );
+  };
+
   const buildPreview = () =>
     runApply(
       `Clipping ${rows.length} sentences from the source (up to a minute for a long video)…`,
@@ -700,6 +713,11 @@ export function YouTubeMinePage() {
             </div>
             {realignNote ? <div className="muted">{realignNote}</div> : null}
           </section>
+          <TranslateAiHelp
+            rows={rows.map((row) => ({ japanese: row.japanese, translation: row.translation }))}
+            onFill={fillTranslationsFromAi}
+            disabled={busy}
+          />
           {rows.map((row, index) => (
             <section className="panel stack" key={index}>
               <div className="row" style={{ justifyContent: 'space-between' }}>

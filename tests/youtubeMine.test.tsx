@@ -183,6 +183,18 @@ describe('YouTube mining wizard', () => {
     expect(translateJob).toHaveBeenCalledWith('job-1');
     expect(await screen.findByDisplayValue("Let's go.")).toBeInTheDocument();
 
+    // "Translate with AI help" — paste a partial numbered reply; only the
+    // covered rows change, the rest keep their aligned English.
+    await user.click(screen.getByText('Translate with AI help'));
+    await user.type(
+      screen.getByPlaceholderText(/Paste the assistant's reply here/),
+      '1. Good afternoon.{Enter}3. Yes, that is right.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Apply pasted translations' }));
+    expect(await screen.findByDisplayValue('Good afternoon.')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Yes, that is right.')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('It is sunny.')).toBeInTheDocument();
+
     await user.click(screen.getByRole('button', { name: 'Next →' }));
 
     // Stage 4 — every reviewed row clipped in one commit call, then preview.

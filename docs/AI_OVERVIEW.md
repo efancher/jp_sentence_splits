@@ -507,7 +507,12 @@ observed from outside `ReviewPage`'s own due-queue state.
   (`<SegmentationEditor>` — sentence rows, each playing its span, above a
   waveform whose per-boundary handles drag onto pauses, "Snap to pauses")
   → **Translate** (EN per row, editable, "Auto-fill translations (AI)"
-  reuses `sentence-realign`, grouped by transcript-segment provenance) →
+  reuses `sentence-realign`, grouped by transcript-segment provenance;
+  plus a **"Translate with AI help"** panel — the manual copy/paste
+  counterpart, `formatRowsForTranslationAI` / `parseAiTranslations` in
+  `src/lib/miningTranslate.ts`: numbered `JP` + current draft out, numbered
+  `N. english` reply back, fills blanks and replaces weak/mis-scoped drafts,
+  no Edge Function) →
   **Commit** (one `POST /jobs/{id}/commit` clips every row from source
   with audio inline; preview + vocab-suggestion count). Back/forward +
   per-stage re-run. The in-flight job id is persisted to `localStorage`
