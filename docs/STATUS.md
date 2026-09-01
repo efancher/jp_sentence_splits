@@ -51,6 +51,18 @@ is trimmed.)
   "GLIM SPANKY" (20) — vocab-level study items kept, sentence-level dropped
   per the user's call.
 
+- **2026-09-01 — Mining wizard: resume on refresh + elapsed-time progress.**
+  The wizard held the job id in React state only and deleted the job on
+  unmount, so a refresh / phone tab-unload lost a 20-min mine. Now a
+  `localStorage` `ytmine.activeJob` pointer (ignored past the server's 6h
+  TTL) rehydrates on mount by the job's server-side `stage`; the unmount
+  delete is gone (TTL sweep + explicit Start-over/Cancel/finish cover
+  cleanup). Job gains `message_started_at` / `set_message` and the status
+  response an `elapsedSeconds` → the "starting" panel shows a live `N:NN
+  elapsed` + soft per-step ETA (transcription scales with video length) +
+  a "you can leave this page" note. Both services redeployed.
+  `test_jobs_api.py` +1 assertion, `youtubeMine.test.tsx` +1.
+
 - **2026-09-01 — Audio-less pitch-accent production drill.** The
   `pitch_accent` SRS card and the shadowing analysis both need a
   `SentenceAudio` reference; `buildPitchAccentShapeObservations` never did

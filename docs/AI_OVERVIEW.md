@@ -510,7 +510,15 @@ observed from outside `ReviewPage`'s own due-queue state.
   reuses `sentence-realign`, grouped by transcript-segment provenance) →
   **Commit** (one `POST /jobs/{id}/commit` clips every row from source
   with audio inline; preview + vocab-suggestion count). Back/forward +
-  per-stage re-run. Finishing assembles the same
+  per-stage re-run. The in-flight job id is persisted to `localStorage`
+  (`ytmine.activeJob`, ignored past the server's 6h job TTL) so a refresh /
+  accidental nav / phone tab-unload **reconnects** by rehydrating from the
+  job's server-side `stage` rather than restarting a 20-minute mine — the
+  job is no longer deleted on plain unmount (TTL sweep + explicit
+  Start-over/Cancel/finish handle cleanup). During the long download/ASR
+  step the panel shows a live `N:NN elapsed` (`job.message_started_at` →
+  `elapsedSeconds` in the status response) with a soft per-step ETA.
+  Finishing assembles the same
   `ShadowingImportPreview` (`buildShadowingPreview()`) and commits through
   the identical `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior; only how the preview gets built
