@@ -6,21 +6,26 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-08-31.
+Last updated: 2026-09-01.
 
 ## Where things stand
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,
 vocabulary glossing, WaniKani mnemonics, contextual conjugation cards,
-progressive listening, grammar-learning system Phases 1–9-slice) are
-shipped and, in almost every case, verified against production data by the
-user directly. Roughly 68 Python / ~1066 TS test files, green.
+progressive listening, grammar-learning system incl. `grammar_production`)
+are shipped and, in almost every case, verified against production data by
+the user directly. ~1090 TS tests, green.
 
-Active work is **Mining pipeline v2** — the last remaining roadmap item.
-Its three quality slices (A: ASR transcript, B: full UniDic
-form/reading/accent, C: retained source audio) and the staged wizard
-(W1–W6) all landed 2026-08-31. What's left is deferred polish (below).
+**2026-09-01 pass** (see Recent changes): planner new-card-backlog
+awareness, cross-sentence pronunciation profile (`/pronunciation`, closes
+Phase 9's last milestone), grammar production ladder (`grammar_production`),
+and a ROADMAP compaction + re-scoping. Remaining planned work: re-mine
+"After Work" (browser + human review), plus the smaller opportunistic items
+in ROADMAP.md.
+
+**Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
+what's left is one deferred durability item (below).
 
 ## Recent changes
 
