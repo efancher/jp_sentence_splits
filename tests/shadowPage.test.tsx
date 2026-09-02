@@ -347,10 +347,14 @@ describe('ShadowPage', () => {
     expect(disclosure).toBeInTheDocument();
     await user.click(disclosure);
     // The primary finding shows up a third time inside the full ranked list
-    // (already appears in "Segment timing" and "Focus on this").
-    expect(
-      screen.getAllByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
-    ).toHaveLength(3);
+    // (already appears in "Segment timing" and "Focus on this"). The
+    // disclosure body mounts on a state update, so wait for the re-render
+    // rather than asserting synchronously.
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Your 「っ」 in 「ちょっと」 is much shorter than the reference.'),
+      ).toHaveLength(3),
+    );
   });
 
   it('shows a "closer than last time" note when a re-recorded attempt has the same issue but smaller', async () => {
