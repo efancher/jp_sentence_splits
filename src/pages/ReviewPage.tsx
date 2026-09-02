@@ -117,15 +117,15 @@ const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
  * Word-in-context listening (user request): subjectType `sentenceVocabulary`,
  * subjectId a `SentenceVocabulary.id` — one card per surface-form occurrence
  * of a word in a sentence that has reference audio, like the contextual
- * conjugation card. The card loops just that word's span of the recording
- * (SegmentLoopPlayer) and asks the learner to recall its reading/meaning.
- * A two-tier listening ladder: these are gated behind the word's own reading
- * proficiency (tier 1, ActivityDescriptor.isReady →
+ * conjugation card. Reworked 2026-09-02 into an audio cloze: the whole
+ * sentence is played, then shown with the target word blanked (+ its
+ * translation) for the learner to recall from sound + context — see
+ * WordListeningCard. A two-tier listening ladder: these are gated behind the
+ * word's own reading proficiency (tier 1, ActivityDescriptor.isReady →
  * getProficientVocabularyItemIds), and in turn the full-sentence `listening`
  * card is gated behind *these* (tier 2, getSentenceListeningReadiness) — so
- * the learner hears every content word in isolation before parsing the whole
- * clip. Isolation needs forced alignment; when it can't be isolated the card
- * still seeds and falls back to whole-sentence playback (SegmentLoopPlayer).
+ * the learner has parsed every content word inside its clause before being
+ * asked to parse the whole clip cold.
  */
 const WORD_LISTENING_ACTIVITY_TYPES: StudyActivityType[] = ['word_listening'];
 
@@ -1572,6 +1572,9 @@ export function ReviewPage() {
                 candidate={current.wordListening}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+                onReplay={() => markAssistance('audio_replayed')}
+                playbackRate={audioSpeed}
+                onPlaybackRateChange={setAudioSpeed}
               />
             ) : current.confusionPair ? (
               <ContrastivePairCard
@@ -2394,44 +2397,99 @@ function AudioComprehensionCard({
 }
 
 /**
- * Word-in-context listening (user request): tier 1 of the listening ladder.
- * Loops just the target word's span of the sentence's reference recording
- * (SegmentLoopPlayer — falls back to whole-sentence playback when forced
- * alignment can't isolate it) with all text hidden, so the learner practises
- * hearing that one word before being asked to parse the whole clip
- * (`listening`, tier 2, gated behind every one of these). Reveal shows the
- * reading/meaning and the word in its sentence; the 4-point self-rate
- * afterward is the scheduling signal, same as the other reveal-based cards.
+ * Word-in-context listening (user request; reworked 2026-09-02): tier 1 of
+ * the listening ladder. An audio cloze — the listening analog of `cloze`.
+ * The whole sentence is the stimulus (not an isolated word span, which made
+ * a 2-mora function word like いい an unfair vacuum test and degraded to
+ * bare whole-sentence playback whenever forced alignment couldn't isolate
+ * the word). Staged like `listening`:
+ *   1. Audio only, text hidden — attempt to parse the clip.
+ *   2. "Reveal sentence" — the sentence with the target occurrence blanked,
+ *      plus its translation as the cloze constraint; recall the missing
+ *      word from sound + context. The isolated-word loop is offered here as
+ *      optional scaffolding (`SegmentLoopPlayer wordOnly` — shows nothing
+ *      when it can't isolate), never as the test.
+ *   3. "Reveal answer" — the word filled in, reading, meaning, dict form.
+ * The 4-point self-rate after step 3 is the scheduling signal, same as the
+ * other reveal-based cards; the full-sentence `listening` card (tier 2)
+ * stays gated behind every one of these.
  */
 function WordListeningCard({
   candidate,
   revealed,
   onReveal,
+  onReplay,
+  playbackRate,
+  onPlaybackRateChange,
 }: {
   candidate: WordListeningCandidate;
   revealed: boolean;
   onReveal: () => void;
+  /** Called on every play *after* the first — the first play is the exercise itself. */
+  onReplay: () => void;
+  playbackRate: number;
+  onPlaybackRateChange: (value: number) => void;
 }) {
   const { sentence, audio, surfaceForm, vocabularyItem } = candidate;
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   const isInflected =
     !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
+  const playCountRef = useRef(0);
+  const [sentenceRevealed, setSentenceRevealed] = useState(false);
   return (
     <>
-      <SegmentLoopPlayer
-        audio={audio}
-        japanese={sentence.japanese}
-        surfaceForm={surfaceForm}
-        loopLabel="Loop word"
-        loopingLabel="Looping word…"
-      />
-      {!revealed ? (
+      <div className="row" style={{ alignItems: 'center' }}>
+        <NativeAudioButton
+          audio={audio}
+          displayLabel="Play sentence"
+          playbackRate={playbackRate}
+          onPlay={() => {
+            playCountRef.current += 1;
+            if (playCountRef.current > 1) onReplay();
+          }}
+        />
+        <label>
+          Speed{' '}
+          <select
+            value={playbackRate}
+            onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
+          >
+            {PLAYBACK_SPEEDS.map((value) => (
+              <option key={value} value={value}>
+                {value === 1 ? '1× (normal)' : `${value}×`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {!sentenceRevealed ? (
         <>
           <p className="muted">
-            Listen to the word on its own and recall its reading and meaning.
+            Listen to the whole sentence, then reveal which word to identify.
           </p>
+          <button type="button" onClick={() => setSentenceRevealed(true)}>
+            Reveal sentence
+          </button>
+        </>
+      ) : !revealed ? (
+        <>
+          <div className="jp jp-lg">
+            {before}
+            <mark>_____</mark>
+            {after}
+          </div>
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          <p className="muted">Which word fills the blank? Recall its reading and meaning.</p>
+          <SegmentLoopPlayer
+            audio={audio}
+            japanese={sentence.japanese}
+            surfaceForm={surfaceForm}
+            loopLabel="Hear just the word"
+            loopingLabel="Looping word…"
+            wordOnly
+          />
           <button type="button" onClick={onReveal}>
-            Reveal
+            Reveal answer
           </button>
         </>
       ) : (

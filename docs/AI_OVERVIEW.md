@@ -724,19 +724,28 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   listening ladder**: withheld until every `word_listening` card (below) for
   the sentence's vocabulary occurrences is FSRS-proficient
   (`getSentenceListeningReadiness`), on top of the usual
-  vocab-confirmed-and-proficient gate — so the learner has heard each
-  content word in isolation before being asked to parse the whole clip.
+  vocab-confirmed-and-proficient gate — so the learner has parsed each
+  content word inside its own clause (tier 1, below) before being asked to
+  parse the whole clip cold.
 - **SentenceVocabulary subject, audio-gated**: `word_listening` — tier 1 of
   that ladder. One card **per surface-form occurrence** of a word in a
   sentence that has a `SentenceAudio` row (like the contextual conjugation
-  card; subjectId a `SentenceVocabulary.id`). The card loops just that
-  word's span of the recording via `SegmentLoopPlayer`
-  (`src/components/SegmentLoopPlayer.tsx` — the isolate-a-range-and-loop
-  control extracted from `PitchAccentNativeAudio`, using
-  `isolatedWordRange` + `PlaybackCoordinator.loopRange`, with a
-  whole-sentence fallback when forced alignment can't isolate the word) and
-  asks the learner to recall its reading/meaning, then self-rate. Eligible
-  only once the word's own reading is FSRS-proficient
+  card; subjectId a `SentenceVocabulary.id`). It is an **audio cloze** (the
+  listening analog of `cloze`): the whole clip plays with the text hidden,
+  then "Reveal sentence" shows the sentence with the target occurrence
+  blanked (`_____`, same fixed blank as `cloze`) plus its translation as the
+  cloze constraint,
+  and the learner recalls the missing word from sound + context before
+  "Reveal answer" shows the word/reading/meaning to self-rate against. The
+  isolate-a-word-span loop (`SegmentLoopPlayer` `wordOnly` —
+  `src/components/SegmentLoopPlayer.tsx`, using `isolatedWordRange` +
+  `PlaybackCoordinator.loopRange`) is offered on the reveal-sentence step as
+  optional scaffolding and renders nothing when forced alignment can't
+  isolate the word. (Before the 2026-09-02 rework the card *was* that
+  isolated loop with all text hidden — an unfair vacuum test for short
+  function words like いい, and it degraded to bare whole-sentence playback
+  whenever alignment failed.) Eligible only once the word's own reading is
+  FSRS-proficient
   (`getProficientVocabularyItemIds`, via the new
   `ActivityDescriptor.isReady` hook) — so the ladder is cloze/reading →
   word listening → sentence listening. Words with no separate vocabulary

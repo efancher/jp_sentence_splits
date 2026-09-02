@@ -1864,7 +1864,7 @@ describe('ReviewPage', () => {
     // ...but the word_listening card is withheld while the reading is unproven.
     expect(await db.studyItems.where('activityType').equals('word_listening').count()).toBe(0);
     expect(
-      screen.queryByText('Listen to the word on its own and recall its reading and meaning.'),
+      screen.queryByText('Listen to the whole sentence, then reveal which word to identify.'),
     ).not.toBeInTheDocument();
   });
 
@@ -1875,7 +1875,7 @@ describe('ReviewPage', () => {
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByText(
-      'Listen to the word on its own and recall its reading and meaning.',
+      'Listen to the whole sentence, then reveal which word to identify.',
     );
     await waitFor(async () => {
       const seeded = await db.studyItems.where('activityType').equals('word_listening').toArray();
@@ -1884,7 +1884,10 @@ describe('ReviewPage', () => {
       expect(seeded[0]?.subjectId).toBe('sv-hon');
     });
 
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal sentence' }));
+    // Audio cloze: the sentence shows with the target word blanked + its translation.
+    expect(screen.getByText('I read a book.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reveal answer' }));
     expect(screen.getByText('ほん')).toBeInTheDocument();
     expect(screen.getByText('book')).toBeInTheDocument();
 

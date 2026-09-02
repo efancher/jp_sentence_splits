@@ -74,10 +74,14 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   sentence actually used. Migration `20260901000000_...` live 2026-08-30.
   Not yet browser-verified.
 - [x] **Progressive listening (two-tier ladder).** `word_listening`
-  activity type (one card per surface-form occurrence, loops just that
-  word's audio span) gated behind reading proficiency; full-sentence
-  `listening` gated behind every `word_listening` occurrence. Done
-  2026-08-30, not yet browser-verified.
+  activity type (one card per surface-form occurrence) gated behind reading
+  proficiency; full-sentence `listening` gated behind every `word_listening`
+  occurrence. Done 2026-08-30. Reworked 2026-09-02 from an isolated-word
+  loop into an audio cloze (whole clip → sentence with target blanked +
+  translation → answer; isolated loop demoted to optional scaffolding) —
+  the isolated card was an unfair vacuum test for short function words and
+  degraded badly when forced alignment couldn't isolate the word. Not yet
+  browser-verified.
 - [x] **Grammar-learning system.** Phases 1–9-Contrast-slice: schema/
   repository/sync foundation, manual annotation from Analyze, `/grammar`
   browser + personalized curriculum dashboard, AI-assisted suggestion/

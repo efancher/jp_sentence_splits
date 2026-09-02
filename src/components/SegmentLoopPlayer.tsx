@@ -23,6 +23,11 @@ import { NativeAudioButton } from './NativeAudioButton';
  *
  * Extracted from PitchAccentNativeAudio (which now wraps it) so the
  * `word_listening` review card can reuse the same isolate-and-loop control.
+ *
+ * `wordOnly` strips it down to just the loop control (no whole-sentence
+ * button, no "couldn't isolate" hint) and renders nothing at all when the
+ * word can't be isolated — for callers that already provide their own
+ * whole-sentence playback and only want this as optional scaffolding.
  */
 export function SegmentLoopPlayer({
   audio,
@@ -31,6 +36,7 @@ export function SegmentLoopPlayer({
   loopLabel = 'Loop native word',
   loopingLabel = 'Looping word…',
   fallbackHint = 'Couldn’t isolate just the word — play the whole sentence instead.',
+  wordOnly = false,
 }: {
   audio: SentenceAudio;
   japanese: string;
@@ -38,6 +44,7 @@ export function SegmentLoopPlayer({
   loopLabel?: string;
   loopingLabel?: string;
   fallbackHint?: string;
+  wordOnly?: boolean;
 }) {
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const coordinatorRef = useRef(new PlaybackCoordinator());
@@ -115,6 +122,9 @@ export function SegmentLoopPlayer({
   }
 
   if (!blob) return null;
+  // wordOnly: this control is optional scaffolding — show nothing rather
+  // than a bare whole-sentence button when the word can't be isolated.
+  if (wordOnly && !range) return null;
 
   return (
     <div className="stack" style={{ gap: '0.35rem' }}>
@@ -131,14 +141,16 @@ export function SegmentLoopPlayer({
             {isLooping ? `🔁 ${loopingLabel}` : `🔁 ${loopLabel}`}
           </button>
         ) : null}
-        <NativeAudioButton
-          audio={audio}
-          displayLabel="Whole sentence"
-          onPlay={() => {
-            coordinatorRef.current.cancel();
-            setIsLooping(false);
-          }}
-        />
+        {wordOnly ? null : (
+          <NativeAudioButton
+            audio={audio}
+            displayLabel="Whole sentence"
+            onPlay={() => {
+              coordinatorRef.current.cancel();
+              setIsLooping(false);
+            }}
+          />
+        )}
         {range ? (
           <label>
             Speed{' '}

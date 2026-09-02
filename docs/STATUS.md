@@ -33,6 +33,27 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — `word_listening` card: audio cloze, not isolated word.**
+  Tier 1 of the listening ladder was "loop just this word's audio span,
+  recall its reading/meaning" with all text hidden. Two problems the user
+  hit: for a short high-frequency word in a grammatical frame (いい in
+  `なんて呼んだらいい？`, the `〜たらいい` pattern) recognising it from a
+  2-mora vacuum isn't a real skill; and when forced alignment couldn't
+  isolate the span the card silently degraded to bare whole-sentence
+  playback with a now-meaningless "recall the word on its own" prompt.
+  Reworked into the listening analog of `cloze`, staged like `listening`:
+  (1) whole clip plays, text hidden; (2) "Reveal sentence" shows the
+  sentence with the target occurrence blanked (`_____`) + its
+  translation as the constraint, recall from sound + context — the
+  isolated-word loop (`SegmentLoopPlayer` new `wordOnly` prop, renders
+  nothing when it can't isolate) sits here as optional scaffolding, not the
+  test; (3) "Reveal answer" → word/reading/meaning/dict-form, self-rate.
+  `WordListeningCard` now takes the shared `audioSpeed` state
+  (`onReplay`/`playbackRate`/`onPlaybackRateChange`) like
+  `AudioComprehensionCard`. Candidate generation, the tier-1 reading-
+  proficiency gate, and the tier-2 `getSentenceListeningReadiness` gate are
+  all unchanged. `reviewPage.test.tsx` word_listening tests updated to the
+  new two-step reveal; 1135 TS tests green.
 - **2026-09-02 — Pitch-accent card: audio-first, drop-position.** The
   `pitch_accent` SRS card no longer asks "which of heiban/atamadaka/
   nakadaka/odaka" — a 25–50% guess for an un-memorised fact, with the
