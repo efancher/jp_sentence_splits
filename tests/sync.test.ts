@@ -173,18 +173,45 @@ describe('sync queue and local-first mutations', () => {
 
   it('shouldApplyRemoteEvent skips a version the local record already has, but not a newer one', async () => {
     const { shouldApplyRemoteEvent } = await import('../src/sync/engine');
+    const now = new Date().toISOString();
+    await getDb().kanji.put({
+      id: 'kanji_have',
+      character: '一',
+      meanings: [],
+      onyomi: [],
+      kunyomi: [],
+      nanori: [],
+      createdAt: now,
+      updatedAt: now,
+    });
     await putRecordMeta({
       entity: 'kanji',
-      recordId: 'kanji_2',
+      recordId: 'kanji_have',
+      version: 5,
+      syncedVersion: 5,
+      updatedAt: now,
+    });
+
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_have', 'upsert', 5)).toBe(false);
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_have', 'upsert', 6)).toBe(true);
+    // A delete always applies regardless of the local version.
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_have', 'delete', 5)).toBe(true);
+  });
+
+  it('shouldApplyRemoteEvent applies an "already have it" version when the local row is actually missing', async () => {
+    const { shouldApplyRemoteEvent } = await import('../src/sync/engine');
+    // Stale record-meta: meta says v5, but no kanji row exists locally (a
+    // partial clear kept the meta). The event must still apply, or the row
+    // never comes back.
+    await putRecordMeta({
+      entity: 'kanji',
+      recordId: 'kanji_missing',
       version: 5,
       syncedVersion: 5,
       updatedAt: new Date().toISOString(),
     });
 
-    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'upsert', 5)).toBe(false);
-    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'upsert', 6)).toBe(true);
-    // A delete always applies regardless of the local version.
-    expect(await shouldApplyRemoteEvent('kanji', 'kanji_2', 'delete', 5)).toBe(true);
+    expect(await shouldApplyRemoteEvent('kanji', 'kanji_missing', 'upsert', 5)).toBe(true);
   });
 
   it('enqueues, retries, and removes queue items', async () => {

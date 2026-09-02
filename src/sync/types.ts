@@ -88,6 +88,14 @@ export interface SyncMetaState {
   migrationChoice?: 'upload' | 'keep_local' | 'replace_cloud' | 'skipped';
   syncReferenceAudio: boolean;
   wifiOnlyAudioDownload: boolean;
+  /**
+   * `sync_events` ids that a past pull declined to apply for a *transient*
+   * reason (local pending write, open conflict, or record-meta that looked
+   * newer than the event) — re-checked at the start of every subsequent pull
+   * so a momentary skip can't become a permanent missing row. Cleared as each
+   * one applies (or is confirmed obsolete). Capped; see MAX_DEFERRED_PULL_EVENTS.
+   */
+  deferredPullEventIds?: number[];
 }
 
 export const SYNC_SCHEMA_VERSION = 1;

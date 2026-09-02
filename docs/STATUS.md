@@ -33,6 +33,28 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Sync: pull no longer permanently skips events + a
+  "Re-download from cloud" recovery.** Follow-up to the orphaned-study-items
+  work: a `grammarPattern`-subject study item still showed "Subject not
+  found" after a clean sync because the client's local `grammar_patterns`
+  row was missing — `pullChanges` had once skipped that row's event
+  (`shouldApplyRemoteEvent` false on stale `syncRecordMeta`: meta said
+  "have v1", no row) and advanced its cursor past it forever.
+  `src/sync/engine.ts`: (1) the "already have this version" skip now also
+  requires `localRecordExists(entity, recordId)` — stale meta with a missing
+  row applies instead of suppressing; (2) events skipped for a transient
+  reason (pending write / open conflict) are stored in
+  `SyncMetaState.deferredPullEventIds` and re-attempted at the top of every
+  pull rather than lost (capped `MAX_DEFERRED_PULL_EVENTS` = 2000);
+  (3) `applyFetchedRemote` writes record-meta at the fetched row's real
+  version, not the (possibly stale) triggering event's. New Settings →
+  Account & sync action **"Re-download everything from cloud"**
+  (`AuthAndSyncSettings`, inline two-step confirm, backup-first,
+  `replaceLocalWithCloud`) as the general escape hatch — previously only
+  reachable from the first-run `MigrationModal`. Recovery already run
+  against the affected data via `scripts/resync-grammar-tables.ts`.
+  `tests/sync.test.ts` +1; 1143 TS tests green.
+
 - **2026-09-02 — Sentence-delete cascade leaked orphaned study items.**
   Manual testing (`docs/MANUAL_TEST_LOG.md` item 2f) surfaced "grammar cards
   show as due but never appear in `/review`". Root cause: the 2026-09-01

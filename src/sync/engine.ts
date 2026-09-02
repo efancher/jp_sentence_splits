@@ -42,6 +42,12 @@ import { syncLog } from './logger';
 import type { SyncEntity, SyncQueueItem } from './types';
 
 const PULL_PAGE_SIZE = 100;
+/** Cap on `SyncMetaState.deferredPullEventIds` — past this, something is
+ *  badly wrong and "Re-download everything from cloud" (Settings) is the
+ *  real fix, so keep only the most recent ids rather than growing forever. */
+const MAX_DEFERRED_PULL_EVENTS = 2000;
+/** Chunk size for the `.in('id', …)` re-fetch of deferred events. */
+const DEFERRED_FETCH_CHUNK = 200;
 
 let syncInFlight: Promise<void> | null = null;
 
@@ -456,9 +462,38 @@ async function pullChanges(): Promise<void> {
   if (!userId) return;
 
   const meta = await ensureSyncMeta();
+  const deferred = new Set<number>(meta.deferredPullEventIds ?? []);
+
+  // 1. Re-attempt events an earlier pull declined for a transient reason
+  //    (local pending write / open conflict / meta that looked newer). The
+  //    forward cursor already moved past them, so without this a momentary
+  //    skip becomes a permanent missing row.
+  if (deferred.size > 0) {
+    const ids = [...deferred].sort((a, b) => a - b);
+    for (let i = 0; i < ids.length; i += DEFERRED_FETCH_CHUNK) {
+      const chunk = ids.slice(i, i + DEFERRED_FETCH_CHUNK);
+      const { data: events, error } = await supabase
+        .from('sync_events')
+        .select('*')
+        .eq('owner_id', userId)
+        .in('id', chunk)
+        .order('id', { ascending: true });
+      if (error) throw new Error(error.message);
+      const seen = new Set((events ?? []).map((event) => Number(event.id)));
+      // An id we can no longer see shouldn't happen (events are never
+      // deleted) — but don't spin on it forever if it does.
+      for (const id of chunk) if (!seen.has(id)) deferred.delete(id);
+      if (events?.length) {
+        const { skipped } = await applyRemoteEventsBatch(events);
+        for (const id of seen) if (!skipped.includes(id)) deferred.delete(id);
+      }
+    }
+    await updateSyncMeta({ deferredPullEventIds: [...deferred] });
+  }
+
+  // 2. Forward pull of anything past the cursor.
   let cursor = meta.lastPullEventId;
   let keepGoing = true;
-
   while (keepGoing) {
     const { data: events, error } = await supabase
       .from('sync_events')
@@ -470,10 +505,17 @@ async function pullChanges(): Promise<void> {
     if (error) throw new Error(error.message);
     if (!events?.length) break;
 
-    await applyRemoteEventsBatch(events);
+    const { skipped } = await applyRemoteEventsBatch(events);
+    for (const id of skipped) deferred.add(id);
     cursor = Number(events[events.length - 1]!.id);
 
-    await updateSyncMeta({ lastPullEventId: cursor });
+    let next = [...deferred];
+    if (next.length > MAX_DEFERRED_PULL_EVENTS) {
+      next = next.sort((a, b) => b - a).slice(0, MAX_DEFERRED_PULL_EVENTS);
+      deferred.clear();
+      for (const id of next) deferred.add(id);
+    }
+    await updateSyncMeta({ lastPullEventId: cursor, deferredPullEventIds: next });
     keepGoing = events.length === PULL_PAGE_SIZE;
   }
 }
@@ -508,10 +550,63 @@ export async function shouldApplyRemoteEvent(
 
   const localMeta = await getRecordMeta(entity, recordId);
   if (localMeta && localMeta.version >= version && op !== 'delete') {
-    return false;
+    // Trust "already have this version" only if the row is actually present.
+    // Stale record-meta (row dropped locally by a partial clear / failed
+    // write, meta kept) otherwise makes every future event for it skip
+    // forever — the permanent-missing-row bug this guards against.
+    if (await localRecordExists(entity, recordId)) return false;
   }
 
   return true;
+}
+
+/** Whether the Dexie row for a synced record is present locally. Mirrors
+ *  applyRemoteDelete's entity→table switch. */
+async function localRecordExists(entity: SyncEntity, recordId: string): Promise<boolean> {
+  const db = getDb();
+  switch (entity) {
+    case 'books':
+      return (await db.books.get(recordId)) != null;
+    case 'sentences':
+      return (await db.sentences.get(recordId)) != null;
+    case 'book_sentences':
+      return (await db.bookSentences.get(recordId)) != null;
+    case 'analyses':
+      return (await db.analyses.get(recordId)) != null;
+    case 'import_batches':
+      return (await db.importBatches.get(recordId)) != null;
+    case 'inbox':
+      return (await db.inbox.get(recordId)) != null;
+    case 'reference_audio':
+      return (await db.sentenceAudio.get(recordId)) != null;
+    case 'study_items':
+      return (await db.studyItems.get(recordId)) != null;
+    case 'reviews':
+      return (await db.reviews.get(recordId)) != null;
+    case 'vocabulary_items':
+      return (await db.vocabularyItems.get(recordId)) != null;
+    case 'sentence_vocabulary':
+      return (await db.sentenceVocabulary.get(recordId)) != null;
+    case 'kanji':
+      return (await db.kanji.get(recordId)) != null;
+    case 'vocabulary_kanji':
+      return (await db.vocabularyKanji.get(recordId)) != null;
+    case 'vocabulary_confusions':
+      return (await db.vocabularyConfusions.get(recordId)) != null;
+    case 'card_issue_reports':
+      return (await db.cardIssueReports.get(recordId)) != null;
+    case 'grammar_patterns':
+      return (await db.grammarPatterns.get(recordId)) != null;
+    case 'sentence_grammar':
+      return (await db.sentenceGrammar.get(recordId)) != null;
+    case 'grammar_relationships':
+      return (await db.grammarRelationships.get(recordId)) != null;
+    case 'planner_sessions':
+      return (await db.plannerSessions.get(recordId)) != null;
+    default:
+      // Unknown entity — assume present so we don't loop re-fetching it.
+      return true;
+  }
 }
 
 /**
@@ -530,7 +625,12 @@ async function applyFetchedRemote(
     await applyRemoteDelete(entity, recordId, version);
     return;
   }
-  await applyRemoteUpsert(entity, remote, version);
+  // Prefer the fetched row's real version over the triggering event's — when
+  // re-applying a deferred (older) event the two can differ, and record-meta
+  // should track what we actually wrote, not the stale event.
+  const effectiveVersion =
+    remote.version != null ? Number(remote.version) : version;
+  await applyRemoteUpsert(entity, remote, effectiveVersion);
 }
 
 /** Apply a remote sync_events row. Exported for unit tests. */
@@ -573,11 +673,12 @@ async function applyRemoteEventsBatch(
     op: string;
     version: unknown;
   }>,
-): Promise<void> {
+): Promise<{ skipped: number[] }> {
   const pending = await listPendingMutations();
 
   type PendingFetch = { entity: SyncEntity; recordId: string; version: number };
   const toFetch: PendingFetch[] = [];
+  const skipped: number[] = [];
   for (const event of events) {
     const entity = event.entity as SyncEntity;
     const recordId = String(event.record_id);
@@ -585,12 +686,14 @@ async function applyRemoteEventsBatch(
     const version = Number(event.version);
     if (await shouldApplyRemoteEvent(entity, recordId, op, version, pending)) {
       toFetch.push({ entity, recordId, version });
+    } else {
+      skipped.push(Number(event.id));
     }
   }
-  if (!toFetch.length) return;
+  if (!toFetch.length) return { skipped };
 
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return { skipped };
 
   // Grouping by entity (rather than fetching in original event order) is
   // safe for our fixed, type-level dependency graph (kanji/vocabulary_items
@@ -625,6 +728,8 @@ async function applyRemoteEventsBatch(
       await applyFetchedRemote(item.entity, item.recordId, item.version, byRecordId.get(item.recordId));
     }
   }
+
+  return { skipped };
 }
 
 async function applyRemoteDelete(
@@ -1089,6 +1194,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   await updateSyncMeta({
     userId,
     lastPullEventId: Number(maxEvent?.id ?? 0),
+    deferredPullEventIds: [],
     migrationChoice: 'replace_cloud',
     lastSyncAt: new Date().toISOString(),
   });

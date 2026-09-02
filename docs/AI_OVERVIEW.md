@@ -1232,7 +1232,19 @@ place by design.
   compare-and-swap on push), soft deletes (`deleted_at`), an append-only
   `sync_events` table as the pull cursor. Push failures surface as a
   visible sync-status badge (`SyncStatusBadge.tsx`) rather than retrying
-  silently forever.
+  silently forever. A pull event the client declines to apply for a
+  *transient* reason (local pending write, open conflict, or record-meta
+  that looks newer than the event) is recorded in
+  `SyncMetaState.deferredPullEventIds` and re-attempted at the top of every
+  subsequent pull — the cursor advances regardless, so without this a
+  momentary skip became a permanent missing row (`~を見つける` incident,
+  2026-09-02). The "already have this version" skip also verifies the local
+  row actually exists first (`localRecordExists`), so stale record-meta
+  can't suppress the row forever. Settings → Account & sync →
+  **"Re-download everything from cloud"** (`AuthAndSyncSettings`, inline
+  two-step confirm, backup-first) is the manual escape hatch
+  (`replaceLocalWithCloud`) — previously only reachable from the first-run
+  `MigrationModal`.
 - **Conflict resolution** (`resolveConflict.ts`, `ConflictPanel.tsx`):
   manual keep-local / keep-remote / duplicate UI when two devices edit the
   same record. `reviews` (append-only) sidesteps conflicts entirely by

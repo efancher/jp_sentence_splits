@@ -1,6 +1,9 @@
 import { useState } from 'react';
 
+import { exportFullBackup } from '../db/repository';
+import { downloadText } from '../lib/worksheet';
 import { useAuth } from '../sync/auth';
+import { replaceLocalWithCloud } from '../sync/engine';
 import { useSync } from '../sync/SyncProvider';
 import { ConflictPanel } from './ConflictPanel';
 import { isSupabaseConfigured } from '../sync/supabaseClient';
@@ -16,6 +19,7 @@ export function AuthAndSyncSettings() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmRedownload, setConfirmRedownload] = useState(false);
 
   if (!isSupabaseConfigured()) {
     return (
@@ -126,6 +130,70 @@ export function AuthAndSyncSettings() {
               />
               Download audio on Wi‑Fi only (when browser reports connection)
             </label>
+
+            <div className="stack" style={{ gap: '0.35rem' }}>
+              <p className="muted" style={{ margin: 0 }}>
+                Re-download everything from cloud: replaces this device's study
+                data with a fresh full copy from the server. Use if a card,
+                word, or grammar pattern shows as missing/deleted here but is
+                fine elsewhere. Reference audio and shadowing recordings on this
+                device are untouched. A JSON backup downloads first.
+              </p>
+              {!confirmRedownload ? (
+                <button
+                  type="button"
+                  disabled={busy || !sync.online}
+                  onClick={() => {
+                    setMessage('');
+                    setError('');
+                    setConfirmRedownload(true);
+                  }}
+                >
+                  Re-download everything from cloud
+                </button>
+              ) : (
+                <div className="row">
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError('');
+                      setMessage('');
+                      try {
+                        const payload = await exportFullBackup();
+                        downloadText(
+                          `satori-glossbook-before-redownload-${payload.exportedAt.slice(0, 10)}.json`,
+                          JSON.stringify(payload, null, 2),
+                          'application/json',
+                        );
+                        await replaceLocalWithCloud(auth.user!.id);
+                        setMessage(
+                          'Re-downloaded all study data from the cloud. Backup saved.',
+                        );
+                      } catch (err) {
+                        setError(
+                          err instanceof Error ? err.message : 'Re-download failed.',
+                        );
+                      } finally {
+                        setBusy(false);
+                        setConfirmRedownload(false);
+                      }
+                    }}
+                  >
+                    {busy ? 'Re-downloading…' : 'Back up & replace now'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmRedownload(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <>

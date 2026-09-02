@@ -130,14 +130,37 @@ no clean in-app recovery.
 > any client cursor → clients re-pull the rows (missing ones included) on
 next sync. Verify by reopening the study-item URL after a sync.
 
-**Code follow-ups (not yet done):**
-- Settings action: "Re-download everything from cloud" (reset
-  `lastPullEventId` + `replaceLocalWithCloud`), inline confirm (PWA-safe, not
-  `window.confirm`).
-- `pullChanges`: don't permanently skip — re-check skipped event ids next
-  cycle, or reconcile via periodic full-table pull.
-- If other subject types (vocab/sentence) show the same drift, re-touch
-  those tables too.
+**Code follow-ups — done 2026-09-02:**
+- ✅ `pullChanges` no longer permanently skips. Two changes in
+  `src/sync/engine.ts`:
+  1. `shouldApplyRemoteEvent`'s "already have this version" skip now also
+     requires the local row to actually exist (`localRecordExists`) — stale
+     record-meta with a missing row no longer suppresses the event forever.
+     This is the exact bug that hid `～を見つける`.
+  2. Events skipped for a transient reason (pending write / open conflict)
+     are recorded in `SyncMetaState.deferredPullEventIds` and re-attempted at
+     the top of every subsequent pull, instead of being lost when the cursor
+     advances. Capped at `MAX_DEFERRED_PULL_EVENTS` (2000); cleared by
+     "Re-download everything from cloud". `tests/sync.test.ts` +1.
+- ✅ Settings → Account & sync → **"Re-download everything from cloud"**
+  (`AuthAndSyncSettings`): inline two-step confirm (no `window.confirm`),
+  downloads a JSON backup, then `replaceLocalWithCloud` (full pull + cursor
+  reset + deferred cleared). Reference audio / shadowing recordings on the
+  device are untouched.
+
+### Test plan — sync recovery
+
+| Check | How | Expect |
+|---|---|---|
+| Re-download button present | ☰ → Settings → "Account & sync" panel (must be signed in) | "Re-download everything from cloud" button below the audio options |
+| Two-step confirm, PWA-safe | Tap it | Inline "Back up & replace now" / "Cancel" appears — no OS dialog. Works on installed iOS PWA. |
+| Recovery works | Tap "Back up & replace now" | JSON backup downloads; after a moment "Re-downloaded all study data…"; the previously-missing `/study-items/…` grammar subject now resolves |
+| Data intact | After: ☰ → Progress, ☰ → Study items | Counts look right; Settings → Export all data still succeeds |
+| Audio kept | ShadowPage on a sentence you've recorded | Your past attempts + native clips still there |
+
+Deferred-event retry has no dedicated UI — it just means a transiently
+skipped change now lands on a later sync instead of being lost. Nothing to
+click; the recovery button is the visible half.
 
 Diagnostics: `npx tsx scripts/diagnose-grammar-review-queue.ts`,
 `npx tsx scripts/cleanup-orphaned-study-items.ts`
