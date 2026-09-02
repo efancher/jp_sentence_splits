@@ -18,34 +18,20 @@ import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
-import { pitchPatternLabel } from '../src/lib/pitchAccentShape';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
 
 /**
- * Mirrors ReviewPage's private PitchAccentCard: the buttons ask *where the
- * pitch drops* (position 0..moraCount, in mora order), and the reveal names
- * the category. `expectedPitchAccentDrop` returns the button label for the
- * dictionary position and the reveal category label.
+ * Mirrors ReviewPage's private PitchAccentCard: each choice button's
+ * accessible name is its caption ("Stays high (no fall)" / "Falls after
+ * mora N"); the textbook contour drawing next to it is aria-hidden.
  */
 function expectedPitchAccentDrop(reading: string, position: number) {
   const morae = segmentIntoMorae(reading).map((unit) => unit.text);
   const correctPosition = Math.max(0, Math.min(position, morae.length));
-  const dropLabel = (at: number) =>
-    at === 0 ? 'Stays high (no drop)' : `Drops after ${morae.slice(0, at).join('')}`;
-  const categoryLabel: Record<string, string> = {
-    heiban: 'Heiban (平板)',
-    atamadaka: 'Atamadaka (頭高)',
-    nakadaka: 'Nakadaka (中高)',
-    odaka: 'Odaka (尾高)',
-  };
-  return {
-    morae,
-    correctPosition,
-    label: dropLabel(correctPosition),
-    dropLabel,
-    categoryLabel: categoryLabel[pitchPatternLabel(position, morae.length)]!,
-  };
+  const caption = (at: number) =>
+    at === 0 ? 'Stays high (no fall)' : `Falls after mora ${at}`;
+  return { morae, correctPosition, label: caption(correctPosition), caption };
 }
 
 // Minimal fake <audio> so listening-card tests can drive playback/`onended`
@@ -998,7 +984,7 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Listen, then mark where the pitch drops.');
+    await screen.findByText(/Listen, then mark where it falls/);
     expect(screen.getByText('はな')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: label }));
@@ -1052,14 +1038,14 @@ describe('ReviewPage', () => {
     await suppressVocabularyActivityTypes('vocab-hana2');
     await suppressAudioCards('sent-1', 'sv-hana2');
 
-    // Correct drop is after mora 1; click "no drop" (position 0) instead.
-    const { correctPosition, dropLabel } = expectedPitchAccentDrop('はな', 1);
-    const wrongLabel = dropLabel(0);
+    // Correct fall is after mora 1; click "no fall" (position 0) instead.
+    const { correctPosition, caption } = expectedPitchAccentDrop('はな', 1);
+    const wrongLabel = caption(0);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Listen, then mark where the pitch drops.');
+    await screen.findByText(/Listen, then mark where it falls/);
     await user.click(screen.getByRole('button', { name: wrongLabel }));
 
     expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
@@ -1151,14 +1137,14 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('offers one drop-position choice per mora plus "no drop" for a 1-mora word', async () => {
+  it('offers one fall-position choice per mora plus "no fall" for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
 
-    // 目 (め) — 1 mora: "no drop" and "drops after め", nothing else.
+    // 目 (め) — 1 mora: "no fall" and "falls after mora 1", nothing else.
     await db.vocabularyItems.add({
       id: 'vocab-me',
       expression: '目',
@@ -1182,25 +1168,25 @@ describe('ReviewPage', () => {
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Listen, then mark where the pitch drops.');
+    await screen.findByText(/Listen, then mark where it falls/);
     expect(
-      screen.getByRole('button', { name: 'Stays high (no drop)' }),
+      screen.getByRole('button', { name: 'Stays high (no fall)' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Drops after め' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Falls after mora 1' })).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Drops after め./ }),
+      screen.queryByRole('button', { name: 'Falls after mora 2' }),
     ).not.toBeInTheDocument();
   });
 
-  it('distinguishes two internal drop points (nakadaka) on a longer word and grades them separately', async () => {
+  it('distinguishes two internal fall points (nakadaka) on a longer word and grades them separately', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
 
-    // あいさつ (挨拶) — 4 morae, dictionary accent [3]: drop after さ.
-    // A drop after い (position 2) is also "nakadaka" but a different
+    // あいさつ (挨拶) — 4 morae, dictionary accent [3]: falls after さ.
+    // A fall after い (position 2) is also "nakadaka" but a different
     // contour — the old category card couldn't tell them apart.
     await db.vocabularyItems.add({
       id: 'vocab-aisatsu',
@@ -1226,12 +1212,12 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Listen, then mark where the pitch drops.');
-    expect(screen.getByRole('button', { name: 'Drops after あい' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Drops after あいさ' })).toBeInTheDocument();
+    await screen.findByText(/Listen, then mark where it falls/);
+    expect(screen.getByRole('button', { name: 'Falls after mora 2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Falls after mora 3' })).toBeInTheDocument();
 
-    // Pick the wrong internal drop point.
-    await user.click(screen.getByRole('button', { name: 'Drops after あい' }));
+    // Pick the wrong internal fall point.
+    await user.click(screen.getByRole('button', { name: 'Falls after mora 2' }));
     expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Again' }));

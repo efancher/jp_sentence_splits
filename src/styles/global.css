@@ -438,6 +438,45 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* PitchChoiceContour (ReviewPage pitch_accent card choices) — NHK-style
+   overline over the high morae, dropping at the downstep. */
+.pa-choice-button {
+  padding: 0.5rem 0.6rem;
+}
+
+.pa-choice {
+  display: inline-flex;
+  align-items: flex-start;
+  font-size: 1.15rem;
+  line-height: 1;
+  /* Leave room above the kana for the overline. */
+  padding-top: 4px;
+}
+
+.pa-choice-mora {
+  padding: 3px 1px 0 1px;
+  border-top: 2px solid transparent;
+}
+
+.pa-choice-mora[data-c='h'] {
+  border-top-color: var(--accent);
+}
+
+.pa-choice-mora[data-fall] {
+  border-right: 2px solid var(--accent);
+  padding-right: 3px;
+}
+
+.pa-choice-particle {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  align-self: flex-start;
+}
+
+.pa-choice-particle[data-c='h'] {
+  border-top-color: var(--text-muted);
+}
+
 /* KaraokeSentenceText (ReviewPage listening card) — word-by-word playback highlight. */
 .karaoke-word {
   transition: background-color 0.1s ease-out;

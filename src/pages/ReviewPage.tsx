@@ -65,7 +65,11 @@ import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
-import { pitchPatternLabel, type PitchAccentPattern } from '../lib/pitchAccentShape';
+import {
+  expectedPitchShape,
+  pitchPatternLabel,
+  type PitchAccentPattern,
+} from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { isDeferralMnemonic } from '../lib/wanikaniMnemonic';
@@ -2113,6 +2117,43 @@ const PITCH_ACCENT_PATTERN_LABELS: Record<PitchAccentPattern, string> = {
 };
 
 /**
+ * One pitch-accent choice on the `pitch_accent` card, drawn in the NHK /
+ * OJAD textbook convention: an overline sits above every high mora and ends
+ * in a downward stroke at the downstep, so each button reads as a single
+ * whole contour (a word falls once at most) rather than a list of events.
+ * A trailing dot is the following particle — high only for heiban, which is
+ * what separates it from odaka (identical within the word itself). Shape
+ * comes straight from `expectedPitchShape`, the same function the grader
+ * and `PitchAccentDiagram` use.
+ */
+function PitchChoiceContour({ morae, position }: { morae: string[]; position: number }) {
+  const shape = expectedPitchShape(morae.length, position);
+  const particleHigh = position === 0;
+  return (
+    <span className="pa-choice jp" aria-hidden="true">
+      {morae.map((mora, index) => {
+        const high = shape[index] === 'h';
+        const fallsAfter =
+          high && (shape[index + 1] === 'l' || (index === morae.length - 1 && !particleHigh));
+        return (
+          <span
+            key={index}
+            className="pa-choice-mora"
+            data-c={high ? 'h' : 'l'}
+            data-fall={fallsAfter ? '' : undefined}
+          >
+            {mora}
+          </span>
+        );
+      })}
+      <span className="pa-choice-mora pa-choice-particle" data-c={particleHigh ? 'h' : 'l'}>
+        ・
+      </span>
+    </span>
+  );
+}
+
+/**
  * Pitch accent, audio-first: the learner loops the native realization of
  * the word (PitchAccentNativeAudio, shown before the answer, not just on
  * the reveal) and marks where the pitch drops on the word's own morae —
@@ -2143,13 +2184,15 @@ function PitchAccentCard({
   const [selected, setSelected] = useState<number | null>(null);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
 
-  // Drop positions 0..N. 0 = no drop; N (= morae.length) is odaka —
+  // Drop positions 0..N. 0 = no downstep; N (= morae.length) is odaka —
   // indistinguishable from heiban within the word, which is why the native
   // clip (whose trailing particle drops for odaka, stays high for heiban)
-  // plays before the learner answers.
+  // plays before the learner answers. A word falls once at most, so each
+  // choice is one whole contour, drawn textbook-style (overline over the
+  // high morae, a vertical stroke at the downstep) by PitchChoiceContour.
   const positionChoices = Array.from({ length: morae.length + 1 }, (_, index) => index);
-  const dropLabel = (position: number) =>
-    position === 0 ? 'Stays high (no drop)' : `Drops after ${morae.slice(0, position).join('')}`;
+  const dropCaption = (position: number) =>
+    position === 0 ? 'Stays high (no fall)' : `Falls after mora ${position}`;
 
   return (
     <>
@@ -2164,18 +2207,25 @@ function PitchAccentCard({
 
       {!revealed ? (
         <>
-          <div className="muted">Listen, then mark where the pitch drops.</div>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
+          <div className="muted">
+            A word&rsquo;s pitch falls once at most. Listen, then mark where it falls.
+          </div>
+          <div className="row" style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
             {positionChoices.map((position) => (
               <button
                 key={position}
                 type="button"
+                className="pa-choice-button stack"
+                style={{ gap: '0.2rem', alignItems: 'center' }}
                 onClick={() => {
                   setSelected(position);
                   onCheck(String(position), String(correctPosition));
                 }}
               >
-                {dropLabel(position)}
+                <PitchChoiceContour morae={morae} position={position} />
+                <span className="muted" style={{ fontSize: '0.75rem' }}>
+                  {dropCaption(position)}
+                </span>
               </button>
             ))}
           </div>
@@ -2186,7 +2236,8 @@ function PitchAccentCard({
             {selected === correctPosition ? '✓ Correct' : '✗ Not quite'}
           </div>
           <div>
-            {PITCH_ACCENT_PATTERN_LABELS[correctLabel]} — {dropLabel(correctPosition).toLowerCase()}
+            {PITCH_ACCENT_PATTERN_LABELS[correctLabel]} —{' '}
+            {correctPosition === 0 ? 'no downstep' : `downstep after mora ${correctPosition}`}
           </div>
           <PitchAccentDiagram
             reading={vocabularyItem.reading}

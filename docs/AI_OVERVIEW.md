@@ -773,12 +773,15 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   worth its queue slot, and here the clip is load-bearing. **Audio-first
   perception task**: `PitchAccentNativeAudio` (below) plays *above* the
   question so the learner loops the native word, then marks **where the
-  pitch drops** — choices are drop positions `0..moraCount` in mora order
-  ("Stays high (no drop)" / "Drops after は" / …), not the four category
-  names. This puts the ear before the metalabel and fully specifies the
-  contour (a 4-mora word distinguishes a drop after mora 2 from mora 3,
-  which a single "nakadaka" answer collapsed). `onCheck` passes the chosen
-  and correct positions as strings; `classifyReviewError` flags a miss as
+  pitch falls** — choices `0..moraCount`, each drawn as a whole contour in
+  NHK/OJAD textbook notation (`PitchChoiceContour` in `ReviewPage.tsx`:
+  overline over the high morae dropping at the downstep, trailing
+  particle dot to split heiban from odaka) with a numbered caption ("Stays
+  high (no fall)" / "Falls after mora 2" / …), not the four category names.
+  This puts the ear before the metalabel and fully specifies the contour (a
+  4-mora word distinguishes a fall after mora 2 from mora 3, which a single
+  "nakadaka" answer collapsed). `onCheck` passes the chosen and correct
+  positions as strings; `classifyReviewError` flags a miss as
   `pronunciation_difficulty`. The
   reveal draws the mora-by-mora H/L contour via `PitchAccentDiagram`
   (`src/components/PitchAccentDiagram.tsx`), an SVG render of the same

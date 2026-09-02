@@ -38,11 +38,14 @@ is trimmed.)
   nakadaka/odaka" — a 25–50% guess for an un-memorised fact, with the
   native clip only offered after answering. It now plays the native word
   first (`PitchAccentNativeAudio` moved above the question) and asks
-  **"where does the pitch drop?"** — choices `0..moraCount` in mora order
-  ("Stays high (no drop)" / "Drops after は" / …). This puts the ear before
-  the metalabel and fully specifies the contour: a 4-mora word now
-  distinguishes a drop after mora 2 from mora 3, which the category card
-  collapsed into one "nakadaka" answer. `getPitchAccentReviewCandidates`
+  **where the pitch falls** — choices `0..moraCount`, each drawn as a whole
+  contour in NHK/OJAD textbook notation (`PitchChoiceContour`: overline over
+  the high morae dropping at the downstep, trailing particle dot) with a
+  numbered caption ("Stays high (no fall)" / "Falls after mora 2" / …). This
+  puts the ear before the metalabel and fully specifies the contour: a
+  4-mora word now distinguishes a fall after mora 2 from mora 3, which the
+  category card collapsed into one "nakadaka" answer.
+  `getPitchAccentReviewCandidates`
   drops the pattern-shuffle; `PitchAccentReviewCandidate` carries `morae` +
   `correctPosition`. `onCheck` passes chosen/correct positions as strings,
   so a wrong drop point still classifies as `pronunciation_difficulty`.
