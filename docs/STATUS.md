@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Grammar explanation Save button now gives feedback.**
+  In `GrammarPicker`'s expanded "Explain" form the Save button was
+  fire-and-forget — no in-flight state, no confirmation, no error handling,
+  so after "Suggest explanation (AI)" you couldn't tell whether a save
+  landed without refreshing. Added a `dirty` check (local buffers vs the
+  persisted pattern/link), a `saveState` machine (`idle`/`saving`/`saved`/
+  `error`), and inline status text next to the button: "Unsaved changes"
+  while dirty, "Saved ✓" after a successful write, "Couldn't save — try
+  again" on error. Button is disabled when clean or mid-save. Same feedback
+  pattern as the Analyze sentence-status buttons (06833da).
+
 - **2026-09-02 — WaniKani mnemonics removed.** Learning-in-context proved
   more useful than the Tofugu mnemonics, so the whole feature is gone:
   `ReviewPage`'s "Show mnemonic" scaffolding + auto-show maturity effect,

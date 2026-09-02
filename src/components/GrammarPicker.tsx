@@ -316,6 +316,21 @@ function GrammarPatternCard({
   const [explainAssistState, setExplainAssistState] = useState<
     { status: 'idle' } | { status: 'loading' } | { status: 'error'; reason: string }
   >({ status: 'idle' });
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>(
+    'idle',
+  );
+
+  const dirty =
+    shortMeaning !== pattern.shortMeaning ||
+    structuralNotes !== (pattern.structuralNotes ?? '') ||
+    explanation !== (pattern.explanation ?? '') ||
+    family !== (pattern.family ?? '') ||
+    occurrenceExplanation !== (link.occurrenceExplanation ?? '');
+
+  // Drop the "Saved" confirmation as soon as the learner edits again.
+  useEffect(() => {
+    if (dirty) setSaveState((current) => (current === 'saved' ? 'idle' : current));
+  }, [dirty]);
 
   // Re-sync local edit buffers when a different pattern expands, or the
   // underlying row changes from elsewhere (e.g. another device via sync).
@@ -326,20 +341,28 @@ function GrammarPatternCard({
     setFamily(pattern.family ?? '');
     setOccurrenceExplanation(link.occurrenceExplanation ?? '');
     setExplainAssistState({ status: 'idle' });
+    setSaveState('idle');
     // Only re-sync on identity/expand changes, not on every local keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pattern.id, expanded]);
 
   async function saveExplanation() {
-    await Promise.all([
-      updateGrammarPattern(pattern.id, {
-        shortMeaning,
-        structuralNotes,
-        explanation,
-        family,
-      }),
-      ensureSentenceGrammar(link.sentenceId, pattern.id, { occurrenceExplanation }),
-    ]);
+    setSaveState('saving');
+    try {
+      await Promise.all([
+        updateGrammarPattern(pattern.id, {
+          shortMeaning,
+          structuralNotes,
+          explanation,
+          family,
+        }),
+        ensureSentenceGrammar(link.sentenceId, pattern.id, { occurrenceExplanation }),
+      ]);
+      setSaveState('saved');
+    } catch (error) {
+      console.error('Failed to save grammar explanation', error);
+      setSaveState('error');
+    }
   }
 
   async function suggestExplanation() {
@@ -468,10 +491,26 @@ function GrammarPatternCard({
             onChange={(event) => setOccurrenceExplanation(event.target.value)}
             rows={2}
           />
-          <div className="row">
-            <button type="button" className="primary" onClick={() => void saveExplanation()}>
-              Save
+          <div className="row" style={{ alignItems: 'center' }}>
+            <button
+              type="button"
+              className="primary"
+              disabled={saveState === 'saving' || !dirty}
+              onClick={() => void saveExplanation()}
+            >
+              {saveState === 'saving' ? 'Saving…' : 'Save'}
             </button>
+            {saveState === 'error' ? (
+              <span role="alert" style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>
+                Couldn’t save — try again.
+              </span>
+            ) : dirty ? (
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                Unsaved changes
+              </span>
+            ) : saveState === 'saved' ? (
+              <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved ✓</span>
+            ) : null}
           </div>
         </div>
       ) : null}
