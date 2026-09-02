@@ -107,6 +107,38 @@ sentence's `sentenceVocabulary` links (L316) but not the `word_listening` /
 vocab). Re-run reports clean. `diagnose-grammar-review-queue.ts` now shows
 only the 2 vocab-gated patterns above.
 
+### 2f follow-up — client missing grammar_patterns rows (separate sync bug)
+
+After the cleanup + a sync, `/study-items/study_item_8be75148-…`
+(subject `grammar_pattern_199acf31…` = `～を見つける`) still showed "Subject
+not found". Server check: the pattern row is live with a valid insert
+`sync_events` row (id 11918, 2026-08-24). My cleanup never touched it (it has
+a live link). So the client's local Dexie is **missing the row** — a
+pre-existing sync drift, not caused by the cleanup.
+
+**Root cause:** `pullChanges` (`src/sync/engine.ts`) advances
+`syncMeta.lastPullEventId` past every event in a page, including ones
+`shouldApplyRemoteEvent` returned false for (transient: a local pending
+write, an open conflict, or stale `syncRecordMeta`). A skipped event is never
+revisited → permanent local gap for that row. And there's no "full re-pull"
+action outside the first-run `MigrationModal` (`replaceLocalWithCloud`), so
+no clean in-app recovery.
+
+**Recovery applied 2026-09-02:** `npx tsx scripts/resync-grammar-tables.ts
+--apply` bumped `updated_at` on all 35 `grammar_patterns` + 2
+`sentence_grammar` rows (no content change) → fresh `sync_events` with ids
+> any client cursor → clients re-pull the rows (missing ones included) on
+next sync. Verify by reopening the study-item URL after a sync.
+
+**Code follow-ups (not yet done):**
+- Settings action: "Re-download everything from cloud" (reset
+  `lastPullEventId` + `replaceLocalWithCloud`), inline confirm (PWA-safe, not
+  `window.confirm`).
+- `pullChanges`: don't permanently skip — re-check skipped event ids next
+  cycle, or reconcile via periodic full-table pull.
+- If other subject types (vocab/sentence) show the same drift, re-touch
+  those tables too.
+
 Diagnostics: `npx tsx scripts/diagnose-grammar-review-queue.ts`,
 `npx tsx scripts/cleanup-orphaned-study-items.ts`
 
