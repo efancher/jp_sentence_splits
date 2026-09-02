@@ -8,6 +8,7 @@ import {
   confirmSentenceVocabulary,
   createBook,
   createBookChapter,
+  deferUnreadyGrammarReviews,
   deferUnreadySentenceReviews,
   getProficientVocabularyItemIds,
   getSentenceListeningReadiness,
@@ -68,7 +69,12 @@ import {
   updateBookChapter,
   updateGrammarPattern,
 } from '../src/db/repository';
-import type { AlignmentResult, Sentence, VocabularySelection } from '../src/domain/types';
+import type {
+  AlignmentResult,
+  Sentence,
+  StudyActivityType,
+  VocabularySelection,
+} from '../src/domain/types';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
 import { createId } from '../src/lib/ids';
@@ -839,6 +845,72 @@ describe('deferUnreadySentenceReviews (full-sentence gating)', () => {
 
     // Not due yet (30 days out), so deferUnreadySentenceReviews shouldn't touch it.
     const result = await deferUnreadySentenceReviews(['comprehension']);
+    expect(result).toEqual({ deferred: 0, checked: 0 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(farFuture);
+  });
+});
+
+describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-defer-grammar-${createId('db')}`);
+  });
+
+  async function dueGrammarItem(patternId: string, activityType: StudyActivityType) {
+    const item = await ensureGrammarStudyItem(patternId, activityType);
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: past } });
+    return (await getDb().studyItems.get(item.id))!;
+  }
+
+  it('defers a due grammar item whose pattern has no linked sentence at all', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await dueGrammarItem(pattern.id, 'grammar_comprehension');
+
+    const now = new Date();
+    const result = await deferUnreadyGrammarReviews({ now });
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThanOrEqual(
+      now.getTime() + 7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  it("defers a due grammar item whose only linked sentence isn't full-review-ready", async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.put(stubSentence('sent-1'));
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    // No analyses row → sentence vocab unreviewed → not ready.
+    const item = await dueGrammarItem(pattern.id, 'grammar_completion');
+
+    const result = await deferUnreadyGrammarReviews();
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('leaves a due grammar item alone once a linked sentence is full-review-ready', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await getDb().sentences.put(stubSentence('sent-1'));
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await confirmSentenceVocabulary('sent-1', []);
+    const item = await dueGrammarItem(pattern.id, 'grammar_comprehension');
+
+    const result = await deferUnreadyGrammarReviews();
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
+  });
+
+  it('never pulls a due date earlier — a not-yet-due unready grammar item is untouched', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, due: farFuture },
+    });
+
+    const result = await deferUnreadyGrammarReviews();
     expect(result).toEqual({ deferred: 0, checked: 0 });
     const persisted = await getDb().studyItems.get(item.id);
     expect(persisted?.fsrsState.due).toBe(farFuture);

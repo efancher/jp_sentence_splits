@@ -11,6 +11,7 @@ import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { VocabChips } from '../components/VocabChips';
 import {
   countReviewsSince,
+  deferUnreadyGrammarReviews,
   deferUnreadySentenceReviews,
   ensureGrammarStudyItem,
   ensureStudyItem,
@@ -1114,6 +1115,12 @@ export function ReviewPage() {
       // otherwise bypass it entirely via lazy seeding below — sentenceReadiness
       // covers that path.
       await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
+      // Same gate for tracked grammar patterns: a grammarPattern-subject card
+      // (comprehension/completion/contrast/production) whose pattern has no
+      // full-review-ready linked sentence is dropped from the queue below
+      // anyway (pickContextSentenceForGrammarPattern → undefined) — push its
+      // stored due date out too so it stops counting as due backlog.
+      await deferUnreadyGrammarReviews();
       const sentenceIds = scope.sentences.map((sentence) => sentence.id);
       const sentenceReadiness = await getSentenceFullReviewReadiness(sentenceIds);
 

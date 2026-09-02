@@ -2876,6 +2876,62 @@ export async function deferUnreadySentenceReviews(
   return { deferred: updates.length, checked: dueSentenceItems.length };
 }
 
+/**
+ * Grammar analogue of deferUnreadySentenceReviews (user request,
+ * 2026-09-02): a `grammarPattern`-subject study item — any of
+ * grammar_comprehension / grammar_completion / grammar_contrast /
+ * grammar_production — can't render a card unless
+ * pickContextSentenceForGrammarPattern finds one of the pattern's linked
+ * sentences that is itself full-review-ready (vocab confirmed AND every
+ * surface-form vocab item FSRS-proficient). Before this, such items still
+ * read as due: invisible in /review (ReviewPage drops the pattern) but
+ * inflating the session planner's review backlog and sitting stuck-due
+ * forever. This pushes any currently-due grammar item whose pattern has no
+ * ready context out to at least `minDeferDays` from `now`. Like
+ * deferUnreadySentenceReviews it only ever pushes a due date later, never
+ * earlier, and is idempotent once an item has been deferred.
+ */
+export async function deferUnreadyGrammarReviews(
+  options: { now?: Date; minDeferDays?: number } = {},
+): Promise<{ deferred: number; checked: number }> {
+  const db = getDb();
+  const now = options.now ?? new Date();
+  const nowIsoValue = now.toISOString();
+  const minDeferDays = options.minDeferDays ?? 7;
+
+  const dueGrammarItems = (
+    await db.studyItems.where('subjectType').equals('grammarPattern').toArray()
+  ).filter((item) => item.fsrsState.due <= nowIsoValue);
+  if (dueGrammarItems.length === 0) return { deferred: 0, checked: 0 };
+
+  const patternIds = [...new Set(dueGrammarItems.map((item) => item.subjectId))];
+  const readyPatternIds = new Set<string>();
+  await Promise.all(
+    patternIds.map(async (patternId) => {
+      if (await pickContextSentenceForGrammarPattern(patternId)) readyPatternIds.add(patternId);
+    }),
+  );
+
+  const minDueIso = new Date(now.getTime() + minDeferDays * 24 * 60 * 60 * 1000).toISOString();
+  const updates: StudyItem[] = [];
+  for (const item of dueGrammarItems) {
+    if (readyPatternIds.has(item.subjectId)) continue;
+    if (item.fsrsState.due >= minDueIso) continue;
+    updates.push({
+      ...item,
+      fsrsState: { ...item.fsrsState, due: minDueIso },
+      updatedAt: nowIsoValue,
+    });
+  }
+  if (updates.length > 0) {
+    await db.studyItems.bulkPut(updates);
+    notifySyncMany(
+      updates.map((item) => ({ entity: 'study_items' as const, recordId: item.id, payload: item })),
+    );
+  }
+  return { deferred: updates.length, checked: dueGrammarItems.length };
+}
+
 export async function recordReview(input: {
   studyItemId: string;
   rating: ReviewRating;
@@ -4799,6 +4855,31 @@ const NO_EXCLUSIONS: SessionPlannerExclusions = {
 };
 
 /**
+ * Read-only sibling of deferUnreadyGrammarReviews: return `items` with every
+ * `grammarPattern`-subject entry whose pattern currently has no
+ * full-review-ready context sentence removed. Non-grammar items pass through
+ * untouched. Used by getSessionPlannerInput, which must not persist a
+ * due-date push (planRecommendedSession previews without writing).
+ */
+async function filterReadyGrammarDueItems(items: StudyItem[]): Promise<StudyItem[]> {
+  const patternIds = [
+    ...new Set(
+      items.filter((item) => item.subjectType === 'grammarPattern').map((item) => item.subjectId),
+    ),
+  ];
+  if (patternIds.length === 0) return items;
+  const readyPatternIds = new Set<string>();
+  await Promise.all(
+    patternIds.map(async (patternId) => {
+      if (await pickContextSentenceForGrammarPattern(patternId)) readyPatternIds.add(patternId);
+    }),
+  );
+  return items.filter(
+    (item) => item.subjectType !== 'grammarPattern' || readyPatternIds.has(item.subjectId),
+  );
+}
+
+/**
  * Gathers everything buildRecommendedSession needs — the only Dexie-touching
  * step of the planning pipeline. `exclude` keeps a top-up from re-suggesting
  * a book/sentence/grammar pattern already sitting in today's step list.
@@ -4839,12 +4920,23 @@ export async function getSessionPlannerInput(
     countNewVocabularyCardBacklog(),
   ]);
 
+  // Drop grammar due items whose pattern has no full-review-ready context
+  // sentence right now — ReviewPage can't surface them (it drops the pattern
+  // when pickContextSentenceForGrammarPattern returns undefined), so counting
+  // them in the planner's review backlog just inflates it. Read-only here on
+  // purpose: planRecommendedSession must not persist anything, so unlike
+  // ReviewPage this can't lean on deferUnreadyGrammarReviews.
+  const [retainDueReady, practiceDueReady] = await Promise.all([
+    filterReadyGrammarDueItems(retainDueItems),
+    filterReadyGrammarDueItems(practiceDueItems),
+  ]);
+
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
   // ReviewPriorityInput's informational `mode` field, not for allocation.
   const [retainDue, practiceDue] = await Promise.all([
-    buildReviewPriorityInputs(retainDueItems, 'review', now),
-    buildReviewPriorityInputs(practiceDueItems, 'review', now),
+    buildReviewPriorityInputs(retainDueReady, 'review', now),
+    buildReviewPriorityInputs(practiceDueReady, 'review', now),
   ]);
 
   const activeSentenceIds = await activeSentenceIdsForShadowing(5);

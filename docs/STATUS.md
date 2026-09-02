@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Grammar review: unready-context items no longer sit
+  stuck-due, and Track is gated on sentence vocab.** Follow-up to the
+  orphaned-study-items work: 4 live `grammarPattern`-subject study items
+  (patterns `～ている（状態描写）` / `～を見つける`, both only linked to one
+  `unreviewed` sentence) were correctly dropped from `/review`
+  (`pickContextSentenceForGrammarPattern` → undefined) but still read as due
+  — invisible backlog inflating the session planner and showing "Subject not
+  found" on `/study-items/:id` for a client also missing the pattern row.
+  Three-part fix: (1) `deferUnreadyGrammarReviews` (`src/db/repository.ts`,
+  grammar twin of `deferUnreadySentenceReviews`) — pushes any due
+  `grammarPattern` card whose pattern has no full-review-ready context
+  sentence out ≥7 days; ReviewPage runs it alongside the sentence pass.
+  (2) `getSessionPlannerInput` filters the same items out of its due-review
+  batch read-only (`filterReadyGrammarDueItems`, since
+  `planRecommendedSession` must not persist). (3) `GrammarPicker`'s **Track**
+  button is now disabled until `getSentenceFullReviewReadiness` passes for
+  that sentence, with an inline hint — grammar tracking waits on the
+  sentence's own vocabulary being confirmed + proficient, so no new stuck
+  cards get seeded. New `scripts/defer-unready-grammar-reviews.ts` (dry-run;
+  `--apply`) — ran against production 2026-09-02 (4 items deferred);
+  `scripts/resync-grammar-tables.ts --apply` re-run so affected clients
+  re-pull the pattern rows. `tests/data.test.ts` +4, `tests/grammarPicker.test.tsx`
+  +1; 1122 vitest tests green (2 skipped).
+
 - **2026-09-02 — Grammar explanation Save button now gives feedback.**
   In `GrammarPicker`'s expanded "Explain" form the Save button was
   fire-and-forget — no in-flight state, no confirmation, no error handling,

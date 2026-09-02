@@ -7,6 +7,7 @@ import {
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
+  getSentenceFullReviewReadiness,
   removeSentenceGrammar,
   updateGrammarPattern,
 } from '../db/repository';
@@ -77,11 +78,18 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
       .filter((item): item is LinkedPattern => Boolean(item))
       .sort((a, b) => a.link.createdAt.localeCompare(b.link.createdAt));
     const allPatterns = await db.grammarPatterns.toArray();
-    return { linked, allPatterns };
+    // Grammar review needs this sentence's own vocabulary learned first
+    // (same bar as pickContextSentenceForGrammarPattern / the "vocab before
+    // glossing" rule) — otherwise Track just seeds a card that can never
+    // render and sits stuck-due. Gate the Track button on it.
+    const vocabReady =
+      (await getSentenceFullReviewReadiness([sentenceId])).get(sentenceId) ?? false;
+    return { linked, allPatterns, vocabReady };
   }, [sentenceId]);
 
   const linked = data?.linked ?? [];
   const allPatterns = data?.allPatterns ?? [];
+  const vocabReady = data?.vocabReady ?? false;
   const linkedPatternIds = new Set(linked.map((item) => item.pattern.id));
   const linkedNames = new Set(
     linked.flatMap(({ pattern }) => [pattern.canonicalName, ...pattern.aliases]),
@@ -217,6 +225,7 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
               link={link}
               pattern={pattern}
               tracked={tracked}
+              trackable={vocabReady}
               japanese={japanese}
               chunks={chunks}
               expanded={expandedPatternId === pattern.id}
@@ -247,6 +256,12 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
               onRemove={() => void removeSentenceGrammar(link.id)}
             />
           ))}
+          {!vocabReady && linked.some(({ tracked }) => !tracked) ? (
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Track becomes available once this sentence&rsquo;s vocabulary is confirmed and
+              proficient — grammar review needs its words already learned.
+            </p>
+          ) : null}
         </div>
       )}
       <form
@@ -287,6 +302,7 @@ function GrammarPatternCard({
   link,
   pattern,
   tracked,
+  trackable,
   japanese,
   chunks,
   expanded,
@@ -298,6 +314,8 @@ function GrammarPatternCard({
   link: SentenceGrammar;
   pattern: GrammarPattern;
   tracked: boolean;
+  /** Is this sentence's own vocabulary confirmed + proficient? Tracking before that just seeds a stuck-due card. */
+  trackable: boolean;
   japanese: string;
   chunks?: GrammarAssistChunkContext[];
   expanded: boolean;
@@ -411,7 +429,16 @@ function GrammarPatternCard({
           {expanded ? 'Hide explanation' : 'Explain'}
         </button>
         {!tracked ? (
-          <button type="button" onClick={onTrack}>
+          <button
+            type="button"
+            onClick={onTrack}
+            disabled={!trackable}
+            title={
+              trackable
+                ? undefined
+                : "Confirm this sentence's vocabulary first — grammar review needs its words already learned"
+            }
+          >
             Track
           </button>
         ) : null}

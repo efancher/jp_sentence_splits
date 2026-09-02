@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
+  confirmSentenceVocabulary,
   ensureGrammarPattern,
   ensureSentenceGrammar,
   getDb,
@@ -91,9 +92,19 @@ describe('GrammarPicker', () => {
     ).toBe(0);
   });
 
+  it('Track is disabled until the sentence\'s own vocabulary is confirmed + proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    renderPicker('sent-1');
+
+    expect(await screen.findByRole('button', { name: 'Track' })).toBeDisabled();
+    expect(await screen.findByText(/Track becomes available once/i)).toBeInTheDocument();
+  });
+
   it('"Track" confirms the occurrence and creates both starting grammarPattern study items', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await confirmSentenceVocabulary('sent-1', []); // sentence vocab ready → Track enabled
     const user = userEvent.setup();
     renderPicker('sent-1');
 

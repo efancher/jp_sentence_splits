@@ -918,9 +918,16 @@ to show for `grammar_comprehension`/`grammar_completion`/`grammar_contrast`
 — skips any encounter whose vocabulary isn't confirmed+proficient,
 preferring an older-but-ready encounter over the most recent unready one,
 and simply not offering the pattern as a review candidate at all if none of
-its encounters qualify (no due-date push needed here, unlike
-`deferUnreadySentenceReviews`, since a `grammarPattern`-subject StudyItem
-has no single fixed sentence to defer against).
+its encounters qualify. Since a `grammarPattern`-subject StudyItem has no
+single fixed sentence to defer against, a due card for such a pattern would
+otherwise stay perpetually due (invisible in `/review` but inflating the
+planner backlog); `deferUnreadyGrammarReviews` (2026-09-02, the grammar twin
+of `deferUnreadySentenceReviews`, run by `ReviewPage`) pushes those out ≥7
+days, and `getSessionPlannerInput` filters them out of its due-review batch
+read-only via `filterReadyGrammarDueItems`. `GrammarPicker`'s **Track**
+button — the only entry point that seeds grammar StudyItems — is itself
+disabled until the sentence passes `getSentenceFullReviewReadiness`, so
+tracking can't create a card before its context is reviewable.
 Assistance flags (furigana-shown/audio-replayed/etc.) are recorded on
 `Review.assistance` without penalizing the score — informational only for
 future planning. (A "Show mnemonic" scaffolding tier on vocabulary-target
