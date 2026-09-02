@@ -223,6 +223,7 @@ export function analysisToRemote(
     vocabulary_review_status: analysis.vocabularyReviewStatus ?? 'unreviewed',
     vocabulary_selections: analysis.vocabularySelections ?? [],
     grammar_suggestions: analysis.grammarSuggestions ?? [],
+    grammar_review_status: analysis.grammarReviewStatus ?? 'unreviewed',
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
     deleted_at: null,
@@ -245,6 +246,9 @@ export function remoteToAnalysis(row: Record<string, unknown>): SentenceAnalysis
       [],
     grammarSuggestions:
       (row.grammar_suggestions as SentenceAnalysis['grammarSuggestions']) ?? [],
+    grammarReviewStatus:
+      (row.grammar_review_status as SentenceAnalysis['grammarReviewStatus']) ??
+      'unreviewed',
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

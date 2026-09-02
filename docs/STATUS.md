@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — "Notice grammar in this sentence" planner nudge (user
+  request).** Grammar farming now has a sentence-level reminder, mirroring
+  `vocabulary_review` for vocab. New `SentenceAnalysis.grammarReviewStatus`
+  (`unreviewed`/`confirmed`, additive — migration
+  `20260903000000_analysis_grammar_review_status.sql`, **must be applied to
+  prod before the deploy carries the mapper change**). `GrammarPicker` gains
+  a "Done — nothing more to notice" / "Reopen grammar" toggle
+  (`setSentenceGrammarReviewStatus`) and a "Reviewed" pill. New planner
+  candidate `findGrammarNoticingCandidates` → `grammar_noticing` step
+  (`SYNTHETIC_ACTIVITY_TYPES.grammarNoticing`, `grammar` bucket, deep-links
+  to the sentence's Analyze page): a sentence marked `complete` in its book
+  whose vocab is confirmed + proficient (same `getSentenceFullReviewReadiness`
+  gate) but whose `grammarReviewStatus` isn't `confirmed`. The grammar bucket
+  now runs two passes over one budget — corpus-flagged patterns
+  (`buildUnderstandSteps`) first, then `buildGrammarNoticingSteps`.
+  `GRAMMAR_NOTICING_CANDIDATE_LIMIT = 8`. `tests/data.test.ts` +2,
+  `tests/sessionPlannerRepository.test.ts` +1, `tests/grammarPicker.test.tsx`
+  +1; 1126 vitest tests green.
+
 - **2026-09-02 — Grammar review: unready-context items no longer sit
   stuck-due, and Track is gated on sentence vocab.** Follow-up to the
   orphaned-study-items work: 4 live `grammarPattern`-subject study items

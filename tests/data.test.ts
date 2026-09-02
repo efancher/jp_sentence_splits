@@ -65,6 +65,7 @@ import {
   saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
+  setSentenceGrammarReviewStatus,
   transferBookSentences,
   updateBookChapter,
   updateGrammarPattern,
@@ -914,6 +915,35 @@ describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
     expect(result).toEqual({ deferred: 0, checked: 0 });
     const persisted = await getDb().studyItems.get(item.id);
     expect(persisted?.fsrsState.due).toBe(farFuture);
+  });
+});
+
+describe('setSentenceGrammarReviewStatus', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-grammar-review-status-${createId('db')}`);
+  });
+
+  it('flips grammarReviewStatus on the analysis, creating one if absent, and toggles back', async () => {
+    let analysis = await setSentenceGrammarReviewStatus('sent-1', 'confirmed');
+    expect(analysis.grammarReviewStatus).toBe('confirmed');
+    expect((await getDb().analyses.get('sent-1'))?.grammarReviewStatus).toBe('confirmed');
+
+    analysis = await setSentenceGrammarReviewStatus('sent-1', 'unreviewed');
+    expect(analysis.grammarReviewStatus).toBe('unreviewed');
+  });
+
+  it('leaves structural chunks and vocabulary state untouched', async () => {
+    await saveAnalysis(
+      'sent-1',
+      [{ id: 'c1', order: 0, japanese: '猫が', role: 'actor', literalEnglish: 'cat' }],
+      'a note',
+      { reviewStatus: 'confirmed', selections: [] },
+    );
+    const analysis = await setSentenceGrammarReviewStatus('sent-1', 'confirmed');
+    expect(analysis.chunks).toHaveLength(1);
+    expect(analysis.notes).toBe('a note');
+    expect(analysis.status).toBe('complete');
+    expect(analysis.vocabularyReviewStatus).toBe('confirmed');
   });
 });
 

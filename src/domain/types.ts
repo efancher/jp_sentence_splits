@@ -39,6 +39,15 @@ export interface VocabularySuggestion {
 export type VocabularyReviewStatus = 'unreviewed' | 'confirmed';
 
 /**
+ * Grammar-noticing pass for a sentence, mirroring `VocabularyReviewStatus`:
+ * `confirmed` once the learner has been through the sentence's "Grammar
+ * noticed" panel and either tracked the patterns worth tracking or decided
+ * there's nothing more to pull out. Gates the planner's `grammar_noticing`
+ * nudge the same way `vocabularyReviewStatus` gates `vocabulary_review`.
+ */
+export type GrammarReviewStatus = 'unreviewed' | 'confirmed';
+
+/**
  * Authoritative vocabulary choice for Anki mining.
  * `surface`/`start`/`end` locate the exact span in the sentence Japanese.
  */
@@ -317,6 +326,12 @@ export interface SentenceAnalysis {
   /** Vocabulary picker confirmation — independent of Cure Dolly chunk status. */
   vocabularyReviewStatus: VocabularyReviewStatus;
   vocabularySelections: VocabularySelection[];
+  /**
+   * Grammar-noticing confirmation (2026-09-02). Additive, same precedent as
+   * `grammarSuggestions` — analyses saved before this field existed won't
+   * have it at runtime, so read defensively (`?? 'unreviewed'`).
+   */
+  grammarReviewStatus: GrammarReviewStatus;
   /**
    * Grammar-pattern candidates surfaced for this sentence (design brief §3).
    * Additive, same precedent as vocabularySelections/vocabularyReviewStatus
@@ -826,6 +841,7 @@ export type PlannerStepStatus = 'pending' | 'active' | 'completed' | 'skipped' |
 export type PlannerStepTargetKind =
   | 'continue_book'
   | 'grammar_detail'
+  | 'grammar_noticing'
   | 'shadow'
   | 'review'
   | 'vocabulary_detail'

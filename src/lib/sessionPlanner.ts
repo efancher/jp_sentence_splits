@@ -377,6 +377,22 @@ export interface ShadowCandidate {
   reason: string;
 }
 
+/**
+ * Grammar-noticing candidate (2026-09-02): a sentence the learner has
+ * already worked through (structural analysis complete) and whose own
+ * vocabulary is confirmed + proficient, but whose "Grammar noticed" pass
+ * hasn't been marked done (`SentenceAnalysis.grammarReviewStatus !==
+ * 'confirmed'`). The `grammar`-bucket equivalent of an ExploreCandidate's
+ * `vocabulary_review` sentence — "go pull the grammar patterns out of this
+ * one, or mark that there's nothing more to."
+ */
+export interface GrammarNoticingCandidate {
+  sentenceId: string;
+  bookId?: string;
+  label: string;
+  reason: string;
+}
+
 export interface SessionPlannerInput {
   now: Date;
   /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
@@ -388,6 +404,8 @@ export interface SessionPlannerInput {
   practiceDue: ReviewPriorityInput[];
   exploreCandidates: ExploreCandidate[];
   understandCandidates: UnderstandCandidate[];
+  /** Worked-through sentences whose grammar-noticing pass isn't done — see GrammarNoticingCandidate. Shares the `grammar` bucket with understandCandidates. */
+  grammarNoticingCandidates: GrammarNoticingCandidate[];
   shadowCandidates: ShadowCandidate[];
   /**
    * Distinct confirmed vocabulary words that have never been introduced to
@@ -668,6 +686,33 @@ function buildUnderstandSteps(
   return steps;
 }
 
+/** Step 7 (grammar, second pass): "notice the grammar in this sentence" for worked-through sentences, until the shared grammar budget runs out. */
+function buildGrammarNoticingSteps(
+  candidates: GrammarNoticingCandidate[],
+  budgetMinutes: number,
+  perItemMinutes: number,
+): PlannerStepDraft[] {
+  const steps: PlannerStepDraft[] = [];
+  let remaining = budgetMinutes;
+  for (const candidate of candidates) {
+    if (remaining < perItemMinutes) break;
+    steps.push({
+      id: draftStepId(),
+      bucket: 'grammar',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.grammarNoticing,
+      targetKind: 'grammar_noticing',
+      bookId: candidate.bookId,
+      sentenceId: candidate.sentenceId,
+      label: `Notice grammar: ${candidate.label}`,
+      estimatedMinutes: perItemMinutes,
+      reason: candidate.reason,
+      status: 'pending',
+    });
+    remaining -= perItemMinutes;
+  }
+  return steps;
+}
+
 /**
  * Human-readable "how much have I shadowed this sentence" line, shared by the
  * planner (frozen into `step.reason` at plan time) and the session runner
@@ -798,6 +843,10 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
         : null;
     case 'grammar_detail':
       return step.grammarPatternId ? `/grammar/${encodeURIComponent(step.grammarPatternId)}` : null;
+    case 'grammar_noticing':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/analyze/${step.sentenceId}`
+        : null;
     case 'shadow':
       return step.bookId && step.sentenceId
         ? `/books/${step.bookId}/shadow/${step.sentenceId}`
@@ -842,7 +891,9 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     baseline: input.baseline,
     availableMinutesByMode: {
       glossing: exploreCeilingMinutes(input.exploreCandidates),
-      grammar: input.understandCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
+      grammar:
+        (input.understandCandidates.length + input.grammarNoticingCandidates.length) *
+        MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
       shadowing: input.shadowCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
       review: reviewCeiling,
     },
@@ -857,15 +908,26 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
   );
 
   const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing);
+  // The grammar bucket runs two passes over one shared budget: corpus-flagged
+  // patterns "worth learning now" first (the corpus has already told the
+  // learner they recur), then "notice the grammar in this worked-through
+  // sentence" with whatever's left.
   const understandSteps = buildUnderstandSteps(
     input.understandCandidates,
     allocation.grammar,
+    MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
+  );
+  const understandSpent = understandSteps.reduce((sum, step) => sum + step.estimatedMinutes, 0);
+  const grammarNoticingSteps = buildGrammarNoticingSteps(
+    input.grammarNoticingCandidates,
+    allocation.grammar - understandSpent,
     MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
   );
 
   const allSteps = [
     ...exploreSteps,
     ...understandSteps,
+    ...grammarNoticingSteps,
     ...shadowSteps,
     ...(reviewStep ? [reviewStep] : []),
   ];

@@ -154,6 +154,21 @@ describe('GrammarPicker', () => {
     );
   });
 
+  it('"Done — nothing more to notice" marks the sentence grammar-reviewed and can be reopened', async () => {
+    const user = userEvent.setup();
+    renderPicker('sent-1');
+
+    await user.click(await screen.findByRole('button', { name: /Done — nothing more to notice/ }));
+
+    await screen.findByText('Reviewed');
+    expect((await getDb().analyses.get('sent-1'))?.grammarReviewStatus).toBe('confirmed');
+
+    await user.click(await screen.findByRole('button', { name: 'Reopen grammar' }));
+    await waitFor(async () => {
+      expect((await getDb().analyses.get('sent-1'))?.grammarReviewStatus).toBe('unreviewed');
+    });
+  });
+
   it('"Remove" unlinks the pattern from the sentence, returning to the empty state', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-1', pattern.id, {});

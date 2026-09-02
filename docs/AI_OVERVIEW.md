@@ -290,6 +290,23 @@ step), an unready sentence simply isn't a shadow candidate at all — there's
 no shadow-adjacent activity to substitute in, so `buildShadowSteps` needed
 no change.
 
+The **grammar bucket** runs two passes over its one budget. Pass 1
+(`buildUnderstandSteps`, `findUnderstandCandidates`): corpus-flagged patterns
+"worth learning now" (encountered ≥3 times, never tracked — reuses
+`listGrammarPatternSummaries`' bucket), each a `grammar_detail` step opening
+the pattern dashboard. Pass 2 (`buildGrammarNoticingSteps`,
+`findGrammarNoticingCandidates`, 2026-09-03): a sentence-level "notice the
+grammar here" nudge mirroring `vocabulary_review` — a sentence marked
+`complete` in its book whose vocabulary is confirmed + proficient (same
+`getSentenceFullReviewReadiness` gate) but whose
+`SentenceAnalysis.grammarReviewStatus` isn't `'confirmed'` yet, as a
+`grammar_noticing` step deep-linking to that sentence's `AnalyzePage` where
+the "Grammar noticed" panel lives. `GrammarPicker`'s "Done — nothing more to
+notice" toggle (`setSentenceGrammarReviewStatus`) is what flips
+`grammarReviewStatus` and drops the sentence from the nudge — even when it
+had no patterns worth tracking. Same "vocab before glossing" reasoning as
+the other buckets: you farm grammar from sentences you already understand.
+
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process
 is inspectable and unit-tested (`tests/sessionPlanner.test.ts`) without a

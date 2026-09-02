@@ -19,6 +19,7 @@ import {
   recordReview,
   saveAttempt,
   setBookSentenceStatus,
+  setSentenceGrammarReviewStatus,
   updatePlannerSessionStep,
 } from '../src/db/repository';
 import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
@@ -325,6 +326,30 @@ describe('Learning Orchestrator repository layer', () => {
     const shadowStep = afterConfirm.steps.find((step) => step.targetKind === 'shadow');
     expect(shadowStep).toBeDefined();
     expect(shadowStep!.sentenceId).toBe(sentence.id);
+  });
+
+  it('surfaces a worked-through, vocab-ready sentence as a grammar_noticing step, gated on vocab and cleared once grammar is marked reviewed', async () => {
+    const book = await createBook({ title: 'Notice Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await setBookSentenceStatus(book.id, sentence.id, 'complete');
+
+    // Worked through, but vocab not confirmed yet → no nudge.
+    const beforeConfirm = await planRecommendedSession(60);
+    expect(beforeConfirm.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
+
+    await confirmSentenceVocabulary(sentence.id, []);
+    const afterConfirm = await planRecommendedSession(60);
+    const noticeStep = afterConfirm.steps.find((step) => step.targetKind === 'grammar_noticing');
+    expect(noticeStep).toBeDefined();
+    expect(noticeStep!.sentenceId).toBe(sentence.id);
+    expect(noticeStep!.bucket).toBe('grammar');
+
+    await setSentenceGrammarReviewStatus(sentence.id, 'confirmed');
+    const afterReview = await planRecommendedSession(60);
+    expect(afterReview.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
   });
 
   it('deleteTodayPlannerSession removes today\'s session entirely, letting the next Start build a fresh one (user request, 2026-08-27: "clear out a session created with the wrong split")', async () => {

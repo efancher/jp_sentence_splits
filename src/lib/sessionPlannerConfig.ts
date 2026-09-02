@@ -71,6 +71,7 @@ export const SYNTHETIC_ACTIVITY_TYPES = {
   newSentence: 'new_sentence',
   vocabularyReview: 'vocabulary_review',
   grammarExplore: 'grammar_explore',
+  grammarNoticing: 'grammar_noticing',
   shadowingPractice: 'shadowing_practice',
 } as const;
 
@@ -141,6 +142,9 @@ export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
 
 /** How many not-yet-tracked grammar patterns to consider as candidates. */
 export const UNDERSTAND_CANDIDATE_LIMIT = 8;
+
+/** How many worked-through sentences to consider for a "notice the grammar here" nudge. */
+export const GRAMMAR_NOTICING_CANDIDATE_LIMIT = 8;
 
 /** How many shadowing candidates to consider. */
 export const SHADOW_CANDIDATE_LIMIT = 10;

@@ -9,6 +9,7 @@ import {
   getDb,
   getSentenceFullReviewReadiness,
   removeSentenceGrammar,
+  setSentenceGrammarReviewStatus,
   updateGrammarPattern,
 } from '../db/repository';
 import type { GrammarPattern, SentenceGrammar } from '../domain/types';
@@ -84,12 +85,15 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
     // render and sits stuck-due. Gate the Track button on it.
     const vocabReady =
       (await getSentenceFullReviewReadiness([sentenceId])).get(sentenceId) ?? false;
-    return { linked, allPatterns, vocabReady };
+    const analysis = await db.analyses.get(sentenceId);
+    const grammarReviewed = (analysis?.grammarReviewStatus ?? 'unreviewed') === 'confirmed';
+    return { linked, allPatterns, vocabReady, grammarReviewed };
   }, [sentenceId]);
 
   const linked = data?.linked ?? [];
   const allPatterns = data?.allPatterns ?? [];
   const vocabReady = data?.vocabReady ?? false;
+  const grammarReviewed = data?.grammarReviewed ?? false;
   const linkedPatternIds = new Set(linked.map((item) => item.pattern.id));
   const linkedNames = new Set(
     linked.flatMap(({ pattern }) => [pattern.canonicalName, ...pattern.aliases]),
@@ -152,8 +156,11 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
 
   return (
     <section className="panel stack">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h3 style={{ margin: 0 }}>Grammar noticed</h3>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Grammar noticed</h3>
+          {grammarReviewed ? <span className="status-pill confirmed">Reviewed</span> : null}
+        </div>
         <button
           type="button"
           className="ghost"
@@ -289,11 +296,32 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
           Add
         </button>
       </form>
-      {linked.length > 0 ? (
-        <Link to="/grammar" className="muted" style={{ fontSize: '0.85rem' }}>
-          Browse all grammar patterns →
-        </Link>
-      ) : null}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        {linked.length > 0 ? (
+          <Link to="/grammar" className="muted" style={{ fontSize: '0.85rem' }}>
+            Browse all grammar patterns →
+          </Link>
+        ) : (
+          <span />
+        )}
+        <button
+          type="button"
+          className={grammarReviewed ? 'ghost' : undefined}
+          onClick={() =>
+            void setSentenceGrammarReviewStatus(
+              sentenceId,
+              grammarReviewed ? 'unreviewed' : 'confirmed',
+            )
+          }
+          title={
+            grammarReviewed
+              ? 'Reopen this sentence for grammar noticing'
+              : "Nothing more to pull out here — stop reminding me about this sentence's grammar"
+          }
+        >
+          {grammarReviewed ? 'Reopen grammar' : 'Done — nothing more to notice'}
+        </button>
+      </div>
     </section>
   );
 }

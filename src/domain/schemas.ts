@@ -48,6 +48,7 @@ export const vocabularySelectionSchema = z.object({
 });
 
 export const vocabularyReviewStatusSchema = z.enum(['unreviewed', 'confirmed']);
+export const grammarReviewStatusSchema = z.enum(['unreviewed', 'confirmed']);
 
 export const sourceReferenceSchema = z.object({
   cardId: z.string(),
@@ -152,6 +153,7 @@ export const sentenceAnalysisSchema = z.object({
   // Additive (grammar-learning system): absent on analyses saved before this
   // field existed.
   grammarSuggestions: z.array(grammarSuggestionSchema).default([]),
+  grammarReviewStatus: grammarReviewStatusSchema.default('unreviewed'),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -457,6 +459,7 @@ export const plannerStepStatusSchema = z.enum([
 export const plannerStepTargetKindSchema = z.enum([
   'continue_book',
   'grammar_detail',
+  'grammar_noticing',
   'shadow',
   'review',
   'vocabulary_detail',

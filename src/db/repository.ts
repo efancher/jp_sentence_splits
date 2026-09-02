@@ -18,6 +18,7 @@ import type {
   GrammarPattern,
   GrammarRelationship,
   GrammarRelationshipType,
+  GrammarReviewStatus,
   ImportBatch,
   InboxMembership,
   InitialOrderMode,
@@ -104,6 +105,7 @@ import {
   computeRecentActivityDistribution,
   shadowAttemptSummary,
   type ExploreCandidate,
+  type GrammarNoticingCandidate,
   type RecentActivityEvent,
   type RecommendedSession,
   type ReviewPriorityInput,
@@ -114,6 +116,7 @@ import {
 import {
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
+  GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
   PRACTICE_ACTIVITY_TYPES,
   RETAIN_ACTIVITY_TYPES,
@@ -1632,6 +1635,9 @@ export async function saveAnalysis(
     reviewStatus?: VocabularyReviewStatus;
     selections?: VocabularySelection[];
   },
+  grammar?: {
+    reviewStatus?: GrammarReviewStatus;
+  },
 ): Promise<SentenceAnalysis> {
   const db = getDb();
   const timestamp = nowIso();
@@ -1660,6 +1666,8 @@ export async function saveAnalysis(
     vocabularySelections:
       vocabulary?.selections ?? existing?.vocabularySelections ?? [],
     grammarSuggestions: existing?.grammarSuggestions ?? [],
+    grammarReviewStatus:
+      grammar?.reviewStatus ?? existing?.grammarReviewStatus ?? 'unreviewed',
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -3218,6 +3226,27 @@ export async function confirmSentenceVocabulary(
   return analysis;
 }
 
+/**
+ * Grammar analogue of confirmSentenceVocabulary: flips `grammarReviewStatus`
+ * without touching structural or vocabulary state. `confirmed` means the
+ * learner has been through the sentence's "Grammar noticed" panel and is
+ * done with it — patterns worth tracking are tracked, or there was nothing
+ * more to pull out — which is what drops the sentence from the planner's
+ * `grammar_noticing` nudge. Pass `status: 'unreviewed'` to undo a misclick.
+ * Like confirmSentenceVocabulary, it never settles or advances a session
+ * step.
+ */
+export async function setSentenceGrammarReviewStatus(
+  sentenceId: string,
+  status: GrammarReviewStatus,
+): Promise<SentenceAnalysis> {
+  const db = getDb();
+  const existing = await db.analyses.get(sentenceId);
+  return saveAnalysis(sentenceId, existing?.chunks ?? [], existing?.notes ?? '', undefined, {
+    reviewStatus: status,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Evidence-model foundation (Phase 7.1, docs/STATUS.md). Additive only — no
 // existing review flow is touched. StudyItem.subjectType already supports
@@ -4703,6 +4732,82 @@ async function findUnderstandCandidates(limit: number): Promise<UnderstandCandid
   }));
 }
 
+/**
+ * Grammar-noticing candidates: sentences the learner has already worked
+ * through (marked `complete` in their book) whose own vocabulary is confirmed
+ * + proficient (same getSentenceFullReviewReadiness gate as grammar review /
+ * shadowing / glossing — see [[feedback_vocab_before_glossing]]), but whose
+ * grammar-noticing pass hasn't been marked done
+ * (`SentenceAnalysis.grammarReviewStatus !== 'confirmed'`). Reading order
+ * within each recent book, mirroring findExploreCandidates' scope and its
+ * per-book preview cap so the (expensive) readiness check runs over a bounded
+ * shortlist, not the whole worked-through corpus.
+ */
+async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoticingCandidate[]> {
+  const db = getDb();
+  const books = (await db.books.toArray())
+    .filter((book) => !book.archived)
+    .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
+    .slice(0, 30);
+
+  type Pending = { sentenceId: string; bookId: string; position: number; bookRank: number };
+  const pending: Pending[] = [];
+  for (let bookRank = 0; bookRank < books.length; bookRank += 1) {
+    const book = books[bookRank]!;
+    const worked = (await db.bookSentences.where('bookId').equals(book.id).toArray())
+      .filter((membership) => membership.status === 'complete')
+      .sort((a, b) => a.position - b.position)
+      .slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+    for (const membership of worked) {
+      pending.push({
+        sentenceId: membership.sentenceId,
+        bookId: book.id,
+        position: membership.position,
+        bookRank,
+      });
+    }
+  }
+  if (pending.length === 0) return [];
+
+  const sentenceIds = [...new Set(pending.map((entry) => entry.sentenceId))];
+  const analysisById = new Map(
+    (await db.analyses.bulkGet(sentenceIds))
+      .filter((a): a is SentenceAnalysis => Boolean(a))
+      .map((a) => [a.sentenceId, a]),
+  );
+
+  const seen = new Set<string>();
+  const shortlist = pending
+    .filter((entry) => {
+      if (seen.has(entry.sentenceId)) return false;
+      seen.add(entry.sentenceId);
+      const status = analysisById.get(entry.sentenceId)?.grammarReviewStatus ?? 'unreviewed';
+      return status !== 'confirmed';
+    })
+    .sort((a, b) => a.bookRank - b.bookRank || a.position - b.position)
+    .slice(0, limit * 4);
+  if (shortlist.length === 0) return [];
+
+  const shortlistIds = shortlist.map((entry) => entry.sentenceId);
+  const [sentences, readiness] = await Promise.all([
+    db.sentences.bulkGet(shortlistIds),
+    getSentenceFullReviewReadiness(shortlistIds),
+  ]);
+  const sentenceById = new Map(
+    sentences.filter((s): s is Sentence => Boolean(s)).map((s) => [s.id, s]),
+  );
+
+  return shortlist
+    .filter((entry) => readiness.get(entry.sentenceId) && sentenceById.has(entry.sentenceId))
+    .slice(0, limit)
+    .map((entry) => ({
+      sentenceId: entry.sentenceId,
+      bookId: entry.bookId,
+      label: sentenceById.get(entry.sentenceId)!.japanese.slice(0, 24),
+      reason: 'Vocabulary learned — pull out the grammar patterns worth tracking',
+    }));
+}
+
 /** Sentences from the learner's most-recently-opened, non-archived books that have actually been started — the pool shadowing candidates are drawn from, so a fresh import doesn't immediately dominate the shadow queue. */
 async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<string>> {
   const db = getDb();
@@ -4901,6 +5006,7 @@ export async function getSessionPlannerInput(
     practiceDueItems,
     exploreCandidatesRaw,
     understandCandidatesRaw,
+    grammarNoticingCandidatesRaw,
     newCardBacklogCount,
   ] = await Promise.all([
     getRecentActivityEvents(now),
@@ -4917,6 +5023,7 @@ export async function getSessionPlannerInput(
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
     findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
     findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
+    findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
     countNewVocabularyCardBacklog(),
   ]);
 
@@ -4954,6 +5061,9 @@ export async function getSessionPlannerInput(
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
+  const grammarNoticingCandidates = grammarNoticingCandidatesRaw
+    .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
+    .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);
 
   return {
     now,
@@ -4963,6 +5073,7 @@ export async function getSessionPlannerInput(
     practiceDue,
     exploreCandidates,
     understandCandidates,
+    grammarNoticingCandidates,
     shadowCandidates,
     newCardBacklogCount,
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,

@@ -51,6 +51,7 @@ function emptyPlannerInput(overrides: Partial<SessionPlannerInput> = {}): Sessio
     practiceDue: [],
     exploreCandidates: [],
     understandCandidates: [],
+    grammarNoticingCandidates: [],
     shadowCandidates: [],
     ...overrides,
   };
