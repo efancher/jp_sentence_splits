@@ -82,6 +82,10 @@ export function HomePage() {
   // null = follow the saved default (settings.sessionAllocation); set once the
   // learner edits a value here, and persisted back as the new default on add.
   const [customSplit, setCustomSplit] = useState<Record<SessionBucket, number> | null>(null);
+  // Raw text for fields currently being edited, so a half-typed or momentarily
+  // empty value ("" while backspacing a single digit) isn't snapped back by the
+  // controlled input before the learner can retype it. Cleared on blur.
+  const [splitDrafts, setSplitDrafts] = useState<Partial<Record<SessionBucket, string>>>({});
 
   // Sentinel `null` for "loaded, no session today" — useLiveQuery itself
   // returns undefined while loading, so leaving getTodayPlannerSession's own
@@ -194,12 +198,21 @@ export function HomePage() {
                   min={0}
                   max={100}
                   step={5}
-                  value={Math.round(activeSplit[bucket] * 100)}
+                  value={splitDrafts[bucket] ?? String(Math.round(activeSplit[bucket] * 100))}
                   onChange={(event) => {
-                    const parsed = Number.parseInt(event.target.value, 10);
+                    const raw = event.target.value;
+                    setSplitDrafts((prev) => ({ ...prev, [bucket]: raw }));
+                    const parsed = Number.parseInt(raw, 10);
                     if (Number.isNaN(parsed) || parsed < 0) return;
                     setCustomSplit({ ...activeSplit, [bucket]: parsed / 100 });
                   }}
+                  onBlur={() =>
+                    setSplitDrafts((prev) => {
+                      const next = { ...prev };
+                      delete next[bucket];
+                      return next;
+                    })
+                  }
                 />
               </label>
             ))}
@@ -211,7 +224,14 @@ export function HomePage() {
               default.
             </p>
             {customSplit ? (
-              <button type="button" className="ghost" onClick={() => setCustomSplit(null)}>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setCustomSplit(null);
+                  setSplitDrafts({});
+                }}
+              >
                 Reset to saved default
               </button>
             ) : null}
