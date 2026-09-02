@@ -1137,6 +1137,51 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('does not seed a pitch-accent card when the word appears inflected in the sentence', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // 速く (inflected) for dictionary form 速い — the looped native audio would
+    // be 速く, whose morae/accent no longer match the 速い contour the choices
+    // key off, so the card is unanswerable by ear.
+    await db.sentences.update('sent-1', { japanese: '速く走ります。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hayai',
+      expression: '速い',
+      reading: 'はやい',
+      meaning: 'fast',
+      partOfSpeech: 'adj-i',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hayai',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hayai',
+      surfaceForm: '速く',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressAudioCards('sent-1', 'sv-hayai');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // Inflected occurrence → reading_retrieval names the dictionary form.
+    await screen.findByText('Reveal dictionary reading');
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-hayai')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+    });
+  });
+
   it('offers one fall-position choice per mora plus "no fall" for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();

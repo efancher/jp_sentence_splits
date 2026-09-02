@@ -367,6 +367,13 @@ interface PitchAccentReviewCandidate {
  * getWordListeningCandidates) — heiban and odaka share the word-internal
  * shape, so a native clip (whose trailing particle disambiguates them by
  * ear) is what makes the card answerable at all.
+ *
+ * The word must also appear in its *citation form* in this sentence: the
+ * choices and the ✓/✗ key off the dictionary reading's morae and downstep,
+ * so an inflected occurrence (速く for 速い, ございます for ござる) makes the
+ * looped audio's mora count and accent disagree with the "correct" answer —
+ * unanswerable by ear. Same reason line ~1650 skips the ambient
+ * SentencePitchAccentRow for `sentence_transformation`.
  */
 function getPitchAccentReviewCandidates(
   candidates: VocabularyTargetCandidate[],
@@ -378,7 +385,19 @@ function getPitchAccentReviewCandidates(
     if (!positions?.length) continue;
     const audio = audioBySentenceId.get(candidate.sentence.id);
     if (!audio) continue;
-    const morae = segmentIntoMorae(candidate.vocabularyItem.reading).map((unit) => unit.text);
+    // Citation form only — accept a kana/kanji spelling difference (via the
+    // in-context reading where `inlineReading` is present) but not inflection.
+    const dictionaryReading = candidate.vocabularyItem.reading;
+    const inContextReading = surfaceReadingFromInline(
+      candidate.sentence.inlineReading,
+      candidate.surfaceForm,
+    );
+    const isCitationForm =
+      candidate.surfaceForm === candidate.vocabularyItem.expression ||
+      candidate.surfaceForm === dictionaryReading ||
+      inContextReading === dictionaryReading;
+    if (!isCitationForm) continue;
+    const morae = segmentIntoMorae(dictionaryReading).map((unit) => unit.text);
     if (morae.length === 0) continue;
     const correctPosition = Math.max(0, Math.min(positions[0]!, morae.length));
     result.push({

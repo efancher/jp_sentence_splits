@@ -769,8 +769,12 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `pitch_accent` (narrower eligibility than the other three — only
   words with dictionary pitch-accent data (`VocabularyItem.pitchAccentPositions`)
   *and* whose context sentence has a native reference recording
-  (`SentenceAudio`); a dictionary-contour-only card was dropped as not
-  worth its queue slot, and here the clip is load-bearing. **Audio-first
+  (`SentenceAudio`) *and* where the word appears in its **citation form**
+  (an inflected occurrence — 速く for 速い — would loop native audio whose
+  morae/accent no longer match the dictionary contour the choices key off;
+  a kana/kanji spelling difference for the same form is still fine); a
+  dictionary-contour-only card was dropped as not worth its queue slot, and
+  here the clip is load-bearing. **Audio-first
   perception task**: `PitchAccentNativeAudio` (below) plays *above* the
   question so the learner loops the native word, then marks **where the
   pitch falls** — choices `0..moraCount`, each drawn as a whole contour in

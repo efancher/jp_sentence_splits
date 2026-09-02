@@ -62,6 +62,18 @@ is trimmed.)
   (`VocabularyListPage`) shows a `PitchAccentDiagram` under the reading for
   entries with dictionary data. `reviewPage.test.tsx` pitch tests rewritten.
 
+- **2026-09-02 — Pitch-accent card: citation form only.** From a card
+  issue report (`ござる` tested against `ありがとうございます。` audio):
+  `getPitchAccentReviewCandidates` now skips any occurrence whose surface
+  form isn't the dictionary form. The choices and ✓/✗ key off the
+  dictionary reading's morae and downstep, so an inflected occurrence
+  (`速く` for `速い`, `ございます` for `ござる`) makes the looped native audio's
+  mora count and accent disagree with the "correct" answer — unanswerable
+  by ear. A kana/kanji spelling difference for the same citation form is
+  still allowed (matched via the in-context reading where `inlineReading`
+  is present). Same principle as the `sentence_transformation` exclusion
+  from `SentencePitchAccentRow`. `reviewPage.test.tsx`: +1 test.
+
 - **2026-09-02 — Review: bury siblings for the session.** `ReviewPage`'s
   queue build now keeps at most one due card per `subjectType:subjectId`
   when that card is in the stable `review`/`relearning` state — the other
