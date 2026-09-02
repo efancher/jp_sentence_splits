@@ -82,19 +82,24 @@ sentence's `sentenceVocabulary` links (L316) but not the `word_listening` /
 `sentence_transformation` study items keyed to those link ids, nor considers
 `grammarPattern` study items whose last live occurrence was this sentence.
 
-**Fix (proposed, needs go-ahead — production data mutation):**
-1. One-time cleanup script: soft-delete the orphaned study items (the 11
-   grammar patterns' items, the 20 `sentenceVocabulary` items, the 3 vocab
-   items) — via the normal queued `delete`, never raw DELETE.
-2. `cascadeRetireSentenceLocal`: also retire `sentenceVocabulary`-subject
-   study items for each link it deletes. For `grammarPattern`-subject items,
-   retire only when the deleted link was the pattern's last live
-   `sentence_grammar` row (else leave it — the pattern may recur elsewhere).
-3. Open question for the 2 vocab-gated patterns: leave them (honors
-   vocab-before-glossing) or let grammar review fall back to a
-   not-fully-ready sentence. Deferred — only 2 cards.
+**Fix — status:**
+1. ✅ `cascadeRetireSentenceLocal` (`repository.ts`) now also retires
+   `sentenceVocabulary`-subject study items for each link it deletes, and
+   `grammarPattern`-subject items when the deleted link was the pattern's
+   last live `sentence_grammar` row. Tests in
+   `tests/applyResegmentation.test.ts`.
+2. ⬜ One-time cleanup: `npx tsx scripts/cleanup-orphaned-study-items.ts`
+   (dry-run; `--apply` to write). Dry run finds **45** orphaned study items
+   (20 `word_listening`, 22 `grammarPattern` = 11 patterns × 2 types, 3
+   never-reviewed vocab). Soft-delete only; 85 append-only review rows left
+   dangling (harmless). **Not yet run against production** — awaiting the OK
+   to `--apply`.
+3. Open question for the 2 vocab-gated patterns (`～ている（状態描写）`,
+   `～を見つける`): leave them (honors vocab-before-glossing) or let grammar
+   review fall back to a not-fully-ready sentence. Deferred — only 2 cards.
 
-Diagnostic: `npx tsx scripts/diagnose-grammar-review-queue.ts`
+Diagnostics: `npx tsx scripts/diagnose-grammar-review-queue.ts`,
+`npx tsx scripts/cleanup-orphaned-study-items.ts`
 
 ## Corruption spot-checks (run after any writing test)
 

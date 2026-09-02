@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Sentence-delete cascade leaked orphaned study items.**
+  Manual testing (`docs/MANUAL_TEST_LOG.md` item 2f) surfaced "grammar cards
+  show as due but never appear in `/review`". Root cause: the 2026-09-01
+  "After Work" / "GLIM SPANKY" sentence soft-deletes orphaned study items —
+  `cascadeRetireSentenceLocal` only retired `subjectType: 'sentence'` items,
+  not the `sentenceVocabulary`-subject per-occurrence cards (`word_listening`
+  / `sentence_transformation`) keyed off the links it deleted, nor
+  `grammarPattern`-subject items whose last live `sentence_grammar` link was
+  in a deleted sentence — leaving them stuck-due and invisible
+  (`pickContextSentenceForGrammarPattern` returns undefined → the pattern is
+  dropped before the due-check). Fixed `cascadeRetireSentenceLocal` to retire
+  both (grammar only when it was the pattern's last occurrence;
+  `tests/applyResegmentation.test.ts` +2). New read-only diagnostics
+  `scripts/diagnose-grammar-review-queue.ts` and
+  `scripts/cleanup-orphaned-study-items.ts` (dry-run; `--apply` soft-deletes)
+  — production dry run finds 45 orphans (20 `word_listening`, 22
+  `grammarPattern`, 3 never-reviewed vocab); cleanup not yet applied. 1142 TS
+  tests green.
 - **2026-09-02 — VocabularyPicker flags selections with no meaning on
   confirm.** A blank `english`/meaning doesn't get a review card filtered
   from the queue (unlike the gate-cards-missing-support cases) — it just

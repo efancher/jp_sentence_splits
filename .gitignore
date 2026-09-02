@@ -54,3 +54,4 @@ scripts/.cache/
 # Supabase CLI local link-state (project ref, pooler URL, etc.) — created
 # by `supabase link`, machine-local, never committed.
 supabase/.temp/
+*.deb

@@ -313,11 +313,13 @@ async function cascadeRetireSentenceLocal(
     });
   }
 
+  const removedSentenceVocabularyIds: string[] = [];
   for (const link of await db.sentenceVocabulary
     .where('sentenceId')
     .equals(sentenceId)
     .toArray()) {
     await db.sentenceVocabulary.delete(link.id);
+    removedSentenceVocabularyIds.push(link.id);
     sink.push({
       entity: 'sentence_vocabulary',
       recordId: link.id,
@@ -326,11 +328,13 @@ async function cascadeRetireSentenceLocal(
     });
   }
 
+  const touchedGrammarPatternIds = new Set<string>();
   for (const link of await db.sentenceGrammar
     .where('sentenceId')
     .equals(sentenceId)
     .toArray()) {
     await db.sentenceGrammar.delete(link.id);
+    touchedGrammarPatternIds.add(link.grammarPatternId);
     sink.push({
       entity: 'sentence_grammar',
       recordId: link.id,
@@ -339,10 +343,7 @@ async function cascadeRetireSentenceLocal(
     });
   }
 
-  const studyItems = (
-    await db.studyItems.where('subjectId').equals(sentenceId).toArray()
-  ).filter((item) => item.subjectType === 'sentence' && !keepStudyItemIds.has(item.id));
-  for (const item of studyItems) {
+  const retireStudyItem = async (item: StudyItem) => {
     await db.studyItems.delete(item.id);
     sink.push({
       entity: 'study_items',
@@ -350,6 +351,40 @@ async function cascadeRetireSentenceLocal(
       payload: { id: item.id },
       operation: 'delete',
     });
+  };
+
+  const studyItems = (
+    await db.studyItems.where('subjectId').equals(sentenceId).toArray()
+  ).filter((item) => item.subjectType === 'sentence' && !keepStudyItemIds.has(item.id));
+  for (const item of studyItems) await retireStudyItem(item);
+
+  // Per-occurrence cards keyed off this sentence's now-deleted vocabulary
+  // links (word_listening, sentence_transformation) — their subjectId is a
+  // SentenceVocabulary.id, so they aren't caught by the subjectId ===
+  // sentenceId sweep above and would otherwise sit stuck-due forever
+  // (2026-09-02: found ~20 orphaned this way by the After Work / GLIM SPANKY
+  // deletes).
+  for (const linkId of removedSentenceVocabularyIds) {
+    const items = (await db.studyItems.where('subjectId').equals(linkId).toArray()).filter(
+      (item) => item.subjectType === 'sentenceVocabulary' && !keepStudyItemIds.has(item.id),
+    );
+    for (const item of items) await retireStudyItem(item);
+  }
+
+  // A tracked grammar pattern whose *last* live occurrence was this sentence
+  // can no longer produce any review card (pickContextSentenceForGrammarPattern
+  // returns undefined), so retire its study items too. A pattern still
+  // referenced by another sentence is left alone — it may recur.
+  for (const patternId of touchedGrammarPatternIds) {
+    const stillLinked = await db.sentenceGrammar
+      .where('grammarPatternId')
+      .equals(patternId)
+      .count();
+    if (stillLinked > 0) continue;
+    const items = (await db.studyItems.where('subjectId').equals(patternId).toArray()).filter(
+      (item) => item.subjectType === 'grammarPattern' && !keepStudyItemIds.has(item.id),
+    );
+    for (const item of items) await retireStudyItem(item);
   }
 
   if (await db.inbox.get(sentenceId)) {

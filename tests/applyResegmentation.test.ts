@@ -442,6 +442,99 @@ describe('deleteSentenceCascade', () => {
     expect(await db.studyItems.get(study.id)).toBeUndefined();
     expect(await db.bookSentences.where('sentenceId').equals(s.id).count()).toBe(0);
   });
+
+  it('retires per-occurrence and last-occurrence-grammar study items too', async () => {
+    const db = getDb();
+    const s = shadowingSentence('これはテストです。', 0);
+    await db.sentences.put(s);
+
+    const vocabLinkId = createId('sv');
+    await db.sentenceVocabulary.put({
+      id: vocabLinkId,
+      sentenceId: s.id,
+      vocabularyItemId: createId('vocab_item'),
+      surfaceForm: 'テスト',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    const wordListening = await ensureStudyItem(
+      'sentenceVocabulary',
+      vocabLinkId,
+      'word_listening',
+    );
+
+    const patternId = createId('grammar_pattern');
+    await db.grammarPatterns.put({
+      id: patternId,
+      canonicalName: '～です',
+      normalizedKey: 'です',
+      aliases: [],
+      shortMeaning: 'copula',
+      provenance: 'manual',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    await db.sentenceGrammar.put({
+      id: createId('sg'),
+      sentenceId: s.id,
+      grammarPatternId: patternId,
+      confirmedByLearner: true,
+      source: 'manual',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    const grammarStudy = await ensureStudyItem(
+      'grammarPattern',
+      patternId,
+      'grammar_comprehension',
+    );
+
+    await deleteSentenceCascade(s.id);
+
+    expect(await db.studyItems.get(wordListening.id)).toBeUndefined();
+    expect(await db.studyItems.get(grammarStudy.id)).toBeUndefined();
+    // The pattern itself is corpus-global and stays.
+    expect(await db.grammarPatterns.get(patternId)).toBeDefined();
+  });
+
+  it('keeps a grammar study item whose pattern still has another occurrence', async () => {
+    const db = getDb();
+    const s1 = shadowingSentence('これはテストです。', 0);
+    const s2 = shadowingSentence('それもテストです。', 1);
+    await db.sentences.bulkPut([s1, s2]);
+
+    const patternId = createId('grammar_pattern');
+    await db.grammarPatterns.put({
+      id: patternId,
+      canonicalName: '～です',
+      normalizedKey: 'です',
+      aliases: [],
+      shortMeaning: 'copula',
+      provenance: 'manual',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    for (const sid of [s1.id, s2.id]) {
+      await db.sentenceGrammar.put({
+        id: createId('sg'),
+        sentenceId: sid,
+        grammarPatternId: patternId,
+        confirmedByLearner: true,
+        source: 'manual',
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+    }
+    const grammarStudy = await ensureStudyItem(
+      'grammarPattern',
+      patternId,
+      'grammar_comprehension',
+    );
+
+    await deleteSentenceCascade(s1.id);
+
+    expect(await db.studyItems.get(grammarStudy.id)).toBeDefined();
+  });
 });
 
 describe('deleteBookCascade', () => {
