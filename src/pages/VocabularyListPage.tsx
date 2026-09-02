@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { isHiragana, toHiragana } from 'wanakana';
 
+import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { getDb, readSettings, updateVocabularyItem } from '../db/repository';
 import type { VocabularyItem } from '../domain/types';
 import { isHanCharacter } from '../lib/kanji';
@@ -130,6 +131,12 @@ export function VocabularyListPage() {
                 ) : null}
               </div>
               {item.reading ? <div className="muted">{item.reading}</div> : null}
+              {item.reading && item.pitchAccentPositions?.length ? (
+                <PitchAccentDiagram
+                  reading={item.reading}
+                  position={item.pitchAccentPositions[0]!}
+                />
+              ) : null}
               <VocabularyMeaningField item={item} />
               {item.partOfSpeech ? (
                 <div className="muted">{item.partOfSpeech}</div>

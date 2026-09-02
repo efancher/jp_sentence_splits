@@ -1636,6 +1636,18 @@ export function ReviewPage() {
                 )}
               </>
             )}
+            {revealed &&
+            current.studyItem.activityType !== 'pitch_accent' &&
+            current.studyItem.activityType !== 'sentence_transformation' ? (
+              // Ambient pitch-accent contour for the sentence under review.
+              // `pitch_accent` renders its own (target-highlighted) copy;
+              // `sentence_transformation` is skipped because its verb is
+              // inflected and this row draws the citation-form contour.
+              <SentencePitchAccentRow
+                japanese={current.sentence.japanese}
+                sentenceId={current.sentence.id}
+              />
+            ) : null}
             {revealed ? (
               <div className="row">
                 {RATINGS.map((rating) => (
