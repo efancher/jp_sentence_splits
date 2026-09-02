@@ -20,7 +20,7 @@ Status key: ✅ verified · ⚠️ issue found · ⬜ not yet tested · 🔁 nee
 | 2c | `pitch_accent` audio-first, pick-where-pitch-falls (contour choices) | `/review` | ⬜ | |
 | 2d | `pitch_accent` citation-form-only (no inflected occurrences quizzed) | `/review` | ⬜ | |
 | 2e | `sentence_transformation` conjugation card (type the inflected form) | `/review` | ⬜ | |
-| 2f | `grammar_production` card (free sentence → reveal model) | `/review` | ⚠️ 2026-09-02 | No grammar cards (comprehension *or* production) appear in `/review` even though grammar study items show as due. Root cause identified — see below. |
+| 2f | `grammar_production` card (free sentence → reveal model) | `/review` | 🔁 2026-09-02 | Was: no grammar cards despite due items. Root cause (orphaned study items from the Sept-1 sentence deletes) fixed + 45 orphans cleaned from prod. The only 2 grammar patterns left are correctly vocab-gated. Re-test once a pattern is tracked on a vocab-ready sentence (or confirm vocab for "その時、お父さん鳥は…" in *spring new life*). |
 | 2g | H/L pitch row above rating buttons on sentence cards | `/review` | ✅ 2026-09-02 | iOS Safari |
 | 2h | Sibling burying — no two cards for same subject back-to-back | `/review` | ⚠️ 2026-09-02 | Works on iOS Safari. On work Linux / Firefox it looked like it wasn't happening — needs confirmation whether that machine actually had sibling pairs due at the time, or it's a real gap. See below. |
 | 3 | Session planner new-card backlog ("Review N due + introduce M new", step stays open through seeding) | Home → start today's session → review step | ✅ 2026-09-02 | |
@@ -94,9 +94,18 @@ sentence's `sentenceVocabulary` links (L316) but not the `word_listening` /
    never-reviewed vocab). Soft-delete only; 85 append-only review rows left
    dangling (harmless). **Not yet run against production** — awaiting the OK
    to `--apply`.
-3. Open question for the 2 vocab-gated patterns (`～ている（状態描写）`,
-   `～を見つける`): leave them (honors vocab-before-glossing) or let grammar
-   review fall back to a not-fully-ready sentence. Deferred — only 2 cards.
+3. The 2 remaining patterns (`～ている（状態描写）`, `～を見つける`) are both
+   linked only to `sent_9599a175` ("その時、お父さん鳥は、前方に、穴が空いて
+   いる木を見つけました。", book *spring new life*), whose analysis is
+   `unreviewed` — vocab never confirmed. This is the vocab-before-glossing
+   gate working as intended, not a bug. Confirm that sentence's vocabulary
+   (and review it to proficiency) and the grammar cards will flow. No code
+   change unless the gate itself is later judged too strict.
+
+**Cleanup applied to production 2026-09-02:** `cleanup-orphaned-study-items.ts
+--apply` soft-deleted 45 items (20 `word_listening`, 22 `grammarPattern`, 3
+vocab). Re-run reports clean. `diagnose-grammar-review-queue.ts` now shows
+only the 2 vocab-gated patterns above.
 
 Diagnostics: `npx tsx scripts/diagnose-grammar-review-queue.ts`,
 `npx tsx scripts/cleanup-orphaned-study-items.ts`

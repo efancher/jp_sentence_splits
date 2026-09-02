@@ -48,9 +48,10 @@ is trimmed.)
   `tests/applyResegmentation.test.ts` +2). New read-only diagnostics
   `scripts/diagnose-grammar-review-queue.ts` and
   `scripts/cleanup-orphaned-study-items.ts` (dry-run; `--apply` soft-deletes)
-  — production dry run finds 45 orphans (20 `word_listening`, 22
-  `grammarPattern`, 3 never-reviewed vocab); cleanup not yet applied. 1142 TS
-  tests green.
+  — cleanup applied to production 2026-09-02 (45 orphans soft-deleted: 20
+  `word_listening`, 22 `grammarPattern`, 3 never-reviewed vocab). The only 2
+  grammar patterns still not surfacing are correctly vocab-gated (their one
+  sentence is `unreviewed`). 1142 TS tests green.
 - **2026-09-02 — VocabularyPicker flags selections with no meaning on
   confirm.** A blank `english`/meaning doesn't get a review card filtered
   from the queue (unlike the gate-cards-missing-support cases) — it just
