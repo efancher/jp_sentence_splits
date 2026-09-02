@@ -527,6 +527,10 @@ strong.jp {
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
 }
 
+.status-pill.unstarted {
+  color: var(--text-muted);
+}
+
 .status-pill.confirmed {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 40%, var(--border));

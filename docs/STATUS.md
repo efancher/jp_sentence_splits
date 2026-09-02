@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Analyze page: sentence-status buttons now give feedback.**
+  "Mark in progress" / "Mark complete" / "Needs review" wrote
+  `bookSentences.status` but nothing on the page reflected it, so clicking
+  between them looked like a no-op. Added a live "Sentence status" pill next
+  to the buttons (`SENTENCE_STATUS_LABEL`, reactive off the existing
+  `membership` live query) and the button matching the current status now
+  renders `primary` + `aria-pressed`. Also replaced the open-warnings
+  `window.confirm` on "Mark complete" — a silent no-op on installed iOS
+  PWAs — with an inline two-step confirm (`confirmCompleteWithWarnings`,
+  same pattern as the delete confirm). `.status-pill.unstarted` style added.
+
 - **2026-09-02 — Sync: pull no longer permanently skips events + a
   "Re-download from cloud" recovery.** Follow-up to the orphaned-study-items
   work: a `grammarPattern`-subject study item still showed "Subject not

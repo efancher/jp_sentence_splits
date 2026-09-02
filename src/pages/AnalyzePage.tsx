@@ -56,6 +56,13 @@ import { useNativeAudio } from '../hooks/useNativeAudio';
 const CUSTOM_ROLE_VALUE = '__custom__';
 const ROLE_PRESET_SET = new Set<string>(ROLE_PRESETS);
 
+const SENTENCE_STATUS_LABEL: Record<string, string> = {
+  unstarted: 'Not started',
+  in_progress: 'In progress',
+  complete: 'Complete',
+  needs_review: 'Needs review',
+};
+
 export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
@@ -82,6 +89,8 @@ export function AnalyzePage() {
   } | null>(null);
   const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
   const [deletingSentence, setDeletingSentence] = useState(false);
+  const [confirmCompleteWithWarnings, setConfirmCompleteWithWarnings] =
+    useState(false);
 
   const isCustomRole = (chunk: AnalysisChunk): boolean =>
     customRoleIds.has(chunk.id) ||
@@ -119,6 +128,7 @@ export function AnalyzePage() {
     setDismissedSuggestionIds(new Set());
     setHeuristicPreview(null);
     setConfirmDeleteSentence(false);
+    setConfirmCompleteWithWarnings(false);
     setNotes(data.analysis?.notes ?? '');
     setTranslation(data.sentence.translation ?? '');
     setReadingOnly(data.sentence.readingOnly ?? '');
@@ -947,9 +957,20 @@ export function AnalyzePage() {
             onBlur={() => void saveNow()}
           />
         </label>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>
+            Sentence status:
+          </span>
+          <span className={`status-pill ${membership?.status ?? 'unstarted'}`}>
+            {SENTENCE_STATUS_LABEL[membership?.status ?? 'unstarted'] ??
+              'Not started'}
+          </span>
+        </div>
         <div className="row">
           <button
             type="button"
+            className={membership?.status === 'in_progress' ? 'primary' : undefined}
+            aria-pressed={membership?.status === 'in_progress'}
             onClick={async () => {
               await setBookSentenceStatus(bookId, sentenceId, 'in_progress');
             }}
@@ -958,22 +979,24 @@ export function AnalyzePage() {
           </button>
           <button
             type="button"
-            className="primary"
+            className={membership?.status === 'complete' ? 'primary' : undefined}
+            aria-pressed={membership?.status === 'complete'}
             onClick={async () => {
-              if (openWarnings.length) {
-                const ok = window.confirm(
-                  `${openWarnings.length} review warning(s) are still open. Mark complete anyway?`,
-                );
-                if (!ok) return;
+              if (openWarnings.length && !confirmCompleteWithWarnings) {
+                setConfirmCompleteWithWarnings(true);
+                return;
               }
               await saveNow();
               await setBookSentenceStatus(bookId, sentenceId, 'complete');
+              setConfirmCompleteWithWarnings(false);
             }}
           >
             Mark complete
           </button>
           <button
             type="button"
+            className={membership?.status === 'needs_review' ? 'primary' : undefined}
+            aria-pressed={membership?.status === 'needs_review'}
             onClick={async () => {
               await setBookSentenceStatus(bookId, sentenceId, 'needs_review');
             }}
@@ -1018,6 +1041,12 @@ export function AnalyzePage() {
             <button type="button">Build this</button>
           </Link>
         </div>
+        {confirmCompleteWithWarnings ? (
+          <p style={{ margin: 0, color: 'var(--warning)' }} role="alert">
+            {openWarnings.length} review warning(s) are still open. Press “Mark
+            complete” again to complete anyway.
+          </p>
+        ) : null}
       </section>
 
       <section className="panel stack">
