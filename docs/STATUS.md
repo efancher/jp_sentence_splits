@@ -384,8 +384,11 @@ provenance-grouped realign, JMnedict proper-noun reading check — landed
   of the cache dir instead; if building anyway, do upload-only and defer
   auto-restore.)
 
-**Not yet browser-verified** (typecheck/build/tests green, and the sandbox
-has no browser system libs):
+**Not yet browser-verified** (typecheck/build/tests green; the user
+verifies by hand during normal use — running log in
+`docs/MANUAL_TEST_LOG.md`. As of 2026-09-02: read-only screens, the H/L
+pitch row, and the planner new-card backlog are ✅; sibling burying ✅ on
+iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - Mining wizard W1–W6 (covered by integration tests + build + typecheck).
 - Contextual conjugation cards (`sentence_transformation` rework).
 - Progressive listening `word_listening` cards.
