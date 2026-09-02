@@ -37,6 +37,7 @@ import {
   mergeSuggestionIntoSelection,
   selectionCoversSuggestion,
   selectionFromSuggestion,
+  selectionNeedsMeaning,
   validateSpan,
 } from '../lib/vocabularySuggestions';
 
@@ -357,6 +358,8 @@ function SelectedCard({
     Boolean(item.surface) &&
     validateSpan(japanese, item.start, item.end, item.surface);
   const combinedWarning = combinedExpressionWarning(item);
+  const missingMeaning =
+    selectionNeedsMeaning(item.pos) && !(item.english ?? '').trim();
   const style: CSSProperties = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -412,6 +415,9 @@ function SelectedCard({
             <div style={{ color: 'var(--danger)' }}>
               Span does not match the sentence
             </div>
+          ) : null}
+          {missingMeaning ? (
+            <div style={{ color: 'var(--danger)' }}>No meaning set</div>
           ) : null}
         </div>
         <div className="row">
@@ -697,12 +703,28 @@ export function VocabularyPicker({
     // Non-blocking heads-up, not a confirm/cancel gate — window.confirm
     // silently no-ops on the installed iOS PWA, so this has to be an alert
     // the user dismisses, after which confirming still proceeds normally.
-    const combinedWarnings = selections
-      .map((item) => combinedExpressionWarning(item))
-      .filter((warning): warning is string => Boolean(warning));
-    if (combinedWarnings.length) {
+    // Missing meanings are a heads-up too, not a hard block: unlike the
+    // dictionary expression (always from the tokenizer), a gloss comes from
+    // the AI (may be offline/unavailable) or a later backfill script, so a
+    // blank one is a normal transient state, not an error to stop on.
+    const warnings = [
+      ...selections
+        .map((item) => combinedExpressionWarning(item))
+        .filter((warning): warning is string => Boolean(warning)),
+    ];
+    const missingMeaning = selections.filter(
+      (item) => selectionNeedsMeaning(item.pos) && !(item.english ?? '').trim(),
+    );
+    if (missingMeaning.length) {
+      warnings.push(
+        `No meaning set for: ${missingMeaning
+          .map((item) => item.expression || item.surface)
+          .join('、')}. You can fill them now or let the backfill catch them.`,
+      );
+    }
+    if (warnings.length) {
       window.alert(
-        `Heads up, before saving:\n\n${combinedWarnings.map((warning, index) => `${index + 1}. ${warning}`).join('\n\n')}`,
+        `Heads up, before saving:\n\n${warnings.map((warning, index) => `${index + 1}. ${warning}`).join('\n\n')}`,
       );
     }
     onChange({ selections, reviewStatus: 'confirmed' });

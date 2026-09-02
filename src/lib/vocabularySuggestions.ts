@@ -53,6 +53,20 @@ export function isContentPos(pos: string): boolean {
   return CONTENT_POS_PREFIXES.some((prefix) => pos.startsWith(prefix));
 }
 
+/**
+ * POS classes where a dictionary "meaning" gloss is genuinely optional —
+ * particles and auxiliaries you only ever have in the tray because you
+ * deliberately added them. Everything else (content words, and hand-added
+ * "Add blank" selections with no POS at all) is expected to carry a meaning,
+ * so the confirm step flags it when missing. See VocabularyPicker.
+ */
+const MEANING_OPTIONAL_POS_PREFIXES = ['助詞', '助動詞'] as const;
+
+export function selectionNeedsMeaning(pos: string | undefined): boolean {
+  if (!pos) return true;
+  return !MEANING_OPTIONAL_POS_PREFIXES.some((prefix) => pos.startsWith(prefix));
+}
+
 export function validateSpan(
   japanese: string,
   start: number,

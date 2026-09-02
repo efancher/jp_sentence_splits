@@ -636,6 +636,12 @@ tap tokenizer-derived `vocabularySuggestions` (or add manually) and
 which materializes real `VocabularyItem`/`SentenceVocabulary`/`Kanji`/
 `VocabularyKanji` rows (`materializeVocabularySelections`) — this is the
 load-bearing bridge between the sentence-analysis world and the SRS world.
+On confirm the picker flags any selection missing its `english`/meaning
+gloss — an inline "No meaning set" marker per card plus a dismissible line
+in the pre-save heads-up alert (non-blocking, not a hard block like a
+missing dictionary expression: a gloss comes from the AI or a backfill
+script, so blank is a normal transient state). `selectionNeedsMeaning`
+exempts particles/auxiliaries deliberately added to the tray.
 `AnalyzePage` and `VocabularyReviewPage` cross-link (a "Vocabulary" button
 on `AnalyzePage`'s header and on each `BookDetailPage` sentence row; an
 "Analyze" link back from the vocabulary page).

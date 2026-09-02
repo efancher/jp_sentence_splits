@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — VocabularyPicker flags selections with no meaning on
+  confirm.** A blank `english`/meaning doesn't get a review card filtered
+  from the queue (unlike the gate-cards-missing-support cases) — it just
+  produces a quietly degraded card, so it was slipping through. The picker
+  now shows an inline "No meaning set" marker per `SelectedCard` and folds a
+  dismissible line into the existing pre-save heads-up `window.alert`
+  (non-blocking, same as the combined-expression warning — a gloss comes
+  from the AI or a later backfill script, so blank is a normal transient
+  state, not an error to hard-block on like a missing dictionary
+  expression). `selectionNeedsMeaning(pos)` in `vocabularySuggestions.ts`
+  scopes the check: content words and POS-less "Add blank" selections need a
+  gloss; particles/auxiliaries (助詞/助動詞) you deliberately added don't.
 - **2026-09-02 — `word_listening` card: audio cloze, not isolated word.**
   Tier 1 of the listening ladder was "loop just this word's audio span,
   recall its reading/meaning" with all text hidden. Two problems the user

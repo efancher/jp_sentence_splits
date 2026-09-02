@@ -105,3 +105,58 @@ describe('VocabularyPicker "Suggest (AI)"', () => {
     expect(await screen.findByText(/no suggestion available/i)).toBeInTheDocument();
   });
 });
+
+describe('VocabularyPicker missing-meaning check', () => {
+  function MeaningHarness({ selections }: { selections: VocabularySelection[] }) {
+    const [current, setCurrent] = useState(selections);
+    const [reviewStatus, setReviewStatus] =
+      useState<VocabularyReviewStatus>('unreviewed');
+    return (
+      <VocabularyPicker
+        japanese="先輩、おはようございます。"
+        suggestions={[]}
+        selections={current}
+        reviewStatus={reviewStatus}
+        onChange={({ selections: next, reviewStatus: status }) => {
+          setCurrent(next);
+          setReviewStatus(status);
+        }}
+        onConfirm={() => {}}
+      />
+    );
+  }
+
+  it('flags a content-word selection with no meaning', () => {
+    render(<MeaningHarness selections={[{ ...baseSelection, english: undefined }]} />);
+    expect(screen.getByText('No meaning set')).toBeInTheDocument();
+  });
+
+  it('does not flag it once a meaning is filled in', () => {
+    render(
+      <MeaningHarness
+        selections={[{ ...baseSelection, english: 'senior colleague' }]}
+      />,
+    );
+    expect(screen.queryByText('No meaning set')).toBeNull();
+  });
+
+  it('does not flag a particle selection that has no meaning', () => {
+    render(
+      <MeaningHarness
+        selections={[
+          {
+            id: 'sel-p',
+            surface: 'を',
+            start: 2,
+            end: 3,
+            expression: 'を',
+            reading: 'を',
+            pos: '助詞/格助詞',
+            source: 'manual',
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText('No meaning set')).toBeNull();
+  });
+});

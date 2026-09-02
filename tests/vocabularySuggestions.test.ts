@@ -12,6 +12,7 @@ import {
   mergeSuggestionIntoSelection,
   mergeVocabularySuggestions,
   selectionFromSuggestion,
+  selectionNeedsMeaning,
   suggestionFromToken,
   suggestionsFromTokens,
   validateSpan,
@@ -185,6 +186,20 @@ describe('vocabularySuggestions', () => {
   it('rejects invalid spans', () => {
     expect(validateSpan('abc', 0, 2, 'ab')).toBe(true);
     expect(validateSpan('abc', 0, 2, 'xx')).toBe(false);
+  });
+
+  describe('selectionNeedsMeaning', () => {
+    it('expects a gloss on content words and POS-less manual additions', () => {
+      expect(selectionNeedsMeaning('名詞/普通名詞')).toBe(true);
+      expect(selectionNeedsMeaning('動詞/一般')).toBe(true);
+      expect(selectionNeedsMeaning(undefined)).toBe(true);
+      expect(selectionNeedsMeaning('')).toBe(true);
+    });
+
+    it('treats a gloss as optional for particles and auxiliaries', () => {
+      expect(selectionNeedsMeaning('助詞/格助詞')).toBe(false);
+      expect(selectionNeedsMeaning('助動詞')).toBe(false);
+    });
   });
 
   describe('mergeVocabularySuggestions', () => {
