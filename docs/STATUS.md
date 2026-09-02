@@ -37,8 +37,8 @@ is trimmed.)
   request).** Grammar farming now has a sentence-level reminder, mirroring
   `vocabulary_review` for vocab. New `SentenceAnalysis.grammarReviewStatus`
   (`unreviewed`/`confirmed`, additive — migration
-  `20260903000000_analysis_grammar_review_status.sql`, **must be applied to
-  prod before the deploy carries the mapper change**). `GrammarPicker` gains
+  `20260903000000_analysis_grammar_review_status.sql`, live on prod
+  2026-09-03). `GrammarPicker` gains
   a "Done — nothing more to notice" / "Reopen grammar" toggle
   (`setSentenceGrammarReviewStatus`) and a "Reviewed" pill. New planner
   candidate `findGrammarNoticingCandidates` → `grammar_noticing` step
