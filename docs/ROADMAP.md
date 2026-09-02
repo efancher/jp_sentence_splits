@@ -182,6 +182,33 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   pitch track (mirrors what `AnalysisPanel` already computes for the
   learner's own take). Prompted by the 2026-09-02 pitch-accent pass.
 
+- [ ] **Segmental pronunciation feedback.** The missing half of Phase 9 —
+  everything shipped there scores *timing* and *pitch*, nothing addresses
+  "is my し / ら / ふ / つ / う the right sound vs. an English substitute".
+  Prompted by 2026-09-02 shadowing discussion. Prerequisite: the user gets
+  2–4 phonetics-focused tutor sessions first, to produce a real list of
+  *their* segmental errors — the content below is scoped from that list,
+  not a generic one. Then, in one phase:
+  - **`reference`-type "sound guide" page** — per problem sound: an
+    articulatory cue (tongue/lip position) + a native minimal-contrast
+    clip (English allophone vs. Japanese target). Linked from `ShadowPage`.
+    Mostly content authoring; near-zero new code. Can ship on its own
+    ahead of the analysis work.
+  - **Spectrogram overlay in `AnalysisPanel`** — reference vs. attempt,
+    time-aligned off the existing `loadOrComputeAlignment` cache. Canvas
+    FFT, no new backend, no new dep. Pair with the sound guide — reading a
+    spectrogram is a learned skill and is noise without guidance.
+  - **ASR kana-diff observation** — reuse the existing faster-whisper
+    (`base`) secondary signal: a new observation kind
+    (`asrObservations.ts` + `feedbackRanking.ts`) flagging morae where the
+    ASR reading of the attempt diverges from target kana. Non-authoritative
+    and clearly hedged — `base` is noisy.
+  - **Not** a segmental scoring model — same host-footprint constraint that
+    parked PASQA (see "Not planned"). Spectrogram + ASR-diff only.
+  - Deliberately **not** a standalone blind-A/B perception quiz — cuts
+    against the "skill over metalabel quiz" principle. Only revisit as a
+    small gate inside an existing drill if the above ships and needs one.
+
 ## Not planned (deliberate)
 
 - **Dictionary H/L marks on conjugation (`sentence_transformation`)

@@ -422,6 +422,16 @@ has no browser system libs):
 **Larger not-started items (deliberate, reasoning in the archive):**
 - PASQA speech-quality model — architecture left ready; blocked on
   PyTorch+s3prl footprint on the memory-constrained analysis host.
+- **Segmental pronunciation feedback** (ROADMAP "Planned") — Phase 9
+  covers timing + pitch only; nothing tells the learner whether an
+  individual sound (し / ら / ふ / つ / う vs. an English substitute) is
+  right. Planned as one phase: a `reference` sound guide, a spectrogram
+  overlay in `AnalysisPanel` (canvas FFT off the existing alignment
+  cache), and an ASR kana-diff observation reusing the current
+  faster-whisper signal. Gated on the user first doing phonetics-focused
+  tutor sessions to produce a real per-user error list. No new speech
+  model (same constraint as PASQA); no standalone perception quiz
+  (conflicts with "skill over metalabel quiz"). Prompted 2026-09-02.
 
 ## Services
 
