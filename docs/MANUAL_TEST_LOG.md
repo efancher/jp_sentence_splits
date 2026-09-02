@@ -51,44 +51,50 @@ bug — capture the two subject labels + activity types.
 
 ### 2f — no grammar cards despite due study items
 
-**Mechanism** (`ReviewPage.tsx` ~L1005–1038 + `pickContextSentenceForGrammarPattern`
-in `repository.ts` L4239):
+**Investigated 2026-09-02** with `scripts/diagnose-grammar-review-queue.ts`
+(read-only) + an ad-hoc orphan sweep. Root cause is **not** the readiness
+gate — it's orphaned study items from the 2026-09-01 "After Work" /
+"GLIM SPANKY" sentence soft-deletes.
 
-- A tracked grammar pattern only produces *any* review card
-  (`grammar_comprehension` / `_completion` / `_contrast` / `_production`) if
-  `pickContextSentenceForGrammarPattern` returns a context sentence.
-- That function walks the pattern's `sentenceGrammar`-linked sentences and
-  returns the first one passing `getSentenceFullReviewReadiness` — i.e.
-  `vocabularyReviewStatus === 'confirmed'` **and every** vocab item in that
-  sentence FSRS-proficient (the same bar as full-sentence review + shadowing
-  candidates).
-- If none of the pattern's example sentences clears that bar, the pattern is
-  dropped from `grammarCandidates` entirely (`if (!context) continue;`), so
-  `getDueStudyItems` is never even asked about its due items → **zero cards,
-  silently**, while the study item still reads "due".
-- Unlike sentence-subject cards, grammar has **no `deferUnreadySentenceReviews`
-  equivalent**, so the stuck items keep inflating the planner's review count
-  and the Study-items due list indefinitely.
+Findings (production):
+- 13 grammar patterns have study items; **all 13** have ≥1 due card;
+  **0** currently render.
+- **11 of 13**: their single `sentence_grammar` link was soft-deleted along
+  with the sentence it pointed at. `pickContextSentenceForGrammarPattern`
+  returns undefined at `if (links.length === 0)`, so the pattern is dropped
+  from candidates before the due-check — the `grammar_comprehension` /
+  `grammar_completion` study items (subjectType `grammarPattern`) survived
+  the cascade and are now stuck-due forever, invisible.
+- **2 of 13** (`～ている（状態描写）`, `～を見つける`): genuinely gated — their
+  one live linked sentence (`sent_959`) has `vocabulary_review_status !=
+  'confirmed'`. Minor; separate question.
+- Same cascade gap hit other activity types: **20 `sentenceVocabulary`-subject
+  study items orphaned** (`word_listening` / `sentence_transformation`, 10
+  due), **3 `vocabularyItem`-subject orphaned & due**. `sentence`-subject
+  items were correctly dropped (0 orphan).
 
-**Why it bites:** patterns are tracked from sentences you *just analyzed* —
-exactly the ones whose vocab isn't proficient yet. A freshly-tracked pattern
-is the most likely to be stuck.
+**The bug** — `cascadeRetireSentenceLocal` (`repository.ts` L342):
+```
+.filter((item) => item.subjectType === 'sentence' && !keepStudyItemIds.has(item.id));
+```
+It deletes only `subjectType: 'sentence'` study items. It deletes the
+sentence's `sentenceVocabulary` links (L316) but not the `word_listening` /
+`sentence_transformation` study items keyed to those link ids, nor considers
+`grammarPattern` study items whose last live occurrence was this sentence.
 
-**Confirm on your end:** ☰ → Grammar → open a pattern that shows as due →
-check its example sentences. If none has all vocab confirmed **and** every
-word matured/proficient, that's the cause.
+**Fix (proposed, needs go-ahead — production data mutation):**
+1. One-time cleanup script: soft-delete the orphaned study items (the 11
+   grammar patterns' items, the 20 `sentenceVocabulary` items, the 3 vocab
+   items) — via the normal queued `delete`, never raw DELETE.
+2. `cascadeRetireSentenceLocal`: also retire `sentenceVocabulary`-subject
+   study items for each link it deletes. For `grammarPattern`-subject items,
+   retire only when the deleted link was the pattern's last live
+   `sentence_grammar` row (else leave it — the pattern may recur elsewhere).
+3. Open question for the 2 vocab-gated patterns: leave them (honors
+   vocab-before-glossing) or let grammar review fall back to a
+   not-fully-ready sentence. Deferred — only 2 cards.
 
-**Fix options (needs a scope decision — touches the vocab-before-glossing
-principle):**
-- A. Relax the context pick for `grammar_comprehension`/`_completion`: they
-  show the pattern's meaning and use the sentence only as a reveal example,
-  so they don't need the example's vocab individually mastered. Prefer a
-  ready sentence, fall back to the most recent linked one. Keep the strict
-  gate for `grammar_production` only (or drop it there too).
-- B. Add a grammar deferral pass mirroring `deferUnreadySentenceReviews` so
-  stuck cards stop inflating planner/Study-items counts, + surface "N grammar
-  cards waiting on vocabulary" somewhere.
-- C. Both.
+Diagnostic: `npx tsx scripts/diagnose-grammar-review-queue.ts`
 
 ## Corruption spot-checks (run after any writing test)
 
