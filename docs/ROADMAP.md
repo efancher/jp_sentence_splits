@@ -168,7 +168,27 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   translation-review — not safe to headless against production. Mac exit
   node is up.
 
+- [ ] **Native-clip measured pitch overlay.** Under the sentence text on
+  the `listening` / `word_listening` review reveals and the shadowing
+  surfaces, overlay the *measured* YIN pitch track of the **reference**
+  recording (real signal via the existing `extractPitch` +
+  `loadOrComputeAlignment` cache), not a predicted contour — a genuine
+  sentence-level pitch view with no prosody-model guesswork, complementing
+  the per-word dictionary H/L marks. Needs a persisted per-clip reference
+  pitch track (mirrors what `AnalysisPanel` already computes for the
+  learner's own take). Prompted by the 2026-09-02 pitch-accent pass.
+
 ## Not planned (deliberate)
+
+- **Dictionary H/L marks on conjugation (`sentence_transformation`)
+  cards** — the sentence's verb is inflected but `SentencePitchAccentRow`
+  draws the citation-form contour, which would mislead on the surface under
+  test. Deliberately excluded from the 2026-09-02 wider H/L surfacing.
+- **Joined cross-word sentence pitch contour** — a single continuous line
+  across words. Japanese cross-word downstep / particle attachment /
+  rendaku shifts aren't synchronically rule-governed; a real version needs
+  an OJAD-style prosody parser or per-sentence hand annotation. The
+  per-word blocks are the honest ceiling (see `sentencePitchAccent.ts`).
 
 - No export-back-to-Anki path; migration away from Anki was one-way.
 - No Anki review-history migration — FSRS starts from zero prior signal for

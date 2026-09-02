@@ -769,11 +769,17 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `pitch_accent` (narrower eligibility than the other three — only
   words with dictionary pitch-accent data (`VocabularyItem.pitchAccentPositions`)
   *and* whose context sentence has a native reference recording
-  (`SentenceAudio`) to model the accent on the reveal; a
-  dictionary-contour-only card was dropped as not worth its queue slot —
-  multiple choice among the pitch-accent categories actually
-  distinguishable at the word's own mora count,
-  `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts`; the
+  (`SentenceAudio`); a dictionary-contour-only card was dropped as not
+  worth its queue slot, and here the clip is load-bearing. **Audio-first
+  perception task**: `PitchAccentNativeAudio` (below) plays *above* the
+  question so the learner loops the native word, then marks **where the
+  pitch drops** — choices are drop positions `0..moraCount` in mora order
+  ("Stays high (no drop)" / "Drops after は" / …), not the four category
+  names. This puts the ear before the metalabel and fully specifies the
+  contour (a 4-mora word distinguishes a drop after mora 2 from mora 3,
+  which a single "nakadaka" answer collapsed). `onCheck` passes the chosen
+  and correct positions as strings; `classifyReviewError` flags a miss as
+  `pronunciation_difficulty`. The
   reveal draws the mora-by-mora H/L contour via `PitchAccentDiagram`
   (`src/components/PitchAccentDiagram.tsx`), an SVG render of the same
   `expectedPitchShape` the scoring path uses, with a trailing
@@ -784,10 +790,10 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   and the verb / i-adjective two-class system — a "why this pattern" note,
   each cross-checked against the word's real Kanjium position and
   suppressed on disagreement; plain native nouns get a "memorized, no
-  rule" fallback). The reveal also renders `PitchAccentNativeAudio`
-  (`src/components/PitchAccentNativeAudio.tsx`) — a "Loop native word"
-  toggle that plays just the target word's span on repeat as a model of
-  the real realization next to the dictionary contour, with a
+  rule" fallback). The card renders `PitchAccentNativeAudio`
+  (`src/components/PitchAccentNativeAudio.tsx`) in both states — a "Loop
+  native word" toggle that plays just the target word's span on repeat as a
+  model of the real realization next to the dictionary contour, with a
   pitch-preserving speed control and a whole-sentence button for context.
   The word's span is located by forced alignment (`isolatedWordRange` in
   `src/lib/isolatedWordRange.ts` — character-proportion mapping like
@@ -798,6 +804,10 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `nativeAudioController` singleton (no range support there). The reveal
   also shows `SentencePitchAccentRow` (see below) for the whole sentence,
   with the card's target word highlighted.
+
+  `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts` (the
+  reachable-category reasoning) is now unused by the card but kept and
+  unit-tested.
 - **SentenceVocabulary subject**: `sentence_transformation` (activity-type
   string kept for continuity; label displays as "Conjugation in context").
   One StudyItem **per occurrence** of a conjugable word in a sentence
@@ -1082,10 +1092,17 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   practiced stays in view while pressing Shadow along/Hear that
   back/Compare/Retry, not just while reading.
 - **Per-word pitch-accent H/L marks** (`SentencePitchAccentRow.tsx`,
-  `sentencePitchAccent.ts`): beneath `SyncedShadowText`, and in
-  `AnalysisPanel`'s pitch-accent section, a compact "H"/"L"-per-mora
+  `sentencePitchAccent.ts`): beneath `SyncedShadowText`, in
+  `AnalysisPanel`'s pitch-accent section, on the `pitch_accent` review
+  reveal, and — since 2026-09-02 — on **every other sentence-bearing review
+  reveal** (one shared insert in `ReviewPage` before the rating buttons;
+  excluded only for `pitch_accent`, which highlights its own copy, and
+  `sentence_transformation`, whose inflected verb would clash with the
+  citation-form contour). A compact "H"/"L"-per-mora
   contour for each confirmed sentence word that carries Kanjium/UniDic
-  accent data, plus a following-particle mark. Deliberately one
+  accent data, plus a following-particle mark. `VocabularyListPage`
+  (`/words`) shows the single-word `PitchAccentDiagram` under the reading
+  for entries with dictionary data. Deliberately one
   independent contour per word (from that word's dictionary reading), not
   a joined sentence line — Japanese compound/cross-word accent isn't
   computed anywhere in this codebase (see `pitchAccentRules.ts`). Words

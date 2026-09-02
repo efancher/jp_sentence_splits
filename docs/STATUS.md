@@ -33,6 +33,32 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-02 — Pitch-accent card: audio-first, drop-position.** The
+  `pitch_accent` SRS card no longer asks "which of heiban/atamadaka/
+  nakadaka/odaka" — a 25–50% guess for an un-memorised fact, with the
+  native clip only offered after answering. It now plays the native word
+  first (`PitchAccentNativeAudio` moved above the question) and asks
+  **"where does the pitch drop?"** — choices `0..moraCount` in mora order
+  ("Stays high (no drop)" / "Drops after は" / …). This puts the ear before
+  the metalabel and fully specifies the contour: a 4-mora word now
+  distinguishes a drop after mora 2 from mora 3, which the category card
+  collapsed into one "nakadaka" answer. `getPitchAccentReviewCandidates`
+  drops the pattern-shuffle; `PitchAccentReviewCandidate` carries `morae` +
+  `correctPosition`. `onCheck` passes chosen/correct positions as strings,
+  so a wrong drop point still classifies as `pronunciation_difficulty`.
+  Reveal unchanged (`PitchAccentDiagram` + `SentencePitchAccentRow` +
+  `explainPitchAccent` + category name). Eligibility unchanged (dictionary
+  `pitchAccentPositions` + reference `SentenceAudio`). `possiblePitch-
+  PatternsForMoraCount` is now unused by the card but kept (still
+  unit-tested).
+  Also: `SentencePitchAccentRow` now renders on **every** sentence-bearing
+  review reveal (one shared insert before the rating buttons), not just the
+  `pitch_accent` card — excluded only for `pitch_accent` itself (renders its
+  own highlighted copy) and `sentence_transformation` (its verb is
+  inflected; the row draws the citation-form contour). `/words`
+  (`VocabularyListPage`) shows a `PitchAccentDiagram` under the reading for
+  entries with dictionary data. `reviewPage.test.tsx` pitch tests rewritten.
+
 - **2026-09-02 — Review: bury siblings for the session.** `ReviewPage`'s
   queue build now keeps at most one due card per `subjectType:subjectId`
   when that card is in the stable `review`/`relearning` state — the other
