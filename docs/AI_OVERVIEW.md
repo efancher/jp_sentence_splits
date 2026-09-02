@@ -915,7 +915,15 @@ which parses WaniKani's inline `<radical>`/`<kanji>`/`<vocabulary>`/
 surfaced anywhere outside review cards. A **session planner** caps new-subject introduction per
 sitting (`AppSettings.newCardsPerSessionLimit`) without capping
 already-due reviews, and interleaves activity categories round-robin
-rather than draining one category first. **Graduation** (`isGraduated`,
+rather than draining one category first. **Sibling burying** (Anki's
+default): the queue build keeps at most one due card per
+`subjectType:subjectId` when that card is in the stable `review`/
+`relearning` state — a word's `cloze`/`reading_production` are held for
+the next session when its `reading_retrieval` is already queued, so the
+first card's reveal can't turn the rest into a same-sitting echo test that
+inflates their FSRS intervals. `new`/`learning` items are exempt (the
+lazy-seed path still introduces a full activity-type batch at once as
+first-exposure scaffolding). **Graduation** (`isGraduated`,
 `AppSettings.graduationMinScheduledDays`, default 180) retires a study
 item from the due rotation once its FSRS interval crosses the threshold;
 surfaced as "Graduated" badges on `BookDetailPage.tsx` and

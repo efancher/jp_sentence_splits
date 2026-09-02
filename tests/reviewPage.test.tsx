@@ -2378,6 +2378,96 @@ describe('ReviewPage', () => {
     await screen.findByText('All caught up.');
   });
 
+  it('buries a due sibling card for the session once another card for the same word has shown', async () => {
+    await seedBookWithSentence();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Both settled in the stable `review` state and due now — this is the
+    // 世話 case: graded alike each session they land on adjacent FSRS due
+    // timestamps, so revealing the reading on the first turns the second
+    // into a short-term echo test. reading_retrieval is due a hair earlier,
+    // so it's the one that shows.
+    const reviewState = (due: string) => ({
+      due,
+      stability: 8,
+      difficulty: 3,
+      elapsedDays: 0,
+      scheduledDays: 6,
+      learningSteps: 0,
+      reps: 3,
+      lapses: 0,
+      state: 'review' as const,
+    });
+    await db.studyItems.add({
+      id: 'si-retrieval',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-1',
+      activityType: 'reading_retrieval',
+      fsrsState: reviewState('2020-01-01T00:00:00.000Z'),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.add({
+      id: 'si-cloze',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-1',
+      activityType: 'cloze',
+      fsrsState: reviewState('2020-01-01T00:00:01.000Z'),
+      createdAt: now,
+      updatedAt: now,
+    });
+    // reading_production exists too (far-future) so it isn't lazily seeded
+    // as a brand-new card and shown — this test is about the buried sibling.
+    await db.studyItems.add({
+      id: 'si-production',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-1',
+      activityType: 'reading_production',
+      fsrsState: {
+        ...reviewState(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()),
+        scheduledDays: 0,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    // The cloze sibling is held for next session rather than shown now.
+    await screen.findByText('All caught up.');
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    // It stays due — nothing about its FSRS state changed, it just didn't
+    // get a slot today.
+    const cloze = await db.studyItems.get('si-cloze');
+    expect(cloze?.fsrsState.due).toBe('2020-01-01T00:00:01.000Z');
+  });
+
   // ---------------------------------------------------------------------
   // Grammar-pattern review (grammar-learning system Phase 5, docs/STATUS.md).
   // Global scope only (no bookId) — see GRAMMAR_ACTIVITY_TYPES's doc

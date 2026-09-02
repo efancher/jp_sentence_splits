@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-01.
+Last updated: 2026-09-02.
 
 ## Where things stand
 
@@ -32,6 +32,21 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-02 — Review: bury siblings for the session.** `ReviewPage`'s
+  queue build now keeps at most one due card per `subjectType:subjectId`
+  when that card is in the stable `review`/`relearning` state — the other
+  due siblings (e.g. a word's `cloze` + `reading_production` alongside its
+  `reading_retrieval`) are held for the next session rather than shown back
+  to back. Graded alike each session they converge on near-identical FSRS
+  due timestamps and sort adjacently, so the first card's reveal was
+  turning the rest into a short-term echo test and inflating their
+  intervals (Anki's default "bury siblings" behaviour). `new`/`learning`
+  items are exempt — early-acquisition repetition is intended scaffolding,
+  and the lazy-seed path still introduces a whole activity-type batch at
+  once. Sessions can now run a little short of `targetCount` when the due
+  set is sibling-heavy; the step just doesn't auto-settle (existing
+  "not enough due" behaviour).
 
 - **2026-09-01 — Import preview: conflict detail.** `ShadowingPreviewCard`
   now renders a collapsible list of the sentences whose repeated occurrences

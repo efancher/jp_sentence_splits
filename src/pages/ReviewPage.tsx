@@ -1155,6 +1155,30 @@ export function ReviewPage() {
       });
       due.sort((a, b) => a.studyItem.fsrsState.due.localeCompare(b.studyItem.fsrsState.due));
 
+      // Bury siblings for the session (Anki's default behaviour). 世話's
+      // cloze / reading_retrieval / reading_production are three study items
+      // on one subject; graded alike each session they converge on
+      // near-identical FSRS due timestamps, so the sort above lands them
+      // adjacently and the first card's reveal turns the rest into a
+      // short-term echo test — a hollow "Good" that inflates their intervals.
+      // Once a subject has a card in the queue, hold its other *due* cards
+      // for the next session; they stay due, they just don't compete for a
+      // slot today. Only `review`/`relearning` items are buried: `new` and
+      // `learning` are early acquisition where the multi-card run is intended
+      // first-exposure scaffolding (and the lazy-seed path below deliberately
+      // seeds a whole batch at once). Keyed by subjectType+subjectId so a
+      // word's reading cards and its pitch-accent card count as siblings too.
+      const shownSubjects = new Set<string>();
+      const deduped = due.filter((card) => {
+        const key = `${card.studyItem.subjectType}:${card.studyItem.subjectId}`;
+        const settled =
+          card.studyItem.fsrsState.state === 'review' ||
+          card.studyItem.fsrsState.state === 'relearning';
+        if (settled && shownSubjects.has(key)) return false;
+        shownSubjects.add(key);
+        return true;
+      });
+
       // Any (subject, activityType) pair with no study_item yet needs
       // seeding — tracked per-pair (not per-subject) so a subject left with
       // only some activity types seeded still gets the rest. Built per
@@ -1205,7 +1229,7 @@ export function ReviewPage() {
       }
 
       if (cancelled) return;
-      setQueue(due);
+      setQueue(deduped);
       setPool(pendingSeeds);
       setInitialized(true);
     })();
