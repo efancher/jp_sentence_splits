@@ -40,9 +40,10 @@ is trimmed.)
   (`import-wanikani-kanji.ts`, `backfill-wanikani-mnemonics.ts`) + their
   GitHub workflows, `scripts/lib/wanikani.ts` / `wanikaniCache.ts`, the
   mnemonic CSS, and the four related test files. Migration
-  `20260902000000_drop_wanikani_mnemonics.sql` drops
-  `vocabulary_items.{meaning,reading}_mnemonic`, `kanji.{meaning,reading}_
-  {mnemonic,hint}`, and the `wanikani_subjects` cache table. The `kanji`
+  `20260902000000_drop_wanikani_mnemonics.sql` (live on prod 2026-09-02)
+  drops `vocabulary_items.{meaning,reading}_mnemonic`,
+  `kanji.{meaning,reading}_{mnemonic,hint}`, and the `wanikani_subjects`
+  cache table. The `kanji`
   table itself and its Phase 2-imported readings/meanings stay (no live
   WaniKani integration remains). The `mnemonic_shown` `Review.assistance`
   value is retained as legacy so historical reviews still parse.
