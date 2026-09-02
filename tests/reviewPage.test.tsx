@@ -15,40 +15,37 @@ import {
 } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
-import { createId, hashString } from '../src/lib/ids';
+import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
-import {
-  pitchPatternLabel,
-  possiblePitchPatternsForMoraCount,
-  type PitchAccentPattern,
-} from '../src/lib/pitchAccentShape';
+import { pitchPatternLabel } from '../src/lib/pitchAccentShape';
 import { ReviewPage } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
 
-// Mirrors ReviewPage's private PITCH_ACCENT_PATTERN_LABELS (not exported,
-// same "this file only imports the page component" convention noted above).
-const PITCH_ACCENT_DISPLAY_LABELS: Record<PitchAccentPattern, string> = {
-  heiban: 'Heiban (平板)',
-  atamadaka: 'Atamadaka (頭高)',
-  nakadaka: 'Nakadaka (中高)',
-  odaka: 'Odaka (尾高)',
-};
-
-/** Mirrors ReviewPage's private getPitchAccentReviewCandidates's per-candidate computation, for asserting against whichever label/choice order it actually produces. */
-function expectedPitchAccentCandidate(
-  reading: string,
-  position: number,
-  vocabularyItemId: string,
-) {
-  const moraCount = segmentIntoMorae(reading).length;
-  const correctLabel = pitchPatternLabel(position, moraCount);
-  const choices = [...possiblePitchPatternsForMoraCount(moraCount)].sort((a, b) => {
-    const ha = Number.parseInt(hashString(`${vocabularyItemId}:order:${a}`), 16);
-    const hb = Number.parseInt(hashString(`${vocabularyItemId}:order:${b}`), 16);
-    return ha - hb;
-  });
-  return { moraCount, correctLabel, choices };
+/**
+ * Mirrors ReviewPage's private PitchAccentCard: the buttons ask *where the
+ * pitch drops* (position 0..moraCount, in mora order), and the reveal names
+ * the category. `expectedPitchAccentDrop` returns the button label for the
+ * dictionary position and the reveal category label.
+ */
+function expectedPitchAccentDrop(reading: string, position: number) {
+  const morae = segmentIntoMorae(reading).map((unit) => unit.text);
+  const correctPosition = Math.max(0, Math.min(position, morae.length));
+  const dropLabel = (at: number) =>
+    at === 0 ? 'Stays high (no drop)' : `Drops after ${morae.slice(0, at).join('')}`;
+  const categoryLabel: Record<string, string> = {
+    heiban: 'Heiban (平板)',
+    atamadaka: 'Atamadaka (頭高)',
+    nakadaka: 'Nakadaka (中高)',
+    odaka: 'Odaka (尾高)',
+  };
+  return {
+    morae,
+    correctPosition,
+    label: dropLabel(correctPosition),
+    dropLabel,
+    categoryLabel: categoryLabel[pitchPatternLabel(position, morae.length)]!,
+  };
 }
 
 // Minimal fake <audio> so listening-card tests can drive playback/`onended`
@@ -995,17 +992,16 @@ describe('ReviewPage', () => {
     await suppressVocabularyActivityTypes('vocab-hana');
     await suppressAudioCards('sent-1', 'sv-hana');
 
-    const { correctLabel } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana');
+    // はな [1] → atamadaka, i.e. the drop is right after mora 1 (は).
+    const { label, correctPosition } = expectedPitchAccentDrop('はな', 1);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Which pitch pattern?');
+    await screen.findByText('Listen, then mark where the pitch drops.');
     expect(screen.getByText('はな')).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS[correctLabel] }),
-    );
+    await user.click(screen.getByRole('button', { name: label }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
     expect(screen.getByText('flower')).toBeInTheDocument();
@@ -1016,8 +1012,8 @@ describe('ReviewPage', () => {
       expect(await db.reviews.count()).toBe(1);
     });
     const [review] = await db.reviews.toArray();
-    expect(review?.responseRaw).toBe(correctLabel);
-    expect(review?.expectedAnswer).toBe(correctLabel);
+    expect(review?.responseRaw).toBe(String(correctPosition));
+    expect(review?.expectedAnswer).toBe(String(correctPosition));
     expect(review?.errorClassification).toBeUndefined();
 
     const studyItems = await db.studyItems
@@ -1056,16 +1052,15 @@ describe('ReviewPage', () => {
     await suppressVocabularyActivityTypes('vocab-hana2');
     await suppressAudioCards('sent-1', 'sv-hana2');
 
-    const { correctLabel, choices } = expectedPitchAccentCandidate('はな', 1, 'vocab-hana2');
-    const wrongLabel = choices.find((choice) => choice !== correctLabel)!;
+    // Correct drop is after mora 1; click "no drop" (position 0) instead.
+    const { correctPosition, dropLabel } = expectedPitchAccentDrop('はな', 1);
+    const wrongLabel = dropLabel(0);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Which pitch pattern?');
-    await user.click(
-      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS[wrongLabel] }),
-    );
+    await screen.findByText('Listen, then mark where the pitch drops.');
+    await user.click(screen.getByRole('button', { name: wrongLabel }));
 
     expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Again' }));
@@ -1074,8 +1069,8 @@ describe('ReviewPage', () => {
       expect(await db.reviews.count()).toBe(1);
     });
     const [review] = await db.reviews.toArray();
-    expect(review?.responseRaw).toBe(wrongLabel);
-    expect(review?.expectedAnswer).toBe(correctLabel);
+    expect(review?.responseRaw).toBe('0');
+    expect(review?.expectedAnswer).toBe(String(correctPosition));
     expect(review?.errorClassification).toBe('pronunciation_difficulty');
   });
 
@@ -1156,14 +1151,14 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('excludes odaka/nakadaka as choices for a 1-mora word', async () => {
+  it('offers one drop-position choice per mora plus "no drop" for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
 
-    // 目 (め) — 1 mora: only heiban/atamadaka are reachable.
+    // 目 (め) — 1 mora: "no drop" and "drops after め", nothing else.
     await db.vocabularyItems.add({
       id: 'vocab-me',
       expression: '目',
@@ -1187,59 +1182,66 @@ describe('ReviewPage', () => {
 
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Which pitch pattern?');
+    await screen.findByText('Listen, then mark where the pitch drops.');
     expect(
-      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.heiban }),
+      screen.getByRole('button', { name: 'Stays high (no drop)' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Drops after め' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.atamadaka }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.nakadaka }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.odaka }),
+      screen.queryByRole('button', { name: /Drops after め./ }),
     ).not.toBeInTheDocument();
   });
 
-  it('excludes nakadaka but includes odaka as a choice for a 2-mora word', async () => {
+  it('distinguishes two internal drop points (nakadaka) on a longer word and grades them separately', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
 
-    // 花 (はな) — 2 morae: heiban/atamadaka/odaka reachable, not nakadaka.
+    // あいさつ (挨拶) — 4 morae, dictionary accent [3]: drop after さ.
+    // A drop after い (position 2) is also "nakadaka" but a different
+    // contour — the old category card couldn't tell them apart.
     await db.vocabularyItems.add({
-      id: 'vocab-hana3',
-      expression: '花',
-      reading: 'はな',
-      meaning: 'flower',
+      id: 'vocab-aisatsu',
+      expression: '挨拶',
+      reading: 'あいさつ',
+      meaning: 'greeting',
       partOfSpeech: 'n',
-      pitchAccentPositions: [1],
+      pitchAccentPositions: [3],
       createdAt: now,
       updatedAt: now,
     });
     await db.sentenceVocabulary.add({
-      id: 'sv-hana3',
+      id: 'sv-aisatsu',
       sentenceId: 'sent-1',
-      vocabularyItemId: 'vocab-hana3',
-      surfaceForm: '花',
+      vocabularyItemId: 'vocab-aisatsu',
+      surfaceForm: '挨拶',
       createdAt: now,
       updatedAt: now,
     });
-    await suppressVocabularyActivityTypes('vocab-hana3');
-    await suppressAudioCards('sent-1', 'sv-hana3');
+    await suppressVocabularyActivityTypes('vocab-aisatsu');
+    await suppressAudioCards('sent-1', 'sv-aisatsu');
 
+    const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    await screen.findByText('Which pitch pattern?');
-    expect(
-      screen.getByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.odaka }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: PITCH_ACCENT_DISPLAY_LABELS.nakadaka }),
-    ).not.toBeInTheDocument();
+    await screen.findByText('Listen, then mark where the pitch drops.');
+    expect(screen.getByRole('button', { name: 'Drops after あい' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Drops after あいさ' })).toBeInTheDocument();
+
+    // Pick the wrong internal drop point.
+    await user.click(screen.getByRole('button', { name: 'Drops after あい' }));
+    expect(screen.getByText('✗ Not quite')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Again' }));
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe('2');
+    expect(review?.expectedAnswer).toBe('3');
+    expect(review?.errorClassification).toBe('pronunciation_difficulty');
   });
 
   it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {

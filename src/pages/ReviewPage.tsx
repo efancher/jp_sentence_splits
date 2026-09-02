@@ -60,17 +60,12 @@ import {
   buildGrammarCompletionChoices,
   grammarPatternUsedIn,
 } from '../lib/grammarPatterns';
-import { hashString } from '../lib/ids';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
-import {
-  pitchPatternLabel,
-  possiblePitchPatternsForMoraCount,
-  type PitchAccentPattern,
-} from '../lib/pitchAccentShape';
+import { pitchPatternLabel, type PitchAccentPattern } from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { isDeferralMnemonic } from '../lib/wanikaniMnemonic';
@@ -165,14 +160,11 @@ const CONJUGATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformatio
  * `pitchAccentPositions` data (Kanjium, via
  * scripts/backfill-pitch-accent.ts — a subset of confirmed vocabulary, not
  * all of it) *and* whose context sentence has a native reference recording
- * to model the accent on the reveal — a dictionary-contour-only card was
- * judged not worth its slot in the queue (docs/STATUS.md). Multiple choice
- * among the pitch-accent categories
- * (heiban/atamadaka/nakadaka/odaka) that are actually distinguishable for
- * the word's own mora count (possiblePitchPatternsForMoraCount,
- * src/lib/pitchAccentShape.ts) — not a fixed 4-way choice, since e.g.
- * nakadaka/odaka are structurally impossible for a 1-mora word and
- * offering them would be an unfair distractor. See
+ * to model the accent — a dictionary-contour-only card was judged not
+ * worth its slot in the queue (docs/STATUS.md), and here the native clip
+ * is load-bearing: it is what the learner listens to before answering.
+ * Audio-first perception task — loop the native word, then mark where the
+ * pitch drops on the word's own morae (choices 0..moraCount). See
  * getPitchAccentReviewCandidates below.
  */
 const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
@@ -342,28 +334,35 @@ interface PitchAccentReviewCandidate {
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
-  /** The sentence's first reference recording — required (see getPitchAccentReviewCandidates); powers the reveal's "loop the native word" control. */
+  /** The sentence's first reference recording — required (see getPitchAccentReviewCandidates); powers the card's "loop the native word" control. */
   audio: SentenceAudio;
-  moraCount: number;
+  /** Mora kana of the dictionary reading — the drop-position choices and the ✓/✗ both key off these. */
+  morae: string[];
+  /** Dictionary downstep clamped into [0, morae.length]: 0 = heiban/no drop, n = drop right after mora n (n === morae.length is odaka). */
+  correctPosition: number;
+  /** Category name (平板/頭高/中高/尾高), shown on the reveal only — the buttons ask for a drop position, not this. */
   correctLabel: PitchAccentPattern;
-  /** Every pattern distinguishable at this word's mora count, in a per-word-stable shuffled order (see below) — not the raw fixed enum order, so the correct answer isn't always in the same button position. */
-  choices: PitchAccentPattern[];
 }
 
 /**
  * Pure filter over already-fetched vocabulary-target candidates (no DB
  * access needed), mirroring getSentenceConjugationCandidates's shape —
  * a word is a candidate only if it has dictionary pitch-accent data and a
- * segmentable reading. Choice order is shuffled by a stable per-word hash
- * (same sort-key mechanic buildGrammarCompletionChoices uses for its own
- * final ordering step) rather than ranked/sliced the way grammar's
- * corpus-scale distractor pool needs — here the choice set is already
- * small and fully determined by moraCount, so only ordering varies.
+ * segmentable reading.
+ *
+ * The card is an audio-first perception task: the learner loops the native
+ * realization of the word (see below) and marks *where the pitch drops* on
+ * the word's own morae — choices `0..morae.length`, in natural mora order
+ * (no shuffle). This both puts the ear before the metalabel and fully
+ * specifies the contour: a 4-mora word distinguishes a drop after mora 2
+ * from a drop after mora 3, which the old "which of heiban/atamadaka/
+ * nakadaka/odaka" multiple choice collapsed.
  *
  * `audioBySentenceId` is the same first-recording-per-sentence map the
  * audio-comprehension candidates use; a matching entry is *required* (like
- * getWordListeningCandidates) — the reveal loops the native realization of
- * the word, and a card without that model isn't worth a queue slot.
+ * getWordListeningCandidates) — heiban and odaka share the word-internal
+ * shape, so a native clip (whose trailing particle disambiguates them by
+ * ear) is what makes the card answerable at all.
  */
 function getPitchAccentReviewCandidates(
   candidates: VocabularyTargetCandidate[],
@@ -375,20 +374,17 @@ function getPitchAccentReviewCandidates(
     if (!positions?.length) continue;
     const audio = audioBySentenceId.get(candidate.sentence.id);
     if (!audio) continue;
-    const moraCount = segmentIntoMorae(candidate.vocabularyItem.reading).length;
-    if (moraCount === 0) continue;
-    const correctLabel = pitchPatternLabel(positions[0]!, moraCount);
-    const choices = [...possiblePitchPatternsForMoraCount(moraCount)].sort((a, b) => {
-      const ha = Number.parseInt(hashString(`${candidate.vocabularyItem.id}:order:${a}`), 16);
-      const hb = Number.parseInt(hashString(`${candidate.vocabularyItem.id}:order:${b}`), 16);
-      return ha - hb;
-    });
+    const morae = segmentIntoMorae(candidate.vocabularyItem.reading).map((unit) => unit.text);
+    if (morae.length === 0) continue;
+    const correctPosition = Math.max(0, Math.min(positions[0]!, morae.length));
     result.push({
-      ...candidate,
+      vocabularyItem: candidate.vocabularyItem,
+      sentence: candidate.sentence,
+      surfaceForm: candidate.surfaceForm,
       audio,
-      moraCount,
-      correctLabel,
-      choices,
+      morae,
+      correctPosition,
+      correctLabel: pitchPatternLabel(positions[0]!, morae.length),
     });
   }
   return result;
@@ -1329,11 +1325,9 @@ export function ReviewPage() {
         typedResponseExpected ??
         (current.conjugation
           ? current.conjugation.expectedReadings[0]
-          : current.pitchAccent
-            ? current.pitchAccent.correctLabel
-            : current.grammar
-              ? current.grammar.pattern.canonicalName
-              : current.target?.vocabularyItem.reading);
+          : current.grammar
+            ? current.grammar.pattern.canonicalName
+            : current.target?.vocabularyItem.reading);
       // grammar_production's typed response is a free-form sentence the
       // learner self-grades — there's no single expected string to compare,
       // so record it as responseRaw only (no expectedAnswer → classifyReviewError
@@ -1578,8 +1572,9 @@ export function ReviewPage() {
                 key={current.studyItem.id}
                 candidate={current.pitchAccent}
                 revealed={revealed}
-                onCheck={(value) => {
+                onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
+                  setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
               />
@@ -2106,20 +2101,21 @@ const PITCH_ACCENT_PATTERN_LABELS: Record<PitchAccentPattern, string> = {
 };
 
 /**
- * Pitch accent: multiple choice among the categories
- * (getPitchAccentReviewCandidates's own doc comment covers eligibility and
- * choice-set construction). Shows the reading up front, unlike
- * reading_retrieval/reading_production — this card tests *how* to say a
- * known reading, not recall of the reading itself. Auto-graded (the app
- * knows the right choice), same typed-response/self-rate funnel every
- * other selected-answer card uses — `onCheck` sets `typedResponse` to the
- * chosen label, which classifyReviewError compares against
- * `expectedAnswer` (candidate.correctLabel) the same way it already does
- * for reading_production/sentence_transformation/grammar_completion.
- * Deliberately does not feed the mnemonic-scaffolding effect (that
- * signal is tuned for reading/meaning recall fragility, not
- * pitch-accent-category recall — reusing it would show an unrelated
- * mnemonic on a card that tests neither).
+ * Pitch accent, audio-first: the learner loops the native realization of
+ * the word (PitchAccentNativeAudio, shown before the answer, not just on
+ * the reveal) and marks where the pitch drops on the word's own morae —
+ * choices 0..moraCount, in mora order. getPitchAccentReviewCandidates's
+ * doc comment covers eligibility and why the native clip is required.
+ *
+ * Shows the reading up front, unlike reading_retrieval/reading_production —
+ * this card tests *how* to say a known reading, not recall of the reading.
+ * Auto-graded (the app knows the drop position); same typed-response/
+ * self-rate funnel every other selected-answer card uses — `onCheck`
+ * passes the chosen and correct positions as strings, which
+ * classifyReviewError compares to flag a miss as `pronunciation_difficulty`
+ * the same way it does for reading_production/grammar_completion.
+ * Deliberately does not feed the mnemonic-scaffolding effect (that signal
+ * is tuned for reading/meaning recall fragility, not pitch accent).
  */
 function PitchAccentCard({
   candidate,
@@ -2128,11 +2124,20 @@ function PitchAccentCard({
 }: {
   candidate: PitchAccentReviewCandidate;
   revealed: boolean;
-  onCheck: (chosenLabel: string) => void;
+  onCheck: (chosenPosition: string, correctPosition: string) => void;
 }) {
-  const { vocabularyItem, sentence, surfaceForm, audio, correctLabel, choices } = candidate;
-  const [selected, setSelected] = useState<PitchAccentPattern | null>(null);
+  const { vocabularyItem, sentence, surfaceForm, audio, morae, correctPosition, correctLabel } =
+    candidate;
+  const [selected, setSelected] = useState<number | null>(null);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+
+  // Drop positions 0..N. 0 = no drop; N (= morae.length) is odaka —
+  // indistinguishable from heiban within the word, which is why the native
+  // clip (whose trailing particle drops for odaka, stays high for heiban)
+  // plays before the learner answers.
+  const positionChoices = Array.from({ length: morae.length + 1 }, (_, index) => index);
+  const dropLabel = (position: number) =>
+    position === 0 ? 'Stays high (no drop)' : `Drops after ${morae.slice(0, position).join('')}`;
 
   return (
     <>
@@ -2142,63 +2147,61 @@ function PitchAccentCard({
         {after}
       </div>
       <div className="jp">{vocabularyItem.reading}</div>
+
+      <PitchAccentNativeAudio audio={audio} japanese={sentence.japanese} surfaceForm={surfaceForm} />
+
       {!revealed ? (
         <>
-          <div className="muted">Which pitch pattern?</div>
+          <div className="muted">Listen, then mark where the pitch drops.</div>
           <div className="row" style={{ flexWrap: 'wrap' }}>
-            {choices.map((choice) => (
+            {positionChoices.map((position) => (
               <button
-                key={choice}
+                key={position}
                 type="button"
                 onClick={() => {
-                  setSelected(choice);
-                  onCheck(choice);
+                  setSelected(position);
+                  onCheck(String(position), String(correctPosition));
                 }}
               >
-                {PITCH_ACCENT_PATTERN_LABELS[choice]}
+                {dropLabel(position)}
               </button>
             ))}
           </div>
         </>
       ) : (
         <>
-          <div className="muted">{selected === correctLabel ? '✓ Correct' : '✗ Not quite'}</div>
-          <div>{PITCH_ACCENT_PATTERN_LABELS[correctLabel]}</div>
-          {vocabularyItem.pitchAccentPositions?.length ? (
-            <>
-              <PitchAccentDiagram
-                reading={vocabularyItem.reading}
-                position={vocabularyItem.pitchAccentPositions[0]!}
-              />
-              <SentencePitchAccentRow
-                japanese={sentence.japanese}
-                sentenceId={sentence.id}
-                highlightSurfaceForm={surfaceForm}
-              />
-              {(() => {
-                const explanation = explainPitchAccent({
-                  expression: vocabularyItem.expression,
-                  reading: vocabularyItem.reading,
-                  partOfSpeech: vocabularyItem.partOfSpeech,
-                  position: vocabularyItem.pitchAccentPositions[0]!,
-                  moraCount: candidate.moraCount,
-                });
-                return (
-                  <>
-                    <div className="muted">{explanation.patternGloss}</div>
-                    {explanation.ruleNote ? (
-                      <div className="muted">{explanation.ruleNote}</div>
-                    ) : null}
-                  </>
-                );
-              })()}
-            </>
-          ) : null}
-          <PitchAccentNativeAudio
-            audio={audio}
-            japanese={sentence.japanese}
-            surfaceForm={surfaceForm}
+          <div className="muted">
+            {selected === correctPosition ? '✓ Correct' : '✗ Not quite'}
+          </div>
+          <div>
+            {PITCH_ACCENT_PATTERN_LABELS[correctLabel]} — {dropLabel(correctPosition).toLowerCase()}
+          </div>
+          <PitchAccentDiagram
+            reading={vocabularyItem.reading}
+            position={vocabularyItem.pitchAccentPositions?.[0] ?? correctPosition}
           />
+          <SentencePitchAccentRow
+            japanese={sentence.japanese}
+            sentenceId={sentence.id}
+            highlightSurfaceForm={surfaceForm}
+          />
+          {(() => {
+            const explanation = explainPitchAccent({
+              expression: vocabularyItem.expression,
+              reading: vocabularyItem.reading,
+              partOfSpeech: vocabularyItem.partOfSpeech,
+              position: vocabularyItem.pitchAccentPositions?.[0] ?? correctPosition,
+              moraCount: morae.length,
+            });
+            return (
+              <>
+                <div className="muted">{explanation.patternGloss}</div>
+                {explanation.ruleNote ? (
+                  <div className="muted">{explanation.ruleNote}</div>
+                ) : null}
+              </>
+            );
+          })()}
           {vocabularyItem.meaning ? (
             <div className="muted">{vocabularyItem.meaning}</div>
           ) : null}
