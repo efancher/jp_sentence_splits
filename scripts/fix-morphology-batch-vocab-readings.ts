@@ -40,7 +40,7 @@
  *      or soft-deleted on collision, buggy row soft-deleted last.
  *
  *   D. Append a missing sense to an existing meaning (2026-08-28): 出る's
- *      WaniKani gloss doesn't cover 電話に出る "to answer the phone"
+ *      existing gloss doesn't cover 電話に出る "to answer the phone"
  *      (card issue 4a48d712).
  *
  * Explicit id lists, not a re-derived scan — "garbled combine" and
@@ -78,7 +78,7 @@ const GARBLED_ITEM_IDS = [
 ];
 
 // D — append a missing sense to an existing meaning (card issue 4a48d712:
-// 電話に出る "to answer the phone" isn't covered by 出る's WaniKani gloss).
+// 電話に出る "to answer the phone" isn't covered by 出る's existing gloss).
 const MEANING_FIXES: { id: string; expression: string; from: string; to: string }[] = [
   {
     id: 'vocab_cbb17c5f-c109-4915-a99b-67e0aab53711',

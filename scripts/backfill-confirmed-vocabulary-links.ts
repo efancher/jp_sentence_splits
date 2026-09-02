@@ -16,10 +16,10 @@
  * gap, never reconciles or overwrites.
  *
  * Mirrors import-anki-sentences.ts's exact get-or-create shape for
- * vocabulary_items (normalizeExpressionKey dedup) and
- * import-wanikani-kanji.ts's shape for kanji (fetch-existing-then-reuse-id
- * by character), reusing src/sync/mappers.ts's row mappers rather than
- * hand-rolling the Postgres row shape again.
+ * vocabulary_items (normalizeExpressionKey dedup) and a
+ * fetch-existing-then-reuse-id-by-character shape for kanji, reusing
+ * src/sync/mappers.ts's row mappers rather than hand-rolling the Postgres
+ * row shape again.
  *
  * Dry-run by default; --apply required to write. Idempotent: only
  * never-materialized confirmed sentences are selected, so a successful

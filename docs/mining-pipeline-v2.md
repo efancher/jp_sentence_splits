@@ -247,7 +247,7 @@ The re-segment-existing-book flow and mine stage 2 are the same operation
      `source_audio` Supabase table + Storage mirror (`reference-audio`
      bucket, `source/{videoId}.opus`) so `source_cache.ensure` can restore
      from Storage instead of re-hitting YouTube if the box disk is wiped.
-     Cloud-only table (like `wanikani_subjects`), client writes it at import.
+     Cloud-only table (not synced back to Dexie), client writes it at import.
 2. **B — dictionary-form reading (`lemmaReading` from UniDic `kanaBase`).**
    **[done 2026-08-30]** — conjugation reading-mismatch fixed at the
    source; `aType` pitch accent post-hoc (2026-08-30); inline JMnedict

@@ -143,7 +143,7 @@ built out Phases 1–9):
   conflict-free by construction): `studyItemId`, `rating`
   (again/hard/good/easy), optional `responseRaw`/`expectedAnswer`/
   `elapsedMs`/`errorClassification`/`assistance[]` (furigana_shown,
-  mnemonic_shown, audio_replayed, etc.)/`source`
+  audio_replayed, etc.)/`source`
   (`scheduled_review` | `natural_encounter`)/`contextSentenceId`.
 - `VocabularyConfusion` — an undirected pair of `VocabularyItem`s the
   learner tends to mix up (`confusionType`: reading/kanji/meaning/
@@ -224,9 +224,7 @@ built out Phases 1–9):
   planner" (the per-sitting new-card cap on `ReviewPage`).
 
 Sync/queue-internal tables (`syncMeta`, `syncQueue`, `syncRecordMeta`,
-`syncConflicts`) are infrastructure, not domain data. `wanikani_subjects`
-(Supabase-only, no Dexie counterpart) is a script-side cache of raw
-WaniKani API responses — see External interop.
+`syncConflicts`) are infrastructure, not domain data.
 
 ## Feature walkthrough
 
@@ -898,7 +896,7 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   pending-seed pool once a pattern crosses that bar. `computeGrammarLearnerState`
   is unchanged (no `productive` rung yet).
 
-**Gating and mnemonic/assistance tracking**: a sentence's full-sentence
+**Gating and assistance tracking**: a sentence's full-sentence
 cards (`comprehension`/`reading_in_context`) are deliberately withheld
 until its linked vocabulary is both *confirmed*
 (`SentenceAnalysis.vocabularyReviewStatus`) and *shown proficient* (FSRS
@@ -923,28 +921,13 @@ and simply not offering the pattern as a review candidate at all if none of
 its encounters qualify (no due-date push needed here, unlike
 `deferUnreadySentenceReviews`, since a `grammarPattern`-subject StudyItem
 has no single fixed sentence to defer against).
-Mnemonic-shown/audio-replayed/etc. assistance flags are recorded on
+Assistance flags (furigana-shown/audio-replayed/etc.) are recorded on
 `Review.assistance` without penalizing the score — informational only for
-future planning. The "Show mnemonic" scaffolding on vocabulary-target
-cards (`CardMnemonic` in `ReviewPage.tsx`) has three source tiers, in
-order: (1) the learner's own `VocabularyItem.notes`; (2) WaniKani's
-meaning/reading mnemonic for the word itself
-(`VocabularyItem.meaningMnemonic`/`readingMnemonic`, backfilled by
-`scripts/backfill-wanikani-mnemonics.ts`, ~6.5k WK-catalog words) —
-*unless* it's one of WaniKani's "you already know the component kanji"
-placeholders (`isDeferralMnemonic`, `src/lib/wanikaniMnemonic.ts`), which
-is useless if the learner doesn't, so those fall through to tier 3 and
-render only as an italic lead-in above it; (3) WaniKani's mnemonics **and
-hints** for the word's component kanji
-(`Kanji.meaningMnemonic`/`meaningHint`/`readingMnemonic`/`readingHint`,
-filled by re-running `scripts/import-wanikani-kanji.ts`; ~2k kanji, so
-mined words that miss tier 2 often land here) — one block per kanji, the
-hint on a dimmer line. Hints exist only on WaniKani kanji subjects, never
-vocabulary. Reading-focused cards use the reading mnemonic; `cloze` uses
-the meaning mnemonic. All rendered through `src/components/MnemonicText.tsx`,
-which parses WaniKani's inline `<radical>`/`<kanji>`/`<vocabulary>`/
-`<reading>`/`<ja>` markup into colour-coded spans (no HTML injection). Not
-surfaced anywhere outside review cards. A **session planner** caps new-subject introduction per
+future planning. (A "Show mnemonic" scaffolding tier on vocabulary-target
+cards, layering WaniKani/Tofugu per-word and per-kanji mnemonics onto the
+reveal, existed 2026-08-29..31 and was removed 2026-09-02 in favour of
+learning-in-context; the legacy `mnemonic_shown` assistance value is kept
+so historical reviews still parse.) A **session planner** caps new-subject introduction per
 sitting (`AppSettings.newCardsPerSessionLimit`) without capping
 already-due reviews, and interleaves activity categories round-robin
 rather than draining one category first. **Sibling burying** (Anki's
@@ -1457,27 +1440,13 @@ aren't JSON-serializable/aren't worth backing up).
   stage on creation as a fallback.
   Full design + what's-still-open: `docs/mining-pipeline-v2.md`,
   `docs/mining-wizard-spec.md`.
-- **WaniKani API** — one-time/re-runnable bulk catalog import
-  (`scripts/import-wanikani-kanji.ts`, `npm run import:wanikani-kanji`,
-  manual-dispatch `import-wanikani-kanji.yml`) of the full non-hidden
-  kanji catalog into Supabase `kanji`: readings/meanings **and**
-  meaning/reading mnemonics + hints (`kanji.meaning_mnemonic` etc.), the
-  latter refreshed on every re-run. Not a live SRS/progress sync, catalog
-  content only. Also `scripts/backfill-wanikani-mnemonics.ts` (`npm run
-  backfill:wanikani-mnemonics`, manual-dispatch
-  `backfill-wanikani-mnemonics.yml`) which fills
-  `vocabulary_items.meaning_mnemonic`/`reading_mnemonic` from WK
-  `vocabulary`/`kana_vocabulary` subjects, matched on expression (reading
-  as homophone tiebreaker). Vocab subjects have no `*_hint` — hints are
-  kanji-only. All of it surfaced only on `ReviewPage`'s "Show mnemonic".
-  Everything needs a `WANIKANI_API_TOKEN`. Tofugu's mnemonic content stays
-  in the user's private Supabase/IndexedDB, never the repo or public
-  build. Both scripts pull raw WaniKani subject payloads through a
-  script-only `wanikani_subjects` cache table
-  (`scripts/lib/wanikaniCache.ts`) — an incremental `updated_after` pull
-  keyed on the newest cached `data_updated_at`, so a re-run (or the usual
-  dry-run→`--apply`) fetches only what WaniKani changed. The cache is
-  **not** synced to the client; `--skip-wk-sync` reads it with no API call.
+- **WaniKani** — no live integration. The non-hidden kanji catalog
+  (readings/meanings in Supabase `kanji`) was bulk-imported from the
+  WaniKani API once during Phase 2. A mnemonic feature that added per-word
+  and per-kanji Tofugu mnemonics + hints (`ReviewPage`'s "Show mnemonic")
+  plus a script-only `wanikani_subjects` API cache existed 2026-08-29..31
+  and was fully removed 2026-09-02 (importers, workflows, cache table,
+  and the mnemonic columns) in favour of learning-in-context.
 - **JMDict** (`jmdict-simplified` release) — downloaded/cached locally
   (`scripts/.cache/`, ~110 MB, gitignored) and used only as a local lookup
   index (`scripts/lib/jmdict.ts`) backing the `npm run jmdict:lookup` CLI

@@ -65,10 +65,11 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   for offline backfill scripts, plus a runtime `vocab-assist` Claude Haiku
   Edge Function that glosses in sentence context. Detail in STATUS.md's
   2026-08-28 entry.
-- [x] **WaniKani mnemonics on review cards.** Vocab + kanji mnemonic/hint
+- [x] **WaniKani mnemonics on review cards.** ~~Vocab + kanji mnemonic/hint
   slices + a script-only `wanikani_subjects` Supabase cache + deferral
-  fall-through. Deployed 2026-08-29/30/31 (303 vocab, 2101 kanji). Detail
-  in STATUS.md.
+  fall-through. Deployed 2026-08-29/30/31 (303 vocab, 2101 kanji).~~
+  **Removed 2026-09-02** — learning-in-context replaced it; feature,
+  importers, cache table, and columns all gone. Detail in STATUS.md.
 - [x] **Contextual conjugation cards.** `sentence_transformation` reworked
   to one card per word-in-sentence occurrence, quizzing the form that
   sentence actually used. Migration `20260901000000_...` live 2026-08-30.

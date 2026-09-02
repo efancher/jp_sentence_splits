@@ -270,6 +270,8 @@ export const errorClassificationSchema = z.union([
 export const reviewAssistanceSchema = z.enum([
   'furigana_shown',
   'translation_shown',
+  // Legacy — the "Show mnemonic" scaffolding was removed 2026-09-02; kept in
+  // the enum so historical reviews (and their JSON backups) still parse.
   'mnemonic_shown',
   'audio_replayed',
   'chunks_shown',
@@ -342,8 +344,6 @@ export const vocabularyItemSchema = z.object({
   notes: z.string().optional(),
   externalId: z.string().optional(),
   pitchAccentPositions: z.array(z.number()).optional(),
-  meaningMnemonic: z.string().optional(),
-  readingMnemonic: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -373,10 +373,6 @@ export const kanjiSchema = z.object({
   kunyomi: z.array(z.string()),
   nanori: z.array(z.string()),
   notes: z.string().optional(),
-  meaningMnemonic: z.string().optional(),
-  meaningHint: z.string().optional(),
-  readingMnemonic: z.string().optional(),
-  readingHint: z.string().optional(),
   externalId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),

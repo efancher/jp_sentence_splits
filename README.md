@@ -120,16 +120,11 @@ part of the browser bundle.
 
 ```bash
 cp .env.example .env
-# set WANIKANI_API_TOKEN, SCRIPT_SUPABASE_EMAIL, SCRIPT_SUPABASE_PASSWORD
+# set SCRIPT_SUPABASE_EMAIL, SCRIPT_SUPABASE_PASSWORD
 # (in addition to the VITE_SUPABASE_* vars used for cloud sync)
 
-npm run import:wanikani-kanji   # bulk-upserts the WK kanji catalog into Supabase `kanji`
 npm run jmdict:lookup -- 先生    # local JMDict gloss lookup, no network after first run
 ```
-
-`import:wanikani-kanji` is idempotent (upserts on `character`, preserving
-existing row ids across re-runs) and writes to the live Supabase project —
-review the printed created/updated counts after running it.
 
 `jmdict:lookup` downloads and caches the JMDict release under
 `scripts/.cache/` (gitignored, ~110 MB) on first run, then answers from the

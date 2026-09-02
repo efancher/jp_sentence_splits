@@ -462,17 +462,6 @@ export interface VocabularyItem {
    * backfilled or no dictionary match (`scripts/backfill-pitch-accent.ts`).
    */
   pitchAccentPositions?: number[];
-  /**
-   * WaniKani's meaning/reading mnemonics for this word, backfilled from the
-   * WaniKani API by `scripts/backfill-wanikani-mnemonics.ts` (matched on
-   * expression, reading as tiebreaker). Only ~6.5k words are in WaniKani's
-   * catalog, so most items stay blank — surfaced only as optional
-   * scaffolding on review cards (`ReviewPage`'s "Show mnemonic"). The text
-   * carries WaniKani's own `<radical>`/`<kanji>`/`<vocabulary>`/`<reading>`/
-   * `<ja>` markup, rendered by `src/components/MnemonicText.tsx`.
-   */
-  meaningMnemonic?: string;
-  readingMnemonic?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -506,20 +495,6 @@ export interface Kanji {
   kunyomi: string[];
   nanori: string[];
   notes?: string;
-  /**
-   * WaniKani's mnemonics + hints for this character, filled by re-running
-   * `scripts/import-wanikani-kanji.ts` (the catalog importer — every Kanji
-   * row WaniKani has data for came from it). Hints are one-line
-   * reinforcements and only exist on WaniKani kanji subjects, not
-   * vocabulary. Text carries WaniKani's `<radical>`/`<kanji>`/`<reading>`
-   * markup, rendered by `src/components/MnemonicText.tsx`. Surfaced only as
-   * a fallback on review cards (`ReviewPage`'s `CardMnemonic`) when the word
-   * under study has no WaniKani vocab mnemonic of its own.
-   */
-  meaningMnemonic?: string;
-  meaningHint?: string;
-  readingMnemonic?: string;
-  readingHint?: string;
   externalId?: string;
   createdAt: string;
   updatedAt: string;
@@ -617,6 +592,7 @@ export type ErrorClassification =
 export type ReviewAssistance =
   | 'furigana_shown'
   | 'translation_shown'
+  /** Legacy — the "Show mnemonic" scaffolding was removed 2026-09-02; kept so historical reviews still parse. */
   | 'mnemonic_shown'
   | 'audio_replayed'
   | 'chunks_shown'

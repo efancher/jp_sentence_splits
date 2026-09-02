@@ -135,9 +135,6 @@ since the card-issue-reports feature, `grammar_patterns`/
 system's Phase 1 (schema-only — no UI writer yet), `planner_sessions`
 since 2026-08-25 (last-write-wins, see above). The one exception left is
 `sources`: still no writer anywhere, so nothing to sync yet.
-`wanikani_subjects` (2026-08-31) is deliberately outside the sync engine —
-a script-only WaniKani-API response cache the browser never reads (it sees
-only the derived `kanji`/`vocabulary_items` rows).
 
 ## Learning Orchestrator
 
@@ -236,9 +233,10 @@ configurable FSRS-interval threshold).
   stage so re-segment-existing-book and mine-a-new-source use one editor.
 - **`anki` repo**: archived (Phase 6, read-only on GitHub) — existing
   Satori/Shadowing sentence notes were imported once via `anki_headless/`
-  and verified (Phase 2). WaniKani-catalog and JMDict vocabulary/kanji
-  content is ingested natively (`scripts/import-wanikani-kanji.ts`,
-  `scripts/lib/jmdict.ts`), independent of Anki. No ongoing Anki sync, no
+  and verified (Phase 2), as was the WaniKani kanji catalog (readings/
+  meanings into `kanji`, a one-time import; the importer has since been
+  removed). JMDict vocabulary content is looked up natively
+  (`scripts/lib/jmdict.ts`), independent of Anki. No ongoing Anki sync, no
   export-back-to-Anki path. One further thing has since been sourced from
   it: the Kanjium pitch-accent dictionary
   (`kanjium_pitch_accents.zip`) and its loader logic
@@ -257,19 +255,12 @@ configurable FSRS-interval threshold).
   unreachable). There is no fallback alignment path. Also runs
   `faster-whisper` (`base` model) for a secondary, non-authoritative ASR
   signal.
-- **WaniKani API**: source of the kanji catalog (`scripts/import-wanikani-
-  kanji.ts` — since 2026-08-30 also kanji meaning/reading mnemonics +
-  hints) and, since 2026-08-29, per-word meaning/reading mnemonics
-  (`scripts/backfill-wanikani-mnemonics.ts` → `vocabulary_items`). All
-  shown only on `ReviewPage`'s "Show mnemonic" (learner note → WK vocab
-  mnemonic → component-kanji mnemonic/hint fallback). One-time/occasional
-  bulk imports, not a live per-user integration; Tofugu mnemonic content
-  is kept out of the repo and public build. Raw WaniKani subject payloads
-  are cached in a **script-only** `wanikani_subjects` Supabase table
-  (`scripts/lib/wanikaniCache.ts`, incremental `updated_after` pulls) so
-  re-runs don't re-page the whole catalog — not wired into the sync engine
-  / Dexie / backup, since the browser only ever reads the derived
-  `kanji` / `vocabulary_items` rows.
+- **WaniKani**: no live integration. The kanji catalog (readings/meanings
+  in `kanji`) came from a one-time WaniKani API import during Phase 2. The
+  mnemonic feature that briefly layered per-word and per-kanji Tofugu
+  mnemonics onto review cards (2026-08-29..31) was removed 2026-09-02 —
+  learning-in-context replaced it; the importers, the `wanikani_subjects`
+  cache table, and the mnemonic columns are all gone.
 - **JMDict** (`jmdict-simplified`, pinned release, downloaded/cached by
   `scripts/lib/jmdict.ts`): local dictionary lookups and several backfill
   scripts (vocabulary meanings, suggestion glosses) — no network dependency

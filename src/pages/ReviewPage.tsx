@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
-import { MnemonicText } from '../components/MnemonicText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
@@ -11,7 +10,6 @@ import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { VocabChips } from '../components/VocabChips';
 import {
-  computeVocabularyContextDiversity,
   countReviewsSince,
   deferUnreadySentenceReviews,
   ensureGrammarStudyItem,
@@ -39,7 +37,6 @@ import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
   GrammarPattern,
-  Kanji,
   ReviewAssistance,
   ReviewRating,
   Sentence,
@@ -61,7 +58,6 @@ import {
   grammarPatternUsedIn,
 } from '../lib/grammarPatterns';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
-import { computeMaturityLevel, MATURE_MIN_SCHEDULED_DAYS } from '../lib/maturity';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
@@ -72,7 +68,6 @@ import {
 } from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
-import { isDeferralMnemonic } from '../lib/wanikaniMnemonic';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -754,7 +749,6 @@ export function ReviewPage() {
   const [revealed, setRevealed] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [mnemonicVisible, setMnemonicVisible] = useState(false);
   const [assistanceUsed, setAssistanceUsed] = useState<Set<ReviewAssistance>>(
     () => new Set(),
   );
@@ -1296,7 +1290,6 @@ export function ReviewPage() {
 
   useEffect(() => {
     setRevealed(false);
-    setMnemonicVisible(false);
     setAssistanceUsed(new Set());
     setTypedResponse('');
     setTypedResponseExpected(null);
@@ -1304,37 +1297,6 @@ export function ReviewPage() {
     setIssueNote('');
     setIssueReported(false);
   }, [current?.studyItem.id]);
-
-  // Mnemonic scaffolding (Phase 7.5, brief §7/§6): shown unprompted only
-  // for a vocabulary-target card whose own dimension is still fragile
-  // (few contexts, no long-interval success yet) — otherwise it's still
-  // available, just behind a button, not auto-shown. Computed from live
-  // data each time the card changes rather than cached on the card, since
-  // maturity can change between reviews.
-  useEffect(() => {
-    const target = current?.target;
-    const fsrsState = current?.studyItem.fsrsState;
-    if (!target || !fsrsState) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const diversity = await computeVocabularyContextDiversity(target.vocabularyItem.id);
-        const level = computeMaturityLevel(diversity, {
-          hasLongIntervalSuccess:
-            fsrsState.state === 'review' &&
-            fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS,
-        });
-        if (!cancelled && level === 'fragile') setMnemonicVisible(true);
-      } catch {
-        // Best-effort UI enhancement (e.g. the db closed mid-query because
-        // the page unmounted) — nothing to recover, mnemonic just stays
-        // gated behind its button instead of auto-showing.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [current?.studyItem.id, current?.target]);
 
   function markAssistance(kind: ReviewAssistance) {
     setAssistanceUsed((current) => (current.has(kind) ? current : new Set(current).add(kind)));
@@ -1535,11 +1497,6 @@ export function ReviewPage() {
                   setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
-                mnemonicVisible={mnemonicVisible}
-                onShowMnemonic={() => {
-                  setMnemonicVisible(true);
-                  markAssistance('mnemonic_shown');
-                }}
               />
             ) : current.target ? (
               <VocabularyTargetCard
@@ -1549,11 +1506,6 @@ export function ReviewPage() {
                 surfaceForm={current.target.surfaceForm}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
-                mnemonicVisible={mnemonicVisible}
-                onShowMnemonic={() => {
-                  setMnemonicVisible(true);
-                  markAssistance('mnemonic_shown');
-                }}
               />
             ) : current.audio ? (
               <AudioComprehensionCard
@@ -1762,111 +1714,6 @@ function ReadingInContextCard({
 }
 
 /**
- * The pre-reveal scaffolding hint on a vocabulary-target card, behind the
- * "Show mnemonic" button (or auto-shown for a fragile item — see the
- * mnemonic-scaffolding effect above). Source priority:
- *   1. the learner's own note (`VocabularyItem.notes`),
- *   2. WaniKani's mnemonic for the word itself
- *      (`meaningMnemonic`/`readingMnemonic`, from
- *      `scripts/backfill-wanikani-mnemonics.ts`) — unless it's one of
- *      WaniKani's "you already know the kanji" placeholders
- *      (`isDeferralMnemonic`), which is useless if the learner *doesn't*,
- *      so those fall through to tier 3 (shown as a lead-in line above it).
- *   3. WaniKani's mnemonics + hints for the word's component kanji
- *      (`Kanji.*Mnemonic`/`*Hint`, from `scripts/import-wanikani-kanji.ts`) —
- *      only ~6.5k words are in WaniKani's vocab catalog but ~2k kanji are,
- *      so mined words (and deferral-placeholder words) often land here.
- * Reading-focused cards use the reading mnemonic; `cloze` (recall from
- * meaning, not from a visible word) uses the meaning mnemonic. Renders
- * nothing when no source has anything.
- */
-function CardMnemonic({
-  vocabularyItem,
-  activityType,
-  visible,
-  onShow,
-}: {
-  vocabularyItem: VocabularyItem;
-  activityType: StudyActivityType;
-  visible: boolean;
-  onShow: () => void;
-}) {
-  const useMeaning = activityType === 'cloze';
-  const own = vocabularyItem.notes?.trim();
-  const rawWkWord = useMeaning
-    ? vocabularyItem.meaningMnemonic || vocabularyItem.readingMnemonic
-    : vocabularyItem.readingMnemonic || vocabularyItem.meaningMnemonic;
-  const wkWordIsDeferral = rawWkWord ? isDeferralMnemonic(rawWkWord) : false;
-  const wkWord = rawWkWord && !wkWordIsDeferral ? rawWkWord : undefined;
-  const deferralNote = wkWordIsDeferral ? rawWkWord : undefined;
-
-  // Distinct kanji of the expression, in first-appearance order.
-  const kanjiChars = useMemo(
-    () =>
-      [...new Set(Array.from(vocabularyItem.expression))].filter((c) =>
-        /\p{Script=Han}/u.test(c),
-      ),
-    [vocabularyItem.expression],
-  );
-  const needKanjiFallback = !own && !wkWord && kanjiChars.length > 0;
-  const componentKanji = useLiveQuery(
-    async (): Promise<Kanji[]> => {
-      if (!needKanjiFallback) return [];
-      const rows = await getDb().kanji.where('character').anyOf(kanjiChars).toArray();
-      return kanjiChars
-        .map((c) => rows.find((r) => r.character === c))
-        .filter((r): r is Kanji => Boolean(r));
-    },
-    [needKanjiFallback, kanjiChars],
-  );
-  const kanjiEntries = (componentKanji ?? [])
-    .map((k) => ({
-      char: k.character,
-      mnemonic: (useMeaning ? k.meaningMnemonic : k.readingMnemonic) ?? '',
-      hint: useMeaning ? k.meaningHint : k.readingHint,
-    }))
-    .filter((k) => k.mnemonic !== '');
-
-  if (!own && !wkWord && kanjiEntries.length === 0) return null;
-  if (!visible) {
-    return (
-      <button type="button" onClick={onShow}>
-        Show mnemonic
-      </button>
-    );
-  }
-  return (
-    <div className="muted">
-      💡{' '}
-      {own ? (
-        own
-      ) : wkWord ? (
-        <MnemonicText text={wkWord} />
-      ) : (
-        <>
-          {deferralNote ? (
-            <span className="mnemonic-deferral-note">
-              <MnemonicText text={deferralNote} />
-            </span>
-          ) : null}
-          {kanjiEntries.map((k) => (
-            <span key={k.char} className="mnemonic-kanji-block">
-              <span className="mnemonic-kanji-char">{k.char}</span>
-              <MnemonicText text={k.mnemonic} />
-              {k.hint ? (
-                <span className="mnemonic-hint">
-                  <MnemonicText text={k.hint} />
-                </span>
-              ) : null}
-            </span>
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
  * Renders both vocabulary-item-subject card types (Phase 7.2/7.3): they
  * share the highlighted-sentence layout and only differ in what's hidden
  * before reveal. `reading_retrieval` shows the target word, hides its
@@ -1887,8 +1734,6 @@ function VocabularyTargetCard({
   surfaceForm,
   revealed,
   onReveal,
-  mnemonicVisible,
-  onShowMnemonic,
 }: {
   activityType: StudyActivityType;
   sentence: Sentence;
@@ -1896,8 +1741,6 @@ function VocabularyTargetCard({
   surfaceForm: string;
   revealed: boolean;
   onReveal: () => void;
-  mnemonicVisible: boolean;
-  onShowMnemonic: () => void;
 }) {
   const isCloze = activityType === 'cloze';
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
@@ -1920,14 +1763,6 @@ function VocabularyTargetCard({
       ) : null}
       {isCloze && !revealed && sentence.translation ? (
         <div className="muted">{sentence.translation}</div>
-      ) : null}
-      {!revealed ? (
-        <CardMnemonic
-          vocabularyItem={vocabularyItem}
-          activityType={activityType}
-          visible={mnemonicVisible}
-          onShow={onShowMnemonic}
-        />
       ) : null}
       {!revealed ? (
         <button type="button" onClick={onReveal}>
@@ -1973,16 +1808,12 @@ function ReadingProductionCard({
   surfaceForm,
   revealed,
   onCheck,
-  mnemonicVisible,
-  onShowMnemonic,
 }: {
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
   revealed: boolean;
   onCheck: (typedReading: string, gradedAgainst: string) => void;
-  mnemonicVisible: boolean;
-  onShowMnemonic: () => void;
 }) {
   const [value, setValue] = useState('');
   const [wasCorrect, setWasCorrect] = useState(false);
@@ -2004,14 +1835,6 @@ function ReadingProductionCard({
       </div>
       {isInflected ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
-      ) : null}
-      {!revealed ? (
-        <CardMnemonic
-          vocabularyItem={vocabularyItem}
-          activityType="reading_production"
-          visible={mnemonicVisible}
-          onShow={onShowMnemonic}
-        />
       ) : null}
       {!revealed ? (
         <form
@@ -2189,8 +2012,6 @@ function PitchChoiceContour({ morae, position }: { morae: string[]; position: nu
  * passes the chosen and correct positions as strings, which
  * classifyReviewError compares to flag a miss as `pronunciation_difficulty`
  * the same way it does for reading_production/grammar_completion.
- * Deliberately does not feed the mnemonic-scaffolding effect (that signal
- * is tuned for reading/meaning recall fragility, not pitch accent).
  */
 function PitchAccentCard({
   candidate,

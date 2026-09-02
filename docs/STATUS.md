@@ -12,7 +12,7 @@ Last updated: 2026-09-02.
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,
-vocabulary glossing, WaniKani mnemonics, contextual conjugation cards,
+vocabulary glossing, contextual conjugation cards,
 progressive listening, grammar-learning system incl. `grammar_production`)
 are shipped and, in almost every case, verified against production data by
 the user directly. ~1117 TS tests, green.
@@ -32,6 +32,20 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-02 — WaniKani mnemonics removed.** Learning-in-context proved
+  more useful than the Tofugu mnemonics, so the whole feature is gone:
+  `ReviewPage`'s "Show mnemonic" scaffolding + auto-show maturity effect,
+  `MnemonicText.tsx`, `src/lib/wanikaniMnemonic.ts`, both ingestion scripts
+  (`import-wanikani-kanji.ts`, `backfill-wanikani-mnemonics.ts`) + their
+  GitHub workflows, `scripts/lib/wanikani.ts` / `wanikaniCache.ts`, the
+  mnemonic CSS, and the four related test files. Migration
+  `20260902000000_drop_wanikani_mnemonics.sql` drops
+  `vocabulary_items.{meaning,reading}_mnemonic`, `kanji.{meaning,reading}_
+  {mnemonic,hint}`, and the `wanikani_subjects` cache table. The `kanji`
+  table itself and its Phase 2-imported readings/meanings stay (no live
+  WaniKani integration remains). The `mnemonic_shown` `Review.assistance`
+  value is retained as legacy so historical reviews still parse.
 
 - **2026-09-02 — Analyze page: sentence-status buttons now give feedback.**
   "Mark in progress" / "Mark complete" / "Needs review" wrote
@@ -414,7 +428,7 @@ is trimmed.)
 | Learning Orchestrator | done; daily-session model, vocab-confirm priority |
 | Re-segment an existing source | done; run against "After Work" 2026-08-29 |
 | Vocabulary meaning glossing | done; JMDict/JMnedict offline + `vocab-assist` Edge Function |
-| WaniKani mnemonics | done, deployed 2026-08-29/30/31 (vocab + kanji + subject cache) |
+| WaniKani mnemonics | removed 2026-09-02 (shipped 2026-08-29/30/31; learning-in-context replaced it) |
 | Contextual conjugation cards | done; migration live 2026-08-30 |
 | Progressive listening (`word_listening`) | done 2026-08-30 |
 | Mining pipeline v2 | slices A/B/C + wizard W1–W6 + polish + JMnedict reading check done 2026-08-31; one durability item deferred |

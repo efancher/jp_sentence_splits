@@ -6,8 +6,7 @@ type SupabaseClient = Awaited<ReturnType<typeof createScriptSupabaseClient>>;
 // owns them (column defaults on insert, set_updated_at/bump_version
 // triggers on update) as long as they're simply absent from the payload.
 // Sending an explicit version resets the optimistic-concurrency counter
-// instead of bumping it on update (see import-wanikani-kanji.ts's
-// onConflict comment for the same underlying trigger behavior).
+// instead of bumping it on update.
 export function withoutVersionAndTimestamps<T extends Record<string, unknown>>(
   row: T,
 ): Omit<T, 'version' | 'created_at' | 'updated_at'> {
