@@ -61,6 +61,15 @@ is trimmed.)
   `src/db/repository.ts`, `src/pages/CardIssuesPage.tsx`,
   `src/pages/VocabularyListPage.tsx`, `src/pages/AnalyzePage.tsx`; 1 new
   data.test.ts case.
+- **2026-09-05 — Word-audio "Adjust" drag committed a stale position.**
+  `WordAudioRangeEditor`'s `endDrag` read `props.value` to decide what to
+  persist, but `pointermove` is a React *continuous* event so its
+  `onChange → parent setState → new value prop` round trip can still be in
+  flight when the *discrete* `pointerup` fires — the commit then saved a
+  partway-through span (or the pre-drag span), so dragging the start handle
+  earlier appeared to do nothing on playback (reported on 新人 /
+  `sent_11e4fc56`). Now tracks the live drag span in a ref and commits from
+  that. `src/components/WordAudioRangeEditor.tsx`; 1 new test.
 - **2026-09-03 — `reading_in_context` gated on its whole passage (user
   request).** `comprehension` still waits only on its own sentence's vocab
   (Phase 7.11 gate); `reading_in_context` now additionally waits until every

@@ -54,6 +54,15 @@ export function WordAudioRangeEditor({
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingRef = useRef<'start' | 'end' | null>(null);
+  // The live drag position. `pointermove` is a *continuous* React event, so
+  // its `onChange` -> parent `setState` -> new `value` prop round trip can
+  // still be mid-flight when the *discrete* `pointerup` fires — reading
+  // `value` in `endDrag` then commits a stale, partway-through position
+  // (reported 2026-09-05: "it lets me move the start mark but the audio
+  // doesn't start earlier"). Track the edge we're actually dragging here and
+  // commit from this instead.
+  const liveRangeRef = useRef<TimeRangeMs>(value);
+  if (draggingRef.current === null) liveRangeRef.current = value;
 
   useEffect(() => {
     let cancelled = false;
@@ -95,22 +104,29 @@ export function WordAudioRangeEditor({
     return Math.round(fraction * span);
   };
 
-  const clampStart = (ms: number) => Math.max(0, Math.min(value.endMs - 1, ms));
-  const clampEnd = (ms: number) => Math.min(span, Math.max(value.startMs + 1, ms));
+  const clampStart = (ms: number, endMs: number) =>
+    Math.max(0, Math.min(endMs - 1, ms));
+  const clampEnd = (ms: number, startMs: number) =>
+    Math.min(span, Math.max(startMs + 1, ms));
 
   const handlePointerMove = (event: React.PointerEvent) => {
     const edge = draggingRef.current;
     if (!edge) return;
     const ms = msForClientX(event.clientX);
-    if (edge === 'start') onChange({ startMs: clampStart(ms), endMs: value.endMs });
-    else onChange({ startMs: value.startMs, endMs: clampEnd(ms) });
+    const current = liveRangeRef.current;
+    const next =
+      edge === 'start'
+        ? { startMs: clampStart(ms, current.endMs), endMs: current.endMs }
+        : { startMs: current.startMs, endMs: clampEnd(ms, current.startMs) };
+    liveRangeRef.current = next;
+    onChange(next);
   };
 
   const endDrag = (event: React.PointerEvent) => {
     if (!draggingRef.current) return;
     draggingRef.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
-    onCommit(value);
+    onCommit(liveRangeRef.current);
   };
 
   const nearestPause = (ms: number): number | null => {
@@ -130,9 +146,10 @@ export function WordAudioRangeEditor({
     const start = nearestPause(value.startMs);
     const end = nearestPause(value.endMs);
     const next = {
-      startMs: start !== null ? clampStart(start) : value.startMs,
-      endMs: end !== null ? clampEnd(end) : value.endMs,
+      startMs: start !== null ? clampStart(start, value.endMs) : value.startMs,
+      endMs: end !== null ? clampEnd(end, value.startMs) : value.endMs,
     };
+    liveRangeRef.current = next;
     onChange(next);
     onCommit(next);
   };
