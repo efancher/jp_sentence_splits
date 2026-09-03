@@ -64,15 +64,21 @@ is trimmed.)
   the seek lands. `tests/recording.test.ts` loopRange test rewritten to the
   pause→seek→resume flow; 1145 tests green.
 
-- **2026-09-03 — Content backlog re-checked against prod.** Read-only
-  diagnostics run: grammar review queue is clean (0 stuck; 2 correctly
-  vocab-gated patterns — `diagnose-grammar-review-queue.ts`); new-card
-  backlog is 207 confirmed vocab words with no SRS card (new
-  `npm run report:new-card-backlog`); 124 `vocabulary_items` still lack
-  pitch-accent data — `backfill:pitch-accent` + `-unidic` dry-runs would
-  fill ~69 of them but were **not applied** (see "Data / content backlog"
-  below for the multi-position caveat). No prod writes made; all decisions
-  (limit bump, pitch `--apply`, homograph merge) left to the user.
+- **2026-09-04 — Content backlog worked (user go-ahead).**
+  - **Pitch-accent:** filled 42 blank `vocabulary_items` (36 single-position
+    Kanjium + 2 UniDic + 4 hand-set). `backfill:pitch-accent` now **skips**
+    words where this Kanjium export lists multiple accents in an untrusted
+    order (`positions[0]` is authoritative app-wide; e.g. 結局 came back
+    `[4,0,0]` where 0/heiban is right) — prints them for a hand check
+    instead. 89 items still blank (no Kanjium/UniDic match; no automated
+    source).
+  - **New-card backlog (207):** no change — `settings` is local-only, so the
+    limit is a per-device Settings toggle. Recommendation: 30.
+  - **4 homograph pairs:** decided **not** to merge — genuinely distinct
+    context-dependent readings, not duplicate-bug rows.
+  - **Grammar review queue:** re-checked clean 2026-09-03 (0 stuck; 2
+    correctly vocab-gated).
+  - New `npm run report:new-card-backlog`.
 
 - **2026-09-03 — Settings destructive actions no longer dead on iOS PWA.**
   "Clear audio cache", "Remove local data from this device", and "Replace all
@@ -617,10 +623,13 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   card as of 2026-09-03 (261 confirmed, 54 in the SRS). The planner fix
   landed 2026-08-31 (see Recent changes): the review bucket reserves
   minutes for the backlog and the review step stays open through seeding,
-  so ~`newCardsPerSessionLimit` new words enter per daily session. Still
-  drains over ~11 sessions at the default limit of 20 — by design; raise
-  the limit in Settings to go faster (user's call — no one-off bump made).
-  Diagnostics: `npm run report:new-card-backlog`, `scripts/analyze-due-by-book.ts`.
+  so ~`newCardsPerSessionLimit` new words enter per daily session. Drains
+  over ~11 sessions at the default limit of 20. **No bump made** — the
+  `settings` table is local-only (not synced), so `newCardsPerSessionLimit`
+  can only be changed per-device in Settings → "New cards per review
+  session"; recommend 30 (~7 sessions) when ready to absorb the extra
+  daily review load. Diagnostics: `npm run report:new-card-backlog`,
+  `scripts/analyze-due-by-book.ts`.
 - **Grammar review queue** — re-checked clean 2026-09-03
   (`scripts/diagnose-grammar-review-queue.ts`): 0 stuck items; the only 2
   non-surfacing patterns (`～ている（状態描写）`, `～を見つける`) are correctly
@@ -630,17 +639,21 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   imports (After Work, First Day at Work, GLIM SPANKY) were systemically
   mis-segmented (auto-captions, no punctuation). Bulk re-mine through the
   new ASR pipeline is planned, not done.
-- **Pitch-accent gaps** — 124 `vocabulary_items` have no
-  `pitch_accent_positions` as of 2026-09-03 (backlog grew with new vocab).
-  Dry-runs: `backfill:pitch-accent` (Kanjium) would fill 37,
-  `backfill:pitch-accent-unidic` a further ~32 — **not applied** (awaiting a
-  green light; also flag: the Kanjium script writes multi-position results
-  verbatim, e.g. `結局 → [4,0,0]` with a source-side duplicate — pre-existing
-  behaviour, consumers tolerate it, but worth a look before `--apply`).
-  ~55 would stay blank with no automated source.
-- **4 noun homograph pairs** left with two live readings each (何 なに/なん,
-  羽 はね/わ, 話 はなし/わ, 後 あと/ご) — both valid; user is waiting to see
-  if the duplication is annoying in practice before merging.
+- **Pitch-accent gaps** — **89** `vocabulary_items` have no
+  `pitch_accent_positions` as of 2026-09-04 (was 131). Backfill applied:
+  36 single-position Kanjium + 2 UniDic + 4 hand-set (結局 [0], 一番 [2],
+  時点 [1], 押さえる [3] — the words `backfill:pitch-accent` now skips
+  because this Kanjium export orders multiple accents unreliably, e.g.
+  結局 → [4,0,0]). The remaining 89 have no Kanjium/UniDic match (proper
+  nouns, rare compounds, expressions) — no automated source; app degrades
+  gracefully (word just gets no contour / is skipped from pitch cards).
+- **4 noun homograph pairs** (何 なに/なん, 羽 はね/わ, 話 はなし/わ,
+  後 あと/ご) — **decided not to merge** (2026-09-04): these are genuinely
+  context-dependent readings of different words/senses, not duplicate-bug
+  rows like お母さん→おははさん. Merging would force one reading onto
+  sentences that use the other. Two accurate dictionary entries in `/words`
+  is the correct state; if the browse-view duplication grates, that's a
+  homograph-grouping UI question, not a data merge.
 
 **Infra:**
 - Mac Tailscale exit node for mining downloads still TODO (phone verified
