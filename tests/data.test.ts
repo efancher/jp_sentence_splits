@@ -64,6 +64,7 @@ import {
   saveAttemptAlignment,
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
+  recutSentenceAudioFromSource,
   saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
@@ -541,6 +542,69 @@ describe('manual word-audio range (setSentenceVocabularyAudioRange)', () => {
     await expect(
       setSentenceVocabularyAudioRange('nope', { startMs: 0, endMs: 100 }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('recutSentenceAudioFromSource', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-recut-${createId('db')}`);
+  });
+
+  async function seedAudio(withSourceUrl = true) {
+    const db = getDb();
+    await db.sentenceAudio.put({
+      id: 'ra-1',
+      sentenceId: 'rc-sent-1',
+      sourceId: 'src-1',
+      sourceSentenceId: 'src-1:0',
+      sourceTitle: 'Vid',
+      sourceUrl: withSourceUrl ? 'https://youtu.be/VID' : undefined,
+      mimeType: 'audio/mp4',
+      durationMs: 1200,
+      startMs: 6000,
+      endMs: 7200,
+      blob: new Blob(['old'], { type: 'audio/mp4' }),
+      importedAt: new Date().toISOString(),
+    });
+  }
+
+  it('re-cuts the clip from the source and updates only that audio row', async () => {
+    await seedAudio();
+    const clipFromSource = vi.fn(async (_url: string, cuts: { startMs: number; endMs: number }[]) => [
+      { blob: new Blob(['recut'], { type: 'audio/mp4' }), durationMs: cuts[0]!.endMs - cuts[0]!.startMs },
+    ]);
+
+    const result = await recutSentenceAudioFromSource(
+      'ra-1',
+      { startMs: 5800.4, endMs: 7000.9 },
+      { clipFromSource },
+    );
+
+    expect(clipFromSource).toHaveBeenCalledWith('https://youtu.be/VID', [
+      { startMs: 5800, endMs: 7001 },
+    ]);
+    expect(result.durationMs).toBe(1201);
+    const row = await getDb().sentenceAudio.get('ra-1');
+    expect(row?.startMs).toBe(5800);
+    expect(row?.endMs).toBe(7001);
+    expect(row?.durationMs).toBe(1201);
+    expect(row?.blob).toBeDefined();
+    expect(row?.importedAt).not.toBe('');
+  });
+
+  it('rejects an empty span, a missing row, and a source with no URL', async () => {
+    await seedAudio(false);
+    const clipFromSource = vi.fn();
+    await expect(
+      recutSentenceAudioFromSource('ra-1', { startMs: 100, endMs: 100 }, { clipFromSource }),
+    ).rejects.toThrow(/greater than/);
+    await expect(
+      recutSentenceAudioFromSource('nope', { startMs: 0, endMs: 100 }, { clipFromSource }),
+    ).rejects.toThrow(/no longer exists/);
+    await expect(
+      recutSentenceAudioFromSource('ra-1', { startMs: 0, endMs: 100 }, { clipFromSource }),
+    ).rejects.toThrow(/No source URL/);
+    expect(clipFromSource).not.toHaveBeenCalled();
   });
 });
 

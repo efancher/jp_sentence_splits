@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Per-sentence clip re-cut on Analyze (user request).**
+  `AnalyzePage` gains an **"Adjust clip timing"** control (only when the
+  book has a `sourceUrl`) — opens the same `<BoundaryWaveform>` editor over
+  that one sentence's span, "Save & re-cut" calls new
+  `recutSentenceAudioFromSource` which re-clips just that `sentenceAudio`
+  row from the pristine YouTube source (`clipFromSource`) and re-uploads
+  it. No text change, no lost chunk/grammar analysis, no study-progress
+  remap — the lightweight alternative to book-wide "Re-segment captions"
+  when one mining boundary is a touch off. `tests/data` +2,
+  `sentenceAudioAdjuster` spec new.
+
 - **2026-09-03 — Boundary editor: play the selection + edit the outer
   edges (user feedback).** Two gaps in the per-row `<BoundaryWaveform>`:
   (1) the row's play button (`SpanAudioButton`) cached its first clip

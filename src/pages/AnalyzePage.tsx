@@ -6,6 +6,7 @@ import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { GrammarPicker } from '../components/GrammarPicker';
 import { NativeAudioButton } from '../components/NativeAudioButton';
+import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
@@ -371,6 +372,20 @@ export function AnalyzePage() {
             {nativeAudio.error}
           </p>
         ) : null}
+        {data.book?.sourceUrl
+          ? orderedAudio.map((audio, audioIndex) => (
+              <SentenceAudioAdjuster
+                key={`adjust-${audio.id}`}
+                audio={audio}
+                sourceUrl={audio.sourceUrl ?? data.book!.sourceUrl!}
+                label={
+                  orderedAudio.length > 1
+                    ? `Adjust clip ${audioIndex + 1}`
+                    : 'Adjust clip timing'
+                }
+              />
+            ))
+          : null}
         <VocabChips items={sentence.targetVocabulary} />
         {showEnglish ? (
           <div className="panel stack" style={{ boxShadow: 'none' }}>

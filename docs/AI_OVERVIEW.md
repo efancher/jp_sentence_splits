@@ -601,6 +601,14 @@ observed from outside `ReviewPage`'s own due-queue state.
   (concatenate + ffmpeg cut + optional silence-trim, no re-download);
   best-effort, so a re-segment still lands if the mining service is
   unreachable.
+- **Per-sentence clip re-cut** (`SentenceAudioAdjuster.tsx` on
+  `AnalyzePage`, when the book has a `sourceUrl`) — the lightweight
+  alternative to a book-wide re-segment when one mining boundary is a
+  touch off: "Adjust clip timing" opens the `<BoundaryWaveform>` editor
+  over that sentence's span, "Save & re-cut" calls
+  `recutSentenceAudioFromSource` → re-clips **only** that `sentenceAudio`
+  row from the pristine source (`clipFromSource`) and re-uploads it.
+  Sentence text, study progress, chunk/grammar analysis all untouched.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori

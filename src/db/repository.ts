@@ -1011,6 +1011,80 @@ export async function applyResegmentation(
   return { batchId, newSentenceIds: [...new Set(newIds)] };
 }
 
+/**
+ * Re-cut one sentence's reference clip from the pristine YouTube source to a
+ * new `[startMs, endMs]` span — the per-sentence timing fix on `AnalyzePage`,
+ * for when the mining boundary was a touch off and you don't want a
+ * book-wide re-segment (which drops chunk/grammar analysis). Only the one
+ * `sentenceAudio` row changes; sentence text, study progress, and analysis
+ * are untouched. Needs the audio row (or its book) to still carry a
+ * `sourceUrl`. Returns the new clip's duration.
+ */
+export async function recutSentenceAudioFromSource(
+  sentenceAudioId: string,
+  span: { startMs: number; endMs: number },
+  options: { clipFromSource?: SourceClipFn } = {},
+): Promise<{ durationMs: number }> {
+  if (span.endMs <= span.startMs) throw new Error('endMs must be greater than startMs');
+  const db = getDb();
+  const audio = await db.sentenceAudio.get(sentenceAudioId);
+  if (!audio) throw new Error('That reference clip no longer exists.');
+
+  const membership = await db.bookSentences
+    .where('sentenceId')
+    .equals(audio.sentenceId)
+    .first();
+  const sourceUrl =
+    audio.sourceUrl ??
+    (membership ? (await db.books.get(membership.bookId))?.sourceUrl : undefined);
+  if (!sourceUrl) {
+    throw new Error('No source URL for this clip — a book-wide re-segment is the only option.');
+  }
+
+  const clipFromSource: SourceClipFn =
+    options.clipFromSource ??
+    (async (...args) => (await import('../lib/miningApi')).clipFromSource(...args));
+  const [clip] = await clipFromSource(sourceUrl, [
+    { startMs: Math.round(span.startMs), endMs: Math.round(span.endMs) },
+  ]);
+  if (!clip) throw new Error('The source re-cut returned nothing.');
+
+  const updated: SentenceAudio = {
+    ...audio,
+    startMs: Math.round(span.startMs),
+    endMs: Math.round(span.endMs),
+    durationMs: clip.durationMs,
+    blob: clip.blob,
+    mimeType: 'audio/mp4',
+    importedAt: nowIso(),
+  };
+  await db.sentenceAudio.put(updated);
+
+  // Optional: push the re-cut blob + metadata, same never-block pattern as
+  // the import / re-segment paths.
+  void (async () => {
+    try {
+      const { ensureSyncMeta } = await import('../sync/queue');
+      const { getSupabase } = await import('../sync/supabaseClient');
+      const { uploadReferenceAudio } = await import('../sync/audioSync');
+      const meta = await ensureSyncMeta();
+      if (!meta.syncReferenceAudio) return;
+      const supabase = getSupabase();
+      const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
+      if (!userId) return;
+      await uploadReferenceAudio({
+        audio: updated,
+        bookId: membership?.bookId,
+        ownerId: userId,
+      });
+    } catch {
+      // Local re-cut must stand even if the upload fails.
+    }
+  })();
+
+  return { durationMs: clip.durationMs };
+}
+
 export async function deleteBook(bookId: string): Promise<void> {
   const db = getDb();
   const memberships = await db.bookSentences
