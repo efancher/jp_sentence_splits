@@ -33,6 +33,16 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Content backlog re-checked against prod.** Read-only
+  diagnostics run: grammar review queue is clean (0 stuck; 2 correctly
+  vocab-gated patterns — `diagnose-grammar-review-queue.ts`); new-card
+  backlog is 207 confirmed vocab words with no SRS card (new
+  `npm run report:new-card-backlog`); 124 `vocabulary_items` still lack
+  pitch-accent data — `backfill:pitch-accent` + `-unidic` dry-runs would
+  fill ~69 of them but were **not applied** (see "Data / content backlog"
+  below for the multi-position caveat). No prod writes made; all decisions
+  (limit bump, pitch `--apply`, homograph merge) left to the user.
+
 - **2026-09-03 — Settings destructive actions no longer dead on iOS PWA.**
   "Clear audio cache", "Remove local data from this device", and "Replace all
   local data" (backup restore) each gated on `window.confirm`, which silently
@@ -572,19 +582,31 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - Daily session recap (`SessionRunnerPage` finished state).
 
 **Data / content backlog:**
-- **Review new-card backlog** — ~193 confirmed vocab words have no SRS
-  card. The planner fix landed 2026-08-31 (see Recent changes): the review
-  bucket now reserves minutes for the backlog and the review step stays
-  open through seeding, so ~`newCardsPerSessionLimit` new words enter per
-  daily session instead of a handful. Still drains over multiple sessions
-  by design; raise the limit in Settings to go faster. Diagnostic:
-  `scripts/analyze-due-by-book.ts`.
+- **Review new-card backlog** — **207** confirmed vocab words have no SRS
+  card as of 2026-09-03 (261 confirmed, 54 in the SRS). The planner fix
+  landed 2026-08-31 (see Recent changes): the review bucket reserves
+  minutes for the backlog and the review step stays open through seeding,
+  so ~`newCardsPerSessionLimit` new words enter per daily session. Still
+  drains over ~11 sessions at the default limit of 20 — by design; raise
+  the limit in Settings to go faster (user's call — no one-off bump made).
+  Diagnostics: `npm run report:new-card-backlog`, `scripts/analyze-due-by-book.ts`.
+- **Grammar review queue** — re-checked clean 2026-09-03
+  (`scripts/diagnose-grammar-review-queue.ts`): 0 stuck items; the only 2
+  non-surfacing patterns (`～ている（状態描写）`, `～を見つける`) are correctly
+  vocab-gated on their one sentence (`sent_959`, vocab not confirmed). The
+  2026-09-02 fixes held.
 - **Auto-caption fragmentation re-mine** — pre-2026-08-23 shadowing
   imports (After Work, First Day at Work, GLIM SPANKY) were systemically
   mis-segmented (auto-captions, no punctuation). Bulk re-mine through the
   new ASR pipeline is planned, not done.
-- **Pitch-accent gaps** — after Kanjium + UniDic gap-fill, ~79
-  `vocabulary_items` still have no `pitch_accent_positions`.
+- **Pitch-accent gaps** — 124 `vocabulary_items` have no
+  `pitch_accent_positions` as of 2026-09-03 (backlog grew with new vocab).
+  Dry-runs: `backfill:pitch-accent` (Kanjium) would fill 37,
+  `backfill:pitch-accent-unidic` a further ~32 — **not applied** (awaiting a
+  green light; also flag: the Kanjium script writes multi-position results
+  verbatim, e.g. `結局 → [4,0,0]` with a source-side duplicate — pre-existing
+  behaviour, consumers tolerate it, but worth a look before `--apply`).
+  ~55 would stay blank with no automated source.
 - **4 noun homograph pairs** left with two live readings each (何 なに/なん,
   羽 はね/わ, 話 はなし/わ, 後 あと/ご) — both valid; user is waiting to see
   if the duplication is annoying in practice before merging.

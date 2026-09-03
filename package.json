@@ -41,6 +41,7 @@
     "audit:vocab-readings": "tsx scripts/audit-vocab-readings.ts",
     "issues:list": "tsx scripts/list-card-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts",
+    "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts"
   },
   "dependencies": {
