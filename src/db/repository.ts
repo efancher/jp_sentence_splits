@@ -50,6 +50,11 @@ import type {
   VocabularySuggestion,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
+import {
+  PITCH_TRACK_VERSION,
+  type PitchAnalysisPayload,
+  type ReferencePitchTrack,
+} from '../lib/pitch';
 import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
 import {
   buildPronunciationProfile,
@@ -2513,6 +2518,33 @@ export async function saveReferenceAlignment(
     computedAt: nowIso(),
   };
   await db.referenceAlignments.put(row);
+}
+
+// Measured YIN pitch track of a reference clip — the sentence-level pitch
+// overlay's data source. A stale `pitchVersion` reads as a cache miss, same
+// contract as `getReferenceAlignment`.
+
+export async function getReferencePitchTrack(
+  sentenceAudioId: string,
+): Promise<PitchAnalysisPayload | undefined> {
+  const db = getDb();
+  const row = await db.referencePitchTracks.get(sentenceAudioId);
+  if (!row || row.pitchVersion !== PITCH_TRACK_VERSION) return undefined;
+  return row.payload;
+}
+
+export async function saveReferencePitchTrack(
+  sentenceAudioId: string,
+  payload: PitchAnalysisPayload,
+): Promise<void> {
+  const db = getDb();
+  const row: ReferencePitchTrack = {
+    id: sentenceAudioId,
+    pitchVersion: PITCH_TRACK_VERSION,
+    payload,
+    computedAt: nowIso(),
+  };
+  await db.referencePitchTracks.put(row);
 }
 
 export async function getAttemptAlignment(

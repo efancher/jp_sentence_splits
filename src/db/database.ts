@@ -35,6 +35,7 @@ import type {
   SyncQueueItem,
   SyncRecordMeta,
 } from '../sync/types';
+import type { ReferencePitchTrack } from '../lib/pitch';
 import {
   BASELINE_SESSION_ALLOCATION,
   DEFAULT_DAILY_BUDGET_MINUTES,
@@ -91,6 +92,9 @@ export class GlossbookDatabase extends Dexie {
   // Cached forced-alignment results (Phase 9, Milestone 2b) — local-only,
   // derived/recomputable data, no sync wiring, same precedent as `attempts`.
   referenceAlignments!: EntityTable<ReferenceAlignment, 'id'>;
+  // Measured YIN pitch track of a reference clip (sentence-level pitch
+  // overlay) — local-only derived cache, same precedent as referenceAlignments.
+  referencePitchTracks!: EntityTable<ReferencePitchTrack, 'id'>;
   attemptAlignments!: EntityTable<AttemptAlignment, 'id'>;
   // Cached ASR transcriptions (Phase 9, Milestone 7) — learner attempts
   // only, same local-only precedent.
@@ -584,6 +588,52 @@ export class GlossbookDatabase extends Dexie {
             session.date ??= localDateKey(new Date(session.createdAt));
           });
       });
+
+    // v16: measured reference-clip pitch tracks — additive, local-only
+    // derived cache (same precedent as referenceAlignments), no upgrade.
+    this.version(16).stores({
+      books: 'id, title, sourceKey, archived, updatedAt, lastOpenedAt',
+      sentences:
+        'id, normalizedKey, updatedAt, earliestCreatedAt, latestCreatedAt',
+      bookSentences:
+        'id, bookId, sentenceId, [bookId+sentenceId], position, status, chapterId',
+      analyses: 'sentenceId, status, updatedAt',
+      importBatches: 'id, importedAt, batchName',
+      inbox: 'sentenceId, importBatchId, addedAt',
+      settings: 'id',
+      sentenceAudio:
+        'id, sentenceId, sourceId, [sourceId+sourceSentenceId], importedAt',
+      syncMeta: 'id',
+      syncQueue: 'id, entity, recordId, [entity+recordId], localTimestamp',
+      syncRecordMeta: 'key, entity, recordId, updatedAt',
+      syncConflicts: 'id, entity, recordId, createdAt, resolvedAt',
+      sources: 'id, type, externalId, updatedAt',
+      vocabularyItems:
+        'id, expression, [expression+reading], externalId, updatedAt',
+      sentenceVocabulary:
+        'id, sentenceId, vocabularyItemId, [sentenceId+vocabularyItemId], chunkId',
+      kanji: 'id, character, externalId, updatedAt',
+      vocabularyKanji:
+        'id, vocabularyItemId, kanjiId, [vocabularyItemId+kanjiId]',
+      studyItems:
+        'id, subjectType, subjectId, activityType, [subjectType+subjectId+activityType], updatedAt',
+      reviews: 'id, studyItemId, timestamp',
+      attempts: 'id, sentenceId, createdAt, manualRating',
+      vocabularyConfusions:
+        'id, itemAId, itemBId, [itemAId+itemBId], updatedAt',
+      referenceAlignments: 'id',
+      referencePitchTracks: 'id',
+      attemptAlignments: 'id',
+      attemptTranscriptions: 'id',
+      attemptAnalysisSummaries: 'id, sentenceId, createdAt',
+      cardIssueReports: 'id, studyItemId, sentenceId, status, createdAt',
+      grammarPatterns: 'id, canonicalName, normalizedKey, updatedAt',
+      sentenceGrammar:
+        'id, sentenceId, grammarPatternId, [sentenceId+grammarPatternId], chunkId, updatedAt',
+      grammarRelationships:
+        'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
+      plannerSessions: 'id, status, createdAt, date',
+    });
   }
 }
 

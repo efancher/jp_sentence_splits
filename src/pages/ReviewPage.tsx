@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
+import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
@@ -19,6 +20,8 @@ import {
   getConfusionPairCandidates,
   getDb,
   getDueStudyItems,
+  getReferencePitchTrack,
+  saveReferencePitchTrack,
   getProficientVocabularyItemIds,
   getSentenceFullReviewReadiness,
   getSentenceListeningReadiness,
@@ -61,7 +64,9 @@ import {
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
+import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
+import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
 import {
   expectedPitchShape,
   pitchPatternLabel,
@@ -1633,6 +1638,11 @@ export function ReviewPage() {
                 sentenceId={current.sentence.id}
               />
             ) : null}
+            {revealed && (current.audio ?? current.wordListening?.audio) ? (
+              // Measured pitch of the native clip — only on the audio-centric
+              // cards (listening / word_listening), under the H/L row.
+              <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
+            ) : null}
             {revealed ? (
               <div className="row">
                 {RATINGS.map((rating) => (
@@ -2146,6 +2156,31 @@ function PitchAccentCard({
  * plain static text on its own when alignment isn't available, so no
  * fallback branching is needed here.
  */
+/**
+ * Measured native-clip pitch track under a revealed audio card. Own
+ * component so the (async, decode-backed) load doesn't add a hook to the
+ * ReviewPage body — mounts only when there's an audio card to show it for.
+ */
+function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
+  const [payload, setPayload] = useState<PitchAnalysisPayload>();
+  useEffect(() => {
+    let cancelled = false;
+    setPayload(undefined);
+    void loadOrComputeReferencePitch(
+      audio.id,
+      audio.blob,
+      getReferencePitchTrack,
+      saveReferencePitchTrack,
+    ).then((result) => {
+      if (!cancelled) setPayload(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [audio.id, audio.blob]);
+  return <MeasuredPitchContour payload={payload} />;
+}
+
 function AudioComprehensionCard({
   sentence,
   audio,

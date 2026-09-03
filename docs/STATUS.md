@@ -33,6 +33,28 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Native-clip measured pitch overlay (ROADMAP "Planned").**
+  A real YIN pitch track of the *reference* recording, drawn under the
+  sentence on the `listening` / `word_listening` review reveals and the
+  shadowing surfaces (`SyncedShadowText`) — a genuine sentence-level pitch
+  view with no prosody-model guesswork, complementing the per-word dictionary
+  H/L marks (`SentencePitchAccentRow`). New local-only Dexie cache
+  `referencePitchTracks` (DB v16, `ReferencePitchTrack` / `PITCH_TRACK_VERSION`
+  in `src/lib/pitch.ts`, same version-gated derived-data precedent as
+  `referenceAlignments`; not synced, survives a backup restore).
+  `src/lib/referencePitchCache.ts` `loadOrComputeReferencePitch` mirrors
+  `loadOrComputeAlignment` — cache → decode (`decodeAudioBuffer` +
+  `canonicalizeAudioBuffer`) → `extractPitch` → save; never throws (no
+  AudioContext / undecodable blob → overlay just doesn't render).
+  `src/components/MeasuredPitchContour.tsx` draws the voiced contour in
+  relative semitones (per-speaker median-normalized), broken into separate
+  `<polyline>` runs across unvoiced gaps. `AnalysisPanel` opportunistically
+  warms the cache when it computes the full-clip reference pitch (skipped for
+  practice-target slices). `tests/referencePitchCache.test.ts` (3),
+  `tests/measuredPitchContour.test.tsx` (4), `tests/data.test.ts` +2,
+  `tests/reviewPage.test.tsx` +1; 1136 vitest tests green. Not yet
+  browser-verified (no AudioContext in the sandbox).
+
 - **2026-09-03 — "Notice grammar in this sentence" planner nudge (user
   request).** Grammar farming now has a sentence-level reminder, mirroring
   `vocabulary_review` for vocab. New `SentenceAnalysis.grammarReviewStatus`
@@ -519,6 +541,8 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - `reading_in_context` passage framing (`ReadingInContextCard`).
 - Progress screen (`/progress`).
 - Audio-less pitch-accent drill (`/pitch-accent`).
+- Native-clip measured pitch overlay (`MeasuredPitchContour` on the
+  `listening` / `word_listening` reveals + shadowing surfaces).
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS

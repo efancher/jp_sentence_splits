@@ -14,6 +14,7 @@ import {
   updateSettings,
 } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
+import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
 import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
@@ -1452,6 +1453,56 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(1);
     });
+  });
+
+  it('shows the measured native-clip pitch contour on the listening reveal when a track is cached', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.sentenceAudio.add({
+      id: 'audio-1',
+      sentenceId: 'sent-1',
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+    // jsdom can't decode audio, so seed the cache the overlay reads from.
+    await db.referencePitchTracks.put({
+      id: 'audio-1',
+      pitchVersion: PITCH_TRACK_VERSION,
+      computedAt: now,
+      payload: {
+        medianHz: 140,
+        voicedRatio: 1,
+        durationSeconds: 0.08,
+        frames: [0, 2, 3, 1].map((relativeSemitones, index) => ({
+          timeSeconds: index * 0.02,
+          hz: 140,
+          voiced: true,
+          confidence: 0.9,
+          relativeSemitones,
+        })),
+      },
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByRole('button', { name: /Play native sentence recording/ });
+    await user.click(screen.getByRole('button', { name: 'Reveal text' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal translation' }));
+
+    expect(
+      await screen.findByLabelText('Measured pitch of the native recording'),
+    ).toBeInTheDocument();
   });
 
   it('applies the selected playback speed to the native audio element (listening card follow-up)', async () => {

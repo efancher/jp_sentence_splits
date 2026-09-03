@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
+import {
+  getReferenceAlignment,
+  getReferencePitchTrack,
+  saveReferenceAlignment,
+  saveReferencePitchTrack,
+} from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import type { MoraUnit } from '../lib/mora';
+import type { PitchAnalysisPayload } from '../lib/pitch';
+import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
+import { MeasuredPitchContour } from './MeasuredPitchContour';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 
 /** Shadowing pronunciation-feedback Milestone 1 (docs/STATUS.md Phase 9). */
@@ -66,6 +74,7 @@ export function SyncedShadowText({
   const [words, setWords] = useState<AlignedWord[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [pitchTrack, setPitchTrack] = useState<PitchAnalysisPayload>();
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +95,23 @@ export function SyncedShadowText({
       cancelled = true;
     };
   }, [referenceAudio, japanese]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPitchTrack(undefined);
+    if (!referenceAudio) return;
+    void loadOrComputeReferencePitch(
+      referenceAudio.id,
+      referenceAudio.blob,
+      getReferencePitchTrack,
+      saveReferencePitchTrack,
+    ).then((payload) => {
+      if (!cancelled) setPitchTrack(payload);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [referenceAudio]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -138,6 +164,7 @@ export function SyncedShadowText({
         <div className="jp jp-lg">{japanese}</div>
         <MoraBreakdown units={moraUnits} />
         <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
+        <MeasuredPitchContour payload={pitchTrack} />
       </div>
     );
   }

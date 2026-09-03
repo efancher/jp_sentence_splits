@@ -138,6 +138,14 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   cumulative-words-learned trend rendered with the existing `.progress-bar`
   meter (no charting dep). All recomputed from `Review`/`StudyItem`/
   analysis-summary evidence — nothing seeded or stored.
+- [x] **Native-clip measured pitch overlay.** (2026-09-03) The *measured*
+  YIN pitch track of the **reference** recording, drawn under the sentence on
+  the `listening` / `word_listening` review reveals and the shadowing
+  surfaces (`MeasuredPitchContour` + `SyncedShadowText`) — not a predicted
+  contour, complementing the per-word dictionary H/L marks. Persisted
+  per-clip in the new local-only `referencePitchTracks` Dexie cache (DB v16)
+  via `src/lib/referencePitchCache.ts`; `AnalysisPanel` warms it. Detail in
+  STATUS.md.
 
 ## In progress
 
@@ -173,15 +181,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   translation-review — not safe to headless against production. Mac exit
   node is up.
 
-- [ ] **Native-clip measured pitch overlay.** Under the sentence text on
-  the `listening` / `word_listening` review reveals and the shadowing
-  surfaces, overlay the *measured* YIN pitch track of the **reference**
-  recording (real signal via the existing `extractPitch` +
-  `loadOrComputeAlignment` cache), not a predicted contour — a genuine
-  sentence-level pitch view with no prosody-model guesswork, complementing
-  the per-word dictionary H/L marks. Needs a persisted per-clip reference
-  pitch track (mirrors what `AnalysisPanel` already computes for the
-  learner's own take). Prompted by the 2026-09-02 pitch-accent pass.
 
 - [ ] **Segmental pronunciation feedback.** The missing half of Phase 9 —
   everything shipped there scores *timing* and *pitch*, nothing addresses

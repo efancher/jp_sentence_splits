@@ -29,6 +29,25 @@ export interface PitchAnalysisPayload {
   durationSeconds: number;
 }
 
+/** Bump when `extractPitch`'s DSP would meaningfully change its output. */
+export const PITCH_TRACK_VERSION = 1;
+
+/**
+ * Cached YIN pitch track of a sentence's reference clip — the *measured*
+ * contour (not a predicted one), backing the sentence-level pitch overlay on
+ * the listening / word_listening review reveals and the shadowing surfaces.
+ * Reference audio doesn't change, so this is kept indefinitely unless
+ * `pitchVersion` goes stale. Local-only (Dexie `referencePitchTracks`), same
+ * precedent as `ReferenceAlignment` — derived/recomputable, not synced.
+ */
+export interface ReferencePitchTrack {
+  /** = SentenceAudio.id */
+  id: string;
+  pitchVersion: number;
+  payload: PitchAnalysisPayload;
+  computedAt: string;
+}
+
 function yinPitch(
   frame: Float32Array,
   sampleRate: number,

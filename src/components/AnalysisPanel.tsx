@@ -10,6 +10,7 @@ import {
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
   saveReferenceAlignment,
+  saveReferencePitchTrack,
 } from '../db/repository';
 import type { AlignmentResult } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
@@ -277,6 +278,9 @@ export function AnalysisPanel({
         if (!active) return;
         setReferencePitch(refPitch);
         setLearnerPitch(learnPitch);
+        // Warm the shared cache for the review / shadowing pitch overlay —
+        // only when this is the whole clip, not a practice-target slice.
+        if (!targetRange) void saveReferencePitchTrack(referenceAudioId, refPitch);
         setAlignment({
           referencePeaks: alignmentResult.referencePeaks,
           learnerPeaks: alignmentResult.learnerPeaks,
@@ -293,7 +297,7 @@ export function AnalysisPanel({
     return () => {
       active = false;
     };
-  }, [referenceBlob, learnerBlob, mode, targetRange, referencePlaybackRate]);
+  }, [referenceAudioId, referenceBlob, learnerBlob, mode, targetRange, referencePlaybackRate]);
 
   const [serverAlignment, setServerAlignment] = useState<{
     reference?: AlignmentResult;

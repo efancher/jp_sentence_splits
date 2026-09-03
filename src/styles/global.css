@@ -370,6 +370,21 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* MeasuredPitchContour — measured YIN pitch track of the native reference
+   clip (listening / word_listening review reveals, shadowing surfaces). */
+.pitch-contour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.25rem 0;
+  color: var(--accent);
+}
+
+.pitch-contour-caption {
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+}
+
 /* PitchChoiceContour (ReviewPage pitch_accent card choices) — NHK-style
    overline over the high morae, dropping at the downstep. */
 .pa-choice-button {

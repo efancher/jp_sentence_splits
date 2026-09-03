@@ -32,6 +32,8 @@ import {
   getDb,
   getDueStudyItems,
   getReferenceAlignment,
+  getReferencePitchTrack,
+  saveReferencePitchTrack,
   listAttemptAnalysisSummariesForSentence,
   listGrammarPatternSummaries,
   listGrammarRelationshipsForPattern,
@@ -488,6 +490,35 @@ describe('cached forced alignment (Phase 9, Milestone 2b)', () => {
     await getDb().referenceAlignments.update('audio-1', { alignmentVersion: 0 });
 
     expect(await getReferenceAlignment('audio-1')).toBeUndefined();
+  });
+});
+
+describe('cached reference pitch track (native-clip pitch overlay)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-pitch-track-${createId('db')}`);
+  });
+
+  const payload = {
+    frames: [
+      { timeSeconds: 0, hz: 120, voiced: true, confidence: 0.8, relativeSemitones: 0 },
+      { timeSeconds: 0.02, hz: 140, voiced: true, confidence: 0.8, relativeSemitones: 2.7 },
+    ],
+    medianHz: 130,
+    voicedRatio: 1,
+    durationSeconds: 0.04,
+  };
+
+  it('round-trips a reference pitch track', async () => {
+    expect(await getReferencePitchTrack('audio-1')).toBeUndefined();
+    await saveReferencePitchTrack('audio-1', payload);
+    expect(await getReferencePitchTrack('audio-1')).toEqual(payload);
+  });
+
+  it('treats a stale pitchVersion as a cache miss', async () => {
+    await saveReferencePitchTrack('audio-1', payload);
+    await getDb().referencePitchTracks.update('audio-1', { pitchVersion: 0 });
+
+    expect(await getReferencePitchTrack('audio-1')).toBeUndefined();
   });
 });
 
