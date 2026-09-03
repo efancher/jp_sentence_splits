@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-03.
 
 ## Where things stand
 
@@ -33,6 +33,15 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Contrastive pair card gated on vocabulary (user request).**
+  The `contrastive` (VocabularyConfusion-subject) review card now carries an
+  `ActivityDescriptor.isReady` gate, mirroring tier-1 `word_listening`:
+  withheld from both the due queue and the pending-seed pool until **both**
+  member words' readings have reached FSRS proficiency. Previously ungated
+  (only implicitly required both words to be confirmed, via
+  `getConfusionPairCandidates`). `GateContext.proficientVocabularyItemIds`
+  now also includes confusion-pair member ids. `src/pages/ReviewPage.tsx`;
+  3 tests in `tests/reviewPage.test.tsx` (via new `seedContrastivePairFixture`).
 - **2026-09-03 — Spectrogram overlay in AnalysisPanel (user request; ROADMAP
   segmental-feedback slice).** A "Show spectrogram" toggle under the
   waveforms draws the reference clip and the learner attempt as stacked

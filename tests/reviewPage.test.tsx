@@ -231,6 +231,105 @@ async function suppressAudioCards(sentenceId: string, linkId: string) {
   });
 }
 
+/**
+ * Seeds a book with two sentences (電気が付きました。/ 電気を付けました。), the
+ * transitivity pair 付く/付ける, a surface-form link for each, and a
+ * `vocabulary_confusions` row joining them — the fixture for the contrastive
+ * pair card (Phase 7.7). `memberAProficient` / `memberBProficient` seed
+ * far-future reading cards for that member so it counts as reading-proficient
+ * for the contrastive card's vocab gate (and keeps that member's own reading
+ * cards out of the queue).
+ */
+async function seedContrastivePairFixture(opts: {
+  memberAProficient: boolean;
+  memberBProficient: boolean;
+}) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db.books.add({
+    id: 'book-1',
+    title: 'Test Book',
+    archived: false,
+    chapters: [],
+    updatedAt: now,
+  });
+  await db.sentences.bulkAdd([
+    {
+      id: 'sent-a',
+      normalizedKey: 'sent-a',
+      japanese: '電気が付きました。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'The light turned on.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'sent-b',
+      normalizedKey: 'sent-b',
+      japanese: '電気を付けました。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I turned on the light.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 1,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  await db.bookSentences.bulkAdd([
+    { id: 'bs-a', bookId: 'book-1', sentenceId: 'sent-a', position: 0, status: 'unstarted', addedAt: now },
+    { id: 'bs-b', bookId: 'book-1', sentenceId: 'sent-b', position: 1, status: 'unstarted', addedAt: now },
+  ]);
+  await suppressUnconditionalSentenceActivityTypes('sent-a');
+  await suppressUnconditionalSentenceActivityTypes('sent-b');
+
+  await db.vocabularyItems.bulkAdd([
+    {
+      id: 'vocab-tsuku',
+      expression: '付く',
+      reading: 'つく',
+      meaning: 'to turn on (intransitive)',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'vocab-tsukeru',
+      expression: '付ける',
+      reading: 'つける',
+      meaning: 'to turn on (transitive)',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  await db.sentenceVocabulary.bulkAdd([
+    { id: 'sv-a', sentenceId: 'sent-a', vocabularyItemId: 'vocab-tsuku', surfaceForm: '付き', createdAt: now, updatedAt: now },
+    { id: 'sv-b', sentenceId: 'sent-b', vocabularyItemId: 'vocab-tsukeru', surfaceForm: '付け', createdAt: now, updatedAt: now },
+  ]);
+  await db.vocabularyConfusions.add({
+    id: 'confusion-1',
+    itemAId: 'vocab-tsuku',
+    itemBId: 'vocab-tsukeru',
+    confusionType: 'transitivity',
+    observedCount: 1,
+    lastObservedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (opts.memberAProficient) await suppressVocabularyActivityTypes('vocab-tsuku');
+  if (opts.memberBProficient) await suppressVocabularyActivityTypes('vocab-tsukeru');
+}
+
 function renderReviewPage(path: string, routePath: string) {
   return render(
     withAppProviders(
@@ -1276,105 +1375,9 @@ describe('ReviewPage', () => {
     expect(review?.errorClassification).toBe('pronunciation_difficulty');
   });
 
-  it('renders a contrastive pair card for a confusion pair whose members are both vocabulary-target candidates (Phase 7.7)', async () => {
+  it('renders a contrastive pair card once both members are reading-proficient (Phase 7.7)', async () => {
     const db = getDb();
-    const now = new Date().toISOString();
-    await db.books.add({
-      id: 'book-1',
-      title: 'Test Book',
-      archived: false,
-      chapters: [],
-      updatedAt: now,
-    });
-    await db.sentences.bulkAdd([
-      {
-        id: 'sent-a',
-        normalizedKey: 'sent-a',
-        japanese: '電気が付きました。',
-        readingOnly: '',
-        inlineReading: '',
-        translation: 'The light turned on.',
-        targetVocabulary: [],
-        vocabularySuggestions: [],
-        sourceReferences: [],
-        conflicts: [],
-        firstOccurrenceIndex: 0,
-        importBatchIds: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'sent-b',
-        normalizedKey: 'sent-b',
-        japanese: '電気を付けました。',
-        readingOnly: '',
-        inlineReading: '',
-        translation: 'I turned on the light.',
-        targetVocabulary: [],
-        vocabularySuggestions: [],
-        sourceReferences: [],
-        conflicts: [],
-        firstOccurrenceIndex: 1,
-        importBatchIds: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    await db.bookSentences.bulkAdd([
-      { id: 'bs-a', bookId: 'book-1', sentenceId: 'sent-a', position: 0, status: 'unstarted', addedAt: now },
-      { id: 'bs-b', bookId: 'book-1', sentenceId: 'sent-b', position: 1, status: 'unstarted', addedAt: now },
-    ]);
-    await suppressUnconditionalSentenceActivityTypes('sent-a');
-    await suppressUnconditionalSentenceActivityTypes('sent-b');
-
-    await db.vocabularyItems.bulkAdd([
-      {
-        id: 'vocab-tsuku',
-        expression: '付く',
-        reading: 'つく',
-        meaning: 'to turn on (intransitive)',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'vocab-tsukeru',
-        expression: '付ける',
-        reading: 'つける',
-        meaning: 'to turn on (transitive)',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    await db.sentenceVocabulary.bulkAdd([
-      {
-        id: 'sv-a',
-        sentenceId: 'sent-a',
-        vocabularyItemId: 'vocab-tsuku',
-        surfaceForm: '付き',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'sv-b',
-        sentenceId: 'sent-b',
-        vocabularyItemId: 'vocab-tsukeru',
-        surfaceForm: '付け',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    await db.vocabularyConfusions.add({
-      id: 'confusion-1',
-      itemAId: 'vocab-tsuku',
-      itemBId: 'vocab-tsukeru',
-      confusionType: 'transitivity',
-      observedCount: 1,
-      lastObservedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await suppressVocabularyActivityTypes('vocab-tsuku');
-    await suppressVocabularyActivityTypes('vocab-tsukeru');
+    await seedContrastivePairFixture({ memberAProficient: true, memberBProficient: true });
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -1401,6 +1404,38 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(1);
     });
+  });
+
+  it('withholds the contrastive pair card while one member word is not yet reading-proficient', async () => {
+    const db = getDb();
+    await seedContrastivePairFixture({ memberAProficient: true, memberBProficient: false });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // The un-proficient member's own reading card still seeds and builds...
+    await waitFor(async () => {
+      expect(
+        await db.studyItems.where('subjectId').equals('vocab-tsukeru').count(),
+      ).toBeGreaterThan(0);
+    });
+    // ...but the contrastive pair card is gated out of both the queue and the
+    // pending-seed pool while 付ける's reading is unproven.
+    expect(await db.studyItems.where('subjectId').equals('confusion-1').count()).toBe(0);
+    expect(screen.queryByText('付き')).not.toBeInTheDocument();
+  });
+
+  it('withholds the contrastive pair card while neither member word is reading-proficient', async () => {
+    const db = getDb();
+    await seedContrastivePairFixture({ memberAProficient: false, memberBProficient: false });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await waitFor(async () => {
+      expect(
+        await db.studyItems.where('activityType').equals('reading_retrieval').count(),
+      ).toBeGreaterThan(0);
+    });
+    expect(await db.studyItems.where('subjectId').equals('confusion-1').count()).toBe(0);
   });
 
   it('renders a listening card only when the sentence has reference audio, hides Japanese until reveal (Phase 7.4)', async () => {

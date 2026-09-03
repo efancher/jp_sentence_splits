@@ -901,7 +901,10 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   sentence's vocabulary is confirmed and proficient.
 - **VocabularyConfusion subject**: `contrastive` — one StudyItem per
   confusable pair (not per word), quizzing "can you tell these two
-  apart," fed by `getConfusionPairCandidates`.
+  apart," fed by `getConfusionPairCandidates`. Vocab-gated
+  (`ActivityDescriptor.isReady`, like tier-1 `word_listening`): withheld
+  from queue and seed pool until **both** member words' readings have
+  reached FSRS proficiency.
 - **GrammarPattern subject** (grammar-learning system Phase 5):
   `grammar_comprehension` (show a sentence containing the tracked pattern,
   reveal what it contributes) and `grammar_completion` (multiple choice

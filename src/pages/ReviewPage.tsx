@@ -538,7 +538,8 @@ interface ActivityDescriptor {
    * returns false to withhold this candidate (from both seeding and the due
    * queue). Used for the two-tier listening ladder — tier-1 `word_listening`
    * waits on the word's own reading proficiency, tier-2 `listening` waits on
-   * every tier-1 item. Evaluated in addition to `gateSentenceId`.
+   * every tier-1 item — and for the contrastive pair card, which waits on both
+   * member words' reading proficiency. Evaluated in addition to `gateSentenceId`.
    */
   isReady?: (candidate: unknown, ctx: GateContext) => boolean;
 }
@@ -687,6 +688,13 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('vocabularyConfusion', candidate.confusion.id, activityType),
+      // Vocab gate (user request, 2026-09-03): a contrastive pair is only
+      // worth drilling once each side is individually known — withhold the
+      // card until BOTH member words' readings have reached FSRS proficiency,
+      // mirroring the tier-1 word_listening gate above.
+      isReady: (candidate, ctx) =>
+        ctx.proficientVocabularyItemIds.has(candidate.itemA.vocabularyItem.id) &&
+        ctx.proficientVocabularyItemIds.has(candidate.itemB.vocabularyItem.id),
     }),
     defineActivityDescriptor<SentenceConjugationCandidate>({
       key: 'conjugation',
@@ -1166,16 +1174,24 @@ export function ReviewPage() {
       const sentenceIds = scope.sentences.map((sentence) => sentence.id);
       const sentenceReadiness = await getSentenceFullReviewReadiness(sentenceIds);
 
-      // Listening-ladder gates (ActivityDescriptor.isReady). Tier 1
-      // (word_listening) waits on the word's reading proficiency; tier 2
-      // (listening) waits on every tier-1 item. Like the conjugation card,
-      // these have no defer pass of their own — the isGatedOut filter below
-      // keeps them out of the queue and the pending-seed pool.
+      // Per-candidate gates (ActivityDescriptor.isReady). Listening ladder:
+      // tier 1 (word_listening) waits on the word's reading proficiency; tier 2
+      // (listening) waits on every tier-1 item. Contrastive pair: waits on both
+      // member words' reading proficiency. Like the conjugation card, these have
+      // no defer pass of their own — the isGatedOut filter below keeps them out
+      // of the queue and the pending-seed pool.
       const gateContext: GateContext = {
         proficientVocabularyItemIds: await getProficientVocabularyItemIds([
-          ...new Set(
-            scope.wordListeningCandidates.map((candidate) => candidate.vocabularyItem.id),
-          ),
+          ...new Set([
+            ...scope.wordListeningCandidates.map((candidate) => candidate.vocabularyItem.id),
+            // Contrastive pair members are gated on their own reading
+            // proficiency too (see the `confusion` descriptor's isReady) — their
+            // ids must be in this set or every contrastive card is gated out.
+            ...scope.confusionPairCandidates.flatMap((candidate) => [
+              candidate.itemA.vocabularyItem.id,
+              candidate.itemB.vocabularyItem.id,
+            ]),
+          ]),
         ]),
         listeningReadiness: await getSentenceListeningReadiness(sentenceIds),
       };
