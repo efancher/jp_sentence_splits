@@ -39,15 +39,32 @@ export function CardIssuesPage() {
           </p>
         ) : (
           <div className="stack" style={{ gap: '0.5rem' }}>
-            {visible!.map(({ report, sentence }) => (
+            {visible!.map(({ report, sentence, bookId, vocabularyExpression }) => (
               <div key={report.id} className="list-card stack">
                 {sentence ? <div className="jp">{sentence.japanese}</div> : null}
                 <div className="muted">
                   {report.activityType} · {new Date(report.createdAt).toLocaleString()}
                 </div>
                 <div>{report.note}</div>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div
+                  className="row"
+                  style={{ gap: '0.75rem', flexWrap: 'wrap' }}
+                >
                   <Link to={`/study-items/${report.studyItemId}`}>View card</Link>
+                  {bookId && report.sentenceId ? (
+                    <Link to={`/books/${bookId}/analyze/${report.sentenceId}`}>
+                      Open in Analyze
+                    </Link>
+                  ) : null}
+                  {vocabularyExpression ? (
+                    <Link
+                      to={`/vocabulary?q=${encodeURIComponent(vocabularyExpression)}`}
+                    >
+                      Find in vocabulary
+                    </Link>
+                  ) : null}
+                </div>
+                <div className="row" style={{ justifyContent: 'flex-end' }}>
                   {report.status === 'open' ? (
                     <button
                       type="button"

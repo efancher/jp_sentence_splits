@@ -1288,7 +1288,16 @@ fix-in-place: reports sync to Supabase specifically so a future AI/Claude
 session can read them via `scripts/list-card-issues.ts` and fix a batch at
 once. `/issues` lists open (and optionally resolved) reports with sentence
 context and a one-way "Mark resolved" action; no delete/reopen/edit-in-
-place by design.
+place by design. Each row also carries subject-aware deep links —
+`listCardIssueReportsWithContext` resolves the reported card's book and
+vocabulary item so the row links straight to "Open in Analyze"
+(`/books/:bookId/analyze/:sentenceId`) and "Find in vocabulary"
+(`/vocabulary?q=<expression>`), rather than only the FSRS-stats debug view.
+The Analyze page hosts a **"Native word audio"** section (`WordAudioSection`,
+reusing `SegmentLoopPlayer`) so a mis-aligned word span flagged from a
+`pitch_accent` / `word_listening` card can be re-dragged there (same
+`SentenceVocabulary.audioStartMs/EndMs` override the review card writes),
+not just mid-review.
 
 ### 8. Sync, conflict resolution & sharing — `src/sync/`
 - **Engine** (`engine.ts`): per-record optimistic concurrency (`version` +

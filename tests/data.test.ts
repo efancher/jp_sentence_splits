@@ -1658,6 +1658,39 @@ describe('card issue reports', () => {
     const [withContext] = await listCardIssueReportsWithContext();
     expect(withContext?.sentence?.japanese).toBe('猫が好きです。');
   });
+
+  it('listCardIssueReportsWithContext resolves a book and vocabulary item for deep links', async () => {
+    const book = await createBook({ title: 'Deep Link Book' });
+    await getDb().sentences.add(stubSentence('sent-1', { japanese: 'お父さん鳥。' }));
+    await getDb().bookSentences.add({
+      id: 'bs-deep',
+      bookId: book.id,
+      sentenceId: 'sent-1',
+      position: 0,
+      status: 'unstarted',
+      addedAt: nowIsoForTest(),
+    });
+    const vocab = await ensureVocabularyItem('お父さん', 'おとうさん');
+    await getDb().sentenceVocabulary.add({
+      id: 'sv-deep',
+      sentenceId: 'sent-1',
+      vocabularyItemId: vocab.id,
+      surfaceForm: 'お父さん',
+      createdAt: nowIsoForTest(),
+      updatedAt: nowIsoForTest(),
+    });
+    const studyItem = await ensureStudyItem('sentenceVocabulary', 'sv-deep', 'word_listening');
+    await reportCardIssue({
+      studyItemId: studyItem.id,
+      sentenceId: 'sent-1',
+      activityType: 'word_listening',
+      note: 'word audio runs long',
+    });
+
+    const [withContext] = await listCardIssueReportsWithContext();
+    expect(withContext?.bookId).toBe(book.id);
+    expect(withContext?.vocabularyExpression).toBe('お父さん');
+  });
 });
 
 describe('computeVocabularyContextDiversity (Phase 7.5)', () => {

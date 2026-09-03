@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { isHiragana, toHiragana } from 'wanakana';
 
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
@@ -67,7 +67,10 @@ function VocabularyMeaningField({ item }: { item: VocabularyItem }) {
 }
 
 export function VocabularyListPage() {
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  // Seed the search from ?q= so deep links (e.g. from the reported-issues
+  // list) land pre-filtered on one word.
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
   const items = useLiveQuery(() => getDb().vocabularyItems.toArray(), []);
   const settings = useLiveQuery(() => readSettings(), []);
   const vocabularyStudyItems = useLiveQuery(

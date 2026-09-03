@@ -46,8 +46,21 @@ is trimmed.)
   higher-review survivors, buggy row soft-deleted). Two other open reports
   (pitch_accent word-audio span on 新人さんですか / 今日から働くことになりました)
   are forced-alignment inaccuracies — `SegmentLoopPlayer`'s `isolatedWordRange`
-  mislocates the word in the clip; correctable only in-app via the "Adjust"
-  editor (writes `SentenceVocabulary.audioStartMs/EndMs`).
+  mislocates the word in the clip.
+- **2026-09-03 — Reported-issues rows get subject-aware deep links + Analyze
+  word-audio editor (user request, follow-up to the triage above).**
+  `listCardIssueReportsWithContext` now also resolves each report's book
+  (lowest-position `book_sentences`) and vocabulary item (direct, or via the
+  `sentenceVocabulary` link), so `CardIssuesPage` rows link to "Open in
+  Analyze" and "Find in vocabulary" (new `?q=` seed on `VocabularyListPage`
+  via `useSearchParams`) instead of only the FSRS-stats debug page. AnalyzePage
+  gains a "Native word audio" section (`WordAudioSection`, one
+  `SegmentLoopPlayer` per distinct `surfaceForm`) so the word-span "Adjust"
+  editor — previously reachable only mid-review — can be used on the sentence
+  itself; it writes the same `SentenceVocabulary.audioStartMs/EndMs` override.
+  `src/db/repository.ts`, `src/pages/CardIssuesPage.tsx`,
+  `src/pages/VocabularyListPage.tsx`, `src/pages/AnalyzePage.tsx`; 1 new
+  data.test.ts case.
 - **2026-09-03 — `reading_in_context` gated on its whole passage (user
   request).** `comprehension` still waits only on its own sentence's vocab
   (Phase 7.11 gate); `reading_in_context` now additionally waits until every

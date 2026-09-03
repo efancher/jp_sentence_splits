@@ -6,6 +6,7 @@ import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { GrammarPicker } from '../components/GrammarPicker';
 import { NativeAudioButton } from '../components/NativeAudioButton';
+import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
@@ -17,7 +18,12 @@ import {
   setBookSentenceStatus,
   updateSentenceText,
 } from '../db/repository';
-import type { AnalysisChunk, TextDisplayMode } from '../domain/types';
+import type {
+  AnalysisChunk,
+  SentenceAudio,
+  SentenceVocabulary,
+  TextDisplayMode,
+} from '../domain/types';
 import {
   addZeroGaSubject,
   applyHeuristicChunks,
@@ -111,7 +117,19 @@ export function AnalyzePage() {
       .where('sentenceId')
       .equals(sentenceId)
       .toArray();
-    return { book, memberships, index, sentence, analysis, sentenceAudio };
+    const sentenceVocabulary = await db.sentenceVocabulary
+      .where('sentenceId')
+      .equals(sentenceId)
+      .toArray();
+    return {
+      book,
+      memberships,
+      index,
+      sentence,
+      analysis,
+      sentenceAudio,
+      sentenceVocabulary,
+    };
   }, [bookId, sentenceId]);
 
   useEffect(() => {
@@ -387,6 +405,11 @@ export function AnalyzePage() {
             ))
           : null}
         <VocabChips items={sentence.targetVocabulary} />
+        <WordAudioSection
+          japanese={sentence.japanese}
+          audio={orderedAudio[0]}
+          links={data.sentenceVocabulary ?? []}
+        />
         {showEnglish ? (
           <div className="panel stack" style={{ boxShadow: 'none' }}>
             <label className="muted" htmlFor="sentence-translation">
@@ -1112,6 +1135,55 @@ export function AnalyzePage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * Per-word native-audio isolate + span-adjust, mirroring the control the
+ * `pitch_accent` / `word_listening` review cards show at reveal
+ * (SegmentLoopPlayer). Surfaced here so a mis-aligned word span reported
+ * from a review card can be corrected on the sentence itself rather than
+ * only mid-review — the "Adjust" editor persists to the same
+ * `SentenceVocabulary.audioStartMs/EndMs` override.
+ */
+function WordAudioSection({
+  japanese,
+  audio,
+  links,
+}: {
+  japanese: string;
+  audio: SentenceAudio | undefined;
+  links: SentenceVocabulary[];
+}) {
+  if (!audio) return null;
+  const seen = new Set<string>();
+  const wordLinks = links.filter((link) => {
+    const surface = link.surfaceForm?.trim();
+    if (!surface || seen.has(surface)) return false;
+    seen.add(surface);
+    return true;
+  });
+  if (wordLinks.length === 0) return null;
+
+  return (
+    <div className="panel stack" style={{ boxShadow: 'none' }}>
+      <label className="muted" style={{ margin: 0 }}>
+        Native word audio — loop one word from the recording, or drag its span
+        if the auto-alignment picked the wrong slice (this is the same
+        &ldquo;Adjust&rdquo; a pitch-accent review card offers).
+      </label>
+      {wordLinks.map((link) => (
+        <div key={link.id} className="stack" style={{ gap: '0.25rem' }}>
+          <div className="jp">{link.surfaceForm}</div>
+          <SegmentLoopPlayer
+            audio={audio}
+            japanese={japanese}
+            surfaceForm={link.surfaceForm ?? ''}
+            link={link}
+          />
+        </div>
+      ))}
     </div>
   );
 }
