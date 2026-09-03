@@ -482,6 +482,13 @@ function playUntilEnded(
  * Plays `audio` repeatedly within `range`, jumping back to the start
  * whenever playback crosses the end — until `signal` aborts. Backs Phase
  * 8.2's practice-target isolation (new code, not ported from anywhere).
+ *
+ * Each restart *pauses*, seeks, and waits for `seeked` before resuming —
+ * the same path the very first play takes. Seeking a still-playing element
+ * lands imprecisely on compressed audio (mp3/webm) and, repeated every
+ * loop, eats the word's attack — so every pass after the first sounds
+ * front-clipped while a fresh page load's first loop is always clean
+ * (reported 2026-09-04, pitch-accent + word_listening cards).
  */
 function playLoopedRange(
   audio: HTMLAudioElement,
@@ -495,12 +502,25 @@ function playLoopedRange(
       resolve();
       return;
     }
+    let restarting = false;
     const cleanup = () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       signal.removeEventListener('abort', onAbort);
     };
     const onTimeUpdate = () => {
-      if (audio.currentTime >= endSec) audio.currentTime = startSec;
+      if (restarting || audio.currentTime < endSec) return;
+      restarting = true;
+      audio.pause();
+      const resume = () => {
+        window.clearTimeout(timer);
+        audio.removeEventListener('seeked', resume);
+        restarting = false;
+        if (!signal.aborted) void audio.play().catch(() => undefined);
+      };
+      // Fallback if `seeked` never fires (e.g. seeking to the current spot).
+      const timer = window.setTimeout(resume, 250);
+      audio.addEventListener('seeked', resume, { once: true });
+      audio.currentTime = startSec;
     };
     const onAbort = () => {
       audio.pause();

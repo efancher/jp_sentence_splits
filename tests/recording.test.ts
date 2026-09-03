@@ -277,7 +277,7 @@ describe('PlaybackCoordinator.alternate', () => {
 });
 
 describe('PlaybackCoordinator.loopRange', () => {
-  it('seeks to the start and jumps back whenever playback crosses the end', async () => {
+  it('pauses, rewinds, and waits for `seeked` before resuming when playback crosses the end', async () => {
     const coordinator = new PlaybackCoordinator();
     const audio = new FakeAudioElement();
 
@@ -288,13 +288,19 @@ describe('PlaybackCoordinator.loopRange', () => {
     expect(audio.currentTime).toBe(1);
     expect(audio.play).toHaveBeenCalledOnce();
 
+    // Crossing the end pauses and rewinds — but does NOT resume until the
+    // seek lands (seeking a playing element front-clips compressed audio).
     audio.currentTime = 2.1;
     audio.dispatch('timeupdate');
+    expect(audio.pause).toHaveBeenCalledOnce();
     expect(audio.currentTime).toBe(1);
+    expect(audio.play).toHaveBeenCalledOnce();
+
+    audio.dispatch('seeked');
+    expect(audio.play).toHaveBeenCalledTimes(2);
 
     coordinator.cancel();
     await done;
-    expect(audio.pause).toHaveBeenCalledOnce();
   });
 
   it('applies playbackRate and preservesPitch', async () => {

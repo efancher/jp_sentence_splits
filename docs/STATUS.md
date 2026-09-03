@@ -33,6 +33,20 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Looped word/segment audio front-clipped on every pass
+  after the first (user report).** `playLoopedRange` (`src/lib/recording.ts`,
+  behind `SegmentLoopPlayer` → the `pitch_accent` card reveal, the
+  `word_listening` "Reveal sentence" isolated-word loop, and
+  `PitchAccentNativeAudio`) restarted each loop by writing `currentTime`
+  while the element was still playing — an imprecise seek on compressed
+  audio (mp3/webm) that ate the word's attack a little more each pass,
+  while a fresh page's first loop (seek from a *paused* element) was always
+  clean. Now every restart pauses, seeks, and waits for `seeked` (with a
+  250ms fallback) before resuming — the same path the first play takes —
+  and a `restarting` guard drops the repeat `timeupdate`s that fire before
+  the seek lands. `tests/recording.test.ts` loopRange test rewritten to the
+  pause→seek→resume flow; 1145 tests green.
+
 - **2026-09-03 — Content backlog re-checked against prod.** Read-only
   diagnostics run: grammar review queue is clean (0 stuck; 2 correctly
   vocab-gated patterns — `diagnose-grammar-review-queue.ts`); new-card
