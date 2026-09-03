@@ -3,8 +3,8 @@ import { useState } from 'react';
 import type { SpanWaveform } from '../lib/miningApi';
 import {
   mergeReviewRowUp,
+  moveRowEdge,
   removeReviewRow,
-  setRowBoundary,
   splitReviewRow,
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
@@ -53,6 +53,9 @@ interface SegmentationEditorProps {
    * `(s, e) => fetchJobWaveform(jobId, s, e)`). Omitted = no timing editor.
    */
   waveformForRange?: (startMs: number, endMs: number) => Promise<SpanWaveform>;
+  /** Source duration in ms, if known — the ceiling for the last row's end
+   * edit. Falls back to a generous margin past the current end. */
+  mediaDurationMs?: number;
 }
 
 export function SegmentationEditor({
@@ -63,6 +66,7 @@ export function SegmentationEditor({
   disabled = false,
   audioForRange,
   waveformForRange,
+  mediaDurationMs,
 }: SegmentationEditorProps) {
   const filteringActive = rowsWithProgress.size > 0 && !showAllRows;
   const hiddenRowCount = filteringActive
@@ -95,6 +99,7 @@ export function SegmentationEditor({
                 {audioForRange ? (
                   <SpanAudioButton
                     fetchAudio={() => audioForRange(row.startMs, row.endMs)}
+                    cacheKey={`${row.startMs}-${row.endMs}`}
                     disabled={disabled}
                   />
                 ) : null}
@@ -137,15 +142,18 @@ export function SegmentationEditor({
               <BoundaryWaveform
                 startMs={row.startMs}
                 endMs={row.endMs}
-                minStartMs={index > 0 ? rows[index - 1]!.startMs + 1 : row.startMs}
+                minStartMs={index > 0 ? rows[index - 1]!.startMs + 1 : 0}
                 maxEndMs={
-                  index < rows.length - 1 ? rows[index + 1]!.endMs - 1 : row.endMs
+                  index < rows.length - 1
+                    ? rows[index + 1]!.endMs - 1
+                    : (mediaDurationMs ?? row.endMs + 300_000)
                 }
-                canEditStart={index > 0}
-                canEditEnd={index < rows.length - 1}
+                padStartMs={index === 0 ? Math.min(row.startMs, 8000) : undefined}
+                padEndMs={index === rows.length - 1 ? 8000 : undefined}
                 waveformForRange={waveformForRange}
-                onStartChange={(ms) => onRowsChange(setRowBoundary(rows, index, ms))}
-                onEndChange={(ms) => onRowsChange(setRowBoundary(rows, index + 1, ms))}
+                audioForRange={audioForRange}
+                onStartChange={(ms) => onRowsChange(moveRowEdge(rows, index, 'start', ms))}
+                onEndChange={(ms) => onRowsChange(moveRowEdge(rows, index, 'end', ms))}
                 disabled={disabled}
               />
             ) : null}

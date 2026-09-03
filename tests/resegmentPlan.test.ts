@@ -8,6 +8,7 @@ import {
   distributeTranslation,
   joinJapanese,
   mergeReviewRowUp,
+  moveRowEdge,
   overlapRatio,
   removeReviewRow,
   seedResegmentReview,
@@ -420,6 +421,43 @@ describe('review-row editing helpers', () => {
       expect(setRowBoundary(rows, 0, 500)).toBe(rows);
       expect(setRowBoundary(rows, 2, 500)).toBe(rows);
       expect(setRowBoundary(rows, 1, 1000)).toBe(rows);
+    });
+  });
+
+  describe('moveRowEdge', () => {
+    const trio = () => [
+      row({ startMs: 1000, endMs: 2000 }),
+      row({ startMs: 2000, endMs: 3000 }),
+      row({ startMs: 3000, endMs: 4000 }),
+    ];
+
+    it('moves an internal edge as the shared boundary (both rows)', () => {
+      const out = moveRowEdge(trio(), 1, 'start', 2200);
+      expect(out[0]).toMatchObject({ endMs: 2200 });
+      expect(out[1]).toMatchObject({ startMs: 2200 });
+      const out2 = moveRowEdge(trio(), 1, 'end', 2800);
+      expect(out2[1]).toMatchObject({ endMs: 2800 });
+      expect(out2[2]).toMatchObject({ startMs: 2800 });
+    });
+
+    it('moves the first row start alone, clamped to 0', () => {
+      const out = moveRowEdge(trio(), 0, 'start', 300);
+      expect(out[0]).toMatchObject({ startMs: 300, needsTranslationReview: true });
+      expect(out[1]!.startMs).toBe(2000); // untouched
+      expect(moveRowEdge(trio(), 0, 'start', -500)[0]!.startMs).toBe(0);
+    });
+
+    it('moves the last row end alone', () => {
+      const out = moveRowEdge(trio(), 2, 'end', 4600);
+      expect(out[2]).toMatchObject({ endMs: 4600, needsTranslationReview: true });
+      expect(out[1]!.endMs).toBe(3000);
+    });
+
+    it('clamps an outer edge so the row cannot collapse, and no-ops when unchanged', () => {
+      expect(moveRowEdge(trio(), 0, 'start', 99999)[0]!.startMs).toBe(1999);
+      const rows = trio();
+      expect(moveRowEdge(rows, 0, 'start', 1000)).toBe(rows);
+      expect(moveRowEdge(rows, 5, 'start', 0)).toBe(rows);
     });
   });
 

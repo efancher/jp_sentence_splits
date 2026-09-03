@@ -526,8 +526,11 @@ observed from outside `ReviewPage`'s own due-queue state.
   copy/paste, no Edge Function) → **Segment**
   (`<SegmentationEditor>` — sentence rows, each playing its span; an
   "Adjust timing" toggle per row opens `<BoundaryWaveform>`, a zoomed
-  waveform of just that sentence ±1.5 s with a draggable handle on each
-  edge + visible pause lines + a per-row "Snap to pauses". Peaks + pause
+  waveform of just that sentence + context with a draggable handle on each
+  edge (the first row's start / last row's end move alone via `moveRowEdge`,
+  internal edges move the shared boundary), visible pause lines, a per-row
+  "Snap to pauses", and a "▶ Play selection" that re-fetches the live span
+  so you can hear an edit. Peaks + pause
   midpoints are computed server-side by `app/waveform.py` and fetched via
   `GET /jobs/{id}/waveform`, so the browser never decodes audio — a
   multi-minute `decodeAudioData` fails on iOS Safari, and a whole-span

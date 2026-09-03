@@ -11,26 +11,31 @@ const PAD_MS = 1500;
 const SNAP_MAX_MS = 400;
 
 /**
- * A zoomed waveform of one sentence (its span ± ~1.5 s of context) with a
- * draggable handle on each editable edge — drop the edge onto the pause you
- * can see. Peaks + pause midpoints come from the server (`waveformForRange`,
- * ffmpeg); the browser never decodes audio. `SegmentationEditor` renders one
- * of these on demand under the row being tuned, so a long podcast never has
- * to fit on a single strip. The view window is fixed when it opens — drag
- * an edge to the frame edge and reopen to recentre.
+ * A zoomed waveform of one sentence (its span + context) with a draggable
+ * handle on each edge — drop the edge onto the pause you can see, then hit
+ * "Play selection" to hear exactly the span between the handles. Peaks +
+ * pause midpoints come from the server (`waveformForRange`, ffmpeg); the
+ * browser never decodes audio. `SegmentationEditor` renders one of these on
+ * demand under the row being tuned, so a long podcast never has to fit on a
+ * single strip. The view window is fixed when it opens — `padStartMs` /
+ * `padEndMs` give the first/last row extra room to drag toward 0 / the end;
+ * drag an edge to the frame edge and reopen to recentre.
  */
 interface BoundaryWaveformProps {
   startMs: number;
   endMs: number;
-  /** Floor for the start edge (previous row's start, or this row's start). */
+  /** Floor for the start edge (previous row's start, or 0 for the first row). */
   minStartMs: number;
-  /** Ceiling for the end edge (next row's end, or this row's end). */
+  /** Ceiling for the end edge (next row's end, or the media duration). */
   maxEndMs: number;
-  canEditStart: boolean;
-  canEditEnd: boolean;
   waveformForRange: (startMs: number, endMs: number) => Promise<SpanWaveform>;
+  /** Fetches the audio for an arbitrary span — powers "Play selection". */
+  audioForRange?: (startMs: number, endMs: number) => Promise<Blob>;
   onStartChange: (ms: number) => void;
   onEndChange: (ms: number) => void;
+  /** Left/right context width; defaults to `PAD_MS`. */
+  padStartMs?: number;
+  padEndMs?: number;
   disabled?: boolean;
 }
 
@@ -39,25 +44,29 @@ export function BoundaryWaveform({
   endMs,
   minStartMs,
   maxEndMs,
-  canEditStart,
-  canEditEnd,
   waveformForRange,
+  audioForRange,
   onStartChange,
   onEndChange,
+  padStartMs = PAD_MS,
+  padEndMs = PAD_MS,
   disabled = false,
 }: BoundaryWaveformProps) {
   // Frozen when the editor opens so dragging an edge doesn't re-fetch.
   const [view] = useState(() => ({
-    start: Math.max(0, startMs - PAD_MS),
-    end: endMs + PAD_MS,
+    start: Math.max(0, startMs - padStartMs),
+    end: endMs + padEndMs,
   }));
   const viewMs = view.end - view.start;
 
   const [peaks, setPeaks] = useState<WavePeak[]>([]);
   const [silenceMidsMs, setSilenceMidsMs] = useState<number[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [playing, setPlaying] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingRef = useRef<'start' | 'end' | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +86,14 @@ export function BoundaryWaveform({
       cancelled = true;
     };
   }, [waveformForRange, view.start, view.end]);
+
+  useEffect(
+    () => () => {
+      audioRef.current?.pause();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    },
+    [],
+  );
 
   const wavePath = useMemo(
     () => peaksToPolyline(peaks, VIEW_WIDTH, WAVE_HEIGHT),
@@ -123,15 +140,35 @@ export function BoundaryWaveform({
   };
 
   const snapToPauses = () => {
-    if (canEditStart) {
-      const pause = nearestPause(startMs);
-      if (pause !== null) onStartChange(clampStart(pause));
-    }
-    if (canEditEnd) {
-      const pause = nearestPause(endMs);
-      if (pause !== null) onEndChange(clampEnd(pause));
-    }
+    const startPause = nearestPause(startMs);
+    if (startPause !== null) onStartChange(clampStart(startPause));
+    const endPause = nearestPause(endMs);
+    if (endPause !== null) onEndChange(clampEnd(endPause));
   };
+
+  // Always re-fetches the current [startMs, endMs] so a play right after a
+  // drag reflects the edit (unlike the cached row-level button).
+  async function playSelection() {
+    if (!audioForRange) return;
+    audioRef.current?.pause();
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setPlaying(true);
+    try {
+      const blob = await audioForRange(startMs, endMs);
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      const el = new Audio(url);
+      audioRef.current = el;
+      el.onended = () => setPlaying(false);
+      el.onpause = () => setPlaying(false);
+      await el.play();
+    } catch {
+      setPlaying(false);
+    }
+  }
 
   const beginDrag = (edge: 'start' | 'end') => (event: React.PointerEvent) => {
     if (disabled) return;
@@ -160,27 +197,32 @@ export function BoundaryWaveform({
     );
   };
 
-  const canSnap =
-    status === 'ready' &&
-    silenceMidsMs.length > 0 &&
-    (canEditStart || canEditEnd) &&
-    !disabled;
-
   return (
     <div className="stack" style={{ gap: '0.35rem' }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: '0.85em' }}>
           {status === 'loading'
             ? 'Loading waveform…'
             : status === 'error'
-              ? 'Waveform unavailable — drag not available'
+              ? 'Waveform unavailable — drag by feel, or play to check'
               : `${(startMs / 1000).toFixed(2)}s – ${(endMs / 1000).toFixed(2)}s · ${(
                   (endMs - startMs) / 1000
                 ).toFixed(2)}s`}
         </span>
-        <button type="button" disabled={!canSnap} onClick={snapToPauses}>
-          Snap to pauses
-        </button>
+        <div className="row" style={{ gap: '0.4rem' }}>
+          {audioForRange ? (
+            <button type="button" disabled={disabled || playing} onClick={() => void playSelection()}>
+              {playing ? '▶ …' : '▶ Play selection'}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={disabled || status !== 'ready' || silenceMidsMs.length === 0}
+            onClick={snapToPauses}
+          >
+            Snap to pauses
+          </button>
+        </div>
       </div>
       <svg
         ref={svgRef}
@@ -218,8 +260,8 @@ export function BoundaryWaveform({
           />
         ))}
         <polyline fill="none" stroke="currentColor" strokeWidth={1.5} points={wavePath} />
-        {canEditStart ? handle('start', startMs) : null}
-        {canEditEnd ? handle('end', endMs) : null}
+        {handle('start', startMs)}
+        {handle('end', endMs)}
       </svg>
     </div>
   );

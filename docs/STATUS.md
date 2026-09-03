@@ -33,6 +33,22 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Boundary editor: play the selection + edit the outer
+  edges (user feedback).** Two gaps in the per-row `<BoundaryWaveform>`:
+  (1) the row's play button (`SpanAudioButton`) cached its first clip
+  forever, so after dragging a boundary you replayed the *old* span and
+  couldn't tell if the edit helped — added a `▶ Play selection` button in
+  the editor that re-fetches the current `[startMs, endMs]` every press,
+  plus a `cacheKey` prop on `SpanAudioButton` that drops the stale clip
+  when the span moves (also fixes the transcript/translate-stage row
+  buttons after a merge/split). (2) The first row's start and the last
+  row's end weren't draggable at all — new `moveRowEdge` in
+  `resegmentPlan.ts` moves an outer edge alone (internal edges still move
+  the shared boundary), the first/last row's editor view now extends to 0 /
+  well past the end so there's room to drag, and `SegmentationEditor` takes
+  `mediaDurationMs` as the last-row ceiling. `resegmentPlan` +5,
+  `segmentationEditor` +1.
+
 - **2026-09-03 — Hand-correctable word-audio span (user request).** The
   isolate-and-loop control (`SegmentLoopPlayer`, used by the `pitch_accent`
   and `word_listening` review cards) derived the word's span inside the

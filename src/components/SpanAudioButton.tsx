@@ -10,10 +10,14 @@ export function SpanAudioButton({
   fetchAudio,
   label = 'play',
   disabled = false,
+  cacheKey,
 }: {
   fetchAudio: () => Promise<Blob>;
   label?: string;
   disabled?: boolean;
+  /** Changing this drops the cached clip so the next play re-fetches — pass
+   * the span (e.g. `${startMs}-${endMs}`) when the audio it points at can move. */
+  cacheKey?: string | number;
 }) {
   const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -26,6 +30,18 @@ export function SpanAudioButton({
     },
     [],
   );
+
+  // A new span means the cached clip points at the wrong audio — drop it so
+  // the next play re-fetches.
+  useEffect(() => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+    setState('idle');
+  }, [cacheKey]);
 
   async function play() {
     if (state === 'loading') return;

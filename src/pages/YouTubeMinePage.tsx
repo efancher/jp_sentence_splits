@@ -715,6 +715,7 @@ export function YouTubeMinePage() {
             disabled={busy}
             audioForRange={(s, e) => fetchJobAudioRange(jobId!, s, e)}
             waveformForRange={(s, e) => fetchJobWaveform(jobId!, s, e)}
+            mediaDurationMs={source?.durationMs ?? undefined}
           />
           <section className="panel">
             <div className="row">
@@ -778,6 +779,7 @@ export function YouTubeMinePage() {
                 <span className="jp">{row.japanese}</span>
                 <SpanAudioButton
                   fetchAudio={() => fetchJobAudioRange(jobId!, row.startMs, row.endMs)}
+                  cacheKey={`${row.startMs}-${row.endMs}`}
                   disabled={busy}
                 />
               </div>

@@ -130,6 +130,7 @@ export function TranscriptStage({
             <div className="row">
               <SpanAudioButton
                 fetchAudio={() => fetchAudio(seg.startMs, seg.endMs)}
+                cacheKey={`${seg.startMs}-${seg.endMs}`}
                 disabled={disabled}
               />
               <button

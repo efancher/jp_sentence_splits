@@ -129,11 +129,34 @@ describe('SegmentationEditor', () => {
     await user.click(adjustButtons[1]!);
 
     expect(await screen.findByRole('img', { name: /sentence waveform/i })).toBeInTheDocument();
-    // view window = [1000 - 1500 clamped to 0, 2000 + 1500]
-    expect(waveformForRange).toHaveBeenCalledWith(0, 3500);
+    // Last row: [1000 - 1500 clamped to 0, 2000 + 8000 outer-end pad]
+    expect(waveformForRange).toHaveBeenCalledWith(0, 10000);
     // Toggles closed again.
     await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('img', { name: /sentence waveform/i })).not.toBeInTheDocument();
+  });
+
+  it('lets the first row drag its start toward 0 and plays the live selection', async () => {
+    const onRowsChange = vi.fn();
+    const waveformForRange = vi.fn(async () => ({ peaks: [], silenceMidsMs: [] }));
+    const audioForRange = vi.fn(async () => new Blob(['x'], { type: 'audio/mp4' }));
+    const user = userEvent.setup();
+    render(
+      <SegmentationEditor
+        rows={[row({ startMs: 6000, endMs: 6200 }), row({ startMs: 6200, endMs: 9000 })]}
+        onRowsChange={onRowsChange}
+        waveformForRange={waveformForRange}
+        audioForRange={audioForRange}
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Adjust timing' })[0]!);
+    await screen.findByRole('img', { name: /sentence waveform/i });
+
+    // First row: left pad reaches 0 so the start handle can be dragged back.
+    expect(waveformForRange).toHaveBeenCalledWith(0, 7700);
+    // Both edges get a drag handle now, including the first row's start.
+    expect(screen.getByLabelText('Sentence start')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /play selection/i })).toBeInTheDocument();
   });
 
   it('has no timing editor without a waveform fetcher', () => {
