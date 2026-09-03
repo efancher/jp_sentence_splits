@@ -1117,6 +1117,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
+  - **Spectrogram** — a "Show spectrogram" toggle draws the reference clip
+    and the learner attempt as stacked grayscale spectrograms (0–4 kHz,
+    louder = brighter) from a hand-rolled radix-2 FFT + Hann STFT
+    (`src/lib/spectrogram.ts`, no dep; `SpectrogramCanvas.tsx`), computed
+    off the same samples the panel already decodes. Not a scored signal —
+    a picture for eyeballing a segmental substitution (English ら/ふ/つ/し),
+    with a "how to read this" caption. First slice of the ROADMAP's
+    segmental-pronunciation-feedback phase.
   - Cross-recording "Focus on this" comparison — a re-record can say
     "closer than last time" or "different issue now"
     (`compareObservations`).

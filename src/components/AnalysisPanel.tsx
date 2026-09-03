@@ -26,7 +26,9 @@ import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
 import { categorizeObservations } from '../lib/pronunciationHistory';
+import { computeSpectrogram, type Spectrogram } from '../lib/spectrogram';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
+import { SpectrogramCanvas } from './SpectrogramCanvas';
 import {
   analyzeAlignment,
   canonicalizeAudioBuffer,
@@ -207,6 +209,11 @@ export function AnalysisPanel({
   const [error, setError] = useState<string>();
   const [referencePitch, setReferencePitch] = useState<PitchAnalysisPayload>();
   const [learnerPitch, setLearnerPitch] = useState<PitchAnalysisPayload>();
+  const [showSpectrogram, setShowSpectrogram] = useState(false);
+  const [spectrograms, setSpectrograms] = useState<{
+    reference: Spectrogram;
+    learner: Spectrogram;
+  }>();
   const [alignment, setAlignment] = useState<{
     referencePeaks: WavePeak[];
     learnerPeaks: WavePeak[];
@@ -278,6 +285,16 @@ export function AnalysisPanel({
         if (!active) return;
         setReferencePitch(refPitch);
         setLearnerPitch(learnPitch);
+        setSpectrograms({
+          reference: computeSpectrogram(
+            referenceCanonical.samples,
+            referenceCanonical.sampleRate,
+          ),
+          learner: computeSpectrogram(
+            learnerCanonical.samples,
+            learnerCanonical.sampleRate,
+          ),
+        });
         // Warm the shared cache for the review / shadowing pitch overlay —
         // only when this is the whole clip, not a practice-target slice.
         if (!targetRange) void saveReferencePitchTrack(referenceAudioId, refPitch);
@@ -605,6 +622,38 @@ export function AnalysisPanel({
               ? ` · adjusted for ${referencePlaybackRate}× practice speed`
               : ''}
           </p>
+          {spectrograms ? (
+            <div className="stack" style={{ gap: '0.35rem' }}>
+              <button
+                type="button"
+                aria-expanded={showSpectrogram}
+                onClick={() => setShowSpectrogram((open) => !open)}
+              >
+                {showSpectrogram ? 'Hide spectrogram' : 'Show spectrogram'}
+              </button>
+              {showSpectrogram ? (
+                <>
+                  <SpectrogramCanvas
+                    spectrogram={spectrograms.reference}
+                    label="Reference"
+                  />
+                  <SpectrogramCanvas
+                    spectrogram={spectrograms.learner}
+                    label="Your attempt"
+                  />
+                  <p className="muted" style={{ fontSize: '0.8em' }}>
+                    Time runs left→right, pitch/frequency bottom→top, brighter =
+                    louder. The dark horizontal bands are vowel formants — their
+                    height is roughly the vowel&rsquo;s &ldquo;colour&rdquo;. A
+                    Japanese ら / ふ / つ / し that comes out as an English
+                    substitute shows up as a differently-shaped burst or band
+                    vs. the reference. Read it alongside the audio, not on its
+                    own.
+                  </p>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </>
       ) : null}
       {serverAlignmentStatus === 'loading' ? (

@@ -194,10 +194,13 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     clip (English allophone vs. Japanese target). Linked from `ShadowPage`.
     Mostly content authoring; near-zero new code. Can ship on its own
     ahead of the analysis work.
-  - **Spectrogram overlay in `AnalysisPanel`** — reference vs. attempt,
-    time-aligned off the existing `loadOrComputeAlignment` cache. Canvas
-    FFT, no new backend, no new dep. Pair with the sound guide — reading a
-    spectrogram is a learned skill and is noise without guidance.
+  - ~~**Spectrogram overlay in `AnalysisPanel`**~~ **[done 2026-09-03]** —
+    "Show spectrogram" toggle draws the reference clip + learner attempt as
+    stacked grayscale spectrograms (`src/lib/spectrogram.ts` hand-rolled
+    radix-2 FFT + Hann STFT, `SpectrogramCanvas.tsx`), off the samples the
+    panel already decodes. Short "how to read this" caption stands in for
+    the sound guide until it's authored. Not time-warp-aligned to each
+    other yet (both from t=0, shared px/sec).
   - **ASR kana-diff observation** — reuse the existing faster-whisper
     (`base`) secondary signal: a new observation kind
     (`asrObservations.ts` + `feedbackRanking.ts`) flagging morae where the

@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Spectrogram overlay in AnalysisPanel (user request; ROADMAP
+  segmental-feedback slice).** A "Show spectrogram" toggle under the
+  waveforms draws the reference clip and the learner attempt as stacked
+  grayscale spectrograms (`src/lib/spectrogram.ts` — a hand-rolled radix-2
+  FFT + Hann STFT, pure, no dep; `SpectrogramCanvas.tsx` — canvas, time×freq,
+  0–4 kHz, louder=brighter). Computed from the samples `AnalysisPanel`
+  already decodes for pitch/alignment; a short "how to read this" caption
+  (the ROADMAP's "noise without guidance" guard). The other two
+  segmental-feedback pieces (a `reference` sound guide, ASR kana-diff — the
+  latter already exists as `asrObservations`) and the phonetics-tutor
+  prerequisite are unchanged. `tests/spectrogram` new (+5).
+
 - **2026-09-03 — Per-sentence clip re-cut on Analyze (user request).**
   `AnalyzePage` gains an **"Adjust clip timing"** control (only when the
   book has a `sourceUrl`) — opens the same `<BoundaryWaveform>` editor over
