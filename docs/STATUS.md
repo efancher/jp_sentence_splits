@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Card-issue triage: お父さん reading merge.** Three open
+  reports (`reading_retrieval`/`cloze`/`reading_production`) flagged お父さん
+  reading as おちちさん. Root cause is the `combineSuggestions` reading
+  concatenation (`src/lib/vocabularySuggestions.ts:237` — お+ちち+さん) when a
+  learner combines the お/父/さん tokens in VocabularyPicker; no special-reading
+  lookup and no reading-level `combinedExpressionWarning`. Same class as the
+  2026-08-30 お母さん→おははさん cleanup; `merge:duplicate-vocabulary-items`
+  skips it (never seen conjugated). Fixed by hand: buggy `vocab_item_965e5db8`
+  merged into canonical おとうさん `vocab_18a79a98` (4 sentence_vocabulary
+  links + 3 study_items repointed, reviews + card_issue_reports moved onto the
+  higher-review survivors, buggy row soft-deleted). Two other open reports
+  (pitch_accent word-audio span on 新人さんですか / 今日から働くことになりました)
+  are forced-alignment inaccuracies — `SegmentLoopPlayer`'s `isolatedWordRange`
+  mislocates the word in the clip; correctable only in-app via the "Adjust"
+  editor (writes `SentenceVocabulary.audioStartMs/EndMs`).
 - **2026-09-03 — `reading_in_context` gated on its whole passage (user
   request).** `comprehension` still waits only on its own sentence's vocab
   (Phase 7.11 gate); `reading_in_context` now additionally waits until every
