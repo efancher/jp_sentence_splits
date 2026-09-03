@@ -91,6 +91,9 @@ class Job:
     error: str | None = None
     source: SourceInfo | None = None
     is_music: bool = False
+    # "asr" | "human-caption" | "auto-caption" | "lyrics" — set in
+    # `_fetch_transcript`. `auto-caption` is the degraded path the wizard warns about.
+    transcript_source: str | None = None
     # Transcript stage. `raw_cues` keeps Whisper per-word timings (not
     # serialised) for the auto-advance segment pass; `transcript` is the
     # serialisable view the wizard's transcript panel edits.
@@ -147,6 +150,7 @@ def _write_checkpoint(job: Job) -> None:
             "message": job.message,
             "error": job.error,
             "is_music": job.is_music,
+            "transcript_source": job.transcript_source,
             "next_sentence_seq": job.next_sentence_seq,
             "source": job.source.model_dump() if job.source else None,
             "raw_cues": [c.model_dump() for c in job.raw_cues],
@@ -200,6 +204,7 @@ def _rehydrate(job_id: str) -> Job | None:
     job.message = state.get("message", "Resumed.")
     job.error = state.get("error")
     job.is_music = state.get("is_music", False)
+    job.transcript_source = state.get("transcript_source")
     job.next_sentence_seq = state.get("next_sentence_seq", 1)
     job.source = SourceInfo(**state["source"]) if state.get("source") else None
     job.raw_cues = [Cue(**c) for c in state.get("raw_cues", [])]
@@ -430,6 +435,7 @@ def _fetch_transcript(job: Job, url: str) -> None:
             if keep_auto
             else [c.model_copy(update={"isAuto": False}) for c in caption_cues]
         )
+        job.transcript_source = "lyrics" if job.is_music else "human-caption"
     else:
         job.set_message("Transcribing audio…")
         raw_cues = asr_client.transcribe_source(
@@ -441,9 +447,13 @@ def _fetch_transcript(job: Job, url: str) -> None:
                 job.id,
                 len(raw_cues),
             )
+            job.transcript_source = "asr"
         else:
             job.set_message("Splitting sentences…")
             raw_cues = caption_cues
+            # ASR was unreachable / empty → YouTube auto-captions: no
+            # punctuation, whole-second timestamps. The wizard flags this.
+            job.transcript_source = "auto-caption" if caption_cues else None
 
     job.raw_cues = [
         cue.model_copy(update={"index": i, "sourceIndexes": [i]})
@@ -553,6 +563,7 @@ def job_status(job: Job) -> JobStatusResponse:
         error=job.error,
         source=job.source,
         transcript=job.transcript or None,
+        transcriptSource=job.transcript_source,
         cues=cues_out(job) if job.cues else None,
         rows=job.rows or None,
     )

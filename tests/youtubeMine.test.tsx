@@ -68,6 +68,7 @@ vi.mock('../src/lib/miningApi', () => {
       message: 'Ready — 3 segment(s).',
       source: SOURCE,
       transcript: TRANSCRIPT,
+      transcriptSource: 'asr' as const,
       cues: [],
       rows: [],
     })),
@@ -288,6 +289,46 @@ describe('YouTube mining wizard', () => {
     expect(
       screen.queryByPlaceholderText('https://www.youtube.com/watch?v=…'),
     ).not.toBeInTheDocument();
+    // ASR transcript → no auto-caption warning.
+    expect(screen.queryByText(/Segmented from YouTube auto-captions/)).not.toBeInTheDocument();
+  }, 30000);
+
+  it('warns on the Segment stage when the job fell back to auto-captions', async () => {
+    const { getMiningJob } = await import('../src/lib/miningApi');
+    vi.mocked(getMiningJob).mockResolvedValue({
+      jobId: 'job-cap',
+      status: 'ready',
+      stage: 'segment',
+      message: '1 sentence(s) segmented.',
+      source: SOURCE,
+      transcriptSource: 'auto-caption',
+      cues: [
+        {
+          index: 0,
+          startMs: 0,
+          endMs: 2000,
+          japanese: 'おはよう。',
+          isAuto: true,
+          lowConfidence: false,
+          sourceIndexes: [0],
+        },
+      ],
+    } as Awaited<ReturnType<typeof getMiningJob>>);
+    localStorage.setItem(
+      'ytmine.activeJob',
+      JSON.stringify({ jobId: 'job-cap', savedAt: Date.now() }),
+    );
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    expect(await screen.findByText(/step 2 of 4: Segment/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Segmented from YouTube auto-captions/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/±0\.5/)).toBeInTheDocument();
   }, 30000);
 
   it('offers server-held jobs on the idle screen and resumes the picked one', async () => {

@@ -103,6 +103,8 @@ def test_job_lifecycle_fetch_to_clip(client: TestClient) -> None:
 
     status = _wait_until_ready(client, job_id)
     assert status["status"] == "ready"
+    # ASR is mocked unavailable → YouTube auto-caption fallback.
+    assert status["transcriptSource"] == "auto-caption"
     assert status["source"]["title"] == "Fixture Video"
     assert [cue["japanese"] for cue in status["cues"]] == ["こんにちは。", "元気ですか。"]
     assert status["cues"][0]["englishGuess"] == "Hello."
@@ -156,6 +158,7 @@ def test_uses_asr_transcript_over_captions_when_available(
     job_id = create.json()["jobId"]
     status = _wait_until_ready(client, job_id)
     assert status["status"] == "ready"
+    assert status["transcriptSource"] == "asr"
     # The ASR text, not こんにちは。/ 元気ですか。 from the caption fixture.
     assert [c["japanese"] for c in status["cues"]] == [
         "全然違う文だよ。",
@@ -193,6 +196,7 @@ def test_music_category_uses_lyrics_track_and_skips_asr(
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
     status = _wait_until_ready(client, create.json()["jobId"])
     assert status["status"] == "ready"
+    assert status["transcriptSource"] == "lyrics"
     assert asr_called == []  # Music upload → lyrics track, no ASR
     # Not merged into one cue despite no punctuation.
     assert [c["japanese"] for c in status["cues"]] == [
@@ -222,6 +226,7 @@ def test_human_caption_track_skips_asr(client: TestClient, monkeypatch) -> None:
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
     status = _wait_until_ready(client, create.json()["jobId"])
     assert status["status"] == "ready"
+    assert status["transcriptSource"] == "human-caption"
     assert asr_called == []  # punctuated human track → ASR skipped
     assert all(not c["isAuto"] for c in status["cues"])
     assert status["cues"][0]["japanese"] == "文0です。"
@@ -253,6 +258,7 @@ def test_job_resumes_from_checkpoint_after_eviction(client: TestClient) -> None:
     assert resumed.status_code == 200
     body = resumed.json()
     assert body["status"] == "ready"
+    assert body["transcriptSource"] == "auto-caption"  # survives the checkpoint round-trip
     assert [seg["text"] for seg in body["transcript"]] == ["こんにちは。", "元気ですか。"]
 
     # …and the pipeline is still re-runnable (subtitles were checkpointed).

@@ -15,6 +15,11 @@ TranscriptStatus = Literal[
     "unverified", "auto-caption", "manually-corrected", "verified"
 ]
 
+# Where a job's transcript came from — surfaced so the wizard can warn when
+# it's `auto-caption` (YouTube's ASR: no punctuation, timestamps rounded to
+# whole seconds, so every boundary is ±0.5 s).
+TranscriptSource = Literal["asr", "human-caption", "auto-caption", "lyrics"]
+
 
 class CueWord(BaseModel):
     text: str
@@ -145,6 +150,7 @@ class JobStatusResponse(BaseModel):
     error: str | None = None
     source: SourceInfo | None = None
     transcript: list[TranscriptSegment] | None = None
+    transcriptSource: TranscriptSource | None = None
     cues: list[CueOut] | None = None
     rows: list[TranslatedRow] | None = None
 

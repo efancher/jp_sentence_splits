@@ -86,6 +86,12 @@ const jobStatusSchema = z.object({
   error: z.string().nullable().optional(),
   source: sourceInfoSchema.nullable().optional(),
   transcript: z.array(transcriptSegmentSchema).nullable().optional(),
+  /** Where the transcript came from — `auto-caption` is the degraded path
+   * (no punctuation, whole-second timestamps) the wizard warns about. */
+  transcriptSource: z
+    .enum(['asr', 'human-caption', 'auto-caption', 'lyrics'])
+    .nullable()
+    .optional(),
   cues: z.array(cueSchema).nullable().optional(),
   rows: z.array(translatedRowSchema).nullable().optional(),
 });
@@ -135,6 +141,7 @@ export type MiningTranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 export type MiningTranslatedRow = z.infer<typeof translatedRowSchema>;
 export type MiningJobStatus = z.infer<typeof jobStatusSchema>;
 export type MiningJobStage = MiningJobStatus['stage'];
+export type MiningTranscriptSource = NonNullable<MiningJobStatus['transcriptSource']>;
 export type MiningClipResult = z.infer<typeof clipResponseSchema>;
 export type ResegmentedCue = z.infer<typeof resegmentedCueSchema>;
 

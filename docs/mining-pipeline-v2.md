@@ -165,10 +165,12 @@ up to ~40 min — not yet done.
 
 **Consequence:** a job on a long source (or one where ASR was briefly
 unreachable) uses the **auto-caption track — timestamps rounded to whole
-seconds**, so every boundary is ±0.5 s. Tell from the cues: hiragana-heavy,
-no punctuation, boundaries on round numbers. Silence-snapping does **not**
-rescue this on conversational audio with a music/room-tone bed — no clean
-pauses (はじめての乗馬, 2026-09-03: 37/118 boundaries near a detectable pause).
+seconds**, so every boundary is ±0.5 s. The wizard now surfaces this: the
+job carries `transcriptSource` (`asr` | `human-caption` | `auto-caption` |
+`lyrics`), and `YouTubeMinePage` shows a ⚠ warning on every in-progress
+stage when it's `auto-caption`. Silence-snapping does **not** rescue this on
+conversational audio with a music/room-tone bed — no clean pauses
+(はじめての乗馬, 2026-09-03: 37/118 boundaries near a detectable pause).
 
 **Recovery** (get a proper transcript for a job stuck on captions):
 `transcribe-source` out-of-band with word timestamps on, split each segment

@@ -22,6 +22,7 @@ import {
   type MiningJobStatus,
   type MiningJobSummary,
   type MiningSourceInfo,
+  type MiningTranscriptSource,
 } from '../lib/miningApi';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import {
@@ -164,6 +165,8 @@ export function YouTubeMinePage() {
   const [url, setUrl] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [source, setSource] = useState<MiningSourceInfo | null>(null);
+  const [transcriptSource, setTranscriptSource] =
+    useState<MiningTranscriptSource | null>(null);
   const [progress, setProgress] = useState('Starting…');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -285,6 +288,7 @@ export function YouTubeMinePage() {
   function applyResumedJob(id: string, job: MiningJobStatus): void {
     setJobId(id);
     setSource(job.source ?? null);
+    setTranscriptSource(job.transcriptSource ?? null);
     setProgress(job.message);
     progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
     hydrateStageFromJob(job);
@@ -349,6 +353,7 @@ export function YouTubeMinePage() {
             setStage('idle');
           } else if (job.status === 'ready') {
             setSource(job.source ?? null);
+            setTranscriptSource(job.transcriptSource ?? null);
             setTranscript(transcriptFromJob(job));
             setRows(rowsFromCues(job.cues ?? []));
             setStage('transcript');
@@ -374,6 +379,7 @@ export function YouTubeMinePage() {
     setUrl('');
     setJobId(null);
     setSource(null);
+    setTranscriptSource(null);
     setError('');
     setBusy(false);
     setBusyNote('');
@@ -678,6 +684,25 @@ export function YouTubeMinePage() {
             </div>
           </div>
           {busy ? <div className="muted">{busyNote || 'Working…'}</div> : null}
+        </section>
+      ) : null}
+
+      {currentStepIndex >= 0 && transcriptSource === 'auto-caption' ? (
+        <section
+          className="panel stack"
+          style={{ borderColor: 'var(--warning)', gap: '0.35rem' }}
+        >
+          <strong style={{ color: 'var(--warning)' }}>
+            ⚠ Segmented from YouTube auto-captions
+          </strong>
+          <span className="muted" style={{ fontSize: '0.9em' }}>
+            The transcription service was unavailable, so this used YouTube&rsquo;s
+            auto-caption track — no punctuation, and timestamps rounded to whole
+            seconds, so every sentence boundary is roughly ±0.5&nbsp;s. Tighten
+            them per row with &ldquo;Adjust timing&rdquo; below, or start over
+            once the service is back for word-accurate boundaries and better
+            text.
+          </span>
         </section>
       ) : null}
 
