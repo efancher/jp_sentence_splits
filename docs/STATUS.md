@@ -33,6 +33,22 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Daily session recap.** `SessionRunnerPage`'s finished
+  state now shows a short "Today you…" summary of what the day's session
+  actually moved, under the existing "N of M activities completed" line.
+  `src/lib/sessionRecap.ts` (`buildSessionRecap`, pure) + `getSessionRecap`
+  (`repository.ts`, the only fetch) — activities completed per bucket,
+  scheduled reviews graded in the session window + % recalled (natural
+  encounters excluded, same filter as `progressReport.ts`), distinct
+  vocabulary items whose first-ever review landed in the window, and
+  sentences marked `grammarReviewStatus: confirmed` in the window. All
+  recomputed from `Review` / `StudyItem` / `SentenceAnalysis` rows; nothing
+  stored. Window is the session's own `[createdAt, endedAt ?? now]`. Hidden
+  entirely when nothing measurable happened (`isEmpty`). Shadowing attempts
+  deliberately excluded (user's pick). `tests/sessionRecap.test.ts` (7),
+  `tests/sessionRunnerPage.test.tsx` (2); 1144 vitest tests green. Not yet
+  browser-verified.
+
 - **2026-09-03 — Native-clip measured pitch overlay (ROADMAP "Planned").**
   A real YIN pitch track of the *reference* recording, drawn under the
   sentence on the `listening` / `word_listening` review reveals and the
@@ -543,6 +559,7 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - Audio-less pitch-accent drill (`/pitch-accent`).
 - Native-clip measured pitch overlay (`MeasuredPitchContour` on the
   `listening` / `word_listening` reveals + shadowing surfaces).
+- Daily session recap (`SessionRunnerPage` finished state).
 
 **Data / content backlog:**
 - **Review new-card backlog** — ~193 confirmed vocab words have no SRS

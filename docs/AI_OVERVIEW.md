@@ -424,7 +424,12 @@ trend on the same `.progress-bar` meter. Read-only, recomputed on load,
 nothing stored. **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
-end-early are real, tracked actions. A step settles **only by an explicit
+end-early are real, tracked actions. Once the day's session is settled it
+shows a short "Today you…" recap (`src/lib/sessionRecap.ts` /
+`getSessionRecap`): activities done per bucket, reviews graded this session +
+% recalled, new vocabulary started, grammar noticed — all recomputed from
+`Review`/`StudyItem`/`SentenceAnalysis` evidence for the session's own time
+window, nothing stored, hidden when nothing measurable happened. A step settles **only by an explicit
 action**: the runner's own "Mark complete"/"Skip", `SessionBar`'s "Mark
 complete", `ReviewPage`'s target-count auto-advance (once its live count of
 reviews done this sitting reaches the step's `targetCount`, 2026-08-26), or

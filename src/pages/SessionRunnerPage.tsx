@@ -5,10 +5,12 @@ import {
   countAttemptsForSentences,
   endPlannerSessionEarly,
   getPlannerSession,
+  getSessionRecap,
   updatePlannerSessionStep,
 } from '../db/repository';
-import type { PlannerSessionStep } from '../domain/types';
+import type { PlannerSessionStep, SessionBucket } from '../domain/types';
 import { sessionStepTargetPath, shadowAttemptSummary } from '../lib/sessionPlanner';
+import type { SessionRecap } from '../lib/sessionRecap';
 
 /**
  * Executes a recommended session (design brief §8): each step deep-links
@@ -34,6 +36,50 @@ const STATUS_LABELS: Record<PlannerSessionStep['status'], string> = {
   replaced: 'Replaced',
 };
 
+const RECAP_BUCKET_LABELS: Record<SessionBucket, string> = {
+  glossing: 'New sentences',
+  grammar: 'Grammar',
+  shadowing: 'Shadowing',
+  review: 'Review',
+};
+
+/** Post-session summary — what today's work actually moved (`getSessionRecap`). */
+function SessionRecapPanel({ recap }: { recap: SessionRecap }) {
+  if (recap.isEmpty) return null;
+  const { reviews } = recap;
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }}>
+      <strong>Today you</strong>
+      <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+        {recap.byBucket.map((line) => (
+          <li key={line.bucket}>
+            {RECAP_BUCKET_LABELS[line.bucket]}: {line.completed}/{line.total} done
+          </li>
+        ))}
+        {reviews.graded > 0 ? (
+          <li>
+            graded {reviews.graded} review{reviews.graded === 1 ? '' : 's'}
+            {reviews.accuracy !== null
+              ? ` — ${Math.round(reviews.accuracy * 100)}% recalled`
+              : ''}
+          </li>
+        ) : null}
+        {recap.newWords > 0 ? (
+          <li>
+            started {recap.newWords} new word{recap.newWords === 1 ? '' : 's'}
+          </li>
+        ) : null}
+        {recap.grammarNoticed > 0 ? (
+          <li>
+            noticed grammar in {recap.grammarNoticed} sentence
+            {recap.grammarNoticed === 1 ? '' : 's'}
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
 export function SessionRunnerPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -51,6 +97,12 @@ export function SessionRunnerPage() {
   const shadowAttemptCounts = useLiveQuery(
     () => countAttemptsForSentences(shadowSentenceIds),
     [shadowSentenceIds.join(',')],
+  );
+
+  const sessionFinished = !!session && session.status !== 'in_progress';
+  const recap = useLiveQuery(
+    () => (sessionFinished && session ? getSessionRecap(session) : Promise.resolve(undefined)),
+    [sessionFinished, session?.id, session?.updatedAt],
   );
 
   if (!sessionId) return null;
@@ -96,6 +148,7 @@ export function SessionRunnerPage() {
               {session.steps.filter((step) => step.status === 'completed').length} of{' '}
               {session.steps.length} activities completed. Add more time from Home whenever you have it.
             </p>
+            {recap ? <SessionRecapPanel recap={recap} /> : null}
             <button type="button" className="primary" onClick={() => navigate('/')}>
               Back to Home
             </button>

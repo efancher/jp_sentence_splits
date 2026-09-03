@@ -61,6 +61,7 @@ import {
   type PronunciationProfile,
 } from '../lib/pronunciationProfile';
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
+import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import {
   mergeSentenceOnReimport,
@@ -5214,6 +5215,48 @@ export async function addMinutesToTodaySession(
 
 export async function getPlannerSession(sessionId: string): Promise<PlannerSession | undefined> {
   return getDb().plannerSessions.get(sessionId);
+}
+
+/**
+ * Post-session recap for `SessionRunnerPage` — what today's session moved,
+ * recomputed from evidence (never stored). Window is the session's own
+ * `[createdAt, endedAt ?? now]`. See `src/lib/sessionRecap.ts`.
+ */
+export async function getSessionRecap(
+  session: PlannerSession,
+  now: Date = new Date(),
+): Promise<SessionRecap> {
+  const db = getDb();
+  const windowStart = session.createdAt;
+  const windowEnd = session.endedAt ?? now.toISOString();
+  const [reviews, vocabularyStudyItems, analyses] = await Promise.all([
+    db.reviews.toArray(),
+    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+    db.analyses.toArray(),
+  ]);
+  const grammarNoticed = analyses.filter(
+    (analysis) =>
+      analysis.grammarReviewStatus === 'confirmed' &&
+      analysis.updatedAt >= windowStart &&
+      analysis.updatedAt <= windowEnd,
+  ).length;
+  return buildSessionRecap({
+    windowStart,
+    windowEnd,
+    steps: session.steps.map((step) => ({ bucket: step.bucket, status: step.status })),
+    reviews: reviews.map((review) => ({
+      studyItemId: review.studyItemId,
+      timestamp: review.timestamp,
+      rating: review.rating,
+      source: review.source,
+    })),
+    vocabularyStudyItems: vocabularyStudyItems.map((item) => ({
+      id: item.id,
+      subjectId: item.subjectId,
+      subjectType: item.subjectType,
+    })),
+    grammarNoticed,
+  });
 }
 
 export async function listRecentPlannerSessions(limit = 10): Promise<PlannerSession[]> {
