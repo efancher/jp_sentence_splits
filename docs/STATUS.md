@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Measured pitch overlay: moved up, playhead, loop button
+  (user request).** The `MeasuredPitchContour` now sits directly under the
+  sentence text (above the dictionary H/L row) on the `listening` /
+  `word_listening` reveals and the shadowing surfaces. During playback a
+  playhead (vertical line + faint band) sweeps the contour — the clip
+  playing *is* the one the pitch was measured from, so `currentTime /
+  duration` maps to the contour exactly (~16ms / one frame), no
+  forced-alignment guesswork. Review cards get a "🔁 Loop sentence" toggle
+  next to the contour (`nativeAudioController.play` gained a `{ loop }`
+  option); shadowing surfaces reuse ShadowPage's existing controls.
+  `SyncedShadowText` also gained the contour on its *main* return branch
+  (feature 1 only wired the no-alignment fallback branch — a miss). Playhead
+  tracked off `nativeAudioController.getCurrentTime()` (review, rAF) and the
+  reference `<audio>` element directly (shadowing, rAF, alignment-
+  independent). `tests/measuredPitchContour.test.tsx` +1,
+  `tests/nativeAudio.test.ts` +2; 1148 tests green.
+
 - **2026-09-04 — Looped word/segment audio front-clipped on every pass
   after the first (user report).** `playLoopedRange` (`src/lib/recording.ts`,
   behind `SegmentLoopPlayer` → the `pitch_accent` card reveal, the

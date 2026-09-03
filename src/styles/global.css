@@ -385,6 +385,16 @@ strong.jp {
   letter-spacing: 0.02em;
 }
 
+.pitch-contour-band {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.pitch-contour-playhead {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
 /* PitchChoiceContour (ReviewPage pitch_accent card choices) — NHK-style
    overline over the high morae, dropping at the downstep. */
 .pa-choice-button {

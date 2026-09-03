@@ -56,4 +56,24 @@ describe('MeasuredPitchContour', () => {
     );
     expect(container.querySelectorAll('polyline')).toHaveLength(2);
   });
+
+  it('draws a playhead + band only for an in-range progress value', () => {
+    const frames = [frame(0), frame(1), frame(2), frame(1)];
+
+    const { container: none } = render(<MeasuredPitchContour payload={payload(frames)} />);
+    expect(none.querySelector('.pitch-contour-playhead')).toBeNull();
+
+    const { container: mid } = render(
+      <MeasuredPitchContour payload={payload(frames)} progress={0.5} />,
+    );
+    const line = mid.querySelector('.pitch-contour-playhead');
+    expect(line).not.toBeNull();
+    expect(line!.getAttribute('x1')).toBe('160'); // 0.5 * 320
+    expect(mid.querySelector('.pitch-contour-band')).not.toBeNull();
+
+    const { container: outOfRange } = render(
+      <MeasuredPitchContour payload={payload(frames)} progress={1.4} />,
+    );
+    expect(outOfRange.querySelector('.pitch-contour-playhead')).toBeNull();
+  });
 });

@@ -14,6 +14,7 @@ class MockAudio {
   currentTime = 0;
   playbackRate = 1;
   preservesPitch = false;
+  loop = false;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
   play = vi.fn(async () => undefined);
@@ -93,6 +94,18 @@ describe('NativeAudioController', () => {
       playbackRate: 1,
       preservesPitch: true,
     });
+  });
+
+  it('loops the clip when asked (pitch-contour "Loop sentence")', async () => {
+    const controller = new NativeAudioController();
+    await controller.play(audioRecord('audio-1'), 1, { loop: true });
+    expect(MockAudio.instances[0]?.loop).toBe(true);
+  });
+
+  it('does not loop by default', async () => {
+    const controller = new NativeAudioController();
+    await controller.play(audioRecord('audio-1'));
+    expect(MockAudio.instances[0]?.loop).toBe(false);
   });
 
   it('stops the current clip before starting another', async () => {

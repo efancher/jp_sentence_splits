@@ -75,6 +75,7 @@ export function SyncedShadowText({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [pitchTrack, setPitchTrack] = useState<PitchAnalysisPayload>();
+  const [pitchProgress, setPitchProgress] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +145,41 @@ export function SyncedShadowText({
     return () => cancelAnimationFrame(frame);
   }, [isPlaying, words, audioRef]);
 
+  // Playhead for the measured-pitch contour — tracked off the reference
+  // <audio> element directly (independent of forced alignment, so it works
+  // even when `words` is empty). The clip playing *is* the one the pitch was
+  // measured from, so `currentTime / duration` maps to the contour exactly.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    let frame = 0;
+    const tick = () => {
+      const d = audio.duration;
+      setPitchProgress(
+        Number.isFinite(d) && d > 0 ? Math.max(0, Math.min(1, audio.currentTime / d)) : null,
+      );
+      frame = requestAnimationFrame(tick);
+    };
+    const start = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      setPitchProgress(null);
+    };
+    audio.addEventListener('play', start);
+    audio.addEventListener('pause', stop);
+    audio.addEventListener('ended', stop);
+    if (!audio.paused) start();
+    return () => {
+      cancelAnimationFrame(frame);
+      audio.removeEventListener('play', start);
+      audio.removeEventListener('pause', stop);
+      audio.removeEventListener('ended', stop);
+    };
+  }, [audioRef, referenceAudio]);
+
   const range = useMemo(() => {
     const activeWord = words[activeIndex];
     if (!activeWord || activeWord.text === '<unk>') return null;
@@ -162,9 +198,9 @@ export function SyncedShadowText({
     return (
       <div className="stack" style={{ flex: 1, gap: '0.25rem' }}>
         <div className="jp jp-lg">{japanese}</div>
+        <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} />
         <MoraBreakdown units={moraUnits} />
         <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
-        <MeasuredPitchContour payload={pitchTrack} />
       </div>
     );
   }
@@ -187,6 +223,7 @@ export function SyncedShadowText({
           japanese
         )}
       </div>
+      <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} />
       {moraUnits.length > 0 && (
         <div className="row mora-row" aria-label="Mora breakdown">
           {moraUnits.map((unit) => (

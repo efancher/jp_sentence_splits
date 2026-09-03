@@ -43,7 +43,11 @@ export class NativeAudioController {
     for (const listener of this.listeners) listener();
   }
 
-  async play(record: SentenceAudio, playbackRate = 1): Promise<void> {
+  async play(
+    record: SentenceAudio,
+    playbackRate = 1,
+    options: { loop?: boolean } = {},
+  ): Promise<void> {
     this.stop();
     const generation = ++this.generation;
     this.notify({
@@ -61,7 +65,7 @@ export class NativeAudioController {
       if (generation !== this.generation) return;
       if (blob) playable = { ...record, blob };
     }
-    await this.attemptPlayback(playable, playbackRate, generation, false);
+    await this.attemptPlayback(playable, playbackRate, generation, false, options.loop ?? false);
   }
 
   private async attemptPlayback(
@@ -69,12 +73,14 @@ export class NativeAudioController {
     playbackRate: number,
     generation: number,
     isRetry: boolean,
+    loop: boolean,
   ): Promise<void> {
     this.revokeObjectUrl();
     const url = URL.createObjectURL(record.blob);
     const audio = new Audio(url);
     audio.playbackRate = playbackRate;
     audio.preservesPitch = true;
+    audio.loop = loop;
     this.objectUrl = url;
     this.audio = audio;
     audio.onended = () => this.finish(generation);
@@ -83,7 +89,7 @@ export class NativeAudioController {
     const handleFailure = () => {
       if (generation !== this.generation || handled) return;
       handled = true;
-      void this.recoverAndRetry(record, playbackRate, generation, isRetry);
+      void this.recoverAndRetry(record, playbackRate, generation, isRetry, loop);
     };
     audio.onerror = handleFailure;
 
@@ -92,7 +98,7 @@ export class NativeAudioController {
     } catch {
       if (generation === this.generation && !handled) {
         handled = true;
-        await this.recoverAndRetry(record, playbackRate, generation, isRetry);
+        await this.recoverAndRetry(record, playbackRate, generation, isRetry, loop);
       }
     }
   }
@@ -108,6 +114,7 @@ export class NativeAudioController {
     playbackRate: number,
     generation: number,
     isRetry: boolean,
+    loop: boolean,
   ): Promise<void> {
     if (isRetry) {
       console.error('Native sentence audio playback failed after repair attempt.');
@@ -128,7 +135,7 @@ export class NativeAudioController {
       );
       return;
     }
-    await this.attemptPlayback({ ...record, blob: freshBlob }, playbackRate, generation, true);
+    await this.attemptPlayback({ ...record, blob: freshBlob }, playbackRate, generation, true, loop);
   }
 
   stop(): void {

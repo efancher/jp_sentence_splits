@@ -37,6 +37,7 @@ import {
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
+import { useNativeAudio } from '../hooks/useNativeAudio';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
@@ -1626,6 +1627,12 @@ export function ReviewPage() {
                 )}
               </>
             )}
+            {revealed && (current.audio ?? current.wordListening?.audio) ? (
+              // Measured pitch of the native clip — directly under the
+              // sentence, above the dictionary H/L row. Only on the
+              // audio-centric cards (listening / word_listening).
+              <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
+            ) : null}
             {revealed &&
             current.studyItem.activityType !== 'pitch_accent' &&
             current.studyItem.activityType !== 'sentence_transformation' ? (
@@ -1637,11 +1644,6 @@ export function ReviewPage() {
                 japanese={current.sentence.japanese}
                 sentenceId={current.sentence.id}
               />
-            ) : null}
-            {revealed && (current.audio ?? current.wordListening?.audio) ? (
-              // Measured pitch of the native clip — only on the audio-centric
-              // cards (listening / word_listening), under the H/L row.
-              <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
             ) : null}
             {revealed ? (
               <div className="row">
@@ -2157,12 +2159,17 @@ function PitchAccentCard({
  * fallback branching is needed here.
  */
 /**
- * Measured native-clip pitch track under a revealed audio card. Own
- * component so the (async, decode-backed) load doesn't add a hook to the
- * ReviewPage body — mounts only when there's an audio card to show it for.
+ * Measured native-clip pitch track under a revealed audio card, with a
+ * playback playhead and a loop toggle for studying the contour. Own
+ * component so the (async, decode-backed) load + the rAF playhead loop
+ * don't add hooks to the ReviewPage body — mounts only on an audio card.
  */
 function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
   const [payload, setPayload] = useState<PitchAnalysisPayload>();
+  const native = useNativeAudio();
+  const loopRequestedRef = useRef(false);
+  const [progress, setProgress] = useState<number | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     setPayload(undefined);
@@ -2178,7 +2185,51 @@ function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
       cancelled = true;
     };
   }, [audio.id, audio.blob]);
-  return <MeasuredPitchContour payload={payload} />;
+
+  const active = native.isPlaying && native.activeItemId === audio.id;
+  const looping = active && loopRequestedRef.current;
+  const duration = payload?.durationSeconds ?? 0;
+
+  useEffect(() => {
+    if (!active) {
+      loopRequestedRef.current = false;
+      setProgress(null);
+      return;
+    }
+    if (!duration) return;
+    let frame = 0;
+    const tick = () => {
+      setProgress(Math.max(0, Math.min(1, native.getCurrentTime() / duration)));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [active, duration, native.getCurrentTime]);
+
+  if (!payload) return <MeasuredPitchContour payload={payload} />;
+
+  return (
+    <div className="stack" style={{ gap: '0.2rem' }}>
+      <MeasuredPitchContour payload={payload} progress={progress} />
+      <button
+        type="button"
+        className={`speak-button${looping ? ' speaking' : ''}`}
+        aria-pressed={looping}
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => {
+          if (looping) {
+            native.stop();
+            loopRequestedRef.current = false;
+          } else {
+            loopRequestedRef.current = true;
+            void native.play(audio, 1, { loop: true });
+          }
+        }}
+      >
+        {looping ? '🔁 Looping…' : '🔁 Loop sentence'}
+      </button>
+    </div>
+  );
 }
 
 function AudioComprehensionCard({
