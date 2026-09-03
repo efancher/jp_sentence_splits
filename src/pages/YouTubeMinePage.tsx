@@ -28,6 +28,7 @@ import {
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
 import { realignTranslations } from '../lib/sentenceRealign';
+import { extractYouTubeId } from '../lib/youtubeUrl';
 import {
   buildShadowingPreview,
   type ShadowingAudioDraft,
@@ -172,6 +173,12 @@ export function YouTubeMinePage() {
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
   const [resuming, setResuming] = useState(true);
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
+  // videoId -> the book it was already imported as, so the idle screen can
+  // warn before you re-mine something (re-mining is still allowed — it's how
+  // you restore native clips — it just shouldn't be a surprise).
+  const [minedVideos, setMinedVideos] = useState<
+    Map<string, { title: string; createdAt: string }>
+  >(new Map());
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -241,6 +248,38 @@ export function YouTubeMinePage() {
       cancelled = true;
     };
   }, [stage]);
+
+  // Index every already-imported YouTube book by its video id (from the
+  // stored sourceUrl, falling back to the `shadowing:source-<id>` sourceKey).
+  useEffect(() => {
+    if (stage !== 'idle') return;
+    let cancelled = false;
+    void getDb()
+      .books.toArray()
+      .then((books) => {
+        if (cancelled) return;
+        const map = new Map<string, { title: string; createdAt: string }>();
+        for (const book of books) {
+          const videoId =
+            extractYouTubeId(book.sourceUrl ?? '') ??
+            (book.sourceKey?.startsWith('shadowing:source-')
+              ? book.sourceKey.slice('shadowing:source-'.length)
+              : null);
+          if (videoId && !map.has(videoId)) {
+            map.set(videoId, { title: book.title, createdAt: book.createdAt });
+          }
+        }
+        setMinedVideos(map);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stage]);
+
+  const alreadyMined = (() => {
+    const videoId = extractYouTubeId(url);
+    return videoId ? minedVideos.get(videoId) ?? null : null;
+  })();
 
   function applyResumedJob(id: string, job: MiningJobStatus): void {
     setJobId(id);
@@ -544,21 +583,30 @@ export function YouTubeMinePage() {
           <div className="muted">Reconnecting to your last mining job…</div>
         ) : null}
         {!resuming && stage === 'idle' ? (
-          <div className="row">
-            <input
-              style={{ flex: 1 }}
-              value={url}
-              placeholder="https://www.youtube.com/watch?v=…"
-              onChange={(event) => setUrl(event.target.value)}
-            />
-            <button
-              type="button"
-              className="primary"
-              disabled={!url.trim()}
-              onClick={() => void handleStart()}
-            >
-              Start
-            </button>
+          <div className="stack" style={{ gap: '0.4rem' }}>
+            <div className="row">
+              <input
+                style={{ flex: 1 }}
+                value={url}
+                placeholder="https://www.youtube.com/watch?v=…"
+                onChange={(event) => setUrl(event.target.value)}
+              />
+              <button
+                type="button"
+                className="primary"
+                disabled={!url.trim()}
+                onClick={() => void handleStart()}
+              >
+                {alreadyMined ? 'Mine again' : 'Start'}
+              </button>
+            </div>
+            {alreadyMined ? (
+              <div className="muted" style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>
+                Already imported as “{alreadyMined.title}” on{' '}
+                {new Date(alreadyMined.createdAt).toLocaleDateString()}. Mining it again
+                re-clips the audio and updates that book.
+              </div>
+            ) : null}
           </div>
         ) : null}
         {!resuming && stage === 'idle' && resumable.length > 0 ? (

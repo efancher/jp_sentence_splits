@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Mining wizard warns on an already-imported video (user
+  request).** The Import-from-YouTube idle screen now parses the pasted
+  URL's 11-char video id (`extractYouTubeId` in `src/lib/youtubeUrl.ts`,
+  mirrors `server/youtube-mining` `extract_video_id`) and checks it against
+  every book's `sourceUrl` and `shadowing:source-<id>` `sourceKey`. On a
+  match it shows "Already imported as “<title>” on <date>. Mining it again
+  re-clips the audio and updates that book." and relabels the Start button
+  "Mine again". Warning only — a re-mine is still the sanctioned way to
+  restore native clips. `tests/youtubeUrl.test.ts` (new, +4);
+  `tests/youtubeMine.test.tsx` +1.
+
 - **2026-09-04 — Review: space out surviving siblings (user request).**
   Reported seeing 絶対's `reading_retrieval` → `cloze` → `reading_production`
   back to back. All three were FSRS `learning` (introduced 2026-09-02,

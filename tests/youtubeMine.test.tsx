@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '../src/App';
 import { resetDbForTests } from '../src/db/database';
+import { getDb } from '../src/db/repository';
 import { withAppProviders } from '../src/test/providers';
 
 const { SOURCE, TRANSCRIPT } = vi.hoisted(() => ({
@@ -212,6 +213,33 @@ describe('YouTube mining wizard', () => {
     expect(
       await screen.findByRole('heading', { name: 'Mocked Mining Video' }),
     ).toBeInTheDocument();
+  }, 30000);
+
+  it('warns when the pasted URL points at an already-imported video', async () => {
+    await getDb().books.put({
+      id: 'book-existing',
+      title: 'Mocked Mining Video',
+      sourceKey: 'shadowing:source-ptXJnNgYhi8',
+      sourceUrl: 'https://www.youtube.com/watch?v=ptXJnNgYhi8',
+      archived: false,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      chapters: [],
+      collapsedChapterIds: [],
+    });
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    const input = await screen.findByPlaceholderText('https://www.youtube.com/watch?v=…');
+    await user.type(input, 'https://www.youtube.com/watch?v=ptXJnNgYhi8&t=30s');
+
+    expect(
+      await screen.findByText(/Already imported as .*Mocked Mining Video/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mine again' })).toBeInTheDocument();
   }, 30000);
 
   it('reconnects to an in-flight job on mount instead of showing the URL field', async () => {

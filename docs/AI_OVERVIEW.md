@@ -549,7 +549,13 @@ observed from outside `ReviewPage`'s own due-queue state.
   jobs and the wizard's idle screen offers them as "pick up an import
   already in progress" — so a transcription kicked off on one device is
   finished on another; `POST /jobs` for a URL that already has a live job
-  reconnects instead of re-mining. During the long download/ASR step the
+  reconnects instead of re-mining. The idle screen also cross-checks the
+  pasted URL's video id (`extractYouTubeId` in `src/lib/youtubeUrl.ts`,
+  mirrors the server's `extract_video_id`) against every imported book's
+  `sourceUrl` / `shadowing:source-<id>` `sourceKey` and, on a match, warns
+  "Already imported as …" and relabels the button **"Mine again"** — a
+  re-mine is still allowed (it's how native clips are restored), just not a
+  surprise. During the long download/ASR step the
   panel shows a live `N:NN elapsed` (`job.message_started_at` →
   `elapsedSeconds` in the status response) with a soft per-step ETA.
   Finishing assembles the same
