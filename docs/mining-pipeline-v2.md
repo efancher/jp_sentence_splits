@@ -155,13 +155,14 @@ Still open:
   Costs ~2.5–3× transcription time (2m20s → 6m20s / 8-min source);
   `ANALYSIS_SOURCE_WORD_TIMESTAMPS=0` disables it.
 
-### Operating note — word timestamps are OFF in prod, long sources fall back to captions
+### Operating note — word timestamps are `auto`; a caption fallback is now surfaced
 
-`~/.config/systemd/user/shadowing-analysis-api.service` currently sets
-`ANALYSIS_SOURCE_WORD_TIMESTAMPS=0` (a 32-min podcast's DTW pass blew the
-then-30-min mining ASR timeout → silent caption fallback). The mining
-timeout is now `3600` s, so it could likely be turned back on for sources
-up to ~40 min — not yet done.
+`shadowing-analysis-api` runs with `ANALYSIS_SOURCE_WORD_TIMESTAMPS=auto`
+(2026-09-03, was `0`): it ffprobes the source and keeps per-word timings on
+for sources ≤ `…_MAX_MINUTES` (default 40), off above — the ~3× DTW pass
+would otherwise risk the mining ASR timeout (`MINING_ASR_TIMEOUT_SECONDS`,
+now `3600` s). So a normal mine gets word-accurate boundaries; only very
+long sources fall back.
 
 **Consequence:** a job on a long source (or one where ASR was briefly
 unreachable) uses the **auto-caption track — timestamps rounded to whole
