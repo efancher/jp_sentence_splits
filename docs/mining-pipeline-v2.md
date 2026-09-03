@@ -155,6 +155,29 @@ Still open:
   Costs ~2.5–3× transcription time (2m20s → 6m20s / 8-min source);
   `ANALYSIS_SOURCE_WORD_TIMESTAMPS=0` disables it.
 
+### Operating note — word timestamps are OFF in prod, long sources fall back to captions
+
+`~/.config/systemd/user/shadowing-analysis-api.service` currently sets
+`ANALYSIS_SOURCE_WORD_TIMESTAMPS=0` (a 32-min podcast's DTW pass blew the
+then-30-min mining ASR timeout → silent caption fallback). The mining
+timeout is now `3600` s, so it could likely be turned back on for sources
+up to ~40 min — not yet done.
+
+**Consequence:** a job on a long source (or one where ASR was briefly
+unreachable) uses the **auto-caption track — timestamps rounded to whole
+seconds**, so every boundary is ±0.5 s. Tell from the cues: hiragana-heavy,
+no punctuation, boundaries on round numbers. Silence-snapping does **not**
+rescue this on conversational audio with a music/room-tone bed — no clean
+pauses (はじめての乗馬, 2026-09-03: 37/118 boundaries near a detectable pause).
+
+**Recovery** (get a proper transcript for a job stuck on captions):
+`transcribe-source` out-of-band with word timestamps on, split each segment
+into sentences at the word gaps, `POST /jobs/{id}/segment` with
+`merge:false split:false`. ~7 min per 8 min of audio. Full procedure in the
+`project_mining_asr_word_timestamps` auto-memory. Box is RAM-tight — go
+through the running service (it unloads its source model per call), don't
+spawn a second Whisper.
+
 ### B. Dictionary-form reading + accent from UniDic (stages 1, 4)
 
 **Finding (2026-08-30):** `unidic-lite` *already* exposes `kanaBase` (the
