@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — `reading_in_context` gated on its whole passage (user
+  request).** `comprehension` still waits only on its own sentence's vocab
+  (Phase 7.11 gate); `reading_in_context` now additionally waits until every
+  sentence in the surrounding passage (2 before + 1 after,
+  `buildReadingContextMap`) is itself full-review-ready — so the learner
+  never reads a passage containing words they haven't confirmed + made
+  proficient. New generic `ActivityDescriptor.activityIsReady` hook (per
+  activity type, unlike `isReady`); `GateContext` now carries
+  `sentenceReadiness`; new `deferUnreadyReadingInContextReviews()` repo
+  pass (mirrors `deferUnreadySentenceReviews`/`deferUnreadyGrammarReviews`),
+  run on every ReviewPage queue build. `src/pages/ReviewPage.tsx`,
+  `src/db/repository.ts`; 2 ReviewPage tests + 6 repo tests.
 - **2026-09-03 — Contrastive pair card gated on vocabulary (user request).**
   The `contrastive` (VocabularyConfusion-subject) review card now carries an
   `ActivityDescriptor.isReady` gate, mirroring tier-1 `word_listening`:

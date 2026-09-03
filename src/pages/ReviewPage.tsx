@@ -13,6 +13,7 @@ import { VocabChips } from '../components/VocabChips';
 import {
   countReviewsSince,
   deferUnreadyGrammarReviews,
+  deferUnreadyReadingInContextReviews,
   deferUnreadySentenceReviews,
   ensureGrammarStudyItem,
   ensureStudyItem,
@@ -83,6 +84,12 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * self-rated; they differ in the pre-reveal framing — `comprehension`
  * shows the sentence in isolation, `reading_in_context` embeds it in its
  * surrounding passage (see ReadingInContextCard / buildReadingContextMap).
+ * They also differ in gating: `comprehension` waits only on the sentence's
+ * own vocabulary (the Phase 7.11 full-sentence gate, via
+ * `ActivityDescriptor.gateSentenceId`), while `reading_in_context`
+ * additionally waits on every sentence shown in the passage — a passage is
+ * only worth reading once its neighbours' vocab is confirmed + proficient
+ * too (user request, 2026-09-03, via the descriptor's `activityIsReady`).
  */
 const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
   'comprehension',
@@ -542,6 +549,18 @@ interface ActivityDescriptor {
    * member words' reading proficiency. Evaluated in addition to `gateSentenceId`.
    */
   isReady?: (candidate: unknown, ctx: GateContext) => boolean;
+  /**
+   * Like `isReady`, but per activity type — for a descriptor whose activity
+   * types don't all share the same gate. Returns false to withhold just
+   * that (candidate, activityType) pair from both the due queue and
+   * seeding. Used by the sentence descriptor: `reading_in_context` waits on
+   * its whole passage's readiness, `comprehension` doesn't.
+   */
+  activityIsReady?: (
+    candidate: unknown,
+    activityType: StudyActivityType,
+    ctx: GateContext,
+  ) => boolean;
 }
 
 /** Shared inputs for ActivityDescriptor.isReady, built once per queue build. */
@@ -550,6 +569,13 @@ interface GateContext {
   proficientVocabularyItemIds: Set<string>;
   /** Sentence id -> every surface-form occurrence has a proficient `word_listening` item. */
   listeningReadiness: Map<string, boolean>;
+  /**
+   * Sentence id -> ready for full review (vocab confirmed AND every
+   * surface-form vocab item FSRS-proficient — getSentenceFullReviewReadiness).
+   * The same map `gateSentenceId` is checked against; exposed here so
+   * `reading_in_context` can also check its passage neighbours.
+   */
+  sentenceReadiness: Map<string, boolean>;
 }
 
 /**
@@ -569,6 +595,11 @@ function defineActivityDescriptor<C>(descriptor: {
   ensure: (candidate: C, activityType: StudyActivityType) => Promise<StudyItem>;
   gateSentenceId?: (candidate: C) => string | undefined;
   isReady?: (candidate: C, ctx: GateContext) => boolean;
+  activityIsReady?: (
+    candidate: C,
+    activityType: StudyActivityType,
+    ctx: GateContext,
+  ) => boolean;
 }): ActivityDescriptor {
   return descriptor as unknown as ActivityDescriptor;
 }
@@ -622,6 +653,21 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
+      // `comprehension` is gated only by gateSentenceId (its own sentence's
+      // vocab). `reading_in_context` additionally waits until every sentence
+      // shown in the surrounding passage is itself ready for full review, so
+      // the learner never reads a passage containing words they haven't
+      // confirmed + made proficient yet (user request, 2026-09-03). Empty
+      // context (no book membership, or a book-scoped queue that can't see
+      // the neighbours) => nothing to gate on, ready.
+      activityIsReady: (sentence, activityType, ctx) => {
+        if (activityType !== 'reading_in_context') return true;
+        const context = scope.readingContextBySentenceId.get(sentence.id);
+        if (!context) return true;
+        return [...context.before, ...context.after].every(
+          (neighbour) => ctx.sentenceReadiness.get(neighbour.id) !== false,
+        );
+      },
     }),
     defineActivityDescriptor<VocabularyTargetCandidate>({
       key: 'vocabulary',
@@ -1165,6 +1211,13 @@ export function ReviewPage() {
       // otherwise bypass it entirely via lazy seeding below — sentenceReadiness
       // covers that path.
       await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
+      // reading_in_context has a stricter gate than comprehension — it also
+      // waits on its passage neighbours' vocab. deferUnreadySentenceReviews
+      // above only checked each card's own target sentence; this pushes out
+      // any already-due reading_in_context item whose surrounding passage
+      // isn't ready yet (the isGatedOut filter below covers the not-yet-
+      // seeded path, same split as the sentence gate).
+      await deferUnreadyReadingInContextReviews();
       // Same gate for tracked grammar patterns: a grammarPattern-subject card
       // (comprehension/completion/contrast/production) whose pattern has no
       // full-review-ready linked sentence is dropped from the queue below
@@ -1194,6 +1247,7 @@ export function ReviewPage() {
           ]),
         ]),
         listeningReadiness: await getSentenceListeningReadiness(sentenceIds),
+        sentenceReadiness,
       };
 
       const dueByDescriptor = await Promise.all(
@@ -1212,10 +1266,21 @@ export function ReviewPage() {
       // existing sentence-subject due items; this check also covers the
       // conjugation card (no defer pass of its own) and is belt-and-braces for
       // sentence cards.
-      const isGatedOut = (descriptor: ActivityDescriptor, candidate: unknown): boolean => {
+      const isGatedOut = (
+        descriptor: ActivityDescriptor,
+        candidate: unknown,
+        activityType?: StudyActivityType,
+      ): boolean => {
         const gateSentenceId = descriptor.gateSentenceId?.(candidate);
         if (!!gateSentenceId && sentenceReadiness.get(gateSentenceId) === false) return true;
         if (descriptor.isReady && !descriptor.isReady(candidate, gateContext)) return true;
+        if (
+          activityType &&
+          descriptor.activityIsReady &&
+          !descriptor.activityIsReady(candidate, activityType, gateContext)
+        ) {
+          return true;
+        }
         return false;
       };
 
@@ -1226,7 +1291,7 @@ export function ReviewPage() {
         );
         for (const studyItem of dueByDescriptor[index]!) {
           const candidate = byId.get(studyItem.subjectId);
-          if (candidate && !isGatedOut(descriptor, candidate)) {
+          if (candidate && !isGatedOut(descriptor, candidate, studyItem.activityType)) {
             due.push(descriptor.buildCard(studyItem, candidate));
           }
         }
@@ -1294,6 +1359,7 @@ export function ReviewPage() {
             continue;
           }
           for (const activityType of descriptor.activityTypes) {
+            if (isGatedOut(descriptor, candidate, activityType)) continue;
             if (!existingKeys.has(`${subjectId}:${activityType}`)) {
               seeds.push({ descriptorKey: descriptor.key, candidate, activityType, subjectId });
             }

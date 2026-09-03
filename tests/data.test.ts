@@ -9,6 +9,7 @@ import {
   createBook,
   createBookChapter,
   deferUnreadyGrammarReviews,
+  deferUnreadyReadingInContextReviews,
   deferUnreadySentenceReviews,
   getProficientVocabularyItemIds,
   getSentenceListeningReadiness,
@@ -1058,6 +1059,132 @@ describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
     });
 
     const result = await deferUnreadyGrammarReviews();
+    expect(result).toEqual({ deferred: 0, checked: 0 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(farFuture);
+  });
+});
+
+describe('deferUnreadyReadingInContextReviews (passage gating)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-defer-ric-${createId('db')}`);
+  });
+
+  async function seedPassage() {
+    const db = getDb();
+    const now = nowIsoForTest();
+    await db.books.put({
+      id: 'book-1',
+      title: 'Test Book',
+      archived: false,
+      chapters: [],
+      updatedAt: now,
+    });
+    await db.sentences.bulkPut([
+      stubSentence('sent-0'),
+      stubSentence('sent-1'),
+      stubSentence('sent-2'),
+    ]);
+    await db.bookSentences.bulkPut(
+      ['sent-0', 'sent-1', 'sent-2'].map((sentenceId, position) => ({
+        id: `bs-${position}`,
+        bookId: 'book-1',
+        sentenceId,
+        position,
+        status: 'unstarted' as const,
+        addedAt: now,
+      })),
+    );
+  }
+
+  async function confirmVocabularyReview(sentenceId: string) {
+    const now = nowIsoForTest();
+    await getDb().analyses.put({
+      sentenceId,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  async function dueReadingInContextItem(sentenceId: string) {
+    const item = await ensureStudyItem('sentence', sentenceId, 'reading_in_context');
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: past } });
+    return (await getDb().studyItems.get(item.id))!;
+  }
+
+  it("defers a due reading_in_context item whose passage neighbour isn't full-review-ready", async () => {
+    await seedPassage();
+    await confirmVocabularyReview('sent-1'); // target ready
+    await confirmVocabularyReview('sent-0'); // preceding neighbour ready
+    // sent-2 (following neighbour) has no analyses row → not ready.
+    const item = await dueReadingInContextItem('sent-1');
+
+    const result = await deferUnreadyReadingInContextReviews();
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('leaves a due reading_in_context item alone once its whole passage is ready', async () => {
+    await seedPassage();
+    for (const id of ['sent-0', 'sent-1', 'sent-2']) await confirmVocabularyReview(id);
+    const item = await dueReadingInContextItem('sent-1');
+
+    const result = await deferUnreadyReadingInContextReviews();
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
+  });
+
+  it('also defers on the target sentence itself, like the plain sentence gate', async () => {
+    await seedPassage();
+    for (const id of ['sent-0', 'sent-2']) await confirmVocabularyReview(id);
+    // sent-1 itself never had its vocabulary reviewed.
+    await dueReadingInContextItem('sent-1');
+
+    const result = await deferUnreadyReadingInContextReviews();
+    expect(result).toEqual({ deferred: 1, checked: 1 });
+  });
+
+  it('ignores comprehension items (only reading_in_context)', async () => {
+    await seedPassage();
+    const comprehension = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(comprehension.id, {
+      fsrsState: { ...comprehension.fsrsState, due: past },
+    });
+
+    const result = await deferUnreadyReadingInContextReviews();
+    expect(result).toEqual({ deferred: 0, checked: 0 });
+  });
+
+  it('does not gate on a passage when the sentence has no book membership', async () => {
+    await getDb().sentences.put(stubSentence('sent-lonely'));
+    await confirmVocabularyReview('sent-lonely');
+    const item = await dueReadingInContextItem('sent-lonely');
+
+    const result = await deferUnreadyReadingInContextReviews();
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
+  });
+
+  it('never pulls a due date earlier, only pushes an unready item further out', async () => {
+    await seedPassage();
+    const item = await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, due: farFuture },
+    });
+
+    const result = await deferUnreadyReadingInContextReviews();
     expect(result).toEqual({ deferred: 0, checked: 0 });
     const persisted = await getDb().studyItems.get(item.id);
     expect(persisted?.fsrsState.due).toBe(farFuture);

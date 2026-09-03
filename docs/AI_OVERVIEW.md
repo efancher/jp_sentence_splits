@@ -958,7 +958,14 @@ state has graduated past "new/learning" for every reviewable vocabulary
 item in that sentence) — `getSentenceFullReviewReadiness`/
 `isSentenceReadyForFullReview`/`deferUnreadySentenceReviews` implement
 this, applied both as an ongoing filter on the due queue and defensively
-against lazily-seeded new items so nothing bypasses the gate. The
+against lazily-seeded new items so nothing bypasses the gate.
+`reading_in_context` adds a stricter layer than `comprehension` (user
+request, 2026-09-03): via the sentence descriptor's `activityIsReady` hook
+it also waits until *every* sentence shown in the surrounding passage (2
+before + 1 after, `buildReadingContextMap`) is itself full-review-ready, so
+the learner never reads a passage full of unconfirmed words — with its own
+`deferUnreadyReadingInContextReviews` pass for already-due items (empty
+passage ⇒ nothing to gate on). The
 `listening` card adds a second layer on top (the listening ladder, §4
 above): `getSentenceListeningReadiness` also requires every
 `word_listening` occurrence for the sentence to be proficient, and

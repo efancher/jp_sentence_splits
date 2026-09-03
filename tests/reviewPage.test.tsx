@@ -552,6 +552,25 @@ describe('ReviewPage', () => {
       { id: 'bs-0', bookId: 'book-1', sentenceId: 'sent-0', position: -1, status: 'unstarted', addedAt: now },
       { id: 'bs-2', bookId: 'book-1', sentenceId: 'sent-2', position: 1, status: 'unstarted', addedAt: now },
     ]);
+    // The passage neighbours must themselves be ready for full review
+    // (vocab confirmed, nothing un-proficient linked) or the
+    // reading_in_context card is withheld — see the dedicated gate test
+    // below. Suppress their own sentence-subject cards too so sent-1's
+    // card is the one under test.
+    for (const id of ['sent-0', 'sent-2']) {
+      await db.analyses.add({
+        sentenceId: id,
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: 'confirmed',
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await suppressUnconditionalSentenceActivityTypes(id);
+    }
     // Keep plain comprehension out of the queue so the reading_in_context
     // card is the one under test.
     await db.studyItems.add({
@@ -585,6 +604,128 @@ describe('ReviewPage', () => {
     expect(screen.queryByText('それから出かけました。')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Reveal' }));
     expect(screen.getByText('それから出かけました。')).toBeInTheDocument();
+  });
+
+  async function seedReadingInContextPassage(opts: {
+    followingReady: boolean;
+    suppressTargetComprehension?: boolean;
+  }) {
+    await seedBookWithSentence(); // book-1, sent-1 ('本を読みます。'), vocab confirmed
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.bulkAdd([
+      {
+        id: 'sent-0',
+        normalizedKey: 'sent-0',
+        japanese: '朝ごはんを食べました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'I ate breakfast.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'sent-2',
+        normalizedKey: 'sent-2',
+        japanese: 'それから出かけました。',
+        readingOnly: '',
+        inlineReading: '',
+        translation: 'Then I went out.',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: 0,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.bookSentences.bulkAdd([
+      { id: 'bs-0', bookId: 'book-1', sentenceId: 'sent-0', position: -1, status: 'unstarted', addedAt: now },
+      { id: 'bs-2', bookId: 'book-1', sentenceId: 'sent-2', position: 1, status: 'unstarted', addedAt: now },
+    ]);
+    const confirm = async (sentenceId: string) => {
+      await db.analyses.add({
+        sentenceId,
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: 'confirmed',
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    };
+    // Preceding neighbour is always ready; the following neighbour only when
+    // the test says so. Suppress both neighbours' own sentence-subject cards
+    // so the target sentence's card is the one under test either way.
+    await confirm('sent-0');
+    await suppressUnconditionalSentenceActivityTypes('sent-0');
+    if (opts.followingReady) await confirm('sent-2');
+    await suppressUnconditionalSentenceActivityTypes('sent-2');
+    if (opts.suppressTargetComprehension) {
+      await db.studyItems.add({
+        id: 'si-sent-1-comprehension',
+        subjectType: 'sentence',
+        subjectId: 'sent-1',
+        activityType: 'comprehension',
+        fsrsState: {
+          due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          stability: 1,
+          difficulty: 1,
+          elapsedDays: 0,
+          scheduledDays: 0,
+          learningSteps: 0,
+          reps: 1,
+          lapses: 0,
+          state: 'review',
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  it('withholds the reading_in_context card while a passage neighbour is not full-review-ready', async () => {
+    await seedReadingInContextPassage({ followingReady: false });
+    const db = getDb();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // The plain comprehension card still seeds and renders (its own sentence
+    // is ready)...
+    await screen.findByText('本を読みます。');
+    await waitFor(async () => {
+      const sent1Items = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+      expect(sent1Items.filter((i) => i.activityType === 'comprehension')).toHaveLength(1);
+    });
+    // ...but reading_in_context is withheld: no passage framing, and no
+    // study_item seeded for it while sent-2's vocab is unconfirmed.
+    expect(screen.queryByText(/In context · Test Book/)).not.toBeInTheDocument();
+    expect(screen.queryByText('朝ごはんを食べました。')).not.toBeInTheDocument();
+    const sent1ItemsAfter = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+    expect(sent1ItemsAfter.filter((i) => i.activityType === 'reading_in_context')).toHaveLength(0);
+  });
+
+  it('surfaces the reading_in_context card once every passage sentence is full-review-ready', async () => {
+    await seedReadingInContextPassage({ followingReady: true, suppressTargetComprehension: true });
+    const db = getDb();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    expect(screen.getByText('朝ごはんを食べました。')).toBeInTheDocument();
+    expect(screen.getByText(/In context · Test Book/)).toBeInTheDocument();
+    await waitFor(async () => {
+      const sent1Items = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+      expect(sent1Items.filter((i) => i.activityType === 'reading_in_context')).toHaveLength(1);
+    });
   });
 
   it('renders reading_retrieval, cloze, and reading_production cards for the same target word, each seeded once (Phase 7.2/7.3/7.9)', async () => {
@@ -2105,26 +2246,27 @@ describe('ReviewPage', () => {
         updatedAt: now,
       });
     }
-    // A vocabulary item linked to sent-2 (not sent-1 — Phase 7.11's
+    // A vocabulary item linked to sent-3 (not sent-1 — Phase 7.11's
     // full-sentence gate would otherwise block sent-1's own cards on
-    // vocab-1 not being proficient yet, which isn't what this test is
-    // about) — with the old category-major pending-seed order this would
-    // only seed after all three sentences' six sentence-subject cards were
-    // exhausted; interleaved, it should seed right after sent-1's own two
-    // cards.
+    // vocab-1 not being proficient yet; not sent-2 either — it's sent-1's
+    // reading_in_context passage neighbour, and an un-proficient link there
+    // would gate that card too) — with the old category-major pending-seed
+    // order this would only seed after all three sentences' six
+    // sentence-subject cards were exhausted; interleaved, it should seed
+    // right after sent-1's own two cards.
     await db.vocabularyItems.add({
       id: 'vocab-1',
-      expression: '読む',
-      reading: 'よむ',
-      meaning: 'to read',
+      expression: '飲む',
+      reading: 'のむ',
+      meaning: 'to drink',
       createdAt: now,
       updatedAt: now,
     });
     await db.sentenceVocabulary.add({
       id: 'sv-1',
-      sentenceId: 'sent-2',
+      sentenceId: 'sent-3',
       vocabularyItemId: 'vocab-1',
-      surfaceForm: '読みます',
+      surfaceForm: '飲みます',
       createdAt: now,
       updatedAt: now,
     });

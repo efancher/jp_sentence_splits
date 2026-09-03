@@ -87,6 +87,7 @@ import {
 } from '../lib/maturity';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { nowIso, normalizeSentenceKey } from '../lib/normalize';
+import { buildReadingContextMap } from '../lib/readingContext';
 import {
   concatCut,
   type ResegmentPlan,
@@ -3011,6 +3012,84 @@ export async function deferUnreadySentenceReviews(
     );
   }
   return { deferred: updates.length, checked: dueSentenceItems.length };
+}
+
+/**
+ * Passage analogue of deferUnreadySentenceReviews (user request,
+ * 2026-09-03): a `reading_in_context` card embeds its target sentence in
+ * its reading-order neighbours (buildReadingContextMap — 2 before, 1
+ * after). deferUnreadySentenceReviews already defers it on its *own*
+ * target sentence's readiness; this additionally defers any currently-due
+ * `reading_in_context` item whose surrounding passage contains a sentence
+ * that isn't itself full-review-ready (vocab confirmed AND every
+ * surface-form vocab item FSRS-proficient), so the learner never reads a
+ * passage full of words they haven't confirmed yet. Context is resolved
+ * globally (every book, each sentence's most-recently-opened home book),
+ * the same way ReviewPage's global-scope queue builds it; a book-scoped
+ * session may resolve a slightly different passage, but this only ever
+ * pushes a due date later and self-heals after `minDeferDays`. Like the
+ * other defer passes it never pulls a due date earlier and is idempotent.
+ */
+export async function deferUnreadyReadingInContextReviews(
+  options: { now?: Date; minDeferDays?: number } = {},
+): Promise<{ deferred: number; checked: number }> {
+  const db = getDb();
+  const now = options.now ?? new Date();
+  const nowIsoValue = now.toISOString();
+  const minDeferDays = options.minDeferDays ?? 7;
+
+  const dueItems = (
+    await db.studyItems.where('activityType').equals('reading_in_context').toArray()
+  ).filter((item) => item.subjectType === 'sentence' && item.fsrsState.due <= nowIsoValue);
+  if (dueItems.length === 0) return { deferred: 0, checked: 0 };
+
+  const targetSentenceIds = [...new Set(dueItems.map((item) => item.subjectId))];
+  const allSentences = await db.sentences.toArray();
+  const sentencesById = new Map(allSentences.map((sentence) => [sentence.id, sentence]));
+  const contextMap = buildReadingContextMap({
+    targetSentenceIds,
+    bookSentences: await db.bookSentences.toArray(),
+    books: await db.books.toArray(),
+    sentencesById,
+  });
+
+  // Readiness for every target sentence plus every sentence that appears in
+  // one of their passages.
+  const relevantSentenceIds = new Set(targetSentenceIds);
+  for (const context of contextMap.values()) {
+    for (const neighbour of [...context.before, ...context.after]) {
+      relevantSentenceIds.add(neighbour.id);
+    }
+  }
+  const readiness = await getSentenceFullReviewReadiness([...relevantSentenceIds]);
+
+  const passageReady = (targetSentenceId: string): boolean => {
+    if (!readiness.get(targetSentenceId)) return false;
+    const context = contextMap.get(targetSentenceId);
+    if (!context) return true;
+    return [...context.before, ...context.after].every(
+      (neighbour) => readiness.get(neighbour.id) !== false,
+    );
+  };
+
+  const minDueIso = new Date(now.getTime() + minDeferDays * 24 * 60 * 60 * 1000).toISOString();
+  const updates: StudyItem[] = [];
+  for (const item of dueItems) {
+    if (passageReady(item.subjectId)) continue;
+    if (item.fsrsState.due >= minDueIso) continue;
+    updates.push({
+      ...item,
+      fsrsState: { ...item.fsrsState, due: minDueIso },
+      updatedAt: nowIsoValue,
+    });
+  }
+  if (updates.length > 0) {
+    await db.studyItems.bulkPut(updates);
+    notifySyncMany(
+      updates.map((item) => ({ entity: 'study_items' as const, recordId: item.id, payload: item })),
+    );
+  }
+  return { deferred: updates.length, checked: dueItems.length };
 }
 
 /**
