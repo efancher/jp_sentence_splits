@@ -33,6 +33,15 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Conflict panel: normalised key diff (user request).**
+  `ConflictPanel` was clipping each payload at 1200 chars and showing local
+  (domain, camelCase) vs. remote (raw Postgres row, snake_case) as two
+  unrelated JSON blobs, so nothing lined up. New `src/sync/conflictDiff.ts`
+  recursively camel-cases + sorts keys on both sides, then renders a unified
+  LCS line diff (`− local` / `+ remote`, changed-line count) in an
+  open `<details>`; the full un-clipped payloads stay available in two
+  collapsed `<details>`. `conflictDiff.test.ts` +4.
+
 - **2026-09-04 — Measured pitch overlay: moved up, playhead, loop button
   (user request).** The `MeasuredPitchContour` now sits directly under the
   sentence text (above the dictionary H/L row) on the `listening` /

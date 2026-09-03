@@ -1203,11 +1203,42 @@ button.sync-retry {
 
 .conflict-pre {
   margin: 0;
-  max-height: 12rem;
+  max-height: 20rem;
   overflow: auto;
   font-size: 0.75rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.conflict-diff {
+  max-height: 28rem;
+  line-height: 1.4;
+}
+
+.conflict-diff > div {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.conflict-diff-add {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.conflict-diff-remove {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.conflict-diff-context {
+  color: var(--text-muted);
+}
+
+.conflict-diff-legend {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
 }
 
 .build-prompt-text {

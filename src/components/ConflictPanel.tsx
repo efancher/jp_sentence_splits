@@ -9,13 +9,46 @@ import {
 } from '../sync/resolveConflict';
 import type { SyncConflict } from '../sync/types';
 import { useSync } from '../sync/SyncProvider';
+import {
+  countChanges,
+  diffLines,
+  prettyLines,
+  type DiffRow,
+} from '../sync/conflictDiff';
 
-function summarize(payload: unknown): string {
-  try {
-    return JSON.stringify(payload, null, 2).slice(0, 1200);
-  } catch {
-    return String(payload);
-  }
+const DIFF_PREFIX: Record<DiffRow['type'], string> = {
+  context: '  ',
+  add: '+ ',
+  remove: '- ',
+};
+
+function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
+  const local = prettyLines(conflict.localPayload);
+  const remote = prettyLines(conflict.remotePayload);
+  const rows = diffLines(local, remote);
+  const changes = countChanges(rows);
+
+  return (
+    <div className="stack" style={{ gap: '0.5rem' }}>
+      <div className="muted" style={{ fontSize: '0.8rem' }}>
+        {changes === 0
+          ? 'No field-level differences after normalising keys.'
+          : `${changes} differing line(s). `}
+        <span className="conflict-diff-legend conflict-diff-remove">
+          − local
+        </span>{' '}
+        <span className="conflict-diff-legend conflict-diff-add">+ remote</span>
+      </div>
+      <pre className="conflict-pre conflict-diff">
+        {rows.map((row, idx) => (
+          <div key={idx} className={`conflict-diff-${row.type}`}>
+            {DIFF_PREFIX[row.type]}
+            {row.text}
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
 }
 
 export function ConflictPanel() {
@@ -99,13 +132,21 @@ export function ConflictPanel() {
               local v{conflict.localVersion} vs remote v{conflict.remoteVersion}
             </div>
           </div>
-          <details>
-            <summary>Local version</summary>
-            <pre className="conflict-pre">{summarize(conflict.localPayload)}</pre>
+          <details open>
+            <summary>Differences</summary>
+            <ConflictDiff conflict={conflict} />
           </details>
           <details>
-            <summary>Remote version</summary>
-            <pre className="conflict-pre">{summarize(conflict.remotePayload)}</pre>
+            <summary>Full local version</summary>
+            <pre className="conflict-pre">
+              {prettyLines(conflict.localPayload).join('\n')}
+            </pre>
+          </details>
+          <details>
+            <summary>Full remote version</summary>
+            <pre className="conflict-pre">
+              {prettyLines(conflict.remotePayload).join('\n')}
+            </pre>
           </details>
           <div className="row">
             <button
