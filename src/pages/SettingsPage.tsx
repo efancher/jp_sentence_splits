@@ -28,6 +28,66 @@ import { clearDownloadedAudioCache } from '../sync/audioSync';
 import { useSync } from '../sync/SyncProvider';
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
 
+/**
+ * Two-step inline confirm for a destructive action — replaces `window.confirm`,
+ * which silently no-ops on an installed iOS Safari PWA (same reason the
+ * Analyze/BookDetail confirms are inline). First press arms; a second,
+ * explicit press runs it.
+ */
+function ConfirmButton({
+  label,
+  confirmLabel = 'Confirm',
+  prompt,
+  className = 'danger',
+  onConfirm,
+}: {
+  label: string;
+  confirmLabel?: string;
+  prompt: string;
+  className?: string;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (!armed) {
+    return (
+      <button type="button" className={className} onClick={() => setArmed(true)}>
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }}>
+      <p className="muted" role="alert" style={{ margin: 0 }}>
+        {prompt}
+      </p>
+      <div className="row">
+        <button
+          type="button"
+          className={className}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onConfirm();
+            } finally {
+              setBusy(false);
+              setArmed(false);
+            }
+          }}
+        >
+          {busy ? 'Working…' : confirmLabel}
+        </button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => setArmed(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const settings = useLiveQuery(() => readSettings(), []);
   const sync = useSync();
@@ -306,27 +366,21 @@ export function SettingsPage() {
             No native audio clips cached on this device.
           </p>
         )}
-        <button
-          type="button"
-          onClick={async () => {
-            const confirmed = window.confirm(
-              'Clear downloaded/imported reference audio from this device?',
-            );
-            if (!confirmed) return;
+        <ConfirmButton
+          label="Clear audio cache"
+          confirmLabel="Clear audio cache"
+          className="ghost"
+          prompt="Clear downloaded/imported reference audio from this device? Study data is untouched."
+          onConfirm={async () => {
             const count = await clearDownloadedAudioCache();
             setMessage(`Cleared ${count} audio clip(s) from this device.`);
           }}
-        >
-          Clear audio cache
-        </button>
-        <button
-          type="button"
-          className="danger"
-          onClick={async () => {
-            const confirmed = window.confirm(
-              'Remove ALL local study data from this device? A backup downloads first.',
-            );
-            if (!confirmed) return;
+        />
+        <ConfirmButton
+          label="Remove local data from this device"
+          confirmLabel="Remove local data"
+          prompt="Remove ALL local study data from this device? A backup downloads first."
+          onConfirm={async () => {
             const payload = await exportFullBackup();
             downloadText(
               `satori-glossbook-before-clear-${payload.exportedAt.slice(0, 10)}.json`,
@@ -364,9 +418,7 @@ export function SettingsPage() {
             setMessage('Local study data cleared. Backup downloaded.');
             await sync.syncNow();
           }}
-        >
-          Remove local data from this device
-        </button>
+        />
       </section>
 
       <section className="panel stack">
@@ -442,20 +494,15 @@ export function SettingsPage() {
             >
               Merge into existing data
             </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={async () => {
-                const confirmed = window.confirm(
-                  'Replace ALL local data with this backup? This cannot be undone.',
-                );
-                if (!confirmed) return;
+            <ConfirmButton
+              label="Replace all local data"
+              confirmLabel="Replace all local data"
+              prompt="Replace ALL local data with this backup? This cannot be undone."
+              onConfirm={async () => {
                 await restoreBackup(pendingBackup.data, 'replace');
                 setMessage('Local data replaced from backup.');
               }}
-            >
-              Replace all local data
-            </button>
+            />
           </div>
         ) : null}
         {message ? <div className="status-pill complete">{message}</div> : null}

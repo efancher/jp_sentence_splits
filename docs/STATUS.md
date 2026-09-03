@@ -33,6 +33,16 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Settings destructive actions no longer dead on iOS PWA.**
+  "Clear audio cache", "Remove local data from this device", and "Replace all
+  local data" (backup restore) each gated on `window.confirm`, which silently
+  no-ops on an installed iOS Safari PWA — the actions were unreachable there.
+  New in-file `ConfirmButton` (two-step inline confirm, same pattern as the
+  Analyze / BookDetail confirms) replaces all three; the destructive bodies
+  are unchanged (backup-first, then wipe). `AuthAndSyncSettings` was already
+  inline (2026-09-02). `tests/settingsPage.test.tsx` +1; 1145 vitest tests
+  green. (Backup export/import itself already existed — nothing built there.)
+
 - **2026-09-03 — Daily session recap.** `SessionRunnerPage`'s finished
   state now shows a short "Today you…" summary of what the day's session
   actually moved, under the existing "N of M activities completed" line.
