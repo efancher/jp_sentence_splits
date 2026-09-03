@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-03.
+Last updated: 2026-09-05.
 
 ## Where things stand
 
@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-05 — Vocabulary picker empty on 35 Anki-imported sentences.**
+  User hit "No morphology suggestions on this sentence…" on the later
+  sentences of *spring new life* (the 第五話/ending block, positions
+  78–111, plus one stray grammar-example sentence). Root cause: these were
+  Anki-imported into an existing book *after* the last
+  `backfill:vocabulary-suggestions` run, and `csvImport`/`import-anki-sentences`
+  never populate `vocabulary_suggestions` (only Shadowmine `.zip` imports
+  do) — so the picker had nothing to render. Not a code bug; the backfill
+  is `workflow_dispatch`-only and just needed re-running. Ran it against
+  production (`--apply`, 35 sentences updated, 0 skipped) via a local
+  `.venv-tokenize` (README's documented path; `pip install -e ../shadowing/cli`).
+  Recurring gotcha: re-run the backfill after any Anki/CSV import.
 - **2026-09-03 — Card-issue triage: お父さん reading merge.** Three open
   reports (`reading_retrieval`/`cloze`/`reading_production`) flagged お父さん
   reading as おちちさん. Root cause is the `combineSuggestions` reading
