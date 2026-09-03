@@ -123,11 +123,16 @@ handles at each row boundary; dragging one updates the two adjacent rows'
 `energyEnvelope`/`detectOnsetSeconds` from `waveform.ts`. Purely additive to
 W3.
 
-**Shipped (2026-09-03):** client-side decode of the whole span turned out
-to fail on iOS Safari for a multi-minute podcast, so peaks *and* pauses are
-computed server-side — `app/waveform.py` (`GET /jobs/{id}/waveform`, `POST
-/source-audio/waveform`) does one ffmpeg pass: low-rate PCM for the polyline
-+ real `silencedetect` for "Snap to pauses". SVG render, not canvas.
+**Shipped (2026-09-03):** two corrections to the plan. (1) Client-side
+decode of the whole span fails on iOS Safari for a multi-minute podcast, so
+peaks *and* pauses are computed server-side — `app/waveform.py` (`GET
+/jobs/{id}/waveform`, `POST /source-audio/waveform`), one ffmpeg pass:
+low-rate PCM for the polyline + real `silencedetect`. (2) A single
+whole-span strip is unreadable at podcast length (100+ boundary lines in
+600 px), so there is no global strip — each row has an "Adjust timing"
+toggle opening `<BoundaryWaveform>`, a zoomed view of that sentence ±1.5 s
+with a draggable handle per edge and a per-row "Snap to pauses". SVG, not
+canvas.
 
 ### W5 — the wizard shell
 

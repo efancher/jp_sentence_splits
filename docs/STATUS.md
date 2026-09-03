@@ -33,22 +33,25 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
-- **2026-09-03 — Segmentation waveform computed server-side (user
-  request).** `SegmentationWaveform` used to download the whole reviewed
-  span (up to ~12 MB / 8 min for a podcast) and run it through
-  `AudioContext.decodeAudioData` — which reliably fails on iOS Safari for a
-  span that long, so the boundary waveform was permanently "unavailable"
-  there. New `app/waveform.py` decodes the span with one ffmpeg pass
-  (low-rate PCM on stdout + `silencedetect` on stderr) and returns just the
-  peak buckets + pause midpoints as a few-KB JSON: `GET
-  /jobs/{id}/waveform` for the wizard, `POST /source-audio/waveform` for
-  `/books/:id/resegment`. Client fetchers `fetchJobWaveform` /
-  `fetchSourceWaveform`; `SegmentationEditor` gains a `waveformForRange`
-  prop (kept separate from `audioForRange`, which still feeds the per-row
-  play buttons). No client-side audio decode anymore; "Snap to pauses" now
-  works on every device. `test_waveform.py` (new, +9 py), `test_jobs_api`
-  / `test_source_cache` +1 each; `tests/miningApi.test.ts` +3. Deploy:
-  `pip install -r requirements.txt` unchanged (stdlib only — no numpy).
+- **2026-09-03 — Boundary waveform: server-side + per-row zoom (user
+  request).** Two parts. (a) The boundary waveform no longer touches audio
+  in the browser: `AudioContext.decodeAudioData` on a multi-minute span
+  reliably fails on iOS Safari, so it was permanently "unavailable" there.
+  New `app/waveform.py` does one ffmpeg pass over the span (low-rate PCM on
+  stdout + `silencedetect` on stderr) and returns just peak buckets + pause
+  midpoints as a few-KB JSON — `GET /jobs/{id}/waveform` (wizard), `POST
+  /source-audio/waveform` (`/books/:id/resegment`); stdlib only, no numpy.
+  (b) A single whole-span strip is unreadable for an 8-min podcast (118
+  boundary lines in 600 px), so it's gone. Each full `SegmentationEditor`
+  row now has an **"Adjust timing"** toggle opening `<BoundaryWaveform>` —
+  a zoomed waveform of just that sentence ±1.5 s with a draggable handle on
+  each editable edge, visible pause lines, and a per-row "Snap to pauses".
+  One open at a time; closes on any merge/split/remove.
+  `SegmentationEditor` takes `waveformForRange` (separate from
+  `audioForRange`, which still feeds the per-row play buttons).
+  `test_waveform.py` (new, +9 py), `test_jobs_api` / `test_source_cache`
+  +1 each; `tests/miningApi.test.ts` +3, `tests/segmentationEditor` reworked.
+  Deploy: `pip install -r requirements.txt` unchanged.
 
 - **2026-09-03 — Mining wizard warns on an already-imported video (user
   request).** The Import-from-YouTube idle screen now parses the pasted

@@ -1,11 +1,14 @@
+import { useState } from 'react';
+
 import type { SpanWaveform } from '../lib/miningApi';
 import {
   mergeReviewRowUp,
   removeReviewRow,
+  setRowBoundary,
   splitReviewRow,
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
-import { SegmentationWaveform } from './SegmentationWaveform';
+import { BoundaryWaveform } from './BoundaryWaveform';
 import { SpanAudioButton } from './SpanAudioButton';
 
 /**
@@ -16,6 +19,11 @@ import { SpanAudioButton } from './SpanAudioButton';
  * helpers in `resegmentPlan.ts`) and the "collapse rows with no study
  * progress" view, and hands every change back through `onRowsChange`. It
  * has no knowledge of the plan, the DB, or the apply path.
+ *
+ * Boundary timing is tuned one row at a time (`waveformForRange` set): each
+ * full row has an "Adjust timing" toggle that opens a zoomed
+ * `<BoundaryWaveform>` for that sentence — a whole-span strip is unreadable
+ * for a multi-minute podcast.
  */
 
 const NO_ROWS: ReadonlySet<number> = new Set();
@@ -40,9 +48,9 @@ interface SegmentationEditorProps {
    */
   audioForRange?: (startMs: number, endMs: number) => Promise<Blob>;
   /**
-   * When set, a waveform of the whole reviewed span with draggable
-   * boundary handles renders above the list (the mining wizard passes
-   * `(s, e) => fetchJobWaveform(jobId, s, e)`). Omitted = no waveform.
+   * When set, each full row gets an "Adjust timing" toggle that opens a
+   * zoomed boundary waveform (the mining wizard passes
+   * `(s, e) => fetchJobWaveform(jobId, s, e)`). Omitted = no timing editor.
    */
   waveformForRange?: (startMs: number, endMs: number) => Promise<SpanWaveform>;
 }
@@ -61,20 +69,19 @@ export function SegmentationEditor({
     ? rows.length - rows.filter((_, i) => rowsWithProgress.has(i)).length
     : 0;
 
+  // Index of the row whose timing editor is open (one at a time). Cleared on
+  // any structural change since indexes shift.
+  const [tuningRow, setTuningRow] = useState<number | null>(null);
+  const change = (next: ResegmentReviewRow[]) => {
+    setTuningRow(null);
+    onRowsChange(next);
+  };
+
   const editRow = (index: number, patch: Partial<ResegmentReviewRow>) =>
     onRowsChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
   return (
     <>
-      {waveformForRange && rows.length > 0 ? (
-        <SegmentationWaveform
-          rows={rows}
-          onRowsChange={onRowsChange}
-          waveformForRange={waveformForRange}
-          disabled={disabled}
-        />
-      ) : null}
-
       {rows.map((row, index) =>
         !filteringActive || rowsWithProgress.has(index) ? (
           <section className="panel stack" key={index}>
@@ -91,29 +98,57 @@ export function SegmentationEditor({
                     disabled={disabled}
                   />
                 ) : null}
+                {waveformForRange ? (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-expanded={tuningRow === index}
+                    onClick={() =>
+                      setTuningRow((current) => (current === index ? null : index))
+                    }
+                  >
+                    {tuningRow === index ? 'Done' : 'Adjust timing'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={index === 0 || disabled}
-                  onClick={() => onRowsChange(mergeReviewRowUp(rows, index))}
+                  onClick={() => change(mergeReviewRowUp(rows, index))}
                 >
                   Merge up
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
-                  onClick={() => onRowsChange(splitReviewRow(rows, index))}
+                  onClick={() => change(splitReviewRow(rows, index))}
                 >
                   Split by 。
                 </button>
                 <button
                   type="button"
                   disabled={disabled || rows.length === 1}
-                  onClick={() => onRowsChange(removeReviewRow(rows, index))}
+                  onClick={() => change(removeReviewRow(rows, index))}
                 >
                   Remove
                 </button>
               </div>
             </div>
+            {waveformForRange && tuningRow === index ? (
+              <BoundaryWaveform
+                startMs={row.startMs}
+                endMs={row.endMs}
+                minStartMs={index > 0 ? rows[index - 1]!.startMs + 1 : row.startMs}
+                maxEndMs={
+                  index < rows.length - 1 ? rows[index + 1]!.endMs - 1 : row.endMs
+                }
+                canEditStart={index > 0}
+                canEditEnd={index < rows.length - 1}
+                waveformForRange={waveformForRange}
+                onStartChange={(ms) => onRowsChange(setRowBoundary(rows, index, ms))}
+                onEndChange={(ms) => onRowsChange(setRowBoundary(rows, index + 1, ms))}
+                disabled={disabled}
+              />
+            ) : null}
             <textarea
               className="jp"
               rows={2}
@@ -182,7 +217,7 @@ export function SegmentationEditor({
                 <button
                   type="button"
                   disabled={disabled || rows.length === 1}
-                  onClick={() => onRowsChange(removeReviewRow(rows, index))}
+                  onClick={() => change(removeReviewRow(rows, index))}
                 >
                   Remove
                 </button>

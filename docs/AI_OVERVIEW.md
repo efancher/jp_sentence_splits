@@ -524,11 +524,14 @@ observed from outside `ReviewPage`'s own due-queue state.
   fell back to punctuation-free auto-captions; `formatTranscriptForAI` /
   `parseAiSegmentedTranscript` in `src/lib/miningTranscript.ts`, manual
   copy/paste, no Edge Function) → **Segment**
-  (`<SegmentationEditor>` — sentence rows, each playing its span, above a
-  waveform whose per-boundary handles drag onto pauses, "Snap to pauses";
-  the peaks + pause midpoints are computed server-side by `app/waveform.py`
-  and fetched via `GET /jobs/{id}/waveform`, so the browser never decodes
-  the multi-minute span — that fails on iOS Safari)
+  (`<SegmentationEditor>` — sentence rows, each playing its span; an
+  "Adjust timing" toggle per row opens `<BoundaryWaveform>`, a zoomed
+  waveform of just that sentence ±1.5 s with a draggable handle on each
+  edge + visible pause lines + a per-row "Snap to pauses". Peaks + pause
+  midpoints are computed server-side by `app/waveform.py` and fetched via
+  `GET /jobs/{id}/waveform`, so the browser never decodes audio — a
+  multi-minute `decodeAudioData` fails on iOS Safari, and a whole-span
+  strip is unreadable for a long podcast anyway)
   → **Translate** (EN per row, editable, "Auto-fill translations (AI)"
   reuses `sentence-realign`, grouped by transcript-segment provenance;
   plus a **"Translate with AI help"** panel — the manual copy/paste
@@ -575,9 +578,9 @@ observed from outside `ReviewPage`'s own due-queue state.
   `merge:false split:false` = annotate-only for song lyrics), lets the
   user merge/split/edit in a review step (`SegmentationEditor.tsx`, a pure
   row-list component shared with the mining wizard's segment stage — with
-  the same boundary-drag waveform when the book has a `sourceUrl`, fed by
-  `POST /source-audio/waveform`; per-row span playback uses `POST
-  /source-audio/range`), then `applyResegmentation()`
+  the same per-row "Adjust timing" zoomed waveform when the book has a
+  `sourceUrl` (`POST /source-audio/waveform`; per-row span playback uses
+  `POST /source-audio/range`)), then `applyResegmentation()`
   (`src/db/repository.ts`) creates the new sentences, retires the old
   ones (`deleteSentenceCascade`; soft delete, never raw DELETE), carries
   study progress onto the

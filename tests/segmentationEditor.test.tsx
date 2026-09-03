@@ -108,11 +108,12 @@ describe('SegmentationEditor', () => {
     expect(screen.getByDisplayValue('とり。')).toBeInTheDocument();
   });
 
-  it('renders the boundary waveform when given a waveform fetcher', async () => {
+  it('opens a zoomed boundary waveform for one row on demand', async () => {
     const waveformForRange = vi.fn(async () => ({
       peaks: [{ min: -0.5, max: 0.5 }],
       silenceMidsMs: [1000],
     }));
+    const user = userEvent.setup();
     render(
       <SegmentationEditor
         rows={[row({ startMs: 0, endMs: 1000 }), row({ startMs: 1000, endMs: 2000 })]}
@@ -120,14 +121,24 @@ describe('SegmentationEditor', () => {
         waveformForRange={waveformForRange}
       />,
     );
-    expect(await screen.findByRole('img', { name: /span waveform/i })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /snap to pauses/i })).toBeInTheDocument();
-    expect(waveformForRange).toHaveBeenCalledWith(0, 2000);
+    // Nothing fetched or drawn until a row is opened.
+    expect(screen.queryByRole('img', { name: /sentence waveform/i })).not.toBeInTheDocument();
+    expect(waveformForRange).not.toHaveBeenCalled();
+
+    const adjustButtons = screen.getAllByRole('button', { name: 'Adjust timing' });
+    await user.click(adjustButtons[1]!);
+
+    expect(await screen.findByRole('img', { name: /sentence waveform/i })).toBeInTheDocument();
+    // view window = [1000 - 1500 clamped to 0, 2000 + 1500]
+    expect(waveformForRange).toHaveBeenCalledWith(0, 3500);
+    // Toggles closed again.
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('img', { name: /sentence waveform/i })).not.toBeInTheDocument();
   });
 
-  it('has no waveform without a waveform fetcher', () => {
+  it('has no timing editor without a waveform fetcher', () => {
     render(<SegmentationEditor rows={[row()]} onRowsChange={vi.fn()} />);
-    expect(screen.queryByRole('img', { name: /span waveform/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Adjust timing' })).not.toBeInTheDocument();
   });
 
   it('freezes every control when disabled', () => {
