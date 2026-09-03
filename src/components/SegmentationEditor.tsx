@@ -1,3 +1,4 @@
+import type { SpanWaveform } from '../lib/miningApi';
 import {
   mergeReviewRowUp,
   removeReviewRow,
@@ -33,11 +34,17 @@ interface SegmentationEditorProps {
   /** Freeze all editing while an apply/commit is in flight. */
   disabled?: boolean;
   /**
-   * When set, a waveform of the whole reviewed span with draggable
-   * boundary handles renders above the list (the mining wizard passes
-   * `(s, e) => fetchJobAudioRange(jobId, s, e)`). Omitted = no waveform.
+   * When set, each row gets a play button for its span (the mining wizard
+   * passes `(s, e) => fetchJobAudioRange(jobId, s, e)`). Omitted = no
+   * per-row audio.
    */
   audioForRange?: (startMs: number, endMs: number) => Promise<Blob>;
+  /**
+   * When set, a waveform of the whole reviewed span with draggable
+   * boundary handles renders above the list (the mining wizard passes
+   * `(s, e) => fetchJobWaveform(jobId, s, e)`). Omitted = no waveform.
+   */
+  waveformForRange?: (startMs: number, endMs: number) => Promise<SpanWaveform>;
 }
 
 export function SegmentationEditor({
@@ -47,6 +54,7 @@ export function SegmentationEditor({
   showAllRows = false,
   disabled = false,
   audioForRange,
+  waveformForRange,
 }: SegmentationEditorProps) {
   const filteringActive = rowsWithProgress.size > 0 && !showAllRows;
   const hiddenRowCount = filteringActive
@@ -58,11 +66,11 @@ export function SegmentationEditor({
 
   return (
     <>
-      {audioForRange && rows.length > 0 ? (
+      {waveformForRange && rows.length > 0 ? (
         <SegmentationWaveform
           rows={rows}
           onRowsChange={onRowsChange}
-          audioForRange={audioForRange}
+          waveformForRange={waveformForRange}
           disabled={disabled}
         />
       ) : null}

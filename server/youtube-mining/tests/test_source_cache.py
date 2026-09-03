@@ -148,3 +148,21 @@ def test_source_audio_range_streams_a_span(client: TestClient):
         json={"url": URL, "startMs": 3000, "endMs": 1000},
     )
     assert bad.status_code == 422
+
+
+def test_source_audio_waveform_returns_peaks_and_silences(client: TestClient):
+    resp = client.post(
+        "/source-audio/waveform",
+        json={"url": URL, "startMs": 0, "endMs": 5000},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["peaks"]) > 0
+    assert all(-1.0 <= lo <= hi <= 1.0 for lo, hi in body["peaks"])
+    assert isinstance(body["silenceMidsMs"], list)
+
+    bad = client.post(
+        "/source-audio/waveform",
+        json={"url": URL, "startMs": 5000, "endMs": 1000},
+    )
+    assert bad.status_code == 422

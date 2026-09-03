@@ -1,43 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { SpanWaveform } from '../lib/miningApi';
 import {
   setRowBoundary,
   snapBoundariesToSilences,
   type ResegmentReviewRow,
 } from '../lib/resegmentPlan';
-import {
-  canonicalizeAudioBuffer,
-  computePeaks,
-  decodeAudioBuffer,
-  detectSilences,
-  peaksToPolyline,
-  type WavePeak,
-} from '../lib/waveform';
+import { peaksToPolyline, type WavePeak } from '../lib/waveform';
 
 const VIEW_WIDTH = 600;
 const WAVE_HEIGHT = 96;
-const WAVE_BUCKETS = 600;
 
 /**
  * A waveform of the whole reviewed span with a draggable vertical handle at
  * every internal row boundary — drop a boundary onto the pause you can see,
  * instead of nudging millisecond numbers. "Snap to pauses" moves every
- * boundary to the nearest silence (ffmpeg-`silencedetect`-style, computed
- * client-side from the decoded span). Rendered by `SegmentationEditor` only
- * when it's given an `audioForRange` fetcher (the mining wizard); the
- * re-segment-existing-book flow has no job audio to pull.
+ * boundary to the nearest silence. The peaks and silence midpoints are
+ * computed server-side (ffmpeg) and fetched via `waveformForRange`; the
+ * browser never decodes the span itself (a multi-minute `decodeAudioData`
+ * fails on iOS Safari). Rendered by `SegmentationEditor` only when it's
+ * given a `waveformForRange` fetcher.
  */
 interface SegmentationWaveformProps {
   rows: ResegmentReviewRow[];
   onRowsChange: (rows: ResegmentReviewRow[]) => void;
-  audioForRange: (startMs: number, endMs: number) => Promise<Blob>;
+  waveformForRange: (startMs: number, endMs: number) => Promise<SpanWaveform>;
   disabled?: boolean;
 }
 
 export function SegmentationWaveform({
   rows,
   onRowsChange,
-  audioForRange,
+  waveformForRange,
   disabled = false,
 }: SegmentationWaveformProps) {
   const spanStartMs = rows[0]?.startMs ?? 0;
@@ -58,16 +52,10 @@ export function SegmentationWaveform({
     setStatus('loading');
     void (async () => {
       try {
-        const blob = await audioForRange(spanStartMs, spanEndMs);
-        const buffer = await decodeAudioBuffer(blob);
-        const canonical = canonicalizeAudioBuffer(buffer);
+        const waveform = await waveformForRange(spanStartMs, spanEndMs);
         if (cancelled) return;
-        setPeaks(computePeaks(canonical.samples, WAVE_BUCKETS));
-        setSilenceMidsMs(
-          detectSilences(canonical.samples, canonical.sampleRate).map(
-            (s) => spanStartMs + s.midSeconds * 1000,
-          ),
-        );
+        setPeaks(waveform.peaks);
+        setSilenceMidsMs(waveform.silenceMidsMs);
         setStatus('ready');
       } catch {
         if (!cancelled) setStatus('error');
@@ -76,7 +64,7 @@ export function SegmentationWaveform({
     return () => {
       cancelled = true;
     };
-  }, [audioForRange, spanStartMs, spanEndMs, spanMs]);
+  }, [waveformForRange, spanStartMs, spanEndMs, spanMs]);
 
   const wavePath = useMemo(
     () => peaksToPolyline(peaks, VIEW_WIDTH, WAVE_HEIGHT),

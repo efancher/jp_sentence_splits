@@ -8,8 +8,10 @@ import {
   createMiningJob,
   deleteMiningJob,
   fetchJobAudioRange,
+  fetchJobWaveform,
   fetchMiningClipAudio,
   fetchSourceAudioRange,
+  fetchSourceWaveform,
   getMiningJob,
   translateJob,
 } from '../src/lib/miningApi';
@@ -162,6 +164,51 @@ describe('fetchJobAudioRange', () => {
     await expect(fetchJobAudioRange('job1', 5000, 4000)).rejects.toThrow(
       'endMs must be greater than startMs',
     );
+  });
+});
+
+describe('fetchJobWaveform / fetchSourceWaveform', () => {
+  it('parses the job waveform into {min,max} peaks and passes the rounded span', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ peaks: [[-0.5, 0.5], [-1, 1]], silenceMidsMs: [1200, 3400] }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const waveform = await fetchJobWaveform('job1', 1000.4, 2500.9);
+    expect(waveform.peaks).toEqual([
+      { min: -0.5, max: 0.5 },
+      { min: -1, max: 1 },
+    ]);
+    expect(waveform.silenceMidsMs).toEqual([1200, 3400]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/jobs/job1/waveform?startMs=1000&endMs=2501'),
+    );
+  });
+
+  it('posts the url + span for the source waveform', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ peaks: [], silenceMidsMs: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchSourceWaveform('https://youtu.be/VID', 1000.6, 4000.2);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      url: 'https://youtu.be/VID',
+      startMs: 1001,
+      endMs: 4000,
+    });
+  });
+
+  it('throws with the server detail on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ detail: 'boom' }), { status: 502 })),
+    );
+    await expect(fetchJobWaveform('job1', 0, 1000)).rejects.toThrow('boom');
   });
 });
 

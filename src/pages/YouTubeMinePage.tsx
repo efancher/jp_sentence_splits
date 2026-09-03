@@ -14,6 +14,7 @@ import {
   createMiningJob,
   deleteMiningJob,
   fetchJobAudioRange,
+  fetchJobWaveform,
   getMiningJob,
   listMiningJobs,
   translateJob,
@@ -713,6 +714,7 @@ export function YouTubeMinePage() {
             onRowsChange={setRows}
             disabled={busy}
             audioForRange={(s, e) => fetchJobAudioRange(jobId!, s, e)}
+            waveformForRange={(s, e) => fetchJobWaveform(jobId!, s, e)}
           />
           <section className="panel">
             <div className="row">

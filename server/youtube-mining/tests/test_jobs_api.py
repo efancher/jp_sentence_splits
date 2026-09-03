@@ -397,6 +397,40 @@ def test_job_audio_range_endpoint(client: TestClient) -> None:
     assert missing.status_code == 404
 
 
+def test_job_waveform_endpoint(client: TestClient, monkeypatch) -> None:
+    import struct
+    import subprocess as sp
+
+    from app import waveform
+
+    monkeypatch.setattr(
+        waveform,
+        "_run_ffmpeg",
+        lambda source_path, start_ms, end_ms: sp.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=struct.pack("<4h", 0, 32767, -32768, 0),
+            stderr=b"silence_start: 0.20\nsilence_end: 0.40\n",
+        ),
+    )
+
+    create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
+    job_id = create.json()["jobId"]
+    _wait_until_ready(client, job_id)
+
+    resp = client.get(f"/jobs/{job_id}/waveform", params={"startMs": 0, "endMs": 2000})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["peaks"]) > 0
+    assert body["silenceMidsMs"] == [300]  # midpoint of the 0.2–0.4 s pause
+
+    bad = client.get(f"/jobs/{job_id}/waveform", params={"startMs": 2000, "endMs": 0})
+    assert bad.status_code == 409
+
+    missing = client.get("/jobs/does-not-exist/waveform", params={"startMs": 0, "endMs": 1000})
+    assert missing.status_code == 404
+
+
 def test_commit_endpoint_clips_every_row_inline(client: TestClient) -> None:
     create = client.post("/jobs", json={"url": "https://www.youtube.com/watch?v=vid12345678"})
     job_id = create.json()["jobId"]

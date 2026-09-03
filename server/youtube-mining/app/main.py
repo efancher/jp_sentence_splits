@@ -13,7 +13,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
-from app import clip, config, jobs, morphology, readings, reclip, resegment, source_cache, youtube
+from app import (
+    clip,
+    config,
+    jobs,
+    morphology,
+    readings,
+    reclip,
+    resegment,
+    source_cache,
+    waveform,
+    youtube,
+)
 from app.models import (
     ClipRequest,
     ClipResponse,
@@ -34,6 +45,7 @@ from app.models import (
     SourceAudioRequest,
     SourceClipRequest,
     SourceRangeRequest,
+    WaveformResponse,
 )
 
 logger = logging.getLogger("youtube_mining_api")
@@ -148,6 +160,22 @@ async def get_job_audio(job_id: str, startMs: int, endMs: int):  # noqa: N803
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return FileResponse(path, media_type="audio/mp4")
+
+
+@app.get("/jobs/{job_id}/waveform", response_model=WaveformResponse)
+async def get_job_waveform(job_id: str, startMs: int, endMs: int):  # noqa: N803
+    """Down-sampled peak envelope + pause midpoints for a (startMs, endMs)
+    span of the job's source audio — the segmentation editor's boundary
+    waveform, computed here so the browser never decodes the span."""
+    try:
+        job = jobs.get_job(job_id)
+        return await asyncio.to_thread(jobs.source_waveform, job, startMs, endMs)
+    except jobs.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.post("/jobs/{job_id}/clip", response_model=ClipResponse)
@@ -337,6 +365,29 @@ async def source_audio_range(req: SourceRangeRequest):
     return FileResponse(
         out, media_type="audio/mp4", background=BackgroundTask(cleanup)
     )
+
+
+@app.post("/source-audio/waveform", response_model=WaveformResponse)
+async def source_audio_waveform(req: SourceRangeRequest):
+    """Peak envelope + pause midpoints for one span of a video's cached
+    source audio — the re-segment page's boundary waveform (the wizard uses
+    the job-scoped GET /jobs/{id}/waveform). Ensures the source is cached
+    first (a slow first call per video)."""
+    if req.endMs <= req.startMs:
+        raise HTTPException(status_code=422, detail="endMs must be greater than startMs")
+    try:
+        cached = await asyncio.to_thread(source_cache.ensure, req.url)
+        media_ms = await asyncio.to_thread(clip.probe_duration_ms, cached)
+        return await asyncio.to_thread(
+            waveform.waveform_for_span,
+            cached,
+            req.startMs,
+            min(req.endMs, media_ms),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.post("/source-audio/clip", response_model=ReclipResponse)

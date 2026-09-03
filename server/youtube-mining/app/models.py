@@ -262,6 +262,17 @@ class SourceRangeRequest(BaseModel):
     endMs: int = Field(ge=1)
 
 
+class WaveformResponse(BaseModel):
+    """Down-sampled peak envelope + pause midpoints for a reviewed span —
+    what `SegmentationWaveform` draws instead of decoding the audio itself
+    (a multi-minute `decodeAudioData` fails on iOS Safari). `peaks` is
+    [min, max] per bucket in -1..1; `silenceMidsMs` are absolute
+    (startMs-relative) pause centres, for "Snap to pauses"."""
+
+    peaks: list[tuple[float, float]]
+    silenceMidsMs: list[int]
+
+
 class ClipAudioInfo(BaseModel):
     mimeType: Literal["audio/mp4"] = "audio/mp4"
     durationMs: int

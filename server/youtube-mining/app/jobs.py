@@ -38,6 +38,7 @@ from app import (
     resegment,
     source_cache,
     subtitles,
+    waveform,
     youtube,
 )
 from app.models import (
@@ -690,6 +691,21 @@ def source_audio_range(job: Job, start_ms: int, end_ms: int) -> Path:
         job.source_audio_path, out, start_ms=adj_start, end_ms=adj_end
     )
     return out
+
+
+def source_waveform(job: Job, start_ms: int, end_ms: int) -> dict:
+    """Peak envelope + pause midpoints for [start_ms, end_ms) of the job's
+    source audio — the segmentation editor's boundary waveform. Computed
+    server-side (ffmpeg) so the browser never decodes a multi-minute span
+    (that fails on iOS Safari). Not cached: the client fetches it once per
+    span, and the span only moves when an outer boundary row is dragged."""
+    if end_ms <= start_ms:
+        raise ValueError("endMs must be greater than startMs")
+    _ensure_source_audio(job)
+    media_ms = clip.probe_duration_ms(job.source_audio_path)
+    return waveform.waveform_for_span(
+        job.source_audio_path, start_ms, min(end_ms, media_ms)
+    )
 
 
 def _sweep_once() -> None:

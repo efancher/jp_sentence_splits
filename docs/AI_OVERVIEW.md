@@ -525,7 +525,10 @@ observed from outside `ReviewPage`'s own due-queue state.
   `parseAiSegmentedTranscript` in `src/lib/miningTranscript.ts`, manual
   copy/paste, no Edge Function) → **Segment**
   (`<SegmentationEditor>` — sentence rows, each playing its span, above a
-  waveform whose per-boundary handles drag onto pauses, "Snap to pauses")
+  waveform whose per-boundary handles drag onto pauses, "Snap to pauses";
+  the peaks + pause midpoints are computed server-side by `app/waveform.py`
+  and fetched via `GET /jobs/{id}/waveform`, so the browser never decodes
+  the multi-minute span — that fails on iOS Safari)
   → **Translate** (EN per row, editable, "Auto-fill translations (AI)"
   reuses `sentence-realign`, grouped by transcript-segment provenance;
   plus a **"Translate with AI help"** panel — the manual copy/paste
@@ -573,7 +576,8 @@ observed from outside `ReviewPage`'s own due-queue state.
   user merge/split/edit in a review step (`SegmentationEditor.tsx`, a pure
   row-list component shared with the mining wizard's segment stage — with
   the same boundary-drag waveform when the book has a `sourceUrl`, fed by
-  `POST /source-audio/range`), then `applyResegmentation()`
+  `POST /source-audio/waveform`; per-row span playback uses `POST
+  /source-audio/range`), then `applyResegmentation()`
   (`src/db/repository.ts`) creates the new sentences, retires the old
   ones (`deleteSentenceCascade`; soft delete, never raw DELETE), carries
   study progress onto the
@@ -1471,11 +1475,15 @@ aren't JSON-serializable/aren't worth backing up).
   drives: `POST /jobs/{id}/segment` accepts a corrected transcript and
   re-resegments, `POST /jobs/{id}/translate` re-aligns EN,
   `GET /jobs/{id}/audio?startMs&endMs` streams any span of the cached
-  source for inline playback, `POST /jobs/{id}/commit` clips a batch of
+  source for inline playback, `GET /jobs/{id}/waveform?startMs&endMs`
+  returns the down-sampled peak buckets + `silencedetect` pause midpoints
+  for the segmentation editor's boundary waveform (ffmpeg-computed, so the
+  browser never decodes a multi-minute span — that fails on iOS Safari),
+  `POST /jobs/{id}/commit` clips a batch of
   reviewed rows (audio inline) and is incremental — the client sends ~30 at
-  a time and accumulates. `POST /source-audio/range`
-  is the equivalent span stream for an already-imported book's source
-  (the re-segment page's waveform). `_run_job` still auto-advances every
+  a time and accumulates. `POST /source-audio/range` and `POST
+  /source-audio/waveform` are the equivalents for an already-imported
+  book's source (the re-segment page). `_run_job` still auto-advances every
   stage on creation as a fallback.
   Full design + what's-still-open: `docs/mining-pipeline-v2.md`,
   `docs/mining-wizard-spec.md`.

@@ -108,21 +108,24 @@ describe('SegmentationEditor', () => {
     expect(screen.getByDisplayValue('とり。')).toBeInTheDocument();
   });
 
-  it('renders the boundary waveform when given an audio fetcher', async () => {
-    const audioForRange = vi.fn(async () => new Blob(['x'], { type: 'audio/mp4' }));
+  it('renders the boundary waveform when given a waveform fetcher', async () => {
+    const waveformForRange = vi.fn(async () => ({
+      peaks: [{ min: -0.5, max: 0.5 }],
+      silenceMidsMs: [1000],
+    }));
     render(
       <SegmentationEditor
         rows={[row({ startMs: 0, endMs: 1000 }), row({ startMs: 1000, endMs: 2000 })]}
         onRowsChange={vi.fn()}
-        audioForRange={audioForRange}
+        waveformForRange={waveformForRange}
       />,
     );
     expect(await screen.findByRole('img', { name: /span waveform/i })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /snap to pauses/i })).toBeInTheDocument();
-    expect(audioForRange).toHaveBeenCalledWith(0, 2000);
+    expect(waveformForRange).toHaveBeenCalledWith(0, 2000);
   });
 
-  it('has no waveform without an audio fetcher', () => {
+  it('has no waveform without a waveform fetcher', () => {
     render(<SegmentationEditor rows={[row()]} onRowsChange={vi.fn()} />);
     expect(screen.queryByRole('img', { name: /span waveform/i })).not.toBeInTheDocument();
   });

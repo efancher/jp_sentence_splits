@@ -9,7 +9,11 @@ import {
 } from '../db/repository';
 import { fixNumeralsInReadingOnly } from '../lib/fixNumeralReadings';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
-import { fetchSourceAudioRange, resegmentSentences } from '../lib/miningApi';
+import {
+  fetchSourceAudioRange,
+  fetchSourceWaveform,
+  resegmentSentences,
+} from '../lib/miningApi';
 import {
   buildRealignGroups,
   buildResegmentPlan,
@@ -290,6 +294,12 @@ export function ResegmentSourcePage() {
               context?.sourceUrl
                 ? (startMs, endMs) =>
                     fetchSourceAudioRange(context.sourceUrl!, startMs, endMs)
+                : undefined
+            }
+            waveformForRange={
+              context?.sourceUrl
+                ? (startMs, endMs) =>
+                    fetchSourceWaveform(context.sourceUrl!, startMs, endMs)
                 : undefined
             }
           />

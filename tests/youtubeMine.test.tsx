@@ -126,6 +126,7 @@ vi.mock('../src/lib/miningApi', () => {
         })),
     ),
     fetchJobAudioRange: vi.fn(async () => new Blob(['fake-span'], { type: 'audio/mp4' })),
+    fetchJobWaveform: vi.fn(async () => ({ peaks: [], silenceMidsMs: [] })),
     deleteMiningJob: vi.fn(async () => undefined),
     listMiningJobs: vi.fn(async () => []),
   };

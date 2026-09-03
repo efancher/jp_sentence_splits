@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Segmentation waveform computed server-side (user
+  request).** `SegmentationWaveform` used to download the whole reviewed
+  span (up to ~12 MB / 8 min for a podcast) and run it through
+  `AudioContext.decodeAudioData` — which reliably fails on iOS Safari for a
+  span that long, so the boundary waveform was permanently "unavailable"
+  there. New `app/waveform.py` decodes the span with one ffmpeg pass
+  (low-rate PCM on stdout + `silencedetect` on stderr) and returns just the
+  peak buckets + pause midpoints as a few-KB JSON: `GET
+  /jobs/{id}/waveform` for the wizard, `POST /source-audio/waveform` for
+  `/books/:id/resegment`. Client fetchers `fetchJobWaveform` /
+  `fetchSourceWaveform`; `SegmentationEditor` gains a `waveformForRange`
+  prop (kept separate from `audioForRange`, which still feeds the per-row
+  play buttons). No client-side audio decode anymore; "Snap to pauses" now
+  works on every device. `test_waveform.py` (new, +9 py), `test_jobs_api`
+  / `test_source_cache` +1 each; `tests/miningApi.test.ts` +3. Deploy:
+  `pip install -r requirements.txt` unchanged (stdlib only — no numpy).
+
 - **2026-09-03 — Mining wizard warns on an already-imported video (user
   request).** The Import-from-YouTube idle screen now parses the pasted
   URL's 11-char video id (`extractYouTubeId` in `src/lib/youtubeUrl.ts`,

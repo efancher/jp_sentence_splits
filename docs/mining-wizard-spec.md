@@ -123,6 +123,12 @@ handles at each row boundary; dragging one updates the two adjacent rows'
 `energyEnvelope`/`detectOnsetSeconds` from `waveform.ts`. Purely additive to
 W3.
 
+**Shipped (2026-09-03):** client-side decode of the whole span turned out
+to fail on iOS Safari for a multi-minute podcast, so peaks *and* pauses are
+computed server-side — `app/waveform.py` (`GET /jobs/{id}/waveform`, `POST
+/source-audio/waveform`) does one ffmpeg pass: low-rate PCM for the polyline
++ real `silencedetect` for "Snap to pauses". SVG render, not canvas.
+
 ### W5 — the wizard shell
 
 `YouTubeMinePage` → a stepper. Panels:

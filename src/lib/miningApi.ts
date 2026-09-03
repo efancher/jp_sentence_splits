@@ -371,6 +371,45 @@ export async function fetchJobAudioRange(
   return response.blob();
 }
 
+const waveformSchema = z.object({
+  peaks: z.array(z.tuple([z.number(), z.number()])),
+  silenceMidsMs: z.array(z.number()),
+});
+
+/** Down-sampled peak envelope + absolute pause midpoints for a span. */
+export interface SpanWaveform {
+  peaks: { min: number; max: number }[];
+  silenceMidsMs: number[];
+}
+
+function parseWaveform(payload: unknown): SpanWaveform {
+  const { peaks, silenceMidsMs } = waveformSchema.parse(payload);
+  return {
+    peaks: peaks.map(([min, max]) => ({ min, max })),
+    silenceMidsMs,
+  };
+}
+
+/**
+ * The boundary-editor waveform for a reviewed span
+ * (`GET /jobs/{id}/waveform?startMs&endMs`). The service decodes the span
+ * with ffmpeg and returns only the peak buckets + pause midpoints — the
+ * browser used to pull the whole span and `decodeAudioData` it, which
+ * fails on iOS Safari for a multi-minute podcast.
+ */
+export async function fetchJobWaveform(
+  jobId: string,
+  startMs: number,
+  endMs: number,
+): Promise<SpanWaveform> {
+  const query = `?startMs=${Math.round(startMs)}&endMs=${Math.round(endMs)}`;
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/waveform${query}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch waveform: ${await readErrorDetail(response)}`);
+  }
+  return parseWaveform(await response.json());
+}
+
 /**
  * Re-segment an already-imported source's sentences without re-downloading
  * (server/youtube-mining `POST /resegment`, stateless). `merge`/`split`
@@ -506,6 +545,31 @@ export async function fetchSourceAudioRange(
     throw new Error(`Failed to fetch source audio: ${await readErrorDetail(response)}`);
   }
   return response.blob();
+}
+
+/**
+ * The boundary-editor waveform for one span of a video's cached source
+ * audio (`POST /source-audio/waveform`) — the re-segment page's
+ * equivalent of {@link fetchJobWaveform}.
+ */
+export async function fetchSourceWaveform(
+  url: string,
+  startMs: number,
+  endMs: number,
+): Promise<SpanWaveform> {
+  const response = await fetch(`${API_BASE}/source-audio/waveform`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      startMs: Math.round(startMs),
+      endMs: Math.round(endMs),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch source waveform: ${await readErrorDetail(response)}`);
+  }
+  return parseWaveform(await response.json());
 }
 
 /** Best-effort cleanup — the server also sweeps abandoned jobs on a timer. */
