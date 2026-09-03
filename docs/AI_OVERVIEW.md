@@ -967,7 +967,11 @@ the next session when its `reading_retrieval` is already queued, so the
 first card's reveal can't turn the rest into a same-sitting echo test that
 inflates their FSRS intervals. `new`/`learning` items are exempt (the
 lazy-seed path still introduces a full activity-type batch at once as
-first-exposure scaffolding). **Graduation** (`isGraduated`,
+first-exposure scaffolding), but any siblings that survive the filter are
+then **spaced apart** (`spaceOutSiblingCards`) so two cards for one word
+are never adjacent in the queue unless nothing else can go between them —
+a word stuck in `learning` for days would otherwise show
+reading→cloze→production in a row every sitting. **Graduation** (`isGraduated`,
 `AppSettings.graduationMinScheduledDays`, default 180) retires a study
 item from the due rotation once its FSRS interval crosses the threshold;
 surfaced as "Graduated" badges on `BookDetailPage.tsx` and

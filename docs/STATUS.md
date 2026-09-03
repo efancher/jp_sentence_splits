@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Review: space out surviving siblings (user request).**
+  Reported seeing 絶対's `reading_retrieval` → `cloze` → `reading_production`
+  back to back. All three were FSRS `learning` (introduced 2026-09-02,
+  rated "again" every sitting since), so the 2026-09-02 sibling-bury filter
+  — which only holds back `review`/`relearning` siblings — left them all
+  in, and due-sorted they landed adjacent. New `spaceOutSiblingCards`
+  (`ReviewPage.tsx`, exported + unit-tested) greedily reorders the deduped
+  due queue so no two cards share a `subjectType:subjectId` neighbour
+  unless every remaining card does. Chosen over extending the bury filter
+  to `learning` ("space them, don't cut them"). `reviewPage.test.tsx` +3.
+
 - **2026-09-04 — Conflict panel: normalised key diff (user request).**
   `ConflictPanel` was clipping each payload at 1200 chars and showing local
   (domain, camelCase) vs. remote (raw Postgres row, snake_case) as two

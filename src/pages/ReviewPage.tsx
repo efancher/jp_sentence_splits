@@ -469,6 +469,38 @@ function splitOnSurfaceForm(
   ];
 }
 
+/** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
+function queueCardSubjectKey(card: QueueCard): string {
+  return `${card.studyItem.subjectType}:${card.studyItem.subjectId}`;
+}
+
+/**
+ * Reorders a due queue so two cards on the same subject are never adjacent
+ * unless every remaining card shares that subject (user request
+ * 2026-09-04). The sibling-bury filter above only holds back `review`/
+ * `relearning` siblings; a word whose reading_retrieval / cloze /
+ * reading_production are all still `learning` (e.g. rated "again" every
+ * sitting for days) keeps all three — and due-sorted they land adjacent,
+ * so revealing the first turns the next into a short-term echo test.
+ * Greedy: always take the earliest-due card whose subject differs from the
+ * one just emitted; fall back to plain due order only when it can't.
+ */
+export function spaceOutSiblingCards(cards: QueueCard[]): QueueCard[] {
+  const remaining = [...cards];
+  const spaced: QueueCard[] = [];
+  let lastKey: string | null = null;
+  while (remaining.length > 0) {
+    let index = remaining.findIndex(
+      (card) => queueCardSubjectKey(card) !== lastKey,
+    );
+    if (index === -1) index = 0;
+    const [card] = remaining.splice(index, 1);
+    spaced.push(card!);
+    lastKey = queueCardSubjectKey(card!);
+  }
+  return spaced;
+}
+
 // ---------------------------------------------------------------------------
 // Activity descriptors (Phase 7.10, generalizing five previously
 // hand-duplicated categories — flagged as due for this back in Phase 7.4's
@@ -1204,6 +1236,9 @@ export function ReviewPage() {
         shownSubjects.add(key);
         return true;
       });
+      // Any siblings that survived the bury filter (still `new`/`learning`)
+      // get spread apart so they aren't shown back to back.
+      const spaced = spaceOutSiblingCards(deduped);
 
       // Any (subject, activityType) pair with no study_item yet needs
       // seeding — tracked per-pair (not per-subject) so a subject left with
@@ -1255,7 +1290,7 @@ export function ReviewPage() {
       }
 
       if (cancelled) return;
-      setQueue(deduped);
+      setQueue(spaced);
       setPool(pendingSeeds);
       setInitialized(true);
     })();

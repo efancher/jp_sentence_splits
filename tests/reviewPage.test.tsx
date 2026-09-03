@@ -19,7 +19,7 @@ import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
-import { ReviewPage } from '../src/pages/ReviewPage';
+import { ReviewPage, spaceOutSiblingCards } from '../src/pages/ReviewPage';
 import { withAppProviders } from '../src/test/providers';
 
 /**
@@ -2749,5 +2749,58 @@ describe('ReviewPage', () => {
     await screen.findByText(/What does/);
     const items = await db.studyItems.where('subjectId').equals(pattern.id).toArray();
     expect(items.some((item) => item.activityType === 'grammar_production')).toBe(false);
+  });
+});
+
+describe('spaceOutSiblingCards', () => {
+  const card = (subjectId: string, activityType: string) =>
+    ({
+      studyItem: { subjectType: 'vocabularyItem', subjectId, activityType },
+    }) as unknown as Parameters<typeof spaceOutSiblingCards>[0][number];
+  const trace = (cards: ReturnType<typeof card>[]) =>
+    spaceOutSiblingCards(cards).map(
+      (c) => `${c.studyItem.subjectId}:${c.studyItem.activityType}`,
+    );
+
+  it('never places two cards for the same word adjacently when it can avoid it', () => {
+    const order = trace([
+      card('zettai', 'reading_retrieval'),
+      card('zettai', 'cloze'),
+      card('zettai', 'reading_production'),
+      card('other-a', 'reading_retrieval'),
+      card('other-b', 'reading_retrieval'),
+    ]);
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i].split(':')[0]).not.toBe(order[i - 1].split(':')[0]);
+    }
+    expect(order).toHaveLength(5);
+  });
+
+  it('falls back to plain order when every remaining card is the same word', () => {
+    expect(
+      trace([
+        card('zettai', 'reading_retrieval'),
+        card('zettai', 'cloze'),
+        card('zettai', 'reading_production'),
+      ]),
+    ).toEqual([
+      'zettai:reading_retrieval',
+      'zettai:cloze',
+      'zettai:reading_production',
+    ]);
+  });
+
+  it('keeps due order for non-siblings', () => {
+    expect(
+      trace([
+        card('a', 'reading_retrieval'),
+        card('b', 'reading_retrieval'),
+        card('c', 'reading_retrieval'),
+      ]),
+    ).toEqual([
+      'a:reading_retrieval',
+      'b:reading_retrieval',
+      'c:reading_retrieval',
+    ]);
   });
 });
