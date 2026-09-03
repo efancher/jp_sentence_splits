@@ -67,6 +67,7 @@ import {
   saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
+  setSentenceVocabularyAudioRange,
   setSentenceGrammarReviewStatus,
   transferBookSentences,
   updateBookChapter,
@@ -490,6 +491,56 @@ describe('cached forced alignment (Phase 9, Milestone 2b)', () => {
     await getDb().referenceAlignments.update('audio-1', { alignmentVersion: 0 });
 
     expect(await getReferenceAlignment('audio-1')).toBeUndefined();
+  });
+});
+
+describe('manual word-audio range (setSentenceVocabularyAudioRange)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-word-range-${createId('db')}`);
+  });
+
+  async function seedLink(): Promise<string> {
+    await materializeVocabularySelections('wr-sent-1', [
+      {
+        id: 'wr-vsel-1',
+        surface: '大学',
+        start: 0,
+        end: 2,
+        expression: '大学',
+        reading: 'だいがく',
+        source: 'manual',
+      },
+    ]);
+    const link = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('wr-sent-1')
+      .first();
+    return link!.id;
+  }
+
+  it('stores a rounded span on the link', async () => {
+    const linkId = await seedLink();
+    await setSentenceVocabularyAudioRange(linkId, { startMs: 1200.6, endMs: 1849.2 });
+
+    const link = await getDb().sentenceVocabulary.get(linkId);
+    expect(link?.audioStartMs).toBe(1201);
+    expect(link?.audioEndMs).toBe(1849);
+  });
+
+  it('null clears the override back to the alignment guess', async () => {
+    const linkId = await seedLink();
+    await setSentenceVocabularyAudioRange(linkId, { startMs: 1000, endMs: 1500 });
+    await setSentenceVocabularyAudioRange(linkId, null);
+
+    const link = await getDb().sentenceVocabulary.get(linkId);
+    expect(link?.audioStartMs).toBeUndefined();
+    expect(link?.audioEndMs).toBeUndefined();
+  });
+
+  it('is a no-op for an unknown link', async () => {
+    await expect(
+      setSentenceVocabularyAudioRange('nope', { startMs: 0, endMs: 100 }),
+    ).resolves.toBeUndefined();
   });
 });
 

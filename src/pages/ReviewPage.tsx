@@ -46,6 +46,7 @@ import type {
   ReviewRating,
   Sentence,
   SentenceAudio,
+  SentenceVocabulary,
   StudyActivityType,
   StudyItem,
   VocabularyItem,
@@ -342,6 +343,8 @@ interface PitchAccentReviewCandidate {
   surfaceForm: string;
   /** The sentence's first reference recording — required (see getPitchAccentReviewCandidates); powers the card's "loop the native word" control. */
   audio: SentenceAudio;
+  /** The link this candidate came from — carries any manual word-audio range for the loop control's "Adjust" editor. */
+  link?: SentenceVocabulary;
   /** Mora kana of the dictionary reading — the drop-position choices and the ✓/✗ both key off these. */
   morae: string[];
   /** Dictionary downstep clamped into [0, morae.length]: 0 = heiban/no drop, n = drop right after mora n (n === morae.length is odaka). */
@@ -407,6 +410,7 @@ function getPitchAccentReviewCandidates(
       sentence: candidate.sentence,
       surfaceForm: candidate.surfaceForm,
       audio,
+      link: candidate.link,
       morae,
       correctPosition,
       correctLabel: pitchPatternLabel(positions[0]!, morae.length),
@@ -2100,7 +2104,12 @@ function PitchAccentCard({
       </div>
       <div className="jp">{vocabularyItem.reading}</div>
 
-      <PitchAccentNativeAudio audio={audio} japanese={sentence.japanese} surfaceForm={surfaceForm} />
+      <PitchAccentNativeAudio
+        audio={audio}
+        japanese={sentence.japanese}
+        surfaceForm={surfaceForm}
+        link={candidate.link}
+      />
 
       {!revealed ? (
         <>
@@ -2379,7 +2388,7 @@ function WordListeningCard({
   playbackRate: number;
   onPlaybackRateChange: (value: number) => void;
 }) {
-  const { sentence, audio, surfaceForm, vocabularyItem } = candidate;
+  const { sentence, audio, surfaceForm, vocabularyItem, link } = candidate;
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   const isInflected =
     !!vocabularyItem.expression && surfaceForm !== vocabularyItem.expression;
@@ -2433,6 +2442,7 @@ function WordListeningCard({
             audio={audio}
             japanese={sentence.japanese}
             surfaceForm={surfaceForm}
+            link={link}
             loopLabel="Hear just the word"
             loopingLabel="Looping word…"
             wordOnly

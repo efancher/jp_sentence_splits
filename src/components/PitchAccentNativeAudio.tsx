@@ -1,4 +1,4 @@
-import type { SentenceAudio } from '../domain/types';
+import type { SentenceAudio, SentenceVocabulary } from '../domain/types';
 
 import { SegmentLoopPlayer } from './SegmentLoopPlayer';
 
@@ -14,16 +14,19 @@ export function PitchAccentNativeAudio({
   audio,
   japanese,
   surfaceForm,
+  link,
 }: {
   audio: SentenceAudio;
   japanese: string;
   surfaceForm: string;
+  link?: SentenceVocabulary;
 }) {
   return (
     <SegmentLoopPlayer
       audio={audio}
       japanese={japanese}
       surfaceForm={surfaceForm}
+      link={link}
       fallbackHint="Couldn’t isolate just the word — play the whole sentence for the native model."
     />
   );

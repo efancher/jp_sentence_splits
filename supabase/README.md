@@ -6,6 +6,7 @@
 | `migrations/20260813000000_unified_study_model.sql` | Sources, vocabulary/kanji relationships, study items, reviews |
 | `migrations/20260815000000_review_evidence_foundation.sql` | Review assistance/source/context-sentence columns, vocabulary_confusions table |
 | `migrations/20260816000000_sentence_vocabulary_surface_form.sql` | sentence_vocabulary.surface_form column |
+| `migrations/20260903120000_sentence_vocabulary_audio_range.sql` | sentence_vocabulary.audio_start_ms / audio_end_ms columns (manual word-audio span) |
 | `migrations/20260816010000_study_item_vocabulary_confusion_subject.sql` | study_items.subject_type check constraint widened for 'vocabularyConfusion' |
 | `migrations/20260818000000_card_issue_reports.sql` | card_issue_reports table |
 | `migrations/20260819000000_grammar_learning_foundation.sql` | Grammar-learning system: grammar_patterns, sentence_grammar, grammar_relationships, analyses.grammar_suggestions, study_items.subject_type widened for 'grammarPattern' |

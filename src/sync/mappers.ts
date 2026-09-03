@@ -483,6 +483,8 @@ export function sentenceVocabularyToRemote(
     vocabulary_item_id: link.vocabularyItemId,
     chunk_id: link.chunkId ?? null,
     surface_form: link.surfaceForm ?? null,
+    audio_start_ms: link.audioStartMs ?? null,
+    audio_end_ms: link.audioEndMs ?? null,
     created_at: link.createdAt,
     updated_at: link.updatedAt,
     deleted_at: null,
@@ -499,6 +501,8 @@ export function remoteToSentenceVocabulary(
     vocabularyItemId: String(row.vocabulary_item_id),
     chunkId: (row.chunk_id as string | null) ?? undefined,
     surfaceForm: (row.surface_form as string | null) ?? undefined,
+    audioStartMs: (row.audio_start_ms as number | null) ?? undefined,
+    audioEndMs: (row.audio_end_ms as number | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

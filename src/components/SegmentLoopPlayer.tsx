@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
-import type { SentenceAudio } from '../domain/types';
+import { getReferenceAlignment, saveReferenceAlignment, setSentenceVocabularyAudioRange } from '../db/repository';
+import type { SentenceAudio, SentenceVocabulary } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { isolatedWordRange } from '../lib/isolatedWordRange';
 import { nativeAudioController } from '../lib/nativeAudio';
 import { PlaybackCoordinator, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 
 import { NativeAudioButton } from './NativeAudioButton';
+import { WordAudioRangeEditor } from './WordAudioRangeEditor';
 
 /**
  * Loops just one word's span of a sentence's reference recording — a model
- * of how a native actually says that word, in isolation. Isolation needs
- * forced alignment (`isolatedWordRange`); when that is unavailable it
- * degrades to a plain whole-sentence play button.
+ * of how a native actually says that word, in isolation. The span comes
+ * from forced alignment (`isolatedWordRange`) unless the learner has
+ * hand-corrected it via the "Adjust" editor (a `SentenceVocabulary`
+ * `audioStartMs`/`audioEndMs` override, passed in as `link`). With neither
+ * it degrades to a plain whole-sentence play button.
  *
  * Plays through a local <audio> element + PlaybackCoordinator (which sets
  * `preservesPitch` so slowed playback keeps the pitch), not the
@@ -33,6 +36,7 @@ export function SegmentLoopPlayer({
   audio,
   japanese,
   surfaceForm,
+  link,
   loopLabel = 'Loop native word',
   loopingLabel = 'Looping word…',
   fallbackHint = 'Couldn’t isolate just the word — play the whole sentence instead.',
@@ -41,6 +45,9 @@ export function SegmentLoopPlayer({
   audio: SentenceAudio;
   japanese: string;
   surfaceForm: string;
+  /** The occurrence's link — its `audioStartMs`/`audioEndMs`, when set,
+   * override the alignment guess, and the "Adjust" editor writes back to it. */
+  link?: SentenceVocabulary;
   loopLabel?: string;
   loopingLabel?: string;
   fallbackHint?: string;
@@ -52,10 +59,28 @@ export function SegmentLoopPlayer({
     audio.blob && audio.blob.size > 0 ? audio.blob : null,
   );
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [range, setRange] = useState<TimeRangeMs | null>(null);
+  const [autoRange, setAutoRange] = useState<TimeRangeMs | null>(null);
   const [alignmentResolved, setAlignmentResolved] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  // Manual override — seeded from the link, then owned locally so a drag
+  // reflects instantly without waiting on the DB write / a parent refresh.
+  const [override, setOverride] = useState<TimeRangeMs | null>(() =>
+    link?.audioStartMs != null && link?.audioEndMs != null
+      ? { startMs: link.audioStartMs, endMs: link.audioEndMs }
+      : null,
+  );
+  useEffect(() => {
+    setOverride(
+      link?.audioStartMs != null && link?.audioEndMs != null
+        ? { startMs: link.audioStartMs, endMs: link.audioEndMs }
+        : null,
+    );
+  }, [link?.id, link?.audioStartMs, link?.audioEndMs]);
+
+  const range = override ?? autoRange;
 
   // Metadata-only row (audio synced from another device, blob not
   // downloaded yet) — fetch the clip before it can be looped.
@@ -73,7 +98,7 @@ export function SegmentLoopPlayer({
 
   useEffect(() => {
     let cancelled = false;
-    setRange(null);
+    setAutoRange(null);
     setAlignmentResolved(false);
     if (!blob) return;
     void loadOrComputeAlignment(
@@ -84,7 +109,7 @@ export function SegmentLoopPlayer({
       saveReferenceAlignment,
     ).then((result) => {
       if (cancelled) return;
-      setRange(result ? isolatedWordRange(result.words, japanese, surfaceForm) : null);
+      setAutoRange(result ? isolatedWordRange(result.words, japanese, surfaceForm) : null);
       setAlignmentResolved(true);
     });
     return () => {
@@ -120,6 +145,19 @@ export function SegmentLoopPlayer({
       setIsLooping(false);
     }
   }
+
+  const persistOverride = (next: TimeRangeMs | null) => {
+    setOverride(next);
+    coordinatorRef.current.cancel();
+    setIsLooping(false);
+    if (link) void setSentenceVocabularyAudioRange(link.id, next);
+  };
+
+  // Live drag: update the range the loop button uses, without a DB write per
+  // pointer move — `persistOverride` runs on drag end / snap / reset.
+  const previewOverride = (next: TimeRangeMs) => setOverride(next);
+
+  const canEdit = !!link && !!blob && !!range;
 
   if (!blob) return null;
   // wordOnly: this control is optional scaffolding — show nothing rather
@@ -171,7 +209,26 @@ export function SegmentLoopPlayer({
             </select>
           </label>
         ) : null}
+        {canEdit ? (
+          <button
+            type="button"
+            aria-expanded={editing}
+            onClick={() => setEditing((open) => !open)}
+          >
+            {editing ? 'Done' : override ? 'Adjusted' : 'Adjust'}
+          </button>
+        ) : null}
       </div>
+      {canEdit && editing && range ? (
+        <WordAudioRangeEditor
+          blob={blob}
+          value={range}
+          hasOverride={!!override}
+          onChange={previewOverride}
+          onCommit={persistOverride}
+          onReset={() => persistOverride(null)}
+        />
+      ) : null}
       {!range && alignmentResolved ? <div className="muted">{fallbackHint}</div> : null}
     </div>
   );

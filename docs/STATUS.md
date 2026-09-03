@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-03 — Hand-correctable word-audio span (user request).** The
+  isolate-and-loop control (`SegmentLoopPlayer`, used by the `pitch_accent`
+  and `word_listening` review cards) derived the word's span inside the
+  sentence recording from forced alignment + `isolatedWordRange`'s
+  character-proportion remap — two stacked approximations, often a little
+  off, no way to fix it, and nothing at all when alignment failed. New
+  **"Adjust"** toggle on that control opens `<WordAudioRangeEditor>`: the
+  clip decoded in the browser (2–6 s, no server, no iOS decode ceiling),
+  draggable start/end handles over the waveform, `detectSilences` pause
+  lines + "Snap to pauses", "Reset to auto". The corrected span is stored
+  on the `SentenceVocabulary` link (`audioStartMs`/`audioEndMs`, **synced**
+  — new nullable columns, migration
+  `20260903120000_sentence_vocabulary_audio_range.sql` to apply) and
+  overrides the alignment guess for both the loop and the pitch-accent
+  native model. `getVocabularyTargetCandidates` / the pitch-accent
+  candidate now carry the link. `tests/data` +3, `tests/sync` +1,
+  `segmentLoopPlayer` / `wordAudioRangeEditor` specs new (+5).
+
 - **2026-09-03 — Boundary waveform: server-side + per-row zoom (user
   request).** Two parts. (a) The boundary waveform no longer touches audio
   in the browser: `AudioContext.decodeAudioData` on a multi-minute span

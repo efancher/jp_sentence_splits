@@ -656,9 +656,24 @@ describe('sync mappers', () => {
       .first();
     const remote = sentenceVocabularyToRemote(link!, 'user-1', 1);
     expect(remote.sentence_id).toBe('sent-1');
+    expect(remote.audio_start_ms).toBeNull();
+    expect(remote.audio_end_ms).toBeNull();
     const local = remoteToSentenceVocabulary(remote);
     expect(local.sentenceId).toBe('sent-1');
     expect(local.vocabularyItemId).toBe(link!.vocabularyItemId);
+    expect(local.audioStartMs).toBeUndefined();
+
+    // A manual word-audio span round-trips both directions.
+    const withRange = sentenceVocabularyToRemote(
+      { ...link!, audioStartMs: 1200, audioEndMs: 1850 },
+      'user-1',
+      2,
+    );
+    expect(withRange.audio_start_ms).toBe(1200);
+    expect(withRange.audio_end_ms).toBe(1850);
+    const back = remoteToSentenceVocabulary(withRange);
+    expect(back.audioStartMs).toBe(1200);
+    expect(back.audioEndMs).toBe(1850);
   });
 
   it('round-trips a vocabulary_kanji link through remote shape', async () => {

@@ -497,6 +497,15 @@ export interface SentenceVocabulary {
    * retrieval targets.
    */
   surfaceForm?: string;
+  /**
+   * Hand-corrected span of this occurrence's word inside the sentence's
+   * reference recording, in ms (`SegmentLoopPlayer`'s "Adjust" editor).
+   * When both are set they override the forced-alignment guess
+   * (`isolatedWordRange`) for the isolate-and-loop control and the
+   * pitch-accent native model. Undefined = use the automatic guess.
+   */
+  audioStartMs?: number;
+  audioEndMs?: number;
   createdAt: string;
   updatedAt: string;
 }

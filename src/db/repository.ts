@@ -273,6 +273,28 @@ export async function updateSentenceVocabularySuggestions(
   notifySync('sentences', updated.id, updated);
 }
 
+/**
+ * Set or clear the hand-corrected word-audio span on a `SentenceVocabulary`
+ * link — `SegmentLoopPlayer`'s "Adjust" editor. `null` reverts to the
+ * forced-alignment guess. Rounds to whole ms; no-op if the link is gone.
+ */
+export async function setSentenceVocabularyAudioRange(
+  linkId: string,
+  range: { startMs: number; endMs: number } | null,
+): Promise<void> {
+  const db = getDb();
+  const link = await db.sentenceVocabulary.get(linkId);
+  if (!link) return;
+  const updated: SentenceVocabulary = {
+    ...link,
+    audioStartMs: range ? Math.round(range.startMs) : undefined,
+    audioEndMs: range ? Math.round(range.endMs) : undefined,
+    updatedAt: nowIso(),
+  };
+  await db.sentenceVocabulary.put(updated);
+  notifySync('sentence_vocabulary', updated.id, updated);
+}
+
 type PendingSyncOp = {
   entity: SyncEntity;
   recordId: string;
@@ -3354,6 +3376,9 @@ export interface VocabularyTargetCandidate {
   vocabularyItem: VocabularyItem;
   sentence: Sentence;
   surfaceForm: string;
+  /** The link this candidate was chosen from — carries any manual
+   * word-audio range (`audioStartMs`/`audioEndMs`). */
+  link?: SentenceVocabulary;
 }
 
 /**
@@ -3396,7 +3421,7 @@ export async function getVocabularyTargetCandidates(
     const vocabularyItem = vocabularyItems[index];
     const sentence = sentences[index];
     if (!vocabularyItem || !sentence || !link.surfaceForm) return;
-    candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm });
+    candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm, link });
   });
   return candidates;
 }
