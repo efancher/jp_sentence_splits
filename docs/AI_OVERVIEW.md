@@ -1321,6 +1321,18 @@ not just mid-review.
   manual keep-local / keep-remote / duplicate UI when two devices edit the
   same record. `reviews` (append-only) sidesteps conflicts entirely by
   design — inserts only, no CAS needed.
+- **Sync issue reports** (`sync_issue_reports`, `SyncIssueReport`): a
+  "Report sync issue" button (general, in `AuthAndSyncSettings`) and a
+  "Report this conflict" button (per-card, in `ConflictPanel`, tags
+  `conflictEntity`/`conflictRecordId`) let a learner flag unexpected sync
+  behavior — mirrors `card_issue_reports`'s batched-triage pattern, but no
+  `study_item_id` FK since sync trouble isn't tied to one card. Both bundle
+  a `buildDiagnosticsSnapshot` (`src/sync/logger.ts`) automatically, which
+  includes an `openConflicts` summary (entity/recordId/versions per open
+  conflict, no payload contents) — so filing a report needs no clipboard
+  access. Reports list/resolve on `CardIssuesPage`'s "Sync issues" section;
+  `npm run issues:list-sync` mirrors `issues:list` for batch triage
+  (`card-issue-triage` skill §6).
 - **Duplicate-row self-heal**: `kanji`/`vocabulary_items` get-or-create
   logic dedupes only against the *local* Dexie cache; when a device's
   local cache is missing a row that exists remotely, the naive insert used

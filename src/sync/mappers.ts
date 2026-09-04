@@ -15,6 +15,7 @@ import type {
   SentenceGrammar,
   SentenceVocabulary,
   StudyItem,
+  SyncIssueReport,
   VocabularyConfusion,
   VocabularyItem,
   VocabularyKanji,
@@ -40,7 +41,8 @@ export type LocalSyncPayload =
   | GrammarPattern
   | SentenceGrammar
   | GrammarRelationship
-  | PlannerSession;
+  | PlannerSession
+  | SyncIssueReport;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -810,6 +812,43 @@ export function remoteToPlannerSession(
   };
 }
 
+export function syncIssueReportToRemote(
+  report: SyncIssueReport,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: report.id,
+    owner_id: ownerId,
+    note: report.note,
+    diagnostics_snapshot: report.diagnosticsSnapshot,
+    conflict_entity: report.conflictEntity ?? null,
+    conflict_record_id: report.conflictRecordId ?? null,
+    status: report.status,
+    resolved_at: report.resolvedAt ?? null,
+    created_at: report.createdAt,
+    updated_at: report.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSyncIssueReport(
+  row: Record<string, unknown>,
+): SyncIssueReport {
+  return {
+    id: String(row.id),
+    note: String(row.note),
+    diagnosticsSnapshot: String(row.diagnostics_snapshot),
+    conflictEntity: (row.conflict_entity as string | null) ?? undefined,
+    conflictRecordId: (row.conflict_record_id as string | null) ?? undefined,
+    status: row.status as SyncIssueReport['status'],
+    resolvedAt: (row.resolved_at as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -871,6 +910,8 @@ export function toRemoteRow(
       return grammarRelationshipToRemote(payload as GrammarRelationship, ownerId, version);
     case 'planner_sessions':
       return plannerSessionToRemote(payload as PlannerSession, ownerId, version);
+    case 'sync_issue_reports':
+      return syncIssueReportToRemote(payload as SyncIssueReport, ownerId, version);
   }
 }
 

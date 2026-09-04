@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { exportFullBackup } from '../db/repository';
+import { exportFullBackup, reportSyncIssue } from '../db/repository';
 import { downloadText } from '../lib/worksheet';
 import { useAuth } from '../sync/auth';
 import { replaceLocalWithCloud } from '../sync/engine';
@@ -20,6 +20,10 @@ export function AuthAndSyncSettings() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmRedownload, setConfirmRedownload] = useState(false);
+  const [reportingSyncIssue, setReportingSyncIssue] = useState(false);
+  const [syncIssueNote, setSyncIssueNote] = useState('');
+  const [submittingSyncIssue, setSubmittingSyncIssue] = useState(false);
+  const [syncIssueReported, setSyncIssueReported] = useState(false);
 
   if (!isSupabaseConfigured()) {
     return (
@@ -86,6 +90,72 @@ export function AuthAndSyncSettings() {
                 Sign out
               </button>
             </div>
+            {reportingSyncIssue ? (
+              <form
+                className="stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!syncIssueNote.trim() || submittingSyncIssue) return;
+                  setSubmittingSyncIssue(true);
+                  void (async () => {
+                    try {
+                      const diagnostics = await sync.copyDiagnostics();
+                      await reportSyncIssue({
+                        note: syncIssueNote.trim(),
+                        diagnosticsSnapshot: diagnostics,
+                      });
+                      setReportingSyncIssue(false);
+                      setSyncIssueNote('');
+                      setSyncIssueReported(true);
+                    } finally {
+                      setSubmittingSyncIssue(false);
+                    }
+                  })();
+                }}
+              >
+                <textarea
+                  value={syncIssueNote}
+                  onChange={(event) => setSyncIssueNote(event.target.value)}
+                  placeholder="What looks wrong with sync? (e.g. seeing way more conflicts than expected)"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="row">
+                  <button
+                    type="submit"
+                    disabled={!syncIssueNote.trim() || submittingSyncIssue}
+                  >
+                    Submit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportingSyncIssue(false);
+                      setSyncIssueNote('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSyncIssueReported(false);
+                    setReportingSyncIssue(true);
+                  }}
+                >
+                  Report sync issue
+                </button>
+                {syncIssueReported ? (
+                  <span className="muted">
+                    ✓ Reported — includes a diagnostics snapshot for later triage.
+                  </span>
+                ) : null}
+              </div>
+            )}
             <label className="row">
               <input
                 type="checkbox"

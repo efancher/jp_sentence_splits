@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 
+import { reportSyncIssue } from '../db/repository';
 import { listOpenConflicts } from '../sync/queue';
 import {
   applyBulkConflictResolution,
@@ -55,6 +56,29 @@ export function ConflictPanel() {
   const sync = useSync();
   const conflicts = useLiveQuery(() => listOpenConflicts(), []) ?? [];
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [reportNote, setReportNote] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
+
+  async function submitReport(conflict: SyncConflict): Promise<void> {
+    if (!reportNote.trim() || submittingReport) return;
+    setSubmittingReport(true);
+    try {
+      const diagnostics = await sync.copyDiagnostics();
+      await reportSyncIssue({
+        note: reportNote.trim(),
+        diagnosticsSnapshot: diagnostics,
+        conflictEntity: conflict.entity,
+        conflictRecordId: conflict.recordId,
+      });
+      setReportingId(null);
+      setReportNote('');
+      setReportedIds((prev) => new Set(prev).add(conflict.id));
+    } finally {
+      setSubmittingReport(false);
+    }
+  }
 
   if (!conflicts.length) return null;
 
@@ -173,6 +197,53 @@ export function ConflictPanel() {
               </button>
             )}
           </div>
+          {reportingId === conflict.id ? (
+            <form
+              className="stack"
+              style={{ gap: '0.35rem' }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitReport(conflict);
+              }}
+            >
+              <textarea
+                value={reportNote}
+                onChange={(event) => setReportNote(event.target.value)}
+                placeholder="What looks wrong about this conflict?"
+                rows={2}
+                autoFocus
+              />
+              <div className="row">
+                <button type="submit" disabled={!reportNote.trim() || submittingReport}>
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportingId(null);
+                    setReportNote('');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportingId(conflict.id);
+                  setReportNote('');
+                }}
+              >
+                Report this conflict
+              </button>
+              {reportedIds.has(conflict.id) ? (
+                <span className="muted">✓ Reported</span>
+              ) : null}
+            </div>
+          )}
         </div>
       ))}
     </section>

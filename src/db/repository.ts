@@ -41,6 +41,8 @@ import type {
   StudyItem,
   StudyStatus,
   StudySubjectType,
+  SyncIssueReport,
+  SyncIssueStatus,
   VocabularyConfusion,
   VocabularyConfusionType,
   VocabularyItem,
@@ -4018,6 +4020,63 @@ export async function resolveCardIssueReport(id: string): Promise<CardIssueRepor
   };
   await db.cardIssueReports.put(updated);
   notifySync('card_issue_reports', updated.id, updated);
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Sync issue reports: the same "flag it, deal with it later" mechanism as
+// card issue reports, but for sync trouble ("more conflicts than
+// expected") raised from ConflictPanel/AuthAndSyncSettings rather than
+// ReviewPage — see docs/STATUS.md. Bundles the diagnostics snapshot
+// (buildDiagnosticsSnapshot, src/sync/logger.ts) at report time so a later
+// session can triage without the reporter pasting anything by hand.
+// ---------------------------------------------------------------------------
+
+export async function reportSyncIssue(input: {
+  note: string;
+  diagnosticsSnapshot: string;
+  conflictEntity?: string;
+  conflictRecordId?: string;
+}): Promise<SyncIssueReport> {
+  const db = getDb();
+  const timestamp = nowIso();
+  const report: SyncIssueReport = {
+    id: createId('sync_issue'),
+    note: input.note,
+    diagnosticsSnapshot: input.diagnosticsSnapshot,
+    conflictEntity: input.conflictEntity,
+    conflictRecordId: input.conflictRecordId,
+    status: 'open',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.syncIssueReports.put(report);
+  notifySync('sync_issue_reports', report.id, report);
+  return report;
+}
+
+export async function listSyncIssueReports(
+  status?: SyncIssueStatus,
+): Promise<SyncIssueReport[]> {
+  const db = getDb();
+  const all = await db.syncIssueReports.toArray();
+  const filtered = status ? all.filter((item) => item.status === status) : all;
+  return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function resolveSyncIssueReport(id: string): Promise<SyncIssueReport> {
+  const db = getDb();
+  const existing = await db.syncIssueReports.get(id);
+  if (!existing) throw new Error('Sync issue report not found');
+  const timestamp = nowIso();
+  const updated: SyncIssueReport = {
+    ...existing,
+    status: 'resolved',
+    resolvedAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.syncIssueReports.put(updated);
+  notifySync('sync_issue_reports', updated.id, updated);
   return updated;
 }
 

@@ -228,6 +228,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       online,
       pendingCount: pending,
       conflictCount: open.length,
+      openConflicts: open.map((c) => ({
+        entity: c.entity,
+        recordId: c.recordId,
+        localVersion: c.localVersion,
+        remoteVersion: c.remoteVersion,
+        createdAt: c.createdAt,
+      })),
       lastSyncAt: meta?.lastSyncAt,
       lastError: meta?.lastError,
       status,

@@ -1,13 +1,15 @@
 ---
 name: card-issue-triage
-description: Use when the user asks to check, see, triage, or give an opinion on "issue reports", "card issues", "reported issues", or "review issues" — the flags they raise from ReviewPage's "Report issue" button while studying. Also use if they ask why a reading/translation/highlight looked wrong, or why review audio was cut off / silent / too short, on a review card. Pulls the open reports from Supabase and investigates the underlying study_item / vocabulary_item / sentence_vocabulary / sentence / reference_audio data to determine whether each is a real bug (and why) or a misunderstanding.
+description: Use when the user asks to check, see, triage, or give an opinion on "issue reports", "card issues", "reported issues", "review issues", or "sync issues"/"sync issue reports" — the flags they raise from ReviewPage's "Report issue" button while studying, or from ConflictPanel/Account & sync settings' "Report sync issue" button when sync behaves unexpectedly (e.g. "more conflicts than expected"). Also use if they ask why a reading/translation/highlight looked wrong, why review audio was cut off / silent / too short on a review card, or why they're seeing repeated/unexpected sync conflicts. Pulls the open reports from Supabase and investigates the underlying data (study_item / vocabulary_item / sentence_vocabulary / sentence / reference_audio for card issues; the bundled diagnostics snapshot and, if tagged, the specific conflicting record for sync issues) to determine whether each is a real bug (and why) or a misunderstanding.
 ---
 
 # Card issue triage
 
-Learners flag review cards mid-study via ReviewPage's "Report issue" button.
-Reports land in Supabase (`card_issue_reports`) and pile up for batch triage —
-they are not meant to be actioned one at a time as they arrive.
+Learners flag review cards mid-study via ReviewPage's "Report issue" button,
+and flag sync trouble via ConflictPanel/Account & sync settings' "Report
+sync issue" button (§6). Reports land in Supabase (`card_issue_reports` /
+`sync_issue_reports`) and pile up for batch triage — they are not meant to
+be actioned one at a time as they arrive.
 
 ## 1. Pull open reports
 
@@ -174,3 +176,31 @@ is deliberately read-only. Resolving happens in the app itself
 to Dexie and syncs up). After fixing a root cause, tell the user to mark the
 corresponding reports resolved in-app; don't write a new resolve script
 unless asked.
+
+## 6. Sync issue reports (added 2026-09-04)
+
+```bash
+npm run issues:list-sync
+```
+
+Runs `scripts/list-sync-issues.ts` (read-only, same idea as
+`list-card-issues.ts` but against `sync_issue_reports`). Each row has the
+learner's free-text note, a `diagnostics_snapshot` (JSON string built by
+`buildDiagnosticsSnapshot`, `src/sync/logger.ts` — app/sync-schema version,
+online/pending/conflict counts, an `openConflicts` array of
+`{entity, recordId, localVersion, remoteVersion, createdAt}` for every open
+conflict at report time, `lastSyncAt`/`lastError`, and the last 20 sync log
+events), and optionally `conflict_entity`/`conflict_record_id` if the report
+was filed from one specific conflict card in ConflictPanel rather than the
+general button in Account & sync settings.
+
+Start with `openConflicts` in the snapshot: if the same `entity` recurs
+across many reports (or many rows within one snapshot), that points at a
+specific table's push/pull logic rather than one bad record — check that
+entity's `LAST_WRITE_WINS_ENTITIES` membership and its mapper/engine.ts
+switch cases (`src/sync/engine.ts`, `src/sync/mappers.ts`) for a version- or
+payload-shape bug before assuming it's routine multi-device editing. A high
+`pendingCount` alongside conflicts suggests the queue isn't draining (check
+`lastError`) rather than a true edit collision. Resolution is client-side
+here too (`CardIssuesPage`'s "Sync issues" section → `resolveSyncIssueReport`
+in `src/db/repository.ts`) — no resolve script.

@@ -31,6 +31,7 @@ import {
   remoteToSentenceGrammar,
   remoteToSentenceVocabulary,
   remoteToStudyItem,
+  remoteToSyncIssueReport,
   remoteToVocabularyConfusion,
   remoteToVocabularyItem,
   remoteToVocabularyKanji,
@@ -603,6 +604,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.grammarRelationships.get(recordId)) != null;
     case 'planner_sessions':
       return (await db.plannerSessions.get(recordId)) != null;
+    case 'sync_issue_reports':
+      return (await db.syncIssueReports.get(recordId)) != null;
     default:
       // Unknown entity — assume present so we don't loop re-fetching it.
       return true;
@@ -797,6 +800,9 @@ async function applyRemoteDelete(
     case 'planner_sessions':
       await db.plannerSessions.delete(recordId);
       break;
+    case 'sync_issue_reports':
+      await db.syncIssueReports.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -911,6 +917,9 @@ export async function applyRemoteUpsert(
     case 'planner_sessions':
       await db.plannerSessions.put(remoteToPlannerSession(remote));
       break;
+    case 'sync_issue_reports':
+      await db.syncIssueReports.put(remoteToSyncIssueReport(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -946,6 +955,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const sentenceGrammar = await db.sentenceGrammar.toArray();
   const grammarRelationships = await db.grammarRelationships.toArray();
   const plannerSessions = await db.plannerSessions.toArray();
+  const syncIssueReports = await db.syncIssueReports.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -1004,6 +1014,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const session of plannerSessions) {
     await trackAndEnqueue('planner_sessions', session.id, session);
   }
+  for (const report of syncIssueReports) {
+    await trackAndEnqueue('sync_issue_reports', report.id, report);
+  }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
   await runSyncCycle();
@@ -1058,6 +1071,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.sentenceGrammar,
       db.grammarRelationships,
       db.plannerSessions,
+      db.syncIssueReports,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -1081,6 +1095,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.sentenceGrammar.clear();
       await db.grammarRelationships.clear();
       await db.plannerSessions.clear();
+      await db.syncIssueReports.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -1149,6 +1164,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('planner_sessions', userId, async (rows) => {
     await db.plannerSessions.bulkPut(rows.map((r) => remoteToPlannerSession(r)));
+  });
+  await pullFullTable('sync_issue_reports', userId, async (rows) => {
+    await db.syncIssueReports.bulkPut(rows.map((r) => remoteToSyncIssueReport(r)));
   });
 
   // Reference audio: metadata only (blob-less placeholders), gated on the

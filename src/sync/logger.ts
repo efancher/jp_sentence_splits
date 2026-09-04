@@ -64,6 +64,14 @@ export function getRecentSyncLogs(): SyncLogEvent[] {
   return [...recentEvents];
 }
 
+export interface DiagnosticsConflictSummary {
+  entity: string;
+  recordId: string;
+  localVersion: number;
+  remoteVersion: number;
+  createdAt: string;
+}
+
 export function buildDiagnosticsSnapshot(input: {
   online: boolean;
   pendingCount: number;
@@ -72,6 +80,13 @@ export function buildDiagnosticsSnapshot(input: {
   lastError?: string;
   status: string;
   userId?: string;
+  /**
+   * Compact per-conflict summary (no payload contents — those are already
+   * visible in ConflictPanel while signed in). Without this, "conflicts"
+   * was just a count, which isn't enough to spot a pattern (e.g. one
+   * entity conflicting repeatedly) from a report filed elsewhere.
+   */
+  openConflicts?: DiagnosticsConflictSummary[];
 }): string {
   return JSON.stringify(
     {
@@ -81,6 +96,7 @@ export function buildDiagnosticsSnapshot(input: {
       online: input.online,
       pendingCount: input.pendingCount,
       conflictCount: input.conflictCount,
+      openConflicts: input.openConflicts ?? [],
       lastSyncAt: input.lastSyncAt ?? null,
       lastError: input.lastError ?? null,
       status: input.status,

@@ -703,6 +703,30 @@ export interface CardIssueReport {
   resolvedAt?: string;
 }
 
+export type SyncIssueStatus = 'open' | 'resolved';
+
+/**
+ * A learner-authored free-text flag raised from the sync UI ("seeing way
+ * more conflicts than expected") when they can't act on it in the moment
+ * (e.g. no Claude access at work) — paired with a diagnostics snapshot
+ * (`buildDiagnosticsSnapshot`, src/sync/logger.ts) so a later session can
+ * triage without the reporter pasting anything by hand. Mirrors
+ * CardIssueReport's batched/reviewed-later shape, but isn't tied to one
+ * study item — `conflictEntity`/`conflictRecordId` are only set when raised
+ * from a specific open conflict in ConflictPanel.
+ */
+export interface SyncIssueReport {
+  id: string;
+  note: string;
+  diagnosticsSnapshot: string;
+  conflictEntity?: string;
+  conflictRecordId?: string;
+  status: SyncIssueStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Grammar-learning system (docs/AI_OVERVIEW.md) — additive. Layer 2 on top of
 // the existing Cure-Dolly structural analysis (SentenceAnalysis.chunks,

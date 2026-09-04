@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Sync issue reports: a "Report issue" button for sync
+  trouble (user request — "seeing more conflicts than I'd expect,
+  and I'm at work with no Claude access when it happens").** New
+  `sync_issue_reports` table (`supabase/migrations/20260904000000_sync_issue_reports.sql`)
+  and `SyncIssueReport` domain type mirror `card_issue_reports`, but with no
+  `study_item_id` FK — sync trouble isn't always tied to one card. Two entry
+  points: a general "Report sync issue" button in `AuthAndSyncSettings`
+  (Account & sync settings) and a per-conflict "Report this conflict" button
+  on each card in `ConflictPanel` (tags `conflictEntity`/`conflictRecordId`).
+  Both bundle a diagnostics snapshot automatically via
+  `reportSyncIssue`/`buildDiagnosticsSnapshot`, so the reporter doesn't need
+  clipboard access to file something useful. `buildDiagnosticsSnapshot`
+  (`src/sync/logger.ts`) now also embeds an `openConflicts` summary
+  (entity/recordId/versions/createdAt per open conflict, no payload
+  contents) instead of just a count — this also improves the pre-existing
+  "Copy diagnostics" button. Reports list/resolve alongside card issues on
+  `CardIssuesPage` (new "Sync issues" section,
+  `listSyncIssueReports`/`resolveSyncIssueReport`); `npm run issues:list-sync`
+  (`scripts/list-sync-issues.ts`) mirrors `issues:list` for batch triage by a
+  future Claude session — `card-issue-triage` skill's §6 covers reading the
+  `openConflicts` summary to spot a bad entity vs. routine multi-device
+  editing. Full sync-engine wiring (Dexie v17, `SyncEntity`, mappers,
+  push/pull/upload-all/replace-from-cloud) follows the existing per-entity
+  switch-case pattern exactly.
 - **2026-09-05 — Vocabulary picker empty on 35 Anki-imported sentences.**
   User hit "No morphology suggestions on this sentence…" on the later
   sentences of *spring new life* (the 第五話/ending block, positions

@@ -25,6 +25,7 @@ import type {
   SentenceVocabulary,
   Source,
   StudyItem,
+  SyncIssueReport,
   VocabularyConfusion,
   VocabularyItem,
   VocabularyKanji,
@@ -117,6 +118,10 @@ export class GlossbookDatabase extends Dexie {
   // durable content, and re-planning always works from live StudyItem/Review
   // data regardless of what's here.
   plannerSessions!: EntityTable<PlannerSession, 'id'>;
+  // Learner-reported sync trouble ("more conflicts than expected"), synced
+  // like cardIssueReports so a future session can review a batch via
+  // scripts/list-sync-issues.ts — see docs/STATUS.md.
+  syncIssueReports!: EntityTable<SyncIssueReport, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -633,6 +638,11 @@ export class GlossbookDatabase extends Dexie {
       grammarRelationships:
         'id, patternAId, patternBId, [patternAId+patternBId+relationshipType], relationshipType, updatedAt',
       plannerSessions: 'id, status, createdAt, date',
+    });
+
+    // Sync issue reports — purely additive, every store above is unchanged.
+    this.version(17).stores({
+      syncIssueReports: 'id, status, createdAt',
     });
   }
 }
