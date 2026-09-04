@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Fixed: conflict diff buried the real change under sync
+  bookkeeping (found via a second sync issue report — "seems to be mostly
+  just bookkeeping entries, ids, versions, timestamps").** `canonicalize`
+  (`src/sync/conflictDiff.ts`) normalized casing but never stripped
+  `owner_id`/`version`/`deleted_at`/`client_id`/`last_modified_by` — columns
+  every remote row carries (see any migration's table trailer) that the
+  local domain payload never has. Every conflict's "Differences" view
+  therefore showed these ~5 fields as spurious "added" lines regardless of
+  entity, drowning out whatever the learner actually edited. New `forDiff`
+  export drops just those keys before diffing; the full local/remote JSON
+  `<details>` panels are untouched (still show real version numbers etc. —
+  useful for debugging a conflict, as opposed to deciding keep-local vs.
+  keep-remote). `src/components/ConflictPanel.tsx` now calls `forDiff`
+  before `prettyLines` in the diff path only. 3 new `conflictDiff.test.ts`
+  cases.
 - **2026-09-04 — Fixed: duplicate conflict rows for the same record
   (found via the first sync issue report filed through the new button
   below).** `addConflict` (`src/sync/queue.ts`) always inserted a new

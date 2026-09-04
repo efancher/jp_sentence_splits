@@ -36,6 +36,43 @@ export function prettyLines(value: unknown): string[] {
   }
 }
 
+/**
+ * Sync-bookkeeping columns present on every remote row (see any
+ * `supabase/migrations/*.sql` table) but never on the local domain
+ * payload — `owner_id`, `version`, `deleted_at`, `client_id`,
+ * `last_modified_by`. Diffing local vs. remote without stripping these
+ * made every conflict's diff show them as spurious "added" lines
+ * regardless of whether the learner's actual edit differed, burying the
+ * real change under always-present noise (reported 2026-09-04 — "mostly
+ * just bookkeeping entries, ids, versions, timestamps").
+ */
+const SYNC_BOOKKEEPING_KEYS = new Set([
+  'ownerId',
+  'version',
+  'deletedAt',
+  'clientId',
+  'lastModifiedBy',
+]);
+
+/**
+ * `canonicalize` plus dropping top-level sync-bookkeeping keys — only for
+ * the diff view. The full local/remote JSON `<details>` panels in
+ * ConflictPanel still show everything via plain `prettyLines`, unstripped,
+ * since a real version/owner mismatch is exactly what debugging a conflict
+ * sometimes needs to see.
+ */
+export function forDiff(value: unknown): unknown {
+  const canonical = canonicalize(value);
+  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+    return canonical;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(canonical as Record<string, unknown>)) {
+    if (!SYNC_BOOKKEEPING_KEYS.has(key)) out[key] = v;
+  }
+  return out;
+}
+
 export type DiffRow = {
   type: 'context' | 'add' | 'remove';
   text: string;

@@ -13,6 +13,7 @@ import { useSync } from '../sync/SyncProvider';
 import {
   countChanges,
   diffLines,
+  forDiff,
   prettyLines,
   type DiffRow,
 } from '../sync/conflictDiff';
@@ -24,8 +25,8 @@ const DIFF_PREFIX: Record<DiffRow['type'], string> = {
 };
 
 function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
-  const local = prettyLines(conflict.localPayload);
-  const remote = prettyLines(conflict.remotePayload);
+  const local = prettyLines(forDiff(conflict.localPayload));
+  const remote = prettyLines(forDiff(conflict.remotePayload));
   const rows = diffLines(local, remote);
   const changes = countChanges(rows);
 
@@ -33,7 +34,7 @@ function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
     <div className="stack" style={{ gap: '0.5rem' }}>
       <div className="muted" style={{ fontSize: '0.8rem' }}>
         {changes === 0
-          ? 'No field-level differences after normalising keys.'
+          ? 'No field-level differences after normalising keys and dropping sync bookkeeping (owner, version, timestamps).'
           : `${changes} differing line(s). `}
         <span className="conflict-diff-legend conflict-diff-remove">
           − local

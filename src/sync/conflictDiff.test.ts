@@ -4,6 +4,7 @@ import {
   canonicalize,
   countChanges,
   diffLines,
+  forDiff,
   prettyLines,
 } from './conflictDiff';
 
@@ -47,5 +48,46 @@ describe('diffLines', () => {
       prettyLines({ aB: 1, c: 2 }),
     );
     expect(countChanges(rows)).toBe(0);
+  });
+});
+
+describe('forDiff', () => {
+  it('drops sync-bookkeeping columns that only ever exist on the remote row', () => {
+    // Regression: a remote row always carries owner_id/version/deleted_at/
+    // client_id/last_modified_by, but the local domain payload never does —
+    // undropped, every conflict diff showed these as spurious "added" lines
+    // no matter what the learner actually changed (reported 2026-09-04).
+    const local = { sentence_id: 'x', status: 'empty' };
+    const remote = {
+      sentence_id: 'x',
+      status: 'empty',
+      owner_id: 'user-1',
+      version: 10,
+      deleted_at: null,
+      client_id: 'device-a',
+      last_modified_by: 'user-1',
+    };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(0);
+  });
+
+  it('still surfaces a real content difference alongside stripped bookkeeping', () => {
+    const local = { sentence_id: 'x', status: 'empty', version: 1 };
+    const remote = {
+      sentence_id: 'x',
+      status: 'done',
+      owner_id: 'user-1',
+      version: 2,
+      deleted_at: null,
+    };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(2); // status removed + status added, nothing else
+  });
+
+  it('leaves non-bookkeeping keys and nested content untouched', () => {
+    expect(forDiff({ chunks: [{ version: 1 }], notes: 'hi' })).toEqual({
+      chunks: [{ version: 1 }],
+      notes: 'hi',
+    });
   });
 });
