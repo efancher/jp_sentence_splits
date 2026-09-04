@@ -39,6 +39,7 @@ import {
 } from './mappers';
 import { hydrateMissingReferenceAudio } from './audioSync';
 import { getSupabase } from './supabaseClient';
+import { conflictContentsMatch } from './conflictDiff';
 import { syncLog } from './logger';
 import type { SyncEntity, SyncQueueItem } from './types';
 
@@ -438,6 +439,20 @@ async function handlePushConflict(
     updatedAt: new Date().toISOString(),
     deletedAt: localMeta?.deletedAt,
   });
+  // A version_conflict is a raw CAS mismatch — it doesn't mean the content
+  // actually diverged. Two near-simultaneous saves that land on the same
+  // resulting state (or a queued mutation landing right after another
+  // already wrote it) hit this with nothing left to decide; settle those
+  // automatically instead of asking the learner to click through a
+  // conflict card with no real diff (reported 2026-09-04 — "no other diff
+  // lines highlighted").
+  if (conflictContentsMatch(item.payload, remote)) {
+    syncLog('debug', 'Conflict auto-settled: no content difference', 'CONFLICT_NOOP', {
+      entity: item.entity,
+      recordId: item.recordId,
+    });
+    return;
+  }
   await addConflict({
     entity: item.entity,
     recordId: item.recordId,

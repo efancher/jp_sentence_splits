@@ -1320,7 +1320,22 @@ not just mid-review.
 - **Conflict resolution** (`resolveConflict.ts`, `ConflictPanel.tsx`):
   manual keep-local / keep-remote / duplicate UI when two devices edit the
   same record. `reviews` (append-only) sidesteps conflicts entirely by
-  design — inserts only, no CAS needed.
+  design — inserts only, no CAS needed. `addConflict` (`queue.ts`) upserts
+  on `(entity, recordId)` among *open* conflicts rather than always
+  inserting, so several queued mutations hitting `version_conflict` in one
+  push cycle update one card instead of spawning duplicates. A
+  `version_conflict` (raw CAS mismatch) that turns out to have no real
+  content difference — `conflictContentsMatch`, `conflictDiff.ts` — never
+  becomes a card at all (`handlePushConflict`, `engine.ts`): local
+  record-meta still realigns to the cloud version, but nothing is shown,
+  since there'd be nothing left to decide. The diff itself (`forDiff`,
+  same file) also excludes columns that can never carry real content: the
+  server-only bookkeeping trailer (`owner_id`/`version`/`deleted_at`/
+  `client_id`/`last_modified_by`), `updated_at` (a trigger stamps it with
+  the server clock on every push, so it always differs regardless of
+  content), and drops `null`-vs-absent-key noise on optional fields — the
+  full local/remote JSON `<details>` panels stay unstripped for real
+  debugging.
 - **Sync issue reports** (`sync_issue_reports`, `SyncIssueReport`): a
   "Report sync issue" button (general, in `AuthAndSyncSettings`) and a
   "Report this conflict" button (per-card, in `ConflictPanel`, tags

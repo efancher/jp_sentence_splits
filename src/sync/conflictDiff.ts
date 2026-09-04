@@ -123,6 +123,26 @@ export function forDiff(value: unknown): unknown {
   return out;
 }
 
+/**
+ * True when local and remote have no diff-worthy difference at all — same
+ * comparison `forDiff` drives, without building the LCS table. A push can
+ * hit `version_conflict` (the CAS check) purely from version-number churn
+ * (e.g. two near-simultaneous saves of the same resulting content, or one
+ * queued mutation landing right after another already wrote the identical
+ * state) with no actual content divergence; the engine uses this to settle
+ * those automatically instead of asking the learner to click through a
+ * conflict card with nothing left to decide (reported 2026-09-04 — "no
+ * other diff lines highlighted").
+ */
+export function conflictContentsMatch(
+  localPayload: unknown,
+  remotePayload: unknown,
+): boolean {
+  return (
+    JSON.stringify(forDiff(localPayload)) === JSON.stringify(forDiff(remotePayload))
+  );
+}
+
 export type DiffRow = {
   type: 'context' | 'add' | 'remove';
   text: string;

@@ -33,6 +33,20 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Content-identical conflicts now auto-settle instead of
+  requiring a manual click (user confirmed, after the diff-noise fixes
+  above, that some conflicts showed "no other diff lines highlighted" at
+  all).** A `version_conflict` is a raw CAS mismatch — it doesn't mean the
+  content actually diverged; two near-simultaneous saves landing on the
+  same resulting state (or a queued mutation landing right after another
+  already wrote it) hit it with nothing left to decide. New
+  `conflictContentsMatch` (`src/sync/conflictDiff.ts`, reuses `forDiff`'s
+  normalization) checked in `handlePushConflict`
+  (`src/sync/engine.ts`) before recording a conflict — if content matches,
+  the local record-meta still aligns to the cloud version (so future edits
+  push cleanly) but no `ConflictPanel` card is created at all, logged at
+  `debug` (`CONFLICT_NOOP`) rather than the `warn`/`CONFLICT` a real
+  conflict gets. 2 new `conflictDiff.test.ts` cases.
 - **2026-09-04 — Fixed: two more conflict-diff noise sources, found via
   five more sync issue reports filed right after the bookkeeping-stripping
   fix above (the cleaner diff let these show through clearly for the first

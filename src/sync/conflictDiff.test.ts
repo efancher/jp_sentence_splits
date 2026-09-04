@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canonicalize,
+  conflictContentsMatch,
   countChanges,
   diffLines,
   forDiff,
@@ -132,5 +133,32 @@ describe('forDiff', () => {
     const remote = { created_at: '2026-09-04T22:05:40.925Z' };
     const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
     expect(countChanges(rows)).toBe(2);
+  });
+});
+
+describe('conflictContentsMatch', () => {
+  it('is true for a version_conflict with no real content difference', () => {
+    // A CAS mismatch doesn't mean the content diverged — two saves that
+    // land on the same resulting state should settle automatically rather
+    // than surface an empty conflict card.
+    const local = {
+      status: 'empty',
+      chunk_id: undefined,
+      updated_at: '2026-09-04T22:05:32.465Z',
+    };
+    const remote = {
+      status: 'empty',
+      chunk_id: null,
+      version: 46,
+      owner_id: 'user-1',
+      updated_at: '2026-09-04T22:05:41.276176+00:00',
+    };
+    expect(conflictContentsMatch(local, remote)).toBe(true);
+  });
+
+  it('is false when real content actually differs', () => {
+    const local = { status: 'empty', version: 45 };
+    const remote = { status: 'done', version: 46 };
+    expect(conflictContentsMatch(local, remote)).toBe(false);
   });
 });
