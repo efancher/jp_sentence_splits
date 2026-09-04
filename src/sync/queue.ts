@@ -146,21 +146,34 @@ export async function clearQueue(): Promise<void> {
   await getDb().syncQueue.clear();
 }
 
+/**
+ * Upserts on (entity, recordId) among *open* conflicts rather than always
+ * inserting — several queued mutations for the same record can each hit
+ * `version_conflict` in one push cycle (e.g. a few quick edits to one
+ * sentence's analysis), and without this every one of them added its own
+ * duplicate conflict card (34 rows for 10 actually-conflicting records in
+ * one reported case, 2026-09-04). Updating in place also keeps the most
+ * recent local edit as `localPayload` for "Keep local", instead of
+ * whichever queued item happened to hit the conflict first.
+ */
 export async function addConflict(
   conflict: Omit<SyncConflict, 'id' | 'createdAt'> & {
     id?: string;
     createdAt?: string;
   },
 ): Promise<SyncConflict> {
+  const existing = (await listOpenConflicts()).find(
+    (c) => c.entity === conflict.entity && c.recordId === conflict.recordId,
+  );
   const row: SyncConflict = {
-    id: conflict.id ?? createId('conflict'),
+    id: existing?.id ?? conflict.id ?? createId('conflict'),
     entity: conflict.entity,
     recordId: conflict.recordId,
     localPayload: conflict.localPayload,
     remotePayload: conflict.remotePayload,
     localVersion: conflict.localVersion,
     remoteVersion: conflict.remoteVersion,
-    createdAt: conflict.createdAt ?? new Date().toISOString(),
+    createdAt: existing?.createdAt ?? conflict.createdAt ?? new Date().toISOString(),
     resolvedAt: conflict.resolvedAt,
     resolution: conflict.resolution,
   };

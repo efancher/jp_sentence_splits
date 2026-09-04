@@ -33,6 +33,20 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Fixed: duplicate conflict rows for the same record
+  (found via the first sync issue report filed through the new button
+  below).** `addConflict` (`src/sync/queue.ts`) always inserted a new
+  `SyncConflict` row with a fresh id, even when an open conflict for that
+  same `(entity, recordId)` already existed. Several queued mutations for
+  one record hitting `version_conflict` in the same push cycle (e.g. a few
+  quick edits to one sentence's `analyses` row) each added their own
+  duplicate `ConflictPanel` card — the user's first report showed 34 open
+  conflicts that collapsed to only 10 distinct records once deduped. Fixed
+  by upserting on `(entity, recordId)` among open conflicts: an existing
+  open conflict updates in place (keeping its original id/createdAt but the
+  latest `localPayload`) instead of spawning a duplicate — also fixes a
+  correctness gap where only the *first* queued edit's payload was kept for
+  "Keep local", discarding later ones. 3 new `queue.test.ts` cases.
 - **2026-09-04 — Sync issue reports: a "Report issue" button for sync
   trouble (user request — "seeing more conflicts than I'd expect,
   and I'm at work with no Claude access when it happens").** New
