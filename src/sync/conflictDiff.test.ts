@@ -90,4 +90,47 @@ describe('forDiff', () => {
       notes: 'hi',
     });
   });
+
+  it('drops updatedAt, since a DB trigger always overwrites it with the server clock', () => {
+    // set_updated_at() (supabase/migrations/20260722000000_sync_schema.sql)
+    // stamps every UPDATE with now() regardless of what the client sent, so
+    // it differs after every push whether or not real content changed.
+    const local = { status: 'empty', updated_at: '2026-09-04T22:05:32.465Z' };
+    const remote = {
+      status: 'empty',
+      updated_at: '2026-09-04T22:05:41.276176+00:00',
+    };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(0);
+  });
+
+  it('treats an absent optional field the same as an explicit null', () => {
+    // Local domain payloads omit unset optional fields entirely
+    // (chunkId?: string); every *ToRemote mapper writes them as
+    // `column: value ?? null` — these must compare equal, not diff.
+    const local = { id: 'sv_1', surface_form: '食べた' };
+    const remote = {
+      id: 'sv_1',
+      surface_form: '食べた',
+      chunk_id: null,
+      audio_start_ms: null,
+      audio_end_ms: null,
+    };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(0);
+  });
+
+  it('collapses Z vs. +00:00 and differing sub-second precision for the same instant', () => {
+    const local = { created_at: '2026-09-04T21:47:25.793Z' };
+    const remote = { created_at: '2026-09-04T21:47:25.793000+00:00' };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(0);
+  });
+
+  it('still reports a real datetime difference after normalizing format', () => {
+    const local = { created_at: '2026-08-27T18:34:52.932Z' };
+    const remote = { created_at: '2026-09-04T22:05:40.925Z' };
+    const rows = diffLines(prettyLines(forDiff(local)), prettyLines(forDiff(remote)));
+    expect(countChanges(rows)).toBe(2);
+  });
 });

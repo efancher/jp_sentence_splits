@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-04 — Fixed: two more conflict-diff noise sources, found via
+  five more sync issue reports filed right after the bookkeeping-stripping
+  fix above (the cleaner diff let these show through clearly for the first
+  time).** (1) `updatedAt` differed after *every* push, for *every*
+  entity, because every synced table has a `before update ...
+  sync_private.set_updated_at()` trigger
+  (`supabase/migrations/20260722000000_sync_schema.sql`) that
+  unconditionally stamps `now()`, ignoring whatever the client sent —
+  added to the excluded-from-diff key set alongside the other
+  auto-managed columns, same reasoning. (2) An unset optional field
+  (`chunkId?`, `conflictEntity?`, ...) is simply absent from the local
+  domain payload but every `*ToRemote` mapper writes it as an explicit
+  `column: value ?? null`, so it always showed as a spurious "added: null"
+  line; `forDiff` now recursively drops `null`-valued keys before
+  diffing, matching the absent/null equivalence the mappers already use
+  elsewhere. Also normalizes ISO timestamp strings (`Z` vs. `+00:00`,
+  millisecond vs. microsecond precision) so the same instant never reads
+  as a diff. 4 new `conflictDiff.test.ts` cases.
 - **2026-09-04 — Fixed: conflict diff buried the real change under sync
   bookkeeping (found via a second sync issue report — "seems to be mostly
   just bookkeeping entries, ids, versions, timestamps").** `canonicalize`

@@ -34,7 +34,7 @@ function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
     <div className="stack" style={{ gap: '0.5rem' }}>
       <div className="muted" style={{ fontSize: '0.8rem' }}>
         {changes === 0
-          ? 'No field-level differences after normalising keys and dropping sync bookkeeping (owner, version, timestamps).'
+          ? 'No field-level differences after normalising keys and dropping sync bookkeeping (owner, version, updatedAt, unset-vs-null fields).'
           : `${changes} differing line(s). `}
         <span className="conflict-diff-legend conflict-diff-remove">
           − local

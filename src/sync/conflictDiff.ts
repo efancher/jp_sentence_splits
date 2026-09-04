@@ -45,6 +45,15 @@ export function prettyLines(value: unknown): string[] {
  * regardless of whether the learner's actual edit differed, burying the
  * real change under always-present noise (reported 2026-09-04 — "mostly
  * just bookkeeping entries, ids, versions, timestamps").
+ *
+ * `updatedAt` is here too, for a different reason: every synced table has
+ * a `before update ... sync_private.set_updated_at()` trigger
+ * (`supabase/migrations/20260722000000_sync_schema.sql`) that
+ * unconditionally overwrites it with the server's `now()`, ignoring
+ * whatever the client sent. It therefore differs between local and remote
+ * after *every* push, for *every* entity, regardless of whether any real
+ * content changed — it can never be trusted as diff-worthy content (still
+ * visible, unstripped, in the full local/remote JSON `<details>` panels).
  */
 const SYNC_BOOKKEEPING_KEYS = new Set([
   'ownerId',
@@ -52,22 +61,63 @@ const SYNC_BOOKKEEPING_KEYS = new Set([
   'deletedAt',
   'clientId',
   'lastModifiedBy',
+  'updatedAt',
 ]);
 
+const ISO_TIMESTAMP_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
 /**
- * `canonicalize` plus dropping top-level sync-bookkeeping keys — only for
- * the diff view. The full local/remote JSON `<details>` panels in
+ * Collapses two representations of the same instant that otherwise read as
+ * a diff: `Z` vs. `+00:00` (client `Date#toISOString()` vs. Postgres text
+ * output), and JS's millisecond precision vs. Postgres timestamptz's
+ * microsecond precision. Only touches strings that actually look like a
+ * full ISO datetime — leaves plain dates, non-date strings, etc. alone.
+ */
+function normalizeTimestamp(value: unknown): unknown {
+  if (typeof value !== 'string' || !ISO_TIMESTAMP_RE.test(value)) return value;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+
+/**
+ * Recursively drops `null`-valued keys and normalizes ISO timestamp
+ * strings. An optional field (`chunkId?`, `conflictEntity?`, ...) is
+ * simply absent from the local domain payload when unset, but every
+ * `*ToRemote` mapper writes it as an explicit `column: value ?? null` —
+ * without this, every such field showed as a spurious "added: null" line
+ * on the remote side (reported 2026-09-04). Absent-vs-null is the
+ * convention this codebase's mappers already treat as equivalent
+ * (`row.x as string | null ?? undefined`), so collapsing them here matches
+ * existing intent rather than inventing a new one.
+ */
+function normalizeForDiff(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeForDiff);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === null) continue;
+      out[key] = normalizeForDiff(v);
+    }
+    return out;
+  }
+  return normalizeTimestamp(value);
+}
+
+/**
+ * `canonicalize` plus the diff-only normalizations above — only for the
+ * diff view. The full local/remote JSON `<details>` panels in
  * ConflictPanel still show everything via plain `prettyLines`, unstripped,
- * since a real version/owner mismatch is exactly what debugging a conflict
- * sometimes needs to see.
+ * since a real version/owner/null mismatch is exactly what debugging a
+ * conflict sometimes needs to see.
  */
 export function forDiff(value: unknown): unknown {
-  const canonical = canonicalize(value);
-  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
-    return canonical;
+  const normalized = normalizeForDiff(canonicalize(value));
+  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+    return normalized;
   }
   const out: Record<string, unknown> = {};
-  for (const [key, v] of Object.entries(canonical as Record<string, unknown>)) {
+  for (const [key, v] of Object.entries(normalized as Record<string, unknown>)) {
     if (!SYNC_BOOKKEEPING_KEYS.has(key)) out[key] = v;
   }
   return out;
