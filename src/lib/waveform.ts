@@ -301,6 +301,47 @@ export function detectSilences(
   return spans;
 }
 
+/**
+ * Sample range with leading and trailing near-silence removed, keeping a
+ * small margin so the first/last syllable isn't clipped. Used to make the
+ * reference and learner *display* waveforms fill the same width so their
+ * shapes line up — a learner take usually has a big gap between tapping
+ * "record" and the first word, and dead air on either side isn't a
+ * meaningful part of the comparison. Returns the whole clip when it's
+ * silent or too short to trim. Alignment math (onset, offset, duration
+ * ratio) still runs on the untrimmed samples.
+ */
+export function trimmedSampleRange(
+  samples: Float32Array,
+  sampleRate: number,
+  {
+    thresholdRatio = 0.08,
+    marginSeconds = 0.05,
+    windowSize = 256,
+  }: { thresholdRatio?: number; marginSeconds?: number; windowSize?: number } = {},
+): { start: number; end: number } {
+  const full = { start: 0, end: samples.length };
+  const envelope = energyEnvelope(samples, windowSize);
+  if (envelope.length === 0) return full;
+  let peak = 0;
+  for (const value of envelope) peak = Math.max(peak, value);
+  if (peak <= 0) return full;
+  const threshold = peak * thresholdRatio;
+  let firstLoud = -1;
+  let lastLoud = -1;
+  for (let i = 0; i < envelope.length; i += 1) {
+    if ((envelope[i] ?? 0) >= threshold) {
+      if (firstLoud < 0) firstLoud = i;
+      lastLoud = i;
+    }
+  }
+  if (firstLoud < 0) return full;
+  const margin = Math.round((marginSeconds * sampleRate) / windowSize);
+  const start = Math.max(0, (firstLoud - margin) * windowSize);
+  const end = Math.min(samples.length, (lastLoud + 1 + margin) * windowSize);
+  return start < end ? { start, end } : full;
+}
+
 export function detectOnsetSeconds(
   samples: Float32Array,
   sampleRate: number,
@@ -396,13 +437,19 @@ export async function analyzeAlignment(
     confidence = 'medium';
   }
   const expectedDurationSeconds = reference.durationSeconds / referencePlaybackRate;
+  // Peaks are display-only: trim the dead air off each clip independently so
+  // the two waveforms fill the same width and can be compared by shape.
+  const referenceTrim = trimmedSampleRange(reference.samples, reference.sampleRate);
+  const learnerTrim = trimmedSampleRange(learner.samples, learner.sampleRate);
   return {
     mode,
     offsetSeconds,
     durationRatio:
       expectedDurationSeconds > 0 ? learner.durationSeconds / expectedDurationSeconds : 1,
     confidence,
-    referencePeaks: computePeaks(reference.samples),
-    learnerPeaks: computePeaks(learner.samples),
+    referencePeaks: computePeaks(
+      reference.samples.subarray(referenceTrim.start, referenceTrim.end),
+    ),
+    learnerPeaks: computePeaks(learner.samples.subarray(learnerTrim.start, learnerTrim.end)),
   };
 }

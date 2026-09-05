@@ -615,6 +615,11 @@ export function AnalysisPanel({
         <>
           <PeakWaveform peaks={alignment.referencePeaks} label="Reference waveform" />
           <PeakWaveform peaks={alignment.learnerPeaks} label="Learner waveform" />
+          <p className="muted" style={{ fontSize: '0.8em' }}>
+            Silent lead-in and trail are trimmed from each waveform so the
+            shapes line up; the offset and duration ratio below still use the
+            full recordings.
+          </p>
           <p className="muted">
             Offset {alignment.offsetSeconds.toFixed(2)}s · duration ratio{' '}
             {alignment.durationRatio.toFixed(2)} · confidence {alignment.confidence}

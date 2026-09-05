@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-05 — AnalysisPanel waveforms trim silent edges (user request).**
+  The stacked "Reference waveform" / "Learner waveform" in `AnalysisPanel`
+  were drawn from the full sample arrays, so a learner take's record-button
+  lead-in (and any trailing dead air) squashed the actual speech into a
+  fraction of the width and made shape comparison hard. New
+  `trimmedSampleRange` in `src/lib/waveform.ts` finds the first/last
+  above-threshold energy window (8% of peak, 50 ms margin) and
+  `analyzeAlignment` now feeds `computePeaks` the trimmed slice for each
+  clip independently. Display-only: onset/offset/duration-ratio math still
+  runs on the untrimmed samples, and a note under the waveforms says so.
+  2 tests in `tests/waveform.test.ts`.
 - **2026-09-04 — Content-identical conflicts now auto-settle instead of
   requiring a manual click (user confirmed, after the diff-noise fixes
   above, that some conflicts showed "no other diff lines highlighted" at

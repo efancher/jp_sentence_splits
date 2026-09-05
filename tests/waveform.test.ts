@@ -15,6 +15,7 @@ import {
   peaksToPolyline,
   pitchBucketsToPolyline,
   pitchFramesToBucketSemitones,
+  trimmedSampleRange,
 } from '../src/lib/waveform';
 
 function sineWave(hz: number, samples: number, sampleRate: number, amplitude = 0.5): Float32Array {
@@ -197,6 +198,32 @@ describe('detectOnsetSeconds', () => {
     const sampleRate = 16_000;
     const tone = sineWave(220, sampleRate, sampleRate);
     expect(detectOnsetSeconds(tone, sampleRate)).toBe(0);
+  });
+});
+
+describe('trimmedSampleRange', () => {
+  const sampleRate = 16_000;
+
+  it('drops leading and trailing silence, keeping a margin around the speech', () => {
+    const lead = new Float32Array(Math.round(sampleRate * 0.6));
+    const speech = sineWave(220, Math.round(sampleRate * 0.5), sampleRate);
+    const trail = new Float32Array(Math.round(sampleRate * 0.4));
+    const samples = new Float32Array(lead.length + speech.length + trail.length);
+    samples.set(lead, 0);
+    samples.set(speech, lead.length);
+    samples.set(trail, lead.length + speech.length);
+
+    const { start, end } = trimmedSampleRange(samples, sampleRate);
+    // Trimmed close to the speech, but not past it (margin keeps some silence).
+    expect(start).toBeGreaterThan(0);
+    expect(start).toBeLessThan(lead.length);
+    expect(end).toBeGreaterThan(lead.length + speech.length);
+    expect(end).toBeLessThan(samples.length);
+  });
+
+  it('returns the whole clip when it is silent', () => {
+    const samples = new Float32Array(sampleRate);
+    expect(trimmedSampleRange(samples, sampleRate)).toEqual({ start: 0, end: samples.length });
   });
 });
 
