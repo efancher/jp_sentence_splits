@@ -60,6 +60,12 @@
     No vocabulary, no reading — just tones. Same task shape as your app's pitch_accent card
     (pick the downstep position), but with the word stripped out so only the contour is left.
   </p>
+  <p class="sub">
+    You'll hear one extra tone after the main sequence — it stands in for whatever follows
+    the word in real speech (e.g. a particle). Without it, "flat" and "drop at the very end"
+    would sound identical, which is also true in real Japanese: heiban and odaka words are
+    genuinely indistinguishable in isolation, only the following particle tells them apart.
+  </p>
 
   <div class="controls">
     <label>
@@ -155,6 +161,13 @@
       for (let i = 0; i < n; i++) {
         seq.push(dropIndex === 0 || i < dropIndex ? interval : 0);
       }
+      // Trailing "particle" tone: without it, dropIndex === 0 (flat) and
+      // dropIndex === n (drop right at the end) produce identical audio —
+      // both are all-high across the n main notes. The trailing tone is
+      // high only when the pitch never dropped (dropIndex === 0); any real
+      // drop (dropIndex 1..n) means everything after it, including this
+      // trailing tone, is low.
+      seq.push(dropIndex === 0 ? interval : 0);
       return { seq, dropIndex };
     }
 
