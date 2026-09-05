@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Relative Pitch Trainer</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 16px;
+    background: #111;
+    color: #eee;
+  }
+  h1 { font-size: 1.3rem; }
+  p.sub { color: #999; font-size: 0.9rem; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 20px 0;
+    padding: 12px;
+    background: #1b1b1b;
+    border-radius: 8px;
+  }
+  .controls label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+  button {
+    font-size: 1rem;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #222;
+    color: #eee;
+    cursor: pointer;
+  }
+  button:hover { background: #2c2c2c; }
+  button.primary { background: #2b5d34; border-color: #3a7d46; }
+  button.primary:hover { background: #33703d; }
+  #choices { display: flex; gap: 8px; margin: 16px 0; }
+  #choices button { flex: 1; }
+  #choices button.correct { background: #2b5d34; border-color: #3a7d46; }
+  #choices button.wrong { background: #6b2b2b; border-color: #8a3a3a; }
+  #feedback { min-height: 1.5em; font-size: 1.1rem; margin: 8px 0; }
+  #score { color: #999; font-size: 0.9rem; }
+  #streakNote { color: #6aa9ff; font-size: 0.85rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <h1>Relative Pitch Trainer</h1>
+  <p class="sub">
+    No Japanese, no mora structure — just "did the pitch go up, down, or stay the same."
+    This is the raw perceptual substrate under pitch accent. If this stays easy even at a
+    small interval, the bottleneck for pitch accent is the Japanese-specific layer (voicing,
+    speech tempo, unfamiliar mora timing), not relative pitch itself — go back to
+    <code>pitch-ear-trainer.html</code>. If this is shaky, drill here first; it should transfer.
+  </p>
+
+  <div class="controls">
+    <label>
+      Interval (semitones)
+      <select id="intervalSize">
+        <option value="12">12 — easy (octave)</option>
+        <option value="7">7 — easier (fifth)</option>
+        <option value="4" selected>4 (major third)</option>
+        <option value="2">2 (whole step)</option>
+        <option value="1">1 — hard (half step)</option>
+      </select>
+    </label>
+    <label>
+      Note length (ms)
+      <select id="noteLength">
+        <option value="500">500 (slow)</option>
+        <option value="300" selected>300</option>
+        <option value="150">150 (fast)</option>
+      </select>
+    </label>
+    <label>
+      Include "same" trials
+      <select id="includeSame">
+        <option value="yes" selected>yes</option>
+        <option value="no">no (up/down only)</option>
+      </select>
+    </label>
+    <label>
+      Adaptive difficulty
+      <select id="adaptive">
+        <option value="on" selected>on (shrinks interval on streaks)</option>
+        <option value="off">off (manual only)</option>
+      </select>
+    </label>
+  </div>
+
+  <div>
+    <button id="playBtn" class="primary">▶ Play pair</button>
+    <button id="replayBtn">↻ Replay</button>
+  </div>
+
+  <div id="choices">
+    <button data-choice="up">▲ Up</button>
+    <button data-choice="same">— Same</button>
+    <button data-choice="down">▼ Down</button>
+  </div>
+
+  <div id="feedback"></div>
+  <div id="streakNote"></div>
+  <div id="score">Score: 0 / 0 — streak: 0</div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    const INTERVALS = [1, 2, 4, 7, 12];
+    let currentIntervalIdx = INTERVALS.indexOf(4);
+    let currentPair = null; // { firstSemis, secondSemis, answer }
+    let correct = 0, total = 0, streak = 0;
+
+    const intervalSizeEl = document.getElementById('intervalSize');
+    const noteLengthEl = document.getElementById('noteLength');
+    const includeSameEl = document.getElementById('includeSame');
+    const adaptiveEl = document.getElementById('adaptive');
+    const choicesEl = document.getElementById('choices');
+    const feedbackEl = document.getElementById('feedback');
+    const scoreEl = document.getElementById('score');
+    const streakNoteEl = document.getElementById('streakNote');
+
+    function semitoneToFreq(base, semitones) {
+      return base * Math.pow(2, semitones / 12);
+    }
+
+    function playTone(freq, startTime, durationSec) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const fade = Math.min(0.02, durationSec / 4);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + fade);
+      gain.gain.setValueAtTime(0.3, startTime + durationSec - fade);
+      gain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + durationSec);
+    }
+
+    function activeInterval() {
+      if (adaptiveEl.value === 'on') return INTERVALS[currentIntervalIdx];
+      return parseInt(intervalSizeEl.value, 10);
+    }
+
+    function buildPair() {
+      const interval = activeInterval();
+      const allowSame = includeSameEl.value === 'yes';
+      const options = allowSame ? ['up', 'down', 'same'] : ['up', 'down'];
+      const answer = options[Math.floor(Math.random() * options.length)];
+      const firstSemis = 0;
+      let secondSemis;
+      if (answer === 'up') secondSemis = interval;
+      else if (answer === 'down') secondSemis = -interval;
+      else secondSemis = 0;
+      return { firstSemis, secondSemis, answer };
+    }
+
+    function playPair(pair) {
+      const baseFreq = 220 + Math.random() * 60;
+      const durationSec = parseInt(noteLengthEl.value, 10) / 1000;
+      const gapSec = durationSec * 0.5;
+      const startTime = audioCtx.currentTime + 0.05;
+      playTone(semitoneToFreq(baseFreq, pair.firstSemis), startTime, durationSec);
+      playTone(semitoneToFreq(baseFreq, pair.secondSemis), startTime + durationSec + gapSec, durationSec);
+    }
+
+    function resetChoiceStyles() {
+      [...choicesEl.children].forEach(c => {
+        c.classList.remove('correct', 'wrong');
+        c.disabled = false;
+      });
+    }
+
+    function handleAnswer(choice, btn) {
+      total++;
+      const isCorrect = choice === currentPair.answer;
+      if (isCorrect) {
+        correct++;
+        streak++;
+        btn.classList.add('correct');
+        feedbackEl.textContent = '✓ correct';
+        if (adaptiveEl.value === 'on' && streak > 0 && streak % 5 === 0 && currentIntervalIdx > 0) {
+          currentIntervalIdx--;
+          streakNoteEl.textContent = `Streak of ${streak} — shrinking interval to ${INTERVALS[currentIntervalIdx]} semitones`;
+        }
+      } else {
+        if (adaptiveEl.value === 'on' && currentIntervalIdx < INTERVALS.length - 1) {
+          currentIntervalIdx++;
+          streakNoteEl.textContent = `Missed — widening interval back to ${INTERVALS[currentIntervalIdx]} semitones`;
+        }
+        streak = 0;
+        btn.classList.add('wrong');
+        feedbackEl.textContent = `✗ wrong — it was "${currentPair.answer}"`;
+        [...choicesEl.children].forEach(c => {
+          if (c.dataset.choice === currentPair.answer) c.classList.add('correct');
+        });
+      }
+      scoreEl.textContent = `Score: ${correct} / ${total} — streak: ${streak}`;
+      [...choicesEl.children].forEach(c => c.disabled = true);
+    }
+
+    function newTrial() {
+      audioCtx.resume();
+      currentPair = buildPair();
+      feedbackEl.textContent = '';
+      resetChoiceStyles();
+      playPair(currentPair);
+    }
+
+    [...choicesEl.children].forEach(btn => {
+      btn.addEventListener('click', () => handleAnswer(btn.dataset.choice, btn));
+    });
+
+    document.getElementById('playBtn').addEventListener('click', newTrial);
+    document.getElementById('replayBtn').addEventListener('click', () => {
+      if (currentPair) playPair(currentPair);
+    });
+  </script>
+</body>
+</html>

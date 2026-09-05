@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Pitch Ear Trainer</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 16px;
+    background: #111;
+    color: #eee;
+  }
+  h1 { font-size: 1.3rem; }
+  p.sub { color: #999; font-size: 0.9rem; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 20px 0;
+    padding: 12px;
+    background: #1b1b1b;
+    border-radius: 8px;
+  }
+  .controls label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+  button {
+    font-size: 1rem;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #222;
+    color: #eee;
+    cursor: pointer;
+  }
+  button:hover { background: #2c2c2c; }
+  button.primary { background: #2b5d34; border-color: #3a7d46; }
+  button.primary:hover { background: #33703d; }
+  #choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  #choices button { flex: 1 1 60px; min-width: 60px; }
+  #choices button.correct { background: #2b5d34; border-color: #3a7d46; }
+  #choices button.wrong { background: #6b2b2b; border-color: #8a3a3a; }
+  #feedback { min-height: 1.5em; font-size: 1.1rem; margin: 8px 0; }
+  #score { color: #999; font-size: 0.9rem; }
+  .contour-bar {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 32px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .contour-bar div { width: 8px; background: #6aa9ff; border-radius: 2px; }
+</style>
+</head>
+<body>
+  <h1>Pitch Ear Trainer</h1>
+  <p class="sub">
+    Trains the raw skill behind pitch accent: hearing <em>where a pitch sequence drops</em>.
+    No vocabulary, no reading — just tones. Same task shape as your app's pitch_accent card
+    (pick the downstep position), but with the word stripped out so only the contour is left.
+  </p>
+
+  <div class="controls">
+    <label>
+      Notes per trial
+      <select id="noteCount">
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </label>
+    <label>
+      Interval size (semitones)
+      <select id="intervalSize">
+        <option value="12">12 — easy (octave)</option>
+        <option value="7">7 — medium (fifth)</option>
+        <option value="4" selected>4 — realistic-ish (major third)</option>
+        <option value="2">2 — hard (whole step)</option>
+      </select>
+    </label>
+    <label>
+      Note length (ms)
+      <select id="noteLength">
+        <option value="450">450 (slow)</option>
+        <option value="300" selected>300</option>
+        <option value="180">180 (fast, speech-like)</option>
+      </select>
+    </label>
+    <label>
+      Tone
+      <select id="waveType">
+        <option value="sine" selected>sine (pure)</option>
+        <option value="triangle">triangle (softer)</option>
+      </select>
+    </label>
+  </div>
+
+  <div>
+    <button id="playBtn" class="primary">▶ Play sequence</button>
+    <button id="replayBtn">↻ Replay</button>
+  </div>
+
+  <p>Where does the pitch drop? (0 = flat / no drop, like heiban)</p>
+  <div id="choices"></div>
+
+  <div id="feedback"></div>
+  <div id="score">Score: 0 / 0 — streak: 0</div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    let currentSequence = null; // array of semitone offsets (0 = base pitch)
+    let correctDrop = null;     // index 0..N where drop occurs; 0 = no drop (flat)
+    let correct = 0, total = 0, streak = 0;
+
+    const noteCountEl = document.getElementById('noteCount');
+    const intervalSizeEl = document.getElementById('intervalSize');
+    const noteLengthEl = document.getElementById('noteLength');
+    const waveTypeEl = document.getElementById('waveType');
+    const choicesEl = document.getElementById('choices');
+    const feedbackEl = document.getElementById('feedback');
+    const scoreEl = document.getElementById('score');
+
+    function semitoneToFreq(base, semitones) {
+      return base * Math.pow(2, semitones / 12);
+    }
+
+    function playTone(freq, startTime, durationSec, type) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      // small fade in/out to avoid clicks
+      const fade = Math.min(0.02, durationSec / 4);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + fade);
+      gain.gain.setValueAtTime(0.3, startTime + durationSec - fade);
+      gain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + durationSec);
+    }
+
+    function buildSequence() {
+      const n = parseInt(noteCountEl.value, 10);
+      const interval = parseInt(intervalSizeEl.value, 10);
+      // dropIndex: 0 means flat/no drop (heiban-style). 1..n means pitch is
+      // high for notes [0, dropIndex) and low from dropIndex onward — mirrors
+      // the atamadaka/nakadaka/odaka "high until nucleus, then low" shape.
+      const dropIndex = Math.floor(Math.random() * (n + 1));
+      const seq = [];
+      for (let i = 0; i < n; i++) {
+        seq.push(dropIndex === 0 || i < dropIndex ? interval : 0);
+      }
+      return { seq, dropIndex };
+    }
+
+    function playSequence(seq) {
+      const baseFreq = 220 + Math.random() * 40; // small random base so it's not memorized by absolute pitch
+      const durationSec = parseInt(noteLengthEl.value, 10) / 1000;
+      const gapSec = durationSec * 0.15;
+      const type = waveTypeEl.value;
+      const startTime = audioCtx.currentTime + 0.05;
+      seq.forEach((semitones, i) => {
+        const t = startTime + i * (durationSec + gapSec);
+        playTone(semitoneToFreq(baseFreq, semitones), t, durationSec, type);
+      });
+    }
+
+    function renderChoices(n) {
+      choicesEl.innerHTML = '';
+      for (let i = 0; i <= n; i++) {
+        const btn = document.createElement('button');
+        btn.textContent = i === 0 ? 'flat' : `drop@${i}`;
+        btn.addEventListener('click', () => handleAnswer(i, btn));
+        choicesEl.appendChild(btn);
+      }
+    }
+
+    function handleAnswer(choice, btn) {
+      total++;
+      const isCorrect = choice === correctDrop;
+      if (isCorrect) {
+        correct++;
+        streak++;
+        btn.classList.add('correct');
+        feedbackEl.textContent = '✓ correct';
+      } else {
+        streak = 0;
+        btn.classList.add('wrong');
+        feedbackEl.textContent = `✗ wrong — it was ${correctDrop === 0 ? 'flat' : 'drop@' + correctDrop}`;
+        [...choicesEl.children].forEach(c => {
+          if (c.textContent === (correctDrop === 0 ? 'flat' : `drop@${correctDrop}`)) {
+            c.classList.add('correct');
+          }
+        });
+      }
+      scoreEl.textContent = `Score: ${correct} / ${total} — streak: ${streak}`;
+      [...choicesEl.children].forEach(c => c.disabled = true);
+    }
+
+    function newTrial() {
+      audioCtx.resume();
+      const n = parseInt(noteCountEl.value, 10);
+      const { seq, dropIndex } = buildSequence();
+      currentSequence = seq;
+      correctDrop = dropIndex;
+      feedbackEl.textContent = '';
+      renderChoices(n);
+      playSequence(seq);
+    }
+
+    document.getElementById('playBtn').addEventListener('click', newTrial);
+    document.getElementById('replayBtn').addEventListener('click', () => {
+      if (currentSequence) playSequence(currentSequence);
+    });
+  </script>
+</body>
+</html>
