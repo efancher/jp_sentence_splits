@@ -319,6 +319,31 @@ describe('PlaybackCoordinator.loopRange', () => {
     await done;
   });
 
+  it('below 1x, keeps playing past the end for a stretch-lag before rewinding', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(
+      audio as unknown as HTMLAudioElement,
+      { startMs: 0, endMs: 1000 },
+      0.5,
+    );
+
+    // Crossing the end does NOT pause immediately — the buffered tail is
+    // still audible under preservesPitch time-stretching.
+    audio.currentTime = 1.01;
+    audio.dispatch('timeupdate');
+    expect(audio.pause).not.toHaveBeenCalled();
+
+    // ...but it does rewind once the lag elapses ((1/0.5 - 1) * 90 = 90ms).
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(audio.currentTime).toBe(0);
+
+    coordinator.cancel();
+    await done;
+  });
+
   it('resolves without throwing if play() rejects (e.g. unsupported source)', async () => {
     const coordinator = new PlaybackCoordinator();
     const audio = new FakeAudioElement();

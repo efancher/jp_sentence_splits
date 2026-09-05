@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-05 — Looped word audio clipped its tail at slowed speeds
+  (user report, card issue `e1c3f531`).** On the `pitch_accent` card (and
+  any `SegmentLoopPlayer` consumer) the reporter noticed the looped native
+  word lost more of its end the more they slowed playback. Cause:
+  `preservesPitch` time-stretching makes `audio.currentTime` lead the
+  audible output, and that lead grows as the rate drops, so `playLoopedRange`
+  (`src/lib/recording.ts`) pausing the instant `currentTime` reached `endSec`
+  cut the still-buffered tail — the folded-in trailing particle, i.e. the
+  audible heiban/odaka cue. Below 1× it now keeps playing for an estimated
+  stretch-lag (`(1/rate - 1) * 90` ms) before the pause/rewind; 1× is
+  unchanged. Empirical constant — tune if the tail is still short (or bleeds
+  into the next word) at 0.5×. 1 test in `tests/recording.test.ts`.
 - **2026-09-05 — AnalysisPanel waveforms trim silent edges (user request).**
   The stacked "Reference waveform" / "Learner waveform" in `AnalysisPanel`
   were drawn from the full sample arrays, so a learner take's record-button

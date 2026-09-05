@@ -489,6 +489,15 @@ function playUntilEnded(
  * loop, eats the word's attack — so every pass after the first sounds
  * front-clipped while a fresh page load's first loop is always clean
  * (reported 2026-09-04, pitch-accent + word_listening cards).
+ *
+ * At slowed speeds `preservesPitch` time-stretching makes `currentTime`
+ * (the decode cursor) run ahead of what's actually audible, and that lead
+ * grows as the rate drops — so pausing the instant `currentTime` hits
+ * `endSec` drops the still-buffered tail (the folded-in trailing particle,
+ * which is the only audible heiban/odaka cue). Below 1× we let it keep
+ * playing for an estimated stretch-lag before rewinding (reported
+ * 2026-09-05, pitch-accent card). The constant is empirical — tune it if
+ * the tail is still clipped, or bleeds into the next word, at 0.5×.
  */
 function playLoopedRange(
   audio: HTMLAudioElement,
@@ -503,13 +512,13 @@ function playLoopedRange(
       return;
     }
     let restarting = false;
+    let tailTimer: number | undefined;
     const cleanup = () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       signal.removeEventListener('abort', onAbort);
+      window.clearTimeout(tailTimer);
     };
-    const onTimeUpdate = () => {
-      if (restarting || audio.currentTime < endSec) return;
-      restarting = true;
+    const rewind = () => {
       audio.pause();
       const resume = () => {
         window.clearTimeout(timer);
@@ -521,6 +530,17 @@ function playLoopedRange(
       const timer = window.setTimeout(resume, 250);
       audio.addEventListener('seeked', resume, { once: true });
       audio.currentTime = startSec;
+    };
+    const onTimeUpdate = () => {
+      if (restarting || audio.currentTime < endSec) return;
+      restarting = true;
+      const rate = audio.playbackRate || 1;
+      const tailLagMs = rate < 1 ? Math.round((1 / rate - 1) * 90) : 0;
+      if (tailLagMs === 0) {
+        rewind();
+        return;
+      }
+      tailTimer = window.setTimeout(rewind, tailLagMs);
     };
     const onAbort = () => {
       audio.pause();
