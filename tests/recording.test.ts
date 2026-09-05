@@ -335,8 +335,8 @@ describe('PlaybackCoordinator.loopRange', () => {
     audio.dispatch('timeupdate');
     expect(audio.pause).not.toHaveBeenCalled();
 
-    // ...but it does rewind once the lag elapses ((1/0.5 - 1) * 90 = 90ms).
-    await new Promise((resolve) => setTimeout(resolve, 140));
+    // ...but it does rewind once the lag elapses ((1/0.5 - 1) * 400 = 400ms).
+    await new Promise((resolve) => setTimeout(resolve, 460));
     expect(audio.pause).toHaveBeenCalledOnce();
     expect(audio.currentTime).toBe(0);
 

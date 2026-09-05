@@ -42,9 +42,12 @@ is trimmed.)
   (`src/lib/recording.ts`) pausing the instant `currentTime` reached `endSec`
   cut the still-buffered tail — the folded-in trailing particle, i.e. the
   audible heiban/odaka cue. Below 1× it now keeps playing for an estimated
-  stretch-lag (`(1/rate - 1) * 90` ms) before the pause/rewind; 1× is
-  unchanged. Empirical constant — tune if the tail is still short (or bleeds
-  into the next word) at 0.5×. 1 test in `tests/recording.test.ts`.
+  WSOLA-buffer drain time before the pause/rewind; 1× is unchanged. First
+  pass used `(1/rate - 1) * 90` ms and the user reported it still clipped,
+  so the constant is now `400` (≈400 ms at 0.5×, ≈133 ms at 0.75×) and
+  `localStorage.loopTailLagMs` overrides the whole computation for hands-on
+  tuning without a rebuild. Empirical — revisit if it bleeds into the next
+  word. 1 test in `tests/recording.test.ts`.
 - **2026-09-05 — AnalysisPanel waveforms trim silent edges (user request).**
   The stacked "Reference waveform" / "Learner waveform" in `AnalysisPanel`
   were drawn from the full sample arrays, so a learner take's record-button

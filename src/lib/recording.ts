@@ -490,15 +490,30 @@ function playUntilEnded(
  * front-clipped while a fresh page load's first loop is always clean
  * (reported 2026-09-04, pitch-accent + word_listening cards).
  *
- * At slowed speeds `preservesPitch` time-stretching makes `currentTime`
- * (the decode cursor) run ahead of what's actually audible, and that lead
- * grows as the rate drops — so pausing the instant `currentTime` hits
- * `endSec` drops the still-buffered tail (the folded-in trailing particle,
- * which is the only audible heiban/odaka cue). Below 1× we let it keep
- * playing for an estimated stretch-lag before rewinding (reported
- * 2026-09-05, pitch-accent card). The constant is empirical — tune it if
- * the tail is still clipped, or bleeds into the next word, at 0.5×.
+ * At slowed speeds `preservesPitch` time-stretching (WSOLA) makes
+ * `currentTime` (the decode cursor) run well ahead of what's actually
+ * audible — the stretch buffer holds ~100-200 ms of source, which at 0.5×
+ * takes ~200-400 ms of wall-clock to drain. Pausing/seeking the instant
+ * `currentTime` hits `endSec` discards that buffer, so the tail (the
+ * folded-in trailing particle — the only audible heiban/odaka cue) is
+ * lost, and worse the slower you go. Below 1× we keep playing for an
+ * estimated drain time before rewinding (reported 2026-09-05, twice —
+ * a first pass at ~90 ms was still short). The `400` is empirical: raise
+ * it if the tail is still clipped at 0.5×, lower it if the loop now bleeds
+ * audibly into the next word. `localStorage.loopTailLagMs` overrides the
+ * whole computation (any rate) for hands-on tuning without a rebuild.
  */
+function loopTailLagMs(rate: number): number {
+  try {
+    const override = window.localStorage?.getItem('loopTailLagMs');
+    if (override != null && override.trim() !== '' && Number.isFinite(Number(override))) {
+      return Math.max(0, Number(override));
+    }
+  } catch {
+    // localStorage can throw (private mode / disabled) — fall through.
+  }
+  return rate < 1 ? Math.round((1 / rate - 1) * 400) : 0;
+}
 function playLoopedRange(
   audio: HTMLAudioElement,
   range: TimeRangeMs,
@@ -534,13 +549,12 @@ function playLoopedRange(
     const onTimeUpdate = () => {
       if (restarting || audio.currentTime < endSec) return;
       restarting = true;
-      const rate = audio.playbackRate || 1;
-      const tailLagMs = rate < 1 ? Math.round((1 / rate - 1) * 90) : 0;
-      if (tailLagMs === 0) {
+      const tailLag = loopTailLagMs(audio.playbackRate || 1);
+      if (tailLag === 0) {
         rewind();
         return;
       }
-      tailTimer = window.setTimeout(rewind, tailLagMs);
+      tailTimer = window.setTimeout(rewind, tailLag);
     };
     const onAbort = () => {
       audio.pause();
