@@ -33,6 +33,7 @@ import {
   recordReview,
   reportCardIssue,
   settleSessionStep,
+  updatePlannerSessionStep,
   type ConfusionPairCandidate,
   type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
@@ -840,6 +841,18 @@ export function ReviewPage() {
     () => (reviewStep?.startedAt ? countReviewsSince(reviewStep.startedAt) : undefined),
     [reviewStep?.startedAt],
   );
+  // Reaching this page any way other than SessionRunnerPage's "Go" — the top
+  // nav's "Review" link, SessionBar's "Resume" — leaves the planner's review
+  // step `pending`, so it never gets a `startedAt`. Without that anchor
+  // `countReviewsSince` can't run, and "Reviews this step" (plus the
+  // target-count auto-advance below) sit frozen at 0 no matter how many cards
+  // you grade. Activate it on arrival, exactly as "Go" would.
+  useEffect(() => {
+    if (!activeSession || !reviewStep || reviewStep.status !== 'pending') return;
+    void updatePlannerSessionStep(activeSession.session.id, reviewStep.id, {
+      status: 'active',
+    });
+  }, [activeSession?.session.id, reviewStep?.id, reviewStep?.status]);
   const [queue, setQueue] = useState<QueueCard[]>([]);
   const [pool, setPool] = useState<PendingSeed[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -2223,6 +2236,15 @@ function PitchAccentCard({
           <div className="muted">
             {selected === correctPosition ? '✓ Correct' : '✗ Not quite'}
           </div>
+          {selected !== null && selected !== correctPosition ? (
+            <div className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
+              <span className="muted">You chose:</span>
+              <PitchChoiceContour morae={morae} position={selected} />
+              <span className="muted" style={{ fontSize: '0.75rem' }}>
+                {dropCaption(selected)}
+              </span>
+            </div>
+          ) : null}
           <div>
             {PITCH_ACCENT_PATTERN_LABELS[correctLabel]} —{' '}
             {correctPosition === 0 ? 'no downstep' : `downstep after mora ${correctPosition}`}

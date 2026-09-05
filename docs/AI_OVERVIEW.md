@@ -496,7 +496,12 @@ state, so progress survives leaving and returning to the page) and, once N
 is reached, calls `settleSessionStep` and navigates to the next step —
 this is the one place a deep-linked page is deliberately made
 session-aware, since the `review` step's count otherwise had no way to be
-observed from outside `ReviewPage`'s own due-queue state.
+observed from outside `ReviewPage`'s own due-queue state. Because that
+count anchors on the step's `startedAt`, `ReviewPage` also flips a
+`pending` review step to `active` on arrival (mirroring
+`SessionRunnerPage`'s "Go") — otherwise reaching the page via the top-nav
+"Review" link or `SessionBar`'s "Resume" would leave the step unstarted
+and the counter frozen at 0.
 
 ### 1. Content import & organization
 - **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses

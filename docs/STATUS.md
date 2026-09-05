@@ -33,6 +33,16 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-05 — "Reviews this step: 0 / N" never advanced (user report).**
+  The session planner's `review` step only gets a `startedAt` when it's
+  flipped to `active`, which `SessionRunnerPage`'s "Go" does — but reaching
+  `ReviewPage` via the top-nav "Review" link or `SessionBar`'s "Resume"
+  (navigate-only) left the step `pending`. With no `startedAt`,
+  `countReviewsSince` can't run, so the counter (and the target-count
+  auto-advance) sat frozen at 0 no matter how many cards were graded.
+  `ReviewPage` now activates a matching `pending` review step on arrival
+  (`src/pages/ReviewPage.tsx`), the same effect "Go" has.
+
 - **2026-09-05 — Looped word audio clipped its tail at slowed speeds
   (user report, card issue `e1c3f531`).** On the `pitch_accent` card (and
   any `SegmentLoopPlayer` consumer) the reporter noticed the looped native
