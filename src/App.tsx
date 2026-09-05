@@ -145,6 +145,16 @@ const PitchAccentDrillPage = lazy(() =>
     default: module.PitchAccentDrillPage,
   })),
 );
+const PitchEarTrainerPage = lazy(() =>
+  import('./pages/PitchEarTrainerPage').then((module) => ({
+    default: module.PitchEarTrainerPage,
+  })),
+);
+const RelativePitchTrainerPage = lazy(() =>
+  import('./pages/RelativePitchTrainerPage').then((module) => ({
+    default: module.RelativePitchTrainerPage,
+  })),
+);
 
 export default function App() {
   useTheme();
@@ -167,6 +177,8 @@ export default function App() {
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="pitch-accent" element={<PitchAccentDrillPage />} />
+            <Route path="pitch-ear-trainer" element={<PitchEarTrainerPage />} />
+            <Route path="relative-pitch-trainer" element={<RelativePitchTrainerPage />} />
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />

@@ -61,6 +61,8 @@ const SHORTCUTS = [
   { to: '/vocabulary', label: 'Words' },
   { to: '/pronunciation', label: 'Pronunciation' },
   { to: '/pitch-accent', label: 'Pitch-accent drill' },
+  { to: '/pitch-ear-trainer', label: 'Pitch ear trainer' },
+  { to: '/relative-pitch-trainer', label: 'Relative pitch trainer' },
   { to: '/progress', label: 'Progress' },
   { to: '/search', label: 'Library / Search' },
 ] as const;
