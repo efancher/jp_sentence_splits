@@ -1251,8 +1251,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   for entries with dictionary data. Deliberately one
   independent contour per word (from that word's dictionary reading), not
   a joined sentence line — Japanese compound/cross-word accent isn't
-  computed anywhere in this codebase (see `pitchAccentRules.ts`). Words
-  with no accent data and particles are simply absent; renders nothing
+  computed anywhere in this codebase (see `pitchAccentRules.ts`). The one
+  connected-speech concession: a marked word absorbs the run of short
+  single-kana grammatical particles right after it (`particleTail` —
+  は・が・を・に・も・の・か・…, stopping at okurigana / multi-mora particles /
+  the next marked word) and shows them at the `particleHigh` level, so an
+  odaka word's dropped particle is finally visible. Words with no accent
+  data and *standalone* particles are still absent; renders nothing
   when the sentence has no accented words. Word order under the sentence
   is by first unclaimed `indexOf` of the surface form. In `AnalysisPanel`
   the row also takes `learnerClassesBySurface` — a second H/L line under
@@ -1263,8 +1268,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   per-word marks (shared `PitchAccentWordMarks` markup, same
   `learnerClassesBySurface` second line) but stacked *inline* beneath each
   word of the full sentence rather than lifted into a separate strip, so
-  the learner reads and checks in one glance; non-accented runs stay plain
-  text.
+  the learner reads and checks in one glance; the marked word plus its
+  `particleTail` fold onto the sentence line, other non-accented runs stay
+  plain text.
 - **Practice-mode variants**: "Delayed shadow" (listen in full, then
   auto-record after a configurable 0.5–2.0s gap) and "Show meaning
   instead" (swap Japanese transcript for English translation, forcing

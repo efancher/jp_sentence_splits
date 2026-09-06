@@ -4,10 +4,13 @@ import type { SentenceWordAccent } from '../lib/sentencePitchAccent';
 /**
  * The stacked per-mora marks for one accent-bearing word — kana, the
  * dictionary H/L, and (when `showLearner`) the learner's own measured H/L
- * as a second line — plus the trailing particle-attachment mark. Shared by
- * the compact `SentencePitchAccentRow` and the inline
- * `SentencePitchAccentText`; each supplies its own outer `.pa-word`
- * wrapper (they differ on highlight / heading).
+ * as a second line. When `word.particleTail` is non-empty the trailing
+ * marks are the actual attached particle kana (each at the `particleHigh`
+ * level); otherwise a single abstract `·` mora still shows what a
+ * following particle would do. Shared by the compact
+ * `SentencePitchAccentRow` and the inline `SentencePitchAccentText`; each
+ * supplies its own outer `.pa-word` wrapper (they differ on highlight /
+ * heading).
  *
  * `learnerClasses` is the learner's measured shape for this word (same
  * mora segmentation as `word.morae`); a mora the estimate couldn't reach
@@ -53,19 +56,35 @@ export function PitchAccentWordMarks({
           </span>
         );
       })}
-      <span className="pa-mora pa-particle">
-        <span className="pa-kana" aria-hidden="true">
-          ·
-        </span>
-        <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
-          {word.particleHigh ? 'H' : 'L'}
-        </span>
-        {showLearner ? (
-          <span className="pa-hl pa-hl-learner" aria-hidden="true">
+      {word.particleTail.length > 0 ? (
+        word.particleTail.map((kana, tailIndex) => (
+          <span key={`tail-${tailIndex}`} className="pa-mora pa-particle">
+            <span className="pa-kana jp">{kana}</span>
+            <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
+              {word.particleHigh ? 'H' : 'L'}
+            </span>
+            {showLearner ? (
+              <span className="pa-hl pa-hl-learner" aria-hidden="true">
+                ·
+              </span>
+            ) : null}
+          </span>
+        ))
+      ) : (
+        <span className="pa-mora pa-particle">
+          <span className="pa-kana" aria-hidden="true">
             ·
           </span>
-        ) : null}
-      </span>
+          <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
+            {word.particleHigh ? 'H' : 'L'}
+          </span>
+          {showLearner ? (
+            <span className="pa-hl pa-hl-learner" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+        </span>
+      )}
     </>
   );
 }

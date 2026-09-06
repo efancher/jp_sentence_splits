@@ -18,9 +18,11 @@ import { PitchAccentWordMarks } from './PitchAccentWordMarks';
  * under each word of the full sentence rather than in a separate strip.)
  *
  * Per-word, not a joined sentence contour — see `sentencePitchAccent.ts`
- * for why. Words with no Kanjium/UniDic data (many particles, unparsed
- * runs, ~79 still-blank vocab items) are simply absent; the component
- * renders nothing at all when the sentence has no accented words.
+ * for why (short grammatical particles attached to a marked word are the
+ * one exception: they ride along in `word.particleTail`). Words with no
+ * Kanjium/UniDic data (unparsed runs, ~79 still-blank vocab items) and
+ * standalone particles are simply absent; the component renders nothing at
+ * all when the sentence has no accented words.
  *
  * Pass `targets` when the caller already has them (AnalysisPanel loads the
  * same list for scoring); otherwise pass `sentenceId` and the row loads

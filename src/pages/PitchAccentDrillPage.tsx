@@ -275,8 +275,8 @@ export function PitchAccentDrillPage() {
                   ) : null}
                   <span className="muted" style={{ fontSize: '0.8rem' }}>
                     {analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
-                      ? 'Marks under each word: top = dictionary, bottom = your recording (H = high mora, L = low)'
-                      : 'Marks under each word show the dictionary pitch accent (H = high mora, L = low)'}
+                      ? 'Marks under each word (and the particles after it): top = dictionary, bottom = your recording (H = high mora, L = low)'
+                      : 'Marks under each word (and the particles after it) show the dictionary pitch accent (H = high mora, L = low)'}
                   </span>
                 </div>
 

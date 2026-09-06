@@ -143,6 +143,70 @@ describe('PitchAccentDrillPage', () => {
     expect(screen.getByLabelText('Your pitch-fall prediction')).toHaveTextContent(/✓/);
   });
 
+  it('marks the grammatical particle attached to an accented word', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 's2',
+      normalizedKey: 's2',
+      japanese: '犬が好き。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I like dogs.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 's2',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyItems.add({
+      id: 'vocab-inu',
+      expression: '犬',
+      reading: 'いぬ',
+      meaning: 'dog',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'link-inu',
+      sentenceId: 's2',
+      vocabularyItemId: 'vocab-inu',
+      surfaceForm: '犬',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.add({
+      id: 'si-inu',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-inu',
+      activityType: 'reading_retrieval',
+      fsrsState: PROFICIENT_FSRS,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Falls after mora 2/ }));
+
+    // 犬 (いぬ, odaka) + attached が on the sentence line.
+    expect(await screen.findByText('犬が')).toBeInTheDocument();
+  });
+
   it('shows the dictionary contour when the prediction misses', async () => {
     await seedEligibleSentence();
     renderPage();

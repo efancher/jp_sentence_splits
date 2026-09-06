@@ -24,6 +24,16 @@ import {
  * exact for that word in isolation; only its *position* in the sentence is
  * approximate (first unclaimed `indexOf` of the surface form), which is
  * enough to order the per-word blocks left-to-right under the sentence.
+ *
+ * `particleTail` is the one concession to *connected* speech: the run of
+ * short grammatical particles that immediately follows the word in the
+ * sentence (は・が・を・に・も・… — see `BUNSETSU_PARTICLE_KANA`) is pulled
+ * into the word's accent phrase and marked at a single level — high after a
+ * heiban/odaka-shaped word's particle would stay high, low after an
+ * accented one (the same `particleHigh` rule the abstract trailing mark
+ * already used). This is only the bunsetsu-level rule (particle attachment);
+ * it deliberately stops at verb/copula okurigana (て・た・だ・で・…) and
+ * multi-mora particles, and never bridges across to the next content word.
  */
 export interface SentenceWordAccent {
   surfaceForm: string;
@@ -38,8 +48,27 @@ export interface SentenceWordAccent {
   classes: MoraPitchClass[];
   /** Whether a following particle stays high (heiban only). */
   particleHigh: boolean;
+  /**
+   * Short grammatical particles attached to this word in the sentence, one
+   * kana per entry (empty when the word is followed by punctuation, kanji,
+   * okurigana, or another marked word). Each is voiced at the `particleHigh`
+   * level.
+   */
+  particleTail: string[];
   pattern: PitchAccentPattern;
 }
+
+/**
+ * Single-kana grammatical particles that reliably cliticise onto the
+ * preceding accent phrase and take its final level. Deliberately excludes
+ * verb/copula okurigana (て・で・た・だ・な as a copula) and every
+ * multi-mora particle (から・まで・のに・ので・だけ・…), several of which
+ * carry their own accent — marking those needs real morphology, which this
+ * module doesn't have.
+ */
+const BUNSETSU_PARTICLE_KANA = new Set(
+  ['は', 'が', 'を', 'に', 'へ', 'と', 'も', 'の', 'や', 'か', 'ね', 'よ', 'わ', 'さ', 'ぞ', 'ぜ'],
+);
 
 export interface SentencePitchAccentTarget {
   surfaceForm: string;
@@ -77,11 +106,12 @@ export function buildSentencePitchAccents(
       morae,
       classes: expectedPitchShape(morae.length, position),
       particleHigh: position <= 0,
+      particleTail: [],
       pattern: pitchPatternLabel(position, morae.length),
     });
   }
 
-  return results.sort((a, b) => {
+  const sorted = results.sort((a, b) => {
     if (a.start !== b.start) {
       // Unlocated words (-1) sort to the end.
       if (a.start < 0) return 1;
@@ -90,4 +120,29 @@ export function buildSentencePitchAccents(
     }
     return 0;
   });
+
+  // Second pass: attach the run of short grammatical particles that follows
+  // each located word, stopping before the next located word.
+  for (let index = 0; index < sorted.length; index += 1) {
+    const word = sorted[index]!;
+    if (word.start < 0) continue;
+    const tailStart = word.start + word.surfaceForm.length;
+    let limit = japanese.length;
+    for (let next = index + 1; next < sorted.length; next += 1) {
+      const nextStart = sorted[next]!.start;
+      if (nextStart >= tailStart) {
+        limit = nextStart;
+        break;
+      }
+    }
+    const tail: string[] = [];
+    for (let pos = tailStart; pos < limit; pos += 1) {
+      const char = japanese[pos]!;
+      if (!BUNSETSU_PARTICLE_KANA.has(char)) break;
+      tail.push(char);
+    }
+    word.particleTail = tail;
+  }
+
+  return sorted;
 }

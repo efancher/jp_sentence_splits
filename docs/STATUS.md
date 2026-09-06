@@ -33,6 +33,22 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Pitch-accent marks extend over attached particles (user
+  ask: "add the h/l markers for the entire sentence").** Still per-word, not
+  a computed sentence contour, but `buildSentencePitchAccents` now runs a
+  second pass that pulls the run of short single-kana grammatical particles
+  immediately after a marked word (`BUNSETSU_PARTICLE_KANA` — は・が・を・に・
+  も・の・か・ね・よ・…) into that word's accent phrase as `particleTail`,
+  voiced at the `particleHigh` level (high after heiban, low after an
+  accented/odaka word — so odaka is finally visible in the sentence view).
+  Deliberately stops at verb/copula okurigana (て・た・だ・で), multi-mora
+  particles (から・まで・のに — several carry their own accent), and the next
+  marked word. `PitchAccentWordMarks` renders the real particle kana when
+  present (falling back to the abstract `·` following-particle mark
+  otherwise); `SentencePitchAccentText` folds the tail onto the sentence
+  line and out of the plain-text run. Flows through `SentencePitchAccentRow`
+  too (shadowing panels, `AnalysisPanel`, `pitch_accent` card).
+
 - **2026-09-06 — Grammar-noticing is one batched step + its own flow (user
   report: "notice grammar / notice vocab items keep coming up during review
   sessions — put them in their own flow").** The planner used to draft one

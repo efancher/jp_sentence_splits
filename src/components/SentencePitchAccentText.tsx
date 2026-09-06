@@ -15,13 +15,14 @@ import { PitchAccentWordMarks } from './PitchAccentWordMarks';
  * separate strip below the sentence. Reading the line and checking the
  * accent then happen in one downward glance (pitch-accent drill page).
  *
- * Words with dictionary accent data render as a column (surface form on
- * the sentence line, mora kana + dictionary H/L — and the learner's
- * measured H/L when `learnerClassesBySurface` is supplied — below);
- * particles, punctuation and dataless words stay inline as plain text.
- * Word positions come from `buildSentencePitchAccents` (first unclaimed
- * `indexOf` of the surface form); a word that can't be located, or that
- * overlaps one already placed, falls back to plain text.
+ * Words with dictionary accent data render as a column (surface form —
+ * plus any short grammatical particles attached to it
+ * (`word.particleTail`) — on the sentence line, mora kana + dictionary H/L
+ * — and the learner's measured H/L when `learnerClassesBySurface` is
+ * supplied — below); other punctuation and dataless words stay inline as
+ * plain text. Word positions come from `buildSentencePitchAccents` (first
+ * unclaimed `indexOf` of the surface form); a word that can't be located,
+ * or that overlaps one already placed, falls back to plain text.
  */
 type Segment =
   | { kind: 'text'; text: string }
@@ -47,7 +48,7 @@ export function SentencePitchAccentText({
       if (word.start < cursor) continue; // overlaps a word already placed
       if (word.start > cursor) parts.push({ kind: 'text', text: japanese.slice(cursor, word.start) });
       parts.push({ kind: 'word', word });
-      cursor = word.start + word.surfaceForm.length;
+      cursor = word.start + word.surfaceForm.length + word.particleTail.length;
     }
     if (cursor < japanese.length) parts.push({ kind: 'text', text: japanese.slice(cursor) });
     return parts;
@@ -75,7 +76,10 @@ export function SentencePitchAccentText({
             className="pa-text-word"
             title={`${segment.word.surfaceForm} — ${segment.word.pattern}`}
           >
-            <span className="pa-text-kanji">{segment.word.surfaceForm}</span>
+            <span className="pa-text-kanji">
+              {segment.word.surfaceForm}
+              {segment.word.particleTail.join('')}
+            </span>
             <span className="pa-row pa-text-marks">
               <span className="pa-word">
                 <PitchAccentWordMarks

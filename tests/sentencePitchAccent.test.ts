@@ -26,6 +26,36 @@ describe('buildSentencePitchAccents', () => {
     });
   });
 
+  it('attaches trailing grammatical particles to the word at the particleHigh level', () => {
+    const words = buildSentencePitchAccents('先生が本を読む', [
+      { surfaceForm: '先生', reading: 'せんせい', pitchAccentPositions: [3] },
+      { surfaceForm: '本', reading: 'ほん', pitchAccentPositions: [0] },
+    ]);
+    // 先生 is accented (nakadaka) → its が drops to low.
+    expect(words[0]).toMatchObject({ surfaceForm: '先生', particleHigh: false, particleTail: ['が'] });
+    // 本 is heiban → its を stays high.
+    expect(words[1]).toMatchObject({ surfaceForm: '本', particleHigh: true, particleTail: ['を'] });
+  });
+
+  it('stops the particle tail at okurigana, kanji, or the next marked word', () => {
+    const [word] = buildSentencePitchAccents('本には', [
+      { surfaceForm: '本', reading: 'ほん', pitchAccentPositions: [0] },
+    ]);
+    expect(word!.particleTail).toEqual(['に', 'は']);
+
+    const [copula] = buildSentencePitchAccents('本だった', [
+      { surfaceForm: '本', reading: 'ほん', pitchAccentPositions: [0] },
+    ]);
+    // だ is copula okurigana, not a clitic particle — tail stops immediately.
+    expect(copula!.particleTail).toEqual([]);
+
+    const noTail = buildSentencePitchAccents('本読む', [
+      { surfaceForm: '本', reading: 'ほん', pitchAccentPositions: [0] },
+      { surfaceForm: '読む', reading: 'よむ', pitchAccentPositions: [1] },
+    ]);
+    expect(noTail[0]!.particleTail).toEqual([]);
+  });
+
   it('skips words with no accent data', () => {
     const words = buildSentencePitchAccents('本を読む', [
       { surfaceForm: '本', reading: 'ほん', pitchAccentPositions: [] },
