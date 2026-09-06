@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Completed glossing/grammar steps kept coming back (user
+  report).** The planner's `continue_book` / `vocabulary_review` /
+  `grammar_noticing` candidate finders key on real-progress markers
+  (`BookSentence.status`, `SentenceAnalysis.vocabularyReviewStatus` /
+  `grammarReviewStatus`), not the session step. Those markers move only via
+  AnalyzePage's own status pill / the picker's Confirm button — and the
+  learner was settling the step from `SessionBar`'s "Mark complete" instead,
+  leaving the sentence `unstarted`, so every subsequent session re-drafted
+  the identical step. The 2026-08-27 "single advance control" decision
+  (in-page work never settles a step) now has its reverse wired up:
+  `updatePlannerSessionStep` calls `advanceCompletedStepProgress` when a
+  glossing/grammar step transitions to `completed` (never `skipped`), which
+  advances that step's marker — `continue_book` → `BookSentence.status`
+  `complete`, `vocabulary_review` → `confirmSentenceVocabulary` (materializes
+  the autosaved selections), `grammar_noticing` → `grammarReviewStatus`
+  `confirmed`. `grammar_detail` ("Examine <pattern>") is deliberately left
+  out — whether to Track is a real decision that step exists to prompt.
+  (`src/db/repository.ts`.)
+
 - **2026-09-05 — "Reviews this step: 0 / N" never advanced (user report).**
   The session planner's `review` step only gets a `startedAt` when it's
   flipped to `active`, which `SessionRunnerPage`'s "Go" does — but reaching

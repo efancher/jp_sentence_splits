@@ -443,7 +443,16 @@ unstarted step. So the session step is a day-plan checklist item the
 learner ticks off, layered over the real progress (analyses, vocabulary
 confirmations, reviews) — never its source of truth, and the planner's
 vocabulary-first gating reads that real state, not step status. A step
-opened and left is never counted as done. "Replace an
+opened and left is never counted as done. The *reverse* direction is wired
+up, though (2026-09-06 fix): settling a glossing/grammar step as
+`completed` (never `skipped`) runs `advanceCompletedStepProgress`, which
+advances that step's underlying marker so the planner stops re-drafting it —
+`continue_book` → `BookSentence.status` `complete`, `vocabulary_review` →
+`confirmSentenceVocabulary`, `grammar_noticing` → `grammarReviewStatus`
+`confirmed` (`grammar_detail` excluded: whether to Track is a real
+decision). Learners were ticking the step off from `SessionBar` without
+pressing AnalyzePage's own status pill, so finished sentences stayed
+`unstarted` and recurred every session. "Replace an
 activity" was deliberately not built for v1 (Skip plus a
 later top-up covers the same need) — see `docs/STATUS_ARCHIVE.md`'s
 2026-08-20 and 2026-08-21 entries for this and other known limitations (no time-tracking

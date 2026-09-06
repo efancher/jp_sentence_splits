@@ -413,6 +413,60 @@ describe('Learning Orchestrator repository layer', () => {
     expect(updated!.steps.find((step) => step.id === continueStep!.id)!.status).not.toBe('completed');
   });
 
+  it('completing a glossing/grammar step advances its underlying marker so the planner stops re-proposing it (user report, 2026-09-06)', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    // Day 1: confirm vocab (no real items → immediately "ready") so the plan
+    // offers the continue_book (structural analysis) step.
+    await confirmSentenceVocabulary(sentence.id, []);
+    const day1 = await addMinutesToTodaySession(30);
+    const continueStep = day1.steps.find((step) => step.targetKind === 'continue_book');
+    expect(continueStep!.sentenceId).toBe(sentence.id);
+
+    // Completing it marks the book sentence complete...
+    await updatePlannerSessionStep(day1.id, continueStep!.id, { status: 'completed' });
+    const membership = await db.bookSentences
+      .where('[bookId+sentenceId]')
+      .equals([book.id, sentence.id])
+      .first();
+    expect(membership!.status).toBe('complete');
+
+    // ...so day 2 no longer re-drafts the same continue_book step. The now
+    // worked-through sentence surfaces as a grammar_noticing nudge instead.
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const day2 = await addMinutesToTodaySession(30, tomorrow);
+    expect(day2.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
+    const noticeStep = day2.steps.find((step) => step.targetKind === 'grammar_noticing');
+    expect(noticeStep!.sentenceId).toBe(sentence.id);
+
+    // Completing the grammar-noticing step flips grammarReviewStatus, which is
+    // what drops the sentence from that nudge's pool.
+    await updatePlannerSessionStep(day2.id, noticeStep!.id, { status: 'completed' });
+    expect((await db.analyses.get(sentence.id))!.grammarReviewStatus).toBe('confirmed');
+
+    const dayAfter = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const day3 = await addMinutesToTodaySession(30, dayAfter);
+    expect(day3.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
+  });
+
+  it('skipping a glossing step does not advance its underlying marker', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const vocabStep = session.steps.find((step) => step.targetKind === 'vocabulary_review');
+    await updatePlannerSessionStep(session.id, vocabStep!.id, { status: 'skipped' });
+    const analysis = await db.analyses.get(sentence.id);
+    expect(analysis?.vocabularyReviewStatus ?? 'unreviewed').not.toBe('confirmed');
+  });
+
   it('countAttemptsForSentences tallies recorded attempts so a shadow step subtitle can stay current', async () => {
     const db = getDb();
     const s1 = makeSentence();

@@ -5585,6 +5585,62 @@ export async function getActiveInProgressPlannerSession(): Promise<PlannerSessio
 }
 
 /**
+ * Real-progress side effect of settling a glossing/grammar step as
+ * *completed* (never skipped). A session's step list is a day-plan checklist
+ * layered over real progress and normally never its source of truth — but
+ * "Mark complete" on these exploration steps is the single advance control the
+ * learner actually touches (2026-08-27 decision), and the underlying page's
+ * own status pill / picker Confirm button was being left unpressed. The
+ * planner's candidate finders key on those markers, so a fully-worked sentence
+ * whose `BookSentence.status` was still `unstarted` got re-drafted as the same
+ * `continue_book` step every session (user report, 2026-09-06). Completing the
+ * step now also advances the marker its finder checks, so finished work drops
+ * out of the pool:
+ *   - continue_book     → BookSentence.status unstarted/in_progress → complete
+ *   - vocabulary_review → vocabularyReviewStatus → confirmed (materializes the
+ *                         autosaved selections, exactly like the picker's
+ *                         Confirm button)
+ *   - grammar_noticing  → grammarReviewStatus → confirmed
+ * `grammar_detail` ("Examine <pattern>") is deliberately excluded — whether to
+ * Track a pattern is a real decision the step exists to prompt, not a
+ * foregone conclusion of having looked at it. Failures here are logged and
+ * swallowed: the step still settles and the session still advances.
+ */
+async function advanceCompletedStepProgress(step: PlannerSessionStep): Promise<void> {
+  try {
+    if (step.targetKind === 'continue_book' && step.bookId && step.sentenceId) {
+      const membership = await getDb()
+        .bookSentences.where('[bookId+sentenceId]')
+        .equals([step.bookId, step.sentenceId])
+        .first();
+      if (
+        membership &&
+        (membership.status === 'unstarted' || membership.status === 'in_progress')
+      ) {
+        await setBookSentenceStatus(step.bookId, step.sentenceId, 'complete');
+      }
+      return;
+    }
+    if (step.targetKind === 'vocabulary_review' && step.sentenceId) {
+      const analysis = await getDb().analyses.get(step.sentenceId);
+      if (analysis?.vocabularyReviewStatus !== 'confirmed') {
+        await confirmSentenceVocabulary(step.sentenceId, analysis?.vocabularySelections ?? []);
+      }
+      return;
+    }
+    if (step.targetKind === 'grammar_noticing' && step.sentenceId) {
+      const analysis = await getDb().analyses.get(step.sentenceId);
+      if (analysis?.grammarReviewStatus !== 'confirmed') {
+        await setSentenceGrammarReviewStatus(step.sentenceId, 'confirmed');
+      }
+      return;
+    }
+  } catch (error) {
+    console.error('advanceCompletedStepProgress failed', { stepId: step.id, error });
+  }
+}
+
+/**
  * Marks one step's outcome (start/complete/skip). Session steps settle only
  * through an explicit user action — "Mark complete"/"Skip" in SessionBar or
  * SessionRunnerPage, ReviewPage's own "target review count reached" auto-
@@ -5592,7 +5648,10 @@ export async function getActiveInProgressPlannerSession(): Promise<PlannerSessio
  * Doing the underlying work in place (confirmSentenceVocabulary,
  * setBookSentenceStatus) no longer settles anything on its own (2026-08-27),
  * so there's a single predictable advance control and nothing moves the
- * session's pointer past work the learner hasn't confirmed done.
+ * session's pointer past work the learner hasn't confirmed done. The reverse
+ * direction *is* wired up, though: settling a glossing/grammar step as
+ * completed advances that step's underlying real-progress marker so the
+ * planner stops re-proposing it — see advanceCompletedStepProgress.
  * Once every step is completed/skipped/replaced, the session itself is
  * marked complete.
  */
@@ -5605,6 +5664,7 @@ export async function updatePlannerSessionStep(
   const session = await db.plannerSessions.get(sessionId);
   if (!session) return undefined;
   const timestamp = nowIso();
+  const priorStep = session.steps.find((step) => step.id === stepId);
   const steps = session.steps.map((step) => {
     if (step.id !== stepId) return step;
     return {
@@ -5628,6 +5688,17 @@ export async function updatePlannerSessionStep(
   };
   await db.plannerSessions.put(updated);
   notifySync('planner_sessions', updated.id, updated);
+
+  // Settling (not re-settling) a glossing/grammar step as completed advances
+  // its underlying real-progress marker so the planner stops re-proposing it.
+  if (
+    update.status === 'completed' &&
+    priorStep &&
+    priorStep.status !== 'completed'
+  ) {
+    await advanceCompletedStepProgress(priorStep);
+  }
+
   return updated;
 }
 
