@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-05.
+Last updated: 2026-09-06.
 
 ## Where things stand
 
@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Learner's own H/L under the dictionary pitch-accent row
+  (user request).** `AnalysisPanel`'s "Pitch accent (dictionary)" section
+  measured the learner's per-mora shape internally
+  (`classifyLearnerMorae`) but only surfaced it as prose when it
+  *disagreed* with the dictionary. New `buildLearnerPitchAccentShapes`
+  exports that same rough per-mora H/L estimate; `SentencePitchAccentRow`
+  takes an optional `learnerClassesBySurface` map and draws it as a second
+  H/L line directly under the dictionary one (AnalysisPanel only — the
+  shadowing/review uses of the row are unchanged). Disagreeing morae are
+  flagged in `--danger`; morae with too little voiced signal show `·`. So
+  a correctly-produced accent now reads as a visible match. +4 tests
+  (`pitchAccentObservations.test.ts`).
 - **2026-09-06 — Completed glossing/grammar steps kept coming back (user
   report).** The planner's `continue_book` / `vocabulary_review` /
   `grammar_noticing` candidate finders key on real-progress markers

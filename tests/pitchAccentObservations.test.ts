@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { WordAlignment } from '../src/domain/types';
 import type { PitchAnalysisPayload, PitchFrame } from '../src/lib/pitch';
 import {
+  buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
   type PitchAccentTarget,
 } from '../src/lib/pitchAccentObservations';
@@ -124,5 +125,53 @@ describe('buildPitchAccentShapeObservations', () => {
     ];
 
     expect(buildPitchAccentShapeObservations({ learnerWords, learnerPitch, targets })).toEqual([]);
+  });
+});
+
+describe('buildLearnerPitchAccentShapes', () => {
+  it('returns the learner per-mora shape even when it matches the dictionary', () => {
+    const learnerWords = [word(0, 1, '雨')];
+    const learnerPitch = payload(twoMoraFrames(5, -5)); // high then low = atamadaka
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: '雨', reading: 'あめ', pitchAccentPositions: [1] },
+    ];
+
+    expect(buildLearnerPitchAccentShapes({ learnerWords, learnerPitch, targets })).toEqual([
+      { surfaceForm: '雨', classes: ['h', 'l'], voicedBucketCount: 2, moraCount: 2 },
+    ]);
+  });
+
+  it('reports the produced shape when it differs from the dictionary', () => {
+    const learnerWords = [word(0, 1, '雨')];
+    const learnerPitch = payload(twoMoraFrames(-5, 5)); // low then high = heiban shape
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: '雨', reading: 'あめ', pitchAccentPositions: [1] },
+    ];
+
+    expect(buildLearnerPitchAccentShapes({ learnerWords, learnerPitch, targets })[0]?.classes).toEqual([
+      'l',
+      'h',
+    ]);
+  });
+
+  it('omits a target whose word is missing or has too little voiced signal', () => {
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: '雨', reading: 'あめ', pitchAccentPositions: [1] },
+    ];
+
+    expect(
+      buildLearnerPitchAccentShapes({
+        learnerWords: [word(0, 1, '違う')],
+        learnerPitch: payload(twoMoraFrames(-5, 5)),
+        targets,
+      }),
+    ).toEqual([]);
+    expect(
+      buildLearnerPitchAccentShapes({
+        learnerWords: [word(0, 1, '雨')],
+        learnerPitch: payload([frame(0.1, 5)]),
+        targets,
+      }),
+    ).toEqual([]);
   });
 });

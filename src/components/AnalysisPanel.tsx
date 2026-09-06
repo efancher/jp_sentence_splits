@@ -21,7 +21,12 @@ import { extractPitch } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import type { TimingObservation } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
-import { buildPitchAccentShapeObservations, type PitchAccentTarget } from '../lib/pitchAccentObservations';
+import {
+  buildLearnerPitchAccentShapes,
+  buildPitchAccentShapeObservations,
+  type PitchAccentTarget,
+} from '../lib/pitchAccentObservations';
+import type { MoraPitchClass } from '../lib/pitchAccentShape';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
@@ -438,6 +443,20 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, learnerPitch, pitchAccentTargets]);
 
+  /** Learner's own measured per-mora H/L for each accent target, keyed by surface form — the second line under the dictionary row below. */
+  const learnerPitchAccentShapes = useMemo(() => {
+    const map = new Map<string, MoraPitchClass[]>();
+    if (!serverAlignment?.learner || !learnerPitch || !pitchAccentTargets.length) return map;
+    for (const shape of buildLearnerPitchAccentShapes({
+      learnerWords: serverAlignment.learner.words,
+      learnerPitch,
+      targets: pitchAccentTargets,
+    })) {
+      map.set(shape.surfaceForm, shape.classes);
+    }
+    return map;
+  }, [serverAlignment, learnerPitch, pitchAccentTargets]);
+
   const primaryObservation = useMemo(
     () =>
       selectPrimaryObservation([
@@ -701,7 +720,23 @@ export function AnalysisPanel({
         <div className="stack">
           <strong>Pitch accent (dictionary)</strong>
           {pitchAccentTargets.length > 0 ? (
-            <SentencePitchAccentRow japanese={transcript} targets={pitchAccentTargets} />
+            <>
+              <SentencePitchAccentRow
+                japanese={transcript}
+                targets={pitchAccentTargets}
+                learnerClassesBySurface={
+                  learnerPitchAccentShapes.size > 0 ? learnerPitchAccentShapes : undefined
+                }
+              />
+              {learnerPitchAccentShapes.size > 0 ? (
+                <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
+                  Top line is the dictionary shape; the line below it is a rough
+                  per-mora estimate from your recording. A red mark is a mora where
+                  the two disagree; a <span className="jp">·</span> is a mora with
+                  too little voiced sound to judge.
+                </p>
+              ) : null}
+            </>
           ) : null}
           {pitchAccentObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>

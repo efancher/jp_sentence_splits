@@ -5,6 +5,7 @@ import {
   buildSentencePitchAccents,
   type SentencePitchAccentTarget,
 } from '../lib/sentencePitchAccent';
+import type { MoraPitchClass } from '../lib/pitchAccentShape';
 
 /**
  * "H's and L's under the kana" — a compact per-word pitch-accent contour
@@ -20,17 +21,25 @@ import {
  * Pass `targets` when the caller already has them (AnalysisPanel loads the
  * same list for scoring); otherwise pass `sentenceId` and the row loads
  * its own from the confirmed `sentence_vocabulary` links.
+ *
+ * `learnerClassesBySurface` (AnalysisPanel only) adds a second H/L line
+ * per mora — the learner's own measured shape from
+ * `buildLearnerPitchAccentShapes` — under the dictionary line, so the two
+ * can be compared mark-for-mark. Morae the estimate couldn't reach show a
+ * `·`; morae that disagree with the dictionary are flagged.
  */
 export function SentencePitchAccentRow({
   japanese,
   targets,
   sentenceId,
   highlightSurfaceForm,
+  learnerClassesBySurface,
 }: {
   japanese: string;
   targets?: SentencePitchAccentTarget[];
   sentenceId?: string;
   highlightSurfaceForm?: string;
+  learnerClassesBySurface?: Map<string, MoraPitchClass[]>;
 }) {
   const [loaded, setLoaded] = useState<SentencePitchAccentTarget[] | null>(null);
 
@@ -59,33 +68,71 @@ export function SentencePitchAccentRow({
 
   if (words.length === 0) return null;
 
+  const showLearner = !!learnerClassesBySurface;
+
   return (
-    <div className="pa-row" aria-label="Pitch accent (H = high mora, L = low mora)">
-      {words.map((word, index) => (
-        <span
-          key={`${word.surfaceForm}-${word.start}-${index}`}
-          className="pa-word"
-          data-highlight={highlightSurfaceForm === word.surfaceForm ? '' : undefined}
-          title={`${word.surfaceForm} — ${word.pattern}`}
-        >
-          {word.morae.map((mora, moraIndex) => (
-            <span key={moraIndex} className="pa-mora">
-              <span className="pa-kana jp">{mora}</span>
-              <span className="pa-hl" data-c={word.classes[moraIndex]}>
-                {word.classes[moraIndex] === 'h' ? 'H' : 'L'}
+    <div
+      className="pa-row"
+      aria-label={
+        showLearner
+          ? 'Pitch accent (top line = dictionary, bottom line = your recording; H = high mora, L = low mora)'
+          : 'Pitch accent (H = high mora, L = low mora)'
+      }
+    >
+      {words.map((word, index) => {
+        const learnerClasses = learnerClassesBySurface?.get(word.surfaceForm);
+        return (
+          <span
+            key={`${word.surfaceForm}-${word.start}-${index}`}
+            className="pa-word"
+            data-highlight={highlightSurfaceForm === word.surfaceForm ? '' : undefined}
+            title={`${word.surfaceForm} — ${word.pattern}`}
+          >
+            {word.morae.map((mora, moraIndex) => {
+              const learnerClass = learnerClasses?.[moraIndex];
+              return (
+                <span key={moraIndex} className="pa-mora">
+                  <span className="pa-kana jp">{mora}</span>
+                  <span className="pa-hl" data-c={word.classes[moraIndex]}>
+                    {word.classes[moraIndex] === 'h' ? 'H' : 'L'}
+                  </span>
+                  {showLearner ? (
+                    <span
+                      className="pa-hl pa-hl-learner"
+                      data-c={learnerClass}
+                      data-mismatch={
+                        learnerClass && learnerClass !== word.classes[moraIndex] ? '' : undefined
+                      }
+                      title={
+                        learnerClass
+                          ? learnerClass === word.classes[moraIndex]
+                            ? 'Your recording matches here'
+                            : 'Your recording differs here'
+                          : 'Not enough voiced signal to estimate this mora'
+                      }
+                    >
+                      {learnerClass ? (learnerClass === 'h' ? 'H' : 'L') : '·'}
+                    </span>
+                  ) : null}
+                </span>
+              );
+            })}
+            <span className="pa-mora pa-particle">
+              <span className="pa-kana" aria-hidden="true">
+                ·
               </span>
-            </span>
-          ))}
-          <span className="pa-mora pa-particle">
-            <span className="pa-kana" aria-hidden="true">
-              ·
-            </span>
-            <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
-              {word.particleHigh ? 'H' : 'L'}
+              <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
+                {word.particleHigh ? 'H' : 'L'}
+              </span>
+              {showLearner ? (
+                <span className="pa-hl pa-hl-learner" aria-hidden="true">
+                  ·
+                </span>
+              ) : null}
             </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }

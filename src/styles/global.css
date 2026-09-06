@@ -366,6 +366,20 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* Learner's own measured H/L, shown as a second line under the dictionary
+   one in the AnalysisPanel (SentencePitchAccentRow learnerClassesBySurface). */
+.pa-hl-learner {
+  margin-top: 1px;
+  padding-top: 1px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  opacity: 0.9;
+}
+
+.pa-hl-learner[data-mismatch] {
+  color: var(--danger);
+  font-weight: 800;
+}
+
 .pa-particle .pa-kana {
   color: var(--text-muted);
 }

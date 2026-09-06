@@ -112,6 +112,58 @@ function classifyLearnerMorae(
   return { classes, voicedBucketCount };
 }
 
+export interface LearnerPitchAccentShape {
+  /** The target word's surface form as it appeared in the sentence. */
+  surfaceForm: string;
+  /** Learner's measured high/low per mora — same length (and mora segmentation) as the dictionary row for this word. */
+  classes: MoraPitchClass[];
+  /** How many mora buckets carried any voiced signal; the rest are carried-forward guesses. */
+  voicedBucketCount: number;
+  moraCount: number;
+}
+
+/**
+ * The learner's own per-mora H/L shape for each pitch-accent target, for
+ * displaying directly under the dictionary row so the two can be compared
+ * mark-for-mark (`SentencePitchAccentRow`'s learner row). Same rough
+ * per-mora estimate `buildPitchAccentShapeObservations` scores against —
+ * this just surfaces it instead of only reporting mismatches, so a
+ * correctly-produced accent is still visible as a match.
+ */
+export function buildLearnerPitchAccentShapes({
+  learnerWords,
+  learnerPitch,
+  targets,
+}: {
+  learnerWords: WordAlignment[];
+  learnerPitch: PitchAnalysisPayload;
+  targets: PitchAccentTarget[];
+}): LearnerPitchAccentShape[] {
+  const audibleWords = learnerWords.filter((word) => !isSilence(word));
+  const shapes: LearnerPitchAccentShape[] = [];
+
+  for (const target of targets) {
+    if (!target.pitchAccentPositions.length) continue;
+    const word = audibleWords.find((candidate) => candidate.text === target.surfaceForm);
+    if (!word) continue;
+
+    const morae = segmentIntoMorae(target.reading);
+    if (morae.length === 0) continue;
+
+    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch);
+    if (!learnerResult) continue;
+
+    shapes.push({
+      surfaceForm: target.surfaceForm,
+      classes: learnerResult.classes,
+      voicedBucketCount: learnerResult.voicedBucketCount,
+      moraCount: morae.length,
+    });
+  }
+
+  return shapes;
+}
+
 export function buildPitchAccentShapeObservations({
   learnerWords,
   learnerPitch,

@@ -1128,7 +1128,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     produce an identical shape within a single word's own span) rather
     than guessing at it. Renders as its own "Pitch accent (dictionary)"
     section in `AnalysisPanel.tsx` and feeds the same ranking as every
-    other observation kind. The same `pitchAccentPositions` data also
+    other observation kind. That section also shows a second H/L line
+    directly under the dictionary one — the learner's own measured per-mora
+    shape (`buildLearnerPitchAccentShapes`, passed to
+    `SentencePitchAccentRow` as `learnerClassesBySurface`) — so a
+    correctly-produced accent is visible as a match, not just silence;
+    disagreeing morae are flagged and unvoiced ones show `·`.
+    The same `pitchAccentPositions` data also
     feeds two other, independent consumers — the `pitch_accent` SRS review
     activity type (§4), and the **audio-less pitch-accent drill**
     (`PitchAccentDrillPage` at `/pitch-accent`, `getPitchAccentDrillSentences`):
@@ -1207,7 +1213,11 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   computed anywhere in this codebase (see `pitchAccentRules.ts`). Words
   with no accent data and particles are simply absent; renders nothing
   when the sentence has no accented words. Word order under the sentence
-  is by first unclaimed `indexOf` of the surface form.
+  is by first unclaimed `indexOf` of the surface form. In `AnalysisPanel`
+  the row also takes `learnerClassesBySurface` — a second H/L line under
+  the dictionary one showing the learner's own measured per-mora shape for
+  each target (from `buildLearnerPitchAccentShapes`), with disagreeing
+  morae flagged and unreachable (unvoiced) morae shown as `·`.
 - **Practice-mode variants**: "Delayed shadow" (listen in full, then
   auto-record after a configurable 0.5–2.0s gap) and "Show meaning
   instead" (swap Japanese transcript for English translation, forcing
