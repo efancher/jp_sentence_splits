@@ -856,8 +856,9 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   perception task**: `PitchAccentNativeAudio` (below) plays *above* the
   question so the learner loops the native word, then marks **where the
   pitch falls** — choices `0..moraCount`, each drawn as a whole contour in
-  NHK/OJAD textbook notation (`PitchChoiceContour` in `ReviewPage.tsx`:
-  overline over the high morae dropping at the downstep, trailing
+  NHK/OJAD textbook notation (`PitchChoiceContour`,
+  `src/components/PitchChoiceContour.tsx`, shared with the pitch-accent
+  drill's predict step: overline over the high morae dropping at the downstep, trailing
   particle dot to split heiban from odaka) with a numbered caption ("Stays
   high (no fall)" / "Falls after mora 2" / …), not the four category names.
   This puts the ear before the metalabel and fully specifies the contour (a
@@ -1150,8 +1151,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     (`PitchAccentDrillPage` at `/pitch-accent`, `getPitchAccentDrillSentences`):
     a lightweight non-SRS practice loop over Satori sentences that have
     confirmed pitch-accent-bearing vocabulary, no reference recording, and
-    proficient words — record the sentence, get each target word's realized
-    contour scored against the dictionary shape (same
+    proficient words. Each sentence opens on a **predict-the-drop** step —
+    one accent-bearing word spotlighted in the otherwise-plain sentence, pick
+    where its pitch falls (`0..moraCount`, whole contours via the shared
+    `PitchChoiceContour`) before the marks reveal, skippable — then record
+    the sentence and get each target word's realized contour scored against
+    the dictionary shape (same
     `buildPitchAccentShapeObservations`, learner alignment only) and shown
     as your measured H/L line under the dictionary row (same
     `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line

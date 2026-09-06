@@ -128,6 +128,13 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   the sentence; `buildPitchAccentShapeObservations` scores each target
   word's realized contour against the dictionary shape using only the
   learner's own forced alignment + pitch. Nothing saved or scheduled.
+  **2026-09-06:** each sentence now opens on a **predict-the-drop** step —
+  one accent-bearing word is spotlighted in the otherwise-plain sentence and
+  you pick where *its* pitch falls (`0..moraCount`, drawn as whole contours
+  by the shared `PitchChoiceContour`, extracted from `ReviewPage`) before
+  the dictionary marks reveal; the prediction result stays on screen next to
+  your recorded attempt. Skippable. The "locate the fall" perceptual step,
+  cued to one word in real sentence context (ChatGPT pitch-ear discussion).
 - [x] **Retention / progress-over-time view.** (2026-09-01)
   `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
   `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
@@ -181,6 +188,28 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   translation-review — not safe to headless against production. Mac exit
   node is up.
 
+
+- [ ] **Real-audio pitch-perception bridge.** Follow-on to the
+  predict-the-drop step (Done above) and the synthetic `pitch-ear-trainer` /
+  `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
+  discussion: the learner passes synthetic-tone discrimination but still
+  misses lexical accent in real speech, so the gap is the Japanese-specific
+  layer (mora timing, voicing cues, per-speaker normalization, phrase-level
+  downstep), which only *real* audio trains. Two exercises, both built from
+  the existing native-clip corpus (`SentenceAudio` + per-word alignment +
+  dictionary `pitchAccentPositions`), staged as an optional warm-up **inside
+  the drill**, not a standalone module (keeps the "skill over metalabel
+  quiz" principle):
+  - **Word-alone vs. word-in-phrase** — play the isolated word span, then
+    the word + following particle span, ask "did the drop land before the
+    particle?" The odaka-vs-heiban bridge, which no isolated view can teach.
+  - **Same/different + ABX on near-minimal pairs** — same mora count +
+    reading shape, different accent position; same-speaker first, then
+    cross-speaker. 3–5 trials, not a scored drill.
+  - **Not** an F0-resynthesis pipeline (ChatGPT's centre-piece): real
+    near-minimal pairs from the corpus get most of the perceptual benefit
+    without a PSOLA/WORLD service on the memory-constrained analysis host
+    (same footprint constraint that parked PASQA).
 
 - [ ] **Segmental pronunciation feedback.** The missing half of Phase 9 —
   everything shipped there scores *timing* and *pitch*, nothing addresses

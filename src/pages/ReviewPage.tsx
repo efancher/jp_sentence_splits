@@ -7,6 +7,7 @@ import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
+import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { VocabChips } from '../components/VocabChips';
@@ -71,13 +72,10 @@ import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
-import {
-  expectedPitchShape,
-  pitchPatternLabel,
-  type PitchAccentPattern,
-} from '../lib/pitchAccentShape';
+import { pitchPatternLabel, type PitchAccentPattern } from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
+import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
 /**
  * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
@@ -465,20 +463,6 @@ interface QueueCard {
   grammar?: GrammarReviewCandidate;
   /** Set only for `reading_in_context` cards — the surrounding passage. */
   readingContext?: ReadingContext;
-}
-
-/** Splits `japanese` around the first occurrence of `surfaceForm`, for highlighting. */
-function splitOnSurfaceForm(
-  japanese: string,
-  surfaceForm: string,
-): [string, string, string] {
-  const index = japanese.indexOf(surfaceForm);
-  if (index === -1) return [japanese, '', ''];
-  return [
-    japanese.slice(0, index),
-    surfaceForm,
-    japanese.slice(index + surfaceForm.length),
-  ];
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -2113,43 +2097,6 @@ const PITCH_ACCENT_PATTERN_LABELS: Record<PitchAccentPattern, string> = {
   nakadaka: 'Nakadaka (中高)',
   odaka: 'Odaka (尾高)',
 };
-
-/**
- * One pitch-accent choice on the `pitch_accent` card, drawn in the NHK /
- * OJAD textbook convention: an overline sits above every high mora and ends
- * in a downward stroke at the downstep, so each button reads as a single
- * whole contour (a word falls once at most) rather than a list of events.
- * A trailing dot is the following particle — high only for heiban, which is
- * what separates it from odaka (identical within the word itself). Shape
- * comes straight from `expectedPitchShape`, the same function the grader
- * and `PitchAccentDiagram` use.
- */
-function PitchChoiceContour({ morae, position }: { morae: string[]; position: number }) {
-  const shape = expectedPitchShape(morae.length, position);
-  const particleHigh = position === 0;
-  return (
-    <span className="pa-choice jp" aria-hidden="true">
-      {morae.map((mora, index) => {
-        const high = shape[index] === 'h';
-        const fallsAfter =
-          high && (shape[index + 1] === 'l' || (index === morae.length - 1 && !particleHigh));
-        return (
-          <span
-            key={index}
-            className="pa-choice-mora"
-            data-c={high ? 'h' : 'l'}
-            data-fall={fallsAfter ? '' : undefined}
-          >
-            {mora}
-          </span>
-        );
-      })}
-      <span className="pa-choice-mora pa-choice-particle" data-c={particleHigh ? 'h' : 'l'}>
-        ・
-      </span>
-    </span>
-  );
-}
 
 /**
  * Pitch accent, audio-first: the learner loops the native realization of

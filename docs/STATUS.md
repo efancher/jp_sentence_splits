@@ -33,6 +33,37 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Pitch-accent drill opens on a "predict the drop" step +
+  `pitch-ear-trainer` adaptive difficulty (user request, from a ChatGPT
+  pitch-ear discussion).** The learner passes synthetic-tone discrimination
+  (`relative-pitch-trainer`) but still misses lexical accent in real speech;
+  the missing piece is an active "locate the fall" step cued to a real word
+  in sentence context (rather than an abstract melody or a metalabel guess).
+  - `PitchAccentDrillPage` now runs each sentence in two beats. **Beat 1:**
+    one accent-bearing word is spotlighted (`<mark>`) in the otherwise-plain
+    sentence and the learner picks where *its* pitch falls (`0..moraCount`,
+    each drawn as a whole NHK-style contour) before the dictionary marks
+    reveal. The focus word rotates by list position so patterns vary down
+    the drill. **Beat 2:** the existing reveal — full `SentencePitchAccentText`
+    marks, record, `buildPitchAccentShapeObservations` scoring — with the
+    beat-1 result (`✓/✗`, and the dictionary contour when missed) kept on
+    screen so the loop closes. A "Skip — just practise saying it" button
+    goes straight to beat 2.
+  - `PitchChoiceContour` extracted from `ReviewPage.tsx` to its own
+    component (`src/components/PitchChoiceContour.tsx`), now shared by the
+    `pitch_accent` SRS card and the drill. `splitOnSurfaceForm` likewise
+    lifted to `src/lib/surfaceForm.ts` (was a `ReviewPage` local).
+  - `scripts/pitch-ear-trainer.html` gains an adaptive-difficulty mode:
+    trials start at an exaggerated 10-semitone drop and shrink toward
+    natural speech (2 st) on each streak of 5, widening back on a miss —
+    ported from `relative-pitch-trainer.html`'s ladder. The fixed-interval
+    select still works when adaptive is off.
+  - The real-audio half of the same discussion (word-alone vs. word+particle,
+    same/different + ABX on corpus near-minimal pairs) is written up under
+    ROADMAP "Planned" → **Real-audio pitch-perception bridge**; deliberately
+    not an F0-resynthesis pipeline. `tests/pitchAccentDrillPage.test.tsx`
+    +3, `tests/surfaceForm.test.ts` new (+4); 1226 vitest tests green.
+
 - **2026-09-06 — `/grammar` list hides orphaned patterns (user report).**
   User saw それより / ～じゃん at the bottom of the grammar page reading
   "Encountered 0 times, not tracked yet." These are canonical
