@@ -41,6 +41,7 @@
   #choices button.correct { background: #2b5d34; border-color: #3a7d46; }
   #choices button.wrong { background: #6b2b2b; border-color: #8a3a3a; }
   #feedback { min-height: 1.5em; font-size: 1.1rem; margin: 8px 0; }
+  #streakNote { color: #6aa9ff; font-size: 0.85rem; min-height: 1.2em; }
   #score { color: #999; font-size: 0.9rem; }
   .contour-bar {
     display: inline-flex;
@@ -66,6 +67,12 @@
     would sound identical, which is also true in real Japanese: heiban and odaka words are
     genuinely indistinguishable in isolation, only the following particle tells them apart.
   </p>
+  <p class="sub">
+    With <strong>adaptive difficulty</strong> on, trials start with a wide, exaggerated pitch
+    drop (10 semitones) and the separation shrinks toward natural speech (~2–4 semitones) as
+    you build a streak, widening back out when you miss — the bridge from the relative-pitch
+    trainer to real Japanese contours.
+  </p>
 
   <div class="controls">
     <label>
@@ -75,6 +82,13 @@
         <option value="3" selected>3</option>
         <option value="4">4</option>
         <option value="5">5</option>
+      </select>
+    </label>
+    <label>
+      Adaptive difficulty
+      <select id="adaptive">
+        <option value="on" selected>on (starts wide, shrinks on streaks)</option>
+        <option value="off">off (use fixed interval)</option>
       </select>
     </label>
     <label>
@@ -112,6 +126,7 @@
   <div id="choices"></div>
 
   <div id="feedback"></div>
+  <div id="streakNote"></div>
   <div id="score">Score: 0 / 0 — streak: 0</div>
 
   <script>
@@ -121,13 +136,26 @@
     let correctDrop = null;     // index 0..N where drop occurs; 0 = no drop (flat)
     let correct = 0, total = 0, streak = 0;
 
+    // Adaptive ladder: wide/exaggerated at the top, natural-speech-ish at the
+    // bottom. Start wide, step down one rung every streak of 5, step back up
+    // on a miss.
+    const ADAPTIVE_INTERVALS = [2, 3, 4, 5, 7, 10];
+    let adaptiveIdx = ADAPTIVE_INTERVALS.length - 1;
+
     const noteCountEl = document.getElementById('noteCount');
     const intervalSizeEl = document.getElementById('intervalSize');
     const noteLengthEl = document.getElementById('noteLength');
     const waveTypeEl = document.getElementById('waveType');
+    const adaptiveEl = document.getElementById('adaptive');
     const choicesEl = document.getElementById('choices');
     const feedbackEl = document.getElementById('feedback');
+    const streakNoteEl = document.getElementById('streakNote');
     const scoreEl = document.getElementById('score');
+
+    function activeInterval() {
+      if (adaptiveEl.value === 'on') return ADAPTIVE_INTERVALS[adaptiveIdx];
+      return parseInt(intervalSizeEl.value, 10);
+    }
 
     function semitoneToFreq(base, semitones) {
       return base * Math.pow(2, semitones / 12);
@@ -152,7 +180,7 @@
 
     function buildSequence() {
       const n = parseInt(noteCountEl.value, 10);
-      const interval = parseInt(intervalSizeEl.value, 10);
+      const interval = activeInterval();
       // dropIndex: 0 means flat/no drop (heiban-style). 1..n means pitch is
       // high for notes [0, dropIndex) and low from dropIndex onward — mirrors
       // the atamadaka/nakadaka/odaka "high until nucleus, then low" shape.
@@ -201,8 +229,16 @@
         streak++;
         btn.classList.add('correct');
         feedbackEl.textContent = '✓ correct';
+        if (adaptiveEl.value === 'on' && streak % 5 === 0 && adaptiveIdx > 0) {
+          adaptiveIdx--;
+          streakNoteEl.textContent = `Streak of ${streak} — shrinking the pitch drop to ${ADAPTIVE_INTERVALS[adaptiveIdx]} semitones`;
+        }
       } else {
         streak = 0;
+        if (adaptiveEl.value === 'on' && adaptiveIdx < ADAPTIVE_INTERVALS.length - 1) {
+          adaptiveIdx++;
+          streakNoteEl.textContent = `Missed — widening the pitch drop back to ${ADAPTIVE_INTERVALS[adaptiveIdx]} semitones`;
+        }
         btn.classList.add('wrong');
         feedbackEl.textContent = `✗ wrong — it was ${correctDrop === 0 ? 'flat' : 'drop@' + correctDrop}`;
         [...choicesEl.children].forEach(c => {
