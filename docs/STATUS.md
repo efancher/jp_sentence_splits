@@ -33,6 +33,13 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Sentence-glossing page shows preceding context (user
+  request).** `AnalyzePage` now renders the previous one or two sentences
+  (dimmed, above the working sentence; translations shown only when "Show
+  Satori English" is on) so short conversational lines have context while
+  glossing. Context is capped at the current chapter so it doesn't bleed
+  across a scene break.
+
 - **2026-09-06 — "Order from paste" tolerates Satori's dropped episode-final
   `。` (user report).** Reordering *spring new life* left
   `しばらくすると、…羽をバタバタさせ始めました。` unmatched: it's the last

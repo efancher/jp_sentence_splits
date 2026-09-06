@@ -20,6 +20,7 @@ import {
 } from '../db/repository';
 import type {
   AnalysisChunk,
+  Sentence,
   SentenceAudio,
   SentenceVocabulary,
   TextDisplayMode,
@@ -121,6 +122,22 @@ export function AnalyzePage() {
       .where('sentenceId')
       .equals(sentenceId)
       .toArray();
+    // The preceding sentence or two, for context when glossing short lines
+    // (especially conversational ones). Kept within the current chapter so
+    // context doesn't bleed across a scene break.
+    const currentChapterId =
+      index >= 0 ? memberships[index]?.chapterId : undefined;
+    const contextSentences =
+      index > 0
+        ? (
+            await Promise.all(
+              memberships
+                .slice(Math.max(0, index - 2), index)
+                .filter((item) => item.chapterId === currentChapterId)
+                .map((item) => db.sentences.get(item.sentenceId)),
+            )
+          ).filter((item): item is Sentence => Boolean(item))
+        : [];
     return {
       book,
       memberships,
@@ -129,6 +146,7 @@ export function AnalyzePage() {
       analysis,
       sentenceAudio,
       sentenceVocabulary,
+      contextSentences,
     };
   }, [bookId, sentenceId]);
 
@@ -208,7 +226,7 @@ export function AnalyzePage() {
     return <p className="muted">Loading sentence…</p>;
   }
 
-  const { sentence, memberships, index, book } = data;
+  const { sentence, memberships, index, book, contextSentences } = data;
   const membership = index >= 0 ? memberships[index] : null;
   const chapterTitle = membership?.chapterId
     ? book.chapters?.find((chapter) => chapter.id === membership.chapterId)
@@ -323,6 +341,28 @@ export function AnalyzePage() {
             </Link>
           </div>
         </div>
+        {contextSentences.length > 0 ? (
+          <div
+            className="stack"
+            style={{ gap: '0.2rem', opacity: 0.6, marginBottom: '0.25rem' }}
+          >
+            <div className="muted" style={{ fontSize: '0.75rem' }}>
+              {contextSentences.length === 1
+                ? 'Preceding sentence'
+                : 'Preceding sentences'}
+            </div>
+            {contextSentences.map((context) => (
+              <div key={context.id}>
+                <div className="jp">{context.japanese}</div>
+                {showEnglish && context.translation ? (
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    {context.translation}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
         {japaneseView()}
         <div className="row">
           <label>

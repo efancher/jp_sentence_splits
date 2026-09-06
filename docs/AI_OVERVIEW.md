@@ -663,7 +663,10 @@ piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge shape
 encodes grammatical fit, so structure is visually scannable.
 `lintAnalysis` (`analysisSuggestions.ts`) flags likely mistakes (e.g.
 discarded annotations, chunk/source mismatches). Sentence translation is
-directly editable inline (textarea, autosave). A **"Grammar noticed" panel**
+directly editable inline (textarea, autosave). The preceding one or two
+sentences (same chapter only) render dimmed above the working sentence for
+context — useful for short conversational lines; their translations show
+only when "Show Satori English" is toggled on. A **"Grammar noticed" panel**
 (`GrammarPicker.tsx`) is the entry point for the grammar-learning system's
 second layer: search-existing-or-create-new pattern tagging (autocomplete
 against every `GrammarPattern` already in the corpus), with three
