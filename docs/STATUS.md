@@ -33,6 +33,22 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — `/grammar` list hides orphaned patterns (user report).**
+  User saw それより / ～じゃん at the bottom of the grammar page reading
+  "Encountered 0 times, not tracked yet." These are canonical
+  `grammar_patterns` rows whose every `sentence_grammar` link was removed
+  (sentence deleted / re-segmented, or the last occurrence
+  mis-tag-corrected) — `cascadeRetireSentenceLocal` and
+  `removeSentenceGrammar` both deliberately keep the row so
+  `ensureGrammarPattern` can reuse it by `normalizedKey` if the pattern
+  recurs. `listGrammarPatternSummaries` walked every row with no filter, so
+  they surfaced with `encounterCount 0` in the `recently_encountered`
+  bucket. Fixed by filtering the summary list to
+  `encounterCount > 0 || tracked`; the canonical rows are left in place (no
+  delete). Harmless to reviews — the planner already skips them
+  (`pickContextSentenceForGrammarPattern` finds no live sentence).
+  `tests/grammarListPage.test.tsx` +2.
+
 - **2026-09-06 — Pitch-accent drill shows your measured H/L under the
   dictionary row (user request).** After a take, `PitchAccentDrillPage`
   now also runs `buildLearnerPitchAccentShapes` (alongside the existing

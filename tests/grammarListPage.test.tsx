@@ -8,6 +8,7 @@ import {
   ensureGrammarPattern,
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
+  removeSentenceGrammar,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { GrammarListPage } from '../src/pages/GrammarListPage';
@@ -80,6 +81,33 @@ describe('GrammarListPage', () => {
     await screen.findByText('〜わけがない');
     expect(screen.getByText('Worth learning now')).toBeInTheDocument();
     expect(screen.getByText('Developing')).toBeInTheDocument();
+  });
+
+  it('hides an orphaned pattern whose sentence links were all removed', async () => {
+    const orphan = await ensureGrammarPattern('それより', {
+      shortMeaning: 'shifting focus to a different topic',
+    });
+    const link = await ensureSentenceGrammar('sent-1', orphan.id, {});
+    const live = await ensureGrammarPattern('〜てしまう');
+    await ensureSentenceGrammar('sent-2', live.id, {});
+
+    await removeSentenceGrammar(link.id);
+
+    renderPage();
+
+    await screen.findByText('〜てしまう');
+    expect(screen.queryByText('それより')).not.toBeInTheDocument();
+  });
+
+  it('keeps a tracked pattern even with zero live encounters', async () => {
+    const pattern = await ensureGrammarPattern('〜じゃん');
+    const link = await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await removeSentenceGrammar(link.id);
+
+    renderPage();
+
+    expect(await screen.findByText('〜じゃん')).toBeInTheDocument();
   });
 
   it('filters by search query against name, meaning, and family', async () => {

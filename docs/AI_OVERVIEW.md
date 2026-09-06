@@ -1067,7 +1067,12 @@ pattern showing a prose explanation of its own bucket
 (`explainGrammarPriority`, e.g. "Encountered 3 times, across 2 sources,
 needed help on 1 of the last 5 reviews.") rather than a bare number or an
 opaque score — closer to "what's actually showing up, and how well do you
-know it" than a dictionary or a JLPT-ordered syllabus. The detail page
+know it" than a dictionary or a JLPT-ordered syllabus. A pattern whose
+`sentence_grammar` links were all removed (sentence deleted / re-segmented /
+last occurrence mis-tag-corrected) is filtered out of the list —
+`listGrammarPatternSummaries` keeps only `encounterCount > 0 || tracked` —
+though the canonical row itself is never deleted, so it reappears intact if
+the pattern is encountered again. The detail page
 shows a derived learner-state badge (`GrammarLearnerState` — Encountered /
 Noticed / Recognized / Distinguished (the last requires FSRS proficiency
 on the pattern's own `grammar_contrast` study item, Phase 9 Contrast

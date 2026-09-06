@@ -4582,7 +4582,7 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     else reviewsByStudyItemId.set(review.studyItemId, [review]);
   }
 
-  return patterns.map((pattern) => {
+  const summaries = patterns.map((pattern) => {
     const patternLinks = linksByPatternId.get(pattern.id) ?? [];
     const encounterCount = patternLinks.length;
     const confirmedCount = patternLinks.filter((link) => link.confirmedByLearner).length;
@@ -4648,6 +4648,14 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
       recentReviewCount: recent.length,
     };
   });
+
+  // Drop orphaned patterns: a canonical row whose sentence links were all
+  // removed (sentence deleted / re-segmented, or the last occurrence
+  // mis-tag-corrected) is deliberately never deleted — cascadeRetireSentenceLocal
+  // and removeSentenceGrammar both keep the row so it can be reused by
+  // ensureGrammarPattern if the pattern recurs. Until then it has nothing to
+  // show ("Encountered 0 times"), so it doesn't belong on the browser.
+  return summaries.filter((summary) => summary.encounterCount > 0 || summary.tracked);
 }
 
 export interface GrammarRelationshipView {
