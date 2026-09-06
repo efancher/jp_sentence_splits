@@ -33,6 +33,15 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Pitch-accent drill shows your measured H/L under the
+  dictionary row (user request).** After a take, `PitchAccentDrillPage`
+  now also runs `buildLearnerPitchAccentShapes` (alongside the existing
+  `buildPitchAccentShapeObservations`) and passes the result as
+  `learnerClassesBySurface` to `SentencePitchAccentRow` — the same
+  mark-for-mark second H/L line already used in `AnalysisPanel`, with
+  mismatched morae flagged and unreachable ones shown as `·`. The
+  per-word mismatch observations still render below it.
+
 - **2026-09-06 — Sentence-glossing page shows preceding context (user
   request).** `AnalyzePage` now renders the previous one or two sentences
   (dimmed, above the working sentence; translations shown only when "Show

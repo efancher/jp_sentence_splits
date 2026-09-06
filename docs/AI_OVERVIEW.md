@@ -1147,7 +1147,10 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     confirmed pitch-accent-bearing vocabulary, no reference recording, and
     proficient words — record the sentence, get each target word's realized
     contour scored against the dictionary shape (same
-    `buildPitchAccentShapeObservations`, learner alignment only), nothing
+    `buildPitchAccentShapeObservations`, learner alignment only) and shown
+    as your measured H/L line under the dictionary row (same
+    `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line
+    as `AnalysisPanel`), nothing
     saved. So a word's pitch-accent data backs passive shadowing feedback,
     an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-

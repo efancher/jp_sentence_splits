@@ -22,8 +22,8 @@ import type { MoraPitchClass } from '../lib/pitchAccentShape';
  * same list for scoring); otherwise pass `sentenceId` and the row loads
  * its own from the confirmed `sentence_vocabulary` links.
  *
- * `learnerClassesBySurface` (AnalysisPanel only) adds a second H/L line
- * per mora — the learner's own measured shape from
+ * `learnerClassesBySurface` (AnalysisPanel and the pitch-accent drill page)
+ * adds a second H/L line per mora — the learner's own measured shape from
  * `buildLearnerPitchAccentShapes` — under the dictionary line, so the two
  * can be compared mark-for-mark. Morae the estimate couldn't reach show a
  * `·`; morae that disagree with the dictionary are flagged.

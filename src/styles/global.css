@@ -367,7 +367,8 @@ strong.jp {
 }
 
 /* Learner's own measured H/L, shown as a second line under the dictionary
-   one in the AnalysisPanel (SentencePitchAccentRow learnerClassesBySurface). */
+   one in the AnalysisPanel and the pitch-accent drill page
+   (SentencePitchAccentRow learnerClassesBySurface). */
 .pa-hl-learner {
   margin-top: 1px;
   padding-top: 1px;

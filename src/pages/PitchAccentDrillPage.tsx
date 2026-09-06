@@ -8,7 +8,11 @@ import { getPitchAccentDrillSentences } from '../db/repository';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
 import { extractPitch } from '../lib/pitch';
-import { buildPitchAccentShapeObservations } from '../lib/pitchAccentObservations';
+import {
+  buildLearnerPitchAccentShapes,
+  buildPitchAccentShapeObservations,
+} from '../lib/pitchAccentObservations';
+import type { MoraPitchClass } from '../lib/pitchAccentShape';
 import type { SentencePitchAccentTarget } from '../lib/sentencePitchAccent';
 import type { TimingObservation } from '../lib/timingObservations';
 import { MAX_RECORDING_DURATION_MS } from '../lib/recording';
@@ -22,7 +26,11 @@ import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
  * dictionary pitch-accent data. Record yourself saying the sentence, and
  * `buildPitchAccentShapeObservations` scores each target word's realized
  * contour against the dictionary shape using only the learner's own forced
- * alignment + pitch (no reference clip involved).
+ * alignment + pitch (no reference clip involved). The take's measured
+ * per-mora H/L (`buildLearnerPitchAccentShapes`) is also rendered as a
+ * second line under the dictionary `SentencePitchAccentRow`, so a
+ * correctly-produced accent shows as a match, not just the absence of a
+ * mismatch note.
  *
  * A lightweight practice loop, not SRS: nothing is scheduled or persisted
  * (attempts aren't saved — the point is the immediate feedback), and the
@@ -33,7 +41,12 @@ type AnalysisState =
   | { status: 'idle' }
   | { status: 'analyzing' }
   | { status: 'unavailable' }
-  | { status: 'done'; observations: TimingObservation[] };
+  | {
+      status: 'done';
+      observations: TimingObservation[];
+      /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
+      learnerClassesBySurface: Map<string, MoraPitchClass[]>;
+    };
 
 async function analyzeRecording(
   blob: Blob,
@@ -46,18 +59,27 @@ async function analyzeRecording(
       decodeAudioBuffer(blob).then((buffer) => extractPitch(canonicalizeAudioBuffer(buffer))),
     ]);
     if (!alignment) return { status: 'unavailable' };
+    const scorableTargets = targets
+      .filter((target) => target.pitchAccentPositions?.length)
+      .map((target) => ({
+        surfaceForm: target.surfaceForm,
+        reading: target.reading,
+        pitchAccentPositions: target.pitchAccentPositions!,
+      }));
     const observations = buildPitchAccentShapeObservations({
       learnerWords: alignment.words,
       learnerPitch: pitch,
-      targets: targets
-        .filter((target) => target.pitchAccentPositions?.length)
-        .map((target) => ({
-          surfaceForm: target.surfaceForm,
-          reading: target.reading,
-          pitchAccentPositions: target.pitchAccentPositions!,
-        })),
+      targets: scorableTargets,
     });
-    return { status: 'done', observations };
+    const learnerClassesBySurface = new Map<string, MoraPitchClass[]>();
+    for (const shape of buildLearnerPitchAccentShapes({
+      learnerWords: alignment.words,
+      learnerPitch: pitch,
+      targets: scorableTargets,
+    })) {
+      learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
+    }
+    return { status: 'done', observations, learnerClassesBySurface };
   } catch {
     return { status: 'unavailable' };
   }
@@ -173,12 +195,19 @@ export function PitchAccentDrillPage() {
 
             <div className="stack" style={{ gap: '0.25rem' }}>
               <span className="muted" style={{ fontSize: '0.8rem' }}>
-                Target contour (dictionary)
+                {analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
+                  ? 'Pitch-accent contour (top = dictionary, bottom = your recording)'
+                  : 'Target contour (dictionary)'}
               </span>
               <SentencePitchAccentRow
                 key={current.sentence.id}
                 japanese={current.sentence.japanese}
                 targets={contourTargets}
+                learnerClassesBySurface={
+                  analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
+                    ? analysis.learnerClassesBySurface
+                    : undefined
+                }
               />
             </div>
 
