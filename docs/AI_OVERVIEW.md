@@ -307,16 +307,26 @@ The **grammar bucket** runs two passes over its one budget. Pass 1
 `listGrammarPatternSummaries`' bucket), each a `grammar_detail` step opening
 the pattern dashboard. Pass 2 (`buildGrammarNoticingSteps`,
 `findGrammarNoticingCandidates`, 2026-09-03): a sentence-level "notice the
-grammar here" nudge mirroring `vocabulary_review` — a sentence marked
-`complete` in its book whose vocabulary is confirmed + proficient (same
+grammar here" nudge mirroring `vocabulary_review` — sentences marked
+`complete` in their book whose vocabulary is confirmed + proficient (same
 `getSentenceFullReviewReadiness` gate) but whose
-`SentenceAnalysis.grammarReviewStatus` isn't `'confirmed'` yet, as a
-`grammar_noticing` step deep-linking to that sentence's `AnalyzePage` where
-the "Grammar noticed" panel lives. `GrammarPicker`'s "Done — nothing more to
-notice" toggle (`setSentenceGrammarReviewStatus`) is what flips
-`grammarReviewStatus` and drops the sentence from the nudge — even when it
-had no patterns worth tracking. Same "vocab before glossing" reasoning as
-the other buckets: you farm grammar from sentences you already understand.
+`SentenceAnalysis.grammarReviewStatus` isn't `'confirmed'` yet. Originally
+one `grammar_noticing` step per sentence, which `preferCoherentChains`
+scattered through the sitting — the learner reported it "keeps coming up"
+(2026-09-06). Now **one batched step**, "Notice grammar in N sentences"
+(`step.sentenceIds`, capped at `GRAMMAR_NOTICING_PER_SESSION_LIMIT` = 4 so a
+backlog drains gradually), deep-linking to `GrammarNoticingFlowPage`
+(`/notice-grammar?ids=…`) — a lightweight walker that shows each sentence
+plus the same `GrammarPicker` the `AnalyzePage` grammar panel uses (it
+sequences, doesn't reimplement — same principle as `SessionRunnerPage`).
+`GrammarPicker`'s "Done — nothing more to notice" toggle
+(`setSentenceGrammarReviewStatus`), or the flow's "Nothing to notice"
+shortcut, flips `grammarReviewStatus` and drops the sentence from the nudge
+— even when it had no patterns worth tracking. Marking the batched step
+complete in the runner confirms every sentence the learner didn't already
+close (`advanceCompletedStepProgress`). Same "vocab before glossing"
+reasoning as the other buckets: you farm grammar from sentences you already
+understand.
 
 **Planner** (`src/lib/sessionPlanner.ts`) — pure, no Dexie access, same
 convention as `scheduling.ts`/`maturity.ts`, so the whole decision process

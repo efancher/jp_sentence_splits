@@ -898,6 +898,15 @@ export interface PlannerSessionStep {
   sentenceId?: string;
   grammarPatternId?: string;
   vocabularyItemId?: string;
+  /**
+   * Sentences a batched step walks in one flow. Currently only set for the
+   * `grammar_noticing` step, which used to be drafted one-per-sentence and
+   * interleaved through the session (user report, 2026-09-06: "keeps coming
+   * up") — now a single "Notice grammar in N sentences" step deep-linking to
+   * `GrammarNoticingFlowPage`. `sentenceId` stays set too when there's just
+   * one, so coherent-chain ordering and older persisted sessions still work.
+   */
+  sentenceIds?: string[];
   label: string;
   estimatedMinutes: number;
   /** Short human-readable reason this specific step was chosen (design brief §7's "not opaque" requirement), e.g. "Encountered 3 times, not tracked yet." */

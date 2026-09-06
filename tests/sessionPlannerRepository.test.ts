@@ -364,6 +364,39 @@ describe('Learning Orchestrator repository layer', () => {
     expect(afterReview.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
   });
 
+  it('batches several worked-through sentences into one grammar_noticing step, and completing it confirms every sentence still open', async () => {
+    const book = await createBook({ title: 'Notice Us' });
+    const db = getDb();
+    const sentences = [makeSentence(), makeSentence(), makeSentence()];
+    await db.sentences.bulkPut(sentences);
+    await addSentencesToBook(
+      book.id,
+      sentences.map((s) => s.id),
+    );
+    for (const sentence of sentences) {
+      await setBookSentenceStatus(book.id, sentence.id, 'complete');
+      await confirmSentenceVocabulary(sentence.id, []);
+    }
+
+    const session = await addMinutesToTodaySession(60);
+    const noticeSteps = session.steps.filter((step) => step.targetKind === 'grammar_noticing');
+    expect(noticeSteps).toHaveLength(1);
+    expect(new Set(noticeSteps[0]!.sentenceIds)).toEqual(new Set(sentences.map((s) => s.id)));
+
+    // Learner closes one sentence in the flow itself, then marks the step done.
+    await setSentenceGrammarReviewStatus(sentences[0]!.id, 'confirmed');
+    await updatePlannerSessionStep(session.id, noticeSteps[0]!.id, { status: 'completed' });
+
+    for (const sentence of sentences) {
+      expect((await db.analyses.get(sentence.id))!.grammarReviewStatus).toBe('confirmed');
+    }
+
+    // All confirmed → no noticing step re-drafted the next day.
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const day2 = await addMinutesToTodaySession(30, tomorrow);
+    expect(day2.steps.some((step) => step.targetKind === 'grammar_noticing')).toBe(false);
+  });
+
   it('deleteTodayPlannerSession removes today\'s session entirely, letting the next Start build a fresh one (user request, 2026-08-27: "clear out a session created with the wrong split")', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();

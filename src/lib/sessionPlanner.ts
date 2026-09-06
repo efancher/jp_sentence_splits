@@ -10,6 +10,7 @@ import type {
 import {
   BASELINE_SESSION_ALLOCATION,
   EXPLORE_STEP_MINUTES,
+  GRAMMAR_NOTICING_PER_SESSION_LIMIT,
   MAX_NEGLECT_BOOST,
   MODE_ACTIVITY_ESTIMATE_MINUTES,
   NEGLECT_WINDOW_DAYS,
@@ -444,6 +445,8 @@ export interface PlannerStepDraft {
   sentenceId?: string;
   grammarPatternId?: string;
   vocabularyItemId?: string;
+  /** Sentences a batched step walks in one flow — currently only `grammar_noticing`. See PlannerSessionStep.sentenceIds. */
+  sentenceIds?: string[];
   label: string;
   estimatedMinutes: number;
   reason: string;
@@ -693,31 +696,42 @@ function buildUnderstandSteps(
   return steps;
 }
 
-/** Step 7 (grammar, second pass): "notice the grammar in this sentence" for worked-through sentences, until the shared grammar budget runs out. */
+/**
+ * Step 7 (grammar, second pass): a single batched "notice the grammar in
+ * these worked-through sentences" step. Was one step per sentence, interleaved
+ * through the session by `preferCoherentChains` — the learner reported it
+ * "keeps coming up" (2026-09-06). Now it's one step that walks up to
+ * `GRAMMAR_NOTICING_PER_SESSION_LIMIT` sentences in `GrammarNoticingFlowPage`,
+ * bounded by the remaining grammar budget. Returns `[]` (not a single-element
+ * array with an empty list) when nothing fits.
+ */
 function buildGrammarNoticingSteps(
   candidates: GrammarNoticingCandidate[],
   budgetMinutes: number,
   perItemMinutes: number,
 ): PlannerStepDraft[] {
-  const steps: PlannerStepDraft[] = [];
-  let remaining = budgetMinutes;
-  for (const candidate of candidates) {
-    if (remaining < perItemMinutes) break;
-    steps.push({
+  const affordable = Math.floor(budgetMinutes / perItemMinutes);
+  const take = Math.min(candidates.length, affordable, GRAMMAR_NOTICING_PER_SESSION_LIMIT);
+  if (take < 1) return [];
+  const picked = candidates.slice(0, take);
+  const single = picked.length === 1 ? picked[0]! : null;
+  return [
+    {
       id: draftStepId(),
       bucket: 'grammar',
       activityType: SYNTHETIC_ACTIVITY_TYPES.grammarNoticing,
       targetKind: 'grammar_noticing',
-      bookId: candidate.bookId,
-      sentenceId: candidate.sentenceId,
-      label: `Notice grammar: ${candidate.label}`,
-      estimatedMinutes: perItemMinutes,
-      reason: candidate.reason,
+      bookId: single?.bookId,
+      // Kept for single-sentence coherent-chain ordering; the flow itself
+      // always reads the full `sentenceIds` list.
+      sentenceId: single?.sentenceId,
+      sentenceIds: picked.map((candidate) => candidate.sentenceId),
+      label: single ? `Notice grammar: ${single.label}` : `Notice grammar in ${picked.length} sentences`,
+      estimatedMinutes: perItemMinutes * picked.length,
+      reason: single?.reason ?? 'Vocabulary learned — pull out the grammar patterns worth tracking',
       status: 'pending',
-    });
-    remaining -= perItemMinutes;
-  }
-  return steps;
+    },
+  ];
 }
 
 /**
@@ -850,10 +864,17 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
         : null;
     case 'grammar_detail':
       return step.grammarPatternId ? `/grammar/${encodeURIComponent(step.grammarPatternId)}` : null;
-    case 'grammar_noticing':
+    case 'grammar_noticing': {
+      // New batched form: walk every sentence in one flow.
+      if (step.sentenceIds && step.sentenceIds.length > 0) {
+        return `/notice-grammar?ids=${step.sentenceIds.join(',')}`;
+      }
+      // Older persisted sessions drafted one step per sentence, deep-linking
+      // straight into that sentence's Analyze grammar panel.
       return step.bookId && step.sentenceId
         ? `/books/${step.bookId}/analyze/${step.sentenceId}`
         : null;
+    }
     case 'shadow':
       return step.bookId && step.sentenceId
         ? `/books/${step.bookId}/shadow/${step.sentenceId}`
@@ -899,7 +920,8 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     availableMinutesByMode: {
       glossing: exploreCeilingMinutes(input.exploreCandidates),
       grammar:
-        (input.understandCandidates.length + input.grammarNoticingCandidates.length) *
+        (input.understandCandidates.length +
+          Math.min(input.grammarNoticingCandidates.length, GRAMMAR_NOTICING_PER_SESSION_LIMIT)) *
         MODE_ACTIVITY_ESTIMATE_MINUTES.grammar,
       shadowing: input.shadowCandidates.length * MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
       review: reviewCeiling,

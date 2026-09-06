@@ -146,6 +146,14 @@ export const UNDERSTAND_CANDIDATE_LIMIT = 8;
 /** How many worked-through sentences to consider for a "notice the grammar here" nudge. */
 export const GRAMMAR_NOTICING_CANDIDATE_LIMIT = 8;
 
+/**
+ * Cap on how many sentences one session's single batched "Notice grammar in N
+ * sentences" step walks, regardless of remaining grammar budget — the backlog
+ * drains a few at a time rather than dominating a sitting (user report,
+ * 2026-09-06).
+ */
+export const GRAMMAR_NOTICING_PER_SESSION_LIMIT = 4;
+
 /** How many shadowing candidates to consider. */
 export const SHADOW_CANDIDATE_LIMIT = 10;
 

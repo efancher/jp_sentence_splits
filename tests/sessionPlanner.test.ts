@@ -318,6 +318,47 @@ describe('buildRecommendedSession', () => {
     expect(step!.reason).toContain('Encountered 3 times');
   });
 
+  it('grammar-noticing candidates collapse into a single batched step, capped and carrying every sentenceId', () => {
+    const grammarNoticingCandidates = Array.from({ length: 7 }, (_, i) => ({
+      sentenceId: `notice_${i}`,
+      bookId: 'b1',
+      label: `sentence ${i}`,
+      reason: 'Vocabulary learned — pull out the grammar patterns worth tracking',
+    }));
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        grammarNoticingCandidates,
+        baseline: { glossing: 0, grammar: 1, shadowing: 0, review: 0 },
+        totalMinutes: 60,
+      }),
+    );
+    const noticeSteps = session.steps.filter((s) => s.targetKind === 'grammar_noticing');
+    expect(noticeSteps).toHaveLength(1);
+    expect(noticeSteps[0]!.sentenceIds).toEqual([
+      'notice_0',
+      'notice_1',
+      'notice_2',
+      'notice_3',
+    ]);
+    expect(noticeSteps[0]!.label).toBe('Notice grammar in 4 sentences');
+  });
+
+  it('a lone grammar-noticing candidate keeps sentenceId set for coherent-chain ordering', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        grammarNoticingCandidates: [
+          { sentenceId: 'notice_solo', bookId: 'b1', label: 'そうだよね', reason: 'r' },
+        ],
+        baseline: { glossing: 0, grammar: 1, shadowing: 0, review: 0 },
+        totalMinutes: 60,
+      }),
+    );
+    const step = session.steps.find((s) => s.targetKind === 'grammar_noticing');
+    expect(step!.sentenceId).toBe('notice_solo');
+    expect(step!.sentenceIds).toEqual(['notice_solo']);
+    expect(step!.label).toBe('Notice grammar: そうだよね');
+  });
+
   it('a small (10-minute) planning pass produces a small, sensible mix that fits within budget', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({

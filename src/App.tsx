@@ -115,6 +115,11 @@ const GrammarPatternDetailPage = lazy(() =>
     default: module.GrammarPatternDetailPage,
   })),
 );
+const GrammarNoticingFlowPage = lazy(() =>
+  import('./pages/GrammarNoticingFlowPage').then((module) => ({
+    default: module.GrammarNoticingFlowPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({
     default: module.SettingsPage,
@@ -183,6 +188,7 @@ export default function App() {
             <Route path="vocabulary" element={<VocabularyListPage />} />
             <Route path="kanji/:character" element={<KanjiDetailPage />} />
             <Route path="grammar" element={<GrammarListPage />} />
+            <Route path="notice-grammar" element={<GrammarNoticingFlowPage />} />
             <Route path="grammar/:patternId" element={<GrammarPatternDetailPage />} />
             <Route
               path="import-batches/:batchId"

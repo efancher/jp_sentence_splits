@@ -5292,6 +5292,7 @@ function exclusionsFromSteps(steps: PlannerSessionStep[]): SessionPlannerExclusi
   const grammarPatternIds = new Set<string>();
   for (const step of steps) {
     if (step.sentenceId) sentenceIds.add(step.sentenceId);
+    for (const id of step.sentenceIds ?? []) sentenceIds.add(id);
     if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review')) {
       bookIds.add(step.bookId);
     }
@@ -5643,10 +5644,17 @@ async function advanceCompletedStepProgress(step: PlannerSessionStep): Promise<v
       }
       return;
     }
-    if (step.targetKind === 'grammar_noticing' && step.sentenceId) {
-      const analysis = await getDb().analyses.get(step.sentenceId);
-      if (analysis?.grammarReviewStatus !== 'confirmed') {
-        await setSentenceGrammarReviewStatus(step.sentenceId, 'confirmed');
+    if (step.targetKind === 'grammar_noticing') {
+      // Batched step walks `sentenceIds`; older per-sentence steps only have
+      // `sentenceId`. Marking the step complete means "I'm done noticing
+      // grammar in these" — confirm any the learner didn't already close in
+      // the flow, same as the old single-sentence step did.
+      const ids = step.sentenceIds?.length ? step.sentenceIds : step.sentenceId ? [step.sentenceId] : [];
+      for (const sentenceId of ids) {
+        const analysis = await getDb().analyses.get(sentenceId);
+        if (analysis?.grammarReviewStatus !== 'confirmed') {
+          await setSentenceGrammarReviewStatus(sentenceId, 'confirmed');
+        }
       }
       return;
     }

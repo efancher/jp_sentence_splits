@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Grammar-noticing is one batched step + its own flow (user
+  report: "notice grammar / notice vocab items keep coming up during review
+  sessions — put them in their own flow").** The planner used to draft one
+  `grammar_noticing` step per worked-through sentence and
+  `preferCoherentChains` interleaved them through the sitting. Now
+  `buildGrammarNoticingSteps` emits a **single** step — "Notice grammar in N
+  sentences", carrying `PlannerSessionStep.sentenceIds`, capped at
+  `GRAMMAR_NOTICING_PER_SESSION_LIMIT` (4) regardless of remaining grammar
+  budget so a backlog drains a few at a time. `sessionStepTargetPath` routes
+  it to the new **`GrammarNoticingFlowPage`** (`/notice-grammar?ids=…`,
+  lazy): a walker that shows each sentence + the existing `GrammarPicker`
+  (reused, not reimplemented — same principle as `SessionRunnerPage`), a
+  1/N progress row with per-sentence ✓, Prev/Next, and a "Nothing to notice"
+  shortcut (`setSentenceGrammarReviewStatus` → `confirmed`, advance). When
+  there's only one candidate the step keeps `sentenceId` set too, so
+  coherent-chain ordering and older persisted sessions (which deep-link
+  straight to `AnalyzePage`) still work. `advanceCompletedStepProgress` and
+  `exclusionsFromSteps` both iterate `sentenceIds`: marking the batched step
+  complete confirms every sentence not already closed in the flow, and a
+  same-day top-up won't re-propose any of them. Tests: +2
+  `sessionPlanner.test.ts` (batch collapse + cap; lone-candidate keeps
+  `sentenceId`), +1 `sessionPlannerRepository.test.ts` (batch → complete
+  confirms all → no re-draft next day).
+
 - **2026-09-06 — "Quiet mode" — pause every speak-aloud activity (user
   request: "sometimes at work / in a noisy environment, can't talk").** New
   `AppSettings.quietMode` (per-device like the rest of `settings`, default
