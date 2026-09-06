@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — Overline pitch contour on the sentence H/L marks (user
+  ask, follow-on: "show the pitch contour too?").** `PitchAccentWordMarks`
+  now draws the OJAD/NHK convention — a `border-top` bar over every high
+  mora and a `border-right` tick at the downstep — directly on the kana row,
+  computed from the same `dictSeq` (word classes + particle-tail level) so
+  the tick lands on the last high mora even when the fall is only heard on a
+  following particle (odaka). The literal H/L letters stay beneath it (user
+  chose "contour above, letters stay"). After a recording, the learner's
+  measured shape gets its own overline (`data-lpa`/`data-lfall`, neutral
+  `--text` colour) above their H/L line, so a shape mismatch reads as two
+  offset lines rather than two rows of letters. Transparent default borders
+  keep row height stable. Flows everywhere `PitchAccentWordMarks` renders
+  (drill, `SentencePitchAccentRow` on shadowing panels / `AnalysisPanel` /
+  `pitch_accent` card).
+
 - **2026-09-06 — Pitch-accent marks extend over attached particles (user
   ask: "add the h/l markers for the entire sentence").** Still per-word, not
   a computed sentence contour, but `buildSentencePitchAccents` now runs a

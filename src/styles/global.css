@@ -346,6 +346,19 @@ strong.jp {
   flex-direction: column;
   align-items: center;
   line-height: 1.1;
+  /* OJAD/NHK-style overline: a bar over each high mora, a vertical tick at
+     the downstep. Transparent by default so the row height doesn't shift. */
+  border-top: 2px solid transparent;
+  padding-top: 2px;
+}
+
+.pa-mora[data-pa='h'] {
+  border-top-color: var(--accent);
+}
+
+.pa-mora[data-fall] {
+  border-right: 2px solid var(--accent);
+  padding-right: 2px;
 }
 
 .pa-kana {
@@ -371,9 +384,20 @@ strong.jp {
    (SentencePitchAccentRow learnerClassesBySurface). */
 .pa-hl-learner {
   margin-top: 1px;
-  padding-top: 1px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding-top: 2px;
+  /* Doubles as the divider from the dictionary line and, when high, the
+     learner's own measured overline (see .pa-mora). */
+  border-top: 2px solid color-mix(in srgb, var(--border) 70%, transparent);
   opacity: 0.9;
+}
+
+.pa-hl-learner[data-lpa='h'] {
+  border-top-color: var(--text);
+}
+
+.pa-hl-learner[data-lfall] {
+  border-right: 2px solid var(--text);
+  padding-right: 2px;
 }
 
 .pa-hl-learner[data-mismatch] {

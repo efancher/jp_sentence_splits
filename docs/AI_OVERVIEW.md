@@ -1244,9 +1244,11 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   reveal** (one shared insert in `ReviewPage` before the rating buttons;
   excluded only for `pitch_accent`, which highlights its own copy, and
   `sentence_transformation`, whose inflected verb would clash with the
-  citation-form contour). A compact "H"/"L"-per-mora
-  contour for each confirmed sentence word that carries Kanjium/UniDic
-  accent data, plus a following-particle mark. `VocabularyListPage`
+  citation-form contour). For each confirmed sentence word that carries
+  Kanjium/UniDic accent data: an OJAD/NHK overline contour (bar over each
+  high mora, tick at the downstep — CSS borders on the kana in
+  `PitchAccentWordMarks`) with the literal "H"/"L"-per-mora letters
+  beneath it, plus a following-particle mark. `VocabularyListPage`
   (`/words`) shows the single-word `PitchAccentDiagram` under the reading
   for entries with dictionary data. Deliberately one
   independent contour per word (from that word's dictionary reading), not
@@ -1262,8 +1264,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   is by first unclaimed `indexOf` of the surface form. In `AnalysisPanel`
   the row also takes `learnerClassesBySurface` — a second H/L line under
   the dictionary one showing the learner's own measured per-mora shape for
-  each target (from `buildLearnerPitchAccentShapes`), with disagreeing
-  morae flagged and unreachable (unvoiced) morae shown as `·`. The
+  each target (from `buildLearnerPitchAccentShapes`) — with its own overline
+  in a neutral colour, disagreeing morae flagged, and unreachable (unvoiced)
+  morae shown as `·`. The
   pitch-accent drill page instead uses `SentencePitchAccentText`: the same
   per-word marks (shared `PitchAccentWordMarks` markup, same
   `learnerClassesBySurface` second line) but stacked *inline* beneath each

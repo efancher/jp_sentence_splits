@@ -135,6 +135,9 @@ describe('PitchAccentDrillPage', () => {
     expect(await screen.findByText('りんごを')).toBeInTheDocument();
     expect(screen.getAllByText('食べる').length).toBeGreaterThan(0);
     expect(screen.getByText('1 of 1')).toBeInTheDocument();
+    // 食べる (たべる) is nakadaka — one high mora and a downstep tick after it.
+    expect(document.querySelector('.pa-mora[data-pa="h"]')).not.toBeNull();
+    expect(document.querySelector('.pa-mora[data-fall]')).not.toBeNull();
     expect(
       screen.getByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
     ).toBeInTheDocument();
