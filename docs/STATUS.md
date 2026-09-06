@@ -40,7 +40,12 @@ is trimmed.)
   `learnerClassesBySurface` to `SentencePitchAccentRow` — the same
   mark-for-mark second H/L line already used in `AnalysisPanel`, with
   mismatched morae flagged and unreachable ones shown as `·`. The
-  per-word mismatch observations still render below it.
+  per-word mismatch observations still render below it. Also stops the
+  misleading "no mismatch — nicely done" when in fact *no* target word
+  could be lined up in the recording (compound split differently / word
+  too quiet): the message is now keyed off how many of the sentence's
+  accent-bearing words were actually measured ("N of M"), with a distinct
+  "nothing to check, try again slower" when that count is zero.
 
 - **2026-09-06 — Sentence-glossing page shows preceding context (user
   request).** `AnalyzePage` now renders the previous one or two sentences

@@ -46,6 +46,8 @@ type AnalysisState =
       observations: TimingObservation[];
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
+      /** Accent-bearing target words in the sentence — the denominator for "measured N of M". */
+      scorableCount: number;
     };
 
 async function analyzeRecording(
@@ -79,7 +81,12 @@ async function analyzeRecording(
     })) {
       learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
     }
-    return { status: 'done', observations, learnerClassesBySurface };
+    return {
+      status: 'done',
+      observations,
+      learnerClassesBySurface,
+      scorableCount: scorableTargets.length,
+    };
   } catch {
     return { status: 'unavailable' };
   }
@@ -235,11 +242,31 @@ export function PitchAccentDrillPage() {
                     Couldn't reach the alignment service, so there's no pitch-accent feedback for
                     this take. Try again in a moment.
                   </p>
+                ) : analysis.status === 'done' && analysis.learnerClassesBySurface.size === 0 ? (
+                  <p className="muted">
+                    Couldn't line up any of the target word{analysis.scorableCount === 1 ? '' : 's'}{' '}
+                    in this recording, so there's nothing to check. That usually means the alignment
+                    split a compound differently, or the word was too quiet or rushed to measure — try
+                    again a bit slower and clearer.
+                  </p>
                 ) : analysis.status === 'done' && analysis.observations.length === 0 ? (
-                  <p>No clear pitch-accent mismatch detected on this take — nicely done.</p>
+                  <p>
+                    No clear pitch-accent mismatch on the{' '}
+                    {analysis.learnerClassesBySurface.size === analysis.scorableCount
+                      ? ''
+                      : `${analysis.learnerClassesBySurface.size} of ${analysis.scorableCount} `}
+                    word{analysis.learnerClassesBySurface.size === 1 ? '' : 's'} I could measure —
+                    nicely done.
+                  </p>
                 ) : analysis.status === 'done' ? (
                   <div className="stack">
                     <strong>Pitch accent</strong>
+                    {analysis.learnerClassesBySurface.size < analysis.scorableCount ? (
+                      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                        Measured {analysis.learnerClassesBySurface.size} of {analysis.scorableCount}{' '}
+                        target words this take; the rest couldn't be lined up in the recording.
+                      </p>
+                    ) : null}
                     {analysis.observations.map((observation) => (
                       <article key={observation.id} className="stack" style={{ gap: 0 }}>
                         <span>
