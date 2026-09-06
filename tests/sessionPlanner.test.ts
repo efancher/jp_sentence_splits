@@ -189,6 +189,22 @@ describe('buildRecommendedSession', () => {
     expect(shadowSteps.length).toBeGreaterThan(0);
   });
 
+  it('quiet mode: no shadow steps even with neglected shadowing, and the explanation says why', () => {
+    const recentActivity: RecentActivityEvent[] = [
+      { mode: 'review', timestamp: daysAgo(0) },
+      { mode: 'glossing', timestamp: daysAgo(0) },
+    ];
+    const session = buildRecommendedSession(
+      // getSessionPlannerInput withholds shadowCandidates entirely in quiet
+      // mode; this flag only drives the explanation line.
+      emptyPlannerInput({ recentActivity, shadowCandidates: [], quietMode: true, totalMinutes: 60 }),
+    );
+    expect(session.steps.filter((step) => step.targetKind === 'shadow')).toHaveLength(0);
+    expect(
+      session.explanation.some((line) => line.toLowerCase().includes('quiet mode')),
+    ).toBe(true);
+  });
+
   it('with no due reviews, review gets 0 minutes and the rest is spent elsewhere', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {

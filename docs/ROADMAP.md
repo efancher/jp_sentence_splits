@@ -153,6 +153,12 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   per-clip in the new local-only `referencePitchTracks` Dexie cache (DB v16)
   via `src/lib/referencePitchCache.ts`; `AnalysisPanel` warms it. Detail in
   STATUS.md.
+- [x] **Quiet mode.** (2026-09-06) `settings.quietMode` (per-device, toggle
+  on Settings + Home) pauses every speak-aloud activity: the session planner
+  withholds all `shadowCandidates` (minutes flow to the other buckets,
+  nothing consumed), the pitch-accent drill runs perception-only (no
+  recording beat), and `/shadow` shows a non-blocking banner. For noisy
+  environments / working somewhere you can't talk. Detail in STATUS.md.
 
 ## In progress
 

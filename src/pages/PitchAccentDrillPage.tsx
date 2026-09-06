@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
-import { getPitchAccentDrillSentences } from '../db/repository';
+import { getPitchAccentDrillSentences, readSettings } from '../db/repository';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
 import { extractPitch } from '../lib/pitch';
@@ -129,6 +129,7 @@ async function analyzeRecording(
 
 export function PitchAccentDrillPage() {
   const sentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
+  const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
   const [position, setPosition] = useState(0);
   const shadowing = useShadowing();
   const { cancelRecording } = shadowing;
@@ -254,6 +255,7 @@ export function PitchAccentDrillPage() {
                 translation={current.sentence.translation}
                 word={focusWord}
                 onPredict={setPrediction}
+                allowSkip={!quietMode}
               />
             ) : (
               <>
@@ -282,73 +284,82 @@ export function PitchAccentDrillPage() {
                   <PredictionResult word={focusWord} predicted={prediction} />
                 ) : null}
 
-                <div className="row" style={{ alignItems: 'center' }}>
-                  <RecordToggleButton
-                    isRecording={isRecording}
-                    isRequestingMic={isRequestingMic}
-                    elapsedMs={shadowing.recordingElapsedMs}
-                    maxDurationMs={MAX_RECORDING_DURATION_MS}
-                    idleLabel={pending ? 'Record again' : 'Record'}
-                    onStart={() => void shadowing.startRecording()}
-                    onStop={() => void shadowing.stopRecording()}
-                  />
-                </div>
-                {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+                {quietMode ? (
+                  <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                    Quiet mode is on, so the say-it-aloud step is paused — this runs as a
+                    perception-only drill. Move to the next sentence when you&rsquo;re ready.
+                  </p>
+                ) : (
+                  <>
+                    <div className="row" style={{ alignItems: 'center' }}>
+                      <RecordToggleButton
+                        isRecording={isRecording}
+                        isRequestingMic={isRequestingMic}
+                        elapsedMs={shadowing.recordingElapsedMs}
+                        maxDurationMs={MAX_RECORDING_DURATION_MS}
+                        idleLabel={pending ? 'Record again' : 'Record'}
+                        onStart={() => void shadowing.startRecording()}
+                        onStop={() => void shadowing.stopRecording()}
+                      />
+                    </div>
+                    {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
 
-                {pending && pendingUrl ? (
-                  <div className="stack">
-                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                    <audio controls src={pendingUrl} />
-                    {analysis.status === 'analyzing' ? (
-                      <p className="muted">Checking your pitch accent…</p>
-                    ) : analysis.status === 'unavailable' ? (
-                      <p className="muted">
-                        Couldn't reach the alignment service, so there's no pitch-accent feedback for
-                        this take. Try again in a moment.
-                      </p>
-                    ) : analysis.status === 'done' &&
-                      analysis.learnerClassesBySurface.size === 0 ? (
-                      <p className="muted">
-                        Couldn't line up any of the target word
-                        {analysis.scorableCount === 1 ? '' : 's'} in this recording, so there's
-                        nothing to check. That usually means the alignment split a compound
-                        differently, or the word was too quiet or rushed to measure — try again a bit
-                        slower and clearer.
-                      </p>
-                    ) : analysis.status === 'done' && analysis.observations.length === 0 ? (
-                      <p>
-                        No clear pitch-accent mismatch on the{' '}
-                        {analysis.learnerClassesBySurface.size === analysis.scorableCount
-                          ? ''
-                          : `${analysis.learnerClassesBySurface.size} of ${analysis.scorableCount} `}
-                        word{analysis.learnerClassesBySurface.size === 1 ? '' : 's'} I could measure —
-                        nicely done.
-                      </p>
-                    ) : analysis.status === 'done' ? (
+                    {pending && pendingUrl ? (
                       <div className="stack">
-                        <strong>Pitch accent</strong>
-                        {analysis.learnerClassesBySurface.size < analysis.scorableCount ? (
-                          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                            Measured {analysis.learnerClassesBySurface.size} of{' '}
-                            {analysis.scorableCount} target words this take; the rest couldn't be
-                            lined up in the recording.
+                        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                        <audio controls src={pendingUrl} />
+                        {analysis.status === 'analyzing' ? (
+                          <p className="muted">Checking your pitch accent…</p>
+                        ) : analysis.status === 'unavailable' ? (
+                          <p className="muted">
+                            Couldn't reach the alignment service, so there's no pitch-accent
+                            feedback for this take. Try again in a moment.
                           </p>
-                        ) : null}
-                        {analysis.observations.map((observation) => (
-                          <article key={observation.id} className="stack" style={{ gap: 0 }}>
-                            <span>
-                              <strong>{observation.confidence} confidence:</strong>{' '}
-                              {observation.message}
-                            </span>
-                            {observation.detail ? (
-                              <p className="muted">{observation.detail}</p>
+                        ) : analysis.status === 'done' &&
+                          analysis.learnerClassesBySurface.size === 0 ? (
+                          <p className="muted">
+                            Couldn't line up any of the target word
+                            {analysis.scorableCount === 1 ? '' : 's'} in this recording, so there's
+                            nothing to check. That usually means the alignment split a compound
+                            differently, or the word was too quiet or rushed to measure — try again
+                            a bit slower and clearer.
+                          </p>
+                        ) : analysis.status === 'done' && analysis.observations.length === 0 ? (
+                          <p>
+                            No clear pitch-accent mismatch on the{' '}
+                            {analysis.learnerClassesBySurface.size === analysis.scorableCount
+                              ? ''
+                              : `${analysis.learnerClassesBySurface.size} of ${analysis.scorableCount} `}
+                            word{analysis.learnerClassesBySurface.size === 1 ? '' : 's'} I could
+                            measure — nicely done.
+                          </p>
+                        ) : analysis.status === 'done' ? (
+                          <div className="stack">
+                            <strong>Pitch accent</strong>
+                            {analysis.learnerClassesBySurface.size < analysis.scorableCount ? (
+                              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                                Measured {analysis.learnerClassesBySurface.size} of{' '}
+                                {analysis.scorableCount} target words this take; the rest couldn't
+                                be lined up in the recording.
+                              </p>
                             ) : null}
-                          </article>
-                        ))}
+                            {analysis.observations.map((observation) => (
+                              <article key={observation.id} className="stack" style={{ gap: 0 }}>
+                                <span>
+                                  <strong>{observation.confidence} confidence:</strong>{' '}
+                                  {observation.message}
+                                </span>
+                                {observation.detail ? (
+                                  <p className="muted">{observation.detail}</p>
+                                ) : null}
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
-                  </div>
-                ) : null}
+                  </>
+                )}
               </>
             )}
 
@@ -376,11 +387,14 @@ function PredictDropStep({
   translation,
   word,
   onPredict,
+  allowSkip,
 }: {
   japanese: string;
   translation?: string;
   word: SentenceWordAccent;
   onPredict: (position: number) => void;
+  /** Hidden in quiet mode, where the prediction *is* the whole exercise. */
+  allowSkip: boolean;
 }) {
   const [before, target, after] = splitOnSurfaceForm(japanese, word.surfaceForm);
   return (
@@ -412,14 +426,16 @@ function PredictDropStep({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className="ghost"
-        style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
-        onClick={() => onPredict(PREDICTION_SKIPPED)}
-      >
-        Skip — just practise saying it
-      </button>
+      {allowSkip ? (
+        <button
+          type="button"
+          className="ghost"
+          style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
+          onClick={() => onPredict(PREDICTION_SKIPPED)}
+        >
+          Skip — just practise saying it
+        </button>
+      ) : null}
     </div>
   );
 }

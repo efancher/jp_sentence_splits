@@ -240,6 +240,23 @@ export function HomePage() {
           </div>
         </details>
 
+        <label className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
+          <input
+            type="checkbox"
+            checked={settings?.quietMode ?? false}
+            onChange={(event) => {
+              void updateSettings({ quietMode: event.target.checked });
+            }}
+          />
+          <span>
+            Quiet mode — can&rsquo;t speak aloud
+            <span className="muted" style={{ fontSize: '0.85rem' }}>
+              {' '}
+              (new sessions skip shadowing; pitch-accent drill runs perception-only)
+            </span>
+          </span>
+        </label>
+
         <div className="row" role="group" aria-label="Add time to today's session">
           <button
             type="button"

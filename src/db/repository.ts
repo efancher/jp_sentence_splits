@@ -5393,11 +5393,17 @@ export async function getSessionPlannerInput(
     buildReviewPriorityInputs(practiceDueReady, 'review', now),
   ]);
 
-  const activeSentenceIds = await activeSentenceIdsForShadowing(5);
-  const shadowCandidatesRaw = await findShadowCandidates(
-    SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
-    activeSentenceIds,
-  );
+  // Quiet mode (settings, per-device): the learner can't speak aloud, so
+  // withhold every shadowing candidate. buildShadowSteps then drafts
+  // nothing and allocateTimeAcrossModes routes the shadowing minutes to the
+  // other buckets. Nothing is consumed — the candidates recompute on the
+  // next plan once quiet mode is off.
+  const shadowCandidatesRaw = settings.quietMode
+    ? []
+    : await findShadowCandidates(
+        SHADOW_CANDIDATE_LIMIT + exclude.sentenceIds.size,
+        await activeSentenceIdsForShadowing(5),
+      );
 
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
@@ -5425,6 +5431,7 @@ export async function getSessionPlannerInput(
     newCardBacklogCount,
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
+    quietMode: settings.quietMode ?? false,
   };
 }
 

@@ -426,6 +426,13 @@ export interface SessionPlannerInput {
   reviewLimit?: number;
   /** User-adjustable override for BASELINE_SESSION_ALLOCATION (set directly on Home) — see AllocateTimeInput.baseline. */
   baseline?: Record<SessionBucket, number>;
+  /**
+   * `settings.quietMode` — the learner can't speak aloud right now.
+   * `getSessionPlannerInput` already withholds `shadowCandidates` when it's
+   * set (so no shadowing steps get drafted and the minutes flow to the
+   * other buckets); this flag only drives the explanation line.
+   */
+  quietMode?: boolean;
 }
 
 export interface PlannerStepDraft {
@@ -939,6 +946,9 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     allocation,
     input.baseline ?? BASELINE_SESSION_ALLOCATION,
   );
+  if (input.quietMode) {
+    explanation.push('Quiet mode is on — speaking practice (shadowing) is paused for now.');
+  }
   if (newCardSlots > 0) {
     explanation.push(
       (input.newCardBacklogCount ?? 0) > newCardSlots

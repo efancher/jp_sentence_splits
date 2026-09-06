@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb } from '../src/db/repository';
+import { getDb, updateSettings } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { PitchAccentDrillPage } from '../src/pages/PitchAccentDrillPage';
 import { withAppProviders } from '../src/test/providers';
@@ -154,6 +154,27 @@ describe('PitchAccentDrillPage', () => {
     expect(result).toHaveTextContent(/nakadaka/);
     // Still lets you record your attempt.
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+  });
+
+  it('quiet mode: runs perception-only — no Skip button, no Record after predicting', async () => {
+    await seedEligibleSentence();
+    await updateSettings({ quietMode: true });
+    renderPage();
+
+    // The predict step still runs (it is silent), but without the skip-to-speaking escape.
+    expect(
+      await screen.findByLabelText("Predict where this word's pitch falls"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Skip — just practise saying it' }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Falls after mora 2/ }));
+
+    expect(await screen.findByText(/perception-only drill/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
+    // The dictionary marks + prediction result still show.
+    expect(screen.getByLabelText('Your pitch-fall prediction')).toBeInTheDocument();
   });
 
   it('skips straight to recording when the predict step is skipped', async () => {

@@ -21,6 +21,7 @@ import {
   setBookSentenceStatus,
   setSentenceGrammarReviewStatus,
   updatePlannerSessionStep,
+  updateSettings,
 } from '../src/db/repository';
 import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
 import type { Sentence } from '../src/domain/types';
@@ -326,6 +327,17 @@ describe('Learning Orchestrator repository layer', () => {
     const shadowStep = afterConfirm.steps.find((step) => step.targetKind === 'shadow');
     expect(shadowStep).toBeDefined();
     expect(shadowStep!.sentenceId).toBe(sentence.id);
+
+    // Quiet mode withholds every shadow candidate — the step disappears and
+    // the plan says why. Turning it back off restores it (nothing consumed).
+    await updateSettings({ quietMode: true });
+    const quiet = await planRecommendedSession(60);
+    expect(quiet.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
+    expect(quiet.explanation.some((line) => line.toLowerCase().includes('quiet mode'))).toBe(true);
+
+    await updateSettings({ quietMode: false });
+    const loud = await planRecommendedSession(60);
+    expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
   });
 
   it('surfaces a worked-through, vocab-ready sentence as a grammar_noticing step, gated on vocab and cleared once grammar is marked reviewed', async () => {

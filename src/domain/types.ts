@@ -420,6 +420,14 @@ export interface AppSettings {
    * remains the shipped default.
    */
   sessionAllocation: Record<SessionBucket, number>;
+  /**
+   * "Quiet mode" (per-device, like the rest of `settings`): the learner is
+   * somewhere they can't speak aloud. The session planner skips shadowing
+   * steps (the candidates aren't consumed — they come back next plan), the
+   * pitch-accent drill drops its recording beat and runs perception-only,
+   * and `/shadow` shows a non-blocking banner. Defaults to `false`.
+   */
+  quietMode?: boolean;
 }
 
 export interface InboxMembership {

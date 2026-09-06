@@ -33,6 +33,33 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — "Quiet mode" — pause every speak-aloud activity (user
+  request: "sometimes at work / in a noisy environment, can't talk").** New
+  `AppSettings.quietMode` (per-device like the rest of `settings`, default
+  `false`), toggleable on **both** the Settings page (Learning Orchestrator
+  section) and Home (a checkbox right above the Add-time buttons — it flips
+  day to day, so it needs to be one tap from where you start a session).
+  When on:
+  - **Session planner:** `getSessionPlannerInput` returns an empty
+    `shadowCandidates` list, so `buildShadowSteps` drafts nothing and
+    `allocateTimeAcrossModes` routes the shadowing minutes to glossing /
+    grammar / review. Nothing is consumed — candidates recompute next plan.
+    New `SessionPlannerInput.quietMode` flag drives one explanation line
+    ("Quiet mode is on — speaking practice (shadowing) is paused for now.").
+  - **Pitch-accent drill:** the recording beat is dropped — it runs
+    perception-only (predict the drop → reveal the dictionary marks + your
+    prediction result → next sentence). The "Skip — just practise saying it"
+    button is hidden (the prediction *is* the whole exercise).
+  - **`/shadow`:** a non-blocking banner ("Quiet mode is on … this page
+    still works if you've found somewhere you can talk") with a "Turn off
+    quiet mode" button. Not hard-blocked.
+  - Not synced (settings never is); an in-flight planned session keeps any
+    shadow steps it already had (skip them, or turn quiet mode off and
+    re-plan). `tests/sessionPlanner.test.ts` +1,
+    `tests/sessionPlannerRepository.test.ts` (extended the shadow-gate
+    test), `tests/pitchAccentDrillPage.test.tsx` +1; 1228 vitest tests
+    green.
+
 - **2026-09-06 — Pitch-accent drill opens on a "predict the drop" step +
   `pitch-ear-trainer` adaptive difficulty (user request, from a ChatGPT
   pitch-ear discussion).** The learner passes synthetic-tone discrimination

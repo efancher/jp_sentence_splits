@@ -245,6 +245,23 @@ export function SettingsPage() {
           split (glossing/grammar/shadowing/review) is set on Home, right
           before adding time, not here.
         </p>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={settings.quietMode ?? false}
+            onChange={(event) => {
+              void updateSettings({ quietMode: event.target.checked });
+            }}
+          />
+          Quiet mode (can&rsquo;t speak aloud)
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Pauses everything that needs you to talk: new sessions skip
+          shadowing steps (they come back when you turn this off), the
+          pitch-accent drill runs perception-only, and Shadowing shows a
+          reminder instead of blocking. Per-device, and also toggleable on
+          Home.
+        </p>
       </section>
 
       <AuthAndSyncSettings />

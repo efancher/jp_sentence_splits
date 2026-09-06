@@ -210,7 +210,8 @@ built out Phases 1–9):
 - `AppSettings` (singleton) — theme, TTS voice/rate, `newCardsPerSessionLimit`
   (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
-  rotation).
+  rotation), `quietMode` (pauses every speak-aloud activity — see the
+  session-planner section).
 - `PlannerSession` (Learning Orchestrator; syncs, last-write-wins conflicts) — one
   **calendar day's** recommended session, keyed by local `date`
   (`YYYY-MM-DD`, at most one per day, found via `getTodayPlannerSession`):
@@ -289,6 +290,16 @@ glossing's not-ready sentences (which fall back to a `vocabulary_review`
 step), an unready sentence simply isn't a shadow candidate at all — there's
 no shadow-adjacent activity to substitute in, so `buildShadowSteps` needed
 no change.
+
+**Quiet mode** (`settings.quietMode`, per-device, toggle on both Settings
+and Home): when the learner can't speak aloud, `getSessionPlannerInput`
+returns an empty `shadowCandidates` list, so no shadowing steps are drafted
+and `allocateTimeAcrossModes` routes those minutes to the other buckets;
+the plan explanation says "Quiet mode is on — speaking practice is paused."
+Nothing is consumed — the candidates recompute on the next plan once it's
+off. The pitch-accent drill (§8) also drops its recording beat and runs
+perception-only under quiet mode, and `/shadow` shows a non-blocking
+banner.
 
 The **grammar bucket** runs two passes over its one budget. Pass 1
 (`buildUnderstandSteps`, `findUnderstandCandidates`): corpus-flagged patterns
@@ -1161,8 +1172,10 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     as your measured H/L line under the dictionary row (same
     `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line
     as `AnalysisPanel`), nothing
-    saved. So a word's pitch-accent data backs passive shadowing feedback,
-    an active-recall flashcard, and a recording drill.
+    saved. Under `settings.quietMode` the recording beat is dropped and the
+    drill runs perception-only (predict → reveal marks → next). So a word's
+    pitch-accent data backs passive shadowing feedback, an active-recall
+    flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Spectrogram** — a "Show spectrogram" toggle draws the reference clip

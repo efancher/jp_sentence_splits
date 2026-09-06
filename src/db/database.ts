@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   graduationMinScheduledDays: 180,
   dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,
   sessionAllocation: { ...BASELINE_SESSION_ALLOCATION },
+  quietMode: false,
 };
 
 export class GlossbookDatabase extends Dexie {

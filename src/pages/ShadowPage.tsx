@@ -13,8 +13,10 @@ import {
   listAttemptAnalysisSummariesForSentence,
   listAttemptsForSentence,
   rateAttempt,
+  readSettings,
   saveAttempt,
   setAttemptFavorite,
+  updateSettings,
 } from '../db/repository';
 import type { Attempt, AttemptRating } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
@@ -96,6 +98,8 @@ export function ShadowPage() {
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
   /** Cleanup for an in-flight "play reference, then auto-record" sequence (delayed shadowing). */
   const delayedShadowCancelRef = useRef<(() => void) | null>(null);
+
+  const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -367,6 +371,23 @@ export function ShadowPage() {
 
   return (
     <div className="stack">
+      {quietMode ? (
+        <section className="panel stack" style={{ gap: '0.4rem' }}>
+          <strong>Quiet mode is on</strong>
+          <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+            Shadowing needs you to speak aloud. New sessions skip it while quiet mode is on —
+            this page still works if you&rsquo;ve found somewhere you can talk.
+          </p>
+          <button
+            type="button"
+            className="ghost"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => void updateSettings({ quietMode: false })}
+          >
+            Turn off quiet mode
+          </button>
+        </section>
+      ) : null}
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
