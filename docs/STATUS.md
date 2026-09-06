@@ -63,6 +63,18 @@ is trimmed.)
   accent-bearing words were actually measured ("N of M"), with a distinct
   "nothing to check, try again slower" when that count is zero.
 
+- **2026-09-06 — Pitch-accent drill: marks moved under the sentence (user
+  request).** The drill was showing the sentence on one line and the
+  accent contour as a separate strip below, so reading + checking the
+  accent meant glancing back and forth. New `SentencePitchAccentText`
+  renders the whole sentence with each accent-bearing word's kana + H/L
+  (and, post-take, the learner's measured H/L) stacked directly beneath
+  it; particles / punctuation / dataless words stay inline as plain text.
+  Shared per-word mark markup extracted to `PitchAccentWordMarks` and
+  reused by the existing compact `SentencePitchAccentRow` (unchanged
+  output). Only the drill page uses the new inline layout; shadowing /
+  AnalysisPanel / `pitch_accent` reveal keep the compact row.
+
 - **2026-09-06 — Sentence-glossing page shows preceding context (user
   request).** `AnalyzePage` now renders the previous one or two sentences
   (dimmed, above the working sentence; translations shown only when "Show

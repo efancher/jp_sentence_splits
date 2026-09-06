@@ -109,10 +109,13 @@ describe('PitchAccentDrillPage', () => {
     await seedEligibleSentence();
     renderPage();
 
-    expect(await screen.findByText('りんごを食べる。')).toBeInTheDocument();
+    // The sentence renders interleaved (plain runs + per-word accent columns),
+    // so assert on the accent-bearing word and the surrounding plain text.
+    expect(await screen.findByText('りんごを')).toBeInTheDocument();
+    expect(screen.getByText('食べる')).toBeInTheDocument();
     expect(screen.getByText('1 of 1')).toBeInTheDocument();
     expect(
-      screen.getByLabelText('Pitch accent (H = high mora, L = low mora)'),
+      screen.getByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
   });

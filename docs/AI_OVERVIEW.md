@@ -1230,7 +1230,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   the row also takes `learnerClassesBySurface` — a second H/L line under
   the dictionary one showing the learner's own measured per-mora shape for
   each target (from `buildLearnerPitchAccentShapes`), with disagreeing
-  morae flagged and unreachable (unvoiced) morae shown as `·`.
+  morae flagged and unreachable (unvoiced) morae shown as `·`. The
+  pitch-accent drill page instead uses `SentencePitchAccentText`: the same
+  per-word marks (shared `PitchAccentWordMarks` markup, same
+  `learnerClassesBySurface` second line) but stacked *inline* beneath each
+  word of the full sentence rather than lifted into a separate strip, so
+  the learner reads and checks in one glance; non-accented runs stay plain
+  text.
 - **Practice-mode variants**: "Delayed shadow" (listen in full, then
   auto-record after a configurable 0.5–2.0s gap) and "Show meaning
   instead" (swap Japanese transcript for English translation, forcing

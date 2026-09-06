@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { RecordToggleButton } from '../components/RecordToggleButton';
-import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
+import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { getPitchAccentDrillSentences } from '../db/repository';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
@@ -28,7 +28,8 @@ import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
  * contour against the dictionary shape using only the learner's own forced
  * alignment + pitch (no reference clip involved). The take's measured
  * per-mora H/L (`buildLearnerPitchAccentShapes`) is also rendered as a
- * second line under the dictionary `SentencePitchAccentRow`, so a
+ * second line under the dictionary marks in `SentencePitchAccentText`
+ * (which stacks the marks inline beneath each word of the sentence), so a
  * correctly-produced accent shows as a match, not just the absence of a
  * mismatch note.
  *
@@ -195,18 +196,9 @@ export function PitchAccentDrillPage() {
             <div className="muted" style={{ fontSize: '0.85rem' }}>
               {position + 1} of {sentences.length}
             </div>
-            <div className="jp jp-lg">{current.sentence.japanese}</div>
-            {current.sentence.translation ? (
-              <div className="muted">{current.sentence.translation}</div>
-            ) : null}
 
-            <div className="stack" style={{ gap: '0.25rem' }}>
-              <span className="muted" style={{ fontSize: '0.8rem' }}>
-                {analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
-                  ? 'Pitch-accent contour (top = dictionary, bottom = your recording)'
-                  : 'Target contour (dictionary)'}
-              </span>
-              <SentencePitchAccentRow
+            <div className="stack" style={{ gap: '0.35rem' }}>
+              <SentencePitchAccentText
                 key={current.sentence.id}
                 japanese={current.sentence.japanese}
                 targets={contourTargets}
@@ -216,6 +208,14 @@ export function PitchAccentDrillPage() {
                     : undefined
                 }
               />
+              {current.sentence.translation ? (
+                <div className="muted">{current.sentence.translation}</div>
+              ) : null}
+              <span className="muted" style={{ fontSize: '0.8rem' }}>
+                {analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
+                  ? 'Marks under each word: top = dictionary, bottom = your recording (H = high mora, L = low)'
+                  : 'Marks under each word show the dictionary pitch accent (H = high mora, L = low)'}
+              </span>
             </div>
 
             <div className="row" style={{ alignItems: 'center' }}>

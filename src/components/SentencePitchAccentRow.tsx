@@ -6,12 +6,16 @@ import {
   type SentencePitchAccentTarget,
 } from '../lib/sentencePitchAccent';
 import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import { PitchAccentWordMarks } from './PitchAccentWordMarks';
 
 /**
  * "H's and L's under the kana" — a compact per-word pitch-accent contour
  * for the words in a sentence that carry dictionary accent data, shown on
  * the shadowing panels (`SyncedShadowText`), the post-recording
- * `AnalysisPanel`, and the `pitch_accent` review card reveal.
+ * `AnalysisPanel`, and the `pitch_accent` review card reveal. (The
+ * pitch-accent drill page uses `SentencePitchAccentText` instead — the
+ * same per-word marks via `PitchAccentWordMarks`, but stacked inline
+ * under each word of the full sentence rather than in a separate strip.)
  *
  * Per-word, not a joined sentence contour — see `sentencePitchAccent.ts`
  * for why. Words with no Kanjium/UniDic data (many particles, unparsed
@@ -22,8 +26,8 @@ import type { MoraPitchClass } from '../lib/pitchAccentShape';
  * same list for scoring); otherwise pass `sentenceId` and the row loads
  * its own from the confirmed `sentence_vocabulary` links.
  *
- * `learnerClassesBySurface` (AnalysisPanel and the pitch-accent drill page)
- * adds a second H/L line per mora — the learner's own measured shape from
+ * `learnerClassesBySurface` (AnalysisPanel) adds a second H/L line per
+ * mora — the learner's own measured shape from
  * `buildLearnerPitchAccentShapes` — under the dictionary line, so the two
  * can be compared mark-for-mark. Morae the estimate couldn't reach show a
  * `·`; morae that disagree with the dictionary are flagged.
@@ -88,48 +92,11 @@ export function SentencePitchAccentRow({
             data-highlight={highlightSurfaceForm === word.surfaceForm ? '' : undefined}
             title={`${word.surfaceForm} — ${word.pattern}`}
           >
-            {word.morae.map((mora, moraIndex) => {
-              const learnerClass = learnerClasses?.[moraIndex];
-              return (
-                <span key={moraIndex} className="pa-mora">
-                  <span className="pa-kana jp">{mora}</span>
-                  <span className="pa-hl" data-c={word.classes[moraIndex]}>
-                    {word.classes[moraIndex] === 'h' ? 'H' : 'L'}
-                  </span>
-                  {showLearner ? (
-                    <span
-                      className="pa-hl pa-hl-learner"
-                      data-c={learnerClass}
-                      data-mismatch={
-                        learnerClass && learnerClass !== word.classes[moraIndex] ? '' : undefined
-                      }
-                      title={
-                        learnerClass
-                          ? learnerClass === word.classes[moraIndex]
-                            ? 'Your recording matches here'
-                            : 'Your recording differs here'
-                          : 'Not enough voiced signal to estimate this mora'
-                      }
-                    >
-                      {learnerClass ? (learnerClass === 'h' ? 'H' : 'L') : '·'}
-                    </span>
-                  ) : null}
-                </span>
-              );
-            })}
-            <span className="pa-mora pa-particle">
-              <span className="pa-kana" aria-hidden="true">
-                ·
-              </span>
-              <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
-                {word.particleHigh ? 'H' : 'L'}
-              </span>
-              {showLearner ? (
-                <span className="pa-hl pa-hl-learner" aria-hidden="true">
-                  ·
-                </span>
-              ) : null}
-            </span>
+            <PitchAccentWordMarks
+              word={word}
+              learnerClasses={learnerClasses}
+              showLearner={showLearner}
+            />
           </span>
         );
       })}

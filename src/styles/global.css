@@ -385,6 +385,31 @@ strong.jp {
   color: var(--text-muted);
 }
 
+/* SentencePitchAccentText — the whole sentence with each accented word's
+   kana + H/L stacked under it (pitch-accent drill). */
+.pa-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.2rem 0.05rem;
+  line-height: 1.35;
+}
+
+.pa-text-plain {
+  white-space: pre-wrap;
+}
+
+.pa-text-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pa-text-marks {
+  margin: 0.1rem 0 0;
+  gap: 0 0.6rem;
+}
+
 /* MeasuredPitchContour — measured YIN pitch track of the native reference
    clip (listening / word_listening review reveals, shadowing surfaces). */
 .pitch-contour {
