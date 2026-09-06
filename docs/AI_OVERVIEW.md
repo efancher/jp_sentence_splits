@@ -626,7 +626,9 @@ and the counter frozen at 0.
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori
-  chapter text, `src/lib/pasteOrder.ts`), move/copy sentences between
+  chapter text, `src/lib/pasteOrder.ts`; NFKC substring match, with a
+  trailing-`。`-stripped retry since Satori drops the closing punctuation on
+  each episode's last sentence), move/copy sentences between
   books, archive books. Two book-delete buttons: "Delete book" drops the
   book but leaves its sentences in the library; "Delete book + sentences"
   (`deleteBookCascade`, two-step inline confirm) also retires every

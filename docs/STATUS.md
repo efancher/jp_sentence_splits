@@ -33,6 +33,14 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-06 — "Order from paste" tolerates Satori's dropped episode-final
+  `。` (user report).** Reordering *spring new life* left
+  `しばらくすると、…羽をバタバタさせ始めました。` unmatched: it's the last
+  sentence of 第三話 and Satori's copy/paste omits the closing `。` on each
+  episode's final sentence, so the exact-substring match failed.
+  `orderBookSentencesFromPaste` now retries with trailing sentence-final
+  punctuation (`。.!?…‥`) stripped from the stored key. +1 test.
+
 - **2026-09-06 — Learner's own H/L under the dictionary pitch-accent row
   (user request).** `AnalysisPanel`'s "Pitch accent (dictionary)" section
   measured the learner's per-mora shape internally

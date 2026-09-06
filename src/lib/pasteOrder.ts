@@ -18,10 +18,14 @@ export type PasteOrderResult = {
  *
  * Matching uses {@link normalizeForPasteMatch} (NFKC) so full-width digits and
  * similar compatibility forms align with ASCII forms in Satori page pastes.
+ * When an exact substring match fails, we retry with trailing sentence-final
+ * punctuation stripped from the stored key — Satori drops the closing 。 on the
+ * last sentence of an episode/page, which would otherwise leave it unmatched.
  *
  * When multiple memberships share the same match key, only the first in the
  * given list claims that paste occurrence; later duplicates stay unmatched.
  */
+const SENTENCE_TAIL_PUNCTUATION = /[。.!?…‥]+$/;
 export function orderBookSentencesFromPaste(
   paste: string,
   sentences: PasteOrderSentence[],
@@ -46,7 +50,13 @@ export function orderBookSentencesFromPaste(
       unmatchedIds.push(sentence.id);
       return;
     }
-    const index = normalizedPaste.indexOf(key);
+    let index = normalizedPaste.indexOf(key);
+    if (index < 0) {
+      const trimmedKey = key.replace(SENTENCE_TAIL_PUNCTUATION, '');
+      if (trimmedKey && trimmedKey !== key) {
+        index = normalizedPaste.indexOf(trimmedKey);
+      }
+    }
     if (index < 0) {
       unmatchedIds.push(sentence.id);
       return;

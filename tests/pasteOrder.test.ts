@@ -71,6 +71,20 @@ ${dayOne}${others}`;
     expect(result.orderedIds).toEqual(['spring', 'day', 'others']);
   });
 
+  it('matches an episode-final sentence whose closing 。 is missing from the paste', () => {
+    const s1 = 'ひなたちは、毎日少しずつ大きくなりました。';
+    const s2 =
+      'しばらくすると、お母さんとお父さんの真似をして、羽をバタバタさせ始めました。';
+    // Satori drops the closing 。 on the last sentence before an episode header.
+    const paste = `${s1}${s2.replace(/。$/, '')}\n春、第四話\nある日、１羽のひなが巣の端に立ちました。`;
+    const result = orderBookSentencesFromPaste(paste, [
+      { id: 'bata', japanese: s2 },
+      { id: 'grew', japanese: s1 },
+    ]);
+    expect(result.matchedIds).toEqual(['grew', 'bata']);
+    expect(result.unmatchedIds).toEqual([]);
+  });
+
   it('treats spacing differences as the same via paste match normalization', () => {
     const result = orderBookSentencesFromPaste(
       `${S1}\n${S2}`,
