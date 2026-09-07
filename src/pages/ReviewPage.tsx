@@ -360,6 +360,20 @@ interface PitchAccentReviewCandidate {
 }
 
 /**
+ * True when the first occurrence of `surfaceForm` in `japanese` is
+ * immediately followed by a hiragana mora — a grammatical particle, copula,
+ * or auxiliary in the same accent phrase, i.e. something for an odaka /
+ * heiban word's downstep to actually land on. Punctuation, a trailing
+ * pause, the end of the sentence, or the next content word's kanji all read
+ * as "nothing follows."
+ */
+function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean {
+  const [, target, after] = splitOnSurfaceForm(japanese, surfaceForm);
+  if (!target) return false;
+  return /^[ぁ-ゟ]/.test(after);
+}
+
+/**
  * Pure filter over already-fetched vocabulary-target candidates (no DB
  * access needed), mirroring getSentenceConjugationCandidates's shape —
  * a word is a candidate only if it has dictionary pitch-accent data and a
@@ -378,6 +392,16 @@ interface PitchAccentReviewCandidate {
  * getWordListeningCandidates) — heiban and odaka share the word-internal
  * shape, so a native clip (whose trailing particle disambiguates them by
  * ear) is what makes the card answerable at all.
+ *
+ * That only helps when the clip actually *has* a following mora for the
+ * downstep to land on. When the accent sits on the word's edge — heiban
+ * (drop 0) or odaka (drop === mora count) — and this occurrence is
+ * phrase-final (nothing voiced follows before punctuation / a pause / the
+ * next content word), the two contours are identical by ear, so the card is
+ * skipped the same way a missing recording skips it (user request,
+ * 2026-09-07; cf. the "gate cards that can't populate their scaffolding"
+ * stance). An internal drop (atamadaka / nakadaka) is audible on the word
+ * alone and needs no following particle.
  *
  * The word must also appear in its *citation form* in this sentence: the
  * choices and the ✓/✗ key off the dictionary reading's morae and downstep,
@@ -411,6 +435,12 @@ function getPitchAccentReviewCandidates(
     const morae = segmentIntoMorae(dictionaryReading).map((unit) => unit.text);
     if (morae.length === 0) continue;
     const correctPosition = Math.max(0, Math.min(positions[0]!, morae.length));
+    // Edge accent (heiban / odaka) is only audible on what follows the word;
+    // skip the occurrence when nothing does (see doc comment).
+    const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
+    if (isEdgeAccent && !hasFollowingVoicedMora(candidate.sentence.japanese, candidate.surfaceForm)) {
+      continue;
+    }
     result.push({
       vocabularyItem: candidate.vocabularyItem,
       sentence: candidate.sentence,

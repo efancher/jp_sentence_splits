@@ -1378,6 +1378,92 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('does not seed an edge-accent (odaka) pitch card when the word is phrase-final', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // 下手 (へた) is odaka [2] on a 2-mora word — the downstep only lands on a
+    // following particle. Here it's sentence-final, so nothing disambiguates
+    // it from heiban by ear.
+    await db.sentences.update('sent-1', { japanese: '説明が上手い、下手。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-heta',
+      expression: '下手',
+      reading: 'へた',
+      meaning: 'unskillful',
+      partOfSpeech: 'adj-na',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-heta',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-heta',
+      surfaceForm: '下手',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressAudioCards('sent-1', 'sv-heta');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(/Reveal reading|Reveal dictionary reading/);
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-heta')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+    });
+  });
+
+  it('seeds an edge-accent (odaka) pitch card when a particle follows the word', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // Same 下手 [2], but now followed by は — the downstep has somewhere to land.
+    await db.sentences.update('sent-1', { japanese: '下手は下手なりに頑張る。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-heta-ok',
+      expression: '下手',
+      reading: 'へた',
+      meaning: 'unskillful',
+      partOfSpeech: 'adj-na',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-heta-ok',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-heta-ok',
+      surfaceForm: '下手',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-heta-ok');
+    await suppressAudioCards('sent-1', 'sv-heta-ok');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(/Listen, then mark where it falls/);
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-heta-ok')
+        .toArray();
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(true);
+    });
+  });
+
   it('does not seed a pitch-accent card when the word appears inflected in the sentence', async () => {
     await seedBookWithSentence();
     const db = getDb();
@@ -1429,6 +1515,9 @@ describe('ReviewPage', () => {
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
+    // 目 is odaka-shaped (1-mora [1]); the card only surfaces when a particle
+    // follows for the downstep to land on.
+    await db.sentences.update('sent-1', { japanese: '目が赤いです。' });
 
     // 目 (め) — 1 mora: "no fall" and "falls after mora 1", nothing else.
     await db.vocabularyItems.add({

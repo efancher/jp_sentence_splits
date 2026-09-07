@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-06.
+Last updated: 2026-09-07.
 
 ## Where things stand
 
@@ -32,6 +32,19 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-07 — `pitch_accent` card skips phrase-final edge-accent words
+  (user ask: "how would I tell it's odaka from the recording since heta is
+  at the end of the sentence, so there's nothing to go down to").** Heiban
+  (drop 0) and odaka (drop === mora count) are identical on the word's own
+  morae — the fall only surfaces on whatever is voiced after the word. New
+  `hasFollowingVoicedMora` (in `ReviewPage.tsx`) requires a hiragana mora
+  (particle / copula / auxiliary) immediately after the word's occurrence
+  before `getPitchAccentReviewCandidates` will emit an edge-accent card;
+  atamadaka / nakadaka (internal drop, audible on the word alone) are
+  unaffected. Same "skip, don't show degraded" treatment as the missing-
+  reference-recording gate. Already-seeded study items for now-ineligible
+  words just fall dormant (no cleanup, mirrors the audio gate).
 
 - **2026-09-07 — Kana ruler under the AnalysisPanel pitch contours (user
   ask: "line up the hiragana under those so I have a better idea of what

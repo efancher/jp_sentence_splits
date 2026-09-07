@@ -871,8 +871,14 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   (`SentenceAudio`) *and* where the word appears in its **citation form**
   (an inflected occurrence — 速く for 速い — would loop native audio whose
   morae/accent no longer match the dictionary contour the choices key off;
-  a kana/kanji spelling difference for the same form is still fine); a
-  dictionary-contour-only card was dropped as not worth its queue slot, and
+  a kana/kanji spelling difference for the same form is still fine) *and*,
+  when the accent sits on the word's edge (heiban, drop 0; or odaka, drop
+  === mora count), where a hiragana mora (particle / copula / auxiliary)
+  follows that occurrence in the sentence — the two contours are identical
+  on the word's own morae, so a phrase-final clip can't disambiguate them by
+  ear (`hasFollowingVoicedMora`; user request, 2026-09-07). An internal drop
+  (atamadaka / nakadaka) is audible on the word alone and skips that check.
+  A dictionary-contour-only card was dropped as not worth its queue slot, and
   here the clip is load-bearing. **Audio-first
   perception task**: `PitchAccentNativeAudio` (below) plays *above* the
   question so the learner loops the native word, then marks **where the
