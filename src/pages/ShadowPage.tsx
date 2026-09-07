@@ -728,6 +728,7 @@ export function ShadowPage() {
                       attemptCreatedAt={attempt.createdAt}
                       learnerBlob={attempt.blob}
                       transcript={sentence.japanese}
+                      moraUnits={moraUnits}
                       hasReading={Boolean(sentence.readingOnly || sentence.inlineReading)}
                       durationHintSeconds={attempt.durationMs / 1000}
                       targetRange={targetRange ?? undefined}

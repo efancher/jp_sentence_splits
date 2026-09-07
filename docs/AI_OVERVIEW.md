@@ -1188,6 +1188,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
+  - **Kana ruler under the pitch contours** — once the forced alignment is
+    available, `buildKanaTimeline` (`src/lib/kanaTimeline.ts`) lays the
+    sentence's kana along each contour's linear time axis, one label per
+    aligned word, positioned by the word's `start`/`end` over the contour
+    duration. Word→kana split is by character-count proportion onto the mora
+    sequence (same approximation as `SyncedShadowText`); reference side is
+    offset-corrected for a practice-target slice. Degrades to nothing when
+    the aligner is unreachable. Not on the waveforms — their peaks are
+    edge-trimmed and mode-warped, so there's no honest linear time axis.
   - **Spectrogram** — a "Show spectrogram" toggle draws the reference clip
     and the learner attempt as stacked grayscale spectrograms (0–4 kHz,
     louder = brighter) from a hand-rolled radix-2 FFT + Hann STFT

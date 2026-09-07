@@ -27,6 +27,8 @@ import {
   type PitchAccentTarget,
 } from '../lib/pitchAccentObservations';
 import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import type { MoraUnit } from '../lib/mora';
+import { buildKanaTimeline } from '../lib/kanaTimeline';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
 import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
@@ -114,16 +116,62 @@ function PeakWaveform({ peaks, label }: { peaks: WavePeak[]; label: string }) {
   );
 }
 
+/**
+ * Kana lined up under a pitch contour's linear time axis, so it's clear which
+ * syllables the rises and falls belong to. Only rendered once server forced
+ * alignment is available; degrades to nothing otherwise.
+ */
+function KanaTimelineRow({
+  entries,
+  label,
+}: {
+  entries: ReturnType<typeof buildKanaTimeline>;
+  label: string;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <div
+      aria-label={label}
+      style={{ position: 'relative', width: '100%', height: '1.4em', marginTop: 2 }}
+    >
+      {entries.map((entry, index) => (
+        <span
+          key={`${entry.text}-${index}`}
+          className="jp"
+          title={entry.text}
+          style={{
+            position: 'absolute',
+            left: `${entry.leftPct}%`,
+            width: `${Math.min(entry.widthPct, 100 - entry.leftPct)}%`,
+            textAlign: 'center',
+            fontSize: '0.72em',
+            lineHeight: 1.3,
+            color: 'var(--text-muted)',
+            borderLeft: '1px solid var(--border)',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'clip',
+          }}
+        >
+          {entry.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function PitchCanvas({
   pitch,
   label,
   mode,
   dashed,
+  kana,
 }: {
   pitch?: PitchAnalysisPayload;
   label: string;
   mode: 'hz' | 'semitones';
   dashed?: boolean;
+  kana?: ReturnType<typeof buildKanaTimeline>;
 }) {
   const path = useMemo(() => {
     if (!pitch || pitch.frames.length === 0) return '';
@@ -151,6 +199,7 @@ function PitchCanvas({
       <span className="muted">{label}</span>
       <svg
         viewBox={`0 0 ${PITCH_WIDTH} ${PITCH_HEIGHT}`}
+        preserveAspectRatio="none"
         role="img"
         aria-label={`${label} pitch contour`}
         style={{ width: '100%', height: PITCH_HEIGHT, color: 'var(--text-muted)' }}
@@ -163,6 +212,7 @@ function PitchCanvas({
           points={path}
         />
       </svg>
+      {kana ? <KanaTimelineRow entries={kana} label={`${label} syllables`} /> : null}
     </div>
   );
 }
@@ -175,6 +225,7 @@ export function AnalysisPanel({
   attemptCreatedAt,
   learnerBlob,
   transcript,
+  moraUnits,
   hasReading,
   durationHintSeconds,
   targetRange,
@@ -193,6 +244,8 @@ export function AnalysisPanel({
   learnerBlob: Blob;
   /** Plain Japanese sentence text sent to the alignment service. */
   transcript: string;
+  /** Mora/kana segmentation of the sentence reading, for the pitch-contour syllable ruler. */
+  moraUnits: MoraUnit[];
   hasReading: boolean;
   durationHintSeconds: number;
   /** Restricts the reference side to this sub-range (Phase 8.2's practice-target isolation). */
@@ -422,6 +475,25 @@ export function AnalysisPanel({
       referenceTimeOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
     });
   }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
+
+  const referenceKanaTimeline = useMemo(() => {
+    if (!serverAlignment?.reference || !referencePitch) return undefined;
+    return buildKanaTimeline({
+      words: serverAlignment.reference.words,
+      moraUnits,
+      durationSeconds: referencePitch.durationSeconds,
+      timeOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
+    });
+  }, [serverAlignment, referencePitch, moraUnits, targetRange]);
+
+  const learnerKanaTimeline = useMemo(() => {
+    if (!serverAlignment?.learner || !learnerPitch) return undefined;
+    return buildKanaTimeline({
+      words: serverAlignment.learner.words,
+      moraUnits,
+      durationSeconds: learnerPitch.durationSeconds,
+    });
+  }, [serverAlignment, learnerPitch, moraUnits]);
 
   const asrObservations = useMemo(() => {
     if (!serverAlignment?.reference || !transcribedText) return [];
@@ -775,8 +847,26 @@ export function AnalysisPanel({
           Hertz
         </button>
       </div>
-      <PitchCanvas pitch={referencePitch} label="Reference pitch" mode={pitchMode} />
-      <PitchCanvas pitch={learnerPitch} label="Learner pitch" mode={pitchMode} dashed />
+      <PitchCanvas
+        pitch={referencePitch}
+        label="Reference pitch"
+        mode={pitchMode}
+        kana={referenceKanaTimeline}
+      />
+      <PitchCanvas
+        pitch={learnerPitch}
+        label="Learner pitch"
+        mode={pitchMode}
+        dashed
+        kana={learnerKanaTimeline}
+      />
+      {(referenceKanaTimeline?.length ?? 0) > 0 || (learnerKanaTimeline?.length ?? 0) > 0 ? (
+        <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
+          Kana under each contour are placed from the server word alignment, so
+          they mark roughly where each syllable falls — compare where your rises
+          and falls sit against the reference&rsquo;s.
+        </p>
+      ) : null}
       <div className="stack">
         {observations.map((item) => (
           <article key={item.id} className="stack" style={{ gap: 0 }}>

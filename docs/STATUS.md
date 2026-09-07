@@ -33,6 +33,26 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-07 — Kana ruler under the AnalysisPanel pitch contours (user
+  ask: "line up the hiragana under those so I have a better idea of what
+  syllables relate to the pitches").** New pure `buildKanaTimeline`
+  (`src/lib/kanaTimeline.ts`) places one kana label per forced-alignment
+  word along a linear time axis: each word's share of the total audible
+  transcript character count is mapped onto the sentence's mora sequence by
+  proportion (same approximation as `SyncedShadowText`'s karaoke slice — no
+  fragile cross-tokenization string matching), positioned by the word's
+  `start`/`end` seconds over the contour's `durationSeconds`. Reference side
+  subtracts `targetRange.startMs` when a practice-target slice is active and
+  drops words outside the window; falls back to the raw aligner token when
+  the sentence has no reading. `AnalysisPanel` renders it via a
+  `KanaTimelineRow` under each `PitchCanvas` (both `PitchCanvas` SVGs gained
+  `preserveAspectRatio="none"` so x is truly linear at any width, matching
+  `MeasuredPitchContour`). Only appears once the server forced alignment is
+  `ready` — degrades to nothing off-tailnet. `moraUnits` now threads from
+  `ShadowPage` into `AnalysisPanel`. Waveforms deliberately skipped (their
+  peaks are edge-trimmed / mode-warped, so no honest linear axis).
+  `tests/kanaTimeline` new (+5).
+
 - **2026-09-07 — Measured native pitch contour on the non-audio review
   cards (user ask: they wanted the real speaker contour, not a symbolic
   one, on "the review cards where it's only shown the h/l for the
