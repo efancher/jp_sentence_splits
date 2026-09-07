@@ -59,6 +59,22 @@ is trimmed.)
   Settings copy updated). `tests/pitchAccentDrill.test.ts` +4 (new
   `getPitchAccentDrillWords` describe), `tests/pitchAccentDrillPage.test.tsx`
   rewritten for the no-predict flow + word mode.
+  **Follow-up same day (user: "if a word has a particle after it, could we
+  include that, since particles often take the pitch accent of the preceding
+  word"):** single-word mode now drills `surfaceForm + followingParticle` —
+  the word plus the run of single-kana bunsetsu particles after it in the
+  example sentence (new exported `trailingBunsetsuParticles` in
+  `sentencePitchAccent.ts`; `PitchAccentDrillWord.followingParticle`). The
+  particle gets its dictionary H/L mark (via `SentencePitchAccentText`, same
+  as sentence mode) and is included in the recording transcript so a
+  phrase-final heiban/odaka fall is actually voiced.
+  `getPitchAccentDrillWords` now scores candidate occurrences
+  `(hasParticle?2:0) + (isDictForm?1:0)`, earliest-first tiebreak, so it
+  prefers an example where the word carries a particle. Note:
+  `buildPitchAccentShapeObservations` still only classifies the word's own
+  morae, so the *scorer* can't yet use the particle to tell heiban from
+  odaka — display + transcript only for now. `tests/pitchAccentDrill.test.ts`
+  +1, `tests/pitchAccentDrillPage.test.tsx` +1.
 
 - **2026-09-07 — `pitch_accent` card skips phrase-final edge-accent words
   (user ask: "how would I tell it's odaka from the recording since heta is

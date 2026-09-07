@@ -130,7 +130,11 @@ export function PitchAccentDrillPage() {
     mode === 'sentence' ? currentSentence?.sentence.id : currentWord?.vocabularyItem.id;
 
   const transcript =
-    mode === 'sentence' ? currentSentence?.sentence.japanese : currentWord?.surfaceForm;
+    mode === 'sentence'
+      ? currentSentence?.sentence.japanese
+      : currentWord
+        ? currentWord.surfaceForm + currentWord.followingParticle
+        : undefined;
 
   const analysisTargets = useMemo<PitchAccentTarget[]>(() => {
     if (mode === 'sentence') return currentSentence?.targets ?? [];
@@ -367,13 +371,13 @@ function WordPrompt({
   targets: SentencePitchAccentTarget[];
   learnerClasses?: Map<string, MoraPitchClass[]>;
 }) {
-  const { vocabularyItem: item, sentence, surfaceForm } = word;
+  const { vocabularyItem: item, sentence, surfaceForm, followingParticle } = word;
   const [before, marked, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   return (
     <div className="stack" style={{ gap: '0.35rem' }}>
       <SentencePitchAccentText
         key={item.id}
-        japanese={surfaceForm}
+        japanese={surfaceForm + followingParticle}
         targets={targets}
         learnerClassesBySurface={learnerClasses}
       />

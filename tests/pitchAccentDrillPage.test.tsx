@@ -173,6 +173,21 @@ describe('PitchAccentDrillPage', () => {
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
   });
 
+  it('single-word mode includes the particle that follows the word', async () => {
+    await seedEligibleSentence({
+      japanese: '犬が好き。',
+      expression: '犬',
+      reading: 'いぬ',
+      surfaceForm: '犬',
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Single words' }));
+
+    // The drilled unit is 犬 + が, not bare 犬.
+    expect(await screen.findByText('犬が')).toBeInTheDocument();
+  });
+
   it('single-word mode explains what is needed when there are no eligible words', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Single words' }));

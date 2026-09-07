@@ -70,6 +70,24 @@ const BUNSETSU_PARTICLE_KANA = new Set(
   ['は', 'が', 'を', 'に', 'へ', 'と', 'も', 'の', 'や', 'か', 'ね', 'よ', 'わ', 'さ', 'ぞ', 'ぜ'],
 );
 
+/**
+ * The run of single-kana bunsetsu particles (`BUNSETSU_PARTICLE_KANA`) that
+ * immediately follows `from` in `text` — the same "particle attaches to the
+ * preceding accent phrase" concession `buildSentencePitchAccents` applies,
+ * exposed for callers that only have a bare word + its sentence (the
+ * single-word pitch-accent drill). Stops at the first non-particle-kana
+ * character (kanji, okurigana, punctuation, space).
+ */
+export function trailingBunsetsuParticles(text: string, from: number): string {
+  let out = '';
+  for (let pos = from; pos < text.length; pos += 1) {
+    const char = text[pos]!;
+    if (!BUNSETSU_PARTICLE_KANA.has(char)) break;
+    out += char;
+  }
+  return out;
+}
+
 export interface SentencePitchAccentTarget {
   surfaceForm: string;
   reading: string;

@@ -1182,7 +1182,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     (`getPitchAccentDrillWords`) walks one proficient, pitch-carrying word
     at a time with its example sentence as context — *not* gated on the
     sentence lacking audio (you're drilling the word alone), so a much
-    larger pool. Either way you record (the sentence, or just the word) and
+    larger pool. The single-word unit is the word **plus any trailing
+    bunsetsu particle** (`followingParticle` / `trailingBunsetsuParticles`) —
+    shown with the particle's dictionary mark and recorded together, since a
+    phrase-final fall only lands on the particle; the example occurrence is
+    chosen to prefer one that carries a particle. Either way you record (the
+    sentence, or just the word + particle) and
     each target word's realized contour is scored against the dictionary
     shape (same `buildPitchAccentShapeObservations`, learner alignment only)
     and shown as your measured H/L line under the dictionary row (same

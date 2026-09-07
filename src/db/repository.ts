@@ -65,6 +65,7 @@ import {
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
+import { trailingBunsetsuParticles } from '../lib/sentencePitchAccent';
 import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
@@ -3662,6 +3663,14 @@ export interface PitchAccentDrillWord {
   sentence: Sentence;
   /** The word's surface form as it appears in that sentence. */
   surfaceForm: string;
+  /**
+   * The run of single-kana bunsetsu particles that follows the word in that
+   * sentence (`は`/`が`/`を`/… — `trailingBunsetsuParticles`), or `''`. The
+   * particle carries the tail of the word's accent phrase, so it's the only
+   * place a phrase-final heiban/odaka fall is audible — the drill shows and
+   * records `surfaceForm + followingParticle`.
+   */
+  followingParticle: string;
 }
 
 /**
@@ -3675,8 +3684,9 @@ export interface PitchAccentDrillWord {
  * unlike `getPitchAccentDrillSentences` — you're drilling the word in
  * isolation, not the sentence, so the overlap with the reference-audio-gated
  * `pitch_accent` SRS card doesn't apply. That also makes the pool much
- * larger. One entry per distinct word; the example sentence is the word's
- * own dictionary-form occurrence when there is one, else its earliest.
+ * larger. One entry per distinct word; the example occurrence is picked to
+ * prefer (1) one with a trailing bunsetsu particle (so a phrase-final fall
+ * is audible), then (2) the word's dictionary form, then (3) the earliest.
  */
 export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]> {
   const db = getDb();
@@ -3703,7 +3713,13 @@ export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]
       .map((row) => [row.id, row]),
   );
 
-  const bestByItemId = new Map<string, { sentence: Sentence; surfaceForm: string }>();
+  interface Candidate {
+    sentence: Sentence;
+    surfaceForm: string;
+    followingParticle: string;
+    score: number;
+  }
+  const bestByItemId = new Map<string, Candidate>();
   for (const link of links) {
     if (!link.surfaceForm) continue;
     if (!proficientIds.has(link.vocabularyItemId)) continue;
@@ -3711,27 +3727,39 @@ export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]
     if (!item) continue;
     const sentence = sentenceById.get(link.sentenceId);
     if (!sentence) continue;
+
+    const occurrence = sentence.japanese.indexOf(link.surfaceForm);
+    const followingParticle =
+      occurrence >= 0
+        ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
+        : '';
+    const score =
+      (followingParticle ? 2 : 0) + (link.surfaceForm === item.expression ? 1 : 0);
+
     const current = bestByItemId.get(link.vocabularyItemId);
-    if (!current) {
-      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
-      continue;
-    }
-    // Prefer the dictionary-form occurrence, then the earliest one.
-    const currentIsDictForm = current.surfaceForm === item.expression;
-    const candidateIsDictForm = link.surfaceForm === item.expression;
-    if (candidateIsDictForm && !currentIsDictForm) {
-      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
-    } else if (
-      candidateIsDictForm === currentIsDictForm &&
-      sentence.firstOccurrenceIndex < current.sentence.firstOccurrenceIndex
+    if (
+      !current ||
+      score > current.score ||
+      (score === current.score &&
+        sentence.firstOccurrenceIndex < current.sentence.firstOccurrenceIndex)
     ) {
-      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
+      bestByItemId.set(link.vocabularyItemId, {
+        sentence,
+        surfaceForm: link.surfaceForm,
+        followingParticle,
+        score,
+      });
     }
   }
 
   const result: PitchAccentDrillWord[] = [];
-  for (const [itemId, { sentence, surfaceForm }] of bestByItemId) {
-    result.push({ vocabularyItem: pitchCarryingItemById.get(itemId)!, sentence, surfaceForm });
+  for (const [itemId, { sentence, surfaceForm, followingParticle }] of bestByItemId) {
+    result.push({
+      vocabularyItem: pitchCarryingItemById.get(itemId)!,
+      sentence,
+      surfaceForm,
+      followingParticle,
+    });
   }
   result.sort((a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex);
   return result;

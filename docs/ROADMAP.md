@@ -134,7 +134,8 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   **Single words** mode alongside Full sentence: one proficient,
   pitch-carrying word at a time (`getPitchAccentDrillWords`, *not* gated on
   the example sentence lacking audio, so a much larger pool), record just
-  the word, same dictionary-shape check. Quiet mode no longer touches this
+  the word (+ any trailing bunsetsu particle — it carries the phrase-final
+  fall), same dictionary-shape check. Quiet mode no longer touches this
   page.
 - [x] **Retention / progress-over-time view.** (2026-09-01)
   `src/lib/progressReport.ts` (`buildProgressReport`, pure) +

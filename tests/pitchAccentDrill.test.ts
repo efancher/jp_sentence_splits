@@ -179,6 +179,64 @@ describe('getPitchAccentDrillWords', () => {
     expect(await getPitchAccentDrillWords()).toEqual([]);
   });
 
+  it('includes the trailing bunsetsu particle and prefers an occurrence that has one', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.vocabularyItems.add({
+      id: 'vocab-inu',
+      expression: '犬',
+      reading: 'いぬ',
+      meaning: 'dog',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.add({
+      id: 'si-inu',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-inu',
+      activityType: 'reading_retrieval',
+      fsrsState: PROFICIENT_FSRS,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Earliest occurrence: no particle (犬。). Later occurrence: 犬が.
+    for (const [id, japanese, index] of [
+      ['inu-bare', '犬。', 0],
+      ['inu-ga', '犬が好き。', 3],
+    ] as const) {
+      await db.sentences.add({
+        id,
+        normalizedKey: id,
+        japanese,
+        readingOnly: '',
+        inlineReading: '',
+        translation: '',
+        targetVocabulary: [],
+        vocabularySuggestions: [],
+        sourceReferences: [],
+        conflicts: [],
+        firstOccurrenceIndex: index,
+        importBatchIds: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.sentenceVocabulary.add({
+        id: `${id}-link`,
+        sentenceId: id,
+        vocabularyItemId: 'vocab-inu',
+        surfaceForm: '犬',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const result = await getPitchAccentDrillWords();
+    expect(result).toHaveLength(1);
+    expect(result[0]!.sentence.id).toBe('inu-ga');
+    expect(result[0]!.followingParticle).toBe('が');
+  });
+
   it('returns one entry per distinct word, ordered by the example sentence position', async () => {
     await seedEligibleSentence('s2');
     await seedEligibleSentence('s1');
