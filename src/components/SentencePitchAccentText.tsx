@@ -32,10 +32,13 @@ export function SentencePitchAccentText({
   japanese,
   targets,
   learnerClassesBySurface,
+  learnerFollowingBySurface,
 }: {
   japanese: string;
   targets: SentencePitchAccentTarget[];
   learnerClassesBySurface?: Map<string, MoraPitchClass[]>;
+  /** Learner's measured level on each word's attached particle, keyed by surface form. */
+  learnerFollowingBySurface?: Map<string, MoraPitchClass>;
 }) {
   const segments = useMemo<Segment[]>(() => {
     const words = buildSentencePitchAccents(japanese, targets)
@@ -85,6 +88,7 @@ export function SentencePitchAccentText({
                 <PitchAccentWordMarks
                   word={segment.word}
                   learnerClasses={learnerClassesBySurface?.get(segment.word.surfaceForm)}
+                  learnerFollowingClass={learnerFollowingBySurface?.get(segment.word.surfaceForm)}
                   showLearner={showLearner}
                 />
               </span>

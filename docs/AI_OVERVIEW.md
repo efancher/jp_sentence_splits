@@ -883,8 +883,8 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   question so the learner loops the native word, then marks **where the
   pitch falls** — choices `0..moraCount`, each drawn as a whole contour in
   NHK/OJAD textbook notation (`PitchChoiceContour`,
-  `src/components/PitchChoiceContour.tsx`, shared with the pitch-accent
-  drill's predict step: overline over the high morae dropping at the downstep, trailing
+  `src/components/PitchChoiceContour.tsx`: overline over the high morae
+  dropping at the downstep, trailing
   particle dot to split heiban from odaka) with a numbered caption ("Stays
   high (no fall)" / "Falls after mora 2" / …), not the four category names.
   This puts the ear before the metalabel and fully specifies the contour (a
@@ -1161,16 +1161,24 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     `VocabularyItem.pitchAccentPositions`) rather than a reference
     recording, so it needs no reference clip/`SentenceAudio` at all —
     only the sentence's confirmed vocabulary and the learner's own
-    alignment. Deliberately collapses the odaka/heiban distinction (both
-    produce an identical shape within a single word's own span) rather
-    than guessing at it. Renders as its own "Pitch accent (dictionary)"
-    section in `AnalysisPanel.tsx` and feeds the same ranking as every
-    other observation kind. That section also shows a second H/L line
-    directly under the dictionary one — the learner's own measured per-mora
-    shape (`buildLearnerPitchAccentShapes`, passed to
-    `SentencePitchAccentRow` as `learnerClassesBySurface`) — so a
+    alignment. Odaka and heiban are identical within a word's own span, so
+    they're collapsed *unless* the target carries a `followingMora` (the
+    attached bunsetsu particle, from `trailingBunsetsuParticles`) and that
+    particle's pitch can be measured in the recording: then
+    `expectedPitchShape(moraCount, position, true)` appends the particle's
+    expected level and `classifyLearnerMorae` measures it (classed 'l' only
+    on a clear ≥2-semitone drop, biased toward 'h' so declination isn't
+    misread as odaka), so the scorer can say "the fall belongs on the
+    particle, you kept it up." Renders as its own "Pitch accent
+    (dictionary)" section in `AnalysisPanel.tsx` and feeds the same ranking
+    as every other observation kind. That section also shows a second H/L
+    line directly under the dictionary one — the learner's own measured
+    per-mora shape (`buildLearnerPitchAccentShapes`, passed to
+    `SentencePitchAccentRow` as `learnerClassesBySurface`, with the
+    measured particle level in `learnerFollowingBySurface`) — so a
     correctly-produced accent is visible as a match, not just silence;
-    disagreeing morae are flagged and unvoiced ones show `·`.
+    disagreeing morae (and the particle) are flagged and unvoiced ones
+    show `·`.
     The same `pitchAccentPositions` data also
     feeds two other, independent consumers — the `pitch_accent` SRS review
     activity type (§4), and the **audio-less pitch-accent drill**

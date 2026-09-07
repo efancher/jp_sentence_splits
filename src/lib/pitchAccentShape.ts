@@ -12,19 +12,21 @@
  * graphs — deliberately not ported, this module only needs the
  * classification).
  *
- * Known, deliberate ambiguity: odaka (尾高, drop right after the last
- * mora) and heiban (平板, no drop) produce the IDENTICAL shape within a
- * word's own span — ['l', 'h', 'h', ...] either way. They only differ in
- * whether a *following* particle stays high (heiban) or drops (odaka),
- * which is outside any single word's own frames. `detectedDropPosition`
- * therefore can never report a detected "odaka" — collapsing that
- * distinction is what lets it stay honest about what's actually
- * observable from one word's audio, rather than guessing.
- * `pitchAccentObservations.ts` should compare
+ * Known ambiguity, only resolvable with the following mora: odaka (尾高,
+ * drop right after the last mora) and heiban (平板, no drop) produce the
+ * IDENTICAL shape within a word's own span — ['l', 'h', 'h', ...] either
+ * way. They differ only in whether a *following* particle stays high
+ * (heiban) or drops (odaka). When the caller has actually measured that
+ * following mora it passes `hasFollowingMora` to `expectedPitchShape`,
+ * which then appends the particle's level ('h' for heiban, 'l' for every
+ * accented pattern) so `detectedDropPosition` can report an odaka drop at
+ * `moraCount`. With the 2-arg call (no following mora observed) the two
+ * stay collapsed — `detectedDropPosition` can't report "odaka" and
+ * `pitchAccentObservations.ts` compares
  * `detectedDropPosition(learnerClasses)` against
  * `detectedDropPosition(expectedPitchShape(moraCount, dictionaryPosition))`
- * (not the raw dictionary position) so an odaka target is never scored as
- * a mismatch against a correctly-produced heiban-shaped attempt.
+ * so an odaka target is never scored as a mismatch against a
+ * correctly-produced heiban-shaped attempt.
  */
 
 export type MoraPitchClass = 'h' | 'l';
@@ -35,25 +37,39 @@ export type PitchAccentPattern = 'heiban' | 'atamadaka' | 'nakadaka' | 'odaka';
  * Expected relative high/low per mora for a dictionary accent `position`
  * (0 = heiban, 1 = atamadaka, N = nakadaka, N >= moraCount = odaka) over
  * `moraCount` morae.
+ *
+ * When `hasFollowingMora` is true the result has one extra trailing
+ * element for the mora right after the word (a grammatical particle in the
+ * same accent phrase): 'h' for heiban — the pitch stays up — and 'l' for
+ * every accented pattern, which has already dropped by then. This is the
+ * only cue that separates odaka from heiban (see module doc); pass it only
+ * when that mora was actually measured.
  */
-export function expectedPitchShape(moraCount: number, position: number): MoraPitchClass[] {
+export function expectedPitchShape(
+  moraCount: number,
+  position: number,
+  hasFollowingMora = false,
+): MoraPitchClass[] {
   if (moraCount <= 0) return [];
-  if (position <= 0) {
-    // Heiban (and, within the word's own span, odaka — see module doc).
-    return moraCount > 1 ? ['l', ...(Array(moraCount - 1).fill('h') as MoraPitchClass[])] : ['h'];
-  }
-  if (position === 1) {
-    return moraCount > 1 ? ['h', ...(Array(moraCount - 1).fill('l') as MoraPitchClass[])] : ['h'];
-  }
-  const dropAfter = Math.min(position, moraCount);
-  const classes: MoraPitchClass[] = [];
-  for (let index = 0; index < moraCount; index += 1) {
-    const moraNumber = index + 1;
-    if (moraNumber === 1) classes.push('l');
-    else if (moraNumber <= dropAfter) classes.push('h');
-    else classes.push('l');
-  }
-  return classes;
+  const base = ((): MoraPitchClass[] => {
+    if (position <= 0) {
+      // Heiban (and, within the word's own span, odaka — see module doc).
+      return moraCount > 1 ? ['l', ...(Array(moraCount - 1).fill('h') as MoraPitchClass[])] : ['h'];
+    }
+    if (position === 1) {
+      return moraCount > 1 ? ['h', ...(Array(moraCount - 1).fill('l') as MoraPitchClass[])] : ['h'];
+    }
+    const dropAfter = Math.min(position, moraCount);
+    const classes: MoraPitchClass[] = [];
+    for (let index = 0; index < moraCount; index += 1) {
+      const moraNumber = index + 1;
+      if (moraNumber === 1) classes.push('l');
+      else if (moraNumber <= dropAfter) classes.push('h');
+      else classes.push('l');
+    }
+    return classes;
+  })();
+  return hasFollowingMora ? [...base, position <= 0 ? 'h' : 'l'] : base;
 }
 
 export function pitchPatternLabel(position: number, moraCount: number): PitchAccentPattern {

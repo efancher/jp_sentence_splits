@@ -65,6 +65,8 @@ type AnalysisState =
       observations: TimingObservation[];
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
+      /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
+      learnerFollowingBySurface: Map<string, MoraPitchClass>;
       /** Accent-bearing target words in the take — the denominator for "measured N of M". */
       scorableCount: number;
     };
@@ -86,6 +88,7 @@ async function analyzeRecording(
         surfaceForm: target.surfaceForm,
         reading: target.reading,
         pitchAccentPositions: target.pitchAccentPositions,
+        followingMora: target.followingMora,
       }));
     const observations = buildPitchAccentShapeObservations({
       learnerWords: alignment.words,
@@ -93,17 +96,20 @@ async function analyzeRecording(
       targets: scorableTargets,
     });
     const learnerClassesBySurface = new Map<string, MoraPitchClass[]>();
+    const learnerFollowingBySurface = new Map<string, MoraPitchClass>();
     for (const shape of buildLearnerPitchAccentShapes({
       learnerWords: alignment.words,
       learnerPitch: pitch,
       targets: scorableTargets,
     })) {
       learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
+      if (shape.followingClass) learnerFollowingBySurface.set(shape.surfaceForm, shape.followingClass);
     }
     return {
       status: 'done',
       observations,
       learnerClassesBySurface,
+      learnerFollowingBySurface,
       scorableCount: scorableTargets.length,
     };
   } catch {
@@ -141,7 +147,14 @@ export function PitchAccentDrillPage() {
     if (!currentWord) return [];
     const { reading, pitchAccentPositions } = currentWord.vocabularyItem;
     if (!pitchAccentPositions?.length) return [];
-    return [{ surfaceForm: currentWord.surfaceForm, reading, pitchAccentPositions }];
+    return [
+      {
+        surfaceForm: currentWord.surfaceForm,
+        reading,
+        pitchAccentPositions,
+        followingMora: currentWord.followingParticle,
+      },
+    ];
   }, [mode, currentSentence, currentWord]);
 
   const contourTargets = useMemo<SentencePitchAccentTarget[]>(
@@ -202,6 +215,10 @@ export function PitchAccentDrillPage() {
   const learnerClasses =
     analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
       ? analysis.learnerClassesBySurface
+      : undefined;
+  const learnerFollowing =
+    analysis.status === 'done' && analysis.learnerFollowingBySurface.size > 0
+      ? analysis.learnerFollowingBySurface
       : undefined;
 
   return (
@@ -274,12 +291,14 @@ export function PitchAccentDrillPage() {
                 sentence={currentSentence.sentence}
                 targets={contourTargets}
                 learnerClasses={learnerClasses}
+                learnerFollowing={learnerFollowing}
               />
             ) : currentWord ? (
               <WordPrompt
                 word={currentWord}
                 targets={contourTargets}
                 learnerClasses={learnerClasses}
+                learnerFollowing={learnerFollowing}
               />
             ) : null}
 
@@ -342,10 +361,12 @@ function SentencePrompt({
   sentence,
   targets,
   learnerClasses,
+  learnerFollowing,
 }: {
   sentence: Sentence;
   targets: SentencePitchAccentTarget[];
   learnerClasses?: Map<string, MoraPitchClass[]>;
+  learnerFollowing?: Map<string, MoraPitchClass>;
 }) {
   return (
     <div className="stack" style={{ gap: '0.35rem' }}>
@@ -354,6 +375,7 @@ function SentencePrompt({
         japanese={sentence.japanese}
         targets={targets}
         learnerClassesBySurface={learnerClasses}
+        learnerFollowingBySurface={learnerFollowing}
       />
       {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
       <MarksCaption showLearner={!!learnerClasses} />
@@ -366,10 +388,12 @@ function WordPrompt({
   word,
   targets,
   learnerClasses,
+  learnerFollowing,
 }: {
   word: PitchAccentDrillWord;
   targets: SentencePitchAccentTarget[];
   learnerClasses?: Map<string, MoraPitchClass[]>;
+  learnerFollowing?: Map<string, MoraPitchClass>;
 }) {
   const { vocabularyItem: item, sentence, surfaceForm, followingParticle } = word;
   const [before, marked, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
@@ -380,6 +404,7 @@ function WordPrompt({
         japanese={surfaceForm + followingParticle}
         targets={targets}
         learnerClassesBySurface={learnerClasses}
+        learnerFollowingBySurface={learnerFollowing}
       />
       <div className="muted">
         {item.reading}

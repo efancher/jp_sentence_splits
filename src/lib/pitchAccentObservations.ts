@@ -35,10 +35,25 @@ export interface PitchAccentTarget {
   surfaceForm: string;
   reading: string;
   pitchAccentPositions: number[];
+  /**
+   * The run of single-kana bunsetsu particles right after this occurrence
+   * in the sentence (`は`/`が`/`を`/… — `trailingBunsetsuParticles`), if any.
+   * When present and its pitch can be measured in the recording, it lets the
+   * scorer tell odaka (particle drops) from heiban (particle stays high) —
+   * the one distinction that's invisible on the word's own morae.
+   */
+  followingMora?: string;
 }
 
 const MIN_VOICED_BUCKETS = 2;
 const STARK_MORA_GAP = 2;
+/**
+ * How far (semitones) the following mora must sit below the word's own mean
+ * pitch to count as "the particle dropped". Biased well past ordinary
+ * utterance declination (~1–2 st) so a genuinely heiban phrase is never
+ * misread as odaka; a real odaka downstep is 3+ st.
+ */
+const FOLLOWING_DROP_MARGIN_SEMITONES = 2;
 
 function isSilence(word: WordAlignment): boolean {
   return !word.text || word.text === '<eps>';
@@ -58,8 +73,27 @@ function voicedSemitones(frames: PitchFrame[]): number[] {
 }
 
 interface MoraeClassification {
+  /** Length `moraCount`, or `moraCount + 1` when `measuredFollowing` — the last element is then the following mora. */
   classes: MoraPitchClass[];
+  /** Word buckets with any voiced signal (the following mora is not counted here). */
   voicedBucketCount: number;
+  /** Whether the following mora had enough voiced signal to append its class. */
+  measuredFollowing: boolean;
+}
+
+/** Frames within `[start, end)` that are voiced and have a relative-semitone reading. */
+function voicedFramesInSpan(
+  pitch: PitchAnalysisPayload,
+  start: number,
+  end: number,
+): PitchFrame[] {
+  return pitch.frames.filter(
+    (frame) =>
+      frame.voiced &&
+      frame.relativeSemitones !== null &&
+      frame.timeSeconds >= start &&
+      frame.timeSeconds < end,
+  );
 }
 
 /**
@@ -72,20 +106,21 @@ interface MoraeClassification {
  * before any voiced bucket is seen — silence more often coincides with
  * an unvoiced/low stretch than a high one). Returns null when too few
  * buckets have any voiced signal to classify at all.
+ *
+ * When `followingSpan` is given (the aligned particle after the word), one
+ * extra class is appended for it — 'l' only if its mean sits a clear margin
+ * below the word's mean (`FOLLOWING_DROP_MARGIN_SEMITONES`), else 'h'. That
+ * asymmetry is deliberate: it's the odaka-vs-heiban cue and we'd rather
+ * miss a real odaka than invent one from declination.
  */
 function classifyLearnerMorae(
   word: WordAlignment,
   moraCount: number,
   pitch: PitchAnalysisPayload,
+  followingSpan?: { start: number; end: number } | null,
 ): MoraeClassification | null {
   if (moraCount <= 0) return null;
-  const wordFrames = pitch.frames.filter(
-    (frame) =>
-      frame.voiced &&
-      frame.relativeSemitones !== null &&
-      frame.timeSeconds >= word.start &&
-      frame.timeSeconds < word.end,
-  );
+  const wordFrames = voicedFramesInSpan(pitch, word.start, word.end);
   const overallMean = average(voicedSemitones(wordFrames));
   if (overallMean === null) return null;
 
@@ -109,7 +144,45 @@ function classifyLearnerMorae(
     return lastKnown;
   });
 
-  return { classes, voicedBucketCount };
+  let measuredFollowing = false;
+  if (followingSpan && followingSpan.end > followingSpan.start) {
+    const followingFrames = voicedFramesInSpan(pitch, followingSpan.start, followingSpan.end);
+    const followingMean = average(voicedSemitones(followingFrames));
+    if (followingMean !== null && followingFrames.length >= MIN_VOICED_BUCKETS) {
+      classes.push(followingMean <= overallMean - FOLLOWING_DROP_MARGIN_SEMITONES ? 'l' : 'h');
+      measuredFollowing = true;
+    }
+  }
+
+  return { classes, voicedBucketCount, measuredFollowing };
+}
+
+/**
+ * The time span of the aligned particle run right after `audibleWords[wordIndex]`,
+ * matched against the expected `followingMora` kana so we never mistake the
+ * next content word for the particle. `null` when there's no following mora
+ * to look for or the alignment doesn't have it.
+ */
+function followingMoraSpan(
+  audibleWords: WordAlignment[],
+  wordIndex: number,
+  followingMora: string | undefined,
+): { start: number; end: number } | null {
+  if (!followingMora) return null;
+  let consumed = '';
+  let spanStart = Number.NaN;
+  let spanEnd = Number.NaN;
+  for (let index = wordIndex + 1; index < audibleWords.length; index += 1) {
+    const token = audibleWords[index]!;
+    if (!token.text) break;
+    const next = consumed + token.text;
+    if (!followingMora.startsWith(next)) break;
+    if (Number.isNaN(spanStart)) spanStart = token.start;
+    spanEnd = token.end;
+    consumed = next;
+    if (consumed === followingMora) break;
+  }
+  return Number.isNaN(spanStart) ? null : { start: spanStart, end: spanEnd };
 }
 
 export interface LearnerPitchAccentShape {
@@ -117,6 +190,12 @@ export interface LearnerPitchAccentShape {
   surfaceForm: string;
   /** Learner's measured high/low per mora — same length (and mora segmentation) as the dictionary row for this word. */
   classes: MoraPitchClass[];
+  /**
+   * Learner's measured level on the mora right after the word (the attached
+   * particle), when `target.followingMora` was set and had voiced signal —
+   * the odaka/heiban cue, shown under the dictionary particle mark.
+   */
+  followingClass?: MoraPitchClass;
   /** How many mora buckets carried any voiced signal; the rest are carried-forward guesses. */
   voicedBucketCount: number;
   moraCount: number;
@@ -144,18 +223,23 @@ export function buildLearnerPitchAccentShapes({
 
   for (const target of targets) {
     if (!target.pitchAccentPositions.length) continue;
-    const word = audibleWords.find((candidate) => candidate.text === target.surfaceForm);
-    if (!word) continue;
+    const wordIndex = audibleWords.findIndex((candidate) => candidate.text === target.surfaceForm);
+    if (wordIndex < 0) continue;
+    const word = audibleWords[wordIndex]!;
 
     const morae = segmentIntoMorae(target.reading);
     if (morae.length === 0) continue;
 
-    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch);
+    const followingSpan = followingMoraSpan(audibleWords, wordIndex, target.followingMora);
+    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch, followingSpan);
     if (!learnerResult) continue;
 
     shapes.push({
       surfaceForm: target.surfaceForm,
-      classes: learnerResult.classes,
+      classes: learnerResult.classes.slice(0, morae.length),
+      followingClass: learnerResult.measuredFollowing
+        ? learnerResult.classes[morae.length]
+        : undefined,
       voicedBucketCount: learnerResult.voicedBucketCount,
       moraCount: morae.length,
     });
@@ -181,23 +265,29 @@ export function buildPitchAccentShapeObservations({
     // MFA's word tier doesn't always line up with dictionary segmentation
     // (same caveat wordTimingObservations.ts documents) — no exact match
     // means silently skip, not an error.
-    const word = audibleWords.find((candidate) => candidate.text === target.surfaceForm);
-    if (!word) return;
+    const wordIndex = audibleWords.findIndex((candidate) => candidate.text === target.surfaceForm);
+    if (wordIndex < 0) return;
+    const word = audibleWords[wordIndex]!;
 
     const morae = segmentIntoMorae(target.reading);
     if (morae.length === 0) return;
 
-    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch);
+    const followingSpan = followingMoraSpan(audibleWords, wordIndex, target.followingMora);
+    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch, followingSpan);
     if (!learnerResult) return;
-    const { classes: learnerClasses, voicedBucketCount } = learnerResult;
+    const { classes: learnerClasses, voicedBucketCount, measuredFollowing } = learnerResult;
 
     const detected = detectedDropPosition(learnerClasses);
     const expectedPosition = target.pitchAccentPositions[0]!;
-    // Compare through the same shape->drop-position function on both
-    // sides, not the raw dictionary position, so an odaka target is
-    // never scored as a mismatch against a correctly-produced
-    // heiban-shaped attempt (see pitchAccentShape.ts's module doc).
-    const effectiveExpected = detectedDropPosition(expectedPitchShape(morae.length, expectedPosition));
+    // Compare through the same shape->drop-position function on both sides,
+    // not the raw dictionary position. Without a measured following mora an
+    // odaka target is never scored as a mismatch against a correctly-
+    // produced heiban-shaped attempt (see pitchAccentShape.ts); with one,
+    // `expectedPitchShape` appends the particle level so odaka reads as a
+    // drop at `morae.length` and the two are finally distinguishable.
+    const effectiveExpected = detectedDropPosition(
+      expectedPitchShape(morae.length, expectedPosition, measuredFollowing),
+    );
     if (detected === effectiveExpected) return;
 
     const gap = Math.abs(effectiveExpected - detected);
@@ -206,14 +296,28 @@ export function buildPitchAccentShapeObservations({
     const expectedLabel = pitchPatternLabel(expectedPosition, morae.length);
     const detectedLabel = pitchPatternLabel(detected, morae.length);
     const alternates = target.pitchAccentPositions.slice(1);
+    // The mismatch is on the particle when that's the only place the two
+    // shapes diverge — i.e. the word's own morae were produced fine.
+    const onFollowingMora =
+      measuredFollowing &&
+      detectedDropPosition(learnerClasses.slice(0, morae.length)) ===
+        detectedDropPosition(expectedPitchShape(morae.length, expectedPosition));
 
     observations.push({
       id: `pitch-accent-shape-${targetIndex}`,
       kind: 'pitch_accent_shape',
-      confidence: isStark && fullCoverage ? 'high' : 'medium',
+      // A single short following-mora bucket is a shakier read than the
+      // multi-bucket word shape — never claim 'high' off it alone.
+      confidence: isStark && fullCoverage && !onFollowingMora ? 'high' : 'medium',
       severity: Math.min(1, gap / morae.length),
       segment: { startMs: word.start * 1000, endMs: word.end * 1000 },
-      message: `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}; your pitch here sounds like ${detectedLabel} instead.`,
+      message: onFollowingMora
+        ? `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}: the pitch ${
+            expectedLabel === 'heiban' ? 'stays up on' : 'drops on'
+          } the particle after it, but yours ${
+            expectedLabel === 'heiban' ? 'drops' : 'stays up'
+          } there — it sounds like ${detectedLabel}.`
+        : `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}; your pitch here sounds like ${detectedLabel} instead.`,
       detail:
         'Based on a rough per-mora pitch estimate from your recording — mic quality and natural speech variation can shift this.' +
         (alternates.length ? ` Also acceptable: position ${alternates.join(', ')}.` : ''),

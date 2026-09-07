@@ -40,12 +40,15 @@ export function SentencePitchAccentRow({
   sentenceId,
   highlightSurfaceForm,
   learnerClassesBySurface,
+  learnerFollowingBySurface,
 }: {
   japanese: string;
   targets?: SentencePitchAccentTarget[];
   sentenceId?: string;
   highlightSurfaceForm?: string;
   learnerClassesBySurface?: Map<string, MoraPitchClass[]>;
+  /** Learner's measured level on each word's attached particle, keyed by surface form. */
+  learnerFollowingBySurface?: Map<string, MoraPitchClass>;
 }) {
   const [loaded, setLoaded] = useState<SentencePitchAccentTarget[] | null>(null);
 
@@ -97,6 +100,7 @@ export function SentencePitchAccentRow({
             <PitchAccentWordMarks
               word={word}
               learnerClasses={learnerClasses}
+              learnerFollowingClass={learnerFollowingBySurface?.get(word.surfaceForm)}
               showLearner={showLearner}
             />
           </span>

@@ -106,8 +106,69 @@ describe('getPitchAccentDrillSentences', () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.sentence.id).toBe('s1');
     expect(result[0]!.targets).toEqual([
-      { surfaceForm: '食べる', reading: 'たべる', pitchAccentPositions: [2] },
+      { surfaceForm: '食べる', reading: 'たべる', pitchAccentPositions: [2], followingMora: '' },
     ]);
+  });
+
+  it('carries the trailing bunsetsu particle on each target', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sp',
+      normalizedKey: 'sp',
+      japanese: '水が好き。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I like water.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 'sp',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyItems.add({
+      id: 'sp-vocab',
+      expression: '水',
+      reading: 'みず',
+      meaning: 'water',
+      pitchAccentPositions: [0],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sp-link',
+      sentenceId: 'sp',
+      vocabularyItemId: 'sp-vocab',
+      surfaceForm: '水',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.studyItems.add({
+      id: 'sp-si',
+      subjectType: 'vocabularyItem',
+      subjectId: 'sp-vocab',
+      activityType: 'reading_retrieval',
+      fsrsState: PROFICIENT_FSRS,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await getPitchAccentDrillSentences();
+    expect(result[0]!.targets[0]!.followingMora).toBe('が');
   });
 
   it('excludes sentences that have a reference recording', async () => {

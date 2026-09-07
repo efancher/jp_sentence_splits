@@ -33,6 +33,33 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-07 — Pitch-accent scorer now uses the following particle to
+  tell odaka from heiban (user: "wire the scorer to use the following
+  token").** `expectedPitchShape` gains an optional third arg
+  `hasFollowingMora`; when set it appends the particle's expected level
+  ('h' for heiban, 'l' for every accented pattern), so
+  `detectedDropPosition` reports an odaka drop at `moraCount` instead of
+  collapsing it into heiban. `classifyLearnerMorae` measures one extra
+  bucket over the aligned particle span (`followingMoraSpan` matches the
+  next token(s) against `PitchAccentTarget.followingMora` so the next
+  *content* word is never mistaken for the particle) and classifies it 'l'
+  only when it sits ≥ `FOLLOWING_DROP_MARGIN_SEMITONES` (2 st) below the
+  word's mean — biased toward 'h' so ordinary declination on a genuinely
+  heiban phrase isn't misread as odaka. `buildPitchAccentShapeObservations`
+  then emits a targeted message ("…the pitch drops on the particle after
+  it, but yours stays up there — it sounds like heiban"). Without a
+  measurable following mora everything stays exactly as before (2-arg
+  `expectedPitchShape`, odaka never scored against a heiban-shaped attempt).
+  `PitchAccentTarget.followingMora` is populated by
+  `getPitchAccentDrillWords` (from `followingParticle`),
+  `getPitchAccentDrillSentences`, and `AnalysisPanel` (all via
+  `trailingBunsetsuParticles`). `LearnerPitchAccentShape.followingClass` +
+  a `learnerFollowingBySurface` map thread the measured particle level to
+  `PitchAccentWordMarks`, which now renders the learner's H/L (with
+  match/mismatch flag) under the dictionary particle mark instead of a bare
+  `·`. `tests/pitchAccentShape.test.ts` +5, `tests/pitchAccentObservations.test.ts`
+  +6, `tests/pitchAccentDrill.test.ts` +1.
+
 - **2026-09-07 — Pitch-accent drill: "predict the drop" removed + a
   Single-words mode + a bigger pool (user: "I just want to practice saying
   it and have it check the pitch" / "a mode to do single words" / "add more

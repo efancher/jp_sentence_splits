@@ -33,6 +33,27 @@ describe('expectedPitchShape', () => {
   it('returns empty for a zero mora count', () => {
     expect(expectedPitchShape(0, 0)).toEqual([]);
   });
+
+  describe('with a measured following mora', () => {
+    it('heiban keeps the following mora high', () => {
+      expect(expectedPitchShape(3, 0, true)).toEqual(['l', 'h', 'h', 'h']);
+    });
+
+    it('odaka drops on the following mora — no longer identical to heiban', () => {
+      expect(expectedPitchShape(3, 3, true)).toEqual(['l', 'h', 'h', 'l']);
+      expect(expectedPitchShape(3, 3, true)).not.toEqual(expectedPitchShape(3, 0, true));
+    });
+
+    it('atamadaka / nakadaka: the following mora is already low', () => {
+      expect(expectedPitchShape(3, 1, true)).toEqual(['h', 'l', 'l', 'l']);
+      expect(expectedPitchShape(5, 3, true)).toEqual(['l', 'h', 'h', 'l', 'l', 'l']);
+    });
+
+    it('makes odaka a detectable drop at mora count, distinct from heiban', () => {
+      expect(detectedDropPosition(expectedPitchShape(3, 3, true))).toBe(3);
+      expect(detectedDropPosition(expectedPitchShape(3, 0, true))).toBe(0);
+    });
+  });
 });
 
 describe('pitchPatternLabel', () => {

@@ -27,6 +27,7 @@ import {
   type PitchAccentTarget,
 } from '../lib/pitchAccentObservations';
 import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import { trailingBunsetsuParticles } from '../lib/sentencePitchAccent';
 import type { MoraUnit } from '../lib/mora';
 import { buildKanaTimeline } from '../lib/kanaTimeline';
 import { buildWordTimingObservations } from '../lib/wordTimingObservations';
@@ -310,11 +311,21 @@ export function AnalysisPanel({
       setPitchAccentTargets(
         candidates
           .filter((candidate) => candidate.vocabularyItem.pitchAccentPositions?.length)
-          .map((candidate) => ({
-            surfaceForm: candidate.surfaceForm,
-            reading: candidate.vocabularyItem.reading,
-            pitchAccentPositions: candidate.vocabularyItem.pitchAccentPositions!,
-          })),
+          .map((candidate) => {
+            const occurrence = candidate.sentence.japanese.indexOf(candidate.surfaceForm);
+            return {
+              surfaceForm: candidate.surfaceForm,
+              reading: candidate.vocabularyItem.reading,
+              pitchAccentPositions: candidate.vocabularyItem.pitchAccentPositions!,
+              followingMora:
+                occurrence >= 0
+                  ? trailingBunsetsuParticles(
+                      candidate.sentence.japanese,
+                      occurrence + candidate.surfaceForm.length,
+                    )
+                  : '',
+            };
+          }),
       );
     });
     return () => {
@@ -515,18 +526,22 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, learnerPitch, pitchAccentTargets]);
 
-  /** Learner's own measured per-mora H/L for each accent target, keyed by surface form — the second line under the dictionary row below. */
+  /** Learner's own measured per-mora H/L for each accent target, keyed by surface form — the second line under the dictionary row below (`classes` for the word, `following` for its attached particle). */
   const learnerPitchAccentShapes = useMemo(() => {
-    const map = new Map<string, MoraPitchClass[]>();
-    if (!serverAlignment?.learner || !learnerPitch || !pitchAccentTargets.length) return map;
+    const classes = new Map<string, MoraPitchClass[]>();
+    const following = new Map<string, MoraPitchClass>();
+    if (!serverAlignment?.learner || !learnerPitch || !pitchAccentTargets.length) {
+      return { classes, following };
+    }
     for (const shape of buildLearnerPitchAccentShapes({
       learnerWords: serverAlignment.learner.words,
       learnerPitch,
       targets: pitchAccentTargets,
     })) {
-      map.set(shape.surfaceForm, shape.classes);
+      classes.set(shape.surfaceForm, shape.classes);
+      if (shape.followingClass) following.set(shape.surfaceForm, shape.followingClass);
     }
-    return map;
+    return { classes, following };
   }, [serverAlignment, learnerPitch, pitchAccentTargets]);
 
   const primaryObservation = useMemo(
@@ -797,10 +812,17 @@ export function AnalysisPanel({
                 japanese={transcript}
                 targets={pitchAccentTargets}
                 learnerClassesBySurface={
-                  learnerPitchAccentShapes.size > 0 ? learnerPitchAccentShapes : undefined
+                  learnerPitchAccentShapes.classes.size > 0
+                    ? learnerPitchAccentShapes.classes
+                    : undefined
+                }
+                learnerFollowingBySurface={
+                  learnerPitchAccentShapes.following.size > 0
+                    ? learnerPitchAccentShapes.following
+                    : undefined
                 }
               />
-              {learnerPitchAccentShapes.size > 0 ? (
+              {learnerPitchAccentShapes.classes.size > 0 ? (
                 <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
                   Top line is the dictionary shape; the line below it is a rough
                   per-mora estimate from your recording. A red mark is a mora where

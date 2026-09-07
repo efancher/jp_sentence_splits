@@ -15,16 +15,22 @@ import type { SentenceWordAccent } from '../lib/sentencePitchAccent';
  * `learnerClasses` is the learner's measured shape for this word (same
  * mora segmentation as `word.morae`); a mora the estimate couldn't reach
  * shows `·`, and one that disagrees with the dictionary is flagged.
+ * `learnerFollowingClass` is the learner's measured level on the attached
+ * particle (`word.particleTail`) — the odaka/heiban cue — shown under the
+ * dictionary particle mark; `·` when it wasn't measured.
  */
 export function PitchAccentWordMarks({
   word,
   learnerClasses,
+  learnerFollowingClass,
   showLearner = false,
 }: {
   word: SentenceWordAccent;
   learnerClasses?: MoraPitchClass[];
+  learnerFollowingClass?: MoraPitchClass;
   showLearner?: boolean;
 }) {
+  const dictParticleClass: MoraPitchClass = word.particleHigh ? 'h' : 'l';
   return (
     <>
       {word.morae.map((mora, moraIndex) => {
@@ -60,12 +66,27 @@ export function PitchAccentWordMarks({
         word.particleTail.map((kana, tailIndex) => (
           <span key={`tail-${tailIndex}`} className="pa-mora pa-particle">
             <span className="pa-kana jp">{kana}</span>
-            <span className="pa-hl" data-c={word.particleHigh ? 'h' : 'l'}>
-              {word.particleHigh ? 'H' : 'L'}
+            <span className="pa-hl" data-c={dictParticleClass}>
+              {dictParticleClass === 'h' ? 'H' : 'L'}
             </span>
             {showLearner ? (
-              <span className="pa-hl pa-hl-learner" aria-hidden="true">
-                ·
+              <span
+                className="pa-hl pa-hl-learner"
+                data-c={learnerFollowingClass}
+                data-mismatch={
+                  learnerFollowingClass && learnerFollowingClass !== dictParticleClass
+                    ? ''
+                    : undefined
+                }
+                title={
+                  learnerFollowingClass
+                    ? learnerFollowingClass === dictParticleClass
+                      ? 'Your recording matches here'
+                      : 'Your recording differs here'
+                    : 'Not enough voiced signal to estimate the particle'
+                }
+              >
+                {learnerFollowingClass ? (learnerFollowingClass === 'h' ? 'H' : 'L') : '·'}
               </span>
             ) : null}
           </span>

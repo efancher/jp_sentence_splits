@@ -3641,10 +3641,15 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
     for (const link of sentenceLinks) {
       const item = vocabularyItemById.get(link.vocabularyItemId);
       if (link.surfaceForm && item?.pitchAccentPositions?.length) {
+        const occurrence = sentence.japanese.indexOf(link.surfaceForm);
         targets.push({
           surfaceForm: link.surfaceForm,
           reading: item.reading,
           pitchAccentPositions: item.pitchAccentPositions,
+          followingMora:
+            occurrence >= 0
+              ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
+              : '',
         });
       }
     }

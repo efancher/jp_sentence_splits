@@ -136,7 +136,10 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   the example sentence lacking audio, so a much larger pool), record just
   the word (+ any trailing bunsetsu particle — it carries the phrase-final
   fall), same dictionary-shape check. Quiet mode no longer touches this
-  page.
+  page. Also 2026-09-07: the scorer itself now measures that following
+  particle (`expectedPitchShape`'s 3rd arg + `classifyLearnerMorae`), so
+  odaka vs heiban is finally graded, not collapsed — both in the drill and
+  in `AnalysisPanel` shadowing feedback.
 - [x] **Retention / progress-over-time view.** (2026-09-01)
   `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
   `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
@@ -198,7 +201,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 
 
 - [ ] **Real-audio pitch-perception bridge.** Follow-on to the
-  predict-the-drop step (Done above) and the synthetic `pitch-ear-trainer` /
+  pitch-accent drill and the synthetic `pitch-ear-trainer` /
   `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
   discussion: the learner passes synthetic-tone discrimination but still
   misses lexical accent in real speech, so the gap is the Japanese-specific
