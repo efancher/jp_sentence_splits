@@ -297,9 +297,8 @@ returns an empty `shadowCandidates` list, so no shadowing steps are drafted
 and `allocateTimeAcrossModes` routes those minutes to the other buckets;
 the plan explanation says "Quiet mode is on — speaking practice is paused."
 Nothing is consumed — the candidates recompute on the next plan once it's
-off. The pitch-accent drill (§8) also drops its recording beat and runs
-perception-only under quiet mode, and `/shadow` shows a non-blocking
-banner.
+off. `/shadow` shows a non-blocking banner. (The pitch-accent drill (§8)
+ignores quiet mode — it's a page you only open when you can speak.)
 
 The **grammar bucket** runs two passes over its one budget. Pass 1
 (`buildUnderstandSteps`, `findUnderstandCandidates`): corpus-flagged patterns
@@ -1175,23 +1174,22 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     The same `pitchAccentPositions` data also
     feeds two other, independent consumers — the `pitch_accent` SRS review
     activity type (§4), and the **audio-less pitch-accent drill**
-    (`PitchAccentDrillPage` at `/pitch-accent`, `getPitchAccentDrillSentences`):
-    a lightweight non-SRS practice loop over Satori sentences that have
-    confirmed pitch-accent-bearing vocabulary, no reference recording, and
-    proficient words. Each sentence opens on a **predict-the-drop** step —
-    one accent-bearing word spotlighted in the otherwise-plain sentence, pick
-    where its pitch falls (`0..moraCount`, whole contours via the shared
-    `PitchChoiceContour`) before the marks reveal, skippable — then record
-    the sentence and get each target word's realized contour scored against
-    the dictionary shape (same
-    `buildPitchAccentShapeObservations`, learner alignment only) and shown
-    as your measured H/L line under the dictionary row (same
+    (`PitchAccentDrillPage` at `/pitch-accent`): a lightweight non-SRS
+    "say it and get the pitch checked" practice loop with a **Full sentence
+    / Single words** toggle. Full sentence (`getPitchAccentDrillSentences`)
+    walks Satori sentences that have confirmed pitch-accent-bearing
+    vocabulary, no reference recording, and proficient words. Single words
+    (`getPitchAccentDrillWords`) walks one proficient, pitch-carrying word
+    at a time with its example sentence as context — *not* gated on the
+    sentence lacking audio (you're drilling the word alone), so a much
+    larger pool. Either way you record (the sentence, or just the word) and
+    each target word's realized contour is scored against the dictionary
+    shape (same `buildPitchAccentShapeObservations`, learner alignment only)
+    and shown as your measured H/L line under the dictionary row (same
     `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line
-    as `AnalysisPanel`), nothing
-    saved. Under `settings.quietMode` the recording beat is dropped and the
-    drill runs perception-only (predict → reveal marks → next). So a word's
-    pitch-accent data backs passive shadowing feedback, an active-recall
-    flashcard, and a recording drill.
+    as `AnalysisPanel`), nothing saved. `settings.quietMode` does not affect
+    this page. So a word's pitch-accent data backs passive shadowing
+    feedback, an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Kana ruler under the pitch contours** — once the forced alignment is

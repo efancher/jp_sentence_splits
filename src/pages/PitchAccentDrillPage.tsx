@@ -2,23 +2,24 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
-import { getPitchAccentDrillSentences, readSettings } from '../db/repository';
+import {
+  getPitchAccentDrillSentences,
+  getPitchAccentDrillWords,
+  type PitchAccentDrillWord,
+} from '../db/repository';
+import type { Sentence } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
 import { extractPitch } from '../lib/pitch';
 import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
+  type PitchAccentTarget,
 } from '../lib/pitchAccentObservations';
-import { pitchPatternLabel, type MoraPitchClass } from '../lib/pitchAccentShape';
-import {
-  buildSentencePitchAccents,
-  type SentencePitchAccentTarget,
-  type SentenceWordAccent,
-} from '../lib/sentencePitchAccent';
+import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import type { SentencePitchAccentTarget } from '../lib/sentencePitchAccent';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 import type { TimingObservation } from '../lib/timingObservations';
 import { MAX_RECORDING_DURATION_MS } from '../lib/recording';
@@ -27,50 +28,33 @@ import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
 /**
  * Audio-less pitch-accent production drill (docs/ROADMAP.md). The
  * `pitch_accent` SRS card and the shadowing analysis both need a reference
- * recording; this practices the same skill on the majority of the corpus
- * that has none — a Satori sentence with confirmed vocabulary that carries
- * dictionary pitch-accent data.
+ * recording; this practices the same skill — say it, get the realized
+ * pitch-accent shape scored against the dictionary using only the
+ * learner's own forced alignment + pitch (`buildPitchAccentShapeObservations`,
+ * never a reference clip) — on the majority of the corpus that has none.
  *
- * Each sentence runs in two beats:
+ * Two modes:
  *
- *  1. **Predict the drop.** One accent-bearing word is spotlighted in the
- *     otherwise-plain sentence and you pick where *its* pitch falls
- *     (`0..moraCount`, drawn as whole NHK-style contours by
- *     `PitchChoiceContour`) before anything reveals the answer — the
- *     "locate the fall" perceptual step, cued to a single word in real
- *     sentence context rather than an abstract melody (ChatGPT pitch-ear
- *     discussion, 2026-09-06). Skippable when you only want production
- *     practice.
- *  2. **Say it and get it checked.** The full sentence reveals with each
- *     target word's dictionary H/L marks; you record yourself and
- *     `buildPitchAccentShapeObservations` scores each realized contour
- *     against the dictionary shape using only your own forced alignment +
- *     pitch (no reference clip). Your measured per-mora H/L
- *     (`buildLearnerPitchAccentShapes`) renders as a second line under the
- *     dictionary marks, and the spotlighted word's prediction result stays
- *     on screen so the loop closes.
+ *  - **Full sentence.** A Satori sentence with confirmed, proficient
+ *    vocabulary that carries dictionary pitch-accent data and has no
+ *    reference recording. The sentence shows with each target word's
+ *    dictionary H/L marks; you record it and every realized contour is
+ *    scored against its dictionary shape. Your measured per-mora H/L
+ *    (`buildLearnerPitchAccentShapes`) renders as a second line under the
+ *    dictionary marks.
+ *  - **Single words.** One proficient, pitch-carrying word at a time (with
+ *    an example sentence for context) — record just the word and get the
+ *    same check. Not gated on the example sentence lacking audio: you're
+ *    drilling the word in isolation, so the overlap with the audio-gated
+ *    `pitch_accent` card doesn't apply, which also makes the pool much
+ *    larger.
  *
  * A lightweight practice loop, not SRS: nothing is scheduled or persisted
- * (attempts aren't saved — the point is the immediate feedback), and the
- * sentence list is just walked in reading order.
+ * (attempts aren't saved — the point is the immediate feedback), and each
+ * list is just walked in reading order.
  */
 
-/** Sentinel `prediction` value meaning the learner skipped the predict step. */
-const PREDICTION_SKIPPED = -1;
-
-function dropCaption(position: number): string {
-  return position === 0 ? 'Stays high (no fall)' : `Falls after mora ${position}`;
-}
-
-/** Choice offered on the predict step: 0 (no fall) plus one per mora. */
-function focusChoicePositions(moraCount: number): number[] {
-  return Array.from({ length: moraCount + 1 }, (_, index) => index);
-}
-
-/** Dictionary drop position for the choices — odaka clamped into the word's own span. */
-function focusCorrectPosition(word: SentenceWordAccent): number {
-  return Math.max(0, Math.min(word.position, word.morae.length));
-}
+type DrillMode = 'sentence' | 'word';
 
 type AnalysisState =
   | { status: 'idle' }
@@ -81,14 +65,14 @@ type AnalysisState =
       observations: TimingObservation[];
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
-      /** Accent-bearing target words in the sentence — the denominator for "measured N of M". */
+      /** Accent-bearing target words in the take — the denominator for "measured N of M". */
       scorableCount: number;
     };
 
 async function analyzeRecording(
   blob: Blob,
   transcript: string,
-  targets: SentencePitchAccentTarget[],
+  targets: PitchAccentTarget[],
 ): Promise<AnalysisState> {
   try {
     const [alignment, pitch] = await Promise.all([
@@ -101,7 +85,7 @@ async function analyzeRecording(
       .map((target) => ({
         surfaceForm: target.surfaceForm,
         reading: target.reading,
-        pitchAccentPositions: target.pitchAccentPositions!,
+        pitchAccentPositions: target.pitchAccentPositions,
       }));
     const observations = buildPitchAccentShapeObservations({
       learnerWords: alignment.words,
@@ -129,7 +113,8 @@ async function analyzeRecording(
 
 export function PitchAccentDrillPage() {
   const sentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
-  const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
+  const words = useLiveQuery(() => getPitchAccentDrillWords(), []);
+  const [mode, setMode] = useState<DrillMode>('sentence');
   const [position, setPosition] = useState(0);
   const shadowing = useShadowing();
   const { cancelRecording } = shadowing;
@@ -137,20 +122,45 @@ export function PitchAccentDrillPage() {
   const [pending, setPending] = useState<{ blob: Blob; durationMs: number } | null>(null);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: 'idle' });
-  /** null = not answered yet; PREDICTION_SKIPPED = skipped; else the chosen drop position. */
-  const [prediction, setPrediction] = useState<number | null>(null);
 
-  const current = sentences?.[position];
-  // Stable per-sentence identity for the pieces below that don't otherwise
-  // key off it.
-  const currentId = current?.sentence.id;
+  const list = mode === 'sentence' ? sentences : words;
+  const currentSentence = mode === 'sentence' ? sentences?.[position] : undefined;
+  const currentWord = mode === 'word' ? words?.[position] : undefined;
+  const currentId =
+    mode === 'sentence' ? currentSentence?.sentence.id : currentWord?.vocabularyItem.id;
 
+  const transcript =
+    mode === 'sentence' ? currentSentence?.sentence.japanese : currentWord?.surfaceForm;
+
+  const analysisTargets = useMemo<PitchAccentTarget[]>(() => {
+    if (mode === 'sentence') return currentSentence?.targets ?? [];
+    if (!currentWord) return [];
+    const { reading, pitchAccentPositions } = currentWord.vocabularyItem;
+    if (!pitchAccentPositions?.length) return [];
+    return [{ surfaceForm: currentWord.surfaceForm, reading, pitchAccentPositions }];
+  }, [mode, currentSentence, currentWord]);
+
+  const contourTargets = useMemo<SentencePitchAccentTarget[]>(
+    () =>
+      analysisTargets.map((target) => ({
+        surfaceForm: target.surfaceForm,
+        reading: target.reading,
+        pitchAccentPositions: target.pitchAccentPositions,
+      })),
+    [analysisTargets],
+  );
+
+  // Reset the take + feedback whenever the item — or the mode — changes.
   useEffect(() => {
     setPending(null);
     setAnalysis({ status: 'idle' });
-    setPrediction(null);
     cancelRecording();
-  }, [currentId, cancelRecording]);
+  }, [currentId, mode, cancelRecording]);
+
+  // Switching modes walks a different list, so start it from the top.
+  useEffect(() => {
+    setPosition(0);
+  }, [mode]);
 
   useEffect(() => () => cancelRecording(), [cancelRecording]);
 
@@ -172,46 +182,23 @@ export function PitchAccentDrillPage() {
   }, [pending]);
 
   useEffect(() => {
-    if (!pending || !current) return;
+    if (!pending || !transcript || analysisTargets.length === 0) return;
     let active = true;
     setAnalysis({ status: 'analyzing' });
-    void analyzeRecording(pending.blob, current.sentence.japanese, current.targets).then((next) => {
+    void analyzeRecording(pending.blob, transcript, analysisTargets).then((next) => {
       if (active) setAnalysis(next);
     });
     return () => {
       active = false;
     };
-  }, [pending, current]);
+  }, [pending, transcript, analysisTargets]);
 
-  const contourTargets = useMemo<SentencePitchAccentTarget[]>(
-    () =>
-      (current?.targets ?? []).map((target) => ({
-        surfaceForm: target.surfaceForm,
-        reading: target.reading,
-        pitchAccentPositions: target.pitchAccentPositions,
-      })),
-    [current],
-  );
-
-  // The word to spotlight on the predict step: the sentence's accent-bearing
-  // words that could be located, rotated by list position so patterns vary
-  // as you walk the drill rather than always hitting the first word.
-  const focusWord = useMemo<SentenceWordAccent | undefined>(() => {
-    if (!current) return undefined;
-    const located = buildSentencePitchAccents(current.sentence.japanese, contourTargets).filter(
-      (word) => word.start >= 0 && word.morae.length > 0,
-    );
-    if (located.length === 0) return undefined;
-    return located[position % located.length];
-  }, [current, contourTargets, position]);
-
-  const predicted = prediction !== null;
   const isRecording = shadowing.status === 'recording';
   const isRequestingMic = shadowing.status === 'requesting-mic';
-
-  function goTo(next: number) {
-    setPosition(next);
-  }
+  const learnerClasses =
+    analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
+      ? analysis.learnerClassesBySurface
+      : undefined;
 
   return (
     <div className="stack">
@@ -223,152 +210,110 @@ export function PitchAccentDrillPage() {
           </Link>
         </div>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Spot where one word&rsquo;s pitch falls, then say the whole sentence aloud and get its
-          pitch-accent shape checked against the dictionary — for Satori sentences that have no
-          reference recording. Nothing here is saved or scheduled.
+          Say it aloud and get its pitch-accent shape checked against the dictionary — for words
+          and Satori sentences that have no reference recording. Nothing here is saved or
+          scheduled.
         </p>
 
-        {sentences === undefined ? (
+        <div className="row" role="group" aria-label="Drill mode">
+          <button
+            type="button"
+            aria-pressed={mode === 'sentence'}
+            className={mode === 'sentence' ? undefined : 'ghost'}
+            onClick={() => setMode('sentence')}
+          >
+            Full sentence
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === 'word'}
+            className={mode === 'word' ? undefined : 'ghost'}
+            onClick={() => setMode('word')}
+          >
+            Single words
+          </button>
+        </div>
+
+        {list === undefined ? (
           <p className="muted">Loading…</p>
-        ) : sentences.length === 0 ? (
-          <p className="muted">
-            No eligible sentences yet — this needs a sentence whose confirmed vocabulary has
-            dictionary pitch-accent data, no reference audio, and whose words you've already
-            reviewed to proficiency.
-          </p>
-        ) : !current ? (
+        ) : list.length === 0 ? (
+          mode === 'sentence' ? (
+            <p className="muted">
+              No eligible sentences yet — this needs a sentence whose confirmed vocabulary has
+              dictionary pitch-accent data, no reference audio, and whose words you've already
+              reviewed to proficiency.
+            </p>
+          ) : (
+            <p className="muted">
+              No eligible words yet — this needs a confirmed word with dictionary pitch-accent
+              data that you've already reviewed to proficiency.
+            </p>
+          )
+        ) : position >= list.length ? (
           <>
-            <p>You've reached the end of the list ({sentences.length} sentences).</p>
-            <button type="button" onClick={() => goTo(0)}>
+            <p>
+              You've reached the end of the list ({list.length}{' '}
+              {mode === 'sentence' ? 'sentences' : 'words'}).
+            </p>
+            <button type="button" onClick={() => setPosition(0)}>
               Start over
             </button>
           </>
         ) : (
           <>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
-              {position + 1} of {sentences.length}
+              {position + 1} of {list.length}
             </div>
 
-            {focusWord && !predicted ? (
-              <PredictDropStep
-                japanese={current.sentence.japanese}
-                translation={current.sentence.translation}
-                word={focusWord}
-                onPredict={setPrediction}
-                allowSkip={!quietMode}
+            {mode === 'sentence' && currentSentence ? (
+              <SentencePrompt
+                sentence={currentSentence.sentence}
+                targets={contourTargets}
+                learnerClasses={learnerClasses}
               />
-            ) : (
-              <>
-                <div className="stack" style={{ gap: '0.35rem' }}>
-                  <SentencePitchAccentText
-                    key={current.sentence.id}
-                    japanese={current.sentence.japanese}
-                    targets={contourTargets}
-                    learnerClassesBySurface={
-                      analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
-                        ? analysis.learnerClassesBySurface
-                        : undefined
-                    }
-                  />
-                  {current.sentence.translation ? (
-                    <div className="muted">{current.sentence.translation}</div>
-                  ) : null}
-                  <span className="muted" style={{ fontSize: '0.8rem' }}>
-                    {analysis.status === 'done' && analysis.learnerClassesBySurface.size > 0
-                      ? 'Marks under each word (and the particles after it): top = dictionary, bottom = your recording (H = high mora, L = low)'
-                      : 'Marks under each word (and the particles after it) show the dictionary pitch accent (H = high mora, L = low)'}
-                  </span>
-                </div>
+            ) : currentWord ? (
+              <WordPrompt
+                word={currentWord}
+                targets={contourTargets}
+                learnerClasses={learnerClasses}
+              />
+            ) : null}
 
-                {focusWord && prediction !== null && prediction !== PREDICTION_SKIPPED ? (
-                  <PredictionResult word={focusWord} predicted={prediction} />
-                ) : null}
+            <div className="row" style={{ alignItems: 'center' }}>
+              <RecordToggleButton
+                isRecording={isRecording}
+                isRequestingMic={isRequestingMic}
+                elapsedMs={shadowing.recordingElapsedMs}
+                maxDurationMs={MAX_RECORDING_DURATION_MS}
+                idleLabel={pending ? 'Record again' : 'Record'}
+                onStart={() => void shadowing.startRecording()}
+                onStop={() => void shadowing.stopRecording()}
+              />
+            </div>
+            {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
 
-                {quietMode ? (
-                  <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                    Quiet mode is on, so the say-it-aloud step is paused — this runs as a
-                    perception-only drill. Move to the next sentence when you&rsquo;re ready.
-                  </p>
-                ) : (
-                  <>
-                    <div className="row" style={{ alignItems: 'center' }}>
-                      <RecordToggleButton
-                        isRecording={isRecording}
-                        isRequestingMic={isRequestingMic}
-                        elapsedMs={shadowing.recordingElapsedMs}
-                        maxDurationMs={MAX_RECORDING_DURATION_MS}
-                        idleLabel={pending ? 'Record again' : 'Record'}
-                        onStart={() => void shadowing.startRecording()}
-                        onStop={() => void shadowing.stopRecording()}
-                      />
-                    </div>
-                    {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
-
-                    {pending && pendingUrl ? (
-                      <div className="stack">
-                        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                        <audio controls src={pendingUrl} />
-                        {analysis.status === 'analyzing' ? (
-                          <p className="muted">Checking your pitch accent…</p>
-                        ) : analysis.status === 'unavailable' ? (
-                          <p className="muted">
-                            Couldn't reach the alignment service, so there's no pitch-accent
-                            feedback for this take. Try again in a moment.
-                          </p>
-                        ) : analysis.status === 'done' &&
-                          analysis.learnerClassesBySurface.size === 0 ? (
-                          <p className="muted">
-                            Couldn't line up any of the target word
-                            {analysis.scorableCount === 1 ? '' : 's'} in this recording, so there's
-                            nothing to check. That usually means the alignment split a compound
-                            differently, or the word was too quiet or rushed to measure — try again
-                            a bit slower and clearer.
-                          </p>
-                        ) : analysis.status === 'done' && analysis.observations.length === 0 ? (
-                          <p>
-                            No clear pitch-accent mismatch on the{' '}
-                            {analysis.learnerClassesBySurface.size === analysis.scorableCount
-                              ? ''
-                              : `${analysis.learnerClassesBySurface.size} of ${analysis.scorableCount} `}
-                            word{analysis.learnerClassesBySurface.size === 1 ? '' : 's'} I could
-                            measure — nicely done.
-                          </p>
-                        ) : analysis.status === 'done' ? (
-                          <div className="stack">
-                            <strong>Pitch accent</strong>
-                            {analysis.learnerClassesBySurface.size < analysis.scorableCount ? (
-                              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                                Measured {analysis.learnerClassesBySurface.size} of{' '}
-                                {analysis.scorableCount} target words this take; the rest couldn't
-                                be lined up in the recording.
-                              </p>
-                            ) : null}
-                            {analysis.observations.map((observation) => (
-                              <article key={observation.id} className="stack" style={{ gap: 0 }}>
-                                <span>
-                                  <strong>{observation.confidence} confidence:</strong>{' '}
-                                  {observation.message}
-                                </span>
-                                {observation.detail ? (
-                                  <p className="muted">{observation.detail}</p>
-                                ) : null}
-                              </article>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </>
-            )}
+            {pending && pendingUrl ? (
+              <div className="stack">
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio controls src={pendingUrl} />
+                <PitchAccentFeedback analysis={analysis} />
+              </div>
+            ) : null}
 
             <div className="row">
-              <button type="button" disabled={position === 0} onClick={() => goTo(position - 1)}>
+              <button
+                type="button"
+                disabled={position === 0}
+                onClick={() => setPosition(position - 1)}
+              >
                 Previous
               </button>
-              <button type="button" onClick={() => goTo(position + 1)}>
-                {position + 1 >= sentences.length ? 'Finish' : 'Next sentence'}
+              <button type="button" onClick={() => setPosition(position + 1)}>
+                {position + 1 >= list.length
+                  ? 'Finish'
+                  : mode === 'sentence'
+                    ? 'Next sentence'
+                    : 'Next word'}
               </button>
             </div>
           </>
@@ -378,93 +323,129 @@ export function PitchAccentDrillPage() {
   );
 }
 
-/**
- * Beat 1: pick where the spotlighted word's pitch falls, before the
- * sentence's dictionary marks reveal.
- */
-function PredictDropStep({
-  japanese,
-  translation,
-  word,
-  onPredict,
-  allowSkip,
-}: {
-  japanese: string;
-  translation?: string;
-  word: SentenceWordAccent;
-  onPredict: (position: number) => void;
-  /** Hidden in quiet mode, where the prediction *is* the whole exercise. */
-  allowSkip: boolean;
-}) {
-  const [before, target, after] = splitOnSurfaceForm(japanese, word.surfaceForm);
+function MarksCaption({ showLearner }: { showLearner: boolean }) {
   return (
-    <div className="stack" aria-label="Predict where this word's pitch falls">
-      <div className="jp jp-lg">
-        {before}
-        <mark>{target || word.surfaceForm}</mark>
-        {after}
+    <span className="muted" style={{ fontSize: '0.8rem' }}>
+      {showLearner
+        ? 'Marks under each word (and the particles after it): top = dictionary, bottom = your recording (H = high mora, L = low)'
+        : 'Marks under each word (and the particles after it) show the dictionary pitch accent (H = high mora, L = low)'}
+    </span>
+  );
+}
+
+/** Full-sentence prompt: the sentence with every target word's dictionary marks. */
+function SentencePrompt({
+  sentence,
+  targets,
+  learnerClasses,
+}: {
+  sentence: Sentence;
+  targets: SentencePitchAccentTarget[];
+  learnerClasses?: Map<string, MoraPitchClass[]>;
+}) {
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }}>
+      <SentencePitchAccentText
+        key={sentence.id}
+        japanese={sentence.japanese}
+        targets={targets}
+        learnerClassesBySurface={learnerClasses}
+      />
+      {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+      <MarksCaption showLearner={!!learnerClasses} />
+    </div>
+  );
+}
+
+/** Single-word prompt: the word alone with its marks, plus an example sentence for context. */
+function WordPrompt({
+  word,
+  targets,
+  learnerClasses,
+}: {
+  word: PitchAccentDrillWord;
+  targets: SentencePitchAccentTarget[];
+  learnerClasses?: Map<string, MoraPitchClass[]>;
+}) {
+  const { vocabularyItem: item, sentence, surfaceForm } = word;
+  const [before, marked, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }}>
+      <SentencePitchAccentText
+        key={item.id}
+        japanese={surfaceForm}
+        targets={targets}
+        learnerClassesBySurface={learnerClasses}
+      />
+      <div className="muted">
+        {item.reading}
+        {item.meaning ? ` — ${item.meaning}` : ''}
       </div>
-      {translation ? <div className="muted">{translation}</div> : null}
-      <div className="jp">{word.reading}</div>
-      <p style={{ margin: 0 }}>
-        Where does <strong className="jp">{word.surfaceForm}</strong>&rsquo;s pitch fall? Say it in
-        your head first, then pick the contour.
-      </p>
-      <div className="row" style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
-        {focusChoicePositions(word.morae.length).map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            className="pa-choice-button stack"
-            style={{ gap: '0.2rem', alignItems: 'center' }}
-            onClick={() => onPredict(choice)}
-          >
-            <PitchChoiceContour morae={word.morae} position={choice} />
-            <span className="muted" style={{ fontSize: '0.75rem' }}>
-              {dropCaption(choice)}
-            </span>
-          </button>
-        ))}
-      </div>
-      {allowSkip ? (
-        <button
-          type="button"
-          className="ghost"
-          style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
-          onClick={() => onPredict(PREDICTION_SKIPPED)}
-        >
-          Skip — just practise saying it
-        </button>
+      <MarksCaption showLearner={!!learnerClasses} />
+      {sentence.japanese ? (
+        <div className="muted jp" style={{ fontSize: '0.9rem' }}>
+          {before}
+          <mark>{marked || surfaceForm}</mark>
+          {after}
+        </div>
       ) : null}
     </div>
   );
 }
 
-/** The persistent "you predicted X, dictionary says Y" line after beat 1. */
-function PredictionResult({ word, predicted }: { word: SentenceWordAccent; predicted: number }) {
-  const correct = focusCorrectPosition(word);
-  const hit = predicted === correct;
-  const label = pitchPatternLabel(word.position, word.morae.length);
+/** The pitch-accent read-out after a take — shared by both modes. */
+function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
+  if (analysis.status === 'analyzing') {
+    return <p className="muted">Checking your pitch accent…</p>;
+  }
+  if (analysis.status === 'unavailable') {
+    return (
+      <p className="muted">
+        Couldn't reach the alignment service, so there's no pitch-accent feedback for this take.
+        Try again in a moment.
+      </p>
+    );
+  }
+  if (analysis.status !== 'done') return null;
+
+  const { observations, learnerClassesBySurface, scorableCount } = analysis;
+  const measured = learnerClassesBySurface.size;
+
+  if (measured === 0) {
+    return (
+      <p className="muted">
+        Couldn't line up any of the target word{scorableCount === 1 ? '' : 's'} in this recording,
+        so there's nothing to check. That usually means the alignment split a compound differently,
+        or the word was too quiet or rushed to measure — try again a bit slower and clearer.
+      </p>
+    );
+  }
+  if (observations.length === 0) {
+    return (
+      <p>
+        No clear pitch-accent mismatch on the{' '}
+        {measured === scorableCount ? '' : `${measured} of ${scorableCount} `}
+        word{measured === 1 ? '' : 's'} I could measure — nicely done.
+      </p>
+    );
+  }
   return (
-    <div className="stack" style={{ gap: '0.25rem' }} aria-label="Your pitch-fall prediction">
-      <div>
-        {hit ? '✓ ' : '✗ '}
-        <strong className="jp">{word.surfaceForm}</strong> — you picked{' '}
-        <em>{dropCaption(predicted).toLowerCase()}</em>
-        {hit ? '' : `; the dictionary has it ${label} (${dropCaption(correct).toLowerCase()})`}.
-      </div>
-      {hit ? null : (
-        <div className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span className="muted" style={{ fontSize: '0.75rem' }}>
-            you:
+    <div className="stack">
+      <strong>Pitch accent</strong>
+      {measured < scorableCount ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Measured {measured} of {scorableCount} target words this take; the rest couldn't be
+          lined up in the recording.
+        </p>
+      ) : null}
+      {observations.map((observation) => (
+        <article key={observation.id} className="stack" style={{ gap: 0 }}>
+          <span>
+            <strong>{observation.confidence} confidence:</strong> {observation.message}
           </span>
-          <PitchChoiceContour morae={word.morae} position={predicted} />
-          <span className="muted" style={{ fontSize: '0.75rem' }}>
-            dictionary:
-          </span>
-          <PitchChoiceContour morae={word.morae} position={correct} />
-        </div>
-      )}
+          {observation.detail ? <p className="muted">{observation.detail}</p> : null}
+        </article>
+      ))}
     </div>
   );
 }

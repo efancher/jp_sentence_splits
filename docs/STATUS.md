@@ -33,6 +33,33 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-07 — Pitch-accent drill: "predict the drop" removed + a
+  Single-words mode + a bigger pool (user: "I just want to practice saying
+  it and have it check the pitch" / "a mode to do single words" / "add more
+  words").** `PitchAccentDrillPage` no longer opens on the perceptual
+  predict-the-drop beat (added 2026-09-06, now cut) — every item goes
+  straight to marks → record → dictionary-shape check. `PredictDropStep` /
+  `PredictionResult` / the `prediction` state / the `focusWord` rotation are
+  gone; `PitchChoiceContour` is still used by the `pitch_accent` SRS card so
+  the component stays. New **Full sentence / Single words** toggle at the
+  top. Single-words mode walks one word at a time (word rendered alone via
+  `SentencePitchAccentText`, reading — meaning, and the example sentence as
+  `<mark>`ed context), records just that word, and runs the same
+  `buildPitchAccentShapeObservations` scoring with a one-entry target list.
+  New `getPitchAccentDrillWords` (`repository.ts`): every confirmed vocab
+  item the learner has reviewed to proficiency
+  (`getProficientVocabularyItemIds`) that carries dictionary
+  `pitchAccentPositions`, one entry per word, example sentence = the
+  dictionary-form occurrence when there is one else the earliest —
+  **deliberately not gated on the sentence lacking reference audio** (you're
+  drilling the word in isolation, so the overlap with the audio-gated
+  `pitch_accent` card doesn't apply), which makes the pool much larger than
+  the sentence list. Quiet mode no longer affects this page — it's a
+  deliberate "practise speaking" page (`AppSettings.quietMode` doc, Home /
+  Settings copy updated). `tests/pitchAccentDrill.test.ts` +4 (new
+  `getPitchAccentDrillWords` describe), `tests/pitchAccentDrillPage.test.tsx`
+  rewritten for the no-predict flow + word mode.
+
 - **2026-09-07 — `pitch_accent` card skips phrase-final edge-accent words
   (user ask: "how would I tell it's odaka from the recording since heta is
   at the end of the sentence, so there's nothing to go down to").** Heiban

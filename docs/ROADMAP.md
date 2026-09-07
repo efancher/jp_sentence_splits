@@ -128,13 +128,14 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   the sentence; `buildPitchAccentShapeObservations` scores each target
   word's realized contour against the dictionary shape using only the
   learner's own forced alignment + pitch. Nothing saved or scheduled.
-  **2026-09-06:** each sentence now opens on a **predict-the-drop** step —
-  one accent-bearing word is spotlighted in the otherwise-plain sentence and
-  you pick where *its* pitch falls (`0..moraCount`, drawn as whole contours
-  by the shared `PitchChoiceContour`, extracted from `ReviewPage`) before
-  the dictionary marks reveal; the prediction result stays on screen next to
-  your recorded attempt. Skippable. The "locate the fall" perceptual step,
-  cued to one word in real sentence context (ChatGPT pitch-ear discussion).
+  **2026-09-06:** briefly opened each sentence on a "predict-the-drop"
+  perceptual step. **2026-09-07:** that step was removed (user request) —
+  the drill is now purely "say it and get the pitch checked". Added a
+  **Single words** mode alongside Full sentence: one proficient,
+  pitch-carrying word at a time (`getPitchAccentDrillWords`, *not* gated on
+  the example sentence lacking audio, so a much larger pool), record just
+  the word, same dictionary-shape check. Quiet mode no longer touches this
+  page.
 - [x] **Retention / progress-over-time view.** (2026-09-01)
   `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
   `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
@@ -156,9 +157,9 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 - [x] **Quiet mode.** (2026-09-06) `settings.quietMode` (per-device, toggle
   on Settings + Home) pauses every speak-aloud activity: the session planner
   withholds all `shadowCandidates` (minutes flow to the other buckets,
-  nothing consumed), the pitch-accent drill runs perception-only (no
-  recording beat), and `/shadow` shows a non-blocking banner. For noisy
+  nothing consumed) and `/shadow` shows a non-blocking banner. For noisy
   environments / working somewhere you can't talk. Detail in STATUS.md.
+  (2026-09-07: no longer affects the pitch-accent drill.)
 
 ## In progress
 

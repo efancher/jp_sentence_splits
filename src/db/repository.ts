@@ -3656,6 +3656,87 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
   return result;
 }
 
+export interface PitchAccentDrillWord {
+  vocabularyItem: VocabularyItem;
+  /** An example sentence containing the word — shown as context under the drill. */
+  sentence: Sentence;
+  /** The word's surface form as it appears in that sentence. */
+  surfaceForm: string;
+}
+
+/**
+ * Words eligible for the single-word variant of the audio-less pitch-accent
+ * drill: every confirmed vocabulary item the learner has reviewed to
+ * proficiency (`getProficientVocabularyItemIds`, the same "shown recall"
+ * bar as `getPitchAccentDrillSentences`) that carries dictionary
+ * `pitchAccentPositions`, paired with one example sentence for context.
+ *
+ * Deliberately *not* gated on the example sentence lacking reference audio,
+ * unlike `getPitchAccentDrillSentences` — you're drilling the word in
+ * isolation, not the sentence, so the overlap with the reference-audio-gated
+ * `pitch_accent` SRS card doesn't apply. That also makes the pool much
+ * larger. One entry per distinct word; the example sentence is the word's
+ * own dictionary-form occurrence when there is one, else its earliest.
+ */
+export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]> {
+  const db = getDb();
+  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
+  if (links.length === 0) return [];
+
+  const vocabularyItems = await db.vocabularyItems.bulkGet([
+    ...new Set(links.map((link) => link.vocabularyItemId)),
+  ]);
+  const pitchCarryingItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  if (pitchCarryingItemById.size === 0) return [];
+
+  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
+  if (proficientIds.size === 0) return [];
+
+  const sentenceById = new Map(
+    (await db.sentences.bulkGet([...new Set(links.map((link) => link.sentenceId))]))
+      .filter((row): row is Sentence => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  const bestByItemId = new Map<string, { sentence: Sentence; surfaceForm: string }>();
+  for (const link of links) {
+    if (!link.surfaceForm) continue;
+    if (!proficientIds.has(link.vocabularyItemId)) continue;
+    const item = pitchCarryingItemById.get(link.vocabularyItemId);
+    if (!item) continue;
+    const sentence = sentenceById.get(link.sentenceId);
+    if (!sentence) continue;
+    const current = bestByItemId.get(link.vocabularyItemId);
+    if (!current) {
+      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
+      continue;
+    }
+    // Prefer the dictionary-form occurrence, then the earliest one.
+    const currentIsDictForm = current.surfaceForm === item.expression;
+    const candidateIsDictForm = link.surfaceForm === item.expression;
+    if (candidateIsDictForm && !currentIsDictForm) {
+      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
+    } else if (
+      candidateIsDictForm === currentIsDictForm &&
+      sentence.firstOccurrenceIndex < current.sentence.firstOccurrenceIndex
+    ) {
+      bestByItemId.set(link.vocabularyItemId, { sentence, surfaceForm: link.surfaceForm });
+    }
+  }
+
+  const result: PitchAccentDrillWord[] = [];
+  for (const [itemId, { sentence, surfaceForm }] of bestByItemId) {
+    result.push({ vocabularyItem: pitchCarryingItemById.get(itemId)!, sentence, surfaceForm });
+  }
+  result.sort((a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex);
+  return result;
+}
+
 export interface VocabularyOccurrenceCandidate {
   link: SentenceVocabulary;
   vocabularyItem: VocabularyItem;

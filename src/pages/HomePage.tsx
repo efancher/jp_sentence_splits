@@ -252,7 +252,7 @@ export function HomePage() {
             Quiet mode — can&rsquo;t speak aloud
             <span className="muted" style={{ fontSize: '0.85rem' }}>
               {' '}
-              (new sessions skip shadowing; pitch-accent drill runs perception-only)
+              (new sessions skip shadowing)
             </span>
           </span>
         </label>

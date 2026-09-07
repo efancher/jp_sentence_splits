@@ -423,9 +423,10 @@ export interface AppSettings {
   /**
    * "Quiet mode" (per-device, like the rest of `settings`): the learner is
    * somewhere they can't speak aloud. The session planner skips shadowing
-   * steps (the candidates aren't consumed — they come back next plan), the
-   * pitch-accent drill drops its recording beat and runs perception-only,
-   * and `/shadow` shows a non-blocking banner. Defaults to `false`.
+   * steps (the candidates aren't consumed — they come back next plan) and
+   * `/shadow` shows a non-blocking banner. Defaults to `false`. (The
+   * pitch-accent drill ignores it — it's a deliberate "practise speaking"
+   * page you only open when you can.)
    */
   quietMode?: boolean;
 }

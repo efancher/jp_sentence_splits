@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb, updateSettings } from '../src/db/repository';
+import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { PitchAccentDrillPage } from '../src/pages/PitchAccentDrillPage';
 import { withAppProviders } from '../src/test/providers';
@@ -27,13 +27,20 @@ const PROFICIENT_FSRS = {
   state: 'review' as const,
 };
 
-async function seedEligibleSentence() {
+async function seedEligibleSentence({
+  japanese = 'りんごを食べる。',
+  expression = '食べる',
+  reading = 'たべる',
+  surfaceForm = '食べる',
+  pitchAccentPositions = [2] as number[] | undefined,
+  withAudio = false,
+} = {}) {
   const db = getDb();
   const now = new Date().toISOString();
   await db.sentences.add({
     id: 's1',
     normalizedKey: 's1',
-    japanese: 'りんごを食べる。',
+    japanese,
     readingOnly: '',
     inlineReading: '',
     translation: 'I eat an apple.',
@@ -59,10 +66,10 @@ async function seedEligibleSentence() {
   });
   await db.vocabularyItems.add({
     id: 'vocab-1',
-    expression: '食べる',
-    reading: 'たべる',
+    expression,
+    reading,
     meaning: 'to eat',
-    pitchAccentPositions: [2],
+    pitchAccentPositions,
     createdAt: now,
     updatedAt: now,
   });
@@ -70,7 +77,7 @@ async function seedEligibleSentence() {
     id: 'link-1',
     sentenceId: 's1',
     vocabularyItemId: 'vocab-1',
-    surfaceForm: '食べる',
+    surfaceForm,
     createdAt: now,
     updatedAt: now,
   });
@@ -83,6 +90,21 @@ async function seedEligibleSentence() {
     createdAt: now,
     updatedAt: now,
   });
+  if (withAudio) {
+    await db.sentenceAudio.add({
+      id: 's1-audio',
+      sentenceId: 's1',
+      sourceId: 'src',
+      sourceSentenceId: 'src-s1',
+      sourceTitle: 'ref',
+      mimeType: 'audio/mp3',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['x'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+  }
 }
 
 function renderPage() {
@@ -106,150 +128,54 @@ describe('PitchAccentDrillPage', () => {
     expect(await screen.findByText(/No eligible sentences yet/)).toBeInTheDocument();
   });
 
-  it('opens on the predict-the-drop step before revealing the answer', async () => {
+  it('shows the sentence marks and Record control straight away — no predict step', async () => {
     await seedEligibleSentence();
     renderPage();
 
     expect(
-      await screen.findByLabelText("Predict where this word's pitch falls"),
+      await screen.findByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Where does/)).toBeInTheDocument();
-    // The dictionary marks / Record control are gated behind the prediction.
-    expect(
-      screen.queryByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
-    // One choice per mora plus "no fall": たべる → 0..3.
-    expect(screen.getByRole('button', { name: /Stays high \(no fall\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Falls after mora 3/ })).toBeInTheDocument();
-  });
-
-  it('reveals the sentence marks and Record control after a prediction', async () => {
-    await seedEligibleSentence();
-    renderPage();
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Falls after mora 2/ }),
-    );
-
-    expect(await screen.findByText('りんごを')).toBeInTheDocument();
-    expect(screen.getAllByText('食べる').length).toBeGreaterThan(0);
+    expect(screen.getByText('りんごを')).toBeInTheDocument();
     expect(screen.getByText('1 of 1')).toBeInTheDocument();
-    expect(
-      screen.getByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
-    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
-    // 食べる is position 2 over 3 morae → nakadaka, drop after mora 2: a hit.
-    expect(screen.getByLabelText('Your pitch-fall prediction')).toHaveTextContent(/✓/);
+    // The old "predict the drop" beat is gone.
+    expect(screen.queryByText(/Where does/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Predict where this word's pitch falls"),
+    ).not.toBeInTheDocument();
   });
 
   it('marks the grammatical particle attached to an accented word', async () => {
-    const db = getDb();
-    const now = new Date().toISOString();
-    await db.sentences.add({
-      id: 's2',
-      normalizedKey: 's2',
+    await seedEligibleSentence({
       japanese: '犬が好き。',
-      readingOnly: '',
-      inlineReading: '',
-      translation: 'I like dogs.',
-      targetVocabulary: [],
-      vocabularySuggestions: [],
-      sourceReferences: [],
-      conflicts: [],
-      firstOccurrenceIndex: 0,
-      importBatchIds: [],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.analyses.add({
-      sentenceId: 's2',
-      chunks: [],
-      notes: '',
-      status: 'empty',
-      formatVersion: 2,
-      vocabularyReviewStatus: 'confirmed',
-      vocabularySelections: [],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.vocabularyItems.add({
-      id: 'vocab-inu',
       expression: '犬',
       reading: 'いぬ',
-      meaning: 'dog',
-      pitchAccentPositions: [2],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.sentenceVocabulary.add({
-      id: 'link-inu',
-      sentenceId: 's2',
-      vocabularyItemId: 'vocab-inu',
       surfaceForm: '犬',
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.studyItems.add({
-      id: 'si-inu',
-      subjectType: 'vocabularyItem',
-      subjectId: 'vocab-inu',
-      activityType: 'reading_retrieval',
-      fsrsState: PROFICIENT_FSRS,
-      createdAt: now,
-      updatedAt: now,
-    });
-
     renderPage();
-    await userEvent.click(await screen.findByRole('button', { name: /Falls after mora 2/ }));
-
     // 犬 (いぬ, odaka) + attached が on the sentence line.
     expect(await screen.findByText('犬が')).toBeInTheDocument();
   });
 
-  it('shows the dictionary contour when the prediction misses', async () => {
-    await seedEligibleSentence();
+  it('single-word mode drills one proficient pitch-carrying word with its context', async () => {
+    await seedEligibleSentence({ withAudio: true });
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Stays high \(no fall\)/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Single words' }));
 
-    const result = await screen.findByLabelText('Your pitch-fall prediction');
-    expect(result).toHaveTextContent(/✗/);
-    expect(result).toHaveTextContent(/nakadaka/);
-    // Still lets you record your attempt.
+    // Word alone gets its marks; the sentence is context (with audio — which
+    // the sentence list would have excluded).
+    expect(
+      await screen.findByLabelText('Sentence with pitch accent (H = high mora, L = low mora)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/たべる — to eat/)).toBeInTheDocument();
+    expect(screen.getByText('1 of 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
   });
 
-  it('quiet mode: runs perception-only — no Skip button, no Record after predicting', async () => {
-    await seedEligibleSentence();
-    await updateSettings({ quietMode: true });
+  it('single-word mode explains what is needed when there are no eligible words', async () => {
     renderPage();
-
-    // The predict step still runs (it is silent), but without the skip-to-speaking escape.
-    expect(
-      await screen.findByLabelText("Predict where this word's pitch falls"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Skip — just practise saying it' }),
-    ).not.toBeInTheDocument();
-
-    await userEvent.click(await screen.findByRole('button', { name: /Falls after mora 2/ }));
-
-    expect(await screen.findByText(/perception-only drill/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
-    // The dictionary marks + prediction result still show.
-    expect(screen.getByLabelText('Your pitch-fall prediction')).toBeInTheDocument();
-  });
-
-  it('skips straight to recording when the predict step is skipped', async () => {
-    await seedEligibleSentence();
-    renderPage();
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Skip — just practise saying it' }),
-    );
-
-    expect(await screen.findByRole('button', { name: 'Record' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Your pitch-fall prediction')).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Single words' }));
+    expect(await screen.findByText(/No eligible words yet/)).toBeInTheDocument();
   });
 });
