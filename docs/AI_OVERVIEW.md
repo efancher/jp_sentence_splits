@@ -1246,7 +1246,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   `sentence_transformation`, whose inflected verb would clash with the
   citation-form contour). A compact "H"/"L"-per-mora
   contour for each confirmed sentence word that carries Kanjium/UniDic
-  accent data, plus a following-particle mark. `VocabularyListPage`
+  accent data, plus a following-particle mark. When that sentence also has
+  a reference recording, `SentenceNativePitchContour` mounts the measured
+  native pitch track (`ReviewPitchContour` / `MeasuredPitchContour`, YIN,
+  with playhead + loop) just above the H/L row — the same contour the
+  `listening` / `word_listening` reveals already show from their own audio;
+  nothing shows for sentences with no clip. `VocabularyListPage`
   (`/words`) shows the single-word `PitchAccentDiagram` under the reading
   for entries with dictionary data. Deliberately one
   independent contour per word (from that word's dictionary reading), not

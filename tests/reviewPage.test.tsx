@@ -1681,6 +1681,39 @@ describe('ReviewPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the measured native pitch contour on a non-audio card reveal when the sentence has a reference clip', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await addReferenceAudio('sent-1');
+    // jsdom can't decode audio, so seed the cache the contour reads from.
+    await db.referencePitchTracks.put({
+      id: 'audio-sent-1',
+      pitchVersion: PITCH_TRACK_VERSION,
+      computedAt: now,
+      payload: {
+        medianHz: 140,
+        voicedRatio: 1,
+        durationSeconds: 0.08,
+        frames: [0, 2, 3, 1].map((relativeSemitones, index) => ({
+          timeSeconds: index * 0.02,
+          hz: 140,
+          voiced: true,
+          confidence: 0.9,
+          relativeSemitones,
+        })),
+      },
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
+    expect(
+      await screen.findByLabelText('Measured pitch of the native recording'),
+    ).toBeInTheDocument();
+  });
+
   it('applies the selected playback speed to the native audio element (listening card follow-up)', async () => {
     vi.stubGlobal('Audio', MockAudio);
     MockAudio.instances = [];

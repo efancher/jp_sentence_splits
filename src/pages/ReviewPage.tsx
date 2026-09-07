@@ -1758,10 +1758,18 @@ export function ReviewPage() {
               // `pitch_accent` renders its own (target-highlighted) copy;
               // `sentence_transformation` is skipped because its verb is
               // inflected and this row draws the citation-form contour.
-              <SentencePitchAccentRow
-                japanese={current.sentence.japanese}
-                sentenceId={current.sentence.id}
-              />
+              <>
+                {!(current.audio ?? current.wordListening?.audio) ? (
+                  // The measured native contour, when the sentence has a
+                  // reference clip — the listening cards above already show
+                  // it from their own audio, so only add it for the rest.
+                  <SentenceNativePitchContour sentenceId={current.sentence.id} />
+                ) : null}
+                <SentencePitchAccentRow
+                  japanese={current.sentence.japanese}
+                  sentenceId={current.sentence.id}
+                />
+              </>
             ) : null}
             {revealed ? (
               <div className="row">
@@ -2325,6 +2333,24 @@ function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
       </button>
     </div>
   );
+}
+
+/**
+ * Loads a sentence's first reference recording, if it has one, and shows
+ * its measured native pitch contour — for the review cards whose reveal
+ * otherwise carries only the dictionary H/L row (comprehension,
+ * reading_in_context, grammar, …). Renders nothing when the sentence has no
+ * reference audio. The audio-centric cards (listening / word_listening)
+ * already mount `ReviewPitchContour` straight from their own candidate, so
+ * the caller gates this out there to avoid a duplicate contour.
+ */
+function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
+  const audio = useLiveQuery(
+    () => getDb().sentenceAudio.where('sentenceId').equals(sentenceId).first(),
+    [sentenceId],
+  );
+  if (!audio) return null;
+  return <ReviewPitchContour audio={audio} />;
 }
 
 function AudioComprehensionCard({

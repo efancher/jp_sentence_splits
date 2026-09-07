@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-07 — Measured native pitch contour on the non-audio review
+  cards (user ask: they wanted the real speaker contour, not a symbolic
+  one, on "the review cards where it's only shown the h/l for the
+  vocabulary words").** `ReviewPitchContour` (the YIN track of the native
+  clip, playhead + loop) previously mounted only on `listening` /
+  `word_listening` reveals, where the audio rides on the candidate. New
+  `SentenceNativePitchContour` wrapper does a `useLiveQuery` for the
+  sentence's first `sentenceAudio` row and mounts `ReviewPitchContour` when
+  one exists — added above the shared `SentencePitchAccentRow` insert on
+  every other revealed sentence card (comprehension, reading_in_context,
+  grammar, …), gated out when a `ReviewPitchContour` is already showing so
+  there's never a double contour. Nothing shows for sentences with no
+  reference clip. A brief symbolic overline contour (b08a038) was tried
+  first and reverted (9b8893b) — the user wanted the real thing.
+
 - **2026-09-06 — Pitch-accent marks extend over attached particles (user
   ask: "add the h/l markers for the entire sentence").** Still per-word, not
   a computed sentence contour, but `buildSentencePitchAccents` now runs a
