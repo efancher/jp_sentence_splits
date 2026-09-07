@@ -27,6 +27,12 @@ const PITCH_HEIGHT = 120;
 const PITCH_ESTIMATE_EVERY_N_FRAMES = 2;
 /** Voiced-frame count before the learner's running median is stable enough to normalize against. */
 const LIVE_PITCH_MIN_VOICED_FRAMES = 5;
+/**
+ * Drop a live frame whose pitch sits more than this far from the running
+ * median — an octave error (±12 st) or other single-frame YIN glitch, which
+ * would otherwise draw as a spike. Legit speech stays inside the ±8 display.
+ */
+const LIVE_PITCH_OUTLIER_SEMITONES = 10;
 
 /**
  * Ported from ~/projects/shadowing/web/src/components/LiveShadowWaveform.tsx.
@@ -59,12 +65,15 @@ export function LiveShadowWaveform({
   const [liveMedianHz, setLiveMedianHz] = useState<number | null>(null);
   const [playheadIndex, setPlayheadIndex] = useState(0);
   const [error, setError] = useState<string>();
-  /** Raw per-bucket max-abs amplitude; display gain is applied at render so it stays consistent as the running level grows. */
+  /** Per-bucket max-abs amplitude for the *current* rep; display gain is applied at render. */
   const liveAmpRef = useRef<number[]>([]);
-  /** Raw per-bucket pitch in Hz; normalized to the learner's own running median for display. */
-  const liveHzRef = useRef<Array<number | null>>([]);
-  /** Every voiced Hz reading so far this take, for the running median. */
+  /** Per-bucket sum / count of voiced Hz readings in the current rep — averaged at render, like the reference contour. */
+  const liveHzSumRef = useRef<number[]>([]);
+  const liveHzCountRef = useRef<number[]>([]);
+  /** Every voiced Hz reading across all reps this loop — a slow-moving normalization centre so the contour doesn't jump each rep. */
   const liveVoicedHzRef = useRef<number[]>([]);
+  /** Last raw media time, to spot the reference `<audio loop>` wrapping back to the start of a new rep. */
+  const lastMediaTimeRef = useRef(0);
   const referenceMagnitudeRef = useRef(0);
   const rafRef = useRef<number | undefined>(undefined);
   const frameCountRef = useRef(0);
@@ -108,10 +117,12 @@ export function LiveShadowWaveform({
     }
     const buckets = referencePeaks.length || LIVE_WAVEFORM_BUCKETS;
     liveAmpRef.current = new Array<number>(buckets).fill(0);
-    liveHzRef.current = emptyLivePitchBuckets(buckets);
+    liveHzSumRef.current = new Array<number>(buckets).fill(0);
+    liveHzCountRef.current = new Array<number>(buckets).fill(0);
     liveVoicedHzRef.current = [];
+    lastMediaTimeRef.current = 0;
     setLivePeaks(emptyLivePeaks(buckets));
-    setLivePitchBuckets(liveHzRef.current.slice());
+    setLivePitchBuckets(emptyLivePitchBuckets(buckets));
     setLiveMedianHz(null);
     setPlayheadIndex(0);
     frameCountRef.current = 0;
@@ -120,9 +131,21 @@ export function LiveShadowWaveform({
 
     const samples = new Float32Array(analyser.fftSize);
 
+    // Wipe the per-bucket amplitude/pitch buffers at the top of each rep. Without
+    // this the contour accretes every past rep's one-shot frames into one
+    // ever-denser line that reads as a growing vibration around the median.
+    const startRep = () => {
+      liveAmpRef.current.fill(0);
+      liveHzSumRef.current.fill(0);
+      liveHzCountRef.current.fill(0);
+    };
+
     const tick = () => {
+      const rawMediaTime = getMediaTimeRef.current();
+      if (lastMediaTimeRef.current - rawMediaTime > durationSeconds / 2) startRep();
+      lastMediaTimeRef.current = rawMediaTime;
       // Shift left by output latency so drawing tracks what you hear over AirPods.
-      const mediaTime = Math.max(0, getMediaTimeRef.current() - SHADOW_OUTPUT_LATENCY_SECONDS);
+      const mediaTime = Math.max(0, rawMediaTime - SHADOW_OUTPUT_LATENCY_SECONDS);
       const progress = Math.min(1, Math.max(0, mediaTime / durationSeconds));
       const index = Math.min(buckets - 1, Math.floor(progress * buckets));
 
@@ -139,13 +162,25 @@ export function LiveShadowWaveform({
         const frame = samples.subarray(frameStart);
         const estimated = estimateFramePitch(frame, sampleRate);
         if (estimated.voiced && estimated.hz !== null && index >= 0 && index < buckets) {
-          liveHzRef.current[index] = estimated.hz;
-          liveVoicedHzRef.current.push(estimated.hz);
+          const runningMedian =
+            liveVoicedHzRef.current.length >= LIVE_PITCH_MIN_VOICED_FRAMES
+              ? medianHz(liveVoicedHzRef.current)
+              : null;
+          const isOutlier =
+            runningMedian !== null &&
+            Math.abs(hzToRelativeSemitones(estimated.hz, runningMedian)) >
+              LIVE_PITCH_OUTLIER_SEMITONES;
+          if (!isOutlier) {
+            liveHzSumRef.current[index] = (liveHzSumRef.current[index] ?? 0) + estimated.hz;
+            liveHzCountRef.current[index] = (liveHzCountRef.current[index] ?? 0) + 1;
+            liveVoicedHzRef.current.push(estimated.hz);
+          }
         }
       }
 
-      // Gain and pitch-normalization are derived from the whole take so far,
-      // so the earliest buckets stay consistent with the latest ones.
+      // Gain is derived from this rep's levels; the pitch centre (median) is
+      // pooled across every rep so the contour's vertical position stays put
+      // while its shape is redrawn fresh each rep.
       let liveMagnitude = 0;
       for (const amplitude of liveAmpRef.current) liveMagnitude = Math.max(liveMagnitude, amplitude);
       const gain = gentleLiveGain(liveMagnitude, referenceMagnitudeRef.current);
@@ -161,9 +196,11 @@ export function LiveShadowWaveform({
       setLivePeaks(livePeaksFromAmplitudes(liveAmpRef.current, gain));
       setLiveMedianHz(median);
       setLivePitchBuckets(
-        liveHzRef.current.map((hz) =>
-          hz !== null && median && median > 0 ? hzToRelativeSemitones(hz, median) : null,
-        ),
+        liveHzCountRef.current.map((count, bucket) => {
+          if (!count || !median || median <= 0) return null;
+          const bucketHz = (liveHzSumRef.current[bucket] ?? 0) / count;
+          return hzToRelativeSemitones(bucketHz, median);
+        }),
       );
       rafRef.current = requestAnimationFrame(tick);
     };

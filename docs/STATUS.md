@@ -33,6 +33,20 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-07 — Live shadow pitch contour no longer degrades over loop
+  reps (user: "starts smooth but becomes more and more spiky as the loops
+  go on").** `LiveShadowWaveform` kept one set of per-bucket amplitude/pitch
+  buffers for the whole loop: each bucket held a single last-write-wins YIN
+  frame, and rep after rep filled in more buckets until the contour was 240
+  independent one-shot estimates (octave errors included) vibrating around
+  the median — while the reference contour looked smooth because it averages
+  ~15 frames/bucket. Fix: detect the reference `<audio loop>` wrap (media
+  time jumps back > half the clip) and wipe the amplitude/pitch buffers at
+  the top of each rep; accumulate per-bucket sum+count and average at render
+  (matching the reference path); drop frames > 10 st from the running
+  median. The normalization median stays pooled across reps so only the
+  shape redraws, not the vertical position. typecheck + waveform/pitch/
+  shadow tests green.
 - **2026-09-07 — Pitch-accent scorer now uses the following particle to
   tell odaka from heiban (user: "wire the scorer to use the following
   token").** `expectedPitchShape` gains an optional third arg
