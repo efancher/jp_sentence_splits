@@ -57,6 +57,29 @@ describe('MeasuredPitchContour', () => {
     expect(container.querySelectorAll('polyline')).toHaveLength(2);
   });
 
+  it('renders the kana ruler under the contour when kana entries are given', () => {
+    const { container, getByText } = render(
+      <MeasuredPitchContour
+        payload={payload([frame(0), frame(1), frame(2), frame(1)])}
+        label="Your pitch (measured)"
+        kana={[
+          { text: 'り', start: 0, end: 0.2, leftPct: 0, widthPct: 50 },
+          { text: 'んご', start: 0.2, end: 0.4, leftPct: 50, widthPct: 50 },
+        ]}
+      />,
+    );
+    expect(container.querySelector('[aria-label="Your pitch (measured) syllables"]')).not.toBeNull();
+    expect(getByText('り')).toBeInTheDocument();
+    expect(getByText('んご')).toBeInTheDocument();
+  });
+
+  it('renders no kana ruler for an empty kana list', () => {
+    const { container } = render(
+      <MeasuredPitchContour payload={payload([frame(0), frame(1)])} kana={[]} />,
+    );
+    expect(container.querySelector('[aria-label$="syllables"]')).toBeNull();
+  });
+
   it('draws a playhead + band only for an in-range progress value', () => {
     const frames = [frame(0), frame(1), frame(2), frame(1)];
 

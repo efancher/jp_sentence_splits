@@ -10,9 +10,11 @@ import {
   getPitchAccentDrillWords,
   type PitchAccentDrillWord,
 } from '../db/repository';
-import type { Sentence } from '../domain/types';
+import type { Sentence, WordAlignment } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
+import { buildKanaTimeline, type KanaTimelineEntry } from '../lib/kanaTimeline';
+import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
 import { extractPitch, type PitchAnalysisPayload } from '../lib/pitch';
 import { seededShuffle } from '../lib/seededShuffle';
 import {
@@ -56,6 +58,11 @@ import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
  * walked in a shuffled order (`seededShuffle`, deterministic per `shuffleSeed`
  * so a Dexie live-query refresh doesn't reorder mid-drill); the "Shuffle" and
  * "Shuffle and start over" buttons pick a new seed.
+ *
+ * After a take the learner's own measured pitch contour renders under the
+ * playback control (`MeasuredPitchContour`), with a time-aligned kana ruler
+ * (`buildKanaTimeline`) beneath it once the forced alignment is back — the
+ * same treatment as the shadowing analysis contours.
  */
 
 type DrillMode = 'sentence' | 'word';
@@ -71,6 +78,8 @@ type AnalysisState =
       observations: TimingObservation[];
       /** The learner's measured YIN pitch track for the whole take. */
       learnerPitch?: PitchAnalysisPayload;
+      /** The take's forced-alignment words — feeds the kana ruler under the contour. */
+      learnerWords: WordAlignment[];
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
       /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
@@ -123,6 +132,7 @@ async function analyzeRecording(
       status: 'done',
       observations,
       learnerPitch: pitch,
+      learnerWords: alignment.words,
       learnerClassesBySurface,
       learnerFollowingBySurface,
       scorableCount: scorableTargets.length,
@@ -203,6 +213,19 @@ export function PitchAccentDrillPage() {
     [analysisTargets],
   );
 
+  // Kana of the recorded unit, for the ruler under the learner's contour.
+  const moraUnits = useMemo<MoraUnit[]>(() => {
+    if (mode === 'sentence') {
+      const sentence = currentSentence?.sentence;
+      if (!sentence) return [];
+      const chunks = getSentenceReadingForMora(sentence);
+      return chunks ? segmentIntoMorae(chunks) : [];
+    }
+    if (!currentWord) return [];
+    const reading = currentWord.vocabularyItem.reading || currentWord.surfaceForm;
+    return segmentIntoMorae(reading + currentWord.followingParticle);
+  }, [mode, currentSentence, currentWord]);
+
   // Reset the take + feedback whenever the item — or the mode — changes.
   useEffect(() => {
     setPending(null);
@@ -260,6 +283,14 @@ export function PitchAccentDrillPage() {
     analysis.status === 'done' || analysis.status === 'unavailable'
       ? analysis.learnerPitch
       : undefined;
+  const learnerKana = useMemo<KanaTimelineEntry[] | undefined>(() => {
+    if (analysis.status !== 'done' || !analysis.learnerPitch) return undefined;
+    return buildKanaTimeline({
+      words: analysis.learnerWords,
+      moraUnits,
+      durationSeconds: analysis.learnerPitch.durationSeconds,
+    });
+  }, [analysis, moraUnits]);
 
   return (
     <div className="stack">
@@ -370,7 +401,7 @@ export function PitchAccentDrillPage() {
 
             {pending && pendingUrl ? (
               <div className="stack">
-                <LearnerTake url={pendingUrl} pitch={learnerPitch} />
+                <LearnerTake url={pendingUrl} pitch={learnerPitch} kana={learnerKana} />
                 <PitchAccentFeedback analysis={analysis} />
               </div>
             ) : null}
@@ -480,7 +511,15 @@ function WordPrompt({
  * the native reference. The playhead follows playback (x↔time is exact: the
  * audio being played *is* the clip the pitch was measured from).
  */
-function LearnerTake({ url, pitch }: { url: string; pitch?: PitchAnalysisPayload }) {
+function LearnerTake({
+  url,
+  pitch,
+  kana,
+}: {
+  url: string;
+  pitch?: PitchAnalysisPayload;
+  kana?: KanaTimelineEntry[];
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   return (
@@ -503,6 +542,7 @@ function LearnerTake({ url, pitch }: { url: string; pitch?: PitchAnalysisPayload
           progress={progress}
           label="Your pitch (measured)"
           ariaLabel="Measured pitch of your recording"
+          kana={kana}
         />
       ) : null}
     </div>

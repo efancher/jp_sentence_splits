@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-08 — Pitch-accent drill: kana ruler under your recording's
+  contour (user request, follow-up).** `MeasuredPitchContour` gained an
+  optional `kana` prop (a `buildKanaTimeline` entry list); when passed it
+  renders the shared `KanaTimelineRow` (extracted from `AnalysisPanel` into
+  `src/components/KanaTimelineRow.tsx`) under the SVG — same time-aligned
+  syllable ruler the shadowing analysis contours use. The drill builds the
+  timeline from the take's forced-alignment words (`analysis.learnerWords`,
+  now kept on the `done` state) + the item's mora sequence
+  (`getSentenceReadingForMora`/`segmentIntoMorae` in sentence mode, the
+  vocab reading + trailing particle in word mode). Shows only once alignment
+  succeeds; degrades to nothing otherwise.
 - **2026-09-08 — Pitch-accent drill shows your recording's measured pitch
   contour (user request).** After a take, `PitchAccentDrillPage` renders a
   `MeasuredPitchContour` (labelled "Your pitch (measured)") under the audio

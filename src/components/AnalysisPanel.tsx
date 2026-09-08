@@ -35,6 +35,7 @@ import { buildAsrObservations } from '../lib/asrObservations';
 import { compareObservations, rankObservations, selectPrimaryObservation } from '../lib/feedbackRanking';
 import { categorizeObservations } from '../lib/pronunciationHistory';
 import { computeSpectrogram, type Spectrogram } from '../lib/spectrogram';
+import { KanaTimelineRow } from './KanaTimelineRow';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import {
@@ -113,50 +114,6 @@ function PeakWaveform({ peaks, label }: { peaks: WavePeak[]; label: string }) {
       >
         <polyline fill="none" stroke="currentColor" strokeWidth="2" points={points} />
       </svg>
-    </div>
-  );
-}
-
-/**
- * Kana lined up under a pitch contour's linear time axis, so it's clear which
- * syllables the rises and falls belong to. Only rendered once server forced
- * alignment is available; degrades to nothing otherwise.
- */
-function KanaTimelineRow({
-  entries,
-  label,
-}: {
-  entries: ReturnType<typeof buildKanaTimeline>;
-  label: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <div
-      aria-label={label}
-      style={{ position: 'relative', width: '100%', height: '1.4em', marginTop: 2 }}
-    >
-      {entries.map((entry, index) => (
-        <span
-          key={`${entry.text}-${index}`}
-          className="jp"
-          title={entry.text}
-          style={{
-            position: 'absolute',
-            left: `${entry.leftPct}%`,
-            width: `${Math.min(entry.widthPct, 100 - entry.leftPct)}%`,
-            textAlign: 'center',
-            fontSize: '0.72em',
-            lineHeight: 1.3,
-            color: 'var(--text-muted)',
-            borderLeft: '1px solid var(--border)',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'clip',
-          }}
-        >
-          {entry.text}
-        </span>
-      ))}
     </div>
   );
 }

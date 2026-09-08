@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 
+import type { KanaTimelineEntry } from '../lib/kanaTimeline';
 import type { PitchAnalysisPayload } from '../lib/pitch';
+import { KanaTimelineRow } from './KanaTimelineRow';
 
 const WIDTH = 320;
 const HEIGHT = 36;
@@ -26,12 +28,17 @@ const BAND_HALF = 3;
  * `progress` (0..1, fraction of the clip's duration) draws a playhead — the
  * audio being played *is* the clip the pitch was measured from, so x↔time is
  * exact to within one analysis frame (~16ms); no forced-alignment guesswork.
+ *
+ * `kana` (from `buildKanaTimeline`, needs a forced alignment) lays the
+ * transcript's syllables under the same time axis — same treatment as the
+ * shadowing analysis contours.
  */
 export function MeasuredPitchContour({
   payload,
   progress,
   label = 'Native pitch (measured)',
   ariaLabel = 'Measured pitch of the native recording',
+  kana,
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
@@ -39,6 +46,8 @@ export function MeasuredPitchContour({
   label?: string;
   /** SVG aria-label; defaults to the native-reference wording. */
   ariaLabel?: string;
+  /** Time-aligned kana ruler under the contour; omitted when there's no alignment. */
+  kana?: KanaTimelineEntry[];
 }) {
   const segments = useMemo(() => {
     const frames = payload?.frames ?? [];
@@ -114,6 +123,9 @@ export function MeasuredPitchContour({
           />
         ))}
       </svg>
+      {kana && kana.length > 0 ? (
+        <KanaTimelineRow entries={kana} label={`${label} syllables`} />
+      ) : null}
     </div>
   );
 }

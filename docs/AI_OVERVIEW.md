@@ -1207,7 +1207,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     labelled "Your pitch (measured)", playhead following playback) — the same
     honest sentence-level track the review reveals draw for the native
     reference, here on the learner's clip; it survives an alignment-service
-    outage since the pitch track is extracted independently. Each list is
+    outage since the pitch track is extracted independently. When the
+    alignment *is* back, a time-aligned kana ruler (`buildKanaTimeline` →
+    shared `KanaTimelineRow`, `MeasuredPitchContour`'s `kana` prop) sits
+    under the contour — same treatment as the shadowing analysis contours,
+    from the take's own forced-alignment words + the item's mora sequence.
+    Each list is
     walked in a shuffled order (`seededShuffle`, deterministic per a random
     `shuffleSeed` so a Dexie live-query refresh doesn't reorder mid-drill;
     "Shuffle" / "Shuffle and start over" pick a new seed).
@@ -1222,7 +1227,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     duration. Word→kana split is by character-count proportion onto the mora
     sequence (same approximation as `SyncedShadowText`); reference side is
     offset-corrected for a practice-target slice. Degrades to nothing when
-    the aligner is unreachable. Not on the waveforms — their peaks are
+    the aligner is unreachable. The row component (`KanaTimelineRow`) is
+    shared with the pitch-accent drill's own-recording contour (§8). Not on
+    the waveforms — their peaks are
     edge-trimmed and mode-warped, so there's no honest linear time axis.
   - **Spectrogram** — a "Show spectrogram" toggle draws the reference clip
     and the learner attempt as stacked grayscale spectrograms (0–4 kHz,
