@@ -50,8 +50,10 @@ is trimmed.)
   row yet, otherwise keep whichever of the two is further along (reps →
   scheduledDays → lastReview) and soft-delete the other. Append-only
   `reviews` rows follow the relabelled id untouched. Docs + `reviewPage`/
-  `sessionPlannerRepository` tests updated; suite green (1257).
-  **Migration not yet run against production** — pending user go-ahead.
+  `sessionPlannerRepository` tests updated; suite green (1257). Migration
+  run against production 2026-09-08: 14 relabelled, 19 soft-deleted (7
+  comprehension superseded, 12 reading_in_context rows where the
+  comprehension row was further along); re-run is idempotent.
 
 - **2026-09-07 — Live shadow pitch contour no longer degrades over loop
   reps (user: "starts smooth but becomes more and more spiky as the loops
