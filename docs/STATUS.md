@@ -43,7 +43,11 @@ is trimmed.)
   contour still renders when the alignment service is down (`learnerPitch` on
   both the `done` and `unavailable` analysis states). `MeasuredPitchContour`
   gained `label` / `ariaLabel` props (default to the native-reference
-  wording; ReviewPage/shadowing untouched).
+  wording; ReviewPage/shadowing untouched). Same pass (user request): both
+  drill lists are now walked in a **shuffled** order (`seededShuffle`,
+  deterministic per a random `shuffleSeed` so a live-query refresh can't
+  reorder mid-drill) — "Shuffle" button by the counter, "Shuffle and start
+  over" at the end of the list.
 - **2026-09-08 — `comprehension` retired; `reading_in_context` is the only
   sentence-subject card (user: "always better to learn in context if
   possible").** The plain isolated-sentence card is gone.

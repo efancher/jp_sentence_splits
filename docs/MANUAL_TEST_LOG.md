@@ -28,6 +28,7 @@ Status key: ✅ verified · ⚠️ issue found · ⬜ not yet tested · 🔁 nee
 | 5 | Mining wizard W1–W6 (Transcript→Segment→Translate→Commit) | ☰ → Import from YouTube | ⬜ | Use a short NEW video; after commit check ☰ → Books for exactly one new book, no duplicate |
 | 6 | `/pitch-accent` drill records + scores contour vs dictionary | Home shortcut row → "Pitch-accent drill" | ⬜ | Needs mic + an eligible sentence; "nothing to practice" is a valid state |
 | 6a | `/pitch-accent` drill shows *your* recording's measured pitch contour under the audio player ("Your pitch (measured)"), playhead tracks playback | Home shortcut row → "Pitch-accent drill" → record a take | ⬜ | Contour should still appear if the alignment service is unreachable (feedback text says so but the line is drawn); a near-silent take draws nothing |
+| 6b | `/pitch-accent` drill order is shuffled; "Shuffle" reshuffles + resets to 1 | Home shortcut row → "Pitch-accent drill" | ⬜ | Order should not match `/words` reading order; hitting "Shuffle" (or reload) gives a new order and doesn't reorder mid-drill on a background data refresh |
 
 ## Open questions / issues
 

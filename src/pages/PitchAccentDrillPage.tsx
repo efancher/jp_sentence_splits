@@ -14,6 +14,7 @@ import type { Sentence } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
 import { extractPitch, type PitchAnalysisPayload } from '../lib/pitch';
+import { seededShuffle } from '../lib/seededShuffle';
 import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
@@ -51,11 +52,15 @@ import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
  *    larger.
  *
  * A lightweight practice loop, not SRS: nothing is scheduled or persisted
- * (attempts aren't saved — the point is the immediate feedback), and each
- * list is just walked in reading order.
+ * (attempts aren't saved — the point is the immediate feedback). Each list is
+ * walked in a shuffled order (`seededShuffle`, deterministic per `shuffleSeed`
+ * so a Dexie live-query refresh doesn't reorder mid-drill); the "Shuffle" and
+ * "Shuffle and start over" buttons pick a new seed.
  */
 
 type DrillMode = 'sentence' | 'word';
+
+const newShuffleSeed = () => Math.random().toString(36).slice(2);
 
 type AnalysisState =
   | { status: 'idle' }
@@ -128,10 +133,31 @@ async function analyzeRecording(
 }
 
 export function PitchAccentDrillPage() {
-  const sentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
-  const words = useLiveQuery(() => getPitchAccentDrillWords(), []);
+  const rawSentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
+  const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const [mode, setMode] = useState<DrillMode>('sentence');
   const [position, setPosition] = useState(0);
+  const [shuffleSeed, setShuffleSeed] = useState(newShuffleSeed);
+
+  const sentences = useMemo(
+    () =>
+      rawSentences
+        ? seededShuffle(rawSentences, (entry) => entry.sentence.id, shuffleSeed)
+        : rawSentences,
+    [rawSentences, shuffleSeed],
+  );
+  const words = useMemo(
+    () =>
+      rawWords
+        ? seededShuffle(rawWords, (entry) => entry.vocabularyItem.id, shuffleSeed)
+        : rawWords,
+    [rawWords, shuffleSeed],
+  );
+
+  const reshuffle = () => {
+    setShuffleSeed(newShuffleSeed());
+    setPosition(0);
+  };
   const shadowing = useShadowing();
   const { cancelRecording } = shadowing;
 
@@ -290,14 +316,27 @@ export function PitchAccentDrillPage() {
               You've reached the end of the list ({list.length}{' '}
               {mode === 'sentence' ? 'sentences' : 'words'}).
             </p>
-            <button type="button" onClick={() => setPosition(0)}>
-              Start over
+            <button type="button" onClick={reshuffle}>
+              Shuffle and start over
             </button>
           </>
         ) : (
           <>
-            <div className="muted" style={{ fontSize: '0.85rem' }}>
-              {position + 1} of {list.length}
+            <div
+              className="row muted"
+              style={{ fontSize: '0.85rem', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <span>
+                {position + 1} of {list.length}
+              </span>
+              <button
+                type="button"
+                className="ghost"
+                style={{ fontSize: '0.8rem' }}
+                onClick={reshuffle}
+              >
+                Shuffle
+              </button>
             </div>
 
             {mode === 'sentence' && currentSentence ? (

@@ -1207,7 +1207,10 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     labelled "Your pitch (measured)", playhead following playback) — the same
     honest sentence-level track the review reveals draw for the native
     reference, here on the learner's clip; it survives an alignment-service
-    outage since the pitch track is extracted independently.
+    outage since the pitch track is extracted independently. Each list is
+    walked in a shuffled order (`seededShuffle`, deterministic per a random
+    `shuffleSeed` so a Dexie live-query refresh doesn't reorder mid-drill;
+    "Shuffle" / "Shuffle and start over" pick a new seed).
     `settings.quietMode` does not affect this page. So a word's pitch-accent data backs passive shadowing
     feedback, an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-

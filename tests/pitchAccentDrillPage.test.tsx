@@ -193,4 +193,10 @@ describe('PitchAccentDrillPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Single words' }));
     expect(await screen.findByText(/No eligible words yet/)).toBeInTheDocument();
   });
+
+  it('offers a Shuffle control once there is something to drill', async () => {
+    await seedEligibleSentence();
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Shuffle' })).toBeInTheDocument();
+  });
 });
