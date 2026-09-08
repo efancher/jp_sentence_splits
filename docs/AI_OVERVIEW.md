@@ -1202,8 +1202,13 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     shape (same `buildPitchAccentShapeObservations`, learner alignment only)
     and shown as your measured H/L line under the dictionary row (same
     `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line
-    as `AnalysisPanel`), nothing saved. `settings.quietMode` does not affect
-    this page. So a word's pitch-accent data backs passive shadowing
+    as `AnalysisPanel`), nothing saved. The take's own measured YIN pitch
+    contour also renders under the audio player (`MeasuredPitchContour`,
+    labelled "Your pitch (measured)", playhead following playback) — the same
+    honest sentence-level track the review reveals draw for the native
+    reference, here on the learner's clip; it survives an alignment-service
+    outage since the pitch track is extracted independently.
+    `settings.quietMode` does not affect this page. So a word's pitch-accent data backs passive shadowing
     feedback, an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).

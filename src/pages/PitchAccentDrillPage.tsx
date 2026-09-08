@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
@@ -12,7 +13,7 @@ import {
 import type { Sentence } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
 import { alignAudio } from '../lib/analysisApi';
-import { extractPitch } from '../lib/pitch';
+import { extractPitch, type PitchAnalysisPayload } from '../lib/pitch';
 import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
@@ -59,10 +60,12 @@ type DrillMode = 'sentence' | 'word';
 type AnalysisState =
   | { status: 'idle' }
   | { status: 'analyzing' }
-  | { status: 'unavailable' }
+  | { status: 'unavailable'; learnerPitch?: PitchAnalysisPayload }
   | {
       status: 'done';
       observations: TimingObservation[];
+      /** The learner's measured YIN pitch track for the whole take. */
+      learnerPitch?: PitchAnalysisPayload;
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
       /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
@@ -76,12 +79,18 @@ async function analyzeRecording(
   transcript: string,
   targets: PitchAccentTarget[],
 ): Promise<AnalysisState> {
+  // The measured pitch track is independent of the alignment service — keep it
+  // even when alignment is down so the contour still renders.
+  let pitch: PitchAnalysisPayload | undefined;
   try {
-    const [alignment, pitch] = await Promise.all([
-      alignAudio(blob, transcript),
-      decodeAudioBuffer(blob).then((buffer) => extractPitch(canonicalizeAudioBuffer(buffer))),
-    ]);
-    if (!alignment) return { status: 'unavailable' };
+    const buffer = await decodeAudioBuffer(blob);
+    pitch = extractPitch(canonicalizeAudioBuffer(buffer));
+  } catch {
+    pitch = undefined;
+  }
+  try {
+    const alignment = await alignAudio(blob, transcript);
+    if (!alignment || !pitch) return { status: 'unavailable', learnerPitch: pitch };
     const scorableTargets = targets
       .filter((target) => target.pitchAccentPositions?.length)
       .map((target) => ({
@@ -108,12 +117,13 @@ async function analyzeRecording(
     return {
       status: 'done',
       observations,
+      learnerPitch: pitch,
       learnerClassesBySurface,
       learnerFollowingBySurface,
       scorableCount: scorableTargets.length,
     };
   } catch {
-    return { status: 'unavailable' };
+    return { status: 'unavailable', learnerPitch: pitch };
   }
 }
 
@@ -220,6 +230,10 @@ export function PitchAccentDrillPage() {
     analysis.status === 'done' && analysis.learnerFollowingBySurface.size > 0
       ? analysis.learnerFollowingBySurface
       : undefined;
+  const learnerPitch =
+    analysis.status === 'done' || analysis.status === 'unavailable'
+      ? analysis.learnerPitch
+      : undefined;
 
   return (
     <div className="stack">
@@ -317,8 +331,7 @@ export function PitchAccentDrillPage() {
 
             {pending && pendingUrl ? (
               <div className="stack">
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                <audio controls src={pendingUrl} />
+                <LearnerTake url={pendingUrl} pitch={learnerPitch} />
                 <PitchAccentFeedback analysis={analysis} />
               </div>
             ) : null}
@@ -417,6 +430,41 @@ function WordPrompt({
           <mark>{marked || surfaceForm}</mark>
           {after}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The recorded take: playback plus — once measured — the learner's own YIN
+ * pitch contour, the same honest measured track the review reveals show for
+ * the native reference. The playhead follows playback (x↔time is exact: the
+ * audio being played *is* the clip the pitch was measured from).
+ */
+function LearnerTake({ url, pitch }: { url: string; pitch?: PitchAnalysisPayload }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  return (
+    <div className="stack" style={{ gap: '0.2rem' }}>
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <audio
+        ref={audioRef}
+        controls
+        src={url}
+        onTimeUpdate={() => {
+          const el = audioRef.current;
+          if (!el || !el.duration || Number.isNaN(el.duration)) return setProgress(null);
+          setProgress(Math.max(0, Math.min(1, el.currentTime / el.duration)));
+        }}
+        onEnded={() => setProgress(null)}
+      />
+      {pitch ? (
+        <MeasuredPitchContour
+          payload={pitch}
+          progress={progress}
+          label="Your pitch (measured)"
+          ariaLabel="Measured pitch of your recording"
+        />
       ) : null}
     </div>
   );

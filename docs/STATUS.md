@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-08 — Pitch-accent drill shows your recording's measured pitch
+  contour (user request).** After a take, `PitchAccentDrillPage` renders a
+  `MeasuredPitchContour` (labelled "Your pitch (measured)") under the audio
+  player — the same honest YIN track the review reveals draw for the native
+  reference, now on the learner's own clip. The playhead follows playback
+  (x↔time is exact — the audio *is* the clip the pitch was measured from).
+  `analyzeRecording` now extracts the pitch track in its own try block so the
+  contour still renders when the alignment service is down (`learnerPitch` on
+  both the `done` and `unavailable` analysis states). `MeasuredPitchContour`
+  gained `label` / `ariaLabel` props (default to the native-reference
+  wording; ReviewPage/shadowing untouched).
 - **2026-09-08 — `comprehension` retired; `reading_in_context` is the only
   sentence-subject card (user: "always better to learn in context if
   possible").** The plain isolated-sentence card is gone.

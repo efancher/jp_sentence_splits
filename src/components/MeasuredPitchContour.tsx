@@ -9,12 +9,13 @@ const PAD_Y = 5;
 const BAND_HALF = 3;
 
 /**
- * The *measured* sentence-level pitch of a native reference clip — a real YIN
- * track (via `extractPitch` / `loadOrComputeReferencePitch`), not a predicted
- * contour. Shown directly under the sentence on the `listening` /
- * `word_listening` review reveals and the shadowing surfaces, complementing
- * the per-word dictionary H/L marks (`SentencePitchAccentRow`) with an
- * honest, model-free sentence-level view.
+ * The *measured* sentence-level pitch of a clip — a real YIN track (via
+ * `extractPitch` / `loadOrComputeReferencePitch`), not a predicted contour.
+ * Shown directly under the sentence on the `listening` / `word_listening`
+ * review reveals and the shadowing surfaces, complementing the per-word
+ * dictionary H/L marks (`SentencePitchAccentRow`) with an honest, model-free
+ * sentence-level view. Usually the native reference; on the pitch-accent
+ * drill it's the learner's own take (`label` distinguishes them).
  *
  * Drawn in relative semitones against the speaker's own median (so a
  * baritone reference sits centred, same normalization as everywhere else),
@@ -29,9 +30,15 @@ const BAND_HALF = 3;
 export function MeasuredPitchContour({
   payload,
   progress,
+  label = 'Native pitch (measured)',
+  ariaLabel = 'Measured pitch of the native recording',
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
+  /** Visible caption; defaults to the native-reference wording. */
+  label?: string;
+  /** SVG aria-label; defaults to the native-reference wording. */
+  ariaLabel?: string;
 }) {
   const segments = useMemo(() => {
     const frames = payload?.frames ?? [];
@@ -69,12 +76,12 @@ export function MeasuredPitchContour({
 
   return (
     <div className="pitch-contour">
-      <span className="muted pitch-contour-caption">Native pitch (measured)</span>
+      <span className="muted pitch-contour-caption">{label}</span>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label="Measured pitch of the native recording"
+        aria-label={ariaLabel}
         style={{ width: '100%', height: HEIGHT }}
       >
         {playheadX != null ? (
