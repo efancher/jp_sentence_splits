@@ -78,22 +78,27 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
 /**
- * Phase 4 (docs/UNIFIED_APP_ARCHITECTURE.md §10) starts with two
- * sentence-subject activity types. Both reveal EN + vocab and are
- * self-rated; they differ in the pre-reveal framing — `comprehension`
- * shows the sentence in isolation, `reading_in_context` embeds it in its
- * surrounding passage (see ReadingInContextCard / buildReadingContextMap).
- * They also differ in gating: `comprehension` waits only on the sentence's
- * own vocabulary (the Phase 7.11 full-sentence gate, via
- * `ActivityDescriptor.gateSentenceId`), while `reading_in_context`
- * additionally waits on every sentence shown in the passage — a passage is
- * only worth reading once its neighbours' vocab is confirmed + proficient
- * too (user request, 2026-09-03, via the descriptor's `activityIsReady`).
+ * Sentence-subject review: one activity type, `reading_in_context`. Shows
+ * the Japanese sentence framed by its reading-order neighbours (preceding
+ * sentences untranslated above, the following sentence's translation folded
+ * into the reveal — see ReadingInContextCard / buildReadingContextMap),
+ * then reveals EN + vocab for a self-rating. Falls back to the isolated
+ * layout when no passage is available (inbox-only sentence, or a
+ * book-scoped queue that can't see the neighbours).
+ *
+ * Gating: the Phase 7.11 full-sentence gate on the sentence's own
+ * vocabulary (`ActivityDescriptor.gateSentenceId`), *plus* — since a
+ * passage is only worth studying once you can actually read it — every
+ * sentence shown in the surrounding passage must itself be full-review
+ * ready (user request, 2026-09-03, via the descriptor's `activityIsReady`).
+ *
+ * History: this was two types — a plain isolated `comprehension` and
+ * `reading_in_context`. `comprehension` was retired 2026-09-08 (user:
+ * "always better to learn in context if possible"); its existing study
+ * items were migrated to `reading_in_context`
+ * (scripts/migrate-comprehension-to-reading-in-context.ts).
  */
-const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = [
-  'comprehension',
-  'reading_in_context',
-];
+const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = ['reading_in_context'];
 
 /**
  * Vocabulary-item-subject activity types (Phase 7.2/7.3/7.9, docs/STATUS.md) —
@@ -661,22 +666,18 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       buildCard: (studyItem, sentence) => ({
         studyItem,
         sentence,
-        readingContext:
-          studyItem.activityType === 'reading_in_context'
-            ? scope.readingContextBySentenceId.get(sentence.id)
-            : undefined,
+        readingContext: scope.readingContextBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
-      // `comprehension` is gated only by gateSentenceId (its own sentence's
-      // vocab). `reading_in_context` additionally waits until every sentence
-      // shown in the surrounding passage is itself ready for full review, so
-      // the learner never reads a passage containing words they haven't
-      // confirmed + made proficient yet (user request, 2026-09-03). Empty
-      // context (no book membership, or a book-scoped queue that can't see
-      // the neighbours) => nothing to gate on, ready.
-      activityIsReady: (sentence, activityType, ctx) => {
-        if (activityType !== 'reading_in_context') return true;
+      // On top of gateSentenceId (the card's own sentence vocab), the
+      // sentence card waits until every sentence shown in the surrounding
+      // passage is itself ready for full review, so the learner never
+      // studies a passage containing words they haven't confirmed + made
+      // proficient yet (user request, 2026-09-03). Empty context (no book
+      // membership, or a book-scoped queue that can't see the neighbours)
+      // => nothing to gate on, ready.
+      activityIsReady: (sentence, _activityType, ctx) => {
         const context = scope.readingContextBySentenceId.get(sentence.id);
         if (!context) return true;
         return [...context.before, ...context.after].every(
@@ -1233,17 +1234,15 @@ export function ReviewPage() {
       // computing what's due, push out any sentence card whose vocabulary
       // hasn't been shown proficient yet — see deferUnreadySentenceReviews.
       // That only covers items that already exist; a sentence with no
-      // study_item yet for some SENTENCE_ACTIVITY_TYPES entry (e.g. only
-      // comprehension has ever been seeded, not reading_in_context) would
-      // otherwise bypass it entirely via lazy seeding below — sentenceReadiness
-      // covers that path.
+      // reading_in_context study_item yet would otherwise bypass it
+      // entirely via lazy seeding below — sentenceReadiness covers that path.
       await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
-      // reading_in_context has a stricter gate than comprehension — it also
-      // waits on its passage neighbours' vocab. deferUnreadySentenceReviews
-      // above only checked each card's own target sentence; this pushes out
-      // any already-due reading_in_context item whose surrounding passage
-      // isn't ready yet (the isGatedOut filter below covers the not-yet-
-      // seeded path, same split as the sentence gate).
+      // reading_in_context also waits on its passage neighbours' vocab, on
+      // top of its own sentence. deferUnreadySentenceReviews above only
+      // checked each card's own target sentence; this pushes out any
+      // already-due reading_in_context item whose surrounding passage isn't
+      // ready yet (the isGatedOut filter below covers the not-yet-seeded
+      // path, same split as the sentence gate).
       await deferUnreadyReadingInContextReviews();
       // Same gate for tracked grammar patterns: a grammarPattern-subject card
       // (comprehension/completion/contrast/production) whose pattern has no
@@ -1823,11 +1822,11 @@ export function ReviewPage() {
 }
 
 /**
- * `reading_in_context` card body — the same reveal flow as plain
- * `comprehension` (see JP, reveal EN + vocab, self-rate), but the sentence
- * under test is framed by its reading-order neighbours (buildReadingContextMap):
- * the preceding sentences are shown untranslated above it so the passage
- * sets the scene without spoiling the answer, and the following sentence's
+ * `reading_in_context` card body — the sole sentence-subject card. Reveal
+ * flow: see JP, reveal EN + vocab, self-rate. The sentence under test is
+ * framed by its reading-order neighbours (buildReadingContextMap): the
+ * preceding sentences are shown untranslated above it so the passage sets
+ * the scene without spoiling the answer, and the following sentence's
  * translation joins the reveal. With no context available (inbox-only
  * sentence, or a book-scoped queue whose neighbours aren't loaded) it
  * degrades to the isolated layout.

@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-07.
+Last updated: 2026-09-08.
 
 ## Where things stand
 
@@ -32,6 +32,26 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-08 — `comprehension` retired; `reading_in_context` is the only
+  sentence-subject card (user: "always better to learn in context if
+  possible").** The plain isolated-sentence card is gone.
+  `SENTENCE_ACTIVITY_TYPES` is now just `['reading_in_context']`, so nothing
+  new seeds as `comprehension` and the planner's `RETAIN_ACTIVITY_TYPES`
+  drops it too. `reading_in_context` keeps its stricter gate unchanged (the
+  whole 2-before/1-after passage must be full-review ready, user request
+  2026-09-03) — a sentence whose passage isn't ready now waits rather than
+  falling back to an isolated card; with genuinely no passage (inbox-only
+  sentence, book-scoped queue that can't see neighbours) it still degrades
+  to the isolated layout inside `ReadingInContextCard`. Existing
+  `comprehension` study items (FSRS state + review history) are migrated by
+  `scripts/migrate-comprehension-to-reading-in-context.ts` (dry-run default,
+  `--apply`): relabel in place where the sentence has no `reading_in_context`
+  row yet, otherwise keep whichever of the two is further along (reps →
+  scheduledDays → lastReview) and soft-delete the other. Append-only
+  `reviews` rows follow the relabelled id untouched. Docs + `reviewPage`/
+  `sessionPlannerRepository` tests updated; suite green (1257).
+  **Migration not yet run against production** — pending user go-ahead.
 
 - **2026-09-07 — Live shadow pitch contour no longer degrades over loop
   reps (user: "starts smooth but becomes more and more spiky as the loops

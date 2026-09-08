@@ -2,11 +2,12 @@ import type { Book, BookSentence, Sentence } from '../domain/types';
 
 /**
  * The sentences immediately before/after a target sentence in reading order,
- * used by the `reading_in_context` review card to differentiate it from
- * plain `comprehension` (docs/ROADMAP.md — "the two still share one
- * interaction"): the sentence under test is shown embedded in its passage
- * rather than in isolation, so the learner reads it the way it was actually
- * encountered.
+ * used by the `reading_in_context` review card — the sole sentence-subject
+ * card since `comprehension` was retired 2026-09-08 (user: "always better to
+ * learn in context if possible"). The sentence under test is shown embedded
+ * in its passage rather than in isolation, so the learner reads it the way
+ * it was actually encountered; with no passage available the card falls back
+ * to the isolated layout.
  */
 export interface ReadingContext {
   /** Preceding sentences, in reading order (closest last). */

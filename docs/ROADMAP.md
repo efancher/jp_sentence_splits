@@ -118,7 +118,13 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   the following sentence's translation folded into the reveal, a "In
   context · <book>" caption. Home book = the sentence's most recently
   opened book. Degrades to the isolated layout when no context is
-  available. `comprehension` unchanged. Closes the Phase 4 gap.
+  available. Closes the Phase 4 gap.
+  **Superseded 2026-09-08:** the isolated `comprehension` card was retired
+  entirely (user: "always better to learn in context if possible") —
+  `reading_in_context` is the only sentence-subject card now, existing
+  `comprehension` items migrated to it
+  (`scripts/migrate-comprehension-to-reading-in-context.ts`). Detail in
+  STATUS.md.
 - [x] **Audio-less pitch-accent production drill.** (2026-09-01)
   `PitchAccentDrillPage` (`/pitch-accent`, Home shortcut) +
   `getPitchAccentDrillSentences` — a non-SRS practice loop over Satori

@@ -139,7 +139,7 @@ function SortableRow({
   status: string;
   /** Undefined means no analysis row exists yet — never opened AnalyzePage for this sentence. */
   vocabularyReviewStatus: 'unreviewed' | 'confirmed' | undefined;
-  /** Every one of this sentence's own study items (comprehension/reading_in_context) has crossed the graduation threshold. */
+  /** Every one of this sentence's own study items (reading_in_context) has crossed the graduation threshold. */
   graduated: boolean;
   selected: boolean;
   editOrder: boolean;

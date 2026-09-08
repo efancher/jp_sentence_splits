@@ -172,7 +172,9 @@ pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`
 is a thin wrapper with no knowledge of sentences/chunks — it only ever sees
 `StudyItem.fsrsState` (shaped to match `ts-fsrs`'s `Card`) and a rating.
-Live since Phase 4 (`comprehension`/`reading_in_context`), extended through
+Live since Phase 4 (`comprehension`/`reading_in_context`; `comprehension`
+retired 2026-09-08, `reading_in_context` is now the sole sentence card),
+extended through
 Phase 7 to `vocabularyItem`, `vocabularyConfusion` and `sentenceVocabulary`
 subjects and several
 more `activityType`s (`reading_production`, `sentence_transformation` — now

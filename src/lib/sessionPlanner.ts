@@ -399,7 +399,7 @@ export interface SessionPlannerInput {
   /** Minutes this planning pass has to work with — the day's starting budget on first plan, or just the increment being added on a later top-up (see `addMinutesToTodaySession`). */
   totalMinutes: number;
   recentActivity: RecentActivityEvent[];
-  /** Due StudyItems costed at the quicker "retain" per-item rate (comprehension/reading_retrieval/listening/etc) — merged with practiceDue into one ranked `review` batch. */
+  /** Due StudyItems costed at the quicker "retain" per-item rate (reading_in_context/reading_retrieval/listening/etc) — merged with practiceDue into one ranked `review` batch. */
   retainDue: ReviewPriorityInput[];
   /** Due StudyItems costed at the slower "practice" per-item rate (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast) — merged with retainDue into one ranked `review` batch. */
   practiceDue: ReviewPriorityInput[];

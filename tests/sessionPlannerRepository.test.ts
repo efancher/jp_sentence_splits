@@ -117,7 +117,7 @@ describe('Learning Orchestrator repository layer', () => {
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
     // A brand-new StudyItem is immediately due, giving a second (retain) step.
-    await ensureStudyItem('sentence', sentence.id, 'comprehension');
+    await ensureStudyItem('sentence', sentence.id, 'reading_in_context');
 
     const session = await addMinutesToTodaySession(30);
     expect(session.steps.length).toBeGreaterThanOrEqual(2);
@@ -285,7 +285,7 @@ describe('Learning Orchestrator repository layer', () => {
     const sentence = makeSentence();
     await db.sentences.put(sentence);
     await addSentencesToBook(book.id, [sentence.id]);
-    const studyItem = await ensureStudyItem('sentence', sentence.id, 'comprehension');
+    const studyItem = await ensureStudyItem('sentence', sentence.id, 'reading_in_context');
     await recordReview({ studyItemId: studyItem.id, rating: 'good' });
 
     const balance = await computeLearningBalance();

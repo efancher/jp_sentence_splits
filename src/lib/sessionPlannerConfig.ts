@@ -20,7 +20,7 @@ export const TOP_UP_INCREMENTS_MINUTES = [20, 30] as const;
  * about directly. `glossing` = new-sentence structural analysis + vocab
  * confirmation, `grammar` = examining not-yet-tracked grammar patterns,
  * `shadowing` = pronunciation practice, `review` = every FSRS due card
- * (comprehension/cloze/production/pitch/grammar drills/etc. — one shared
+ * (reading_in_context/cloze/production/pitch/grammar drills/etc. — one shared
  * due-queue, so one bucket) regardless of which of the old two "halves"
  * (retain/practice) it used to belong to. See src/lib/sessionPlanner.ts's
  * ALL_SESSION_BUCKETS for the canonical ordered list.
@@ -40,7 +40,6 @@ export const BASELINE_SESSION_ALLOCATION: Record<SessionBucket, number> = {
  * (quicker: show/reveal/self-rate).
  */
 export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
-  'comprehension',
   'reading_in_context',
   'reading_retrieval',
   'listening',

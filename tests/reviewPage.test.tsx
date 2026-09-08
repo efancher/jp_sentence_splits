@@ -125,10 +125,10 @@ async function addReferenceAudio(sentenceId: string) {
 }
 
 /**
- * Seeds far-future comprehension/reading_in_context study items for
- * `sentenceId` so those two unconditional activity types never occupy the
- * queue — used by tests that want to isolate a conditional card type
- * (vocabulary-target or listening) instead.
+ * Seeds a far-future `reading_in_context` study item for `sentenceId` so the
+ * sole sentence-subject activity type never occupies the queue — used by
+ * tests that want to isolate a conditional card type (vocabulary-target or
+ * listening) instead.
  */
 async function suppressUnconditionalSentenceActivityTypes(sentenceId: string) {
   const db = getDb();
@@ -144,17 +144,15 @@ async function suppressUnconditionalSentenceActivityTypes(sentenceId: string) {
     lapses: 0,
     state: 'review' as const,
   };
-  for (const activityType of ['comprehension', 'reading_in_context']) {
-    await db.studyItems.add({
-      id: `si-${sentenceId}-${activityType}`,
-      subjectType: 'sentence',
-      subjectId: sentenceId,
-      activityType,
-      fsrsState: farFutureFsrsState,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  await db.studyItems.add({
+    id: `si-${sentenceId}-reading_in_context`,
+    subjectType: 'sentence',
+    subjectId: sentenceId,
+    activityType: 'reading_in_context',
+    fsrsState: farFutureFsrsState,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 /**
@@ -367,7 +365,7 @@ describe('ReviewPage', () => {
     expect(screen.getByRole('button', { name: 'Good' })).toBeInTheDocument();
 
     await waitFor(async () => {
-      expect(await getDb().studyItems.count()).toBe(2);
+      expect(await getDb().studyItems.count()).toBe(1); // reading_in_context only
     });
   });
 
@@ -418,9 +416,9 @@ describe('ReviewPage', () => {
     await screen.findByText('本を読みます。');
     const studyItem = await waitFor(async () => {
       const items = await getDb().studyItems.where('subjectId').equals('sent-1').toArray();
-      const comprehensionItem = items.find((item) => item.activityType === 'comprehension');
-      expect(comprehensionItem).toBeDefined();
-      return comprehensionItem!;
+      const sentenceItem = items.find((item) => item.activityType === 'reading_in_context');
+      expect(sentenceItem).toBeDefined();
+      return sentenceItem!;
     });
     expect(screen.getByRole('link', { name: 'Why?' })).toHaveAttribute(
       'href',
@@ -430,6 +428,44 @@ describe('ReviewPage', () => {
 
   it('rates a card, advances the queue, and records a review', async () => {
     await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    // A second sentence so the queue has somewhere to advance to.
+    await db.sentences.add({
+      id: 'sent-2',
+      normalizedKey: 'sent-2',
+      japanese: '水を飲みます。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I drink water.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 1,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-2',
+      bookId: 'book-1',
+      sentenceId: 'sent-2',
+      position: 1,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 'sent-2',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
@@ -437,8 +473,8 @@ describe('ReviewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Reveal' }));
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
-    // Second study item (the other activity type) for the same sentence.
-    await screen.findByText('本を読みます。');
+    // Queue advances to the second sentence's card.
+    await screen.findByText('水を飲みます。');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Reveal' })).toBeInTheDocument();
     });
@@ -571,27 +607,6 @@ describe('ReviewPage', () => {
       });
       await suppressUnconditionalSentenceActivityTypes(id);
     }
-    // Keep plain comprehension out of the queue so the reading_in_context
-    // card is the one under test.
-    await db.studyItems.add({
-      id: 'si-sent-1-comprehension',
-      subjectType: 'sentence',
-      subjectId: 'sent-1',
-      activityType: 'comprehension',
-      fsrsState: {
-        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        stability: 1,
-        difficulty: 1,
-        elapsedDays: 0,
-        scheduledDays: 0,
-        learningSteps: 0,
-        reps: 1,
-        lapses: 0,
-        state: 'review',
-      },
-      createdAt: now,
-      updatedAt: now,
-    });
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -606,10 +621,7 @@ describe('ReviewPage', () => {
     expect(screen.getByText('それから出かけました。')).toBeInTheDocument();
   });
 
-  async function seedReadingInContextPassage(opts: {
-    followingReady: boolean;
-    suppressTargetComprehension?: boolean;
-  }) {
+  async function seedReadingInContextPassage(opts: { followingReady: boolean }) {
     await seedBookWithSentence(); // book-1, sent-1 ('本を読みます。'), vocab confirmed
     const db = getDb();
     const now = new Date().toISOString();
@@ -671,27 +683,6 @@ describe('ReviewPage', () => {
     await suppressUnconditionalSentenceActivityTypes('sent-0');
     if (opts.followingReady) await confirm('sent-2');
     await suppressUnconditionalSentenceActivityTypes('sent-2');
-    if (opts.suppressTargetComprehension) {
-      await db.studyItems.add({
-        id: 'si-sent-1-comprehension',
-        subjectType: 'sentence',
-        subjectId: 'sent-1',
-        activityType: 'comprehension',
-        fsrsState: {
-          due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          stability: 1,
-          difficulty: 1,
-          elapsedDays: 0,
-          scheduledDays: 0,
-          learningSteps: 0,
-          reps: 1,
-          lapses: 0,
-          state: 'review',
-        },
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
   }
 
   it('withholds the reading_in_context card while a passage neighbour is not full-review-ready', async () => {
@@ -699,23 +690,17 @@ describe('ReviewPage', () => {
     const db = getDb();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    // The plain comprehension card still seeds and renders (its own sentence
-    // is ready)...
-    await screen.findByText('本を読みます。');
-    await waitFor(async () => {
-      const sent1Items = await db.studyItems.where('subjectId').equals('sent-1').toArray();
-      expect(sent1Items.filter((i) => i.activityType === 'comprehension')).toHaveLength(1);
-    });
-    // ...but reading_in_context is withheld: no passage framing, and no
-    // study_item seeded for it while sent-2's vocab is unconfirmed.
+    // sent-1's own vocab is ready, but the following sentence's isn't — the
+    // passage gate withholds the card entirely and seeds no study_item.
+    await screen.findByText('All caught up.');
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
     expect(screen.queryByText(/In context · Test Book/)).not.toBeInTheDocument();
-    expect(screen.queryByText('朝ごはんを食べました。')).not.toBeInTheDocument();
-    const sent1ItemsAfter = await db.studyItems.where('subjectId').equals('sent-1').toArray();
-    expect(sent1ItemsAfter.filter((i) => i.activityType === 'reading_in_context')).toHaveLength(0);
+    const sent1Items = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+    expect(sent1Items.filter((i) => i.activityType === 'reading_in_context')).toHaveLength(0);
   });
 
   it('surfaces the reading_in_context card once every passage sentence is full-review-ready', async () => {
-    await seedReadingInContextPassage({ followingReady: true, suppressTargetComprehension: true });
+    await seedReadingInContextPassage({ followingReady: true });
     const db = getDb();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
@@ -2215,7 +2200,7 @@ describe('ReviewPage', () => {
 
     await screen.findByText('本を読みます。');
     await waitFor(async () => {
-      expect(await db.studyItems.count()).toBe(2); // comprehension + reading_in_context only
+      expect(await db.studyItems.count()).toBe(1); // reading_in_context only
     });
     expect(screen.queryByRole('button', { name: /Play native sentence recording/ })).not.toBeInTheDocument();
   });
@@ -2293,10 +2278,10 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    // Only sent-1's two activity types should seed (one "new subject" batch).
+    // Only sent-1's sentence card should seed (one "new subject" batch).
     await screen.findByText('本を読みます。');
     await waitFor(async () => {
-      expect(await db.studyItems.count()).toBe(2);
+      expect(await db.studyItems.count()).toBe(1);
     });
 
     await user.click(await screen.findByRole('button', { name: 'Reveal' }));
@@ -2304,8 +2289,6 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(1);
     });
-    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
-    await user.click(screen.getByRole('button', { name: 'Good' }));
 
     expect(
       await screen.findByText(/New-card limit reached for this session/),
@@ -2313,7 +2296,7 @@ describe('ReviewPage', () => {
     expect(screen.getByText(/1 of 1 introduced/)).toBeInTheDocument();
     expect(screen.getByText(/2 more waiting next time/)).toBeInTheDocument();
     // sent-2/sent-3 never got seeded.
-    expect(await db.studyItems.count()).toBe(2);
+    expect(await db.studyItems.count()).toBe(1);
   });
 
   it('interleaves new-subject seeding across categories instead of draining sentences first (Phase 7.10)', async () => {
@@ -2369,13 +2352,13 @@ describe('ReviewPage', () => {
       });
     }
     // A vocabulary item linked to sent-3 (not sent-1 — Phase 7.11's
-    // full-sentence gate would otherwise block sent-1's own cards on
+    // full-sentence gate would otherwise block sent-1's own card on
     // vocab-1 not being proficient yet; not sent-2 either — it's sent-1's
     // reading_in_context passage neighbour, and an un-proficient link there
     // would gate that card too) — with the old category-major pending-seed
-    // order this would only seed after all three sentences' six
-    // sentence-subject cards were exhausted; interleaved, it should seed
-    // right after sent-1's own two cards.
+    // order this would only seed after all three sentences' sentence-subject
+    // cards were exhausted; interleaved, it should seed right after sent-1's
+    // own card.
     await db.vocabularyItems.add({
       id: 'vocab-1',
       expression: '飲む',
@@ -2396,20 +2379,15 @@ describe('ReviewPage', () => {
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
-    // First batch: sent-1's two sentence-subject cards.
+    // First batch: sent-1's sentence card.
     await screen.findByText('本を読みます。');
     await waitFor(async () => {
-      expect(await db.studyItems.count()).toBe(2);
+      expect(await db.studyItems.count()).toBe(1);
     });
     await user.click(await screen.findByRole('button', { name: 'Reveal' }));
     await user.click(screen.getByRole('button', { name: 'Good' }));
     await waitFor(async () => {
       expect(await db.reviews.count()).toBe(1);
-    });
-    await user.click(await screen.findByRole('button', { name: 'Reveal' }));
-    await user.click(screen.getByRole('button', { name: 'Good' }));
-    await waitFor(async () => {
-      expect(await db.reviews.count()).toBe(2);
     });
 
     // Second batch should be vocab-1's cards, not sent-2's — proves

@@ -776,13 +776,15 @@ content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
 rating). One `StudyItem` exists per `(subjectType, subjectId,
 activityType)` triple; multiple activity types can exist for the same
 subject. Activity types currently wired, grouped by subject/eligibility:
-- **Sentence subject**: `comprehension` (JP in isolation, reveal EN+vocab,
-  self-rate) and `reading_in_context` (same reveal flow, but the sentence
-  is framed by its reading-order neighbours — preceding sentences shown
-  untranslated above it, the following sentence folded into the reveal, via
-  `src/lib/readingContext.ts`'s `buildReadingContextMap` +
+- **Sentence subject**: `reading_in_context` (JP framed by its
+  reading-order neighbours — preceding sentences shown untranslated above
+  it, the following sentence folded into the reveal — then reveal EN+vocab,
+  self-rate; via `src/lib/readingContext.ts`'s `buildReadingContextMap` +
   `ReadingInContextCard`; falls back to the isolated layout when no context
-  is available).
+  is available). The isolated `comprehension` card was retired 2026-09-08
+  (user: "always better to learn in context if possible"); existing items
+  were migrated to `reading_in_context`
+  (`scripts/migrate-comprehension-to-reading-in-context.ts`).
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
@@ -996,8 +998,8 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   pending-seed pool once a pattern crosses that bar. `computeGrammarLearnerState`
   is unchanged (no `productive` rung yet).
 
-**Gating and assistance tracking**: a sentence's full-sentence
-cards (`comprehension`/`reading_in_context`) are deliberately withheld
+**Gating and assistance tracking**: a sentence's full-sentence card
+(`reading_in_context`) is deliberately withheld
 until its linked vocabulary is both *confirmed*
 (`SentenceAnalysis.vocabularyReviewStatus`) and *shown proficient* (FSRS
 state has graduated past "new/learning" for every reviewable vocabulary
@@ -1005,13 +1007,13 @@ item in that sentence) — `getSentenceFullReviewReadiness`/
 `isSentenceReadyForFullReview`/`deferUnreadySentenceReviews` implement
 this, applied both as an ongoing filter on the due queue and defensively
 against lazily-seeded new items so nothing bypasses the gate.
-`reading_in_context` adds a stricter layer than `comprehension` (user
+`reading_in_context` adds a stricter layer on top (user
 request, 2026-09-03): via the sentence descriptor's `activityIsReady` hook
 it also waits until *every* sentence shown in the surrounding passage (2
 before + 1 after, `buildReadingContextMap`) is itself full-review-ready, so
 the learner never reads a passage full of unconfirmed words — with its own
 `deferUnreadyReadingInContextReviews` pass for already-due items (empty
-passage ⇒ nothing to gate on). The
+passage ⇒ nothing to gate on, card falls back to the isolated layout). The
 `listening` card adds a second layer on top (the listening ladder, §4
 above): `getSentenceListeningReadiness` also requires every
 `word_listening` occurrence for the sentence to be proficient, and
@@ -1506,10 +1508,10 @@ aren't JSON-serializable/aren't worth backing up).
 
 ## Current known gaps / deliberately-deferred items
 
-- **Sentence/vocabulary-card real UI differentiation**: `reading_in_context`
-  now differs from `comprehension` (it shows the surrounding passage — see
-  the activity-type list above). Other same-subject pairs still share an
-  interaction, but this specific Phase 4 gap is closed.
+- **Sentence-card differentiation**: resolved by deletion — the isolated
+  `comprehension` card was retired 2026-09-08, leaving `reading_in_context`
+  (surrounding-passage framing) as the only sentence-subject card. Some
+  same-subject *vocabulary*-card pairs still share an interaction.
 - **`sources` table** is schema-ready (Dexie + Postgres + RLS) but has no
   writer/reader anywhere; `Book.sourceKey`/`sourceUrl` remain the de facto
   source-tracking mechanism.
