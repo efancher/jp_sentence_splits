@@ -222,3 +222,79 @@ export function buildPronunciationProfile(
     headline,
   };
 }
+
+/**
+ * Cross-attempt "weak words" — surface forms flagged with a per-word issue
+ * (today only pitch-accent shape mismatches, from
+ * `AttemptAnalysisSummary.wordIssues`) in more than one analyzed attempt.
+ * Feeds the `/progress` "What to work on" panel's pronunciation block
+ * (`buildErrorMix`), naming the specific words to drill. Read-only — never
+ * writes a Review row.
+ */
+
+export const SHADOWING_WEAK_WORD_MIN_ATTEMPTS = 2;
+
+export interface WeakWordSummaryLike {
+  createdAt: string;
+  wordIssues?: { surfaceForm: string; kind: string; severity: number }[];
+}
+
+export interface ShadowingWeakWord {
+  surfaceForm: string;
+  issueKind: string;
+  /** Distinct analyzed attempts in which this word was flagged. */
+  attemptCount: number;
+  lastSeenAt: string;
+  meanSeverity: number;
+  trend: TrendDirection;
+}
+
+export function buildShadowingWeakWords(
+  summaries: WeakWordSummaryLike[],
+  options: { minAttempts?: number } = {},
+): ShadowingWeakWord[] {
+  const minAttempts = options.minAttempts ?? SHADOWING_WEAK_WORD_MIN_ATTEMPTS;
+
+  interface Bucket {
+    surfaceForm: string;
+    kindCounts: Map<string, number>;
+    severities: number[];
+    lastSeenAt: string;
+    points: { createdAt: string; severity: number }[];
+  }
+  const buckets = new Map<string, Bucket>();
+  for (const summary of summaries) {
+    for (const issue of summary.wordIssues ?? []) {
+      const bucket = buckets.get(issue.surfaceForm) ?? {
+        surfaceForm: issue.surfaceForm,
+        kindCounts: new Map<string, number>(),
+        severities: [],
+        lastSeenAt: summary.createdAt,
+        points: [],
+      };
+      bucket.kindCounts.set(issue.kind, (bucket.kindCounts.get(issue.kind) ?? 0) + 1);
+      bucket.severities.push(issue.severity);
+      if (summary.createdAt > bucket.lastSeenAt) bucket.lastSeenAt = summary.createdAt;
+      bucket.points.push({ createdAt: summary.createdAt, severity: issue.severity });
+      buckets.set(issue.surfaceForm, bucket);
+    }
+  }
+
+  return [...buckets.values()]
+    .filter((bucket) => bucket.severities.length >= minAttempts)
+    .map((bucket) => {
+      const issueKind = [...bucket.kindCounts.entries()].sort((a, b) => b[1] - a[1])[0]![0];
+      return {
+        surfaceForm: bucket.surfaceForm,
+        issueKind,
+        attemptCount: bucket.severities.length,
+        lastSeenAt: bucket.lastSeenAt,
+        meanSeverity:
+          bucket.severities.reduce((sum, value) => sum + value, 0) / bucket.severities.length,
+        trend: meanSeverityTrend(bucket.points),
+      };
+    })
+    .sort(
+      (a, b) => b.attemptCount - a.attemptCount || b.lastSeenAt.localeCompare(a.lastSeenAt),
+    );
+}

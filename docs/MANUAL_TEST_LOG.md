@@ -30,6 +30,25 @@ Status key: ✅ verified · ⚠️ issue found · ⬜ not yet tested · 🔁 nee
 | 6a | `/pitch-accent` drill shows *your* recording's measured pitch contour under the audio player ("Your pitch (measured)"), playhead tracks playback, kana ruler lines up under it | Home shortcut row → "Pitch-accent drill" → record a take | ⬜ | Contour + playhead should still appear if the alignment service is unreachable (feedback text says so but the line is drawn); the kana ruler needs the aligner, so it's absent then; a near-silent take draws nothing |
 | 6b | `/pitch-accent` drill order is shuffled; "Shuffle" reshuffles + resets to 1 | Home shortcut row → "Pitch-accent drill" | ⬜ | Order should not match `/words` reading order; hitting "Shuffle" (or reload) gives a new order and doesn't reorder mid-drill on a background data refresh |
 
+## 2026-09-08 — analytics pass 1 (blind spots / error mix / shadowing bridge)
+
+| # | Feature | How to reach it | Status | Notes |
+|---|---|---|---|---|
+| A1 | `/progress` → **Blind spots** panel lists recurring unconfirmed words from books you've worked | ☰ → Progress | ⬜ | Each row → that sentence's Vocabulary page. Confirm one word there → it drops off Blind spots on next load. "Nothing unaccounted for" is a valid empty state. |
+| A2 | Blind spots grammar row count matches `/grammar`'s "Worth learning now" | ☰ → Progress → Blind spots; then ☰ → Grammar | ⬜ | Same N patterns. Row links to `/grammar`. |
+| A3 | `/progress` → **What to work on** breaks down graded misses by kind, with a next-action link per row | ☰ → Progress | ⬜ | Categories should match what you've actually been missing (readings, conjugations, pitch, contrastive). Links land on `/review` / `/grammar` / `/pitch-accent`. |
+| A4 | What to work on: 30d / 90d / All window toggle changes the counts | ☰ → Progress → What to work on → tap 90 days / All time | ⬜ | Counts grow with a wider window. "N more misses on self-rated cards" footnote present when you've failed comprehension/listening cards. |
+| A5 | Shadowing bridge: a "Better"/"Same" rating on a sentence that already has a `reading_in_context` card logs a natural encounter | `/books/:id/shadow/:sentenceId` on a sentence whose vocab is proficient → record → rate "Better" | ⬜ | Muted "Counted as a natural encounter…" line appears under "Past attempts". `/study-items/<that card>` shows a new `natural_encounter` review + pushed-out due date. Rate a 2nd take "Better" → no duplicate (dedupe). |
+| A6 | Shadowing bridge no-ops when there's no `reading_in_context` card | Shadow a sentence with no sentence card yet, rate "Better" | ⬜ | No muted line; ☰ → Study items shows no new `sentence` card was created. |
+| A7 | Per-word weak words: mispronounce one accent word across a couple of analyzed attempts → it's named in `/progress` Pronunciation block | Shadow + Analyze a sentence twice, missing the same word's pitch accent | ⬜ | Word appears under "Words to drill: …(2×)" with a link to the pitch-accent drill. Needs the alignment service up for the analysis. |
+
+Corruption spot-check for this pass: the `/progress` panels are pure reads;
+the only writes are `recordShadowingEncounter` (one append-only `reviews`
+row + one `study_items` FSRS update — same path as `/practice`'s natural
+encounter) and the local-only `wordIssues` field on
+`attemptAnalysisSummaries`. After A5, run Settings → Export all data (should
+succeed) and check the sync badge (no conflict).
+
 ## Open questions / issues
 
 ### 2h — sibling burying not observed on Firefox / work Linux

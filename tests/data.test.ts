@@ -54,6 +54,7 @@ import {
   recordGrammarRelationshipObservation,
   recordNaturalEncounter,
   recordReview,
+  recordShadowingEncounter,
   removeSentencesFromBook,
   reorderBookSentences,
   reportCardIssue,
@@ -1576,6 +1577,38 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     const { review } = await recordReview({ studyItemId: item.id, rating: 'good' });
     expect(review.source).toBeUndefined();
     expect(review.contextSentenceId).toBeUndefined();
+  });
+
+  it('recordShadowingEncounter no-ops when the sentence has no reading_in_context card', async () => {
+    const result = await recordShadowingEncounter('sent-no-card');
+    expect(result).toBeNull();
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('recordShadowingEncounter logs a good natural encounter on an existing reading_in_context card', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-shadow', 'reading_in_context');
+    const result = await recordShadowingEncounter('sent-shadow');
+    expect(result).not.toBeNull();
+    expect(result!.review.source).toBe('natural_encounter');
+    expect(result!.review.rating).toBe('good');
+    expect(result!.review.contextSentenceId).toBe('sent-shadow');
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.reps).toBe(1);
+  });
+
+  it('recordShadowingEncounter dedupes until the next scheduled review', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-shadow', 'reading_in_context');
+    const first = await recordShadowingEncounter('sent-shadow');
+    expect(first).not.toBeNull();
+    const second = await recordShadowingEncounter('sent-shadow');
+    expect(second).toBeNull();
+    expect(await getDb().reviews.count()).toBe(1);
+
+    // A real scheduled review resets the dedupe window.
+    await recordReview({ studyItemId: item.id, rating: 'good' });
+    const third = await recordShadowingEncounter('sent-shadow');
+    expect(third).not.toBeNull();
+    expect(await getDb().reviews.count()).toBe(3);
   });
 });
 

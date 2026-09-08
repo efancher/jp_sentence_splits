@@ -60,9 +60,13 @@ import {
 import { ANALYSIS_SUMMARY_VERSION } from '../lib/pronunciationHistory';
 import {
   buildPronunciationProfile,
+  buildShadowingWeakWords,
   type PronunciationProfile,
+  type ShadowingWeakWord,
 } from '../lib/pronunciationProfile';
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
+import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpots';
+import { buildErrorMix, type ErrorMix } from '../lib/errorMix';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import { trailingBunsetsuParticles } from '../lib/sentencePitchAccent';
@@ -2773,6 +2777,128 @@ export async function getProgressReport(
   });
 }
 
+/**
+ * Cross-attempt "weak words" (`buildShadowingWeakWords`) — surface forms
+ * flagged with a per-word pitch-accent mismatch in more than one analyzed
+ * shadowing attempt. Read-only; feeds the `/progress` "What to work on"
+ * pronunciation block. Version-filtered like `getPronunciationProfile`.
+ */
+export async function getShadowingWeakWords(
+  options: { minAttempts?: number } = {},
+): Promise<ShadowingWeakWord[]> {
+  const db = getDb();
+  const rows = (await db.attemptAnalysisSummaries.toArray()).filter(
+    (row) => row.analysisSummaryVersion === ANALYSIS_SUMMARY_VERSION,
+  );
+  return buildShadowingWeakWords(
+    rows.map((row) => ({ createdAt: row.createdAt, wordIssues: row.wordIssues })),
+    options,
+  );
+}
+
+/**
+ * "What to work on" (`buildErrorMix`) — an interpretable breakdown of the
+ * kinds of mistakes the learner keeps making, from `Review.errorClassification`
+ * (written by `classifyReviewError`), plus a pronunciation block from the
+ * shadowing side. Pure derivation; this only fetches. `windowDays` 0 = all
+ * time.
+ */
+export async function getErrorMix(
+  options: { windowDays?: number; now?: Date } = {},
+): Promise<ErrorMix> {
+  const db = getDb();
+  const now = options.now ?? new Date();
+  const windowDays = options.windowDays ?? 30;
+  const [reviews, weakWords, profile] = await Promise.all([
+    db.reviews.toArray(),
+    getShadowingWeakWords(),
+    getPronunciationProfile({ now }),
+  ]);
+  const topFocus = profile.focusAreas[0];
+  return buildErrorMix({
+    now,
+    windowDays,
+    reviews: reviews.map((review) => ({
+      timestamp: review.timestamp,
+      rating: review.rating,
+      errorClassification: review.errorClassification,
+    })),
+    weakWords: weakWords.map((word) => ({
+      surfaceForm: word.surfaceForm,
+      issueKind: word.issueKind,
+      attemptCount: word.attemptCount,
+      trend: word.trend,
+    })),
+    pronunciationHeadline: profile.headline,
+    pronunciationTopFocus: topFocus
+      ? {
+          label: topFocus.label,
+          sentenceCount: topFocus.sentenceCount,
+          trend: topFocus.trend,
+        }
+      : null,
+  });
+}
+
+/**
+ * "Blind spots" (`buildBlindSpots`) — vocabulary and grammar that recur
+ * across books the learner has actually worked but were never confirmed /
+ * tracked. Distinct from the new-card backlog (words already picked, not
+ * yet reviewed). Read-only; feeds the `/progress` "Blind spots" panel.
+ */
+export async function getBlindSpots(): Promise<BlindSpots> {
+  const db = getDb();
+  const [sentences, bookSentences, vocabularyItems, grammarSummaries] = await Promise.all([
+    db.sentences.toArray(),
+    db.bookSentences.toArray(),
+    db.vocabularyItems.toArray(),
+    listGrammarPatternSummaries(),
+  ]);
+
+  const workedBookIds = new Set<string>();
+  const bookIdsBySentenceId = new Map<string, string[]>();
+  for (const membership of bookSentences) {
+    const list = bookIdsBySentenceId.get(membership.sentenceId) ?? [];
+    list.push(membership.bookId);
+    bookIdsBySentenceId.set(membership.sentenceId, list);
+    if (membership.status !== 'unstarted') workedBookIds.add(membership.bookId);
+  }
+
+  const confirmedKeys = new Set(
+    vocabularyItems.map((item) => vocabularyKey(item.expression, item.reading)),
+  );
+
+  return buildBlindSpots({
+    sentences: sentences.map((sentence) => ({
+      id: sentence.id,
+      suggestions: [
+        ...(sentence.vocabularySuggestions ?? []).map((suggestion) => ({
+          expression: suggestion.expression,
+          reading: suggestion.reading,
+          english: suggestion.english,
+          // A morphology token only counts when it'd start checked in the
+          // picker (content word); Satori-sourced suggestions always count.
+          contentful: suggestion.source === 'satori' || suggestion.selectedByDefault,
+        })),
+        ...(sentence.targetVocabulary ?? []).map((entry) => ({
+          expression: entry.expression,
+          reading: entry.reading,
+          english: entry.english,
+          contentful: true,
+        })),
+      ],
+    })),
+    bookIdsBySentenceId,
+    workedBookIds,
+    confirmedKeys,
+    grammar: grammarSummaries.map((summary) => ({
+      name: summary.pattern.canonicalName,
+      encounterCount: summary.encounterCount,
+      worthLearningNow: summary.priorityBucket === 'worth_learning_now',
+    })),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // FSRS-scheduled review (docs/UNIFIED_APP_ARCHITECTURE.md §10, Phase 4).
 // study_items are created lazily the first time a subject is encountered in
@@ -3498,6 +3624,57 @@ export async function recordNaturalEncounter(input: {
     rating: input.rating,
     source: 'natural_encounter',
     contextSentenceId: input.sentenceId,
+  });
+}
+
+/**
+ * Bridge from shadowing to the SRS: a close A/B-rated shadow of a sentence
+ * ("better"/"same" vs the reference) is real evidence the learner can read
+ * and parse that whole sentence, so it logs one `natural_encounter` review
+ * (rating `good`) against the sentence's `reading_in_context` study item —
+ * the same mechanism `recordNaturalEncounter` uses for the "Recognized this
+ * without hints?" panel on `/practice`.
+ *
+ * Deliberately narrow:
+ * - Only the sentence-level `reading_in_context` card, never the individual
+ *   word cards — caps the schedule impact at one row per shadowed sentence.
+ * - **No-op if that study item doesn't already exist.** Creating one would
+ *   bypass the passage-readiness gate (`ReviewPage`'s `activityIsReady`),
+ *   which shadowing evidence has no business doing.
+ * - Deduped: skipped if a `natural_encounter` review already landed on this
+ *   item since its last scheduled review, so re-rating the same take (or
+ *   rating several takes of one sitting) doesn't ratchet the interval.
+ *
+ * Returns the recorded review, or null when it no-opped.
+ */
+export async function recordShadowingEncounter(
+  sentenceId: string,
+): Promise<{ review: Review; studyItem: StudyItem } | null> {
+  const db = getDb();
+  const studyItem = await db.studyItems
+    .where('[subjectType+subjectId+activityType]')
+    .equals(['sentence', sentenceId, 'reading_in_context'])
+    .first();
+  if (!studyItem) return null;
+
+  const reviews = await db.reviews.where('studyItemId').equals(studyItem.id).toArray();
+  const lastScheduledAt = reviews
+    .filter((review) => review.source !== 'natural_encounter')
+    .map((review) => review.timestamp)
+    .sort()
+    .at(-1);
+  const alreadyCounted = reviews.some(
+    (review) =>
+      review.source === 'natural_encounter' &&
+      (lastScheduledAt === undefined || review.timestamp > lastScheduledAt),
+  );
+  if (alreadyCounted) return null;
+
+  return recordReview({
+    studyItemId: studyItem.id,
+    rating: 'good',
+    source: 'natural_encounter',
+    contextSentenceId: sentenceId,
   });
 }
 

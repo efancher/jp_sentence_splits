@@ -555,6 +555,17 @@ export function AnalysisPanel({
     ];
     const { timingSeverity, pitchSeverity } = categorizeObservations(all);
     const primary = selectPrimaryObservation(all);
+    // Per-word issues (currently only pitch-accent shape mismatches, which
+    // tag themselves with `subject` = the surface form) — persisted so the
+    // cross-attempt "weak words" signal on /progress can name specific
+    // words to drill (`buildShadowingWeakWords`).
+    const wordIssues = all
+      .filter((obs) => obs.subject && (obs.severity ?? 0) > 0)
+      .map((obs) => ({
+        surfaceForm: obs.subject!,
+        kind: obs.kind,
+        severity: obs.severity ?? 0,
+      }));
     void saveAttemptAnalysisSummary({
       id: attemptId,
       sentenceId,
@@ -564,6 +575,7 @@ export function AnalysisPanel({
       primaryIssueKind: primary?.kind,
       primaryIssueMessage: primary?.message,
       primaryIssueSeverity: primary?.severity,
+      wordIssues: wordIssues.length > 0 ? wordIssues : undefined,
     });
     // Intentionally not depending on the observation arrays themselves —
     // they're new references every render; `analysisSettled` already

@@ -28,6 +28,14 @@ export interface TimingObservation {
   severity?: number;
   /** Reference-clip time range (full-clip time base), for auto-proposing a practice loop. */
   segment?: { startMs: number; endMs: number };
+  /**
+   * The sub-sentence unit this observation is about, when it has one — the
+   * `SentenceVocabulary.surfaceForm` for a per-word observation. Used to
+   * persist a per-word weakness signal (`AttemptAnalysisSummary.wordIssues`);
+   * ignored by the ranking/display path. Only `buildPitchAccentShapeObservations`
+   * sets it today.
+   */
+  subject?: string;
 }
 
 export function confidenceFromSignal(options: {

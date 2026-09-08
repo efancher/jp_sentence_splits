@@ -170,6 +170,24 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   nothing consumed) and `/shadow` shows a non-blocking banner. For noisy
   environments / working somewhere you can't talk. Detail in STATUS.md.
   (2026-09-07: no longer affects the pitch-accent drill.)
+- [x] **Analytics pass 1: blind spots, error mix, shadowing→SRS bridge.**
+  (2026-09-08) Two new `/progress` panels + the first link between the
+  shadowing world and the SRS world:
+  - **Blind spots** (`src/lib/blindSpots.ts`, `getBlindSpots`) — vocabulary
+    (tokenizer + Satori suggestions) and grammar (`worth_learning_now`
+    bucket) that recur across books the learner has worked but were never
+    confirmed / tracked.
+  - **What to work on** (`src/lib/errorMix.ts`, `getErrorMix`) — aggregates
+    `Review.errorClassification` into a ranked breakdown with a next-action
+    per category + a 30/90/all window toggle, plus a pronunciation block
+    from the shadowing side.
+  - **Shadowing → SRS bridge** — a `better`/`same` A/B rating on a shadow
+    attempt logs one `natural_encounter` review against the sentence's
+    existing `reading_in_context` card (`recordShadowingEncounter`, no-op if
+    the card doesn't exist, deduped per cycle); per-word pitch-accent
+    mismatches persist on `AttemptAnalysisSummary.wordIssues` and feed a
+    read-only "weak words" signal (`buildShadowingWeakWords`) named in the
+    error-mix pronunciation block. Detail in STATUS.md.
 
 ## In progress
 
@@ -257,6 +275,62 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   - Deliberately **not** a standalone blind-A/B perception quiz — cuts
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
+
+## Possibilities (analytics & cross-activity coherence)
+
+From a 2026-09-08 discussion on measuring performance, surfacing what to
+learn next, and making the review card types + shadowing reinforce each
+other instead of running as silos. **Blind-spot surfacing**, the
+**error-mix view**, and the **shadowing → SRS evidence bridge** shipped
+2026-09-08 — see "Analytics pass 1" under Done. The rest are unscheduled
+possibilities, kept here so the thinking isn't lost:
+
+- [ ] **Leech list** — rank study items by lapses + the planner's existing
+  `weakness` term, show the `errorClassification` reason, offer a real
+  intervention per item (re-gloss / shadow / contrastive pair / track the
+  grammar), never a leech drill. Overlaps the error-mix view.
+- [ ] **Skill-imbalance metric** — of reading-proficient words, what
+  fraction are `word_listening`-proficient? `reading_production`-proficient?
+  A "listening trails reading by ~N words" line to steer bucket allocation
+  by *skill gap*, not just the neglect score's *recency*.
+- [ ] **Self-rating calibration** — compare self-rated cards
+  (`reading_in_context`, `listening`, `grammar_production`) against
+  objectively-graded ones (`cloze`, `reading_production`,
+  `grammar_completion`) on overlapping subjects; flag over-confidence
+  (rated "good", failed the graded card).
+- [ ] **"Ready to read" coverage** — proficient-word coverage per
+  book/chapter ("Episode 4 is 96% known-word coverage — read it straight
+  through"), to direct which native material to pick up next. The planner
+  currently only points at the next unstudied sentence.
+- [ ] **FSRS calibration surfacing** — predicted retrievability vs actual
+  pass-rate on `/progress`, plus an explicit desired-retention knob, so
+  over/under-reviewing is visible.
+- [ ] **Velocity / ETA** — surface the new-card-backlog drain rate
+  (`report:new-card-backlog` already computes it) and ~words/week.
+- [ ] **Per-sentence mastery arc** — one ladder per encountered sentence
+  (vocab confirmed → words reading-proficient → listening-proficient →
+  conjugations → grammar noticed → `reading_in_context` mature → shadowed
+  → pitch OK), a view plus a "finish sentence X — one rung left" planner
+  step. Turns the flat multi-card queue into a visible arc.
+- [ ] **Cross-activity error routing** — a `cloze` miss on word W in
+  sentence S floats S up as a shadowing/reading target; a
+  `sentence_transformation` miss surfaces the grammar pattern behind that
+  form. Extends `preferCoherentChains` from within-plan grouping to
+  miss-driven scheduling.
+- [ ] **Ambient connective tissue in the reveal** — on a `cloze` reveal,
+  "you've shadowed this sentence — replay?"; on `reading_in_context`,
+  highlight the tracked grammar pattern in the passage; on a `pitch_accent`
+  miss, "missed in the drill twice too". Matches the "ambient surfacing"
+  feedback note.
+- [ ] **Opt-in single-sentence deep dive** — an explicit focus block that
+  walks one lagging sentence through recognition → production → listening →
+  shadow back to back. Distinct from the default queue, which
+  `spaceOutSiblingCards` deliberately keeps siblings apart in.
+- [ ] **Shadowing weak words → pitch-accent drill** — `getShadowingWeakWords`
+  already exists (feeds the `/progress` error-mix panel). Surface those
+  words as a "focus" sub-list or badge on `PitchAccentDrillPage`; a
+  repo-side sort bias won't work because the drill deliberately
+  `seededShuffle`s its list.
 
 ## Not planned (deliberate)
 

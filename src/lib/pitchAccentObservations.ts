@@ -306,6 +306,7 @@ export function buildPitchAccentShapeObservations({
     observations.push({
       id: `pitch-accent-shape-${targetIndex}`,
       kind: 'pitch_accent_shape',
+      subject: target.surfaceForm,
       // A single short following-mora bucket is a shakier read than the
       // multi-bucket word shape — never claim 'high' off it alone.
       confidence: isStark && fullCoverage && !onFollowingMora ? 'high' : 'medium',

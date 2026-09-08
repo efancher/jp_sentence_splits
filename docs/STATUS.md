@@ -33,6 +33,63 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-08 — Analytics pass 1: blind spots, error mix, shadowing→SRS
+  bridge (user request — "measuring my performance / directing my learning
+  / cards & shadowing don't reinforce each other").** Two new read-mostly
+  panels on `/progress` plus the first link between the local-only
+  shadowing world and the synced SRS world. All the aggregation is pure
+  (`src/lib/blindSpots.ts`, `src/lib/errorMix.ts`,
+  `buildShadowingWeakWords` in `pronunciationProfile.ts`), evidence-only,
+  nothing seeded/stored — same shape as `progressReport.ts`.
+  - **Blind spots** (`getBlindSpots`) — vocabulary (tokenizer `morphology`
+    suggestions that start checked + Satori `satori` suggestions +
+    `targetVocabulary` chips) and grammar (the `worth_learning_now`
+    priority bucket) that recur (≥`BLIND_SPOT_MIN_SENTENCES` = 2 sentences)
+    across books the learner has actually worked (≥1 non-`unstarted`
+    `BookSentence`) but were never confirmed / tracked. Distinct from the
+    new-card backlog (words already picked, not yet reviewed). Vocab rows
+    deep-link to that sentence's `VocabularyReviewPage`; the grammar row to
+    `/grammar`.
+  - **What to work on** (`getErrorMix`) — aggregates
+    `Review.errorClassification` (written by `classifyReviewError`, until
+    now only visible as raw JSON on `StudyItemDebugPage`) into a ranked
+    breakdown: each category has a count, a share-of-classified, a
+    recent-vs-earlier trend, and a next-action label + optional route
+    (`incorrect_reading` → `/review`, `grammar_misunderstanding` →
+    `/grammar`, `pronunciation_difficulty` → `/pitch-accent`, …). A
+    30d/90d/all window toggle. Reports `unclassifiedAgainCount` separately
+    as a hedged footnote (self-rated `again`s can't be broken down). A
+    **Pronunciation** block folds in the shadowing side — the pronunciation
+    profile's top focus area + specific weak words.
+  - **Shadowing → SRS bridge.** `recordShadowingEncounter(sentenceId)`
+    (`repository.ts`, mirrors `recordNaturalEncounter`): a `better`/`same`
+    A/B rating on a shadow attempt in `ShadowPage` logs **one**
+    `natural_encounter` review (rating `good`) against the sentence's
+    `reading_in_context` study item — **only if that item already exists**
+    (never creates one — that would bypass the passage-readiness gate), and
+    deduped so re-rating a take (or rating several takes in one sitting)
+    can't ratchet the interval past the next scheduled review. Scoped to
+    the sentence card only, never the word cards, so the schedule impact is
+    one row per shadowed sentence. Recommendation on file was "yes but
+    tightly scoped"; user chose to ship it.
+  - **Per-word weakness signal.** `AttemptAnalysisSummary` gained an
+    optional local-only `wordIssues` array (no Dexie bump — same
+    free-optional-field precedent as `Attempt.practiceStage`);
+    `AnalysisPanel` fills it from pitch-accent shape observations (which
+    now carry a `subject` = surface form on `TimingObservation`).
+    `buildShadowingWeakWords` aggregates across attempts (≥2 flagged) into
+    the words named in the error-mix pronunciation block. Wiring these into
+    the pitch-accent drill's ordering was deferred (the drill
+    `seededShuffle`s its list) — see ROADMAP "Possibilities".
+  - Tests: `tests/blindSpots.test.ts` (new, +6), `tests/errorMix.test.ts`
+    (new, +6), `tests/pronunciationProfile.test.ts` (+3
+    `buildShadowingWeakWords`), `tests/data.test.ts` (+3
+    `recordShadowingEncounter`), `tests/progressPage.test.tsx` (+2). Suite
+    green (1282).
+  - Docs: AI_OVERVIEW §0/§4/§6, ROADMAP (three moved to Done under
+    "Analytics pass 1"; the rest of the discussion parked under
+    "Possibilities").
+
 - **2026-09-08 — Pitch-accent drill: kana ruler under your recording's
   contour (user request, follow-up).** `MeasuredPitchContour` gained an
   optional `kana` prop (a `buildKanaTimeline` entry list); when passed it
@@ -1282,6 +1339,9 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - Native-clip measured pitch overlay (`MeasuredPitchContour` on the
   `listening` / `word_listening` reveals + shadowing surfaces).
 - Daily session recap (`SessionRunnerPage` finished state).
+- Analytics pass 1: `/progress` "Blind spots" + "What to work on" panels,
+  the shadowing→SRS `recordShadowingEncounter` bridge, and the
+  `AttemptAnalysisSummary.wordIssues` per-word weakness signal.
 
 **Data / content backlog:**
 - **Review new-card backlog** — **207** confirmed vocab words have no SRS

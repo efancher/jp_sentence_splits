@@ -239,6 +239,14 @@ export interface AttemptAnalysisSummary {
   primaryIssueMessage?: string;
   /** The primary issue's own severity (0-1) — distinct from timingSeverity/pitchSeverity, which are category maxes, not necessarily this specific observation's value. Used for cross-recording comparison (docs/STATUS.md). */
   primaryIssueSeverity?: number;
+  /**
+   * Per-word issues flagged in this attempt (currently only pitch-accent
+   * shape mismatches, keyed by `SentenceVocabulary.surfaceForm`) — feeds the
+   * cross-attempt "weak words" signal on `/progress` (`buildShadowingWeakWords`).
+   * Optional, local-only (this whole table is), added without a Dexie bump —
+   * same free-optional-field precedent as `Attempt.practiceStage`.
+   */
+  wordIssues?: { surfaceForm: string; kind: string; severity: number }[];
 }
 
 export interface Book {

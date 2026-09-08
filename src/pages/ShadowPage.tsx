@@ -14,6 +14,7 @@ import {
   listAttemptsForSentence,
   rateAttempt,
   readSettings,
+  recordShadowingEncounter,
   saveAttempt,
   setAttemptFavorite,
   updateSettings,
@@ -91,6 +92,7 @@ export function ShadowPage() {
   const [delayedRecordPending, setDelayedRecordPending] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
   const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [shadowEncounterNote, setShadowEncounterNote] = useState(false);
   const referenceRepairAttempted = useRef(false);
 
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -366,6 +368,18 @@ export function ShadowPage() {
     await deleteAttempt(attemptId);
   }
 
+  async function handleRate(attemptId: string, rating: AttemptRating) {
+    await rateAttempt(attemptId, rating);
+    // A close shadow of the whole sentence is evidence the learner can read
+    // and parse it — feed it to the SRS as one natural encounter on the
+    // sentence's reading_in_context card (no-ops when that card doesn't
+    // exist yet or an encounter was already counted this cycle).
+    if (rating === 'better' || rating === 'same') {
+      const recorded = await recordShadowingEncounter(sentenceId);
+      setShadowEncounterNote(recorded !== null);
+    }
+  }
+
   const isRecording = shadowing.status === 'recording';
   const isRequestingMic = shadowing.status === 'requesting-mic';
 
@@ -631,6 +645,12 @@ export function ShadowPage() {
               Pronunciation profile →
             </Link>
           </div>
+          {shadowEncounterNote ? (
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Counted as a natural encounter with this sentence — its reading review is
+              scheduled a little further out.
+            </p>
+          ) : null}
           {attempts.length === 0 ? (
             <p className="muted">No shadowing attempts recorded yet.</p>
           ) : (
@@ -709,7 +729,7 @@ export function ShadowPage() {
                             attempt.manualRating === rating.value ? 'primary' : undefined
                           }
                           aria-pressed={attempt.manualRating === rating.value}
-                          onClick={() => void rateAttempt(attempt.id, rating.value)}
+                          onClick={() => void handleRate(attempt.id, rating.value)}
                         >
                           {rating.label}
                         </button>

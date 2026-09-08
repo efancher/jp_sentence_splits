@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPronunciationProfile,
+  buildShadowingWeakWords,
   focusKindMeta,
   type ProfileSummaryLike,
 } from '../src/lib/pronunciationProfile';
@@ -103,5 +104,40 @@ describe('buildPronunciationProfile', () => {
 describe('focusKindMeta', () => {
   it('falls through to a generic entry for an unknown kind', () => {
     expect(focusKindMeta('brand_new_kind')).toEqual({ label: 'brand_new_kind', category: 'other' });
+  });
+});
+
+describe('buildShadowingWeakWords', () => {
+  const issue = (surfaceForm: string, severity = 0.4) => ({
+    surfaceForm,
+    kind: 'pitch_accent_shape',
+    severity,
+  });
+
+  it('surfaces a surface form flagged in more than one attempt, most-flagged then most-recent first', () => {
+    const weak = buildShadowingWeakWords([
+      { createdAt: new Date(BASE).toISOString(), wordIssues: [issue('きれい'), issue('日本語')] },
+      { createdAt: new Date(BASE + DAY).toISOString(), wordIssues: [issue('きれい')] },
+      { createdAt: new Date(BASE + 2 * DAY).toISOString(), wordIssues: [issue('日本語'), issue('静か')] },
+      { createdAt: new Date(BASE + 3 * DAY).toISOString(), wordIssues: [issue('日本語')] },
+    ]);
+    // 日本語: 3 attempts; きれい: 2 attempts; 静か: 1 (dropped).
+    expect(weak.map((word) => word.surfaceForm)).toEqual(['日本語', 'きれい']);
+    expect(weak[0]).toMatchObject({ attemptCount: 3, issueKind: 'pitch_accent_shape' });
+  });
+
+  it('drops a word flagged only once', () => {
+    const weak = buildShadowingWeakWords([
+      { createdAt: new Date(BASE).toISOString(), wordIssues: [issue('稀')] },
+    ]);
+    expect(weak).toHaveLength(0);
+  });
+
+  it('ignores summaries with no wordIssues', () => {
+    const weak = buildShadowingWeakWords([
+      { createdAt: new Date(BASE).toISOString() },
+      { createdAt: new Date(BASE + DAY).toISOString(), wordIssues: [] },
+    ]);
+    expect(weak).toHaveLength(0);
   });
 });

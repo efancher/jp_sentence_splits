@@ -441,7 +441,21 @@ recently), an FSRS recall-success rate (rating ≠ Again over scheduled
 reviews, 30d + all-time), grammar tracked/recognized, the shadowing
 timing/pitch trend, and an 8-week reviews-per-week + cumulative-words-learned
 trend on the same `.progress-bar` meter. Read-only, recomputed on load,
-nothing stored. **`SessionRunnerPage`** sequences today's steps, deep-linking into
+nothing stored. Two further panels (2026-09-08) answer "what next" rather
+than "how am I doing": **Blind spots** (`src/lib/blindSpots.ts` /
+`getBlindSpots`) — vocabulary (tokenizer + Satori suggestions +
+`targetVocabulary`) and grammar (the `worth_learning_now` bucket) that
+recur across books the learner has actually worked but were never confirmed
+/ tracked, distinct from the new-card backlog; each vocab row deep-links to
+that sentence's `VocabularyReviewPage`. **What to work on**
+(`src/lib/errorMix.ts` / `getErrorMix`) — `Review.errorClassification`
+(written by `classifyReviewError`, otherwise only visible as raw JSON on
+`StudyItemDebugPage`) aggregated into a ranked breakdown with a
+count / share / recent-vs-earlier trend / next-action-route per category, a
+30d/90d/all window toggle, a hedged "N more self-rated misses, no
+breakdown" footnote, and a Pronunciation block folding in the shadowing
+side (`getPronunciationProfile` top focus area + `buildShadowingWeakWords`
+named weak words). **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
 end-early are real, tracked actions. Once the day's session is settled it
@@ -757,7 +771,10 @@ fallback (`scripts/lib/jmnedict.ts`) for proper nouns.
   an analogous "Recognized this grammar without hints?" panel — only for
   patterns already tracked (a `grammarPattern` study item exists) and
   linked to the current sentence via `SentenceGrammar`, feeding
-  `recordGrammarNaturalEncounter`.
+  `recordGrammarNaturalEncounter`. A third `natural_encounter` source
+  (2026-09-08) is the shadowing bridge: a close A/B rating on `ShadowPage`
+  calls `recordShadowingEncounter` (§6), which logs one against the
+  sentence's `reading_in_context` card if it exists.
 - **Build mode** (`BuildPage.tsx`, `src/lib/buildMode.ts`) — inverse of
   Analyze: shows the English prompt, learner reassembles the Japanese
   sentence from shuffled chunk tiles using saved analysis chunks as the
@@ -1127,7 +1144,14 @@ A full practice loop ported/rebuilt from a now-retired standalone
 a self-hosted pronunciation-analysis backend. Capabilities:
 - Record → save → preview → rate (4-way manual A/B rating against
   reference audio) → delete, with a persistent per-sentence attempt
-  history.
+  history. A `better`/`same` rating also calls `recordShadowingEncounter`
+  (`repository.ts`, 2026-09-08) — the bridge into the SRS: it logs **one**
+  `natural_encounter` review (rating `good`) against the sentence's
+  `reading_in_context` study item, but only if that item already exists
+  (never creates one — that would bypass the passage-readiness gate) and
+  deduped so re-rating a take can't ratchet the interval. Scoped to the
+  sentence card only, never the word cards. A muted line confirms when it
+  fired.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point
@@ -1261,6 +1285,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     upstream), so it never compares absolute pitch or loudness. Linked from
     Home's shortcut row and ShadowPage's "Past attempts" header. Closes
     Phase 9's one open milestone (brief's Phase 15).
+  - **Per-word weak-words signal** (`buildShadowingWeakWords`, same file,
+    2026-09-08) — `AnalysisPanel` persists per-word pitch-accent shape
+    mismatches onto the new optional `AttemptAnalysisSummary.wordIssues`
+    (keyed by `SentenceVocabulary.surfaceForm`, via a `subject` tag added
+    to `TimingObservation`); this aggregates them across attempts (≥2
+    flagged) into a ranked "words to drill" list, surfaced in `/progress`'s
+    "What to work on" Pronunciation block. Read-only — never writes a
+    Review row. (Feeding it into the pitch-accent drill's own ordering is
+    deferred — the drill `seededShuffle`s its list.)
 - **Word-synced text/mora highlighting during reference playback**
   (`SyncedShadowText.tsx`, a shared component): as the clip plays, the
   currently-spoken portion of the Japanese sentence and the mora/hiragana
