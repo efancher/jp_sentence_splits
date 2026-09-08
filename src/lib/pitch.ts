@@ -167,3 +167,29 @@ export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
     durationSeconds: audio.durationSeconds,
   };
 }
+
+/**
+ * First and last voiced-frame time (seconds), with a small margin, clamped
+ * to the clip — a speech-anchored window for drawing the pitch contour.
+ * Reference clips are often cut with leading/trailing room tone, so drawing
+ * a contour over the whole clip squashes the actual speech into part of the
+ * width; anchoring the x-axis to this window instead lets a reference and a
+ * tightly-trimmed learner take line up. Returns undefined when there aren't
+ * at least two voiced frames.
+ */
+export function voicedTimeSpan(
+  pitch: Pick<PitchAnalysisPayload, 'frames' | 'durationSeconds'> | undefined,
+): { start: number; end: number } | undefined {
+  if (!pitch) return undefined;
+  const voiced = pitch.frames.filter(
+    (frame) => frame.voiced && frame.relativeSemitones !== null,
+  );
+  if (voiced.length < 2) return undefined;
+  const rawStart = voiced[0]!.timeSeconds;
+  const rawEnd = voiced[voiced.length - 1]!.timeSeconds;
+  const pad = Math.max(0.05, (rawEnd - rawStart) * 0.06);
+  return {
+    start: Math.max(0, rawStart - pad),
+    end: Math.min(pitch.durationSeconds, rawEnd + pad),
+  };
+}

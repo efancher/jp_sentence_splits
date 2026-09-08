@@ -6,6 +6,7 @@ import {
   getReferenceAlignment,
   getVocabularyTargetCandidates,
   listAttemptAnalysisSummariesForSentence,
+  recordShadowingEncounter,
   saveAttemptAlignment,
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
@@ -17,7 +18,7 @@ import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { transcribeAudio } from '../lib/analysisApi';
 import type { TimeRangeMs } from '../lib/recording';
 import type { PitchAnalysisPayload } from '../lib/pitch';
-import { extractPitch } from '../lib/pitch';
+import { extractPitch, voicedTimeSpan } from '../lib/pitch';
 import { buildTimingObservations, confidenceFromSignal } from '../lib/timingObservations';
 import type { TimingObservation } from '../lib/timingObservations';
 import { buildPitchTimingObservations } from '../lib/pitchTimingObservations';
@@ -84,6 +85,15 @@ const PITCH_HEIGHT = 120;
 const ALIGNMENT_MODES: AlignmentMode[] = ['original', 'onset-aligned', 'time-normalized'];
 
 /**
+ * Below this timing- and pitch-severity, a settled analysis is treated as
+ * "close to the reference" and auto-logs the shadowing→SRS natural
+ * encounter (`recordShadowingEncounter`) — the computed read is steadier
+ * than a self-rating and it's what the learner checks anyway. Roughly lines
+ * up with `pronunciationHistory`'s `MUCH_CLOSER_THRESHOLD` (0.15).
+ */
+const SHADOW_ENCOUNTER_MAX_SEVERITY = 0.2;
+
+/**
  * Ported from
  * ~/projects/shadowing/web/src/components/AnalysisPanel.tsx for Phase
  * 8.4b. Two deliberate adaptations: takes `referenceBlob`/`learnerBlob`
@@ -124,12 +134,18 @@ function PitchCanvas({
   mode,
   dashed,
   kana,
+  timeWindow,
+  valueRange,
 }: {
   pitch?: PitchAnalysisPayload;
   label: string;
   mode: 'hz' | 'semitones';
   dashed?: boolean;
   kana?: ReturnType<typeof buildKanaTimeline>;
+  /** Clip-relative seconds to map across the full width — the speech span, shared in spirit with the paired canvas so the two contours line up. Falls back to frame-index scaling when absent. */
+  timeWindow?: { start: number; end: number };
+  /** Shared y-axis min/max (semitones), so contour *magnitude* is comparable between the two canvases and a flat delivery reads as flat rather than being stretched to full height. */
+  valueRange?: { min: number; max: number };
 }) {
   const path = useMemo(() => {
     if (!pitch || pitch.frames.length === 0) return '';
@@ -137,20 +153,29 @@ function PitchCanvas({
       .map((frame) => (mode === 'hz' ? frame.hz : frame.relativeSemitones))
       .filter((value): value is number => value !== null);
     if (values.length === 0) return '';
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = valueRange ? valueRange.min : Math.min(...values);
+    const max = valueRange ? valueRange.max : Math.max(...values);
     const span = Math.max(0.001, max - min);
+    const windowSpan = timeWindow ? Math.max(0.001, timeWindow.end - timeWindow.start) : 0;
     return pitch.frames
       .map((frame, index) => {
         const value = mode === 'hz' ? frame.hz : frame.relativeSemitones;
         if (value === null || !frame.voiced) return null;
-        const x = (index / Math.max(1, pitch.frames.length - 1)) * PITCH_WIDTH;
+        if (
+          timeWindow &&
+          (frame.timeSeconds < timeWindow.start || frame.timeSeconds > timeWindow.end)
+        ) {
+          return null;
+        }
+        const x = timeWindow
+          ? ((frame.timeSeconds - timeWindow.start) / windowSpan) * PITCH_WIDTH
+          : (index / Math.max(1, pitch.frames.length - 1)) * PITCH_WIDTH;
         const y = PITCH_HEIGHT - ((value - min) / span) * (PITCH_HEIGHT - 12) - 6;
         return `${x},${y}`;
       })
       .filter(Boolean)
       .join(' ');
-  }, [pitch, mode]);
+  }, [pitch, mode, timeWindow, valueRange]);
 
   return (
     <div className="stack">
@@ -243,6 +268,8 @@ export function AnalysisPanel({
     primaryIssueMessage?: string;
     primaryIssueSeverity?: number;
   }>();
+  /** Set once this attempt's settled analysis was close enough to log a shadowing→SRS natural encounter (see `SHADOW_ENCOUNTER_MAX_SEVERITY`). */
+  const [encounterLogged, setEncounterLogged] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -444,24 +471,55 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
 
+  // Speech-anchored x-axis for the two pitch contours: each is drawn across
+  // its own voiced span, so "start of speech → end of speech" fills the
+  // width on both and the reference (often cut with trailing room tone)
+  // stops looking compressed next to a tightly-trimmed learner take.
+  const referencePitchWindow = useMemo(
+    () => voicedTimeSpan(referencePitch),
+    [referencePitch],
+  );
+  const learnerPitchWindow = useMemo(() => voicedTimeSpan(learnerPitch), [learnerPitch]);
+
+  // Shared y-axis (semitones from each speaker's own median — already
+  // per-speaker-normalized upstream, so this compares how far the pitch
+  // *moves*, never absolute register). Only when both contours exist.
+  const sharedPitchRange = useMemo(() => {
+    if (pitchMode !== 'semitones' || !referencePitch || !learnerPitch) return undefined;
+    const values = [...referencePitch.frames, ...learnerPitch.frames]
+      .filter((frame) => frame.voiced && frame.relativeSemitones !== null)
+      .map((frame) => frame.relativeSemitones as number);
+    if (values.length < 2) return undefined;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const pad = Math.max(0.5, (max - min) * 0.08);
+    return { min: min - pad, max: max + pad };
+  }, [pitchMode, referencePitch, learnerPitch]);
+
   const referenceKanaTimeline = useMemo(() => {
     if (!serverAlignment?.reference || !referencePitch) return undefined;
+    const window = referencePitchWindow;
     return buildKanaTimeline({
       words: serverAlignment.reference.words,
       moraUnits,
-      durationSeconds: referencePitch.durationSeconds,
-      timeOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
+      durationSeconds: window
+        ? window.end - window.start
+        : referencePitch.durationSeconds,
+      timeOffsetSeconds:
+        (targetRange ? targetRange.startMs / 1000 : 0) + (window?.start ?? 0),
     });
-  }, [serverAlignment, referencePitch, moraUnits, targetRange]);
+  }, [serverAlignment, referencePitch, referencePitchWindow, moraUnits, targetRange]);
 
   const learnerKanaTimeline = useMemo(() => {
     if (!serverAlignment?.learner || !learnerPitch) return undefined;
+    const window = learnerPitchWindow;
     return buildKanaTimeline({
       words: serverAlignment.learner.words,
       moraUnits,
-      durationSeconds: learnerPitch.durationSeconds,
+      durationSeconds: window ? window.end - window.start : learnerPitch.durationSeconds,
+      timeOffsetSeconds: window?.start ?? 0,
     });
-  }, [serverAlignment, learnerPitch, moraUnits]);
+  }, [serverAlignment, learnerPitch, learnerPitchWindow, moraUnits]);
 
   const asrObservations = useMemo(() => {
     if (!serverAlignment?.reference || !transcribedText) return [];
@@ -577,6 +635,24 @@ export function AnalysisPanel({
       primaryIssueSeverity: primary?.severity,
       wordIssues: wordIssues.length > 0 ? wordIssues : undefined,
     });
+
+    // Bridge to the SRS: when the analysis actually produced signal (server
+    // alignment succeeded) and both timing and pitch came back below
+    // SHADOW_ENCOUNTER_MAX_SEVERITY, log one natural encounter on the
+    // sentence's reading_in_context card. The computed read is what the
+    // learner ends up checking anyway, and steadier than a self-rating;
+    // the manual A/B "Better"/"Same" path on ShadowPage stays as the
+    // fallback when the alignment service is unreachable. `recordShadowingEncounter`
+    // no-ops without a reading_in_context card and dedupes per review cycle.
+    if (
+      serverAlignment?.learner &&
+      timingSeverity < SHADOW_ENCOUNTER_MAX_SEVERITY &&
+      pitchSeverity < SHADOW_ENCOUNTER_MAX_SEVERITY
+    ) {
+      void recordShadowingEncounter(sentenceId).then((recorded) => {
+        if (recorded) setEncounterLogged(true);
+      });
+    }
     // Intentionally not depending on the observation arrays themselves —
     // they're new references every render; `analysisSettled` already
     // captures "the inputs that produce them have stopped changing".
@@ -642,6 +718,12 @@ export function AnalysisPanel({
           {comparison?.status === 'resolved'
             ? ' What stood out last time isn’t showing up anymore.'
             : ''}
+        </p>
+      ) : null}
+      {encounterLogged ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Close to the reference — logged as a natural encounter with this sentence, so
+          its reading review is scheduled a little further out.
         </p>
       ) : null}
       {rankedObservations.length > 0 ? (
@@ -843,6 +925,8 @@ export function AnalysisPanel({
         label="Reference pitch"
         mode={pitchMode}
         kana={referenceKanaTimeline}
+        timeWindow={referencePitchWindow}
+        valueRange={sharedPitchRange}
       />
       <PitchCanvas
         pitch={learnerPitch}
@@ -850,6 +934,8 @@ export function AnalysisPanel({
         mode={pitchMode}
         dashed
         kana={learnerKanaTimeline}
+        timeWindow={learnerPitchWindow}
+        valueRange={sharedPitchRange}
       />
       {(referenceKanaTimeline?.length ?? 0) > 0 || (learnerKanaTimeline?.length ?? 0) > 0 ? (
         <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../src/lib/pitch';
+import {
+  estimateFramePitch,
+  extractPitch,
+  hzToRelativeSemitones,
+  medianHz,
+  voicedTimeSpan,
+} from '../src/lib/pitch';
+import type { PitchFrame } from '../src/lib/pitch';
 import type { CanonicalAudio } from '../src/lib/waveform';
 
 const SAMPLE_RATE = 16_000;
@@ -130,5 +137,45 @@ describe('extractPitch', () => {
     const avgFirst = firstHalfFrames.reduce((sum, f) => sum + f.hz!, 0) / firstHalfFrames.length;
     const avgSecond = secondHalfFrames.reduce((sum, f) => sum + f.hz!, 0) / secondHalfFrames.length;
     expect(avgSecond).toBeGreaterThan(avgFirst * 1.7); // ~2x, allow slack for frame straddling the boundary
+  });
+});
+
+describe('voicedTimeSpan', () => {
+  const frame = (timeSeconds: number, voiced: boolean): PitchFrame => ({
+    timeSeconds,
+    hz: voiced ? 200 : null,
+    voiced,
+    confidence: voiced ? 0.9 : 0,
+    relativeSemitones: voiced ? 0 : null,
+  });
+
+  it('returns undefined without at least two voiced frames', () => {
+    expect(voicedTimeSpan(undefined)).toBeUndefined();
+    expect(
+      voicedTimeSpan({ durationSeconds: 2, frames: [frame(0.5, true), frame(1, false)] }),
+    ).toBeUndefined();
+  });
+
+  it('brackets the voiced region with a small margin, clamped to the clip', () => {
+    // speech from 1.0s to 2.0s inside a 5s clip (lots of trailing room tone)
+    const frames = [
+      frame(0.2, false),
+      frame(1.0, true),
+      frame(1.5, true),
+      frame(2.0, true),
+      frame(4.5, false),
+    ];
+    const span = voicedTimeSpan({ durationSeconds: 5, frames })!;
+    expect(span.start).toBeGreaterThan(0.8);
+    expect(span.start).toBeLessThan(1.0);
+    expect(span.end).toBeGreaterThan(2.0);
+    expect(span.end).toBeLessThan(2.2);
+  });
+
+  it('never returns a start below 0 or an end past the clip duration', () => {
+    const frames = [frame(0, true), frame(0.05, true), frame(0.95, true), frame(1, true)];
+    const span = voicedTimeSpan({ durationSeconds: 1, frames })!;
+    expect(span.start).toBe(0);
+    expect(span.end).toBe(1);
   });
 });

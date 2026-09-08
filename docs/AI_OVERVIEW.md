@@ -772,9 +772,10 @@ fallback (`scripts/lib/jmnedict.ts`) for proper nouns.
   patterns already tracked (a `grammarPattern` study item exists) and
   linked to the current sentence via `SentenceGrammar`, feeding
   `recordGrammarNaturalEncounter`. A third `natural_encounter` source
-  (2026-09-08) is the shadowing bridge: a close A/B rating on `ShadowPage`
-  calls `recordShadowingEncounter` (§6), which logs one against the
-  sentence's `reading_in_context` card if it exists.
+  (2026-09-08) is the shadowing bridge: a close shadow (computed analysis,
+  or a manual `better`/`same` fallback) calls `recordShadowingEncounter`
+  (§6), which logs one against the sentence's `reading_in_context` card if
+  it exists.
 - **Build mode** (`BuildPage.tsx`, `src/lib/buildMode.ts`) — inverse of
   Analyze: shows the English prompt, learner reassembles the Japanese
   sentence from shuffled chunk tiles using saved analysis chunks as the
@@ -1144,13 +1145,17 @@ A full practice loop ported/rebuilt from a now-retired standalone
 a self-hosted pronunciation-analysis backend. Capabilities:
 - Record → save → preview → rate (4-way manual A/B rating against
   reference audio) → delete, with a persistent per-sentence attempt
-  history. A `better`/`same` rating also calls `recordShadowingEncounter`
-  (`repository.ts`, 2026-09-08) — the bridge into the SRS: it logs **one**
-  `natural_encounter` review (rating `good`) against the sentence's
-  `reading_in_context` study item, but only if that item already exists
-  (never creates one — that would bypass the passage-readiness gate) and
-  deduped so re-rating a take can't ratchet the interval. Scoped to the
-  sentence card only, never the word cards. A muted line confirms when it
+  history. A close shadow calls `recordShadowingEncounter` (`repository.ts`,
+  2026-09-08) — the bridge into the SRS: it logs **one** `natural_encounter`
+  review (rating `good`) against the sentence's `reading_in_context` study
+  item, but only if that item already exists (never creates one — that would
+  bypass the passage-readiness gate) and deduped so re-rating a take can't
+  ratchet the interval. Scoped to the sentence card only, never the word
+  cards. Two triggers: the **computed analysis** is primary —
+  `AnalysisPanel` fires it once alignment settles with both `timingSeverity`
+  and `pitchSeverity` below `SHADOW_ENCOUNTER_MAX_SEVERITY` (0.2) — and a
+  manual `better`/`same` A/B rating on `ShadowPage` is the fallback for when
+  the alignment service is off the tailnet. A muted line confirms when it
   fired.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
@@ -1244,11 +1249,21 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     feedback, an active-recall flashcard, and a recording drill.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
+  - **Paired pitch contours** (`PitchCanvas`, reference + dashed learner) —
+    each drawn over *its own voiced span* (`voicedTimeSpan` in
+    `src/lib/pitch.ts`: first→last voiced frame + a 6% margin), not the raw
+    clip, so a reference cut with trailing room tone no longer squashes into
+    part of the width while a tight learner take fills it — both read "speech
+    start → speech end" and line up. In speaker-normalized (semitones) mode
+    the two also share a y-range (union of both clips' voiced
+    `relativeSemitones`), so a flat delivery reads as flat rather than being
+    stretched to full height; Hz mode keeps per-canvas y (absolute register
+    isn't cross-speaker comparable).
   - **Kana ruler under the pitch contours** — once the forced alignment is
     available, `buildKanaTimeline` (`src/lib/kanaTimeline.ts`) lays the
-    sentence's kana along each contour's linear time axis, one label per
-    aligned word, positioned by the word's `start`/`end` over the contour
-    duration. Word→kana split is by character-count proportion onto the mora
+    sentence's kana along each contour's linear time axis (the same voiced
+    span as the contour above it), one label per aligned word, positioned by
+    the word's `start`/`end` over the contour duration. Word→kana split is by character-count proportion onto the mora
     sequence (same approximation as `SyncedShadowText`); reference side is
     offset-corrected for a practice-target slice. Degrades to nothing when
     the aligner is unreachable. The row component (`KanaTimelineRow`) is

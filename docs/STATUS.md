@@ -86,6 +86,30 @@ is trimmed.)
     `buildShadowingWeakWords`), `tests/data.test.ts` (+3
     `recordShadowingEncounter`), `tests/progressPage.test.tsx` (+2). Suite
     green (1282).
+  - **Follow-up same day (user):** the bridge now **also fires from the
+    computed analysis** — when `AnalysisPanel`'s server alignment produced
+    signal and both `timingSeverity` and `pitchSeverity` came back below
+    `SHADOW_ENCOUNTER_MAX_SEVERITY` (0.2), it calls the same
+    `recordShadowingEncounter` (deduped, so it can't double-count with the
+    A/B path). The A/B "Better"/"Same" tap stays as the fallback for when
+    the alignment service is unreachable. User's reasoning: they end up
+    reading the graphs anyway and trust a steady computed read over their
+    own A/B call. A muted "Close to the reference — logged as a natural
+    encounter" line shows in the panel.
+  - **Follow-up same day (user): paired pitch contours now share an axis.**
+    `PitchCanvas` (reference + learner in `AnalysisPanel`) drew each contour
+    over frame-index / clip-duration, so a reference clip cut with trailing
+    room tone squashed into ~40% of the width while a tight learner take
+    filled it — impossible to compare. New exported `voicedTimeSpan`
+    (`src/lib/pitch.ts`): first→last voiced frame + a 6% margin. Each canvas
+    now maps `frame.timeSeconds` across *its own* voiced span, so both fill
+    the width "speech start → speech end" and line up; the kana rulers
+    underneath (`buildKanaTimeline`) take the same window. In
+    speaker-normalized (semitones) mode the two canvases also share a y-range
+    (`sharedPitchRange`, union of both clips' voiced `relativeSemitones`), so
+    a flat delivery reads as flat instead of being stretched to full height.
+    Hz mode keeps per-canvas y (absolute register isn't cross-speaker
+    comparable). `tests/pitch.test.ts` +3.
   - Docs: AI_OVERVIEW §0/§4/§6, ROADMAP (three moved to Done under
     "Analytics pass 1"; the rest of the discussion parked under
     "Possibilities").
