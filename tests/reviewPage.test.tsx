@@ -797,6 +797,52 @@ describe('ReviewPage', () => {
     expect(productionReview?.expectedAnswer).toBe('よむ');
   });
 
+  it('seeds only cloze (not the reading cards) for an all-kana target word', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.sentences.update('sent-1', { japanese: '意味がわかりますか。' });
+    await db.vocabularyItems.add({
+      id: 'vocab-wakaru',
+      expression: 'わかる',
+      reading: 'わかる',
+      meaning: 'to understand',
+      partOfSpeech: 'v5r',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-wakaru',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-wakaru',
+      surfaceForm: 'わかります',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // cloze blanks the word — that's the one vocabulary-target card a kana
+    // word gets. (The conjugation card also seeds; its prompt is distinct.)
+    await screen.findByText('Reveal word');
+
+    await waitFor(async () => {
+      const seeded = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-wakaru')
+        .toArray();
+      expect(seeded.map((item) => item.activityType)).toEqual(['cloze']);
+    });
+    expect(
+      await db.studyItems.where('activityType').equals('reading_retrieval').count(),
+    ).toBe(0);
+    expect(
+      await db.studyItems.where('activityType').equals('reading_production').count(),
+    ).toBe(0);
+  });
+
   it('shows incorrect feedback for a wrong typed reading but still records the evidence and lets the learner self-rate (Phase 7.9)', async () => {
     await seedBookWithSentence();
     const db = getDb();

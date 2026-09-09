@@ -10,3 +10,8 @@ const HAN_CHARACTER_RE = /\p{Script=Han}/u;
 export function isHanCharacter(character: string): boolean {
   return HAN_CHARACTER_RE.test(character);
 }
+
+/** True when `text` contains at least one kanji (Han) character. */
+export function containsKanji(text: string): boolean {
+  return HAN_CHARACTER_RE.test(text);
+}

@@ -67,6 +67,7 @@ import {
   buildGrammarCompletionChoices,
   grammarPatternUsedIn,
 } from '../lib/grammarPatterns';
+import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
@@ -113,6 +114,11 @@ const SENTENCE_ACTIVITY_TYPES: StudyActivityType[] = ['reading_in_context'];
  * the learner to type the reading — recognition vs. production is a
  * separate axis from what's hidden, so this is a third, harder rung on the
  * same word rather than a variant of reading_retrieval.
+ *
+ * The two reading cards only seed for a word whose dictionary form has
+ * kanji — for an all-kana lemma (する, わかる, テレビ) there's no reading to
+ * recall and both degenerate to copying the on-screen kana. See the
+ * `vocabulary` descriptor's `activityIsReady`; `cloze` still seeds.
  */
 const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_retrieval',
@@ -728,6 +734,15 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
+      // A word with no kanji in its dictionary form has no reading to recall —
+      // `reading_retrieval` / `reading_production` degenerate into copying the
+      // kana already on screen (user request). `cloze` (recall which word
+      // fills the blank from meaning/context) still tests something real, so
+      // it's the only vocabulary-target card an all-kana word gets. Existing
+      // such study items just stop surfacing; nothing is deleted, and the
+      // word's proficiency still counts toward sentence readiness.
+      activityIsReady: (candidate, activityType) =>
+        activityType === 'cloze' || containsKanji(candidate.vocabularyItem.expression),
     }),
     defineActivityDescriptor<AudioCandidate>({
       key: 'listening',
