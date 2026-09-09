@@ -68,16 +68,24 @@ is trimmed.)
     vocab FSRS-proficient); they surface as vocabulary matures. Tests +18
     (`conjugation.test.ts`, `reviewPage.test.tsx`, `data.test.ts`).
 
-- **2026-09-09 — Vocabulary picker no longer default-checks a 〜て auxiliary
-  verb (recommender polish, same discussion).** UniDic tags the いる in
-  〜ている / くる in 〜てくる / しまう in 〜てしまう as `動詞/非自立可能` —
-  content POS, so the old `isContentPos` default checked them. New
-  `isBoundAuxiliaryVerb` (`src/lib/vocabularySuggestions.ts`) leaves such a
-  verb visible in the strip but unchecked when it's glued to a preceding
-  て/で particle — the *construction* is `GrammarPicker`'s job. Standalone
-  いる・する・できる and サ変 する (世話をする) are unaffected (particle isn't
-  て/で). Forward-only: affects newly mined/imported sentences; re-run
-  `backfill:vocabulary-suggestions` to refresh older unreviewed ones.
+- **2026-09-09 — Vocabulary picker smarter about what it default-checks
+  (recommender polish, same discussion).** Two `selectedByDefault` filters
+  in `src/lib/vocabularySuggestions.ts`, both leaving the chip visible (one
+  tap to add), both forward-only (re-run `backfill:vocabulary-suggestions`
+  to refresh older unreviewed sentences):
+  - `isBoundAuxiliaryVerb` — the いる/くる/しまう/おく/みる/くれる in
+    〜ている / 〜てくる / 〜てしまう … is UniDic `動詞/非自立可能` (content
+    POS) so the old default checked it; now unchecked when it's glued to a
+    preceding て/で. Standalone いる・する・できる and サ変 する (世話をする,
+    particle is を) unaffected.
+  - `isKanaWrittenFormalNoun` — こと/はず/つもり/わけ/ため/ところ/ほう/よう/
+    まま/ふり unchecked when *this occurrence* is written in kana (the
+    grammatical use — 〜ことがある, 〜はずだ, 〜たところ). Written with their
+    kanji (事/訳/為/所/方/用) they're taken as ordinary nouns. `GrammarPicker`
+    owns the constructions.
+  - Side effect (intended): `selectedByDefault` also feeds the `/progress`
+    "vocabulary blind spots" count (`getBlindSpots`), so `ている`-`いる` and
+    kana `こと`/`はず` stop showing up there as untracked words.
 
 - **2026-09-09 — `reading_retrieval` / `reading_production` skipped for
   all-kana words (user request, follow-on from the conjugation work — "type

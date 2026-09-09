@@ -59,6 +59,33 @@ describe('vocabularySuggestions', () => {
     expect(suggestions.find((s) => s.expression === 'いる')?.selectedByDefault).toBe(false);
   });
 
+  it('does not default-select a kana-written formal noun, but keeps a kanji-written one', () => {
+    const kana = '本を読むつもりだ。';
+    const kanaSuggestions = suggestionsFromTokens(kana, [
+      { surface: '本', start: 0, end: 1, lemma: '本', reading: 'ほん', pos: '名詞/普通名詞' },
+      { surface: 'を', start: 1, end: 2, lemma: 'を', reading: 'を', pos: '助詞/格助詞' },
+      { surface: '読む', start: 2, end: 4, lemma: '読む', reading: 'よむ', pos: '動詞/一般' },
+      { surface: 'つもり', start: 4, end: 7, lemma: 'つもり', reading: 'つもり', pos: '名詞/普通名詞' },
+      { surface: 'だ', start: 7, end: 8, lemma: 'だ', reading: 'だ', pos: '助動詞' },
+      { surface: '。', start: 8, end: 9, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    expect(
+      kanaSuggestions.filter((s) => s.selectedByDefault).map((s) => s.expression),
+    ).toEqual(['本', '読む']);
+
+    const kanji = '大事な事を話す。';
+    const kanjiSuggestions = suggestionsFromTokens(kanji, [
+      { surface: '大事', start: 0, end: 2, lemma: '大事', reading: 'だいじ', pos: '形状詞/一般' },
+      { surface: 'な', start: 2, end: 3, lemma: 'だ', reading: 'な', pos: '助動詞' },
+      { surface: '事', start: 3, end: 4, lemma: '事', reading: 'こと', pos: '名詞/普通名詞' },
+      { surface: 'を', start: 4, end: 5, lemma: 'を', reading: 'を', pos: '助詞/格助詞' },
+      { surface: '話す', start: 5, end: 7, lemma: '話す', reading: 'はなす', pos: '動詞/一般' },
+      { surface: '。', start: 7, end: 8, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    // 事 written with its kanji is taken at face value.
+    expect(kanjiSuggestions.find((s) => s.surface === '事')?.selectedByDefault).toBe(true);
+  });
+
   it('still default-selects a content verb that merely follows a comma-broken て', () => {
     const japanese = '歩いて、学ぶ。';
     const suggestions = suggestionsFromTokens(japanese, [

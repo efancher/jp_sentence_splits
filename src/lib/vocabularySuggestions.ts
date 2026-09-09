@@ -11,6 +11,7 @@ import type {
   VocabularySuggestion,
 } from '../domain/types';
 import { createId } from './ids';
+import { containsKanji } from './kanji';
 
 export interface MorphologyToken {
   surface: string;
@@ -71,6 +72,28 @@ function isBoundAuxiliaryVerb(
   if (!prev?.pos?.startsWith('助詞')) return false;
   if (prev.surface !== 'て' && prev.surface !== 'で') return false;
   return prev.end === token.start;
+}
+
+/**
+ * Formal nouns that are the grammatical half of a construction far more
+ * often than a word worth a vocabulary card — 〜ことがある, 〜はずだ,
+ * 〜わけがない, 〜ために, 〜たところ, 〜ほうがいい, 〜ようだ, 〜まま,
+ * 〜ふりをする. Keyed by dictionary reading; suppressed from the default
+ * selection (still visible, one tap to add) only when *this* occurrence is
+ * written in kana — 事/訳/為/所/方/用 written with their kanji are taken at
+ * face value as ordinary nouns (user choice, 2026-09-09). `GrammarPicker`
+ * owns the constructions.
+ */
+const GRAMMATICALIZED_NOUN_READINGS = new Set([
+  'こと', 'はず', 'つもり', 'わけ', 'ため', 'ところ', 'ほう', 'よう', 'まま', 'ふり',
+]);
+
+function isKanaWrittenFormalNoun(token: MorphologyToken, dictionaryReading: string): boolean {
+  return (
+    !!token.pos?.startsWith('名詞') &&
+    !containsKanji(token.surface) &&
+    GRAMMATICALIZED_NOUN_READINGS.has(dictionaryReading)
+  );
 }
 
 /**
@@ -180,17 +203,21 @@ export function suggestionFromToken(
   // The tokenizer's own dictionary-form reading (UniDic kanaBase) when it has
   // one; otherwise derive it from the surface reading + lemma.
   const lemmaReading = token.lemmaReading?.trim();
+  const reading =
+    lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression);
   return {
     id: createId('vsug'),
     surface: token.surface,
     start: token.start,
     end: token.end,
     expression,
-    reading:
-      lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression),
+    reading,
     pos,
     source: 'morphology',
-    selectedByDefault: isContentPos(pos) && !isBoundAuxiliaryVerb(token, prevToken),
+    selectedByDefault:
+      isContentPos(pos) &&
+      !isBoundAuxiliaryVerb(token, prevToken) &&
+      !isKanaWrittenFormalNoun(token, reading),
   };
 }
 
