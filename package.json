@@ -31,6 +31,7 @@
     "backfill:resegment-audio": "tsx scripts/backfill-resegment-audio.ts",
     "backfill:source-audio": "tsx scripts/backfill-source-audio.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts",
+    "fix:truncated-surface-forms": "tsx scripts/fix-truncated-surface-forms.ts",
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
     "merge:duplicate-vocabulary-items": "tsx scripts/merge-duplicate-vocabulary-items.ts",
     "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",
