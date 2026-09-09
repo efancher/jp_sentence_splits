@@ -1161,14 +1161,21 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point
   marking on a scrubbable reference player; loops just that range and
-  scopes comparisons to it.
-- **Shadow mode**: live mic-calibrated play-along recording (reference
-  plays while recording) with a live waveform overlay, sharing one
-  `AudioContext` for mic analysis + reference playback. The live amplitude
-  waveform applies a gentle `sqrt`-curve auto-gain (`gentleLiveGain` in
-  `src/lib/waveform.ts`) toward the reference's peak level so a quiet
-  speaker still reads as a comparable shape (never to full parity — a
-  loudness cue is kept).
+  scopes comparisons to it. Playback speed and this range both stay live
+  while the close-shadow loop (below) runs — changing either takes effect
+  without restarting the loop.
+- **Close shadow (hands-free loop)** — the page's primary practice control,
+  a panel directly under the reference player. One "Loop shadow reps"
+  toggle: the reference plays on a loop through the shadow-mode graph while
+  the mic records, cycling one ephemeral take per pass (rep counter, live
+  waveform overlay), with "Hear that back" / "Compare to native" for the
+  latest rep. **Nothing here is saved** — it's warm-up; the Record &
+  analyze panel below is where a keepable take is captured. The live
+  amplitude waveform applies a gentle `sqrt`-curve auto-gain
+  (`gentleLiveGain` in `src/lib/waveform.ts`) toward the reference's peak
+  level so a quiet speaker still reads as a comparable shape (never to full
+  parity — a loudness cue is kept). All the mic-calibrated play-along
+  plumbing shares one `AudioContext` for mic analysis + reference playback.
 - **Live pitch-contour overlay** during recording (YIN pitch detection,
   `src/lib/pitch.ts`, validated against synthetic tones — no fixtures
   existed in the source repo for this). Both the reference and the live
@@ -1322,12 +1329,8 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   text-matched, since the aligner's tokenization, `sentence.japanese`, and
   `inlineReading`'s word boundaries aren't guaranteed to agree. Falls back
   to the old static text + `MoraBreakdown` rendering when alignment isn't
-  available. Rendered in two places: at the top of `ShadowPage` (hidden
-  while guided mode is active, to avoid a duplicate), and inside
-  `ProgressiveShadowingPanel` directly above every stage's action
-  buttons — kept close to the buttons deliberately, so the text being
-  practiced stays in view while pressing Shadow along/Hear that
-  back/Compare/Retry, not just while reading.
+  available. Rendered at the top of `ShadowPage`, above the close-shadow
+  and record controls.
 - **Per-word pitch-accent H/L marks** (`SentencePitchAccentRow.tsx`,
   `sentencePitchAccent.ts`): beneath `SyncedShadowText`, in
   `AnalysisPanel`'s pitch-accent section, on the `pitch_accent` review
@@ -1367,87 +1370,54 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   the learner reads and checks in one glance; the marked word plus its
   `particleTail` fold onto the sentence line, other non-accented runs stay
   plain text.
-- **Practice-mode variants**: "Delayed shadow" (listen in full, then
-  auto-record after a configurable 0.5–2.0s gap) and "Show meaning
-  instead" (swap Japanese transcript for English translation, forcing
-  production from meaning — disabled when no translation exists).
+- **"Show meaning instead"** — swap the Japanese transcript for the English
+  translation, forcing production from meaning (disabled when no translation
+  exists).
 - Graceful fallback everywhere the forced-alignment service is
   unreachable (falls back to an onset/cross-correlation heuristic) — the
   app must keep working with the service off the tailnet.
-- **Guided/progressive practice** (`ProgressiveShadowingPanel.tsx`, toggled
-  via a "Start guided practice" button, only shown when reference audio
-  exists) — a low-friction, single-screen alternative to the free-form
-  controls above, for learners who find "record vs. stop vs. shadow-mode vs.
-  delay vs. calibrate, all visible at once" too much to hold in mind while
-  practicing. Walks Listen → Pause & Repeat → Delayed Shadow → Close
-  Shadow → Record & Compare, with Back/Skip/Restart always available (the
-  learner controls pacing, not a rigid rep count — soft on-screen tips like
-  "try this once or twice" are text only, never enforced). Deliberately
-  built as a thin orchestration layer, not a new audio engine:
-  - Every stage reuses existing primitives: Listen/Repeat use the same
-    `<audio>` element + `PlaybackCoordinator` (now with a `playRange` method
-    alongside `alternate`/`dualEar`/`loopRange`, for a single range-bounded
-    playthrough — recording.ts). **Delayed Shadow and Close Shadow are the
-    same underlying mechanism** — both call `startRecording('shadow', ...)`
-    (the existing shadow-mode play-along recording) — the only difference
-    between the two stages is the on-screen coaching text ("trail a beat
-    behind" vs. "stay as close as you can"). No artificial audio-delay
-    mixing was built; the trailing behavior is coached, not engineered.
-    Both also have a **"Loop shadow reps" toggle** — hands-free practice
-    that plays the native audio on a loop while the mic records, giving
-    one ephemeral take per rep (replaces the stage's take each time, so
-    "Hear that back"/"Compare" reflect the latest; nothing persisted).
-    `ShadowingController.startShadowLoop` is a distinct path from
-    `startRecording('shadow')` run repeatedly: **all the user-gesture-gated
-    calls happen once, under the starting tap** — `getUserMedia`,
-    `AudioContext.resume()`, the first reference `play()` — after which the
-    reference `<audio loop>` re-plays itself and only `MediaRecorder`
-    cycling runs. On its 100 ms tick the controller watches the reference's
-    `currentTime` (it does *not* `notify()` per tick — that 10 Hz churn
-    re-rendered the panel + waveform enough to scroll on mobile); when
-    `currentTime` jumps back past half the clip (a loop wrap) it calls
-    `RecordingService.cycleRecorder()` — stop + fresh `MediaRecorder` on
-    the *same* held-open stream — so each rep is a separate blob. This
-    once-under-the-tap structure is what it takes on **iOS Safari**, where
-    those three calls need a transient activation that lapses seconds after
-    the tap — two earlier per-*rep*-setup versions reliably died ~6 reps in
-    with "the request is not allowed by the user agent or platform." The
-    shared mic analyser stays up, so the **live waveform runs during the
-    loop**. `stopShadowLoop()` captures the final rep and tears down; a
-    dead-mic cycle failure ends the loop via `endShadowLoop()` rather than
-    spinning; stage change / unmount go through `cancelRecording()`. The
-    panel's Delayed/Close action area has a reserved `minHeight` so the
-    controls swapping (record ↔ loop ↔ stop) don't reflow the sentence
-    out of view.
-  - Recording auto-stops shortly after the reference clip's expected
-    duration (with a fixed trailing buffer), but the single
-    `RecordToggleButton` (`src/components/RecordToggleButton.tsx`, also now
-    used by the free-form Record/Stop control) always lets the learner stop
-    early — one button whose label/action flips between "start" and "●
-    Recording… tap to stop," never two separate buttons on screen at once.
-  - **Only the final "Record & Compare" take is persisted.** Stages 1-4 are
-    ephemeral: an in-memory blob for instant self-playback and an
-    `Alternate`-style "compare to native," discarded on Retry/Next/segment
-    change. This keeps "Past attempts" from filling up with every rep of a
-    2-5s phrase — matches the pedagogical framing ("copy the speaker, not
-    just the words," shown as coaching text, not graded per-word).
-  - State sequencing lives in `useProgressiveShadowing.ts`, a plain
-    `useReducer` (stage index, session id, the current stage's ephemeral
-    take) — deliberately *not* a new external-store controller like
-    `ShadowingController`, since this is page-local UI orchestration, not
-    shared cross-component state. A `resetKey` (sentence id + selected
-    segment) drives an automatic restart when the practiced segment changes.
-  - `Attempt` gained two optional fields for this: `practiceStage?: 'final'`
-    (only ever written by this flow) and `practiceSessionId?: string` (one
-    `crypto.randomUUID()` per guided-practice run, to group/filter later) —
-    no Dexie version bump needed, same precedent as `notes`/`manualRating`.
-  - Known limitation: Delayed/Close Shadow's shadow-mode mechanism always
-    plays the *entire* reference clip (a pre-existing constraint of
-    `ShadowReferencePlayer`, which has no range-cropping support) even if a
-    shorter target range is marked — Listen/Repeat/Compare do respect the
-    marked range via `playRange`/segment-duration heuristics, but Delayed/
-    Close do not. Not fixed here; would require changing
-    `ShadowReferencePlayer`'s carefully-shared-AudioContext internals.
+- **Close-shadow rep loop** (`ShadowingController.startShadowLoop` /
+  `updateShadowLoop`) — the "Loop shadow reps" toggle in the Close shadow
+  panel. Hands-free practice: the native audio plays on a loop while the mic
+  records, cycling one ephemeral take per pass (rep counter, live waveform;
+  "Hear that back" / "Compare to native" reflect the latest; **nothing
+  persisted**). A distinct path from `startRecording('shadow')` run
+  repeatedly: **all the user-gesture-gated calls happen once, under the
+  starting tap** — `getUserMedia`, `AudioContext.resume()`, the first
+  reference `play()` — after which the reference `<audio loop>` re-plays
+  itself and only `MediaRecorder` cycling runs. On its 100 ms tick the
+  controller watches the reference's `currentTime` (it does *not* `notify()`
+  per tick — that 10 Hz churn re-rendered the panel + waveform enough to
+  scroll on mobile); a loop wrap (position jumps back past half the clip)
+  triggers `RecordingService.cycleRecorder()` — stop + fresh `MediaRecorder`
+  on the *same* held-open stream — so each rep is a separate blob. This
+  once-under-the-tap structure is what it takes on **iOS Safari**, where
+  those calls need a transient activation that lapses seconds after the tap
+  — two earlier per-*rep*-setup versions reliably died ~6 reps in with "the
+  request is not allowed by the user agent or platform." `stopShadowLoop()`
+  captures the final rep and tears down; a dead-mic cycle failure ends the
+  loop via `endShadowLoop()`; unmount / sentence change go through
+  `cancelRecording()`.
+  - **Live speed + range.** `updateShadowLoop({ playbackRate, range })`
+    changes the play-along speed (`ShadowReferencePlayer.setPlaybackRate`)
+    and the looped sub-span (the marked target range) on an in-flight loop
+    — no stop/restart, so the once-under-the-tap property holds. For a
+    sub-range, `tickShadowLoop` watches the range's end itself and
+    `seek()`s back to its start (the native `<audio loop>` only wraps at
+    the clip's real end); that seek is also what registers as the "wrap"
+    that cycles the recorder. `startShadowLoop` takes an initial `range`
+    the same way.
+  - The Close shadow panel has a reserved `minHeight` so the control
+    swapping (loop ↔ stop) doesn't reflow the sentence out of view.
+- **Record & analyze** — below the close-shadow panel: Calibrate mic, one
+  `RecordToggleButton` (`src/components/RecordToggleButton.tsx` — one button
+  whose label/action flips between "start" and "● Recording… tap to stop,"
+  never two on screen), save-with-notes / discard, then the Past-attempts
+  list with the inline `AnalysisPanel`. This is where a keepable,
+  analyzable take is captured; the record button is disabled while the
+  close-shadow loop runs. `Attempt` still carries two now-unused optional
+  fields from the retired guided flow — `practiceStage?: 'final'` and
+  `practiceSessionId?: string` (left in place, harmless, no Dexie bump).
 
 This whole feature area is **local-only**: `Attempt` blobs, alignment
 caches, ASR transcriptions, and analysis summaries never sync to Supabase
@@ -1599,12 +1569,14 @@ aren't JSON-serializable/aren't worth backing up).
   resources change.
 - **Named practice-mode taxonomy** from the original design brief
   (Listen/Echo/Delayed shadowing/Close shadowing/Independent production/
-  Meaning→production) is now substantially closed: the guided/progressive
-  practice mode (§6 above, `ProgressiveShadowingPanel.tsx`) sequences
-  Listen/Pause&Repeat/Delayed Shadow/Close Shadow/Record&Compare as one
-  continuous flow, and "Meaning→production" remains available as the
-  free-form "Show meaning instead" toggle. "Independent production" is
-  still only implicit (not pressing play first), not a named mode.
+  Meaning→production) is only partly reflected in the UI. A 5-stage
+  guided/progressive panel once sequenced all of it, but it was folded away
+  2026-09-09 (the user in practice only used its close-shadow loop): §6's
+  ShadowPage now leads with the **close-shadow rep loop** and the
+  scrubbable reference player covers Listen implicitly, with
+  "Meaning→production" as the free-form "Show meaning instead" toggle.
+  Delayed shadowing, an explicit Echo step, and a named "Independent
+  production" mode are no longer surfaced.
 - **Reading-in-context grammar drills, kanji-reading-in-isolation drills,
   and "which words share a reading" browsing** (the reverse of
   `KanjiDetailPage`'s current "this kanji occurs in these words" view) are

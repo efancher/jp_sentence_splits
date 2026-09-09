@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-08.
+Last updated: 2026-09-09.
 
 ## Where things stand
 
@@ -32,6 +32,36 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-09 — `ShadowPage` collapsed to close-shadow + record/analyze
+  (user request — "I pretty much always just use the close shadow looping
+  and the main record and analyze").** The standalone 5-stage
+  guided/progressive practice panel (Listen → Pause&Repeat → Delayed
+  Shadow → Close Shadow → Record&Compare) is gone, along with the
+  free-form "Delayed shadow" + delay-picker and the "Shadow mode"
+  checkbox. New single-page layout:
+  - **Reference player** (unchanged) — audio, playback speed, Mark
+    start / Mark end / Loop target.
+  - **Close shadow** panel — just the hands-free "Loop shadow reps"
+    toggle + live waveform + rep counter, and Hear-that-back / Compare
+    for the last (ephemeral, never saved) rep.
+  - **Record & analyze** panel — Calibrate mic, one plain Record toggle,
+    save/discard, then the unchanged Past-attempts list with inline
+    `AnalysisPanel`.
+  - **Live loop tweaks** — playback speed *and* the target range can be
+    changed while the loop runs (`ShadowingController.updateShadowLoop`
+    → `ShadowReferencePlayer.setPlaybackRate` / `seek`; `startShadowLoop`
+    gained a `range` option and `tickShadowLoop` wraps a sub-range back
+    to its start without waiting for the clip's real end). No stop/restart,
+    so the iOS-safe "gesture-gated setup once" property is preserved.
+  - Deleted `ProgressiveShadowingPanel.tsx`, `useProgressiveShadowing.ts`
+    and their two test files. `Attempt.practiceStage` /
+    `practiceSessionId` (only the old final-stage save set them) are left
+    in the schema — harmless optional fields, one planner test still
+    exercises `practiceStage: 'final'`. `tests/shadowing.test.ts` +2
+    (range loop, `updateShadowLoop`); `tests/shadowPage.test.tsx` swaps
+    the delayed-shadow / shadow-mode assertions for a close-shadow one.
+    Suite green (1265).
 
 - **2026-09-08 — Analytics pass 1: blind spots, error mix, shadowing→SRS
   bridge (user request — "measuring my performance / directing my learning

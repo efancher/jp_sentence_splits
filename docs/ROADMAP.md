@@ -46,8 +46,10 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 - [x] **Phase 9 — Shadowing pronunciation/prosody feedback.** All 9
   milestones (mora segmentation, forced-alignment service, phone/pitch
   timing feedback, ranked "fix one thing" + one-tap practice, ASR secondary
-  signal, pronunciation history, ground-truth pitch-accent scoring,
-  progressive/guided practice mode) plus the **cross-sentence learner
+  signal, pronunciation history, ground-truth pitch-accent scoring; the
+  standalone 5-stage guided/progressive practice panel was folded away
+  2026-09-09 — `ShadowPage` now leads with the hands-free close-shadow loop
+  above the free-form record-and-analyze controls) plus the **cross-sentence learner
   profile** (2026-08-31, brief's Phase 15) — `pronunciationProfile.ts` +
   `/pronunciation`, a ranked recurring-focus-area view + timing/pitch trend
   aggregated across every analyzed attempt. Detail in STATUS.md /
