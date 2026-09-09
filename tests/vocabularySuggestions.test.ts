@@ -43,6 +43,35 @@ describe('vocabularySuggestions', () => {
     expect(defaults.map((item) => item.expression)).toEqual(['世話', 'する']);
   });
 
+  it('does not default-select a 〜て auxiliary verb, but keeps the content verb', () => {
+    const japanese = '毎日走っています。';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: '毎日', start: 0, end: 2, lemma: '毎日', reading: 'まいにち', pos: '名詞/普通名詞' },
+      { surface: '走っ', start: 2, end: 4, lemma: '走る', reading: 'はしっ', pos: '動詞/一般' },
+      { surface: 'て', start: 4, end: 5, lemma: 'て', reading: 'て', pos: '助詞/接続助詞' },
+      { surface: 'い', start: 5, end: 6, lemma: 'いる', reading: 'い', pos: '動詞/非自立可能' },
+      { surface: 'ます', start: 6, end: 8, lemma: 'ます', reading: 'ます', pos: '助動詞' },
+      { surface: '。', start: 8, end: 9, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    const defaults = defaultSelectionsFromSuggestions(suggestions, japanese);
+    expect(defaults.map((item) => item.expression)).toEqual(['毎日', '走る']);
+    // The いる suggestion is still present, just not checked.
+    expect(suggestions.find((s) => s.expression === 'いる')?.selectedByDefault).toBe(false);
+  });
+
+  it('still default-selects a content verb that merely follows a comma-broken て', () => {
+    const japanese = '歩いて、学ぶ。';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: '歩い', start: 0, end: 2, lemma: '歩く', reading: 'あるい', pos: '動詞/一般' },
+      { surface: 'て', start: 2, end: 3, lemma: 'て', reading: 'て', pos: '助詞/接続助詞' },
+      { surface: '、', start: 3, end: 4, lemma: '、', reading: '', pos: '補助記号/読点' },
+      { surface: '学ぶ', start: 4, end: 6, lemma: '学ぶ', reading: 'まなぶ', pos: '動詞/一般' },
+      { surface: '。', start: 6, end: 7, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    const defaults = defaultSelectionsFromSuggestions(suggestions, japanese);
+    expect(defaults.map((item) => item.expression)).toEqual(['歩く', '学ぶ']);
+  });
+
   it('builds a contiguous morph strip with gaps filled', () => {
     const japanese = 'あの、先輩';
     const suggestions = suggestionsFromTokens(japanese, [

@@ -68,6 +68,17 @@ is trimmed.)
     vocab FSRS-proficient); they surface as vocabulary matures. Tests +18
     (`conjugation.test.ts`, `reviewPage.test.tsx`, `data.test.ts`).
 
+- **2026-09-09 — Vocabulary picker no longer default-checks a 〜て auxiliary
+  verb (recommender polish, same discussion).** UniDic tags the いる in
+  〜ている / くる in 〜てくる / しまう in 〜てしまう as `動詞/非自立可能` —
+  content POS, so the old `isContentPos` default checked them. New
+  `isBoundAuxiliaryVerb` (`src/lib/vocabularySuggestions.ts`) leaves such a
+  verb visible in the strip but unchecked when it's glued to a preceding
+  て/で particle — the *construction* is `GrammarPicker`'s job. Standalone
+  いる・する・できる and サ変 する (世話をする) are unaffected (particle isn't
+  て/で). Forward-only: affects newly mined/imported sentences; re-run
+  `backfill:vocabulary-suggestions` to refresh older unreviewed ones.
+
 - **2026-09-09 — `reading_retrieval` / `reading_production` skipped for
   all-kana words (user request, follow-on from the conjugation work — "type
   the reading doesn't make sense for kana words").** A word whose

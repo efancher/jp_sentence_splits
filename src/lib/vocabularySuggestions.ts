@@ -54,6 +54,26 @@ export function isContentPos(pos: string): boolean {
 }
 
 /**
+ * A dependent verb glued onto a preceding て/で — the aspectual/benefactive
+ * half of 〜ている / 〜てくる / 〜てしまう / 〜ておく / 〜てみる / 〜てくれる …
+ * UniDic tags these `動詞/非自立可能`, the same tag it gives standalone
+ * いる・する・できる, so the tag alone can't tell them apart; the adjacent
+ * て/で is what makes this an auxiliary *here*. Left visible in the picker
+ * but not checked by default — the *construction* is grammar (GrammarPicker
+ * covers 〜ている), and a learner who does want いる as a word can still tap
+ * it. `prev` is the token immediately before in sentence order.
+ */
+function isBoundAuxiliaryVerb(
+  token: MorphologyToken,
+  prev: MorphologyToken | undefined,
+): boolean {
+  if (!token.pos?.startsWith('動詞/非自立可能')) return false;
+  if (!prev?.pos?.startsWith('助詞')) return false;
+  if (prev.surface !== 'て' && prev.surface !== 'で') return false;
+  return prev.end === token.start;
+}
+
+/**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
  * deliberately added them. Everything else (content words, and hand-added
@@ -149,6 +169,7 @@ export function deriveDictionaryReading(
 export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,
+  prevToken?: MorphologyToken,
 ): VocabularySuggestion | null {
   if (!validateSpan(japanese, token.start, token.end, token.surface)) {
     return null;
@@ -169,7 +190,7 @@ export function suggestionFromToken(
       lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression),
     pos,
     source: 'morphology',
-    selectedByDefault: isContentPos(pos),
+    selectedByDefault: isContentPos(pos) && !isBoundAuxiliaryVerb(token, prevToken),
   };
 }
 
@@ -178,10 +199,10 @@ export function suggestionsFromTokens(
   tokens: MorphologyToken[],
 ): VocabularySuggestion[] {
   const out: VocabularySuggestion[] = [];
-  for (const token of tokens) {
-    const suggestion = suggestionFromToken(token, japanese);
+  tokens.forEach((token, index) => {
+    const suggestion = suggestionFromToken(token, japanese, tokens[index - 1]);
     if (suggestion) out.push(suggestion);
-  }
+  });
   return out;
 }
 
