@@ -21,6 +21,10 @@ const FakeShadowReferencePlayer = vi.hoisted(() => {
     currentTime = vi.fn(() => this.fakeCurrentTime);
     duration = vi.fn((): number | undefined => 2);
     getSampleRate = vi.fn(() => 48_000);
+    setPlaybackRate = vi.fn();
+    seek = vi.fn((seconds: number) => {
+      this.fakeCurrentTime = seconds;
+    });
 
     constructor() {
       FakeShadowReferencePlayer.instances.push(this);
@@ -303,6 +307,46 @@ describe('ShadowingController shadow mode', () => {
     expect(takes).toHaveLength(2); // final take captured on stop
     expect(controller.getSnapshot()).toMatchObject({ status: 'stopped', shadowActive: false });
     expect(player.teardown).toHaveBeenCalled();
+  });
+
+  it('startShadowLoop with a range seeks to the range start and wraps at the range end', async () => {
+    const controller = new ShadowingController();
+    const blob = new Blob(['ref'], { type: 'audio/webm' });
+    const takes: Array<{ blob: Blob; durationMs: number }> = [];
+
+    await controller.startShadowLoop(blob, {
+      range: { startMs: 500, endMs: 1_500 },
+      onRep: (take) => takes.push(take),
+    });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+    expect(player.seek).toHaveBeenCalledWith(0.5);
+
+    // Play past the range end — the controller seeks back to the start and
+    // cycles one take, without waiting for the clip's real end.
+    player.fakeCurrentTime = 1.6;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(player.seek).toHaveBeenLastCalledWith(0.5);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(takes).toHaveLength(1);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
+  it('updateShadowLoop changes speed and range on an in-flight loop', async () => {
+    const controller = new ShadowingController();
+    await controller.startShadowLoop(new Blob(['ref']), { onRep: () => {} });
+    const player = FakeShadowReferencePlayer.instances.at(-1)!;
+
+    controller.updateShadowLoop({ playbackRate: 0.75 });
+    expect(player.setPlaybackRate).toHaveBeenCalledWith(0.75);
+
+    player.fakeCurrentTime = 5; // outside the new range
+    controller.updateShadowLoop({ range: { startMs: 200, endMs: 900 } });
+    expect(player.seek).toHaveBeenLastCalledWith(0.2);
+
+    controller.stopShadowLoop();
+    await new Promise((r) => setTimeout(r, 30));
   });
 
   it('startShadowLoop surfaces a fatal error if the reference graph fails', async () => {

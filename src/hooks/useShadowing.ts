@@ -21,9 +21,15 @@ export function useShadowing() {
       blob: Blob,
       opts: {
         playbackRate?: number;
+        range?: TimeRangeMs | null;
         onRep: (take: { blob: Blob; durationMs: number }) => void;
       },
     ) => shadowingController.startShadowLoop(blob, opts),
+    [],
+  );
+  const updateShadowLoop = useCallback(
+    (opts: { playbackRate?: number; range?: TimeRangeMs | null }) =>
+      shadowingController.updateShadowLoop(opts),
     [],
   );
   const stopShadowLoop = useCallback(
@@ -92,6 +98,7 @@ export function useShadowing() {
     cancelRecording,
     releaseRecordingStream,
     startShadowLoop,
+    updateShadowLoop,
     stopShadowLoop,
     playAlternate,
     playDualEar,

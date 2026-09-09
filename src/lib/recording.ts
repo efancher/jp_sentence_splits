@@ -315,6 +315,23 @@ export class ShadowReferencePlayer {
     return this.context?.sampleRate ?? 48_000;
   }
 
+  /**
+   * Change the play-along speed mid-loop without restarting the graph — the
+   * hands-free shadow loop (ShadowingController.updateShadowLoop) calls this
+   * so "Playback speed" stays live while looping. Safe from a timer: it only
+   * touches element properties, none of the gesture-gated APIs.
+   */
+  setPlaybackRate(rate: number): void {
+    if (!this.audio) return;
+    this.audio.playbackRate = rate;
+    this.audio.preservesPitch = true;
+  }
+
+  /** Seek the reference element — used to wrap a sub-range loop back to its start. */
+  seek(seconds: number): void {
+    if (this.audio) this.audio.currentTime = Math.max(0, seconds);
+  }
+
   async start(
     stream: MediaStream,
     blob: Blob,
@@ -762,20 +779,6 @@ export class PlaybackCoordinator {
     this.cancel();
     this.controller = new AbortController();
     await playDualEar(referenceBlob, learnerBlob, options, this.controller.signal);
-  }
-
-  /** Plays `audio` once, optionally bounded to `range`, then resolves. */
-  async playRange(
-    audio: HTMLAudioElement,
-    range?: TimeRangeMs,
-    playbackRate = 1,
-  ): Promise<void> {
-    this.cancel();
-    this.controller = new AbortController();
-    const { signal } = this.controller;
-    audio.playbackRate = playbackRate;
-    audio.preservesPitch = true;
-    await playUntilEnded(audio, signal, range);
   }
 
   /** Loops `audio` within `range` until `cancel()` is called. */

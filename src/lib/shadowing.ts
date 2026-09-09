@@ -64,6 +64,8 @@ export class ShadowingController {
         clipSeconds: number;
         lastCurrentTime: number;
         cycling: boolean;
+        /** Sub-range to loop within the clip; undefined loops the whole clip. */
+        range?: TimeRangeMs;
       }
     | undefined;
 
@@ -139,11 +141,17 @@ export class ShadowingController {
    * wraps we cycle the recorder so `onRep` gets one take per rep. The
    * shared mic analyser stays up, so the live waveform works. End with
    * `stopShadowLoop()`.
+   *
+   * `range` loops just a sub-span of the clip (from "Mark start"/"Mark
+   * end"); `playbackRate` and `range` can both be changed live afterwards
+   * via `updateShadowLoop` without tearing the graph down and re-running
+   * the gesture-gated setup.
    */
   async startShadowLoop(
     blob: Blob,
     opts: {
       playbackRate?: number;
+      range?: TimeRangeMs | null;
       onRep: (take: { blob: Blob; durationMs: number }) => void;
     },
   ): Promise<void> {
@@ -176,15 +184,47 @@ export class ShadowingController {
       this.notify({ status: 'idle', error: messageFor(error), shadowActive: false });
       return;
     }
+    const range = opts.range ?? undefined;
+    if (range) this.shadowPlayer.seek(range.startMs / 1000);
     this.shadowLoop = {
       onRep: opts.onRep,
-      clipSeconds: this.shadowPlayer.duration() ?? 3,
+      clipSeconds: range
+        ? Math.max(0.2, (range.endMs - range.startMs) / 1000)
+        : this.shadowPlayer.duration() ?? 3,
       lastCurrentTime: this.shadowPlayer.currentTime(),
       cycling: false,
+      range,
     };
     this.recordingStartedAt = Date.now();
     this.notify({ status: 'recording', recordingElapsedMs: 0, shadowActive: true });
     this.timer = setInterval(() => this.tick(), TICK_MS);
+  }
+
+  /**
+   * Live tweak of an in-flight shadow loop — "Playback speed" and the
+   * "Mark start"/"Mark end" target range stay adjustable while looping
+   * instead of forcing a stop/restart. No-ops when no loop is running.
+   */
+  updateShadowLoop(opts: { playbackRate?: number; range?: TimeRangeMs | null }): void {
+    const loop = this.shadowLoop;
+    if (!loop) return;
+    if (opts.playbackRate !== undefined) {
+      this.shadowPlayer.setPlaybackRate(opts.playbackRate);
+    }
+    if (opts.range !== undefined) {
+      const range = opts.range ?? undefined;
+      loop.range = range;
+      if (range) {
+        loop.clipSeconds = Math.max(0.2, (range.endMs - range.startMs) / 1000);
+        const now = this.shadowPlayer.currentTime();
+        if (now < range.startMs / 1000 || now >= range.endMs / 1000) {
+          this.shadowPlayer.seek(range.startMs / 1000);
+          loop.lastCurrentTime = range.startMs / 1000;
+        }
+      } else {
+        loop.clipSeconds = this.shadowPlayer.duration() ?? 3;
+      }
+    }
   }
 
   stopShadowLoop(): void {
@@ -221,30 +261,51 @@ export class ShadowingController {
 
   private tickShadowLoop(loop: NonNullable<ShadowingController['shadowLoop']>): void {
     const now = this.shadowPlayer.currentTime();
-    // The reference wrapped (loop=true restarts silently) when playback
-    // position jumps back by more than half the clip. No per-tick notify —
-    // nothing in loop mode shows elapsed time, and a 10 Hz snapshot churn
-    // re-renders the panel + waveform enough to scroll on mobile.
+    // Sub-range loop: the native <audio loop> only wraps at the clip's real
+    // end, so we watch the range boundary ourselves and seek back to start.
+    // (`now < startSec` also catches a native wrap-to-0 when the range
+    // doesn't start at 0.)
+    if (loop.range) {
+      const startSec = loop.range.startMs / 1000;
+      const endSec = loop.range.endMs / 1000;
+      if (now >= endSec || now < startSec - 0.05) {
+        this.shadowPlayer.seek(startSec);
+        loop.lastCurrentTime = startSec;
+        this.cycleShadowLoopRecorder(loop);
+        return;
+      }
+      loop.lastCurrentTime = now;
+      return;
+    }
+    // Whole-clip loop: the reference wrapped (loop=true restarts silently)
+    // when playback position jumps back by more than half the clip. No
+    // per-tick notify — nothing in loop mode shows elapsed time, and a 10 Hz
+    // snapshot churn re-renders the panel + waveform enough to scroll on mobile.
     const wrapped = loop.lastCurrentTime - now > loop.clipSeconds / 2;
     loop.lastCurrentTime = now;
-    if (wrapped && !loop.cycling) {
-      loop.cycling = true;
-      void this.recordingService
-        .cycleRecorder()
-        .then((take) => loop.onRep(take))
-        .catch((error) => {
-          // A rep that captured nothing (a quiet pass) is fine — keep going.
-          // Anything else (mic track ended, recorder wedged) ends the loop
-          // cleanly instead of spinning with the same error every wrap.
-          if (error instanceof Error && error.message === 'No audio was captured.') {
-            return;
-          }
-          this.endShadowLoop({ error: messageFor(error) });
-        })
-        .finally(() => {
-          loop.cycling = false;
-        });
-    }
+    if (wrapped) this.cycleShadowLoopRecorder(loop);
+  }
+
+  private cycleShadowLoopRecorder(
+    loop: NonNullable<ShadowingController['shadowLoop']>,
+  ): void {
+    if (loop.cycling) return;
+    loop.cycling = true;
+    void this.recordingService
+      .cycleRecorder()
+      .then((take) => loop.onRep(take))
+      .catch((error) => {
+        // A rep that captured nothing (a quiet pass) is fine — keep going.
+        // Anything else (mic track ended, recorder wedged) ends the loop
+        // cleanly instead of spinning with the same error every wrap.
+        if (error instanceof Error && error.message === 'No audio was captured.') {
+          return;
+        }
+        this.endShadowLoop({ error: messageFor(error) });
+      })
+      .finally(() => {
+        loop.cycling = false;
+      });
   }
 
   private endShadowLoop(opts: { error?: string } = {}): void {
