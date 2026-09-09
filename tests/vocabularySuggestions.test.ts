@@ -39,6 +39,9 @@ describe('vocabularySuggestions', () => {
     ]);
     expect(isContentPos('動詞/非自立可能')).toBe(true);
     expect(isContentPos('助詞/格助詞')).toBe(false);
+    // na-adjectives (modern UniDic tags them 形状詞); not the そう/よう stems.
+    expect(isContentPos('形状詞/一般')).toBe(true);
+    expect(isContentPos('形状詞/助動詞語幹')).toBe(false);
     const defaults = defaultSelectionsFromSuggestions(suggestions, japanese);
     expect(defaults.map((item) => item.expression)).toEqual(['世話', 'する']);
   });

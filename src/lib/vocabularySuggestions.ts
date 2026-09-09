@@ -29,12 +29,20 @@ export interface MorphologyToken {
   pos?: string;
 }
 
-/** POS prefixes that are usually worth studying as vocabulary. */
+/**
+ * POS prefixes that are usually worth studying as vocabulary. `形状詞` is
+ * modern UniDic's tag for na-adjectives / adjectival nouns (色々, 綺麗,
+ * 大変, 元気) — `形容動詞` is the older term, kept for any legacy data.
+ * `形状詞/助動詞語幹` (the そう / よう auxiliary stems) is deliberately not
+ * listed: it's a grammatical use, not a word.
+ */
 const CONTENT_POS_PREFIXES = [
   '名詞',
   '動詞',
   '形容詞',
   '形容動詞',
+  '形状詞/一般',
+  '形状詞/タリ',
   '副詞',
   '連体詞',
   '感動詞',

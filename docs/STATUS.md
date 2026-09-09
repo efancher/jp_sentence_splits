@@ -83,9 +83,14 @@ is trimmed.)
     grammatical use — 〜ことがある, 〜はずだ, 〜たところ). Written with their
     kanji (事/訳/為/所/方/用) they're taken as ordinary nouns. `GrammarPicker`
     owns the constructions.
+  - `CONTENT_POS_PREFIXES` gained `形状詞/一般` + `形状詞/タリ` — modern
+    UniDic's na-adjective tag (色々, 綺麗, 大変, 元気), which the old list
+    (`形容動詞`, the pre-UniDic term) missed entirely, so na-adjectives
+    were never default-checked. `形状詞/助動詞語幹` (the そう/よう stems)
+    stays excluded.
   - Side effect (intended): `selectedByDefault` also feeds the `/progress`
     "vocabulary blind spots" count (`getBlindSpots`), so `ている`-`いる` and
-    kana `こと`/`はず` stop showing up there as untracked words.
+    kana `こと`/`はず` drop off it while na-adjectives now appear.
 
 - **2026-09-09 — `reading_retrieval` / `reading_production` skipped for
   all-kana words (user request, follow-on from the conjugation work — "type
