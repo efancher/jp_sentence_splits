@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-09 — Pitch-contour fixes on ShadowPage (user report).**
+  - `MeasuredPitchContour` (top-of-page native contour) drew over the whole
+    clip, so a reference with leading/trailing room tone squashed the line
+    into a few pixels ("three brief lines"). Now crops the x-axis to
+    `voicedTimeSpan` like `PitchCanvas`, remaps the playhead into that
+    window, and takes an optional `height` — ShadowPage renders it at 64px.
+  - `AnalysisPanel` blanked *both* reference and learner pitch contours (and
+    the waveforms) whenever one clip failed — an older attempt in a codec
+    the current browser's `decodeAudioData` rejects would take the whole
+    analysis down. Reference/learner decode + `analyzeAlignment` are now
+    isolated: each side shows its own "couldn't read this on this device" /
+    "too little voiced sound to plot" note and the good side still renders.
+  - `tests/measuredPitchContour.test.tsx` rewritten with real frame
+    timestamps + a voiced-span-crop case (+2). Suite 1267.
+
 - **2026-09-09 — `ShadowPage` collapsed to close-shadow + record/analyze
   (user request — "I pretty much always just use the close shadow looping
   and the main record and analyze").** The standalone 5-stage

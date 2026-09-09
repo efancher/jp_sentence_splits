@@ -17,7 +17,10 @@ Current layout (top → bottom):
    range are adjustable *while the loop runs* (`ShadowingController.updateShadowLoop`
    → `ShadowReferencePlayer.setPlaybackRate` / `seek`; `startShadowLoop` has a
    `range` option; `tickShadowLoop` wraps a sub-range without waiting for the
-   clip's real end).
+   clip's real end). The **speed** change is deferred to the next loop wrap
+   (`shadowLoop.pendingPlaybackRate`) — applying `playbackRate` mid-pass on the
+   `AudioContext`-routed element stuttered the time-stretcher. Range still
+   repositions immediately.
 3. **Record & analyze** panel — Calibrate mic, one plain Record toggle,
    save/discard, then the Past-attempts list with inline `AnalysisPanel`.
 

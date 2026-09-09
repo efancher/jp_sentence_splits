@@ -47,6 +47,7 @@ import {
   peaksToPolyline,
   sliceCanonicalAudio,
   type AlignmentMode,
+  type CanonicalAudio,
   type WavePeak,
 } from '../lib/waveform';
 
@@ -180,22 +181,30 @@ function PitchCanvas({
   return (
     <div className="stack">
       <span className="muted">{label}</span>
-      <svg
-        viewBox={`0 0 ${PITCH_WIDTH} ${PITCH_HEIGHT}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={`${label} pitch contour`}
-        style={{ width: '100%', height: PITCH_HEIGHT, color: 'var(--text-muted)' }}
-      >
-        <polyline
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeDasharray={dashed ? '6 4' : undefined}
-          points={path}
-        />
-      </svg>
-      {kana ? <KanaTimelineRow entries={kana} label={`${label} syllables`} /> : null}
+      {path ? (
+        <svg
+          viewBox={`0 0 ${PITCH_WIDTH} ${PITCH_HEIGHT}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`${label} pitch contour`}
+          style={{ width: '100%', height: PITCH_HEIGHT, color: 'var(--text-muted)' }}
+        >
+          <polyline
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeDasharray={dashed ? '6 4' : undefined}
+            points={path}
+          />
+        </svg>
+      ) : (
+        <span className="muted" style={{ fontSize: '0.8em' }}>
+          {pitch
+            ? 'Too little voiced sound to plot a contour.'
+            : 'Audio for this clip couldn’t be read on this device.'}
+        </span>
+      )}
+      {kana && path ? <KanaTimelineRow entries={kana} label={`${label} syllables`} /> : null}
     </div>
   );
 }
@@ -323,41 +332,76 @@ export function AnalysisPanel({
     setError(undefined);
     void (async () => {
       try {
-        const referenceBuffer = await decodeAudioBuffer(referenceBlob);
-        const referenceFull = canonicalizeAudioBuffer(referenceBuffer);
-        const referenceCanonical = targetRange
-          ? sliceCanonicalAudio(referenceFull, targetRange)
-          : referenceFull;
-        const learnerBuffer = await decodeAudioBuffer(learnerBlob);
-        const learnerCanonical = canonicalizeAudioBuffer(learnerBuffer);
-        const [refPitch, learnPitch, alignmentResult] = await Promise.all([
-          Promise.resolve(extractPitch(referenceCanonical)),
-          Promise.resolve(extractPitch(learnerCanonical)),
-          analyzeAlignment(referenceBlob, learnerBlob, mode, targetRange, referencePlaybackRate),
-        ]);
+        // Decode the two clips independently: an older attempt recorded in a
+        // codec this browser's `decodeAudioData` won't accept (or an
+        // iOS-corrupted IndexedDB blob) must not blank the *reference*
+        // contour/waveform too — that side is fine and still worth showing.
+        let referenceCanonical: CanonicalAudio | undefined;
+        let learnerCanonical: CanonicalAudio | undefined;
+        const unreadable: string[] = [];
+        try {
+          const referenceFull = canonicalizeAudioBuffer(await decodeAudioBuffer(referenceBlob));
+          referenceCanonical = targetRange
+            ? sliceCanonicalAudio(referenceFull, targetRange)
+            : referenceFull;
+        } catch {
+          unreadable.push('the reference clip');
+        }
+        try {
+          learnerCanonical = canonicalizeAudioBuffer(await decodeAudioBuffer(learnerBlob));
+        } catch {
+          unreadable.push('your recording');
+        }
         if (!active) return;
+
+        const refPitch = referenceCanonical ? extractPitch(referenceCanonical) : undefined;
+        const learnPitch = learnerCanonical ? extractPitch(learnerCanonical) : undefined;
         setReferencePitch(refPitch);
         setLearnerPitch(learnPitch);
-        setSpectrograms({
-          reference: computeSpectrogram(
-            referenceCanonical.samples,
-            referenceCanonical.sampleRate,
-          ),
-          learner: computeSpectrogram(
-            learnerCanonical.samples,
-            learnerCanonical.sampleRate,
-          ),
-        });
+        setSpectrograms(
+          referenceCanonical && learnerCanonical
+            ? {
+                reference: computeSpectrogram(
+                  referenceCanonical.samples,
+                  referenceCanonical.sampleRate,
+                ),
+                learner: computeSpectrogram(
+                  learnerCanonical.samples,
+                  learnerCanonical.sampleRate,
+                ),
+              }
+            : undefined,
+        );
         // Warm the shared cache for the review / shadowing pitch overlay —
         // only when this is the whole clip, not a practice-target slice.
-        if (!targetRange) void saveReferencePitchTrack(referenceAudioId, refPitch);
-        setAlignment({
-          referencePeaks: alignmentResult.referencePeaks,
-          learnerPeaks: alignmentResult.learnerPeaks,
-          offsetSeconds: alignmentResult.offsetSeconds,
-          durationRatio: alignmentResult.durationRatio,
-          confidence: alignmentResult.confidence,
-        });
+        if (refPitch && !targetRange) void saveReferencePitchTrack(referenceAudioId, refPitch);
+
+        if (referenceCanonical && learnerCanonical) {
+          const alignmentResult = await analyzeAlignment(
+            referenceBlob,
+            learnerBlob,
+            mode,
+            targetRange,
+            referencePlaybackRate,
+          );
+          if (!active) return;
+          setAlignment({
+            referencePeaks: alignmentResult.referencePeaks,
+            learnerPeaks: alignmentResult.learnerPeaks,
+            offsetSeconds: alignmentResult.offsetSeconds,
+            durationRatio: alignmentResult.durationRatio,
+            confidence: alignmentResult.confidence,
+          });
+        } else {
+          setAlignment(undefined);
+        }
+
+        if (active && unreadable.length > 0) {
+          setError(
+            `Couldn't read the audio for ${unreadable.join(' and ')} on this device — ` +
+              'the pitch and waveform views need an audio format this browser can decode.',
+          );
+        }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Analysis failed.');
       } finally {

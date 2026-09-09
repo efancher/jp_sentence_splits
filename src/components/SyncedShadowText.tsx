@@ -196,7 +196,7 @@ export function SyncedShadowText({
     return (
       <div className="stack" style={{ flex: 1, gap: '0.25rem' }}>
         <div className="jp jp-lg">{japanese}</div>
-        <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} />
+        <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} height={64} />
         <MoraBreakdown units={moraUnits} />
         <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
       </div>
@@ -221,7 +221,7 @@ export function SyncedShadowText({
           japanese
         )}
       </div>
-      <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} />
+      <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} height={64} />
       {moraUnits.length > 0 && (
         <div className="row mora-row" aria-label="Mora breakdown">
           {moraUnits.map((unit) => (

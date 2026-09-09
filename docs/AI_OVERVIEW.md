@@ -1261,7 +1261,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     `src/lib/pitch.ts`: first→last voiced frame + a 6% margin), not the raw
     clip, so a reference cut with trailing room tone no longer squashes into
     part of the width while a tight learner take fills it — both read "speech
-    start → speech end" and line up. In speaker-normalized (semitones) mode
+    start → speech end" and line up. The compact `MeasuredPitchContour` (the
+    review reveals / ShadowPage's top-of-page native contour, which takes an
+    optional `height`) does the same voiced-span crop, and remaps its
+    playhead into that window. The reference and learner clips are decoded
+    **independently** — an older attempt in a codec this browser's
+    `decodeAudioData` rejects (or an iOS-corrupted IndexedDB blob) leaves a
+    per-side "couldn't read this / too little voiced sound" note instead of
+    blanking both contours and the waveforms; the alignment call is likewise
+    isolated. In speaker-normalized (semitones) mode
     the two also share a y-range (union of both clips' voiced
     `relativeSemitones`), so a flat delivery reads as flat rather than being
     stretched to full height; Hz mode keeps per-canvas y (absolute register

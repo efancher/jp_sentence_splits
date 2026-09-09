@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
 
 import type { KanaTimelineEntry } from '../lib/kanaTimeline';
-import type { PitchAnalysisPayload } from '../lib/pitch';
+import { voicedTimeSpan, type PitchAnalysisPayload } from '../lib/pitch';
 import { KanaTimelineRow } from './KanaTimelineRow';
 
 const WIDTH = 320;
-const HEIGHT = 36;
 const PAD_Y = 5;
 /** Half-width of the highlight band around the playhead, in viewBox units. */
 const BAND_HALF = 3;
@@ -25,9 +24,14 @@ const BAND_HALF = 3;
  * line spans a silence. Renders nothing when there's no track or too little
  * voiced signal to be meaningful.
  *
- * `progress` (0..1, fraction of the clip's duration) draws a playhead — the
- * audio being played *is* the clip the pitch was measured from, so x↔time is
- * exact to within one analysis frame (~16ms); no forced-alignment guesswork.
+ * The x-axis is cropped to the clip's *voiced span* (`voicedTimeSpan`, same
+ * helper the shadowing-analysis contours use), not the raw clip — reference
+ * clips are usually cut with leading/trailing room tone, and drawing over
+ * the whole clip squashes the actual speech into a sliver on the left.
+ *
+ * `progress` (0..1, fraction of the clip's duration) draws a playhead,
+ * remapped into the voiced window; it hides while playback is in the
+ * trimmed lead-in/trail.
  *
  * `kana` (from `buildKanaTimeline`, needs a forced alignment) lays the
  * transcript's syllables under the same time axis — same treatment as the
@@ -39,6 +43,7 @@ export function MeasuredPitchContour({
   label = 'Native pitch (measured)',
   ariaLabel = 'Measured pitch of the native recording',
   kana,
+  height = 36,
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
@@ -48,50 +53,68 @@ export function MeasuredPitchContour({
   ariaLabel?: string;
   /** Time-aligned kana ruler under the contour; omitted when there's no alignment. */
   kana?: KanaTimelineEntry[];
+  /** Rendered pixel height; the compact review reveals keep the default, ShadowPage passes a taller one. */
+  height?: number;
 }) {
-  const segments = useMemo(() => {
+  const result = useMemo(() => {
     const frames = payload?.frames ?? [];
+    const window = voicedTimeSpan(payload);
+    if (!window) return null;
     const voiced = frames.filter(
-      (frame) => frame.voiced && frame.relativeSemitones !== null,
+      (frame) =>
+        frame.voiced &&
+        frame.relativeSemitones !== null &&
+        frame.timeSeconds >= window.start &&
+        frame.timeSeconds <= window.end,
     );
     if (voiced.length < 2) return null;
     const values = voiced.map((frame) => frame.relativeSemitones as number);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = Math.max(0.001, max - min);
-    const lastIndex = Math.max(1, frames.length - 1);
+    const windowSpan = Math.max(0.001, window.end - window.start);
 
     const runs: string[] = [];
     let current: string[] = [];
-    frames.forEach((frame, index) => {
-      if (!frame.voiced || frame.relativeSemitones === null) {
+    frames.forEach((frame) => {
+      const inWindow =
+        frame.timeSeconds >= window.start && frame.timeSeconds <= window.end;
+      if (!frame.voiced || frame.relativeSemitones === null || !inWindow) {
         if (current.length >= 2) runs.push(current.join(' '));
         current = [];
         return;
       }
-      const x = (index / lastIndex) * WIDTH;
+      const x = ((frame.timeSeconds - window.start) / windowSpan) * WIDTH;
       const y =
-        HEIGHT - PAD_Y - ((frame.relativeSemitones - min) / span) * (HEIGHT - 2 * PAD_Y);
+        height - PAD_Y - ((frame.relativeSemitones - min) / span) * (height - 2 * PAD_Y);
       current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
     });
     if (current.length >= 2) runs.push(current.join(' '));
-    return runs.length ? runs : null;
-  }, [payload]);
+    return runs.length ? { runs, window } : null;
+  }, [payload, height]);
 
-  if (!segments) return null;
+  if (!result) return null;
+  const { runs: segments, window } = result;
 
+  const clipDuration = payload?.durationSeconds ?? 0;
+  const playheadFrac =
+    progress != null && progress >= 0 && progress <= 1 && clipDuration > 0
+      ? (progress * clipDuration - window.start) / Math.max(0.001, window.end - window.start)
+      : null;
   const playheadX =
-    progress != null && progress >= 0 && progress <= 1 ? progress * WIDTH : null;
+    playheadFrac != null && playheadFrac >= 0 && playheadFrac <= 1
+      ? playheadFrac * WIDTH
+      : null;
 
   return (
     <div className="pitch-contour">
       <span className="muted pitch-contour-caption">{label}</span>
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${WIDTH} ${height}`}
         preserveAspectRatio="none"
         role="img"
         aria-label={ariaLabel}
-        style={{ width: '100%', height: HEIGHT }}
+        style={{ width: '100%', height }}
       >
         {playheadX != null ? (
           <>
@@ -100,14 +123,14 @@ export function MeasuredPitchContour({
               x={Math.max(0, playheadX - BAND_HALF)}
               y={0}
               width={Math.min(WIDTH, playheadX + BAND_HALF) - Math.max(0, playheadX - BAND_HALF)}
-              height={HEIGHT}
+              height={height}
             />
             <line
               className="pitch-contour-playhead"
               x1={playheadX}
               x2={playheadX}
               y1={0}
-              y2={HEIGHT}
+              y2={height}
             />
           </>
         ) : null}
