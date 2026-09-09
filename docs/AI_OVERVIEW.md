@@ -956,7 +956,15 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   reverse of `conjugate`: it conjugates the dictionary form to every form
   the word class offers (13 verb / 10 adjective) and returns the one the
   surface reproduces, or null — so stacked/compound surfaces (話している,
-  食べられなかった) and bare dictionary-form occurrences get no card. The card
+  食べられなかった) and bare dictionary-form occurrences get no card. When the
+  stored `surfaceForm` is a picker-truncated stem (言っ for 言って),
+  `getSentenceConjugationCandidates` recovers the full form from the
+  sentence via `findInflectedSurfaceInSentence`, accepting it only when it
+  extends the stem and doesn't run into an auxiliary
+  (`CONTINUES_INTO_AUXILIARY`). Word-class detection needs a JMdict POS tag
+  (`v5r`, `adj-i`…); mined vocab carries UniDic POS until `npm run
+  backfill:vocabulary-jmdict-pos` retags it — `npm run
+  diagnose:conjugation-cards` reports coverage. The card
   is a cloze: sentence with the verb blanked, "Dictionary form: X" +
   "Produce: {form}", type the reading (accepts the in-context inflected
   reading via `surfaceReadingFromInline` or the engine's own). Candidates

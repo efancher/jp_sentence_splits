@@ -33,6 +33,37 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-09 — Contextual conjugation cards had ~zero coverage (user
+  report — "surprised I haven't seen any conjugation cards yet").**
+  `getSentenceConjugationCandidates` was producing **0** candidates.
+  `scripts/diagnose-conjugation-cards.ts` (new; `npm run
+  diagnose:conjugation-cards`) shows the funnel. Two causes, both fixed:
+  - **POS format.** `conjugationWordClassFromPartOfSpeech` only reads
+    JMdict tags (`v5r`, `v1`, `adj-i`…) but the mining pipeline writes
+    UniDic POS (`動詞/一般`), so 558 of 631 surface-form occurrences were
+    dropped. `scripts/backfill-vocabulary-jmdict-pos.ts` (new; `npm run
+    backfill:vocabulary-jmdict-pos`) rewrites `part_of_speech` from a
+    confident JMdict match, but only for rows that don't already classify
+    and only when the match is a verb/adjective. **Run it after mining a
+    new source** (same pattern as `backfill:vocabulary-suggestions`).
+    Applied 2026-09-09: 224 items retagged.
+  - **Truncated surface forms.** The picker stores the content morpheme
+    UniDic segmented, dropping the trailing auxiliary (`言い` for `言いました`,
+    `飛ん` for `飛んで`). New `findInflectedSurfaceInSentence`
+    (`src/lib/conjugation.ts`) recovers the full single conjugated form
+    from the sentence — used both at read time in
+    `getSentenceConjugationCandidates` (accepts it only when it extends the
+    stored stem and doesn't continue into an auxiliary —
+    `CONTINUES_INTO_AUXILIARY`, so `待っ`→`待っている` stays un-quizzed) and
+    by `scripts/fix-truncated-surface-forms.ts` (new; `npm run
+    fix:truncated-surface-forms`) which repairs the stored value for the
+    other surface-form cards. Applied 2026-09-09: 85 links repaired.
+  - Result: conjugation candidates 0 → **85** across 70 sentences. Most are
+    still held by the deliberate full-sentence readiness gate
+    (`getSentenceFullReviewReadiness` — vocab confirmed + every sentence
+    vocab FSRS-proficient); they surface as vocabulary matures. Tests +9
+    (`conjugation.test.ts`, `reviewPage.test.tsx`).
+
 - **2026-09-09 — Pitch-contour fixes on ShadowPage (user report).**
   - `MeasuredPitchContour` (top-of-page native contour) drew over the whole
     clip, so a reference with leading/trailing room tone squashed the line
@@ -1375,7 +1406,7 @@ is trimmed.)
 | Re-segment an existing source | done; run against "After Work" 2026-08-29 |
 | Vocabulary meaning glossing | done; JMDict/JMnedict offline + `vocab-assist` Edge Function |
 | WaniKani mnemonics | removed 2026-09-02 (shipped 2026-08-29/30/31; learning-in-context replaced it) |
-| Contextual conjugation cards | done; migration live 2026-08-30 |
+| Contextual conjugation cards | done; migration live 2026-08-30; coverage fix 2026-09-09 (see Recent changes — JMdict POS + truncated surface forms) |
 | Progressive listening (`word_listening`) | done 2026-08-30 |
 | Mining pipeline v2 | slices A/B/C + wizard W1–W6 + polish + JMnedict reading check done 2026-08-31; one durability item deferred |
 
@@ -1429,6 +1460,13 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   session"; recommend 30 (~7 sessions) when ready to absorb the extra
   daily review load. Diagnostics: `npm run report:new-card-backlog`,
   `scripts/analyze-due-by-book.ts`.
+- **Conjugation-card POS** — mined vocab lands with UniDic `part_of_speech`
+  (`動詞/一般`), which the conjugation engine can't classify. `npm run
+  backfill:vocabulary-jmdict-pos -- --apply` retags verbs/adjectives from
+  JMdict; **re-run after every mining session** until it's wired into the
+  mining confirm path (follow-up, not scheduled). `npm run
+  diagnose:conjugation-cards` shows current coverage (85 candidates /
+  70 sentences as of 2026-09-09, most held by the vocab-readiness gate).
 - **Grammar review queue** — re-checked clean 2026-09-03
   (`scripts/diagnose-grammar-review-queue.ts`): 0 stuck items; the only 2
   non-surfacing patterns (`～ている（状態描写）`, `～を見つける`) are correctly
