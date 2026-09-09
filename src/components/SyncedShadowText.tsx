@@ -38,10 +38,8 @@ type AlignedWord = { text: string; start: number; end: number };
  * caller's own <audio> element directly (via ref) rather than the global
  * nativeAudioController singleton that component relies on, since
  * shadowing plays reference audio through PlaybackCoordinator/a raw
- * <audio> element, not that controller. Used both at the top of
- * ShadowPage and (compactly, right above the action buttons) inside
- * ProgressiveShadowingPanel's guided stages, so the highlighted text is
- * always close to whichever controls the learner is about to press.
+ * <audio> element, not that controller. Rendered at the top of ShadowPage,
+ * above the close-shadow and record controls.
  *
  * The forced aligner's word boundaries are keyed to its own tokenization,
  * which can diverge from `japanese`'s literal characters (dictionary-

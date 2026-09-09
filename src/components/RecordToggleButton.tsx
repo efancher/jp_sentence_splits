@@ -1,9 +1,8 @@
 /**
  * Single Record/Stop control — one button whose label and action flip
  * between "start" and "stop" instead of showing two separate buttons side
- * by side. Shared by ShadowPage's free-form controls and every recording
- * stage of ProgressiveShadowingPanel (docs/AI_OVERVIEW.md §6) so the fix
- * for "too many things to think about while recording" applies everywhere.
+ * by side, so there's one less thing to hold in mind while recording
+ * (docs/AI_OVERVIEW.md §6).
  */
 export function RecordToggleButton({
   isRecording,

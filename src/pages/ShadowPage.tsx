@@ -4,7 +4,6 @@ import { Link, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
-import { ProgressiveShadowingPanel } from '../components/ProgressiveShadowingPanel';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SyncedShadowText } from '../components/SyncedShadowText';
 import {
@@ -68,7 +67,7 @@ function SpeedControl({
 export function ShadowPage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const shadowing = useShadowing();
-  const { stopComparison, cancelRecording } = shadowing;
+  const { stopComparison, cancelRecording, updateShadowLoop } = shadowing;
 
   const [pendingAttempt, setPendingAttempt] = useState<
     { blob: Blob; durationMs: number } | null
@@ -80,26 +79,31 @@ export function ShadowPage() {
   const [speed, setSpeed] = useState(1);
   const [targetRange, setTargetRange] = useState<TimeRangeMs | null>(null);
   const [isLoopingTarget, setIsLoopingTarget] = useState(false);
-  const [guidedMode, setGuidedMode] = useState(false);
-  const [shadowMode, setShadowMode] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
   const [hideTranscript, setHideTranscript] = useState(false);
   const [showMeaningInstead, setShowMeaningInstead] = useState(false);
-  const [delayMs, setDelayMs] = useState(750);
-  const [delayedRecordPending, setDelayedRecordPending] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const [shadowEncounterNote, setShadowEncounterNote] = useState(false);
   const referenceRepairAttempted = useRef(false);
 
+  // Close-shadow hands-free rep loop.
+  const [isLoopingReps, setIsLoopingReps] = useState(false);
+  const [repCount, setRepCount] = useState(0);
+  const [ephemeralTake, setEphemeralTake] = useState<{ blob: Blob; durationMs: number } | null>(
+    null,
+  );
+  const [ephemeralUrl, setEphemeralUrl] = useState<string | null>(null);
+  /** True from loop start until its final stopped-take has been consumed as an ephemeral rep. */
+  const loopEngagedRef = useRef(false);
+
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ephemeralAudioRef = useRef<HTMLAudioElement | null>(null);
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
-  /** Cleanup for an in-flight "play reference, then auto-record" sequence (delayed shadowing). */
-  const delayedShadowCancelRef = useRef<(() => void) | null>(null);
 
   const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
 
@@ -121,12 +125,22 @@ export function ShadowPage() {
     return { book, sentence, referenceAudio, attempts, analysisSummaries };
   }, [bookId, sentenceId]);
 
+  /** Valid loop-point range (both marks set, end after start), else null. */
+  const loopRange =
+    targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null;
+
   // Pick up recordings that finished either by the Stop button or by hitting
-  // the max-duration auto-stop (both land in shadowing.lastRecording).
+  // the max-duration auto-stop. A just-ended rep loop also lands a final take
+  // in `shadowing.lastRecording` — route that to the ephemeral take, not the
+  // save/discard pending-attempt slot.
   useEffect(() => {
-    if (shadowing.status === 'stopped' && shadowing.lastRecording) {
-      setPendingAttempt(shadowing.lastRecording);
+    if (shadowing.status !== 'stopped' || !shadowing.lastRecording) return;
+    if (loopEngagedRef.current) {
+      loopEngagedRef.current = false;
+      setEphemeralTake(shadowing.lastRecording);
+      return;
     }
+    setPendingAttempt(shadowing.lastRecording);
   }, [shadowing.status, shadowing.lastRecording]);
 
   useEffect(() => {
@@ -138,6 +152,23 @@ export function ShadowPage() {
     setPendingUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [pendingAttempt]);
+
+  useEffect(() => {
+    if (!ephemeralTake) {
+      setEphemeralUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(ephemeralTake.blob);
+    setEphemeralUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [ephemeralTake]);
+
+  // Some browsers (Safari) don't reliably pick up a same-element `src` swap
+  // without an explicit `load()`, so a stale rep can keep playing after the
+  // next one lands. One render after the `src` prop commits.
+  useEffect(() => {
+    ephemeralAudioRef.current?.load();
+  }, [ephemeralUrl]);
 
   useEffect(() => {
     if (!data?.referenceAudio) {
@@ -155,7 +186,10 @@ export function ShadowPage() {
     setTargetRange(null);
     setAnalyzingAttemptId(null);
     setReferenceError(null);
-    setGuidedMode(false);
+    setEphemeralTake(null);
+    setIsLoopingReps(false);
+    setRepCount(0);
+    loopEngagedRef.current = false;
     referenceRepairAttempted.current = false;
   }, [sentenceId]);
 
@@ -188,57 +222,35 @@ export function ShadowPage() {
     referenceAudioRef.current.preservesPitch = true;
   }, [speed, referenceUrl]);
 
-  // Stop any in-flight recording/comparison/target-loop when leaving this sentence.
+  // Keep an in-flight rep loop in sync with the live "Playback speed" and
+  // "Mark start / Mark end" controls — no stop/restart (which would re-run
+  // the gesture-gated audio setup and drop a beat).
+  useEffect(() => {
+    if (isLoopingReps) updateShadowLoop({ playbackRate: speed });
+  }, [speed, isLoopingReps, updateShadowLoop]);
+
+  useEffect(() => {
+    if (isLoopingReps) updateShadowLoop({ range: loopRange });
+  }, [loopRange, isLoopingReps, updateShadowLoop]);
+
+  // If the loop's mic/audio setup fails, drop back out of the loop UI.
+  useEffect(() => {
+    if (isLoopingReps && shadowing.status === 'idle' && shadowing.error) {
+      loopEngagedRef.current = false;
+      setIsLoopingReps(false);
+      setRepCount(0);
+    }
+  }, [isLoopingReps, shadowing.status, shadowing.error]);
+
+  // Stop any in-flight recording/comparison/loop when leaving this sentence.
   useEffect(
     () => () => {
       stopComparison();
       cancelRecording();
       targetLoopCoordinator.current.cancel();
-      delayedShadowCancelRef.current?.();
     },
     [sentenceId, stopComparison, cancelRecording],
   );
-
-  function cancelDelayedShadow() {
-    delayedShadowCancelRef.current?.();
-    delayedShadowCancelRef.current = null;
-    setDelayedRecordPending(false);
-  }
-
-  /**
-   * Delayed shadowing (the brief's named practice-mode taxonomy, docs/
-   * STATUS.md follow-up): play the reference clip in full, wait `delayMs`
-   * after it ends, then auto-start recording — a fixed gap between hearing
-   * and producing, rather than shadow mode's simultaneous play-along or a
-   * manual "press Record whenever." Always plays the whole clip from the
-   * start, not target-range-scoped — the existing loop mechanism already
-   * covers sub-range practice; this stays a single deliberate listen.
-   */
-  async function handleDelayedShadow() {
-    const audio = referenceAudioRef.current;
-    if (!audio) return;
-    cancelDelayedShadow();
-    setDelayedRecordPending(true);
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const handleEnded = () => {
-      timeoutId = setTimeout(() => {
-        delayedShadowCancelRef.current = null;
-        setDelayedRecordPending(false);
-        void shadowing.startRecording();
-      }, delayMs);
-    };
-    audio.addEventListener('ended', handleEnded);
-    delayedShadowCancelRef.current = () => {
-      audio.removeEventListener('ended', handleEnded);
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-    audio.currentTime = 0;
-    try {
-      await audio.play();
-    } catch {
-      cancelDelayedShadow();
-    }
-  }
 
   const moraUnits = useMemo<MoraUnit[]>(() => {
     const sentence = data?.sentence;
@@ -345,6 +357,51 @@ export function ShadowPage() {
     }
   }
 
+  function handleToggleRepLoop() {
+    if (isLoopingReps) {
+      setIsLoopingReps(false);
+      setRepCount(0);
+      shadowing.stopShadowLoop();
+      return;
+    }
+    if (!referenceAudio) return;
+    stopComparison();
+    setEphemeralTake(null);
+    loopEngagedRef.current = true;
+    setIsLoopingReps(true);
+    setRepCount(1);
+    void shadowing.startShadowLoop(referenceAudio.blob, {
+      playbackRate: speed,
+      range: loopRange,
+      onRep: (take) => {
+        setEphemeralTake(take);
+        setRepCount((n) => n + 1);
+      },
+    });
+  }
+
+  async function handleHearEphemeral() {
+    if (!ephemeralAudioRef.current) return;
+    try {
+      await ephemeralAudioRef.current.play();
+    } catch {
+      // best-effort playback
+    }
+  }
+
+  async function handleCompareEphemeral() {
+    const reference = referenceAudioRef.current;
+    const learner = ephemeralAudioRef.current;
+    if (!reference || !learner) return;
+    await shadowing.playAlternate(
+      reference,
+      learner,
+      'ephemeral-take',
+      speed,
+      targetRange ?? undefined,
+    );
+  }
+
   async function handleCalibrate() {
     setCalibrating(true);
     setCalibrationError(null);
@@ -382,6 +439,7 @@ export function ShadowPage() {
 
   const isRecording = shadowing.status === 'recording';
   const isRequestingMic = shadowing.status === 'requesting-mic';
+  const loopBusy = isLoopingReps || isRequestingMic;
 
   return (
     <div className="stack">
@@ -402,6 +460,7 @@ export function ShadowPage() {
           </button>
         </section>
       ) : null}
+
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
@@ -424,29 +483,28 @@ export function ShadowPage() {
           </div>
         </div>
 
-        {!guidedMode ? (
-          <div className="row" style={{ alignItems: 'center' }}>
-            {hideTranscript ? (
-              <div className="muted" style={{ flex: 1 }}>
-                Audio-only practice
-              </div>
-            ) : showMeaningInstead && sentence.translation ? (
-              <div style={{ flex: 1 }}>{sentence.translation}</div>
-            ) : (
-              <SyncedShadowText
-                audioRef={referenceAudioRef}
-                referenceAudio={referenceAudio}
-                japanese={sentence.japanese}
-                moraUnits={moraUnits}
-                sentenceId={sentence.id}
-              />
-            )}
-          </div>
-        ) : null}
+        <div className="row" style={{ alignItems: 'center' }}>
+          {hideTranscript ? (
+            <div className="muted" style={{ flex: 1 }}>
+              Audio-only practice
+            </div>
+          ) : showMeaningInstead && sentence.translation ? (
+            <div style={{ flex: 1 }}>{sentence.translation}</div>
+          ) : (
+            <SyncedShadowText
+              audioRef={referenceAudioRef}
+              referenceAudio={referenceAudio}
+              japanese={sentence.japanese}
+              moraUnits={moraUnits}
+              sentenceId={sentence.id}
+            />
+          )}
+        </div>
+
         {!referenceAudio || !referenceUrl ? (
           <p className="muted">
             No reference audio for this sentence yet — import one from
-            Practice. You can still record and save shadowing attempts.
+            Practice. You can still record and save shadowing attempts below.
           </p>
         ) : (
           <div className="stack">
@@ -487,156 +545,145 @@ export function ShadowPage() {
                 </>
               ) : null}
             </div>
+            {isLoopingReps ? (
+              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                Speed and the target range stay live — adjust them without stopping the loop.
+              </p>
+            ) : null}
           </div>
         )}
+      </section>
 
-        {referenceAudio && !guidedMode ? (
-          <div className="row" style={{ alignItems: 'center' }}>
-            <button type="button" disabled={isRecording || isRequestingMic} onClick={() => setGuidedMode(true)}>
-              Start guided practice
-            </button>
-          </div>
-        ) : null}
-
-        {guidedMode && referenceAudio ? (
-          <ProgressiveShadowingPanel
-            sentenceId={sentenceId}
-            shadowing={shadowing}
-            referenceAudioRef={referenceAudioRef}
-            referenceAudio={referenceAudio}
-            japanese={sentence.japanese}
-            moraUnits={moraUnits}
-            targetRange={targetRange}
-            speed={speed}
-            onExit={() => setGuidedMode(false)}
-          />
-        ) : (
-          <>
-            <div className="row" style={{ alignItems: 'center' }}>
-              <label className="row" style={{ alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={shadowMode}
-                  disabled={!referenceAudio || isRecording || isRequestingMic}
-                  onChange={(event) => setShadowMode(event.target.checked)}
-                />
-                Shadow mode (play reference while recording)
-              </label>
-              <button
-                type="button"
-                disabled={calibrating || isRecording || isRequestingMic}
-                onClick={() => void handleCalibrate()}
-              >
-                {calibrating ? 'Calibrating…' : 'Calibrate mic'}
-              </button>
-            </div>
-            {calibration ? (
-              <ul className="stack" style={{ margin: 0 }}>
-                {calibration.guidance.map((line) => (
-                  <li key={line} className="muted">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {calibrationError ? <p className="muted">{calibrationError}</p> : null}
-
-            <div className="row" style={{ alignItems: 'center' }}>
-              <label>
-                Delay before recording
-                <select
-                  value={delayMs}
-                  disabled={delayedRecordPending || isRecording || isRequestingMic}
-                  onChange={(event) => setDelayMs(Number(event.target.value))}
-                >
-                  {[500, 750, 1000, 1500, 2000].map((value) => (
-                    <option key={value} value={value}>
-                      {(value / 1000).toFixed(1)}s
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {delayedRecordPending ? (
-                <>
-                  <span className="muted">Listen, then get ready…</span>
-                  <button type="button" onClick={cancelDelayedShadow}>
-                    Cancel
-                  </button>
-                </>
-              ) : (
+      {referenceAudio ? (
+        <section className="panel stack">
+          <strong>Close shadow</strong>
+          <p className="muted" style={{ margin: 0 }}>
+            Play along and stay as close behind the speaker as you can. Loop it hands-free
+            and keep going — nothing here is saved.
+          </p>
+          <div className="stack" style={{ minHeight: '7rem' }}>
+            {isLoopingReps ? (
+              <div className="row" style={{ alignItems: 'center' }}>
                 <button
                   type="button"
-                  disabled={!referenceAudio || isRecording || isRequestingMic}
-                  onClick={() => void handleDelayedShadow()}
+                  className="primary"
+                  aria-pressed
+                  onClick={handleToggleRepLoop}
                 >
-                  Delayed shadow
+                  ⏹ Stop loop
                 </button>
-              )}
-            </div>
-
-            <div className="row" style={{ alignItems: 'center' }}>
-              <RecordToggleButton
-                isRecording={isRecording}
-                isRequestingMic={isRequestingMic}
-                elapsedMs={shadowing.recordingElapsedMs}
-                maxDurationMs={MAX_RECORDING_DURATION_MS}
-                idleLabel="Record"
-                onStart={() =>
-                  void shadowing.startRecording(
-                    shadowMode && referenceAudio ? 'shadow' : undefined,
-                    shadowMode && referenceAudio
-                      ? { blob: referenceAudio.blob, playbackRate: speed }
-                      : undefined,
-                  )
-                }
-                onStop={() => void shadowing.stopRecording()}
-              />
-            </div>
-            {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
-
-            {isRecording && shadowing.shadowActive && referenceAudio ? (
+                <span className="muted">Rep {repCount} — shadow along…</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={isRecording || isRequestingMic}
+                onClick={handleToggleRepLoop}
+              >
+                🔁 Loop shadow reps (hands-free)
+              </button>
+            )}
+            {isLoopingReps && shadowing.shadowActive ? (
               <LiveShadowWaveform
                 referenceBlob={referenceAudio.blob}
-                active={isRecording && shadowing.shadowActive}
+                active={isLoopingReps && shadowing.shadowActive}
                 getMediaTime={shadowing.getShadowMediaTime}
                 analyser={shadowing.getShadowAnalyser()}
                 sampleRate={shadowing.getShadowSampleRate()}
               />
             ) : null}
-
-            {pendingAttempt && pendingUrl ? (
-              <div className="stack">
-                <div className="row" style={{ alignItems: 'center' }}>
-                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                  <audio controls src={pendingUrl} />
-                </div>
-                <label>
-                  Notes <span className="muted">(optional)</span>
-                  <input
-                    value={draftNotes}
-                    onChange={(event) => setDraftNotes(event.target.value)}
-                    placeholder="Focus for next time…"
-                  />
-                </label>
-                <div className="row" style={{ alignItems: 'center' }}>
-                  <button type="button" onClick={() => void handleSave()}>
-                    Save attempt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingAttempt(null);
-                      setDraftNotes('');
-                    }}
-                  >
-                    Discard
-                  </button>
-                </div>
+            {ephemeralUrl && !isLoopingReps ? (
+              <div className="row" style={{ alignItems: 'center' }}>
+                <button type="button" onClick={() => void handleHearEphemeral()}>
+                  ▶ Hear that back
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(shadowing.comparison)}
+                  onClick={() => void handleCompareEphemeral()}
+                >
+                  {shadowing.comparison?.attemptId === 'ephemeral-take'
+                    ? 'Playing…'
+                    : '🔁 Compare to native'}
+                </button>
               </div>
             ) : null}
-            {saveError ? <p className="muted">{saveError}</p> : null}
-          </>
-        )}
+          </div>
+          {isLoopingReps && shadowing.error ? (
+            <p className="muted">{shadowing.error}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className="panel stack">
+        <strong>Record &amp; analyze</strong>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <button
+            type="button"
+            disabled={calibrating || isRecording || loopBusy}
+            onClick={() => void handleCalibrate()}
+          >
+            {calibrating ? 'Calibrating…' : 'Calibrate mic'}
+          </button>
+        </div>
+        {calibration ? (
+          <ul className="stack" style={{ margin: 0 }}>
+            {calibration.guidance.map((line) => (
+              <li key={line} className="muted">
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {calibrationError ? <p className="muted">{calibrationError}</p> : null}
+
+        <div className="row" style={{ alignItems: 'center' }}>
+          <RecordToggleButton
+            isRecording={isRecording && !isLoopingReps}
+            isRequestingMic={isRequestingMic && !isLoopingReps}
+            elapsedMs={shadowing.recordingElapsedMs}
+            maxDurationMs={MAX_RECORDING_DURATION_MS}
+            disabled={loopBusy}
+            idleLabel="Record"
+            onStart={() => void shadowing.startRecording()}
+            onStop={() => void shadowing.stopRecording()}
+          />
+        </div>
+        {shadowing.error && !isLoopingReps ? (
+          <p className="muted">{shadowing.error}</p>
+        ) : null}
+
+        {pendingAttempt && pendingUrl ? (
+          <div className="stack">
+            <div className="row" style={{ alignItems: 'center' }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <audio controls src={pendingUrl} />
+            </div>
+            <label>
+              Notes <span className="muted">(optional)</span>
+              <input
+                value={draftNotes}
+                onChange={(event) => setDraftNotes(event.target.value)}
+                placeholder="Focus for next time…"
+              />
+            </label>
+            <div className="row" style={{ alignItems: 'center' }}>
+              <button type="button" onClick={() => void handleSave()}>
+                Save attempt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingAttempt(null);
+                  setDraftNotes('');
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {saveError ? <p className="muted">{saveError}</p> : null}
 
         <div className="stack">
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -768,6 +815,13 @@ export function ShadowPage() {
             visible player above. */}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio ref={attemptAudioRef} aria-label="Attempt audio" hidden />
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <audio
+          ref={ephemeralAudioRef}
+          src={ephemeralUrl ?? undefined}
+          aria-label="Close-shadow rep"
+          hidden
+        />
       </section>
     </div>
   );

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -134,11 +134,10 @@ describe('ShadowPage', () => {
     expect(screen.getByRole('button', { name: 'Mark end' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
 
-    const shadowModeCheckbox = screen.getByRole('checkbox', {
-      name: /Shadow mode/,
-    });
-    expect(shadowModeCheckbox).toBeInTheDocument();
-    expect(shadowModeCheckbox).toBeEnabled(); // reference audio is present
+    // The close-shadow hands-free loop sits above the free-form recorder.
+    expect(
+      screen.getByRole('button', { name: /Loop shadow reps/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Calibrate mic' })).toBeInTheDocument();
 
     const attemptRows = screen.getAllByRole('listitem');
@@ -186,48 +185,6 @@ describe('ShadowPage', () => {
     renderShadowPage();
     await screen.findByText('本を読みます。');
     expect(screen.getByRole('button', { name: 'Show meaning instead' })).toBeDisabled();
-  });
-
-  it('plays the reference clip and shows a pending state when starting delayed shadow', async () => {
-    const user = userEvent.setup();
-    renderShadowPage();
-    await screen.findByText('本を読みます。');
-
-    const audio = (await screen.findByLabelText('Reference audio')) as HTMLAudioElement;
-    const playSpy = vi.fn(async () => {});
-    audio.play = playSpy;
-
-    await user.click(screen.getByRole('button', { name: 'Delayed shadow' }));
-    expect(playSpy).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Listen, then get ready…')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Delayed shadow' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByRole('button', { name: 'Delayed shadow' })).toBeInTheDocument();
-    expect(screen.queryByText('Listen, then get ready…')).not.toBeInTheDocument();
-  });
-
-  it('starts recording after the reference clip ends and the delay elapses', async () => {
-    const user = userEvent.setup();
-    renderShadowPage();
-    await screen.findByText('本を読みます。');
-
-    const audio = (await screen.findByLabelText('Reference audio')) as HTMLAudioElement;
-    audio.play = vi.fn(async () => {});
-    await user.selectOptions(screen.getByLabelText('Delay before recording'), '500');
-    await user.click(screen.getByRole('button', { name: 'Delayed shadow' }));
-
-    fireEvent(audio, new Event('ended'));
-
-    // Delay elapses (real timers — the timeout lives inside an 'ended'
-    // listener, not directly reachable by vi.useFakeTimers here) and the
-    // page falls back out of the pending state once startRecording settles.
-    await waitFor(
-      () => {
-        expect(screen.getByRole('button', { name: 'Delayed shadow' })).toBeInTheDocument();
-      },
-      { timeout: 2_000 },
-    );
   });
 
   it('favorites and unfavorites an attempt', async () => {
