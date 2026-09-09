@@ -1399,9 +1399,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   loop via `endShadowLoop()`; unmount / sentence change go through
   `cancelRecording()`.
   - **Live speed + range.** `updateShadowLoop({ playbackRate, range })`
-    changes the play-along speed (`ShadowReferencePlayer.setPlaybackRate`)
-    and the looped sub-span (the marked target range) on an in-flight loop
-    — no stop/restart, so the once-under-the-tap property holds. For a
+    changes the play-along speed and the looped sub-span (the marked target
+    range) on an in-flight loop — no stop/restart, so the once-under-the-tap
+    property holds. The **range** change repositions right away; the
+    **speed** change is stashed (`shadowLoop.pendingPlaybackRate`) and
+    applied at the next loop wrap in `cycleShadowLoopRecorder` — setting
+    `playbackRate` on a playing element routed through the shared
+    `AudioContext` glitches the time-stretcher, so it waits for the point
+    where playback is already restarting (and `setPlaybackRate` no-ops when
+    the rate is unchanged and never re-asserts `preservesPitch`). For a
     sub-range, `tickShadowLoop` watches the range's end itself and
     `seek()`s back to its start (the native `<audio loop>` only wraps at
     the clip's real end); that seek is also what registers as the "wrap"

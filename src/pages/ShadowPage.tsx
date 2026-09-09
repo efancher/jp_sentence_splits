@@ -547,7 +547,8 @@ export function ShadowPage() {
             </div>
             {isLoopingReps ? (
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                Speed and the target range stay live — adjust them without stopping the loop.
+                Adjust without stopping the loop — the target range updates right away, a
+                speed change takes effect on the next pass.
               </p>
             ) : null}
           </div>

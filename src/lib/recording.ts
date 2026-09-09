@@ -318,13 +318,14 @@ export class ShadowReferencePlayer {
   /**
    * Change the play-along speed mid-loop without restarting the graph — the
    * hands-free shadow loop (ShadowingController.updateShadowLoop) calls this
-   * so "Playback speed" stays live while looping. Safe from a timer: it only
-   * touches element properties, none of the gesture-gated APIs.
+   * at a loop wrap so "Playback speed" stays live while looping. Safe from a
+   * timer: it only touches element properties, none of the gesture-gated
+   * APIs. `preservesPitch` is left as `start()` set it — re-asserting it
+   * resets the time-stretcher and clicks.
    */
   setPlaybackRate(rate: number): void {
-    if (!this.audio) return;
+    if (!this.audio || this.audio.playbackRate === rate) return;
     this.audio.playbackRate = rate;
-    this.audio.preservesPitch = true;
   }
 
   /** Seek the reference element — used to wrap a sub-range loop back to its start. */

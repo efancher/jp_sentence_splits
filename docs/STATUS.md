@@ -54,6 +54,11 @@ is trimmed.)
     gained a `range` option and `tickShadowLoop` wraps a sub-range back
     to its start without waiting for the clip's real end). No stop/restart,
     so the iOS-safe "gesture-gated setup once" property is preserved.
+    Follow-up (2026-09-09): a live speed change stuttered — changing
+    `playbackRate` on the `AudioContext`-routed element mid-pass glitches
+    the time-stretcher — so it's now deferred to the next loop wrap
+    (`shadowLoop.pendingPlaybackRate`, applied in `cycleShadowLoopRecorder`);
+    the range change still applies immediately.
   - Deleted `ProgressiveShadowingPanel.tsx`, `useProgressiveShadowing.ts`
     and their two test files. `Attempt.practiceStage` /
     `practiceSessionId` (only the old final-stage save set them) are left
