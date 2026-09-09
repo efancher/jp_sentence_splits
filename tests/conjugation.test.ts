@@ -151,6 +151,23 @@ describe('findInflectedSurfaceInSentence (truncated surface_form recovery)', () 
     ).toBeNull();
   });
 
+  it('does not recover a te-form that continues into an auxiliary verb', () => {
+    // 待って here is 待っている, not a standalone te-form — must not become a card.
+    expect(
+      findInflectedSurfaceInSentence('お父さんの帰りを待っていました。', '待つ', 'まつ', 'godan'),
+    ).toBeNull();
+    // 与えて + くれました
+    expect(
+      findInflectedSurfaceInSentence('勇気を与えてくれました。', '与える', 'あたえる', 'ichidan'),
+    ).toBeNull();
+  });
+
+  it('still recovers a te-form used as a plain connective', () => {
+    expect(
+      findInflectedSurfaceInSentence('「えい！」と言って巣から飛び出した。', '言う', 'いう', 'godan'),
+    ).toEqual({ surface: '言って', form: expect.objectContaining({ key: 'te_form' }) });
+  });
+
   it('returns null when the word only appears in its dictionary form', () => {
     expect(
       findInflectedSurfaceInSentence('毎日走る。', '走る', 'はしる', 'godan'),

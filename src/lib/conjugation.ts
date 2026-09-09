@@ -543,10 +543,23 @@ export function identifyConjugationForm(
 }
 
 /**
+ * A helper/aspectual verb continuing on from a te-form or stem — 〜ている,
+ * 〜てくる, 〜ていく, 〜てしまう, 〜ておく, 〜てみる, 〜てある, 〜てくれる/
+ * あげる/もらう, and the colloquial 〜てん(の). Anchored at the start of
+ * whatever follows a matched inflected surface: when it matches, the
+ * occurrence is really a stacked/compound form (待っている, not 待って) and
+ * must not be recovered as a single conjugation step. `ください` is
+ * deliberately absent — 〜てください is a fixed politeness auxiliary, not a
+ * conjugating verb, and the te-form is unambiguously the inflection there.
+ */
+const CONTINUES_INTO_AUXILIARY =
+  /^(い(る|た|て|ま[すし]|な[いかく]|く|っ)|くる|き(た|て|ま[すし])|こな|来|行|ゆ[くき]|しま(う|っ|い|え)|ちゃ|じゃ(う|っ)|お(く|い[てた])|み(る|た|て|ま[すし])|あ(る|っ[たて])|くれ|あげ|もら|いただ|ん[のじ])/;
+
+/**
  * Locate the full inflected surface of a word inside a sentence: conjugate
  * the dictionary form to every form the word class offers and return the
- * first whose `expression` appears verbatim in `japanese`, along with that
- * form.
+ * first whose `expression` appears verbatim in `japanese` and is *not*
+ * immediately followed by another auxiliary verb, along with that form.
  *
  * This is the recovery path for a stored `sentence_vocabulary.surface_form`
  * that the picker truncated to the bare stem (言っ for 言って, 思わ for
@@ -556,10 +569,12 @@ export function identifyConjugationForm(
  * already uses, but it also hands back the `ConjugationForm` so the
  * contextual conjugation card can name the form.
  *
- * Returns null when no single form the engine produces occurs in the
- * sentence — i.e. a stacked/compound surface (食べられなかった, 〜てしまった)
- * that is deliberately left un-quizzed, exactly as `identifyConjugationForm`
- * treats it.
+ * Returns null when no single form the engine produces stands on its own in
+ * the sentence — a stacked/compound surface (食べられなかった, 待っている,
+ * 〜てしまった) is deliberately left un-quizzed, exactly as
+ * `identifyConjugationForm` treats it. `CONTINUES_INTO_AUXILIARY` is what
+ * keeps a truncated 待っ from being "recovered" to a spurious 待って te-form
+ * card when the sentence actually reads 待っていました.
  *
  * When a word occurs more than once in different forms the earliest form in
  * `conjugationFormsForWordClass` order wins; the caller narrows this by only
@@ -576,8 +591,13 @@ export function findInflectedSurfaceInSentence(
     const conjugated = conjugate(expression, reading, wordClass, form.key);
     if (!conjugated) continue;
     if (conjugated.expression === expression) continue;
-    if (japanese.includes(conjugated.expression)) {
-      return { surface: conjugated.expression, form };
+    let from = japanese.indexOf(conjugated.expression);
+    while (from !== -1) {
+      const after = japanese.slice(from + conjugated.expression.length);
+      if (!CONTINUES_INTO_AUXILIARY.test(after)) {
+        return { surface: conjugated.expression, form };
+      }
+      from = japanese.indexOf(conjugated.expression, from + 1);
     }
   }
   return null;
