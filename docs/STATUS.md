@@ -38,15 +38,19 @@ is trimmed.)
   `getSentenceConjugationCandidates` was producing **0** candidates.
   `scripts/diagnose-conjugation-cards.ts` (new; `npm run
   diagnose:conjugation-cards`) shows the funnel. Two causes, both fixed:
-  - **POS format.** `conjugationWordClassFromPartOfSpeech` only reads
+  - **POS format.** `conjugationWordClassFromPartOfSpeech` only read
     JMdict tags (`v5r`, `v1`, `adj-i`…) but the mining pipeline writes
     UniDic POS (`動詞/一般`), so 558 of 631 surface-form occurrences were
-    dropped. `scripts/backfill-vocabulary-jmdict-pos.ts` (new; `npm run
-    backfill:vocabulary-jmdict-pos`) rewrites `part_of_speech` from a
-    confident JMdict match, but only for rows that don't already classify
-    and only when the match is a verb/adjective. **Run it after mining a
-    new source** (same pattern as `backfill:vocabulary-suggestions`).
-    Applied 2026-09-09: 224 items retagged.
+    dropped. Three-part fix: (a) `conjugationWordClassFromPartOfSpeech` now
+    also reads the AI glosser's English tags (`godan verb`…) and UniDic
+    adjective POS (`形容詞…`/`形状詞…`); (b) new `inferConjugationWordClass`
+    decides godan vs ichidan from an inflected surface / the sentence when
+    the tag alone can't — `materializeVocabularySelections` (the confirm
+    path) calls it and stores a synthetic `v5k`/`v1`/… tag, so a
+    newly-mined verb needs no backfill; (c)
+    `scripts/backfill-vocabulary-jmdict-pos.ts` (new; `npm run
+    backfill:vocabulary-jmdict-pos`) retags the *existing* rows from a
+    confident JMdict match. Applied 2026-09-09: 224 items retagged.
   - **Truncated surface forms.** The picker stores the content morpheme
     UniDic segmented, dropping the trailing auxiliary (`言い` for `言いました`,
     `飛ん` for `飛んで`). New `findInflectedSurfaceInSentence`
@@ -58,11 +62,11 @@ is trimmed.)
     by `scripts/fix-truncated-surface-forms.ts` (new; `npm run
     fix:truncated-surface-forms`) which repairs the stored value for the
     other surface-form cards. Applied 2026-09-09: 85 links repaired.
-  - Result: conjugation candidates 0 → **85** across 70 sentences. Most are
-    still held by the deliberate full-sentence readiness gate
+  - Result: conjugation candidates 0 → **86** across 71 sentences. Most
+    are still held by the deliberate full-sentence readiness gate
     (`getSentenceFullReviewReadiness` — vocab confirmed + every sentence
-    vocab FSRS-proficient); they surface as vocabulary matures. Tests +9
-    (`conjugation.test.ts`, `reviewPage.test.tsx`).
+    vocab FSRS-proficient); they surface as vocabulary matures. Tests +18
+    (`conjugation.test.ts`, `reviewPage.test.tsx`, `data.test.ts`).
 
 - **2026-09-09 — Pitch-contour fixes on ShadowPage (user report).**
   - `MeasuredPitchContour` (top-of-page native contour) drew over the whole
@@ -1460,13 +1464,13 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   session"; recommend 30 (~7 sessions) when ready to absorb the extra
   daily review load. Diagnostics: `npm run report:new-card-backlog`,
   `scripts/analyze-due-by-book.ts`.
-- **Conjugation-card POS** — mined vocab lands with UniDic `part_of_speech`
-  (`動詞/一般`), which the conjugation engine can't classify. `npm run
-  backfill:vocabulary-jmdict-pos -- --apply` retags verbs/adjectives from
-  JMdict; **re-run after every mining session** until it's wired into the
-  mining confirm path (follow-up, not scheduled). `npm run
-  diagnose:conjugation-cards` shows current coverage (85 candidates /
-  70 sentences as of 2026-09-09, most held by the vocab-readiness gate).
+- **Conjugation-card POS** — RESOLVED going forward 2026-09-09: the
+  confirm path (`materializeVocabularySelections`) stores a synthetic
+  conjugation tag via `inferConjugationWordClass`, so newly-mined verbs no
+  longer need a backfill. `npm run backfill:vocabulary-jmdict-pos --
+  --apply` is a one-off cleanup for pre-existing rows (already run once);
+  `npm run diagnose:conjugation-cards` shows coverage (86 candidates /
+  71 sentences as of 2026-09-09, most held by the vocab-readiness gate).
 - **Grammar review queue** — re-checked clean 2026-09-03
   (`scripts/diagnose-grammar-review-queue.ts`): 0 stuck items; the only 2
   non-surfacing patterns (`～ている（状態描写）`, `～を見つける`) are correctly

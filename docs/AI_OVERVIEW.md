@@ -961,9 +961,15 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `getSentenceConjugationCandidates` recovers the full form from the
   sentence via `findInflectedSurfaceInSentence`, accepting it only when it
   extends the stem and doesn't run into an auxiliary
-  (`CONTINUES_INTO_AUXILIARY`). Word-class detection needs a JMdict POS tag
-  (`v5r`, `adj-i`…); mined vocab carries UniDic POS until `npm run
-  backfill:vocabulary-jmdict-pos` retags it — `npm run
+  (`CONTINUES_INTO_AUXILIARY`). Word-class detection
+  (`conjugationWordClassFromPartOfSpeech`) reads a JMdict tag, the AI
+  glosser's English tag, or a UniDic adjective POS. Because the tokenizer's
+  UniDic verb POS (`動詞/一般`) can't tell godan from ichidan,
+  `materializeVocabularySelections` runs `inferConjugationWordClass` at
+  confirm time — deciding the class from the inflected surface / the
+  sentence — and stores a synthetic tag (`v5k`, `v1`…), so a mined verb
+  works without a backfill. `npm run backfill:vocabulary-jmdict-pos` is a
+  one-off cleanup for pre-existing rows; `npm run
   diagnose:conjugation-cards` reports coverage. The card
   is a cloze: sentence with the verb blanked, "Dictionary form: X" +
   "Produce: {form}", type the reading (accepts the in-context inflected
