@@ -83,29 +83,153 @@ export function conjugationFormsForWordClass(
 }
 
 /**
- * Classifies a JMDict-tag `partOfSpeech` string (comma- or
- * semicolon-separated, e.g. "v5r; vt", "n,vs,vi", "adj-i") into a
- * conjugation word class, or null if nothing conjugable is tagged. JMDict's
- * v5* tags (v5u/v5k/v5g/v5s/v5t/v5n/v5b/v5m/v5r/...) all collapse to
- * 'godan' here — the specific row doesn't matter, since conjugation derives
- * the okurigana straight from the reading (see splitWordStems), not from
- * the tag.
+ * Classifies a `partOfSpeech` string into a conjugation word class, or null
+ * if nothing conjugable is tagged. Handles the three shapes this field
+ * turns up in:
+ *   - JMDict tags (comma/semicolon separated, "v5r; vt", "n,vs,vi",
+ *     "adj-i") — from the JMDict backfills and the Anki import;
+ *   - the `vocab-assist` Edge Function's short English tags ("godan verb",
+ *     "ichidan verb", "suru verb", "i-adjective", "na-adjective") — carries
+ *     the godan/ichidan split the tokenizer's UniDic POS doesn't;
+ *   - UniDic adjective POS ("形容詞…" → i-adjective, "形状詞…"/"形容動詞…" →
+ *     na-adjective). UniDic verbs ("動詞…") are deliberately *not* mapped
+ *     here — the string alone can't tell godan from ichidan; use
+ *     `inferConjugationWordClass` with an inflected surface for those.
+ *
+ * JMDict's v5* tags all collapse to 'godan' — the specific row doesn't
+ * matter, conjugation derives the okurigana from the reading
+ * (see splitWordStems), not the tag.
  */
 export function conjugationWordClassFromPartOfSpeech(
   partOfSpeech: string | undefined,
 ): ConjugationWordClass | null {
   if (!partOfSpeech) return null;
+  const raw = partOfSpeech.toLowerCase();
   const tags = partOfSpeech
-    .split(/[,;]/)
+    .split(/[,;+]/)
     .map((tag) => tag.trim())
     .filter(Boolean);
-  if (tags.includes('adj-i')) return 'i_adjective';
+  if (tags.includes('adj-i') || tags.includes('adj-ix')) return 'i_adjective';
   if (tags.includes('adj-na')) return 'na_adjective';
   if (tags.includes('vk')) return 'kuru';
   if (tags.some((tag) => tag === 'vs' || tag === 'vs-i' || tag === 'vs-s')) return 'suru';
-  if (tags.includes('v1')) return 'ichidan';
+  if (tags.includes('v1') || tags.includes('v1-s')) return 'ichidan';
   if (tags.some((tag) => /^v5[a-z]$/.test(tag))) return 'godan';
+
+  // vocab-assist English tags.
+  if (raw.includes('ichidan')) return 'ichidan';
+  if (raw.includes('godan')) return 'godan';
+  if (raw.includes('suru verb') || raw === 'する verb') return 'suru';
+  if (raw.includes('kuru verb') || raw.includes('irregular verb (kuru)')) return 'kuru';
+  if (raw.includes('i-adjective') || raw.includes('i adjective')) return 'i_adjective';
+  if (raw.includes('na-adjective') || raw.includes('na adjective')) return 'na_adjective';
+
+  // UniDic adjective POS (na-adjective is 形状詞 / 形容動詞).
+  if (partOfSpeech.startsWith('形状詞') || partOfSpeech.startsWith('形容動詞')) return 'na_adjective';
+  if (partOfSpeech.startsWith('形容詞')) return 'i_adjective';
+
   return null;
+}
+
+const GODAN_ENDING_TO_TAG: Record<string, string> = {
+  う: 'v5u', く: 'v5k', ぐ: 'v5g', す: 'v5s', つ: 'v5t',
+  ぬ: 'v5n', ぶ: 'v5b', む: 'v5m', る: 'v5r',
+};
+
+/**
+ * A canonical JMDict-style tag for a resolved word class — the form
+ * `VocabularyItem.partOfSpeech` is meant to hold (see the module comment).
+ * `materializeVocabularySelections` stores this when it has inferred a class
+ * the tokenizer's UniDic POS couldn't express, so the conjugation card and
+ * `pitchAccentRules` see a value they understand without waiting for a
+ * `backfill:vocabulary-jmdict-pos` run.
+ */
+export function conjugationTagFromWordClass(
+  wordClass: ConjugationWordClass,
+  expression: string,
+): string {
+  switch (wordClass) {
+    case 'ichidan': return 'v1';
+    case 'suru': return 'vs';
+    case 'kuru': return 'vk';
+    case 'i_adjective': return 'adj-i';
+    case 'na_adjective': return 'adj-na';
+    case 'godan': return GODAN_ENDING_TO_TAG[expression.slice(-1)] ?? 'v5r';
+  }
+}
+
+const GODAN_LOOKALIKE_ICHIDAN = new Set([
+  // -iる / -eる surface shape but actually godan (the classic exceptions).
+  // Kept to the common ones — the surface-form path above is what decides an
+  // inflected occurrence; this only backstops a word first seen uninflected.
+  '帰る', '返る', '入る', '走る', '知る', '切る', '要る', '限る', '滑る', '握る',
+  '散る', '蹴る', '減る', '照る', '練る', '喋る', '茂る', '陰る', '覆る', '遮る',
+  '罵る', '捻る', '嘲る', '愚痴る',
+]);
+
+/**
+ * Best-effort conjugation word class for a word the tokenizer left with a
+ * UniDic POS ("動詞/一般") or no POS at all. Order:
+ *   1. `conjugationWordClassFromPartOfSpeech` (JMDict / English / UniDic
+ *      adjective) — trusted outright.
+ *   2. If an inflected `surfaceForm` (≠ the dictionary expression) or the
+ *      containing `sentenceJapanese` is given, conjugate the word as each
+ *      plausible class and return the one whose output reproduces the
+ *      surface / appears in the sentence — this decides godan vs ichidan
+ *      from real evidence and needs no POS at all.
+ *   3. Only when the POS explicitly hints "verb" (UniDic 動詞…, or an
+ *      English "verb"), fall back to shape: 〜する → suru, 来る/くる → kuru,
+ *      〜iる/〜eる not in the godan-lookalike list → ichidan, else godan.
+ *      A bare noun, or a word with no POS and no inflected evidence, gets
+ *      null — never guessed into a verb.
+ *
+ * Returns null when there's no reason to think the word conjugates.
+ */
+export function inferConjugationWordClass(
+  expression: string,
+  reading: string,
+  partOfSpeech: string | undefined,
+  surfaceForm?: string,
+  sentenceJapanese?: string,
+): ConjugationWordClass | null {
+  const tagged = conjugationWordClassFromPartOfSpeech(partOfSpeech);
+  if (tagged) return tagged;
+
+  const pos = (partOfSpeech ?? '').toLowerCase();
+  // A non-verb POS (名詞…, adv, an English "noun") rules the word out; an
+  // empty POS stays in only for the surface-evidence check below.
+  if (partOfSpeech && !partOfSpeech.startsWith('動詞') && !pos.includes('verb')) {
+    return null;
+  }
+
+  const verbClasses: ConjugationWordClass[] = ['godan', 'ichidan', 'suru', 'kuru'];
+  if (surfaceForm && surfaceForm !== expression) {
+    for (const wordClass of verbClasses) {
+      if (identifyConjugationForm(expression, reading, wordClass, surfaceForm)) {
+        return wordClass;
+      }
+    }
+  }
+  if (sentenceJapanese) {
+    for (const wordClass of verbClasses) {
+      if (findInflectedSurfaceInSentence(sentenceJapanese, expression, reading, wordClass)) {
+        return wordClass;
+      }
+    }
+  }
+
+  // Shape fallback — explicit verb POS only (an empty POS with no inflected
+  // evidence isn't enough to call something a verb).
+  const posHintsVerb = !!partOfSpeech && (partOfSpeech.startsWith('動詞') || pos.includes('verb'));
+  if (!posHintsVerb) return null;
+  if (reading.endsWith('する') || expression.endsWith('する')) return 'suru';
+  if (reading === 'くる' || expression === '来る') return 'kuru';
+  if (!reading.endsWith('る')) {
+    return reading.slice(-1) in GODAN_ENDING_TO_TAG ? 'godan' : null;
+  }
+  if (GODAN_LOOKALIKE_ICHIDAN.has(expression)) return 'godan';
+  const beforeRu = reading.slice(-2, -1);
+  return /[いきしちにひみりぎじぢびぴえけせてねへめれげぜでべぺ]/.test(beforeRu) ? 'ichidan' : 'godan';
 }
 
 export interface ConjugatedForm {
@@ -589,7 +713,7 @@ export function findInflectedSurfaceInSentence(
   if (!japanese || !expression || !reading) return null;
   for (const form of conjugationFormsForWordClass(wordClass)) {
     const conjugated = conjugate(expression, reading, wordClass, form.key);
-    if (!conjugated) continue;
+    if (!conjugated?.expression) continue;
     if (conjugated.expression === expression) continue;
     let from = japanese.indexOf(conjugated.expression);
     while (from !== -1) {

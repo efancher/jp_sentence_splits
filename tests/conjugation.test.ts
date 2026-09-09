@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest';
 import {
   conjugate,
   conjugationFormsForWordClass,
+  conjugationTagFromWordClass,
   conjugationWordClassFromPartOfSpeech,
   findInflectedSurfaceInSentence,
   identifyConjugationForm,
+  inferConjugationWordClass,
   type ConjugationFormKey,
   type ConjugationWordClass,
 } from '../src/lib/conjugation';
@@ -62,6 +64,66 @@ describe('conjugationWordClassFromPartOfSpeech (Phase 7.9)', () => {
     expect(conjugationWordClassFromPartOfSpeech('n')).toBeNull();
     expect(conjugationWordClassFromPartOfSpeech('adv')).toBeNull();
     expect(conjugationWordClassFromPartOfSpeech(undefined)).toBeNull();
+  });
+
+  it('maps the AI glosser English tags and UniDic adjective POS', () => {
+    expect(conjugationWordClassFromPartOfSpeech('godan verb')).toBe('godan');
+    expect(conjugationWordClassFromPartOfSpeech('ichidan verb')).toBe('ichidan');
+    expect(conjugationWordClassFromPartOfSpeech('suru verb')).toBe('suru');
+    expect(conjugationWordClassFromPartOfSpeech('i-adjective')).toBe('i_adjective');
+    expect(conjugationWordClassFromPartOfSpeech('na-adjective')).toBe('na_adjective');
+    expect(conjugationWordClassFromPartOfSpeech('形容詞/一般')).toBe('i_adjective');
+    expect(conjugationWordClassFromPartOfSpeech('形状詞/一般')).toBe('na_adjective');
+  });
+
+  it('does not classify a bare UniDic verb POS (godan/ichidan unknown)', () => {
+    expect(conjugationWordClassFromPartOfSpeech('動詞/一般')).toBeNull();
+  });
+});
+
+describe('inferConjugationWordClass', () => {
+  it('decides godan vs ichidan from an inflected surface, no POS needed', () => {
+    expect(inferConjugationWordClass('話す', 'はなす', '動詞/一般', '話して')).toBe('godan');
+    expect(inferConjugationWordClass('食べる', 'たべる', '動詞/一般', '食べた')).toBe('ichidan');
+    expect(inferConjugationWordClass('帰る', 'かえる', undefined, '帰って')).toBe('godan');
+    expect(inferConjugationWordClass('見る', 'みる', undefined, '見て')).toBe('ichidan');
+  });
+
+  it('falls back to the sentence when the stored surface is a bare stem', () => {
+    expect(
+      inferConjugationWordClass('言う', 'いう', '動詞/一般', '言っ', '大声で言ってください。'),
+    ).toBe('godan');
+  });
+
+  it('uses word shape when there is no inflected evidence', () => {
+    expect(inferConjugationWordClass('する', 'する', '動詞/非自立可能')).toBe('suru');
+    expect(inferConjugationWordClass('来る', 'くる', '動詞/非自立可能')).toBe('kuru');
+    expect(inferConjugationWordClass('食べる', 'たべる', '動詞/一般')).toBe('ichidan');
+    expect(inferConjugationWordClass('走る', 'はしる', '動詞/一般')).toBe('godan');
+  });
+
+  it('returns null for a non-verb', () => {
+    expect(inferConjugationWordClass('本', 'ほん', '名詞/普通名詞', '本')).toBeNull();
+    expect(inferConjugationWordClass('学校', 'がっこう', undefined)).toBeNull();
+  });
+});
+
+describe('conjugationTagFromWordClass', () => {
+  it('produces a tag conjugationWordClassFromPartOfSpeech round-trips', () => {
+    const cases: [ConjugationWordClass, string][] = [
+      ['godan', '話す'],
+      ['ichidan', '食べる'],
+      ['suru', '勉強する'],
+      ['kuru', '来る'],
+      ['i_adjective', '高い'],
+      ['na_adjective', '静か'],
+    ];
+    for (const [wordClass, expression] of cases) {
+      const tag = conjugationTagFromWordClass(wordClass, expression);
+      expect(conjugationWordClassFromPartOfSpeech(tag)).toBe(wordClass);
+    }
+    expect(conjugationTagFromWordClass('godan', '話す')).toBe('v5s');
+    expect(conjugationTagFromWordClass('godan', '書く')).toBe('v5k');
   });
 });
 

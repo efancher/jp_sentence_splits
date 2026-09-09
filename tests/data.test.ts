@@ -1333,6 +1333,43 @@ describe('vocabulary/kanji materialization (Phase 5)', () => {
     expect(links[0]?.surfaceForm).toBe('表れていた');
   });
 
+  it('upgrades a UniDic verb POS to a conjugation tag from the inflected surface', async () => {
+    await getDb().sentences.add(stubSentence('sent-1', { japanese: '友達と話して、帰った。' }));
+    await materializeVocabularySelections('sent-1', [
+      selection({
+        surface: '話して',
+        start: 3,
+        end: 6,
+        expression: '話す',
+        reading: 'はなす',
+        pos: '動詞/一般',
+      }),
+    ]);
+    const item = await getDb()
+      .vocabularyItems.where('[expression+reading]')
+      .equals(['話す', 'はなす'])
+      .first();
+    expect(item?.partOfSpeech).toBe('v5s');
+  });
+
+  it('leaves an already-classifiable POS untouched', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({
+        surface: '食べた',
+        start: 0,
+        end: 3,
+        expression: '食べる',
+        reading: 'たべる',
+        pos: 'v1,vt',
+      }),
+    ]);
+    const item = await getDb()
+      .vocabularyItems.where('[expression+reading]')
+      .equals(['食べる', 'たべる'])
+      .first();
+    expect(item?.partOfSpeech).toBe('v1,vt');
+  });
+
   it('re-confirming removes stale links but keeps the underlying vocabulary item', async () => {
     await materializeVocabularySelections('sent-1', [
       selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),

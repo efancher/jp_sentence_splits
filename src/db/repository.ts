@@ -71,6 +71,11 @@ import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import { trailingBunsetsuParticles } from '../lib/sentencePitchAccent';
 import {
+  conjugationTagFromWordClass,
+  conjugationWordClassFromPartOfSpeech,
+  inferConjugationWordClass,
+} from '../lib/conjugation';
+import {
   mergeSentenceOnReimport,
   parseSatoriCsvText,
   type ImportPreview,
@@ -3465,6 +3470,32 @@ export async function updateVocabularyItem(
  * VocabularyItem/Kanji rows themselves, since other sentences may reference
  * them.
  */
+/**
+ * Returns `pos` unchanged when it already names a conjugation word class
+ * (JMDict tag, Anki import, the AI glosser's English tag); otherwise, when
+ * the word can be inferred to conjugate from its inflected surface / the
+ * sentence, returns a synthetic JMDict-style tag (`v5k`, `v1`, `adj-i`…)
+ * that `conjugationWordClassFromPartOfSpeech` understands. Falls back to the
+ * original `pos` when nothing better is known.
+ */
+function upgradeConjugationPos(
+  pos: string | undefined,
+  expression: string,
+  reading: string,
+  surfaceForm: string | undefined,
+  sentenceJapanese: string | undefined,
+): string | undefined {
+  if (conjugationWordClassFromPartOfSpeech(pos)) return pos;
+  const inferred = inferConjugationWordClass(
+    expression,
+    reading,
+    pos,
+    surfaceForm,
+    sentenceJapanese,
+  );
+  return inferred ? conjugationTagFromWordClass(inferred, expression) : pos;
+}
+
 export async function materializeVocabularySelections(
   sentenceId: string,
   selections: VocabularySelection[],
@@ -3475,12 +3506,35 @@ export async function materializeVocabularySelections(
   // selections (same expression/reading, different spans) collapse onto one
   // vocabulary item (see the "collapses duplicate selections" test).
   const surfaceByItemId = new Map<string, string>();
+  // Only fetch the sentence text when some selection actually has a POS the
+  // conjugation engine can't classify yet — the common "all JMDict tags" /
+  // empty-selections paths do no extra work.
+  const needsPosUpgrade = selections.some(
+    (selection) =>
+      selection.expression.trim() && !conjugationWordClassFromPartOfSpeech(selection.pos),
+  );
+  const sentenceJapanese = needsPosUpgrade
+    ? (await db.sentences.get(sentenceId))?.japanese
+    : undefined;
   for (const selection of selections) {
     const expression = selection.expression.trim();
     if (!expression) continue;
-    const item = await ensureVocabularyItem(expression, selection.reading.trim(), {
+    const reading = selection.reading.trim();
+    const item = await ensureVocabularyItem(expression, reading, {
       meaning: selection.english,
-      partOfSpeech: selection.pos,
+      // Store a conjugation-usable POS tag when the tokenizer only gave a
+      // UniDic string ("動詞/一般") the engine can't classify — otherwise the
+      // contextual conjugation card can't see this word until a
+      // `backfill:vocabulary-jmdict-pos` run. Only upgrades; a POS that
+      // already classifies (JMDict tag, Anki import) is passed through, and
+      // ensureVocabularyItem never touches an existing row's POS.
+      partOfSpeech: upgradeConjugationPos(
+        selection.pos,
+        expression,
+        reading,
+        selection.surface,
+        sentenceJapanese,
+      ),
     });
     itemIds.add(item.id);
     if (!surfaceByItemId.has(item.id)) {
