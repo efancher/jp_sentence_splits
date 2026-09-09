@@ -20,6 +20,7 @@
     "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
     "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts",
     "backfill:vocabulary-meanings": "tsx scripts/backfill-vocabulary-meanings.ts",
+    "backfill:vocabulary-jmdict-pos": "tsx scripts/backfill-vocabulary-jmdict-pos.ts",
     "backfill:vocabulary-suggestion-glosses": "tsx scripts/backfill-vocabulary-suggestion-glosses.ts",
     "backfill:refresh-unreviewed-selections": "tsx scripts/refresh-unreviewed-vocabulary-selections.ts",
     "backfill:confirmed-vocabulary-links": "tsx scripts/backfill-confirmed-vocabulary-links.ts",
@@ -43,6 +44,7 @@
     "issues:list-sync": "tsx scripts/list-sync-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts",
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
+    "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts"
   },
   "dependencies": {
