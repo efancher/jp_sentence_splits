@@ -278,6 +278,27 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
 
+- [ ] **Grammar SRS: noticing + in-context reading vs. the isolated drill
+  ladder.** Open design question from a 2026-09-09 discussion (conjugation
+  coverage → vocab/grammar recommender boundary). The
+  `grammar_comprehension` / `grammar_completion` / `grammar_contrast` /
+  `grammar_production` ladder is the part of the system that most resembles
+  a siloed metalabel drill — the same shape the user has trimmed elsewhere
+  (comprehension retired for `reading_in_context`; "prefer in-context over
+  isolated"; "skill over metalabel quiz"). External precedent: jpdb ships a
+  strong tool with **no grammar SRS at all** (deconjugation + graded
+  reading only); the immersion/sentence-mining tradition treats a grammar
+  point as just another i+1 target on one card type, not its own ladder;
+  Bunpro keeps a full grammar ladder but merges it into one review queue.
+  Conjugation is explicitly *not* in scope here — it rides on vocab
+  (deconjugation is part of knowing the word) and that half is settled.
+  The question is only whether tracked grammar patterns should drive
+  `reading_in_context` selection + a lightweight "did you notice it"
+  check + ambient reveal highlighting, rather than four dedicated card
+  types. Not scheduled; would want a real look at how the current grammar
+  cards are actually performing (leech rate, self-rating calibration)
+  before committing either way.
+
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to
