@@ -6,6 +6,7 @@ import {
   conjugate,
   conjugationFormsForWordClass,
   conjugationWordClassFromPartOfSpeech,
+  findInflectedSurfaceInSentence,
   identifyConjugationForm,
   type ConjugationFormKey,
   type ConjugationWordClass,
@@ -128,5 +129,31 @@ describe('identifyConjugationForm (contextual conjugation card)', () => {
     expect(identifyConjugationForm('食べる', 'たべる', 'ichidan', '食べられる')?.form.key).toBe(
       'potential',
     );
+  });
+});
+
+describe('findInflectedSurfaceInSentence (truncated surface_form recovery)', () => {
+  it('recovers the full inflected word the picker truncated to a stem', () => {
+    expect(
+      findInflectedSurfaceInSentence('大声で言ってください。', '言う', 'いう', 'godan'),
+    ).toEqual({ surface: '言って', form: expect.objectContaining({ key: 'te_form' }) });
+    expect(
+      findInflectedSurfaceInSentence('そうは思わない。', '思う', 'おもう', 'godan'),
+    ).toEqual({ surface: '思わない', form: expect.objectContaining({ key: 'plain_negative' }) });
+    expect(
+      findInflectedSurfaceInSentence('声が大きかったです。', '大きい', 'おおきい', 'i_adjective'),
+    ).toEqual({ surface: '大きかった', form: expect.objectContaining({ key: 'plain_past' }) });
+  });
+
+  it('returns null when only a stacked/compound surface is present', () => {
+    expect(
+      findInflectedSurfaceInSentence('まだ食べられなかった。', '食べる', 'たべる', 'ichidan'),
+    ).toBeNull();
+  });
+
+  it('returns null when the word only appears in its dictionary form', () => {
+    expect(
+      findInflectedSurfaceInSentence('毎日走る。', '走る', 'はしる', 'godan'),
+    ).toBeNull();
   });
 });

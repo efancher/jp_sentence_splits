@@ -57,6 +57,7 @@ import type {
 import {
   conjugate,
   conjugationWordClassFromPartOfSpeech,
+  findInflectedSurfaceInSentence,
   identifyConjugationForm,
   type ConjugationForm,
   type ConjugationWordClass,
@@ -280,23 +281,52 @@ function getSentenceConjugationCandidates(
 ): SentenceConjugationCandidate[] {
   const result: SentenceConjugationCandidate[] = [];
   for (const occurrence of occurrences) {
-    const { vocabularyItem, sentence, surfaceForm } = occurrence;
+    const { vocabularyItem, sentence, surfaceForm: storedSurface } = occurrence;
     const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
     if (!wordClass) continue;
-    const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
+
+    // Prefer the stored surface form when it's already a recognizable single
+    // conjugation step. When it isn't, the picker often truncated it to the
+    // bare stem (言っ for 言って, 思わ for 思わない) — recover the full
+    // inflected word from the sentence, but only accept it when it *extends*
+    // the stored surface, so a genuinely stacked/compound occurrence
+    // (食べられなかった) still gets no card and a multi-occurrence word can't
+    // be matched to the wrong form.
+    let surfaceForm = storedSurface;
+    let form: ConjugationForm;
     const identified = identifyConjugationForm(
       vocabularyItem.expression,
       vocabularyItem.reading,
       wordClass,
-      surfaceForm,
-      inContextReading ?? undefined,
+      storedSurface,
+      surfaceReadingFromInline(sentence.inlineReading, storedSurface) ?? undefined,
     );
-    if (!identified) continue;
+    if (identified) {
+      form = identified.form;
+    } else {
+      const resolved = findInflectedSurfaceInSentence(
+        sentence.japanese,
+        vocabularyItem.expression,
+        vocabularyItem.reading,
+        wordClass,
+      );
+      if (
+        !resolved ||
+        resolved.surface === storedSurface ||
+        !resolved.surface.startsWith(storedSurface)
+      ) {
+        continue;
+      }
+      surfaceForm = resolved.surface;
+      form = resolved.form;
+    }
+
+    const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
     const engineReading = conjugate(
       vocabularyItem.expression,
       vocabularyItem.reading,
       wordClass,
-      identified.form.key,
+      form.key,
     )?.reading;
     const expectedReadings = [...new Set([inContextReading, engineReading].filter(
       (value): value is string => !!value,
@@ -308,7 +338,7 @@ function getSentenceConjugationCandidates(
       sentence,
       surfaceForm,
       wordClass,
-      form: identified.form,
+      form,
       expectedReadings,
     });
   }

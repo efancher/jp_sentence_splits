@@ -998,6 +998,46 @@ describe('ReviewPage', () => {
     expect(seeded?.subjectId).toBe('sv-hanasu');
   });
 
+  it('recovers a conjugation card when the stored surface_form was truncated to a stem', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+
+    await db.vocabularyItems.add({
+      id: 'vocab-iu',
+      expression: '言う',
+      reading: 'いう',
+      meaning: 'to say',
+      partOfSpeech: 'v5u; vt',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentences.update('sent-1', { japanese: '大声で言ってください。' });
+    await db.sentenceVocabulary.add({
+      id: 'sv-iu',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-iu',
+      // The picker dropped the auxiliary — 言っ is a bare stem, not a word.
+      // The sentence still contains 言って, so the card is recoverable.
+      surfaceForm: '言っ',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-iu');
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Produce: Te-form');
+    await user.type(screen.getByLabelText('Type the reading of the te-form'), 'いって');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+    // The reveal blanks and then shows the full inflected word, not the stem.
+    expect(screen.getAllByText('言って').length).toBeGreaterThan(0);
+    expect(screen.queryByText('言っ')).not.toBeInTheDocument();
+  });
+
   it('schedules one conjugation card per encounter — same verb, two sentences, two forms', async () => {
     await seedBookWithSentence();
     const db = getDb();

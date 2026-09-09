@@ -542,6 +542,47 @@ export function identifyConjugationForm(
   return null;
 }
 
+/**
+ * Locate the full inflected surface of a word inside a sentence: conjugate
+ * the dictionary form to every form the word class offers and return the
+ * first whose `expression` appears verbatim in `japanese`, along with that
+ * form.
+ *
+ * This is the recovery path for a stored `sentence_vocabulary.surface_form`
+ * that the picker truncated to the bare stem (言っ for 言って, 思わ for
+ * 思わない, 大き for 大きく) — `identifyConjugationForm` can't recognise
+ * those partial surfaces, but the sentence itself still contains the whole
+ * word. Same substring match `scripts/backfill-vocabulary-surface-forms.ts`
+ * already uses, but it also hands back the `ConjugationForm` so the
+ * contextual conjugation card can name the form.
+ *
+ * Returns null when no single form the engine produces occurs in the
+ * sentence — i.e. a stacked/compound surface (食べられなかった, 〜てしまった)
+ * that is deliberately left un-quizzed, exactly as `identifyConjugationForm`
+ * treats it.
+ *
+ * When a word occurs more than once in different forms the earliest form in
+ * `conjugationFormsForWordClass` order wins; the caller narrows this by only
+ * accepting a result that extends the stored (truncated) surface form.
+ */
+export function findInflectedSurfaceInSentence(
+  japanese: string,
+  expression: string,
+  reading: string,
+  wordClass: ConjugationWordClass,
+): { surface: string; form: ConjugationForm } | null {
+  if (!japanese || !expression || !reading) return null;
+  for (const form of conjugationFormsForWordClass(wordClass)) {
+    const conjugated = conjugate(expression, reading, wordClass, form.key);
+    if (!conjugated) continue;
+    if (conjugated.expression === expression) continue;
+    if (japanese.includes(conjugated.expression)) {
+      return { surface: conjugated.expression, form };
+    }
+  }
+  return null;
+}
+
 export function conjugate(
   expression: string,
   reading: string,
