@@ -883,8 +883,12 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   (`surfaceReadingFromInline`), recording whichever reading it actually
   graded against as `Review.expectedAnswer` so `classifyReviewError` stays
   consistent; `reading_retrieval` gets the same dictionary-form label, `cloze`
-  does not since it would spoil the blanked word),
-  `pitch_accent` (narrower eligibility than the other three — only
+  does not since it would spoil the blanked word). `reading_retrieval` and
+  `reading_production` are skipped when the word's dictionary form has no
+  kanji (`containsKanji`, `src/lib/kanji.ts` — via the `vocabulary`
+  descriptor's `activityIsReady`): for する / わかる / テレビ there is no
+  reading to recall, so only `cloze` seeds. `pitch_accent` (narrower
+  eligibility than the other three — only
   words with dictionary pitch-accent data (`VocabularyItem.pitchAccentPositions`)
   *and* whose context sentence has a native reference recording
   (`SentenceAudio`) *and* where the word appears in its **citation form**

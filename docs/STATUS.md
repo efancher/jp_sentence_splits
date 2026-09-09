@@ -68,7 +68,19 @@ is trimmed.)
     vocab FSRS-proficient); they surface as vocabulary matures. Tests +18
     (`conjugation.test.ts`, `reviewPage.test.tsx`, `data.test.ts`).
 
-- **2026-09-09 — Pitch-contour fixes on ShadowPage (user report).**
+- **2026-09-09 — `reading_retrieval` / `reading_production` skipped for
+  all-kana words (user request, follow-on from the conjugation work — "type
+  the reading doesn't make sense for kana words").** A word whose
+  dictionary form has no kanji (する, わかる, テレビ, いい) has no reading to
+  recall — those two cards degenerate into copying the on-screen kana. The
+  `vocabulary` descriptor's new `activityIsReady` (`containsKanji`,
+  `src/lib/kanji.ts`) seeds only `cloze` for such words; conjugation /
+  `word_listening` / contrastive are unaffected. Existing kana-word reading
+  study items just stop surfacing (not deleted; their proficiency still
+  counts toward sentence readiness). This removes the reason to avoid
+  gathering high-frequency kana verbs/adjectives as vocabulary — which is
+  the *only* path to a conjugation card for them (grammar tracking builds
+  `grammar_pattern` rows, never `sentence_vocabulary` links).
   - `MeasuredPitchContour` (top-of-page native contour) drew over the whole
     clip, so a reference with leading/trailing room tone squashed the line
     into a few pixels ("three brief lines"). Now crops the x-axis to
