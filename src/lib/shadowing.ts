@@ -66,14 +66,6 @@ export class ShadowingController {
         cycling: boolean;
         /** Sub-range to loop within the clip; undefined loops the whole clip. */
         range?: TimeRangeMs;
-        /**
-         * A speed change requested mid-pass. Applied at the next loop wrap
-         * (in `cycleShadowLoopRecorder`) rather than immediately — changing
-         * `playbackRate` on a playing element that's routed through the
-         * shared `AudioContext` glitches the time-stretcher, so we wait for
-         * the point where playback is already restarting.
-         */
-        pendingPlaybackRate?: number;
       }
     | undefined;
 
@@ -212,15 +204,12 @@ export class ShadowingController {
    * Live tweak of an in-flight shadow loop — "Playback speed" and the
    * "Mark start"/"Mark end" target range stay adjustable while looping
    * instead of forcing a stop/restart. No-ops when no loop is running.
-   *
-   * A speed change is deferred to the next loop wrap (see
-   * `pendingPlaybackRate`); a range change repositions right away.
    */
   updateShadowLoop(opts: { playbackRate?: number; range?: TimeRangeMs | null }): void {
     const loop = this.shadowLoop;
     if (!loop) return;
     if (opts.playbackRate !== undefined) {
-      loop.pendingPlaybackRate = opts.playbackRate;
+      this.shadowPlayer.setPlaybackRate(opts.playbackRate);
     }
     if (opts.range !== undefined) {
       const range = opts.range ?? undefined;
@@ -301,12 +290,6 @@ export class ShadowingController {
     loop: NonNullable<ShadowingController['shadowLoop']>,
   ): void {
     if (loop.cycling) return;
-    // The loop just wrapped — playback is already discontinuous here, so a
-    // deferred speed change lands with the least audible glitch.
-    if (loop.pendingPlaybackRate !== undefined) {
-      this.shadowPlayer.setPlaybackRate(loop.pendingPlaybackRate);
-      loop.pendingPlaybackRate = undefined;
-    }
     loop.cycling = true;
     void this.recordingService
       .cycleRecorder()

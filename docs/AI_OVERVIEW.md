@@ -1423,13 +1423,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   - **Live speed + range.** `updateShadowLoop({ playbackRate, range })`
     changes the play-along speed and the looped sub-span (the marked target
     range) on an in-flight loop — no stop/restart, so the once-under-the-tap
-    property holds. The **range** change repositions right away; the
-    **speed** change is stashed (`shadowLoop.pendingPlaybackRate`) and
-    applied at the next loop wrap in `cycleShadowLoopRecorder` — setting
-    `playbackRate` on a playing element routed through the shared
-    `AudioContext` glitches the time-stretcher, so it waits for the point
-    where playback is already restarting (and `setPlaybackRate` no-ops when
-    the rate is unchanged and never re-asserts `preservesPitch`). For a
+    property holds. Both apply immediately (`setPlaybackRate` no-ops on an
+    unchanged rate). In loop mode the reference `<audio>` plays as a **bare
+    element** — `ShadowReferencePlayer.start` skips `createMediaElementSource`
+    when `loop` is set — because Chrome's real-time `preservesPitch`
+    time-stretch of a slowed element stutters (worse the slower, compounding
+    each `loop=true` wrap) when its output is pulled through the shared
+    `AudioContext` at the graph's fixed callback cadence. The shared context
+    still owns only the mic analyser, so this isn't the "second context" the
+    settle delay guards against. For a
     sub-range, `tickShadowLoop` watches the range's end itself and
     `seek()`s back to its start (the native `<audio loop>` only wraps at
     the clip's real end); that seek is also what registers as the "wrap"

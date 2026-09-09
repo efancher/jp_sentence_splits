@@ -104,11 +104,17 @@ is trimmed.)
     gained a `range` option and `tickShadowLoop` wraps a sub-range back
     to its start without waiting for the clip's real end). No stop/restart,
     so the iOS-safe "gesture-gated setup once" property is preserved.
-    Follow-up (2026-09-09): a live speed change stuttered — changing
-    `playbackRate` on the `AudioContext`-routed element mid-pass glitches
-    the time-stretcher — so it's now deferred to the next loop wrap
-    (`shadowLoop.pendingPlaybackRate`, applied in `cycleShadowLoopRecorder`);
-    the range change still applies immediately.
+    Follow-up (2026-09-09): the loop stuttered at slow speeds — worse the
+    slower the rate, compounding on every `loop=true` wrap. Root cause: in
+    loop mode `ShadowReferencePlayer.start` captured the reference `<audio>`
+    into the shared `AudioContext` (`createMediaElementSource`), and Chrome's
+    real-time `preservesPitch` time-stretch of a slowed element starves when
+    pulled through the graph at the fixed callback cadence. Fix: loop mode now
+    plays the reference as a **bare element** (no `createMediaElementSource`)
+    — the same path as the stutter-free non-loop reference player; the shared
+    context still owns the mic analyser, so it's not a "second context". The
+    earlier `pendingPlaybackRate` deferral (its premise gone) was reverted —
+    `updateShadowLoop` applies a speed change immediately again.
   - Deleted `ProgressiveShadowingPanel.tsx`, `useProgressiveShadowing.ts`
     and their two test files. `Attempt.practiceStage` /
     `practiceSessionId` (only the old final-stage save set them) are left

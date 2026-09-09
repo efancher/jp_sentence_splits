@@ -277,8 +277,14 @@ export async function playReferenceForShadowing(
 }
 
 /**
- * Play-along reference while recording: one AudioContext for mic analysis +
- * reference playback so a second context cannot chop the sentence opener.
+ * Play-along reference while recording. The mic analyser runs in one
+ * AudioContext; the reference clip is played by a plain `<audio>` element.
+ * In the non-loop path that element is also captured into the same context
+ * (`createMediaElementSource`) so a *second* context can't chop the opener.
+ * In `loop` mode it is NOT captured — a slowed, `preservesPitch`
+ * time-stretched element stutters when pulled through the graph, worse the
+ * slower the rate and compounding on every `loop=true` wrap — so it plays
+ * bare, exactly like the non-loop reference player elsewhere in the app.
  *
  * `loop` mode (the hands-free shadow-rep loop, iOS-safe): the reference
  * `<audio>` element is set `loop = true` and started once, so it replays
@@ -316,12 +322,13 @@ export class ShadowReferencePlayer {
   }
 
   /**
-   * Change the play-along speed mid-loop without restarting the graph — the
+   * Change the play-along speed mid-loop without restarting anything — the
    * hands-free shadow loop (ShadowingController.updateShadowLoop) calls this
-   * at a loop wrap so "Playback speed" stays live while looping. Safe from a
-   * timer: it only touches element properties, none of the gesture-gated
-   * APIs. `preservesPitch` is left as `start()` set it — re-asserting it
-   * resets the time-stretcher and clicks.
+   * so "Playback speed" stays live while looping. Safe from a timer: it only
+   * touches element properties, none of the gesture-gated APIs. `preservesPitch`
+   * is left as `start()` set it. Applied immediately: in loop mode the element
+   * isn't routed through the AudioContext, so this is just a bare-element
+   * `playbackRate` write like the non-loop reference player does.
    */
   setPlaybackRate(rate: number): void {
     if (!this.audio || this.audio.playbackRate === rate) return;
@@ -383,10 +390,20 @@ export class ShadowReferencePlayer {
       audio.load();
     });
 
-    // Media element output must go through this context (not a second graph).
-    const elementSource = context.createMediaElementSource(audio);
-    elementSource.connect(context.destination);
-    this.elementSource = elementSource;
+    // In loop mode the reference plays as a bare element — NOT routed through
+    // this AudioContext. Chrome time-stretches (`preservesPitch`) a slowed
+    // element in real-time chunks; when that output is pulled through a
+    // `MediaElementAudioSourceNode` at the graph's fixed callback cadence the
+    // buffer starves and the audio stutters, worse the slower the rate and
+    // compounding on every `loop=true` wrap. The bare element (same path as
+    // the stutter-free non-loop reference player) has no such coupling. The
+    // shared context is still the mic analyser's, so this isn't a "second
+    // context" — the original concern that the settle delay below guards.
+    if (!this.looping) {
+      const elementSource = context.createMediaElementSource(audio);
+      elementSource.connect(context.destination);
+      this.elementSource = elementSource;
+    }
 
     await new Promise((resolve) => window.setTimeout(resolve, SHADOW_AUDIO_SETTLE_MS));
     await playReferenceForShadowing(audio, playbackRate);

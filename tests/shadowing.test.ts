@@ -333,22 +333,17 @@ describe('ShadowingController shadow mode', () => {
     await new Promise((r) => setTimeout(r, 30));
   });
 
-  it('updateShadowLoop defers a speed change to the next wrap; a range change repositions now', async () => {
+  it('updateShadowLoop changes speed and range on an in-flight loop', async () => {
     const controller = new ShadowingController();
     await controller.startShadowLoop(new Blob(['ref']), { onRep: () => {} });
     const player = FakeShadowReferencePlayer.instances.at(-1)!;
 
+    // Speed applies immediately — the loop-mode reference isn't routed through
+    // the AudioContext, so there's no time-stretcher to glitch.
     controller.updateShadowLoop({ playbackRate: 0.75 });
-    expect(player.setPlaybackRate).not.toHaveBeenCalled(); // not applied mid-pass
-
-    // Wrap the whole-clip loop — the pending rate lands at the top of the new pass.
-    player.fakeCurrentTime = 1.9;
-    await new Promise((r) => setTimeout(r, 150));
-    player.fakeCurrentTime = 0.1;
-    await new Promise((r) => setTimeout(r, 250));
     expect(player.setPlaybackRate).toHaveBeenCalledWith(0.75);
 
-    // A range change still repositions immediately when we're outside it.
+    // A range change repositions immediately when we're outside it.
     player.fakeCurrentTime = 5;
     controller.updateShadowLoop({ range: { startMs: 200, endMs: 900 } });
     expect(player.seek).toHaveBeenLastCalledWith(0.2);

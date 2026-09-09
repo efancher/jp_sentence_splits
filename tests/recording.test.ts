@@ -519,6 +519,9 @@ describe('ShadowReferencePlayer loop mode', () => {
     expect(audio.play).toHaveBeenCalledOnce();
     expect(ShadowFakeContext.instances).toHaveLength(1); // one shared graph
     expect(player.getAnalyser()).toBeDefined();
+    // Loop mode plays the reference as a bare element — NOT captured into the
+    // AudioContext, whose time-stretcher stutters a slowed element.
+    expect(ShadowFakeContext.instances[0]!.createMediaElementSource).not.toHaveBeenCalled();
 
     player.teardown();
     expect(ShadowFakeContext.instances[0]!.close).toHaveBeenCalledOnce();
