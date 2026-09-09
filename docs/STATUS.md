@@ -84,10 +84,16 @@ is trimmed.)
     kanji (事/訳/為/所/方/用) they're taken as ordinary nouns. `GrammarPicker`
     owns the constructions.
   - `CONTENT_POS_PREFIXES` gained `形状詞/一般` + `形状詞/タリ` — modern
-    UniDic's na-adjective tag (色々, 綺麗, 大変, 元気), which the old list
-    (`形容動詞`, the pre-UniDic term) missed entirely, so na-adjectives
-    were never default-checked. `形状詞/助動詞語幹` (the そう/よう stems)
-    stays excluded.
+    UniDic's na-adjective tag (綺麗, 大変, 静か, 好き, 便利), which the old
+    list (`形容動詞`, the pre-UniDic term) missed entirely, so na-adjectives
+    (好き included) were never default-checked. `形状詞/助動詞語幹` (the
+    そう/よう stems) stays excluded.
+  - `isFunctionAdverb` — a lemma-keyed list of degree/quantity/discourse
+    words the tokenizer files as `副詞` (and a few `形状詞`/`連体詞`) but
+    which are picked up from exposure: 色々, とても, かなり, ちょっと, もう,
+    まだ, たくさん, よく, やっぱり, たぶん, こう/そう/どう … Manner adverbs
+    (ゆっくり, はっきり, しっかり, きちんと) stay checked; すごく / 結構 stay
+    checked too (shared lemma with 凄い / the na-adjective 結構).
   - Side effect (intended): `selectedByDefault` also feeds the `/progress`
     "vocabulary blind spots" count (`getBlindSpots`), so `ている`-`いる` and
     kana `こと`/`はず` drop off it while na-adjectives now appear.

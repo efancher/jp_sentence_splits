@@ -105,6 +105,33 @@ function isKanaWrittenFormalNoun(token: MorphologyToken, dictionaryReading: stri
 }
 
 /**
+ * Degree / quantity / frequency / discourse words the tokenizer files under
+ * a content POS (`副詞`, and a few `形状詞`/`連体詞`) but which a learner
+ * picks up from exposure rather than an SRS card — 色々, とても, かなり,
+ * ちょっと, もう, まだ, たくさん, よく, やっぱり, たぶん, こう/そう/どう …
+ * Left visible in the strip, just not checked by default (user request,
+ * 2026-09-09). Keyed by UniDic *lemma*, which is often kanji-fied
+ * (とても→迚も, ちょっと→一寸, やっぱり→矢張り), so it catches every surface
+ * spelling at once. Manner adverbs (ゆっくり, はっきり, しっかり, きちんと)
+ * are deliberately absent — those are real content. すごく / 結構 are absent
+ * too: they share a lemma with the adjective 凄い / the na-adjective 結構.
+ */
+const FUNCTION_ADVERB_LEMMAS = new Set([
+  '色々', '色んな', '様々', // various
+  '迚も', '可成', '随分', '中々', '大分', '余り', // degree
+  '一寸', 'もっと', 'もう', '未だ', 'ずっと', // degree / time-ish
+  '沢山', // quantity
+  '良く', '大抵', // frequency
+  '矢張り', '多分', '急度', '勿論', '大体', '兎に角', // discourse / modal
+  'こう', 'そう', 'どう', // manner demonstratives
+]);
+
+function isFunctionAdverb(token: MorphologyToken): boolean {
+  const lemma = token.lemma?.trim();
+  return !!lemma && FUNCTION_ADVERB_LEMMAS.has(lemma);
+}
+
+/**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
  * deliberately added them. Everything else (content words, and hand-added
@@ -225,7 +252,8 @@ export function suggestionFromToken(
     selectedByDefault:
       isContentPos(pos) &&
       !isBoundAuxiliaryVerb(token, prevToken) &&
-      !isKanaWrittenFormalNoun(token, reading),
+      !isKanaWrittenFormalNoun(token, reading) &&
+      !isFunctionAdverb(token),
   };
 }
 

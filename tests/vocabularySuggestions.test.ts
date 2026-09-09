@@ -62,6 +62,23 @@ describe('vocabularySuggestions', () => {
     expect(suggestions.find((s) => s.expression === 'いる')?.selectedByDefault).toBe(false);
   });
 
+  it('does not default-select degree/discourse adverbs, keeps manner adverbs and 色々-adjacent content', () => {
+    const japanese = '色々あって、やっぱりゆっくり休む。';
+    const suggestions = suggestionsFromTokens(japanese, [
+      { surface: '色々', start: 0, end: 2, lemma: '色々', reading: 'いろいろ', pos: '副詞' },
+      { surface: 'あっ', start: 2, end: 4, lemma: '有る', reading: 'あっ', pos: '動詞/非自立可能' },
+      { surface: 'て', start: 4, end: 5, lemma: 'て', reading: 'て', pos: '助詞/接続助詞' },
+      { surface: '、', start: 5, end: 6, lemma: '、', reading: '', pos: '補助記号/読点' },
+      { surface: 'やっぱり', start: 6, end: 10, lemma: '矢張り', reading: 'やっぱり', pos: '副詞' },
+      { surface: 'ゆっくり', start: 10, end: 14, lemma: 'ゆっくり', reading: 'ゆっくり', pos: '副詞' },
+      { surface: '休む', start: 14, end: 16, lemma: '休む', reading: 'やすむ', pos: '動詞/一般' },
+      { surface: '。', start: 16, end: 17, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    const checked = suggestions.filter((s) => s.selectedByDefault).map((s) => s.expression);
+    // 色々 / やっぱり dropped; ゆっくり (manner) and 有る / 休む kept.
+    expect(checked).toEqual(['有る', 'ゆっくり', '休む']);
+  });
+
   it('does not default-select a kana-written formal noun, but keeps a kanji-written one', () => {
     const kana = '本を読むつもりだ。';
     const kanaSuggestions = suggestionsFromTokens(kana, [
