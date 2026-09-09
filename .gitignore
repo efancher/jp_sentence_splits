@@ -55,3 +55,6 @@ scripts/.cache/
 # by `supabase link`, machine-local, never committed.
 supabase/.temp/
 *.deb
+
+# Claude Code local session data (memory lives in ~/.claude, not the repo)
+.claude/projects/
