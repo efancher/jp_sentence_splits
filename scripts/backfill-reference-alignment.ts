@@ -40,6 +40,7 @@ const STORAGE_BUCKET = 'reference-audio';
 interface AudioRow {
   id: string;
   sentenceId: string;
+  sourceTitle: string;
   storagePath: string | null;
 }
 
@@ -69,11 +70,12 @@ async function main() {
   const audio = await fetchAll<AudioRow>(
     supabase,
     'reference_audio',
-    'id, sentence_id, storage_path',
+    'id, sentence_id, source_title, storage_path',
     user.id,
     (row) => ({
       id: String(row.id),
       sentenceId: String(row.sentence_id ?? ''),
+      sourceTitle: String(row.source_title ?? ''),
       storagePath: (row.storage_path as string | null) ?? null,
     }),
   );
@@ -132,7 +134,7 @@ async function main() {
   }
 
   let ok = 0;
-  let failed = 0;
+  const failures: string[] = [];
   for (const [i, row] of candidates.entries()) {
     const transcript = japaneseById.get(row.sentenceId)!;
     process.stdout.write(`[${i + 1}/${candidates.length}] ${row.id} … `);
@@ -157,12 +159,17 @@ async function main() {
       console.log(`ok (${result.words.length} words)`);
       ok += 1;
     } catch (err) {
-      console.log(`FAILED — ${err instanceof Error ? err.message : String(err)}`);
-      failed += 1;
+      const reason = err instanceof Error ? err.message : String(err);
+      console.log(`FAILED — ${reason}`);
+      failures.push(
+        `  ${row.id}  [${row.sourceTitle || '?'}]  sentence=${row.sentenceId}\n` +
+          `    ${transcript}\n    → ${reason}`,
+      );
     }
   }
 
-  console.log(`\nDone. ${ok} stored, ${failed} failed.`);
+  console.log(`\nDone. ${ok} stored, ${failures.length} failed.`);
+  if (failures.length) console.log(`\nFailures:\n${failures.join('\n')}`);
 }
 
 main().catch((error) => {
