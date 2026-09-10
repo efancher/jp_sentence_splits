@@ -599,6 +599,11 @@ function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
           <span>
             <strong>{observation.confidence} confidence:</strong> {observation.message}
           </span>
+          {observation.hint ? (
+            <p style={{ margin: 0 }}>
+              <strong>Try this:</strong> {observation.hint}
+            </p>
+          ) : null}
           {observation.detail ? <p className="muted">{observation.detail}</p> : null}
         </article>
       ))}

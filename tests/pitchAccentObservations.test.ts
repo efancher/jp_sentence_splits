@@ -99,6 +99,53 @@ describe('buildPitchAccentShapeObservations', () => {
     expect(observations[0]?.message).toBe(
       'Both the dictionary and your recording read 「親鳥」 as nakadaka — the drop is just in the wrong place. It belongs after 「や」 (mora 2), but yours stays high 1 mora too long and drops after 「ど」 (mora 3).',
     );
+    expect(observations[0]?.hint).toContain('Treat 「や」 as the peak');
+  });
+
+  it('flags a raised opening mora even when the drop position is right', () => {
+    // たまご nakadaka [2] = L-H-L. Learner produces H-H-L: the drop after
+    // mora 2 is correct, but the first mora is up (English initial stress).
+    const learnerWords = [word(0, 1.2, 'たまご')];
+    const learnerPitch = payload([
+      frame(0.1, 5),
+      frame(0.3, 5), // mora 1 た: high (should be low)
+      frame(0.5, 5),
+      frame(0.7, 5), // mora 2 ま: high
+      frame(0.9, -8),
+      frame(1.1, -8), // mora 3 ご: low
+    ]);
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: 'たまご', reading: 'たまご', pitchAccentPositions: [2] },
+    ];
+
+    const observations = buildPitchAccentShapeObservations({ learnerWords, learnerPitch, targets });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.message).toContain('started 「たまご」 high on 「た」');
+    expect(observations[0]?.hint).toContain('first syllable');
+    expect(observations[0]?.confidence).toBe('medium');
+  });
+
+  it('does not flag a same-drop-position mora diff that lands on a carried-forward bucket', () => {
+    // 4 morae, nakadaka [3] = L-H-H-L. Mora 2's bucket has no voiced signal,
+    // so its class is carried forward from the (low) first mora — a diff
+    // there is a measurement gap, not a produced error.
+    const learnerWords = [word(0, 1.6, 'あいうえ')];
+    const learnerPitch = payload([
+      frame(0.1, -5),
+      frame(0.3, -5), // mora 1: low
+      // mora 2 (0.4–0.8): silent
+      frame(0.9, 5),
+      frame(1.1, 5), // mora 3: high
+      frame(1.3, -5),
+      frame(1.5, -5), // mora 4: low
+    ]);
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: 'あいうえ', reading: 'あいうえ', pitchAccentPositions: [3] },
+    ];
+
+    expect(
+      buildPitchAccentShapeObservations({ learnerWords, learnerPitch, targets }),
+    ).toEqual([]);
   });
 
   it('does not flag an odaka target produced as heiban (acoustically identical within the word)', () => {

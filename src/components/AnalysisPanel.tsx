@@ -930,6 +930,11 @@ export function AnalysisPanel({
           {pitchAccentObservations.map((item) => (
             <article key={item.id} className="stack" style={{ gap: 0 }}>
               <strong>{item.confidence} confidence:</strong> {item.message}
+              {item.hint ? (
+                <p style={{ margin: 0 }}>
+                  <strong>Try this:</strong> {item.hint}
+                </p>
+              ) : null}
               {item.detail ? <p className="muted">{item.detail}</p> : null}
             </article>
           ))}

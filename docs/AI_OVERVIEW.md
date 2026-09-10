@@ -1248,6 +1248,18 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     correctly-produced accent is visible as a match, not just silence;
     disagreeing morae (and the particle) are flagged and unvoiced ones
     show `·`.
+    Each mismatch also carries a **corrective hint** (`pitchAccentCorrections.ts`,
+    `TimingObservation.hint`, rendered as a "Try this:" line): the raw
+    dictionary-vs-recording H/L divergence is classified into a named
+    failure mode (first-mora-high, held-high / late drop, early-drop,
+    no-downstep, final-fall, particle-fall, flat) and paired with an
+    actionable practice cue — several of which name the likely
+    English-transfer cause (initial stress, utterance-final declination,
+    marking prominence with loudness instead of pitch). The scorer also
+    now fires — at `medium`/`low` confidence — when the drop position is
+    *correct* but individual morae are off (e.g. a raised opening mora),
+    provided every divergent mora was directly measured rather than a
+    carried-forward bucket guess.
     The same `pitchAccentPositions` data also
     feeds two other, independent consumers — the `pitch_accent` SRS review
     activity type (§4), and the **audio-less pitch-accent drill**

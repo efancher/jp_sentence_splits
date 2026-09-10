@@ -211,6 +211,13 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     `20260910000000_reference_alignment.sql`. Off-tailnet clients now get
     word spans for anything aligned once elsewhere. Detail in STATUS.md;
     §18 exception noted in ARCHITECTURE.md.
+- [x] **Pitch-accent misses carry a corrective "Try this:" hint.**
+  (2026-09-10) `pitchAccentCorrections.ts` classifies the H/L divergence
+  (first-mora-high, held-high, early-drop, no-downstep, final-fall,
+  particle-fall, flat) and returns a practice cue, several naming the
+  English-transfer cause. The scorer also now flags a correct drop with
+  the wrong shape around it (medium/low confidence, measured morae only).
+  Detail in STATUS.md.
 
 ## In progress
 

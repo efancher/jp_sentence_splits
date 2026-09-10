@@ -33,6 +33,22 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-10 — Pitch-accent misses now come with a corrective "Try this:"
+  hint (user request).** New `pitchAccentCorrections.ts`
+  (`diagnosePitchAccentDeviation`) classifies the dictionary-vs-recording
+  H/L divergence into a named failure mode — first-mora-high, held-high
+  (late drop), early-drop, no-downstep, final-fall, particle-fall, flat —
+  and returns an actionable practice cue, several naming the likely
+  English-transfer cause (initial stress, utterance-final declination,
+  loudness-not-pitch prominence). Wired into `buildPitchAccentShapeObservations`
+  via `TimingObservation.hint`, rendered as a "Try this:" line in
+  `AnalysisPanel` and `PitchAccentDrillPage`. Also widened the scorer: it
+  now fires (medium/low confidence) when the drop position is right but
+  individual morae are off — `classifyLearnerMorae` exposes per-bucket
+  `voicedBuckets` so a divergent *carried-forward* bucket is suppressed
+  rather than flagged. +2 test files (`pitchAccentCorrections`, new
+  `pitchAccentObservations` cases). 1307 tests green.
+
 - **2026-09-10 — Pitch-accent shape feedback gave a contradictory message
   when the drop was merely misplaced (user report — "the phrase is
   nakadaka, but I sound like nakadaka", 「親鳥」 えさを…).** When the learner's

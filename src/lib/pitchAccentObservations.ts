@@ -1,6 +1,7 @@
 import type { WordAlignment } from '../domain/types';
 import { segmentIntoMorae } from './mora';
 import type { PitchAnalysisPayload, PitchFrame } from './pitch';
+import { diagnosePitchAccentDeviation } from './pitchAccentCorrections';
 import {
   detectedDropPosition,
   expectedPitchShape,
@@ -77,6 +78,8 @@ interface MoraeClassification {
   classes: MoraPitchClass[];
   /** Word buckets with any voiced signal (the following mora is not counted here). */
   voicedBucketCount: number;
+  /** Per-word-mora: true = measured directly, false = class carried forward from a neighbour. Length `moraCount`. */
+  voicedBuckets: boolean[];
   /** Whether the following mora had enough voiced signal to append its class. */
   measuredFollowing: boolean;
 }
@@ -135,7 +138,8 @@ function classifyLearnerMorae(
     bucketMeans.push(average(voicedSemitones(bucketFrames)));
   }
 
-  const voicedBucketCount = bucketMeans.filter((value) => value !== null).length;
+  const voicedBuckets = bucketMeans.map((value) => value !== null);
+  const voicedBucketCount = voicedBuckets.filter(Boolean).length;
   if (voicedBucketCount < Math.min(MIN_VOICED_BUCKETS, moraCount)) return null;
 
   let lastKnown: MoraPitchClass = 'l';
@@ -154,7 +158,7 @@ function classifyLearnerMorae(
     }
   }
 
-  return { classes, voicedBucketCount, measuredFollowing };
+  return { classes, voicedBucketCount, voicedBuckets, measuredFollowing };
 }
 
 /**
@@ -275,20 +279,64 @@ export function buildPitchAccentShapeObservations({
     const followingSpan = followingMoraSpan(audibleWords, wordIndex, target.followingMora);
     const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch, followingSpan);
     if (!learnerResult) return;
-    const { classes: learnerClasses, voicedBucketCount, measuredFollowing } = learnerResult;
+    const { classes: learnerClasses, voicedBucketCount, voicedBuckets, measuredFollowing } =
+      learnerResult;
 
     const detected = detectedDropPosition(learnerClasses);
     const expectedPosition = target.pitchAccentPositions[0]!;
+    const moraeText = morae.map((unit) => unit.text);
+    const expectedShape = expectedPitchShape(morae.length, expectedPosition, measuredFollowing);
+    const perMoraMatch =
+      learnerClasses.length === expectedShape.length &&
+      learnerClasses.every((cls, index) => cls === expectedShape[index]);
+    // Nothing diverged at all — not even a single mora.
+    if (perMoraMatch) return;
+
+    const correction = diagnosePitchAccentDeviation({
+      surfaceForm: target.surfaceForm,
+      moraeText,
+      expected: expectedShape,
+      actual: learnerClasses,
+      hasFollowing: measuredFollowing,
+      followingText: target.followingMora,
+    });
     // Compare through the same shape->drop-position function on both sides,
     // not the raw dictionary position. Without a measured following mora an
     // odaka target is never scored as a mismatch against a correctly-
     // produced heiban-shaped attempt (see pitchAccentShape.ts); with one,
     // `expectedPitchShape` appends the particle level so odaka reads as a
     // drop at `morae.length` and the two are finally distinguishable.
-    const effectiveExpected = detectedDropPosition(
-      expectedPitchShape(morae.length, expectedPosition, measuredFollowing),
-    );
-    if (detected === effectiveExpected) return;
+    const effectiveExpected = detectedDropPosition(expectedShape);
+
+    // The drop landed in the right place but individual morae are off (a
+    // raised opening mora, a sagged plateau — the "just extra lows or
+    // highs" case). Weaker signal than a misplaced drop, so only surface it
+    // when every divergent word mora was actually measured, not a
+    // carried-forward bucket guess.
+    if (detected === effectiveExpected) {
+      if (!correction) return;
+      const divergentWordMoraCarried = learnerClasses.some(
+        (cls, index) =>
+          index < morae.length && cls !== expectedShape[index] && !voicedBuckets[index],
+      );
+      if (divergentWordMoraCarried) return;
+      const diffCount = learnerClasses.filter(
+        (cls, index) => cls !== expectedShape[index],
+      ).length;
+      observations.push({
+        id: `pitch-accent-shape-${targetIndex}`,
+        kind: 'pitch_accent_shape',
+        subject: target.surfaceForm,
+        confidence: voicedBucketCount === morae.length ? 'medium' : 'low',
+        severity: Math.min(0.45, diffCount / expectedShape.length),
+        segment: { startMs: word.start * 1000, endMs: word.end * 1000 },
+        message: correction.summary,
+        hint: correction.hint,
+        detail:
+          'The drop itself is in the right place — this is about the shape around it, read off a rough per-mora pitch estimate.',
+      });
+      return;
+    }
 
     const gap = Math.abs(effectiveExpected - detected);
     const isStark = gap >= STARK_MORA_GAP;
@@ -328,6 +376,7 @@ export function buildPitchAccentShapeObservations({
       confidence: isStark && fullCoverage && !onFollowingMora ? 'high' : 'medium',
       severity: Math.min(1, gap / morae.length),
       segment: { startMs: word.start * 1000, endMs: word.end * 1000 },
+      hint: correction?.hint,
       message: onFollowingMora
         ? `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}: the pitch ${
             expectedLabel === 'heiban' ? 'stays up on' : 'drops on'

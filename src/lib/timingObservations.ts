@@ -26,6 +26,14 @@ export interface TimingObservation {
    * something to fix).
    */
   severity?: number;
+  /**
+   * An actionable "do this differently on the next take" cue, when the
+   * observation has one. Distinct from `detail` (a caveat / the numbers
+   * behind the call): a hint is the corrective coaching. Only
+   * `buildPitchAccentShapeObservations` sets it today
+   * (`pitchAccentCorrections.ts`).
+   */
+  hint?: string;
   /** Reference-clip time range (full-clip time base), for auto-proposing a practice loop. */
   segment?: { startMs: number; endMs: number };
   /**
