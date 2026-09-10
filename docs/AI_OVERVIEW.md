@@ -934,14 +934,19 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   The word's span is located by forced alignment (`isolatedWordRange` in
   `src/lib/isolatedWordRange.ts` — character-proportion mapping like
   `SyncedShadowText`, folding in a following ≤2-char case particle so the
-  post-word pitch is audible); it falls back to whole-sentence-only
-  playback when alignment is unavailable or the word can't be located. An
-  **"Adjust"** toggle opens `<WordAudioRangeEditor>` — the clip decoded in
-  the browser, draggable start/end handles over the waveform with
-  `detectSilences` pause lines + "Snap to pauses" — and the hand-corrected
-  span is stored on the `SentenceVocabulary` link
-  (`audioStartMs`/`audioEndMs`, synced) and overrides the alignment guess
-  from then on. Plays through a local `<audio>` + `PlaybackCoordinator`,
+  post-word pitch is audible; also bails to whole-sentence when an `<unk>`
+  OOV token — a casual contraction the aligner's lexicon lacked — precedes
+  the target, since that breaks the proportional map downstream); it falls
+  back to whole-sentence-only playback when alignment is unavailable or the
+  word can't be located. An **"Adjust"** toggle opens
+  `<WordAudioRangeEditor>` — the clip decoded in the browser, draggable
+  start/end handles over the waveform with `detectSilences` pause lines +
+  "Snap to pauses" — and the hand-corrected span is stored on the
+  `SentenceVocabulary` link (`audioStartMs`/`audioEndMs`, synced) and
+  overrides the alignment guess from then on. "Adjust" stays reachable even
+  when alignment produced no span at all (off-tailnet, OOV, degenerate):
+  it's seeded with a rough duration-proportional guess to drag from,
+  neither looped nor persisted until the learner commits a drag. Plays through a local `<audio>` + `PlaybackCoordinator`,
   not the `nativeAudioController` singleton (no range support there). The reveal
   also shows `SentencePitchAccentRow` (see below) for the whole sentence,
   with the card's target word highlighted.

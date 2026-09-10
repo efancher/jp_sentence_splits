@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-09.
+Last updated: 2026-09-10.
 
 ## Where things stand
 
@@ -32,6 +32,26 @@ what's left is one deferred durability item (below).
 
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
+
+- **2026-09-10 — Word-audio loop fell back to whole-sentence too often on
+  colloquial sentences (user report — "why aren't pitch cards showing
+  word-level playback", e.g. `で、なんか結構怖がってたりもしてね、最近は`).**
+  Two fixes, both in the review-time path; the persistence half is a
+  separate ROADMAP item ("Persist forced alignment on `reference_audio`").
+  - `isolatedWordRange` now returns `null` (→ whole-sentence fallback) when
+    an `<unk>` token sits at/before the matched span. The aligner emits
+    `<unk>` for out-of-vocabulary words — chiefly casual contractions like
+    `怖がってたり` — whose characters drop out of the character-proportion
+    basis while their airtime doesn't, so every token after shifts and the
+    span comes out confidently wrong. Better no isolate than a wrong one.
+  - `SegmentLoopPlayer`'s "Adjust" editor is now reachable when forced
+    alignment produced no range at all (off-tailnet, OOV, degenerate). It's
+    seeded with a rough duration-proportional guess (target char-span ×
+    clip length) to drag from; the guess is never looped or persisted until
+    the learner commits a drag, which writes the usual
+    `SentenceVocabulary.audioStartMs/EndMs` override. Needs a `link` and a
+    known `durationMs`; `wordOnly` callers (the `word_listening` optional
+    scaffold) are unaffected.
 
 - **2026-09-09 — Contextual conjugation cards had ~zero coverage (user
   report — "surprised I haven't seen any conjugation cards yet").**

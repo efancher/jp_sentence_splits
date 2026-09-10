@@ -299,6 +299,39 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   cards are actually performing (leech rate, self-rating calibration)
   before committing either way.
 
+- [ ] **Persist forced alignment on `reference_audio` (synced).** From a
+  2026-09-10 discussion of why `pitch_accent` / `word_listening` cards so
+  often fall back to whole-sentence playback. Root cause: `SegmentLoopPlayer`
+  computes the word span lazily by calling the tailnet-only `/align` service
+  at review time, so it silently no-ops whenever the client is off the
+  tailnet — and even on-tailnet, colloquial sentences (fillers, contractions,
+  right-dislocation, phrase-final targets) defeat `isolatedWordRange`'s
+  character-proportion remap.
+  - **Shipped 2026-09-10 (the cheap half):** `isolatedWordRange` now bails to
+    whole-sentence when an `<unk>` precedes the target (proportional map is
+    unreliable past an OOV); and the "Adjust" editor is reachable even with no
+    auto range, seeded with a duration-proportional guess to drag from.
+  - **Still to do — the persistence piece:** store the raw MFA result
+    (`words[]` + `phones[]`) in a new nullable `reference_audio.alignment`
+    jsonb column (+ `alignment_version`), wired through the sync mappers/engine
+    both directions and mirrored into the existing local `referenceAlignments`
+    Dexie cache on pull so `loadOrComputeAlignment` hits cache and never calls
+    the server. Populate at mining-commit time (browser is on-tailnet then
+    anyway) plus a `scripts/backfill-reference-alignment.ts` that runs **on
+    codex-dev itself** — the box already hosts the MFA service (localhost, no
+    tailnet hop) and the TS scripts already have an authenticated Supabase
+    path via `scriptSupabaseClient`. Keep the lazy server call as the
+    last-resort tier. Additive + nullable, so the app stays fully usable
+    during backfill (un-backfilled rows just show whole-sentence, as today).
+  - Keep the word→span mapping (`isolatedWordRange`) on the client so it stays
+    tunable without a re-backfill; only a model change forces one (guard with
+    `alignment_version`). Storing `phones[]` keeps a future per-mora
+    loop/highlight possible without another server round.
+  - Contradicts the §18 "don't sync recomputable derived data" precedent
+    (same reasoning as `Attempt`) — justified because the recompute dependency
+    is a sometimes-offline personal service, not pure CPU. Note it in
+    ARCHITECTURE.md when this lands.
+
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to
