@@ -68,7 +68,9 @@ is trimmed.)
     `db.sentenceAudio` (all three callers; re-segmentation opts out via a
     new `retireAudio=false` arg since it transfers/retires clips itself).
     `scripts/cleanup-orphaned-reference-audio.ts` (dry-run default,
-    `--apply`, `--delete-blobs`) clears the existing 140.
+    `--apply`, `--delete-blobs`) cleared the existing 140 against prod
+    2026-09-10 (rows soft-deleted + Storage blobs removed). `reference_audio`
+    is now 473 live rows, all aligned, 0 orphaned.
   - Two individually mis-segmented clips that failed alignment
     (`audio_7f9e2107` #932 乗馬, `audio_48a4f5a7` 説明が上手い人) were
     tail-truncated (one also head-truncated); re-cut from the cached source
