@@ -250,13 +250,18 @@ configurable FSRS-interval threshold).
   Forced Aligner-backed), running as a `systemd --user` service on the
   user's Hetzner box, reachable only over their Tailscale tailnet (`tailscale
   serve`). `src/lib/analysisApi.ts` calls it; `src/lib/alignmentCache.ts`
-  wraps that call with the Dexie cache-then-fetch (shared by the shadowing
-  analysis panel and the `listening` review card's karaoke word
-  highlighting — both features degrade gracefully, falling back to no
-  alignment-dependent feedback/highlighting, when the service is
-  unreachable). There is no fallback alignment path. Also runs
-  `faster-whisper` (`base` model) for a secondary, non-authoritative ASR
-  signal.
+  wraps that call with a three-tier resolve — local Dexie cache, then the
+  owner-scoped `reference_alignment` Supabase table
+  (`src/sync/alignmentRemote.ts`, read/written by direct query, *not*
+  through the sync-event engine — same treatment as the reference-audio
+  blobs, since alignment is derived and recomputable), then the MFA
+  service. This means a client off the tailnet still gets word-audio spans
+  for any recording aligned once elsewhere (at mining-commit time, by a
+  client on the tailnet, or by `scripts/backfill-reference-alignment.ts`
+  run on the box itself). Consumers still degrade gracefully (shadowing
+  analysis panel, `pitch_accent` / `word_listening` word isolation, karaoke
+  highlighting) when no tier has it. Also runs `faster-whisper` (`base`
+  model) for a secondary, non-authoritative ASR signal.
 - **WaniKani**: no live integration. The kanji catalog (readings/meanings
   in `kanji`) came from a one-time WaniKani API import during Phase 2. The
   mnemonic feature that briefly layered per-word and per-kanji Tofugu

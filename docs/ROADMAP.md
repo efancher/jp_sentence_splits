@@ -190,6 +190,27 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     mismatches persist on `AttemptAnalysisSummary.wordIssues` and feed a
     read-only "weak words" signal (`buildShadowingWeakWords`) named in the
     error-mix pronunciation block. Detail in STATUS.md.
+- [x] **Word-audio isolation stops depending on the tailnet at review time.**
+  (2026-09-10) From "why aren't `pitch_accent` cards showing word-level
+  playback" (`で、なんか結構怖がってたりもしてね、最近は`). Three parts:
+  - `isolatedWordRange` bails to whole-sentence when an `<unk>` (OOV
+    contraction) precedes the target — the proportional char→time map is
+    unreliable past a token whose characters left the basis but whose
+    airtime didn't.
+  - `SegmentLoopPlayer`'s "Adjust" editor is reachable even when forced
+    alignment produced no span, seeded with a duration-proportional guess;
+    never looped or persisted until the learner commits a drag.
+  - **Alignment is now stored + shared.** `loadOrComputeAlignment` resolves
+    in three tiers — local Dexie cache → the owner-scoped
+    `reference_alignment` Supabase table (`src/sync/alignmentRemote.ts`,
+    direct query, *not* the sync-event engine — same treatment as the
+    reference-audio blobs) → the tailnet MFA service. A fresh service result
+    is pushed to the table opportunistically;
+    `scripts/backfill-reference-alignment.ts` (run on codex-dev, localhost
+    aligner) covers the existing corpus. Migration
+    `20260910000000_reference_alignment.sql`. Off-tailnet clients now get
+    word spans for anything aligned once elsewhere. Detail in STATUS.md;
+    §18 exception noted in ARCHITECTURE.md.
 
 ## In progress
 
@@ -298,39 +319,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   types. Not scheduled; would want a real look at how the current grammar
   cards are actually performing (leech rate, self-rating calibration)
   before committing either way.
-
-- [ ] **Persist forced alignment on `reference_audio` (synced).** From a
-  2026-09-10 discussion of why `pitch_accent` / `word_listening` cards so
-  often fall back to whole-sentence playback. Root cause: `SegmentLoopPlayer`
-  computes the word span lazily by calling the tailnet-only `/align` service
-  at review time, so it silently no-ops whenever the client is off the
-  tailnet — and even on-tailnet, colloquial sentences (fillers, contractions,
-  right-dislocation, phrase-final targets) defeat `isolatedWordRange`'s
-  character-proportion remap.
-  - **Shipped 2026-09-10 (the cheap half):** `isolatedWordRange` now bails to
-    whole-sentence when an `<unk>` precedes the target (proportional map is
-    unreliable past an OOV); and the "Adjust" editor is reachable even with no
-    auto range, seeded with a duration-proportional guess to drag from.
-  - **Still to do — the persistence piece:** store the raw MFA result
-    (`words[]` + `phones[]`) in a new nullable `reference_audio.alignment`
-    jsonb column (+ `alignment_version`), wired through the sync mappers/engine
-    both directions and mirrored into the existing local `referenceAlignments`
-    Dexie cache on pull so `loadOrComputeAlignment` hits cache and never calls
-    the server. Populate at mining-commit time (browser is on-tailnet then
-    anyway) plus a `scripts/backfill-reference-alignment.ts` that runs **on
-    codex-dev itself** — the box already hosts the MFA service (localhost, no
-    tailnet hop) and the TS scripts already have an authenticated Supabase
-    path via `scriptSupabaseClient`. Keep the lazy server call as the
-    last-resort tier. Additive + nullable, so the app stays fully usable
-    during backfill (un-backfilled rows just show whole-sentence, as today).
-  - Keep the word→span mapping (`isolatedWordRange`) on the client so it stays
-    tunable without a re-backfill; only a model change forces one (guard with
-    `alignment_version`). Storing `phones[]` keeps a future per-mora
-    loop/highlight possible without another server round.
-  - Contradicts the §18 "don't sync recomputable derived data" precedent
-    (same reasoning as `Attempt`) — justified because the recompute dependency
-    is a sometimes-offline personal service, not pure CPU. Note it in
-    ARCHITECTURE.md when this lands.
 
 ## Possibilities (analytics & cross-activity coherence)
 

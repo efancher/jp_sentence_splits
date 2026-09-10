@@ -156,14 +156,22 @@ built out Phases 1–9):
   from cloud sync and JSON backup by design).
 - `ReferenceAlignment` / `AttemptAlignment` / `AttemptTranscription` /
   `AttemptAnalysisSummary` — cached, recomputable-on-demand derived data
-  from the forced-alignment/ASR services (all local-only, keyed by version
-  numbers so stale caches can be invalidated). `ReferenceAlignment` is
-  shared between the shadowing-analysis flow (`AnalysisPanel.tsx`) and the
-  `listening` review card's karaoke highlighting
-  (`KaraokeSentenceText.tsx`) — both call the same
-  `loadOrComputeAlignment` (`src/lib/alignmentCache.ts`), so whichever
-  triggers alignment for a given `SentenceAudio` clip first, the other
-  reuses the cached result.
+  from the forced-alignment/ASR services (local Dexie caches, keyed by
+  version numbers so stale caches can be invalidated). `ReferenceAlignment`
+  is shared between the shadowing-analysis flow (`AnalysisPanel.tsx`), the
+  `listening` card's karaoke highlighting (`KaraokeSentenceText.tsx`), and
+  the `pitch_accent` / `word_listening` word-audio isolation
+  (`SegmentLoopPlayer.tsx`) — all call the same `loadOrComputeAlignment`
+  (`src/lib/alignmentCache.ts`), which resolves in three tiers: local Dexie
+  cache → the owner-scoped `reference_alignment` Supabase table
+  (`src/sync/alignmentRemote.ts`, direct query, *not* the sync-event engine
+  — treated like the reference-audio blobs) → the tailnet-only MFA service.
+  A fresh service result is written to the local cache and opportunistically
+  pushed to the table, so a client off the tailnet still gets a span for
+  any clip aligned once elsewhere (backfilled corpus-wide by
+  `scripts/backfill-reference-alignment.ts`, run on the box that hosts the
+  aligner). `AttemptAlignment` / `AttemptTranscription` stay local-only
+  (per-attempt, not shared).
 - `CardIssueReport` — a learner-authored free-text flag on a review card
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a

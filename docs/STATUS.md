@@ -36,8 +36,30 @@ is trimmed.)
 - **2026-09-10 — Word-audio loop fell back to whole-sentence too often on
   colloquial sentences (user report — "why aren't pitch cards showing
   word-level playback", e.g. `で、なんか結構怖がってたりもしてね、最近は`).**
-  Two fixes, both in the review-time path; the persistence half is a
-  separate ROADMAP item ("Persist forced alignment on `reference_audio`").
+  Root cause: `SegmentLoopPlayer` computed the word span lazily by calling
+  the **tailnet-only** `/align` service at review time, so it silently
+  no-ops off-tailnet; and on-tailnet, `isolatedWordRange`'s char-proportion
+  remap is defeated by fillers / contractions / phrase-final targets. Three
+  fixes:
+  - **Alignment is stored + shared, no longer recomputed per client.**
+    `loadOrComputeAlignment` (`src/lib/alignmentCache.ts`) now resolves in
+    three tiers: local `referenceAlignments` Dexie cache → the owner-scoped
+    `reference_alignment` Supabase table (`src/sync/alignmentRemote.ts` —
+    read/written by direct query, **not** the sync-event engine, same
+    treatment as reference-audio blobs in `audioSync.ts`) → the MFA
+    service. A fresh service result is cached locally *and* pushed to the
+    table opportunistically (`uploadRemoteAlignment`). Migration
+    `20260910000000_reference_alignment.sql` (plain owner-scoped table,
+    `alignment` jsonb + `alignment_version`, no sync triggers).
+    `scripts/backfill-reference-alignment.ts` (`npm run
+    backfill:reference-alignment`, `--apply`/`--limit N`) computes the
+    whole existing corpus — meant to run **on codex-dev itself**, which
+    hosts the aligner (`ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002`, no
+    tailnet hop) and where the TS scripts already have an authed Supabase
+    path. Idempotent. Off-tailnet clients now get spans for anything
+    aligned once anywhere. Not wired into mining-commit yet — the backfill
+    plus opportunistic upload cover it; a commit-time hook is a marginal
+    follow-up touching three delicate import sites.
   - `isolatedWordRange` now returns `null` (→ whole-sentence fallback) when
     an `<unk>` token sits at/before the matched span. The aligner emits
     `<unk>` for out-of-vocabulary words — chiefly casual contractions like

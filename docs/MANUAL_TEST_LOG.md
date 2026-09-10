@@ -188,6 +188,27 @@ click; the recovery button is the visible half.
 Diagnostics: `npx tsx scripts/diagnose-grammar-review-queue.ts`,
 `npx tsx scripts/cleanup-orphaned-study-items.ts`
 
+## 2026-09-10 — word-audio isolation off-tailnet
+
+Validation bar: (1) a `pitch_accent` / `word_listening` card still works
+with the alignment service unreachable, (2) no data corruption from the new
+`reference_alignment` table.
+
+| # | Check | How to reach it | Status | Notes |
+|---|---|---|---|---|
+| W1 | `pitch_accent` card shows "🔁 Loop native word" when alignment is available | `/review` on a `pitch_accent` card (e.g. 最近-type word) | ⬜ | Loop plays just the word span. Whole-sentence button still there. |
+| W2 | Off-tailnet, a card whose clip was aligned before still loops the word | Turn off Tailscale / VPN, `/review` a `pitch_accent` card you've seen before | ⬜ | Span comes from the `reference_alignment` table via Supabase — no `/align` call. Needs to have been aligned once (studied on-tailnet, or after the backfill). |
+| W3 | Off-tailnet, a never-aligned clip falls back cleanly | `/review` a brand-new `pitch_accent` card while off-tailnet | ⬜ | "Couldn't isolate just the word — tap Adjust to set it by ear." + an **Adjust** button. No crash, no infinite spinner. |
+| W4 | "Adjust" reachable with no auto span; drag persists | On the W3 card, tap **Adjust** | ⬜ | Waveform editor opens seeded with a rough guess. Drag an edge → "🔁 Loop native word" now plays your range; label flips to "Adjusted". Reopen the card later → your span stuck (writes `sentence_vocabulary.audio_start_ms/end_ms`, synced). |
+| W5 | Colloquial sentence with a contraction doesn't loop a wrong span | `/review` a `pitch_accent` card on a sentence like `で、なんか結構怖がってたりもしてね、最近は` | ⬜ | Either a correct word loop or a clean whole-sentence fallback — never a loop that plays the wrong word (the `<unk>` bail). |
+| W6 | Backfill script (run on codex-dev) | `systemctl --user start shadowing-analysis-api`; `ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002 npm run backfill:reference-alignment` (dry run), then `-- --apply` | ⬜ | Dry run prints a count. `--apply` fills `reference_alignment`; re-running is a no-op ("already aligned"). |
+
+Corruption spot-check for this pass: `reference_alignment` is a standalone
+owner-scoped table with an FK to `reference_audio(id) on delete cascade` and
+no sync-engine wiring — deleting/retiring a recording cascades its alignment
+away; nothing else references it. After W4, Settings → "Export all data"
+still succeeds and `/study-items/<that card>` shows a sane due date.
+
 ## Corruption spot-checks (run after any writing test)
 
 - Settings → "Export all data" downloads a JSON without error (DB-integrity
