@@ -1624,11 +1624,17 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 ## Services
 
 - `server/youtube-mining` (FastAPI, `systemctl --user`, this repo) — mining
-  pipeline, `/resegment`, `/reclip`, source-audio cache, job wizard.
+  pipeline, `/resegment`, `/reclip`, source-audio cache, job wizard. Also a
+  no-JS `GET /status` box-resource page (RAM/disk trend + service RSS +
+  cache size), fed by the `box-metrics` 15-min sampling timer
+  (`deploy/box-metrics.{service,timer}` → `app/metrics.py`). At
+  `…/youtube-mining/status`.
 - `~/projects/shadowing-analysis-api` (separate repo, Hetzner box,
   `systemd --user`, tailnet-only via `tailscale serve`) — MFA forced
   alignment, `faster-whisper` ASR (`base` diagnostic + `large-v3-turbo`
-  source transcription).
+  source transcription). MFA/kalpy leaks per-alignment memory (~2.3 GB warm
+  → ~4.7 GB/week on the 8 GB box); a `shadowing-analysis-api-restart.timer`
+  in that repo restarts it every Sunday 04:00.
 - Supabase — single shared project, table-prefix-isolated from the retired
   `shadowing` repo. Always soft-delete synced tables (`deleted_at`), never
   raw `DELETE`, or clients never learn of the change.

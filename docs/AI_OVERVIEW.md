@@ -1709,8 +1709,11 @@ aren't JSON-serializable/aren't worth backing up).
   faster-whisper (`base` model, CTranslate2 inference) for ASR — both
   deliberately chosen to be lightweight given the host's tight memory
   budget (~1–1.5 GB free even before ASR was added; the alignment service
-  alone runs ~2.4 GB RSS warm). The frontend (`src/lib/analysisApi.ts`)
-  requires a working fallback path when this service is unreachable.
+  alone runs ~2.4 GB RSS warm — and MFA/kalpy doesn't fully release it, so
+  a `systemd --user` timer restarts the service weekly to keep it near that
+  baseline rather than drifting into swap). The frontend
+  (`src/lib/analysisApi.ts`) requires a working fallback path when this
+  service is unreachable.
 - **`server/youtube-mining/`** — unlike everything else in this section,
   this one *is* part of this codebase (Python + FastAPI), not a sibling
   repo — see the "Import from YouTube" feature section above. Deployed
@@ -1718,7 +1721,11 @@ aren't JSON-serializable/aren't worth backing up).
   + tailscale path, separate process/port), called from
   `src/lib/miningApi.ts`. Given a YouTube URL, downloads audio + subtitles
   (yt-dlp), runs ASR, and clips per-sentence audio (ffmpeg) as the user
-  drives the 4-step wizard in `YouTubeMinePage.tsx`. Ported from the
+  drives the 4-step wizard in `YouTubeMinePage.tsx`. Also serves a no-JS
+  `GET /status` page (box RAM/disk trend + the two services' RSS + the
+  source-cache size, from a 15-min `systemd --user` sampling timer →
+  `~/.cache/youtube-mining/metrics.jsonl`) at `…/youtube-mining/status`,
+  for keeping an eye on the memory-constrained host. Ported from the
   sibling `shadowmine` CLI below —
   copied, not imported, so this app has no runtime dependency on that
   repo for this feature. YouTube bot-blocks the datacenter host's IP;

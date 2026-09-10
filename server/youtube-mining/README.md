@@ -75,6 +75,23 @@ Requires root or the tailscale operator
 `funnel` — tailnet-only, matching this whole app ecosystem's privacy
 posture.
 
+### `/status` resource page
+
+`GET /status` (HTML, no JS) shows the box's RAM + disk trend over the last
+few days plus the two FastAPI services' RSS and the source-cache size — a
+glance to catch a leak (the MFA aligner drifts ~2.3→4.7 GB over a week) or a
+filling disk. `GET /status.json` is the same data. Fed by a `systemd --user`
+timer that samples every 15 min into `~/.cache/youtube-mining/metrics.jsonl`
+(trimmed to `MINING_METRICS_RETENTION_DAYS`):
+
+```bash
+cp deploy/box-metrics.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now box-metrics.timer
+```
+
+Once exposed, it's at `…/youtube-mining/status`.
+
 ### YouTube's bot-check (cloud/datacenter IPs)
 
 YouTube blocks yt-dlp requests from most cloud/datacenter IPs (this box
@@ -244,3 +261,9 @@ challenges using node` with no `n challenge solving failed` warning.
 - `MINING_YTDLP_JS_RUNTIME` / `MINING_YTDLP_JS_RUNTIME_PATH` — JS runtime
   name (default `node`) and, if it's not on PATH, its absolute path. See
   "JavaScript runtime" above.
+- `MINING_METRICS_LOG` / `MINING_METRICS_RETENTION_DAYS` / `MINING_METRICS_UNITS`
+  — the `/status` page's sample log (default
+  `~/.cache/youtube-mining/metrics.jsonl`), how long to keep it (10 days),
+  and the `label=unit` list of `systemd --user` units to sample memory for
+  (default `aligner=shadowing-analysis-api.service,mining=youtube-mining-api.service`).
+  See "`/status` resource page" above.

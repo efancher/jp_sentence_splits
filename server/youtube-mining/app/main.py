@@ -10,18 +10,20 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from starlette.background import BackgroundTask
 
 from app import (
     clip,
     config,
     jobs,
+    metrics,
     morphology,
     readings,
     reclip,
     resegment,
     source_cache,
+    status_page,
     waveform,
     youtube,
 )
@@ -73,6 +75,18 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/status", response_class=HTMLResponse)
+async def status_html(days: int = 3):
+    """No-JS resource glance — RAM/disk trend for the box + the two FastAPI
+    services + the source cache. Fed by the `app.metrics` collector timer."""
+    return status_page.render(metrics.load(days=days))
+
+
+@app.get("/status.json")
+async def status_json(days: int = 3):
+    return {"current": metrics.sample(), "samples": metrics.load(days=days)}
 
 
 @app.post("/jobs", response_model=CreateJobResponse)

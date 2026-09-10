@@ -141,3 +141,25 @@ MINING_EXIT_NODE_FALLBACK = os.environ.get("MINING_EXIT_NODE_FALLBACK") or None
 # the name to empty to fall back to yt-dlp's own default (`deno`).
 YTDLP_JS_RUNTIME = os.environ.get("MINING_YTDLP_JS_RUNTIME", "node").strip()
 YTDLP_JS_RUNTIME_PATH = os.environ.get("MINING_YTDLP_JS_RUNTIME_PATH") or None
+
+# --- /status resource page ---------------------------------------------------
+# A systemd --user timer runs `python -m app.metrics` every ~15 min to append
+# one JSON snapshot to this log; `/status` + `/status.json` read it back.
+# RAM + disk for the box, the two FastAPI services, and the source cache —
+# enough to notice a leak (e.g. the MFA aligner's memory growth) or a filling
+# disk before it bites. Local only, no external calls.
+METRICS_LOG = os.environ.get(
+    "MINING_METRICS_LOG",
+    os.path.join(os.path.expanduser("~"), ".cache", "youtube-mining", "metrics.jsonl"),
+)
+METRICS_RETENTION_DAYS = int(os.environ.get("MINING_METRICS_RETENTION_DAYS", "10"))
+# systemd --user units to sample MemoryCurrent for (cgroup memory, so child
+# processes count). Comma-separated "label=unit" or bare "unit".
+METRICS_UNITS = [
+    part.strip()
+    for part in os.environ.get(
+        "MINING_METRICS_UNITS",
+        "aligner=shadowing-analysis-api.service,mining=youtube-mining-api.service",
+    ).split(",")
+    if part.strip()
+]

@@ -1,0 +1,7 @@
+[Unit]
+Description=Sample box RAM/disk for the mining service's /status page
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/jp_sentence_splits/server/youtube-mining
+ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/python -m app.metrics
