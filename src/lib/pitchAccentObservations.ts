@@ -303,6 +303,22 @@ export function buildPitchAccentShapeObservations({
       detectedDropPosition(learnerClasses.slice(0, morae.length)) ===
         detectedDropPosition(expectedPitchShape(morae.length, expectedPosition));
 
+    // Both the dictionary and the recording land in the same coarse
+    // category (only nakadaka has more than one interior drop position,
+    // so this is always nakadaka-vs-nakadaka) but the drop is one or more
+    // morae off. "sounds like nakadaka instead" would be nonsense here —
+    // name the mora the drop belongs on instead.
+    const expectedDropMora = morae[effectiveExpected - 1]?.text;
+    const detectedDropMora = morae[detected - 1]?.text;
+    const sameLabel =
+      !onFollowingMora &&
+      expectedLabel === detectedLabel &&
+      effectiveExpected > 0 &&
+      detected > 0 &&
+      !!expectedDropMora &&
+      !!detectedDropMora;
+    const moraGapWord = gap === 1 ? 'mora' : 'morae';
+
     observations.push({
       id: `pitch-accent-shape-${targetIndex}`,
       kind: 'pitch_accent_shape',
@@ -318,7 +334,13 @@ export function buildPitchAccentShapeObservations({
           } the particle after it, but yours ${
             expectedLabel === 'heiban' ? 'drops' : 'stays up'
           } there — it sounds like ${detectedLabel}.`
-        : `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}; your pitch here sounds like ${detectedLabel} instead.`,
+        : sameLabel
+          ? `Both the dictionary and your recording read 「${target.surfaceForm}」 as ${expectedLabel} — the drop is just in the wrong place. It belongs after 「${expectedDropMora}」 (mora ${effectiveExpected}), but yours ${
+              detected > effectiveExpected
+                ? `stays high ${gap} ${moraGapWord} too long and drops after 「${detectedDropMora}」`
+                : `drops ${gap} ${moraGapWord} early, after 「${detectedDropMora}」`
+            } (mora ${detected}).`
+          : `Dictionaries mark 「${target.surfaceForm}」 as ${expectedLabel}; your pitch here sounds like ${detectedLabel} instead.`,
       detail:
         'Based on a rough per-mora pitch estimate from your recording — mic quality and natural speech variation can shift this.' +
         (alternates.length ? ` Also acceptable: position ${alternates.join(', ')}.` : ''),

@@ -75,6 +75,32 @@ describe('buildPitchAccentShapeObservations', () => {
     );
   });
 
+  it('names the drop mora when both sides are nakadaka but the drop is misplaced', () => {
+    // 親鳥 (おやどり): dictionary drop after や (mora 2); learner keeps the
+    // pitch high one mora too long and drops after ど (mora 3). Both are
+    // "nakadaka" — the old message read "sounds like nakadaka instead".
+    const learnerWords = [word(0, 1.6, '親鳥')];
+    const learnerPitch = payload([
+      frame(0.1, -5),
+      frame(0.3, -5), // mora 1 お: low
+      frame(0.5, 5),
+      frame(0.7, 5), // mora 2 や: high
+      frame(0.9, 5),
+      frame(1.1, 5), // mora 3 ど: high (should have dropped)
+      frame(1.3, -5),
+      frame(1.5, -5), // mora 4 り: low
+    ]);
+    const targets: PitchAccentTarget[] = [
+      { surfaceForm: '親鳥', reading: 'おやどり', pitchAccentPositions: [2] },
+    ];
+
+    const observations = buildPitchAccentShapeObservations({ learnerWords, learnerPitch, targets });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.message).toBe(
+      'Both the dictionary and your recording read 「親鳥」 as nakadaka — the drop is just in the wrong place. It belongs after 「や」 (mora 2), but yours stays high 1 mora too long and drops after 「ど」 (mora 3).',
+    );
+  });
+
   it('does not flag an odaka target produced as heiban (acoustically identical within the word)', () => {
     const learnerWords = [word(0, 1, '橋')];
     const learnerPitch = payload(twoMoraFrames(-5, 5)); // low then high = heiban shape

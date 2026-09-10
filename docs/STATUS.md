@@ -33,6 +33,19 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-10 — Pitch-accent shape feedback gave a contradictory message
+  when the drop was merely misplaced (user report — "the phrase is
+  nakadaka, but I sound like nakadaka", 「親鳥」 えさを…).** When the learner's
+  drop position and the dictionary's fall in the same coarse category
+  (only nakadaka has more than one interior position) the old message read
+  "Dictionaries mark X as nakadaka; your pitch here sounds like nakadaka
+  instead." `buildPitchAccentShapeObservations` now detects the same-label
+  case and names the mora the drop belongs on vs. where the learner put it
+  ("It belongs after 「や」 (mora 2), but yours stays high 1 mora too long
+  and drops after 「ど」 (mora 3)."). The underlying detection was already
+  correct — 親鳥 is Kanjium [2] and the recording did drop a mora late.
+  `pitchAccentObservations.ts` + one new test.
+
 - **2026-09-10 — Word-audio loop fell back to whole-sentence too often on
   colloquial sentences (user report — "why aren't pitch cards showing
   word-level playback", e.g. `で、なんか結構怖がってたりもしてね、最近は`).**
