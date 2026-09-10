@@ -121,6 +121,22 @@ export function diagnosePitchAccentDeviation({
     };
   }
 
+  // 3a-bis. Odaka: the word's own morae are high to the end and the drop
+  // lands on the following particle — learner kept the particle up.
+  if (
+    hasFollowing &&
+    expected[expected.length - 1] === 'l' &&
+    actual[actual.length - 1] === 'h' &&
+    expWord.every((cls, index) => cls === actWord[index])
+  ) {
+    const particle = followingText ? `「${followingText}」` : 'the particle after it';
+    return {
+      kind: 'particle-fall',
+      summary: `「${surfaceForm}」 is odaka — its accent is on the very end, so the pitch should fall on ${particle}, not within the word. Yours kept ${particle} up, which sounds unaccented.`,
+      hint: `The word itself stays high all the way through; the drop happens the instant ${particle} starts. Say 「${surfaceForm}」 flat and high, then let ${particle} fall away.`,
+    };
+  }
+
   // 3b. Word-final mora fell and nothing else did.
   if (
     !hasFollowing &&

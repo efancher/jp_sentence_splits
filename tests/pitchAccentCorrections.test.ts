@@ -94,6 +94,20 @@ describe('diagnosePitchAccentDeviation', () => {
     expect(result?.summary).toContain('「が」 should stay high');
   });
 
+  it('flags an odaka word whose particle stayed up as particle-fall', () => {
+    const result = diagnosePitchAccentDeviation({
+      surfaceForm: '橋',
+      moraeText: ['は', 'し'],
+      expected: hl('lhl'),
+      actual: hl('lhh'),
+      hasFollowing: true,
+      followingText: 'が',
+    });
+    expect(result?.kind).toBe('particle-fall');
+    expect(result?.summary).toContain('odaka');
+    expect(result?.summary).toContain('「が」');
+  });
+
   it('flags an all-one-level contour as flat', () => {
     const result = diagnosePitchAccentDeviation({
       surfaceForm: 'たまご',
