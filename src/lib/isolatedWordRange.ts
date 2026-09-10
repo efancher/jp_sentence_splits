@@ -17,6 +17,15 @@ import type { TimeRangeMs } from './recording';
  * pad is added each side. Returns null when the word can't be located (no
  * alignment, surface form absent, degenerate range) — callers fall back to
  * whole-sentence playback.
+ *
+ * Also returns null when an out-of-vocabulary token (`<unk>` — a word the
+ * aligner's lexicon didn't have, chiefly casual contractions like
+ * 怖がってたり) sits at or before the matched range: its characters are
+ * missing from the proportional basis while its airtime is not, so every
+ * token after it is time-shifted against its character position and the
+ * downstream mapping can't be trusted. Better a whole-sentence fallback
+ * than a confidently-wrong span. (`<eps>` is ordinary inter-word silence
+ * and doesn't trigger this.)
  */
 export function isolatedWordRange(
   words: WordAlignment[],
@@ -50,6 +59,13 @@ export function isolatedWordRange(
     }
   });
   if (startMs === null || endMs === null || endMs <= startMs) return null;
+
+  // An OOV token at/before the match makes the proportional map downstream
+  // unreliable (see doc comment) — bail to whole-sentence playback.
+  const matchEndMs = endMs;
+  if (words.some((w) => w.text === '<unk>' && w.end > w.start && w.start * 1000 < matchEndMs)) {
+    return null;
+  }
 
   const nextWord = usable[lastIndex + 1];
   if (nextWord && nextWord.text.length <= 2) endMs = nextWord.end * 1000;
