@@ -30,6 +30,7 @@
     "backfill:pitch-accent-unidic": "tsx scripts/backfill-vocabulary-pitch-accent-unidic.ts",
     "backfill:resegment-audio": "tsx scripts/backfill-resegment-audio.ts",
     "backfill:source-audio": "tsx scripts/backfill-source-audio.ts",
+    "backfill:reference-alignment": "tsx scripts/backfill-reference-alignment.ts",
     "fix:html-entity-meanings": "tsx scripts/fix-html-entity-meanings.ts",
     "fix:truncated-surface-forms": "tsx scripts/fix-truncated-surface-forms.ts",
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
