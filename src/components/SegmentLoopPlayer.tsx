@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { getReferenceAlignment, saveReferenceAlignment, setSentenceVocabularyAudioRange } from '../db/repository';
 import type { SentenceAudio, SentenceVocabulary } from '../domain/types';
@@ -16,7 +16,9 @@ import { WordAudioRangeEditor } from './WordAudioRangeEditor';
  * from forced alignment (`isolatedWordRange`) unless the learner has
  * hand-corrected it via the "Adjust" editor (a `SentenceVocabulary`
  * `audioStartMs`/`audioEndMs` override, passed in as `link`). With neither
- * it degrades to a plain whole-sentence play button.
+ * it degrades to a plain whole-sentence play button — but still offers
+ * "Adjust", seeded with a rough duration-proportional guess, so the learner
+ * can place the span by ear when alignment couldn't (see `proportionalSeed`).
  *
  * Plays through a local <audio> element + PlaybackCoordinator (which sets
  * `preservesPitch` so slowed playback keeps the pitch), not the
@@ -82,6 +84,32 @@ export function SegmentLoopPlayer({
 
   const range = override ?? autoRange;
 
+  // When forced alignment can't place the word (off-tailnet, OOV contraction,
+  // degenerate span) there's no `range` at all — and without one the "Adjust"
+  // editor was unreachable, so a learner had no recourse. Offer a crude
+  // duration-proportional guess (target's character span × clip length) purely
+  // as a starting point to drag from; it's never looped or persisted until the
+  // learner actually adjusts it. Needs a `link` to save to and a known
+  // duration. `wordOnly` callers have their own whole-sentence playback and
+  // don't want this.
+  const proportionalSeed = useMemo<TimeRangeMs | null>(() => {
+    if (range || wordOnly || !link || !alignmentResolved) return null;
+    const charIndex = japanese.indexOf(surfaceForm);
+    if (charIndex === -1 || surfaceForm.length === 0 || !audio.durationMs) return null;
+    const rawStart = (charIndex / japanese.length) * audio.durationMs;
+    const rawEnd = ((charIndex + surfaceForm.length) / japanese.length) * audio.durationMs;
+    const mid = (rawStart + rawEnd) / 2;
+    const half = Math.max((rawEnd - rawStart) / 2, 300);
+    return {
+      startMs: Math.round(Math.max(0, mid - half)),
+      endMs: Math.round(Math.min(audio.durationMs, mid + half)),
+    };
+  }, [range, wordOnly, link, alignmentResolved, japanese, surfaceForm, audio.durationMs]);
+
+  // What the loop button plays and the editor seeds from: a real range if we
+  // have one, else the guess while the editor is open (for a drag preview).
+  const editRange = range ?? (editing ? proportionalSeed : null);
+
   // Metadata-only row (audio synced from another device, blob not
   // downloaded yet) — fetch the clip before it can be looped.
   useEffect(() => {
@@ -136,11 +164,11 @@ export function SegmentLoopPlayer({
       return;
     }
     const el = audioElRef.current;
-    if (!el || !range) return;
+    if (!el || !editRange) return;
     nativeAudioController.stop();
     setIsLooping(true);
     try {
-      await coordinatorRef.current.loopRange(el, range, speed);
+      await coordinatorRef.current.loopRange(el, editRange, speed);
     } finally {
       setIsLooping(false);
     }
@@ -157,7 +185,7 @@ export function SegmentLoopPlayer({
   // pointer move — `persistOverride` runs on drag end / snap / reset.
   const previewOverride = (next: TimeRangeMs) => setOverride(next);
 
-  const canEdit = !!link && !!blob && !!range;
+  const canEdit = !!link && !!blob && (!!range || !!proportionalSeed);
 
   if (!blob) return null;
   // wordOnly: this control is optional scaffolding — show nothing rather
@@ -168,7 +196,7 @@ export function SegmentLoopPlayer({
     <div className="stack" style={{ gap: '0.35rem' }}>
       <audio ref={audioElRef} src={objectUrl ?? undefined} hidden />
       <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        {range ? (
+        {editRange ? (
           <button
             type="button"
             className={`speak-button${isLooping ? ' speaking' : ''}`}
@@ -189,7 +217,7 @@ export function SegmentLoopPlayer({
             }}
           />
         )}
-        {range ? (
+        {editRange ? (
           <label>
             Speed{' '}
             <select
@@ -219,17 +247,25 @@ export function SegmentLoopPlayer({
           </button>
         ) : null}
       </div>
-      {canEdit && editing && range ? (
+      {canEdit && editing && editRange ? (
         <WordAudioRangeEditor
           blob={blob}
-          value={range}
+          value={editRange}
           hasOverride={!!override}
           onChange={previewOverride}
           onCommit={persistOverride}
           onReset={() => persistOverride(null)}
         />
       ) : null}
-      {!range && alignmentResolved ? <div className="muted">{fallbackHint}</div> : null}
+      {!range && alignmentResolved ? (
+        <div className="muted">
+          {proportionalSeed && !editing
+            ? 'Couldn’t isolate just the word — tap Adjust to set it by ear.'
+            : proportionalSeed
+              ? 'Drag the edges onto the word, then Done.'
+              : fallbackHint}
+        </div>
+      ) : null}
     </div>
   );
 }

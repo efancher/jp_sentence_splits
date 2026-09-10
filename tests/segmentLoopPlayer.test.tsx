@@ -17,6 +17,7 @@ const audio: SentenceAudio = {
   id: 'audio-1',
   sentenceId: 'sent-1',
   sourceId: 'src-1',
+  durationMs: 3000,
   blob: new Blob(['reference-clip'], { type: 'audio/mp4' }),
   importedAt: new Date().toISOString(),
 } as SentenceAudio;
@@ -73,11 +74,22 @@ describe('SegmentLoopPlayer word-audio range', () => {
     expect(await screen.findByRole('img', { name: /word audio range editor/i })).toBeInTheDocument();
   });
 
-  it('falls back to the hint when there is neither alignment nor override', async () => {
+  it('still offers "Adjust" (seeded with a guess) when alignment cannot isolate the word', async () => {
     loadOrComputeAlignment.mockResolvedValue(undefined);
     render(
       <SegmentLoopPlayer audio={audio} japanese="私大学です" surfaceForm="大学" link={link()} />,
     );
+    // No auto range and no saved override — but a link + known duration means
+    // the learner can still place the span by ear.
+    expect(await screen.findByText(/tap adjust to set it by ear/i)).toBeInTheDocument();
+    const adjust = await screen.findByRole('button', { name: 'Adjust' });
+    await userEvent.setup().click(adjust);
+    expect(await screen.findByRole('img', { name: /word audio range editor/i })).toBeInTheDocument();
+  });
+
+  it('shows only the hint (no "Adjust") when there is no link to save a correction to', async () => {
+    loadOrComputeAlignment.mockResolvedValue(undefined);
+    render(<SegmentLoopPlayer audio={audio} japanese="私大学です" surfaceForm="大学" />);
     expect(await screen.findByText(/couldn.t isolate just the word/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Adjust/ })).not.toBeInTheDocument();
   });
