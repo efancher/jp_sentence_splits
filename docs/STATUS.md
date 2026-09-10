@@ -60,6 +60,20 @@ is trimmed.)
     aligned once anywhere. Not wired into mining-commit yet — the backfill
     plus opportunistic upload cover it; a commit-time hook is a marginal
     follow-up touching three delicate import sites.
+  - **Cascade gap found + fixed.** `cascadeRetireSentenceLocal` never
+    retired a sentence's `reference_audio` rows, so the 2026-09 "After
+    Work" / "GLIM SPANKY" sentence soft-deletes stranded **140** live
+    `reference_audio` rows pointing at deleted sentences (114 + 26) — why
+    the alignment backfill covered 473 of 613 rows. Cascade now sweeps
+    `db.sentenceAudio` (all three callers; re-segmentation opts out via a
+    new `retireAudio=false` arg since it transfers/retires clips itself).
+    `scripts/cleanup-orphaned-reference-audio.ts` (dry-run default,
+    `--apply`, `--delete-blobs`) clears the existing 140.
+  - Two individually mis-segmented clips that failed alignment
+    (`audio_7f9e2107` #932 乗馬, `audio_48a4f5a7` 説明が上手い人) were
+    tail-truncated (one also head-truncated); re-cut from the cached source
+    via the mining service, verified to align, and their `reference_audio`
+    rows + `reference_alignment` updated. Corpus now 473/473 aligned.
   - `isolatedWordRange` now returns `null` (→ whole-sentence fallback) when
     an `<unk>` token sits at/before the matched span. The aligner emits
     `<unk>` for out-of-vocabulary words — chiefly casual contractions like

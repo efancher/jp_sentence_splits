@@ -434,6 +434,19 @@ describe('deleteSentenceCascade', () => {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });
+    await db.sentenceAudio.put({
+      id: createId('audio'),
+      sentenceId: s.id,
+      sourceId: 'src-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Source',
+      mimeType: 'audio/mp4',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['clip'], { type: 'audio/mp4' }),
+      importedAt: nowIso(),
+    });
 
     await deleteSentenceCascade(s.id);
 
@@ -441,6 +454,9 @@ describe('deleteSentenceCascade', () => {
     expect(await db.analyses.get(s.id)).toBeUndefined();
     expect(await db.studyItems.get(study.id)).toBeUndefined();
     expect(await db.bookSentences.where('sentenceId').equals(s.id).count()).toBe(0);
+    // Reference recordings are retired too — otherwise the row is orphaned
+    // pointing at a deleted sentence.
+    expect(await db.sentenceAudio.where('sentenceId').equals(s.id).count()).toBe(0);
   });
 
   it('retires per-occurrence and last-occurrence-grammar study items too', async () => {

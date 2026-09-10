@@ -329,6 +329,10 @@ async function cascadeRetireSentenceLocal(
   sentenceId: string,
   sink: PendingSyncOp[],
   keepStudyItemIds: Set<string> = new Set(),
+  /** Re-segmentation transfers/retires the clips itself (see
+   * `newAudioRecords` / `retiredAudioIds` in `applyResegmentation`), so it
+   * opts out to avoid a double `reference_audio` delete for the same id. */
+  retireAudio = true,
 ): Promise<void> {
   const sentence = await db.sentences.get(sentenceId);
   if (!sentence) return;
@@ -441,6 +445,25 @@ async function cascadeRetireSentenceLocal(
     });
   }
 
+  // Reference recordings for this sentence — otherwise the row stays live
+  // pointing at a deleted sentence (nothing plays it, but it clutters the
+  // table and the reference_alignment backfill). Blob in Storage is left;
+  // an orphaned object under RLS is harmless and cheap.
+  if (retireAudio) {
+    for (const clip of await db.sentenceAudio
+      .where('sentenceId')
+      .equals(sentenceId)
+      .toArray()) {
+      await db.sentenceAudio.delete(clip.id);
+      sink.push({
+        entity: 'reference_audio',
+        recordId: clip.id,
+        payload: { id: clip.id },
+        operation: 'delete',
+      });
+    }
+  }
+
   await db.sentences.delete(sentenceId);
   sink.push({
     entity: 'sentences',
@@ -472,6 +495,7 @@ export async function deleteSentenceCascade(sentenceId: string): Promise<void> {
       db.sentenceGrammar,
       db.studyItems,
       db.inbox,
+      db.sentenceAudio,
     ],
     async () => {
       await cascadeRetireSentenceLocal(db, sentenceId, sink);
@@ -908,7 +932,7 @@ export async function applyResegmentation(
           }
           continue;
         }
-        await cascadeRetireSentenceLocal(db, oldId, sink, keepStudyItemIds);
+        await cascadeRetireSentenceLocal(db, oldId, sink, keepStudyItemIds, false);
       }
 
       // 5. Rebuild this source's slice of the book in segment order. Every
@@ -1165,6 +1189,7 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
       db.sentenceGrammar,
       db.studyItems,
       db.inbox,
+      db.sentenceAudio,
     ],
     async () => {
       for (const sentenceId of orphanSentenceIds) {
