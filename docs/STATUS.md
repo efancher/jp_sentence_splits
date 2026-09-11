@@ -30,6 +30,33 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-11 — POS badges in the vocabulary picker (user request, prompted
+  by wanting to learn to read Japanese dictionary entries).** New
+  `src/lib/posLabels.ts`: maps every UniDic pos tag seen in prod
+  `vocabulary_suggestions` (32 distinct values as of this date) to the term
+  a real Japanese dictionary would print (with the UniDic subcategory noted
+  parenthetically) plus a short English gloss — `describePos` (exact match,
+  falling back to a top-level-prefix table for anything unrecognized) and
+  `posTopLevelJa` (compact top-level term only). Wired into
+  `VocabularyPicker.tsx`: `MorphChipContent` gets a one-line compact badge
+  (e.g. "名詞") on every strip chip and the drag overlay; `SelectedCard`
+  shows the full breakdown (e.g. "名詞（普通名詞） · noun (common)") on
+  confirmed/tray cards, splitting a combined selection's `+`-joined pos
+  string per part. Strip-chip title tooltips upgraded to the friendly
+  ja+en text too. New `tests/posLabels.test.ts` + a
+  `tests/vocabularyPicker.test.tsx` case. Full vitest suite green (1330).
+  - Verified visually via a throwaway route+harness page (not committed) —
+    dev server + Playwright screenshots run through Docker
+    (`mcr.microsoft.com/playwright`, `--network host`), since the bare host
+    is missing browser shared libs (no sudo to install them). Desktop
+    (900px) render is clean. Found — but did not fix, out of scope for this
+    change — a **pre-existing** mobile-width (390px) bug in `SelectedCard`:
+    its header row wraps Japanese text one character per line, confirmed
+    pre-existing (not caused by the new pos line) because the untouched
+    `item.surface`/`item.expression` text wraps the same way. Likely the
+    Edit/Remove button pair leaving too little width for the `flex: 1;
+    min-width: 0` middle column at that viewport. Worth a follow-up.
+
 - **2026-09-11 — Root-caused a compound-noun reading bug the user'd hit
   before: お母さん → おははさん.** `suggestionFromToken`
   (`src/lib/vocabularySuggestions.ts`) unconditionally preferred

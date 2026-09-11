@@ -50,6 +50,13 @@ function Harness({
   );
 }
 
+describe('VocabularyPicker POS badge', () => {
+  it('shows the dictionary term + English gloss for a selected card', () => {
+    render(<Harness />);
+    expect(screen.getByText('名詞 · noun')).toBeInTheDocument();
+  });
+});
+
 describe('VocabularyPicker "Suggest (AI)"', () => {
   it('is hidden when no onSuggestMeaning prop is supplied', async () => {
     const user = userEvent.setup();

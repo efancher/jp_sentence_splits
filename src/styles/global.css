@@ -761,12 +761,17 @@ strong.jp {
 }
 
 .vocab-morph-reading,
-.vocab-morph-lemma {
+.vocab-morph-lemma,
+.vocab-morph-pos {
   font-size: 0.68rem;
   max-width: 6.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.vocab-selected-pos {
+  font-size: 0.8rem;
 }
 
 .vocab-morph-gap {

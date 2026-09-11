@@ -25,6 +25,7 @@ import type {
 } from '../domain/types';
 import type { SaveState } from '../hooks/useAutosave';
 import { createId } from '../lib/ids';
+import { describePos, posTopLevelJa } from '../lib/posLabels';
 import {
   buildMorphStrip,
   canMergeSelections,
@@ -116,15 +117,22 @@ function MorphChipContent({
   surface,
   expression,
   reading,
+  pos,
 }: {
   surface: string;
   expression?: string;
   reading?: string;
+  pos?: string;
 }) {
   const lemmaDiffers =
     expression != null &&
     expression.trim() !== '' &&
     expression.trim() !== surface.trim();
+  // Top-level dictionary term only (名詞, not 名詞（普通名詞）) — the full
+  // ja+en breakdown lives in the chip's title tooltip and in SelectedCard,
+  // which have room for it; this stays a one-word line so morph chips don't
+  // grow taller than the surface/reading/lemma stack already makes them.
+  const posLabel = posTopLevelJa(pos);
   return (
     <>
       <span className="vocab-morph-surface jp">{surface}</span>
@@ -134,6 +142,7 @@ function MorphChipContent({
       {lemmaDiffers ? (
         <span className="vocab-morph-lemma muted">→ {expression}</span>
       ) : null}
+      {posLabel ? <span className="vocab-morph-pos muted">{posLabel}</span> : null}
     </>
   );
 }
@@ -193,7 +202,10 @@ function DraggableMorphPiece({
         'Drag onto an adjacent piece or selected card to combine',
         suggestion.expression,
         suggestion.reading,
-        suggestion.pos || 'no POS',
+        (() => {
+          const label = describePos(suggestion.pos);
+          return label ? `${label.ja} · ${label.en}` : suggestion.pos || 'no POS';
+        })(),
       ]
         .filter(Boolean)
         .join(' · ')}
@@ -206,6 +218,7 @@ function DraggableMorphPiece({
         surface={suggestion.surface}
         expression={suggestion.expression}
         reading={suggestion.reading}
+        pos={suggestion.pos}
       />
     </button>
   );
@@ -358,6 +371,13 @@ function SelectedCard({
     Boolean(item.surface) &&
     validateSpan(japanese, item.start, item.end, item.surface);
   const combinedWarning = combinedExpressionWarning(item);
+  // A combined selection's pos is several tags joined with "+" (see
+  // mergeSuggestionIntoSelection/combineSuggestions) — describe each part
+  // rather than failing the whole-string lookup.
+  const posLabels = (item.pos ?? '')
+    .split('+')
+    .map((part) => describePos(part))
+    .filter((label): label is NonNullable<typeof label> => label != null);
   const missingMeaning =
     selectionNeedsMeaning(item.pos) && !(item.english ?? '').trim();
   const style: CSSProperties = transform
@@ -405,6 +425,11 @@ function SelectedCard({
               <span className="muted"> → {item.expression}</span>
             ) : null}
           </div>
+          {posLabels.length ? (
+            <div className="muted vocab-selected-pos">
+              {posLabels.map((label) => `${label.ja} · ${label.en}`).join(' + ')}
+            </div>
+          ) : null}
           {item.source === 'combined' ? (
             <div className="muted">Combined from adjacent pieces</div>
           ) : null}
@@ -963,6 +988,7 @@ export function VocabularyPicker({
                 surface={activeSuggestion.surface}
                 expression={activeSuggestion.expression}
                 reading={activeSuggestion.reading}
+                pos={activeSuggestion.pos}
               />
             </div>
           ) : activeSelection ? (
