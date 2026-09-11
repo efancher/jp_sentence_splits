@@ -418,7 +418,7 @@ function SelectedCard({
         >
           ⠿
         </button>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: '10rem' }}>
           <div className="jp">
             {item.surface || '(no surface)'}
             {item.expression ? (

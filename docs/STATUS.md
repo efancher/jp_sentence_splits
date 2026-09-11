@@ -49,13 +49,20 @@ what's left is one deferred durability item (below).
     dev server + Playwright screenshots run through Docker
     (`mcr.microsoft.com/playwright`, `--network host`), since the bare host
     is missing browser shared libs (no sudo to install them). Desktop
-    (900px) render is clean. Found — but did not fix, out of scope for this
-    change — a **pre-existing** mobile-width (390px) bug in `SelectedCard`:
-    its header row wraps Japanese text one character per line, confirmed
-    pre-existing (not caused by the new pos line) because the untouched
-    `item.surface`/`item.expression` text wraps the same way. Likely the
-    Edit/Remove button pair leaving too little width for the `flex: 1;
-    min-width: 0` middle column at that viewport. Worth a follow-up.
+    (900px) render is clean. Found, and then fixed same day (user: "I use
+    it on my phone a lot") — a **pre-existing** mobile-width (390px) bug in
+    `SelectedCard`: its header row (drag handle + content + Edit/Remove, all
+    one `flex-wrap: wrap` row) wrapped Japanese text one character per line,
+    because the content column's `min-width: 0` let flexbox shrink it to a
+    sliver once the drag handle and Edit/Remove buttons claimed most of a
+    narrow row, rather than wrapping the buttons down. Confirmed
+    pre-existing (not caused by the new pos line) — the untouched
+    `item.surface`/`item.expression` text wrapped the same way. Fix:
+    `min-width: 0` → `min-width: 10rem` on that column, so flex-wrap now
+    reliably pushes Edit/Remove onto their own line below content instead
+    of collapsing it — verified at both 390px and 900px (desktop now also
+    wraps buttons below on the narrower vocab-picker panel width, which
+    reads fine, not broken).
 
 - **2026-09-11 — Root-caused a compound-noun reading bug the user'd hit
   before: お母さん → おははさん.** `suggestionFromToken`
