@@ -7,6 +7,7 @@ import {
   getBookProgress,
   getDb,
 } from '../db/repository';
+import { isBookInStudyRotation } from '../lib/suspendedBooks';
 
 export function BooksPage() {
   const navigate = useNavigate();
@@ -21,8 +22,10 @@ export function BooksPage() {
       })),
     );
     return withProgress.sort((a, b) => {
-      if (a.book.archived !== b.book.archived) {
-        return a.book.archived ? 1 : -1;
+      const aActive = isBookInStudyRotation(a.book);
+      const bActive = isBookInStudyRotation(b.book);
+      if (aActive !== bActive) {
+        return aActive ? -1 : 1;
       }
       return (b.book.lastOpenedAt ?? b.book.updatedAt).localeCompare(
         a.book.lastOpenedAt ?? a.book.updatedAt,
@@ -64,7 +67,9 @@ export function BooksPage() {
           <article key={book.id} className="list-card">
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <strong>{book.title}</strong>
-              {book.archived ? (
+              {book.suspendedAt ? (
+                <span className="status-pill">Suspended</span>
+              ) : book.archived ? (
                 <span className="status-pill">Archived</span>
               ) : null}
             </div>

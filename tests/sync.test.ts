@@ -601,6 +601,15 @@ describe('sync mappers', () => {
     const local = remoteToBook(remote);
     expect(local.title).toBe('Mapper book');
     expect(local.notes).toBe('n');
+    expect(local.suspendedAt).toBeUndefined();
+
+    const suspended = { ...book, suspendedAt: '2026-09-11T00:00:00.000Z' };
+    expect(bookToRemote(suspended, 'user-1', 4).suspended_at).toBe(
+      '2026-09-11T00:00:00.000Z',
+    );
+    expect(remoteToBook(bookToRemote(suspended, 'user-1', 4)).suspendedAt).toBe(
+      '2026-09-11T00:00:00.000Z',
+    );
   });
 
   it('round-trips a vocabulary item through remote shape', async () => {

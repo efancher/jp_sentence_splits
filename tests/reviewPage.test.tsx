@@ -11,6 +11,7 @@ import {
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
+  setBookSuspended,
   updateSettings,
 } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
@@ -367,6 +368,27 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await getDb().studyItems.count()).toBe(1); // reading_in_context only
     });
+  });
+
+  it('holds a suspended book out of the global queue but not its own book review', async () => {
+    await seedBookWithSentence();
+
+    const globalBefore = renderReviewPage('/review', '/review');
+    expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
+    globalBefore.unmount();
+
+    await setBookSuspended('book-1', true);
+
+    const globalAfter = renderReviewPage('/review', '/review');
+    expect(
+      await screen.findByText('No sentences to review here yet.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+    globalAfter.unmount();
+
+    // The book's own review page is an explicit opt-in — still shows its cards.
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+    expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
   });
 
   it('never lazily seeds a full-sentence card for a sentence whose vocabulary has never been reviewed (Phase 7.11)', async () => {

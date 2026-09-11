@@ -41,6 +41,7 @@ import {
   reorderBookSentences,
   restoreBookSentenceSnapshot,
   setBookCollapsedChapterIds,
+  setBookSuspended,
   touchBookOpened,
   transferBookSentences,
   updateBook,
@@ -394,6 +395,14 @@ export function BookDetailPage() {
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />
         </section>
+        {data.book.suspendedAt ? (
+          <p className="muted" style={{ margin: 0 }}>
+            Suspended — this book produces no new session work and its review
+            cards are paused. “Resume studying” brings them back (spread over the
+            next week so there’s no overdue pile); “Continue” picks up where you
+            left off.
+          </p>
+        ) : null}
         <div className="row">
           <button
             type="button"
@@ -405,7 +414,7 @@ export function BookDetailPage() {
               }
             }}
           >
-            Resume
+            Continue
           </button>
           <Link to={`/books/${bookId}/practice`}>
             <button type="button">Practice</button>
@@ -423,6 +432,14 @@ export function BookDetailPage() {
           ) : null}
           <button type="button" onClick={() => setEditMetadata(true)}>
             Edit details
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await setBookSuspended(bookId, !data.book.suspendedAt);
+            }}
+          >
+            {data.book.suspendedAt ? 'Resume studying' : 'Suspend studying'}
           </button>
           <button
             type="button"

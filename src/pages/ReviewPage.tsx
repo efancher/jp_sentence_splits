@@ -23,6 +23,7 @@ import {
   getDb,
   getDueStudyItems,
   getReferencePitchTrack,
+  loadSuspendedBookIndex,
   saveReferencePitchTrack,
   getProficientVocabularyItemIds,
   getSentenceFullReviewReadiness,
@@ -69,6 +70,7 @@ import {
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
+import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
@@ -969,6 +971,17 @@ export function ReviewPage() {
       sentences.sort(
         (a, b) => a.firstOccurrenceIndex - b.firstOccurrenceIndex,
       );
+      // Hold back sentences (and, downstream, the words) that the learner only
+      // meets in suspended books — the global queue shouldn't keep drilling a
+      // book they've shelved. Words shared with an active book still surface via
+      // that book's sentences. The book-scoped path (`bookId` set) is exempt:
+      // opening a suspended book's own review is deliberate.
+      const suspendedIndex = await loadSuspendedBookIndex();
+      if (suspendedIndex) {
+        sentences = sentences.filter(
+          (sentence) => !sentenceIsSuspendedOnly(sentence.id, suspendedIndex),
+        );
+      }
     }
     const sentenceIds = sentences.map((item) => item.id);
     const sentenceIdSet = new Set(sentenceIds);

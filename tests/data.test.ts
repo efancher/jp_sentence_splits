@@ -41,6 +41,9 @@ import {
   listSentenceGrammarForPattern,
   getVocabularyTargetCandidates,
   listAttemptsForSentence,
+  loadSuspendedBookIndex,
+  setBookSuspended,
+  RESUME_RESCHEDULE_SPREAD_DAYS,
   listCardIssueReports,
   listCardIssueReportsWithContext,
   materializeVocabularySelections,
@@ -82,6 +85,7 @@ import type {
   StudyActivityType,
   VocabularySelection,
 } from '../src/domain/types';
+import { studyItemIsHeldBackBySuspension } from '../src/lib/suspendedBooks';
 import { parseBackupJson } from '../src/lib/backup';
 import { parseSatoriCsvText } from '../src/lib/csvImport';
 import { createId } from '../src/lib/ids';
@@ -774,6 +778,102 @@ describe('FSRS review (study_items/reviews)', () => {
 
     const withoutGraduation = await getDueStudyItems(['comprehension']);
     expect(withoutGraduation.map((row) => row.id)).toEqual([item.id]);
+  });
+
+  describe('book suspension', () => {
+    const seedSuspensionFixture = async () => {
+      const db = getDb();
+      const now = new Date().toISOString();
+      const bookA = await createBook({ title: 'Hard book' });
+      const bookB = await createBook({ title: 'Easy book' });
+      for (const id of ['s1', 's2']) {
+        await db.sentences.add({
+          id,
+          normalizedKey: id,
+          japanese: `${id}。`,
+          readingOnly: '',
+          inlineReading: '',
+          translation: '',
+          targetVocabulary: [],
+          vocabularySuggestions: [],
+          sourceReferences: [],
+          conflicts: [],
+          firstOccurrenceIndex: id === 's1' ? 0 : 1,
+          importBatchIds: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      // s1 lives only in the hard book; s2 is shared with the easy book.
+      await db.bookSentences.bulkAdd([
+        { id: 'm1', bookId: bookA.id, sentenceId: 's1', position: 0, status: 'in_progress', addedAt: now },
+        { id: 'm2', bookId: bookA.id, sentenceId: 's2', position: 1, status: 'in_progress', addedAt: now },
+        { id: 'm3', bookId: bookB.id, sentenceId: 's2', position: 0, status: 'in_progress', addedAt: now },
+      ]);
+      for (const vocabId of ['w1', 'w2']) {
+        await db.vocabularyItems.add({
+          id: vocabId,
+          expression: vocabId,
+          reading: vocabId,
+          meaning: '',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      // w1 only met in s1 (hard-only); w2 met in s1 and s2 (also in easy book).
+      await db.sentenceVocabulary.bulkAdd([
+        { id: 'L1', sentenceId: 's1', vocabularyItemId: 'w1', surfaceForm: 'w1', createdAt: now, updatedAt: now },
+        { id: 'L2', sentenceId: 's1', vocabularyItemId: 'w2', surfaceForm: 'w2', createdAt: now, updatedAt: now },
+        { id: 'L3', sentenceId: 's2', vocabularyItemId: 'w2', surfaceForm: 'w2', createdAt: now, updatedAt: now },
+      ]);
+      return { bookA, bookB };
+    };
+
+    it('setBookSuspended sets and clears Book.suspendedAt', async () => {
+      const book = await createBook({ title: 'B' });
+      const suspended = await setBookSuspended(book.id, true);
+      expect(suspended.suspendedAt).toBeTruthy();
+      const resumed = await setBookSuspended(book.id, false);
+      expect(resumed.suspendedAt).toBeUndefined();
+    });
+
+    it('loadSuspendedBookIndex holds back only cards exclusive to a suspended book', async () => {
+      const { bookA } = await seedSuspensionFixture();
+      expect(await loadSuspendedBookIndex()).toBeNull();
+
+      await setBookSuspended(bookA.id, true);
+      const index = await loadSuspendedBookIndex();
+      expect(index).not.toBeNull();
+
+      const held = (subjectType: string, subjectId: string) =>
+        studyItemIsHeldBackBySuspension({ subjectType: subjectType as never, subjectId }, index!);
+      expect(held('sentence', 's1')).toBe(true);
+      expect(held('sentence', 's2')).toBe(false);
+      expect(held('vocabularyItem', 'w1')).toBe(true);
+      expect(held('vocabularyItem', 'w2')).toBe(false);
+      expect(held('sentenceVocabulary', 'L1')).toBe(true);
+      expect(held('sentenceVocabulary', 'L3')).toBe(false);
+    });
+
+    it('resuming a book spreads its overdue cards over the coming days', async () => {
+      const db = getDb();
+      const { bookA } = await seedSuspensionFixture();
+      const wayOverdue = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const seedItem = await ensureStudyItem('sentence', 's1', 'reading_in_context');
+      await db.studyItems.update(seedItem.id, {
+        fsrsState: { ...seedItem.fsrsState, due: wayOverdue },
+      });
+
+      await setBookSuspended(bookA.id, true);
+      await setBookSuspended(bookA.id, false);
+
+      const after = await db.studyItems.get(seedItem.id);
+      const due = new Date(after!.fsrsState.due).getTime();
+      expect(due).toBeGreaterThanOrEqual(Date.now() - 60_000);
+      expect(due).toBeLessThanOrEqual(
+        Date.now() + (RESUME_RESCHEDULE_SPREAD_DAYS + 1) * 24 * 60 * 60 * 1000,
+      );
+    });
   });
 
   it('recordReview appends a Review and advances the study item past "new"', async () => {

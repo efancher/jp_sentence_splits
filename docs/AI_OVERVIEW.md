@@ -670,8 +670,20 @@ and the counter frozen at 0.
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori
   chapter text, `src/lib/pasteOrder.ts`; NFKC substring match, with a
   trailing-`。`-stripped retry since Satori drops the closing punctuation on
-  each episode's last sentence), move/copy sentences between
-  books, archive books. Two book-delete buttons: "Delete book" drops the
+  each episode's last sentence), move/copy sentences between books.
+  **Two shelving states, distinct:** *Archive* (`Book.archived`) tidies a
+  finished book off the library list and out of session-planner rotation but
+  leaves its review cards flowing for long-term retention; *Suspend studying*
+  (`Book.suspendedAt`, `setBookSuspended`) shelves a book that's currently too
+  hard — same planner exclusion **plus** its exclusive review cards are held
+  back from the global `/review` queue (a word or sentence is only held back
+  when *every* book it belongs to is suspended — `src/lib/suspendedBooks.ts`;
+  `loadSuspendedBookIndex` short-circuits to `null` when nothing is suspended).
+  "Resume studying" clears the flag and spreads any now-overdue held-back cards
+  over the next week; "Continue" (the old "Resume" button) jumps to the first
+  unfinished sentence. The book-scoped review path (`/books/:id/review`) ignores
+  suspension — opening it is an explicit opt-in.
+  Two book-delete buttons: "Delete book" drops the
   book but leaves its sentences in the library; "Delete book + sentences"
   (`deleteBookCascade`, two-step inline confirm) also retires every
   sentence the book would orphan, keeping any shared with another book.

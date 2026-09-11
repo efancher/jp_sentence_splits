@@ -33,6 +33,45 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-11 — "Suspend studying" for a book that's too hard right now
+  (user request).** New `Book.suspendedAt` (nullable ISO timestamp), distinct
+  from `archived`: archiving tidies a *finished* book off the library while its
+  review cards keep flowing for retention; suspending shelves a *too-hard* book
+  — it drops out of every session-planner candidate source (the three finders
+  now filter via a shared `isBookInStudyRotation`, was `!book.archived`) **and**
+  its exclusive SRS cards are held back from the global `/review` queue.
+  - New pure `src/lib/suspendedBooks.ts` — `SuspendedBookIndex` +
+    `sentenceIsSuspendedOnly` / `vocabularyItemIsSuspendedOnly` /
+    `studyItemIsHeldBackBySuspension`. A sentence (and, transitively, a word) is
+    only held back when *every* book it belongs to is suspended, so a word
+    shared with an active book keeps being reviewed there. `grammarPattern`
+    subjects are never held back (not book-scoped).
+  - `loadSuspendedBookIndex()` (`repository.ts`) returns `null` when no book is
+    suspended — the common case, zero extra IO; otherwise reads the whole
+    `bookSentences` + `sentenceVocabulary` tables (a few times per review-init /
+    plan). `ReviewPage`'s global-scope `scope` filters `sentences` by
+    `sentenceIsSuspendedOnly` (cascades to vocab/audio/conjugation candidates);
+    `getSessionPlannerInput` filters `retainDue`/`practiceDue`. The book-scoped
+    review path (`/books/:id/review`) is exempt — opening a suspended book's own
+    review is deliberate.
+  - `setBookSuspended(bookId, suspended)` — on **resume** it calls
+    `rescheduleResumedBookItems`: every overdue held-back card of that book gets
+    its `due` spread round-robin over the next `RESUME_RESCHEDULE_SPREAD_DAYS`
+    (7) days (FSRS state otherwise untouched — the cards were shelved, not
+    failed), so there's no one big overdue pile.
+  - UI: `BookDetailPage` gets a "Suspend studying" / "Resume studying" toggle
+    next to Archive + a status note; the existing jump-to-sentence button is
+    renamed "Resume" → "Continue" to avoid the clash. `BooksPage` shows a
+    "Suspended" pill and sinks suspended books (via `isBookInStudyRotation`).
+  - Sync: `books.suspended_at timestamptz`
+    (`20260911000000_book_suspended_at.sql`), `bookToRemote`/`remoteToBook`,
+    `bookSchema`. No Dexie bump (not indexed).
+  - Tests: `tests/suspendedBooks.test.ts` (new), + cases in
+    `tests/data.test.ts` (suspend/resume + reschedule),
+    `tests/sessionPlannerRepository.test.ts` (planner exclusion),
+    `tests/reviewPage.test.tsx` (global queue holds back, book-scoped doesn't),
+    `tests/sync.test.ts` (mapper round-trip). Full vitest suite green (1323).
+
 - **2026-09-10 — Pitch-accent misses now come with a corrective "Try this:"
   hint (user request).** New `pitchAccentCorrections.ts`
   (`diagnosePitchAccentDeviation`) classifies the dictionary-vs-recording

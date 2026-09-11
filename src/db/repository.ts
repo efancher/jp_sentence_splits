@@ -101,6 +101,11 @@ import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { nowIso, normalizeSentenceKey } from '../lib/normalize';
 import { buildReadingContextMap } from '../lib/readingContext';
 import {
+  isBookInStudyRotation,
+  studyItemIsHeldBackBySuspension,
+  type SuspendedBookIndex,
+} from '../lib/suspendedBooks';
+import {
   concatCut,
   type ResegmentPlan,
   type ResegmentPlannedSentence,
@@ -221,7 +226,13 @@ export async function updateBook(
   patch: Partial<
     Pick<
       Book,
-      'title' | 'sourceKey' | 'subtitle' | 'sourceUrl' | 'notes' | 'archived'
+      | 'title'
+      | 'sourceKey'
+      | 'subtitle'
+      | 'sourceUrl'
+      | 'notes'
+      | 'archived'
+      | 'suspendedAt'
     >
   >,
 ): Promise<Book> {
@@ -237,6 +248,141 @@ export async function updateBook(
   await db.books.put(updated);
   notifySync('books', updated.id, updated);
   return updated;
+}
+
+/** How far ahead a resumed book's overdue held-back cards are spread. */
+export const RESUME_RESCHEDULE_SPREAD_DAYS = 7;
+
+/**
+ * Shelve or un-shelve a book (`Book.suspendedAt`). While suspended it drops out
+ * of every session-planner candidate source and its exclusive review cards are
+ * held back from the global queue (see `src/lib/suspendedBooks.ts`). Resuming
+ * clears the flag and spreads any of the book's now-overdue held-back cards over
+ * the next `RESUME_RESCHEDULE_SPREAD_DAYS` days so the learner doesn't face one
+ * big overdue pile — the cards were shelved, not failed, so their FSRS state is
+ * otherwise untouched.
+ */
+export async function setBookSuspended(
+  bookId: string,
+  suspended: boolean,
+  now: Date = new Date(),
+): Promise<Book> {
+  const db = getDb();
+  const existing = await db.books.get(bookId);
+  if (!existing) throw new Error('Book not found');
+  const updated: Book = {
+    ...existing,
+    suspendedAt: suspended ? (existing.suspendedAt ?? now.toISOString()) : undefined,
+    updatedAt: now.toISOString(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
+  if (!suspended && existing.suspendedAt) {
+    await rescheduleResumedBookItems(bookId, now);
+  }
+  return updated;
+}
+
+/**
+ * On resume: pull every overdue study item belonging to this book
+ * (sentence / vocabularyItem / sentenceVocabulary subjects) forward off "way
+ * overdue" and distribute it round-robin across the next
+ * `RESUME_RESCHEDULE_SPREAD_DAYS` days. Only ever moves a due date that is
+ * already in the past, and only later within the spread window — never earlier
+ * than `now`. Idempotent-ish (a second call finds nothing overdue).
+ */
+async function rescheduleResumedBookItems(bookId: string, now: Date): Promise<void> {
+  const db = getDb();
+  const nowIsoValue = now.toISOString();
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+  const sentenceIds = new Set(memberships.map((m) => m.sentenceId));
+  if (sentenceIds.size === 0) return;
+  const links = await db.sentenceVocabulary
+    .where('sentenceId')
+    .anyOf([...sentenceIds])
+    .toArray();
+  const linkIds = new Set(links.map((link) => link.id));
+  const vocabularyItemIds = new Set(links.map((link) => link.vocabularyItemId));
+
+  const candidates = (await db.studyItems.toArray()).filter((item) => {
+    if (item.fsrsState.due > nowIsoValue) return false;
+    switch (item.subjectType) {
+      case 'sentence':
+        return sentenceIds.has(item.subjectId);
+      case 'vocabularyItem':
+        return vocabularyItemIds.has(item.subjectId);
+      case 'sentenceVocabulary':
+        return linkIds.has(item.subjectId);
+      default:
+        return false;
+    }
+  });
+  if (candidates.length === 0) return;
+
+  candidates.sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const perDay = Math.ceil(candidates.length / RESUME_RESCHEDULE_SPREAD_DAYS);
+  const updates = candidates.map((item, index) => {
+    const dayOffset = Math.floor(index / perDay);
+    const due = new Date(now.getTime() + dayOffset * dayMs + (index % perDay) * 60_000);
+    return {
+      ...item,
+      fsrsState: { ...item.fsrsState, due: due.toISOString() },
+      updatedAt: nowIsoValue,
+    };
+  });
+  await db.studyItems.bulkPut(updates);
+  notifySyncMany(
+    updates.map((item) => ({
+      entity: 'study_items' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+  );
+}
+
+/**
+ * Builds the index the global review queue and the session planner use to hold
+ * back a suspended book's exclusive cards. Returns `null` when no book is
+ * suspended — the overwhelmingly common case — so callers pay nothing. When a
+ * book *is* suspended it reads the whole `bookSentences` + `sentenceVocabulary`
+ * tables (a few times per review-init / plan); acceptable at this scale.
+ */
+export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
+  const db = getDb();
+  const books = await db.books.toArray();
+  const suspendedBookIds = new Set(
+    books.filter((book) => book.suspendedAt).map((book) => book.id),
+  );
+  if (suspendedBookIds.size === 0) return null;
+
+  const [memberships, links] = await Promise.all([
+    db.bookSentences.toArray(),
+    db.sentenceVocabulary.toArray(),
+  ]);
+
+  const bookIdsBySentenceId = new Map<string, string[]>();
+  for (const membership of memberships) {
+    const list = bookIdsBySentenceId.get(membership.sentenceId);
+    if (list) list.push(membership.bookId);
+    else bookIdsBySentenceId.set(membership.sentenceId, [membership.bookId]);
+  }
+
+  const sentenceIdsByVocabularyItemId = new Map<string, string[]>();
+  const sentenceIdByLinkId = new Map<string, string>();
+  for (const link of links) {
+    sentenceIdByLinkId.set(link.id, link.sentenceId);
+    const list = sentenceIdsByVocabularyItemId.get(link.vocabularyItemId);
+    if (list) list.push(link.sentenceId);
+    else sentenceIdsByVocabularyItemId.set(link.vocabularyItemId, [link.sentenceId]);
+  }
+
+  return {
+    suspendedBookIds,
+    bookIdsBySentenceId,
+    sentenceIdsByVocabularyItemId,
+    sentenceIdByLinkId,
+  };
 }
 
 /**
@@ -5363,7 +5509,7 @@ async function buildReviewPriorityInputs(
 async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]> {
   const db = getDb();
   const books = (await db.books.toArray())
-    .filter((book) => !book.archived)
+    .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
@@ -5463,7 +5609,7 @@ async function findUnderstandCandidates(limit: number): Promise<UnderstandCandid
 async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoticingCandidate[]> {
   const db = getDb();
   const books = (await db.books.toArray())
-    .filter((book) => !book.archived)
+    .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
@@ -5529,7 +5675,7 @@ async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoti
 async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<string>> {
   const db = getDb();
   const books = (await db.books.toArray())
-    .filter((book) => !book.archived)
+    .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, bookLimit);
   const ids = new Set<string>();
@@ -5742,8 +5888,21 @@ export async function getSessionPlannerInput(
     findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
     findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
+    // NOTE: not filtered for suspended books — a word only met in a suspended
+    // book still counts toward the backlog here, so the planner may slightly
+    // over-reserve review minutes while a book is shelved. Tolerable; the
+    // seeded cards themselves are held back downstream.
     countNewVocabularyCardBacklog(),
   ]);
+
+  // Hold back the exclusive review cards of any suspended book — same
+  // treatment ReviewPage's global queue gives them (see src/lib/suspendedBooks).
+  // `null` (nothing suspended) is the common case and skips all the work.
+  const suspendedIndex = await loadSuspendedBookIndex();
+  const notSuspended = (items: StudyItem[]): StudyItem[] =>
+    suspendedIndex
+      ? items.filter((item) => !studyItemIsHeldBackBySuspension(item, suspendedIndex))
+      : items;
 
   // Drop grammar due items whose pattern has no full-review-ready context
   // sentence right now — ReviewPage can't surface them (it drops the pattern
@@ -5752,8 +5911,8 @@ export async function getSessionPlannerInput(
   // purpose: planRecommendedSession must not persist anything, so unlike
   // ReviewPage this can't lean on deferUnreadyGrammarReviews.
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(retainDueItems),
-    filterReadyGrammarDueItems(practiceDueItems),
+    filterReadyGrammarDueItems(notSuspended(retainDueItems)),
+    filterReadyGrammarDueItems(notSuspended(practiceDueItems)),
   ]);
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream

@@ -258,6 +258,14 @@ export interface Book {
   sourceUrl?: string;
   notes?: string;
   archived: boolean;
+  /**
+   * When set, the book is shelved: it produces no session-planner work
+   * (glossing / grammar / shadowing) AND its exclusive review cards are held
+   * back from the global `/review` queue until the learner resumes it. Distinct
+   * from `archived` (a library-tidiness flag that still allows retention
+   * reviews). See `src/lib/suspendedBooks.ts`.
+   */
+  suspendedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;

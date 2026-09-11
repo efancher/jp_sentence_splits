@@ -14,8 +14,10 @@ import {
   ensureStudyItem,
   getDb,
   getPlannerSession,
+  getSessionPlannerInput,
   getTodayPlannerSession,
   planRecommendedSession,
+  setBookSuspended,
   recordReview,
   saveAttempt,
   setBookSentenceStatus,
@@ -69,6 +71,29 @@ describe('Learning Orchestrator repository layer', () => {
     const exploreStep = recommended.steps.find((step) => step.bucket === 'glossing');
     expect(exploreStep).toBeDefined();
     expect(exploreStep!.bookId).toBe(book.id);
+  });
+
+  it('a suspended book drops out of explore candidates and its due cards out of the review pool', async () => {
+    const book = await createBook({ title: 'Too Hard' });
+    const db = getDb();
+    const sentences = [makeSentence(), makeSentence()];
+    await db.sentences.bulkPut(sentences);
+    await addSentencesToBook(
+      book.id,
+      sentences.map((s) => s.id),
+    );
+    // A due sentence card from this book.
+    const card = await ensureStudyItem('sentence', sentences[0]!.id, 'reading_in_context');
+
+    const before = await getSessionPlannerInput(60);
+    expect(before.exploreCandidates.some((c) => c.bookId === book.id)).toBe(true);
+    expect(before.retainDue.some((d) => d.studyItemId === card.id)).toBe(true);
+
+    await setBookSuspended(book.id, true);
+
+    const after = await getSessionPlannerInput(60);
+    expect(after.exploreCandidates.some((c) => c.bookId === book.id)).toBe(false);
+    expect(after.retainDue.some((d) => d.studyItemId === card.id)).toBe(false);
   });
 
   it('counts confirmed-but-never-introduced words as the new-card backlog, and the planner reserves review minutes for them', async () => {

@@ -92,6 +92,7 @@ export const bookSchema = z.object({
   sourceUrl: z.string().optional(),
   notes: z.string().optional(),
   archived: z.boolean(),
+  suspendedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastOpenedAt: z.string().optional(),

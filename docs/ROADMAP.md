@@ -218,6 +218,13 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   English-transfer cause. The scorer also now flags a correct drop with
   the wrong shape around it (medium/low confidence, measured morae only).
   Detail in STATUS.md.
+- [x] **Suspend a too-hard book.** (2026-09-11) New `Book.suspendedAt`,
+  distinct from `archived`: shelves a book that's currently too hard — out of
+  session-planner rotation *and* its exclusive review cards held back from the
+  global queue (only when every book a word/sentence belongs to is suspended —
+  `src/lib/suspendedBooks.ts`). Resume spreads now-overdue held-back cards over
+  the next week. `BookDetailPage` "Suspend studying" / "Resume studying" toggle;
+  "Resume" jump button renamed "Continue". Detail in STATUS.md.
 
 ## In progress
 
