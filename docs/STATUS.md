@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 
+- **2026-09-11 — Two grammar review-card bugs found via card issue triage.**
+  - `GrammarCompletionCard` (`grammar_completion`): the reveal only named the
+    correct pattern inside the `<mark>` blank, which only renders when
+    `blankPatternInSentence` finds the pattern's canonical name verbatim in
+    the sentence — never true for any pattern with a parenthetical
+    annotation (e.g. `～ている（状態描写）`) or a conjugated/colloquial surface
+    form. A wrong answer on those cards showed "✗ Not quite" with no visible
+    correction. Now always shows "Correct: {canonicalName}" when there's no
+    blank to mark it in. (report card_issue_f8eb6258)
+  - `GrammarComprehensionCard` (`grammar_comprehension`): reused the same
+    `blankPatternInSentence` literal-match as a check, not a blank — when it
+    misses, a note now flags that the sentence uses a conjugated/colloquial
+    form of the pattern rather than its dictionary form (e.g. てる for ている),
+    since the AI-generated `explanation` field doesn't reliably call that out
+    itself. (report card_issue_f222efff)
+  - Both in `src/pages/ReviewPage.tsx`. Full vitest suite green (1323).
+  - Also ran `merge:duplicate-vocabulary-items --apply` while triaging a
+    third report (reading_production on 頑張る showing expected answer
+    "がんばっ" instead of "がんばる" — the known expression/reading-mismatch
+    bug, see "Vocabulary reading-mismatch bug + cleanup" below). Cleared 64
+    buggy/correct duplicate pairs backlog-wide (not just 頑張る); script is
+    idempotent and repoints reviews/card_issue_reports onto the surviving
+    item, so the report itself followed its study item to the merged
+    correct-reading item automatically. 0 pairs remain.
+
 - **2026-09-11 — "Suspend studying" for a book that's too hard right now
   (user request).** New `Book.suspendedAt` (nullable ISO timestamp), distinct
   from `archived`: archiving tidies a *finished* book off the library while its

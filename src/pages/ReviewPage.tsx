@@ -2702,6 +2702,13 @@ function ContrastivePairCard({
  * the sentence translation — self-rated, no typed/selected answer, same
  * "bare self-rating, no auto-classification" shape as plain
  * comprehension/reading_in_context.
+ *
+ * Reuses blankPatternInSentence (built for GrammarCompletionCard's blank)
+ * purely as a literal-match check: when the pattern's dictionary form
+ * doesn't appear verbatim (conjugated/colloquial surface, e.g. てる for
+ * ている), a note flags that explicitly on reveal — user report 2026-09-10
+ * (card_issue_f222efff), learner couldn't find "ている" in "緊張してる？" and
+ * the AI-generated explanation didn't call out the contraction.
  */
 function GrammarComprehensionCard({
   candidate,
@@ -2713,6 +2720,7 @@ function GrammarComprehensionCard({
   onReveal: () => void;
 }) {
   const { pattern, sentence } = candidate;
+  const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
   return (
     <>
       <div className="jp jp-lg">{sentence.japanese}</div>
@@ -2725,6 +2733,13 @@ function GrammarComprehensionCard({
         </button>
       ) : (
         <>
+          {!blank ? (
+            <div className="muted">
+              Note: this sentence uses a conjugated or colloquial form of{' '}
+              <span className="jp">{pattern.canonicalName}</span>, not its dictionary form
+              verbatim.
+            </div>
+          ) : null}
           {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
           {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
           {pattern.structuralNotes ? (
@@ -2816,6 +2831,13 @@ function GrammarProductionCard({
  * Degrades to a plain reveal (like GrammarComprehensionCard) when fewer
  * than two choices exist — a fresh corpus with only one tracked pattern
  * has nothing to contrast against yet.
+ *
+ * When blank is null (no verbatim match — the common case for any pattern
+ * with a parenthetical annotation like ～ている（状態描写）, or a conjugated/
+ * colloquial surface form), the reveal must still name the correct pattern
+ * explicitly, not just mark ✓/✗ — it used to only surface the name inside
+ * the now-absent <mark> blank, leaving a wrong answer with no visible
+ * correction. Fixed 2026-09-11 per user report (card_issue_f8eb6258).
  */
 function GrammarCompletionCard({
   candidate,
@@ -2905,6 +2927,11 @@ function GrammarCompletionCard({
           sentence.japanese
         )}
       </div>
+      {!blank ? (
+        <div className="muted">
+          Correct: <span className="jp">{pattern.canonicalName}</span>
+        </div>
+      ) : null}
       {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
       {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
     </>
