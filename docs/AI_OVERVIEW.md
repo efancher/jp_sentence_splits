@@ -1293,7 +1293,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     shape (same `buildPitchAccentShapeObservations`, learner alignment only)
     and shown as your measured H/L line under the dictionary row (same
     `buildLearnerPitchAccentShapes` / `learnerClassesBySurface` second line
-    as `AnalysisPanel`), nothing saved. The take's own measured YIN pitch
+    as `AnalysisPanel`). The drill itself stays ungated — nothing here
+    blocks or reorders practice — but each take is now logged (below). The
+    take's own measured YIN pitch
     contour also renders under the audio player (`MeasuredPitchContour`,
     labelled "Your pitch (measured)", playhead following playback) — the same
     honest sentence-level track the review reveals draw for the native
@@ -1309,6 +1311,24 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     "Shuffle" / "Shuffle and start over" pick a new seed).
     `settings.quietMode` does not affect this page. So a word's pitch-accent data backs passive shadowing
     feedback, an active-recall flashcard, and a recording drill.
+  - **Drill usage tracking + SRS-miss-triggered extra practice** (2026-09-11,
+    user request — "is the drill actually helping?"). Every take now writes
+    one `PitchDrillAttempt` (append-only, synced like `Review`) per scored
+    target word — `measured`/`mismatch`/`confidence` plus the dictionary vs.
+    measured H/L shape strings — via `logPitchDrillAttempt`. Separately, a
+    word whose `pitch_accent` SRS card's last 2 reviews were both
+    `again`/`hard` surfaces in a "Missed in review" banner at the top of
+    `PitchAccentDrillPage` (`getPitchAccentFocusWords`); "Start extra
+    practice" walks just that word list in single-word mode. This never
+    touches the SRS card's own FSRS scheduling — it's a one-time nudge that
+    clears the moment any drill attempt is logged for the word (any
+    outcome) and only reappears on a fresh 2-miss streak. The
+    `pitch_accent` SRS card's own reviews separately gained
+    `pitchExpectedShape`/`pitchChosenShape` on `Review` (same `'h'/'l'`
+    shape strings), so H/L confusions are tracked on both the drill and the
+    SRS card. `scripts/report-pitch-drill-effectiveness.ts` reads all of
+    this straight from Supabase: usage-vs-pass-rate over time and the most
+    common shape confusions. Detail in STATUS.md.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Paired pitch contours** (`PitchCanvas`, reference + dashed learner) —

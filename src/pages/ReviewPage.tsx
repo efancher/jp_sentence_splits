@@ -76,7 +76,11 @@ import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
-import { pitchPatternLabel, type PitchAccentPattern } from '../lib/pitchAccentShape';
+import {
+  expectedPitchShape,
+  pitchPatternLabel,
+  type PitchAccentPattern,
+} from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
@@ -1536,12 +1540,32 @@ export function ReviewPage() {
       // so record it as responseRaw only (no expectedAnswer → classifyReviewError
       // leaves it unclassified, same as comprehension).
       const isFreeformResponse = current.studyItem.activityType === 'grammar_production';
+      // Pitch-accent shape tracking (docs/STATUS.md): the H/L shape implied
+      // by the chosen vs. correct drop position, purely for later
+      // shape-confusion analysis — never used for grading, which already
+      // happened in PitchAccentCard's onCheck.
+      const pitchAccentShapes = current.pitchAccent
+        ? {
+            pitchExpectedShape: expectedPitchShape(
+              current.pitchAccent.morae.length,
+              current.pitchAccent.correctPosition,
+            ).join(''),
+            pitchChosenShape: typedResponse
+              ? expectedPitchShape(
+                  current.pitchAccent.morae.length,
+                  Number(typedResponse),
+                ).join('')
+              : undefined,
+          }
+        : undefined;
       await recordReview({
         studyItemId: current.studyItem.id,
         rating,
         assistance: assistanceUsed.size > 0 ? [...assistanceUsed] : undefined,
         responseRaw: typedResponse || undefined,
         expectedAnswer: typedResponse && !isFreeformResponse ? expectedAnswerValue : undefined,
+        pitchExpectedShape: pitchAccentShapes?.pitchExpectedShape,
+        pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
       });
       setQueue((q) => q.slice(1));
 

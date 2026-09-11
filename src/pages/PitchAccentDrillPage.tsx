@@ -8,6 +8,8 @@ import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
+  getPitchAccentFocusWords,
+  logPitchDrillAttempt,
   type PitchAccentDrillWord,
 } from '../db/repository';
 import type { Sentence, WordAlignment } from '../domain/types';
@@ -22,7 +24,7 @@ import {
   buildPitchAccentShapeObservations,
   type PitchAccentTarget,
 } from '../lib/pitchAccentObservations';
-import type { MoraPitchClass } from '../lib/pitchAccentShape';
+import { expectedPitchShape, type MoraPitchClass } from '../lib/pitchAccentShape';
 import type { SentencePitchAccentTarget } from '../lib/sentencePitchAccent';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 import type { TimingObservation } from '../lib/timingObservations';
@@ -84,6 +86,8 @@ type AnalysisState =
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
       /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
       learnerFollowingBySurface: Map<string, MoraPitchClass>;
+      /** `observations`, keyed back to the target word they were scored against — usage-log attribution (`logPitchDrillAttempt`). */
+      observationBySurfaceForm: Map<string, TimingObservation>;
       /** Accent-bearing target words in the take — the denominator for "measured N of M". */
       scorableCount: number;
     };
@@ -128,6 +132,16 @@ async function analyzeRecording(
       learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
       if (shape.followingClass) learnerFollowingBySurface.set(shape.surfaceForm, shape.followingClass);
     }
+    // `buildPitchAccentShapeObservations` ids each observation
+    // `pitch-accent-shape-${targetIndex}`, indexed into the same
+    // `scorableTargets` array passed in above — recover the surface form so
+    // usage logging can attribute a mismatch to the right word.
+    const observationBySurfaceForm = new Map<string, TimingObservation>();
+    for (const observation of observations) {
+      const match = /^pitch-accent-shape-(\d+)$/.exec(observation.id);
+      const target = match ? scorableTargets[Number(match[1])] : undefined;
+      if (target) observationBySurfaceForm.set(target.surfaceForm, observation);
+    }
     return {
       status: 'done',
       observations,
@@ -135,6 +149,7 @@ async function analyzeRecording(
       learnerWords: alignment.words,
       learnerClassesBySurface,
       learnerFollowingBySurface,
+      observationBySurfaceForm,
       scorableCount: scorableTargets.length,
     };
   } catch {
@@ -145,9 +160,16 @@ async function analyzeRecording(
 export function PitchAccentDrillPage() {
   const rawSentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
   const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
+  const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
   const [mode, setMode] = useState<DrillMode>('sentence');
+  const [focusMode, setFocusMode] = useState(false);
   const [position, setPosition] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(newShuffleSeed);
+
+  // A word missed twice in a row in review (`getPitchAccentFocusWords`)
+  // forces single-word mode over its own small, deliberately-ordered
+  // (most-recently-missed-first) list — not shuffled like the ordinary pool.
+  const effectiveMode: DrillMode = focusMode ? 'word' : mode;
 
   const sentences = useMemo(
     () =>
@@ -163,6 +185,7 @@ export function PitchAccentDrillPage() {
         : rawWords,
     [rawWords, shuffleSeed],
   );
+  const activeWords = focusMode ? focusWords : words;
 
   const reshuffle = () => {
     setShuffleSeed(newShuffleSeed());
@@ -175,21 +198,21 @@ export function PitchAccentDrillPage() {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: 'idle' });
 
-  const list = mode === 'sentence' ? sentences : words;
-  const currentSentence = mode === 'sentence' ? sentences?.[position] : undefined;
-  const currentWord = mode === 'word' ? words?.[position] : undefined;
+  const list = effectiveMode === 'sentence' ? sentences : activeWords;
+  const currentSentence = effectiveMode === 'sentence' ? sentences?.[position] : undefined;
+  const currentWord = effectiveMode === 'word' ? activeWords?.[position] : undefined;
   const currentId =
-    mode === 'sentence' ? currentSentence?.sentence.id : currentWord?.vocabularyItem.id;
+    effectiveMode === 'sentence' ? currentSentence?.sentence.id : currentWord?.vocabularyItem.id;
 
   const transcript =
-    mode === 'sentence'
+    effectiveMode === 'sentence'
       ? currentSentence?.sentence.japanese
       : currentWord
         ? currentWord.surfaceForm + currentWord.followingParticle
         : undefined;
 
   const analysisTargets = useMemo<PitchAccentTarget[]>(() => {
-    if (mode === 'sentence') return currentSentence?.targets ?? [];
+    if (effectiveMode === 'sentence') return currentSentence?.targets ?? [];
     if (!currentWord) return [];
     const { reading, pitchAccentPositions } = currentWord.vocabularyItem;
     if (!pitchAccentPositions?.length) return [];
@@ -201,7 +224,7 @@ export function PitchAccentDrillPage() {
         followingMora: currentWord.followingParticle,
       },
     ];
-  }, [mode, currentSentence, currentWord]);
+  }, [effectiveMode, currentSentence, currentWord]);
 
   const contourTargets = useMemo<SentencePitchAccentTarget[]>(
     () =>
@@ -215,7 +238,7 @@ export function PitchAccentDrillPage() {
 
   // Kana of the recorded unit, for the ruler under the learner's contour.
   const moraUnits = useMemo<MoraUnit[]>(() => {
-    if (mode === 'sentence') {
+    if (effectiveMode === 'sentence') {
       const sentence = currentSentence?.sentence;
       if (!sentence) return [];
       const chunks = getSentenceReadingForMora(sentence);
@@ -224,19 +247,20 @@ export function PitchAccentDrillPage() {
     if (!currentWord) return [];
     const reading = currentWord.vocabularyItem.reading || currentWord.surfaceForm;
     return segmentIntoMorae(reading + currentWord.followingParticle);
-  }, [mode, currentSentence, currentWord]);
+  }, [effectiveMode, currentSentence, currentWord]);
 
   // Reset the take + feedback whenever the item — or the mode — changes.
   useEffect(() => {
     setPending(null);
     setAnalysis({ status: 'idle' });
     cancelRecording();
-  }, [currentId, mode, cancelRecording]);
+  }, [currentId, effectiveMode, cancelRecording]);
 
-  // Switching modes walks a different list, so start it from the top.
+  // Switching modes (or in/out of focus mode) walks a different list, so
+  // start it from the top.
   useEffect(() => {
     setPosition(0);
-  }, [mode]);
+  }, [mode, focusMode]);
 
   useEffect(() => () => cancelRecording(), [cancelRecording]);
 
@@ -268,6 +292,50 @@ export function PitchAccentDrillPage() {
       active = false;
     };
   }, [pending, transcript, analysisTargets]);
+
+  // Log this take's per-word results (docs/STATUS.md) — a usage/effectiveness
+  // record only, never a gate on the drill itself. Fires once per completed
+  // analysis (a new `analysis` object arrives exactly once per take).
+  useEffect(() => {
+    if (analysis.status !== 'done') return;
+    const contextSentenceId =
+      effectiveMode === 'sentence' ? currentSentence?.sentence.id : currentWord?.sentence.id;
+    if (!contextSentenceId) return;
+    const { learnerClassesBySurface, learnerFollowingBySurface, observationBySurfaceForm } =
+      analysis;
+    for (const target of analysisTargets) {
+      const vocabularyItemId =
+        effectiveMode === 'sentence'
+          ? currentSentence?.targetVocabularyItemIds[target.surfaceForm]
+          : currentWord?.vocabularyItem.id;
+      const moraCount = segmentIntoMorae(target.reading).length;
+      const position = target.pitchAccentPositions[0];
+      const expectedShape =
+        moraCount > 0 && position !== undefined
+          ? expectedPitchShape(moraCount, position, !!target.followingMora).join('')
+          : undefined;
+      const measuredClasses = learnerClassesBySurface.get(target.surfaceForm);
+      const followingClass = learnerFollowingBySurface.get(target.surfaceForm);
+      const measuredShape = measuredClasses
+        ? [...measuredClasses, ...(followingClass ? [followingClass] : [])].join('')
+        : undefined;
+      const observation = observationBySurfaceForm.get(target.surfaceForm);
+      void logPitchDrillAttempt({
+        mode: effectiveMode,
+        vocabularyItemId,
+        surfaceForm: target.surfaceForm,
+        reading: target.reading,
+        contextSentenceId,
+        measured: !!measuredClasses,
+        mismatch: !!observation,
+        confidence: observation?.confidence,
+        expectedShape,
+        measuredShape,
+        focusTriggered: focusMode,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis]);
 
   const isRecording = shadowing.status === 'recording';
   const isRequestingMic = shadowing.status === 'requesting-mic';
@@ -303,33 +371,61 @@ export function PitchAccentDrillPage() {
         </div>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           Say it aloud and get its pitch-accent shape checked against the dictionary — for words
-          and Satori sentences that have no reference recording. Nothing here is saved or
-          scheduled.
+          and Satori sentences that have no reference recording. The drill itself stays ungated —
+          nothing here blocks or reorders your practice — but each take is logged for your own
+          usage/effectiveness tracking (see docs/STATUS.md).
         </p>
 
-        <div className="row" role="group" aria-label="Drill mode">
-          <button
-            type="button"
-            aria-pressed={mode === 'sentence'}
-            className={mode === 'sentence' ? undefined : 'ghost'}
-            onClick={() => setMode('sentence')}
-          >
-            Full sentence
-          </button>
-          <button
-            type="button"
-            aria-pressed={mode === 'word'}
-            className={mode === 'word' ? undefined : 'ghost'}
-            onClick={() => setMode('word')}
-          >
-            Single words
-          </button>
-        </div>
+        {!focusMode && focusWords && focusWords.length > 0 ? (
+          <div className="panel stack" style={{ gap: '0.4rem' }}>
+            <strong>Missed in review</strong>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              You've missed the pitch-accent card twice in a row on {focusWords.length}{' '}
+              word{focusWords.length === 1 ? '' : 's'}. A one-time extra practice pass — this
+              never changes when that card comes up for review again.
+            </p>
+            <div>
+              <button type="button" onClick={() => setFocusMode(true)}>
+                Start extra practice ({focusWords.length})
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {focusMode ? (
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>Extra practice</strong>
+            <button type="button" className="ghost" onClick={() => setFocusMode(false)}>
+              Exit extra practice
+            </button>
+          </div>
+        ) : (
+          <div className="row" role="group" aria-label="Drill mode">
+            <button
+              type="button"
+              aria-pressed={mode === 'sentence'}
+              className={mode === 'sentence' ? undefined : 'ghost'}
+              onClick={() => setMode('sentence')}
+            >
+              Full sentence
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === 'word'}
+              className={mode === 'word' ? undefined : 'ghost'}
+              onClick={() => setMode('word')}
+            >
+              Single words
+            </button>
+          </div>
+        )}
 
         {list === undefined ? (
           <p className="muted">Loading…</p>
         ) : list.length === 0 ? (
-          mode === 'sentence' ? (
+          focusMode ? (
+            <p className="muted">Nothing left to practice — nicely done.</p>
+          ) : effectiveMode === 'sentence' ? (
             <p className="muted">
               No eligible sentences yet — this needs a sentence whose confirmed vocabulary has
               dictionary pitch-accent data, no reference audio, and whose words you've already
@@ -345,11 +441,13 @@ export function PitchAccentDrillPage() {
           <>
             <p>
               You've reached the end of the list ({list.length}{' '}
-              {mode === 'sentence' ? 'sentences' : 'words'}).
+              {effectiveMode === 'sentence' ? 'sentences' : 'words'}).
             </p>
-            <button type="button" onClick={reshuffle}>
-              Shuffle and start over
-            </button>
+            {!focusMode ? (
+              <button type="button" onClick={reshuffle}>
+                Shuffle and start over
+              </button>
+            ) : null}
           </>
         ) : (
           <>
@@ -360,17 +458,19 @@ export function PitchAccentDrillPage() {
               <span>
                 {position + 1} of {list.length}
               </span>
-              <button
-                type="button"
-                className="ghost"
-                style={{ fontSize: '0.8rem' }}
-                onClick={reshuffle}
-              >
-                Shuffle
-              </button>
+              {!focusMode ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  style={{ fontSize: '0.8rem' }}
+                  onClick={reshuffle}
+                >
+                  Shuffle
+                </button>
+              ) : null}
             </div>
 
-            {mode === 'sentence' && currentSentence ? (
+            {effectiveMode === 'sentence' && currentSentence ? (
               <SentencePrompt
                 sentence={currentSentence.sentence}
                 targets={contourTargets}
@@ -417,7 +517,7 @@ export function PitchAccentDrillPage() {
               <button type="button" onClick={() => setPosition(position + 1)}>
                 {position + 1 >= list.length
                   ? 'Finish'
-                  : mode === 'sentence'
+                  : effectiveMode === 'sentence'
                     ? 'Next sentence'
                     : 'Next word'}
               </button>

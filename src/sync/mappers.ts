@@ -7,6 +7,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  PitchDrillAttempt,
   PlannerSession,
   Review,
   Sentence,
@@ -42,7 +43,8 @@ export type LocalSyncPayload =
   | SentenceGrammar
   | GrammarRelationship
   | PlannerSession
-  | SyncIssueReport;
+  | SyncIssueReport
+  | PitchDrillAttempt;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -409,6 +411,8 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     assistance: review.assistance ?? null,
     source: review.source ?? null,
     context_sentence_id: review.contextSentenceId ?? null,
+    pitch_expected_shape: review.pitchExpectedShape ?? null,
+    pitch_chosen_shape: review.pitchChosenShape ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -432,6 +436,9 @@ export function remoteToReview(row: Record<string, unknown>): Review {
     source: (row.source as Review['source'] | null) ?? undefined,
     contextSentenceId:
       (row.context_sentence_id as string | null) ?? undefined,
+    pitchExpectedShape:
+      (row.pitch_expected_shape as string | null) ?? undefined,
+    pitchChosenShape: (row.pitch_chosen_shape as string | null) ?? undefined,
   };
 }
 
@@ -851,6 +858,53 @@ export function remoteToSyncIssueReport(
   };
 }
 
+export function pitchDrillAttemptToRemote(
+  attempt: PitchDrillAttempt,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: attempt.id,
+    owner_id: ownerId,
+    timestamp: attempt.timestamp,
+    mode: attempt.mode,
+    vocabulary_item_id: attempt.vocabularyItemId ?? null,
+    surface_form: attempt.surfaceForm,
+    reading: attempt.reading,
+    context_sentence_id: attempt.contextSentenceId,
+    measured: attempt.measured,
+    mismatch: attempt.mismatch,
+    confidence: attempt.confidence ?? null,
+    expected_shape: attempt.expectedShape ?? null,
+    measured_shape: attempt.measuredShape ?? null,
+    focus_triggered: attempt.focusTriggered,
+    created_at: attempt.timestamp,
+    updated_at: attempt.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToPitchDrillAttempt(
+  row: Record<string, unknown>,
+): PitchDrillAttempt {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    mode: row.mode as PitchDrillAttempt['mode'],
+    vocabularyItemId: (row.vocabulary_item_id as string | null) ?? undefined,
+    surfaceForm: String(row.surface_form),
+    reading: String(row.reading),
+    contextSentenceId: String(row.context_sentence_id),
+    measured: Boolean(row.measured),
+    mismatch: Boolean(row.mismatch),
+    confidence: (row.confidence as PitchDrillAttempt['confidence']) ?? undefined,
+    expectedShape: (row.expected_shape as string | null) ?? undefined,
+    measuredShape: (row.measured_shape as string | null) ?? undefined,
+    focusTriggered: Boolean(row.focus_triggered),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -914,6 +968,8 @@ export function toRemoteRow(
       return plannerSessionToRemote(payload as PlannerSession, ownerId, version);
     case 'sync_issue_reports':
       return syncIssueReportToRemote(payload as SyncIssueReport, ownerId, version);
+    case 'pitch_drill_attempts':
+      return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
   }
 }
 

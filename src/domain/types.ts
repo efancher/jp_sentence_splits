@@ -674,6 +674,46 @@ export interface Review {
    * generated its study item.
    */
   contextSentenceId?: string;
+  /**
+   * `pitch_accent` card only: the word's dictionary H/L shape and the
+   * shape implied by the learner's chosen drop position, each an `'h'/'l'`
+   * string one char per mora (`expectedPitchShape` in
+   * `src/lib/pitchAccentShape.ts`). Lets shape-level confusions (e.g.
+   * consistently one mora late) be mined out of ordinary review history
+   * without a separate table.
+   */
+  pitchExpectedShape?: string;
+  pitchChosenShape?: string;
+}
+
+/**
+ * One take on the free, ungated pitch-accent production drill
+ * (`PitchAccentDrillPage`, `/pitch-accent`) — one row per scored target word
+ * per recording, not per whole take (a "Full sentence" take can score
+ * several words at once). Append-only, same sync-conflict-free shape as
+ * `Review`. Purely a usage/effectiveness log: nothing here gates or reorders
+ * the drill itself, which stays ungated practice.
+ */
+export interface PitchDrillAttempt {
+  id: string;
+  timestamp: string;
+  mode: 'sentence' | 'word';
+  /** Absent when the word couldn't be resolved back to a vocabulary item. */
+  vocabularyItemId?: string;
+  surfaceForm: string;
+  reading: string;
+  contextSentenceId: string;
+  /** Could the learner's forced alignment locate this word in the take at all. */
+  measured: boolean;
+  /** Did `buildPitchAccentShapeObservations` flag a pitch-accent mismatch for this word. */
+  mismatch: boolean;
+  /** The flagged observation's confidence, when `mismatch`. */
+  confidence?: 'low' | 'medium' | 'high';
+  /** `'h'/'l'` strings, one char per mora, populated when `measured`. */
+  expectedShape?: string;
+  measuredShape?: string;
+  /** Reached via the "extra practice" focus banner (a consistently-missed SRS word), not the ordinary shuffled list. */
+  focusTriggered: boolean;
 }
 
 /**

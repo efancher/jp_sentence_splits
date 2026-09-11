@@ -23,6 +23,7 @@ import type {
   InboxMembership,
   InitialOrderMode,
   Kanji,
+  PitchDrillAttempt,
   PlannerSession,
   PlannerSessionStep,
   PlannerStepStatus,
@@ -3465,6 +3466,9 @@ export async function recordReview(input: {
   /** Absent means `scheduled_review` (Phase 7.8, docs brief §9/§16). */
   source?: ReviewSource;
   contextSentenceId?: string;
+  /** `pitch_accent` card only — see `Review.pitchExpectedShape`/`pitchChosenShape`. */
+  pitchExpectedShape?: string;
+  pitchChosenShape?: string;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -3496,6 +3500,8 @@ export async function recordReview(input: {
     assistance: input.assistance,
     source: input.source,
     contextSentenceId: input.contextSentenceId,
+    pitchExpectedShape: input.pitchExpectedShape,
+    pitchChosenShape: input.pitchChosenShape,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -3988,6 +3994,12 @@ export interface PitchAccentDrillSentence {
   sentence: Sentence;
   /** The sentence's confirmed words that carry dictionary pitch-accent data. */
   targets: PitchAccentTarget[];
+  /**
+   * `target.surfaceForm` → vocabulary item id, for logging drill attempts
+   * (`logPitchDrillAttempt`) without threading an id through the shared
+   * `PitchAccentTarget` type (used well beyond this drill).
+   */
+  targetVocabularyItemIds: Record<string, string>;
 }
 
 /**
@@ -4040,6 +4052,7 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
     const sentence = sentenceById.get(sentenceId);
     if (!sentence) continue;
     const targets: PitchAccentTarget[] = [];
+    const targetVocabularyItemIds: Record<string, string> = {};
     for (const link of sentenceLinks) {
       const item = vocabularyItemById.get(link.vocabularyItemId);
       if (link.surfaceForm && item?.pitchAccentPositions?.length) {
@@ -4053,10 +4066,11 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
               ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
               : '',
         });
+        targetVocabularyItemIds[link.surfaceForm] = link.vocabularyItemId;
       }
     }
     if (targets.length === 0) continue;
-    result.push({ sentence, targets });
+    result.push({ sentence, targets, targetVocabularyItemIds });
   }
   result.sort(
     (a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex,
@@ -4095,42 +4109,33 @@ export interface PitchAccentDrillWord {
  * prefer (1) one with a trailing bunsetsu particle (so a phrase-final fall
  * is audible), then (2) the word's dictionary form, then (3) the earliest.
  */
-export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]> {
-  const db = getDb();
-  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
-  if (links.length === 0) return [];
+interface ExampleOccurrence {
+  sentence: Sentence;
+  surfaceForm: string;
+  followingParticle: string;
+}
 
-  const vocabularyItems = await db.vocabularyItems.bulkGet([
-    ...new Set(links.map((link) => link.vocabularyItemId)),
-  ]);
-  const pitchCarryingItemById = new Map(
-    vocabularyItems
-      .filter((row): row is VocabularyItem => Boolean(row))
-      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
-      .map((row) => [row.id, row]),
-  );
-  if (pitchCarryingItemById.size === 0) return [];
-
-  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
-  if (proficientIds.size === 0) return [];
-
-  const sentenceById = new Map(
-    (await db.sentences.bulkGet([...new Set(links.map((link) => link.sentenceId))]))
-      .filter((row): row is Sentence => Boolean(row))
-      .map((row) => [row.id, row]),
-  );
-
-  interface Candidate {
-    sentence: Sentence;
-    surfaceForm: string;
-    followingParticle: string;
+/**
+ * Best example occurrence per vocabulary item id among `links`, restricted
+ * to `itemIds`: prefers (1) an occurrence with a trailing bunsetsu particle
+ * (so a phrase-final heiban/odaka fall is audible), then (2) the word's
+ * dictionary form, then (3) the earliest sentence. Shared by
+ * `getPitchAccentDrillWords` and `getPitchAccentFocusWords`.
+ */
+function bestExampleOccurrencesByItemId(
+  links: SentenceVocabulary[],
+  sentenceById: Map<string, Sentence>,
+  itemById: Map<string, VocabularyItem>,
+  itemIds: Set<string>,
+): Map<string, ExampleOccurrence> {
+  interface Candidate extends ExampleOccurrence {
     score: number;
   }
   const bestByItemId = new Map<string, Candidate>();
   for (const link of links) {
     if (!link.surfaceForm) continue;
-    if (!proficientIds.has(link.vocabularyItemId)) continue;
-    const item = pitchCarryingItemById.get(link.vocabularyItemId);
+    if (!itemIds.has(link.vocabularyItemId)) continue;
+    const item = itemById.get(link.vocabularyItemId);
     if (!item) continue;
     const sentence = sentenceById.get(link.sentenceId);
     if (!sentence) continue;
@@ -4158,6 +4163,40 @@ export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]
       });
     }
   }
+  return bestByItemId;
+}
+
+export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]> {
+  const db = getDb();
+  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
+  if (links.length === 0) return [];
+
+  const vocabularyItems = await db.vocabularyItems.bulkGet([
+    ...new Set(links.map((link) => link.vocabularyItemId)),
+  ]);
+  const pitchCarryingItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  if (pitchCarryingItemById.size === 0) return [];
+
+  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
+  if (proficientIds.size === 0) return [];
+
+  const sentenceById = new Map(
+    (await db.sentences.bulkGet([...new Set(links.map((link) => link.sentenceId))]))
+      .filter((row): row is Sentence => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  const bestByItemId = bestExampleOccurrencesByItemId(
+    links,
+    sentenceById,
+    pitchCarryingItemById,
+    proficientIds,
+  );
 
   const result: PitchAccentDrillWord[] = [];
   for (const [itemId, { sentence, surfaceForm, followingParticle }] of bestByItemId) {
@@ -4170,6 +4209,144 @@ export async function getPitchAccentDrillWords(): Promise<PitchAccentDrillWord[]
   }
   result.sort((a, b) => a.sentence.firstOccurrenceIndex - b.sentence.firstOccurrenceIndex);
   return result;
+}
+
+/**
+ * Words whose `pitch_accent` SRS card has been missed twice in a row (last 2
+ * reviews both rated `again` or `hard`) and haven't had a free-drill attempt
+ * logged since — the "extra practice" focus queue surfaced on
+ * `PitchAccentDrillPage`. Deliberately not FSRS-driven: this never touches
+ * the SRS card's own scheduling, only reads its review history. Clears the
+ * moment any drill attempt is logged for the word (`logPitchDrillAttempt`,
+ * either mode, any outcome) — it's extra practice, not a retest gate — and
+ * reappears only if the SRS card is missed twice again afterward.
+ */
+export async function getPitchAccentFocusWords(): Promise<PitchAccentDrillWord[]> {
+  const db = getDb();
+  const pitchAccentStudyItems = await db.studyItems
+    .where('activityType')
+    .equals('pitch_accent')
+    .toArray();
+  if (pitchAccentStudyItems.length === 0) return [];
+  const studyItemById = new Map(pitchAccentStudyItems.map((item) => [item.id, item]));
+
+  const reviews = await db.reviews
+    .where('studyItemId')
+    .anyOf([...studyItemById.keys()])
+    .sortBy('timestamp');
+  const reviewsByStudyItem = new Map<string, Review[]>();
+  for (const review of reviews) {
+    const list = reviewsByStudyItem.get(review.studyItemId) ?? [];
+    list.push(review);
+    reviewsByStudyItem.set(review.studyItemId, list);
+  }
+
+  // vocabularyItemId -> timestamp of the 2nd consecutive miss.
+  const missedAt = new Map<string, string>();
+  for (const [studyItemId, itemReviews] of reviewsByStudyItem) {
+    if (itemReviews.length < 2) continue;
+    const lastTwo = itemReviews.slice(-2);
+    if (lastTwo.every((review) => review.rating === 'again' || review.rating === 'hard')) {
+      const studyItem = studyItemById.get(studyItemId)!;
+      missedAt.set(studyItem.subjectId, lastTwo[1]!.timestamp);
+    }
+  }
+  if (missedAt.size === 0) return [];
+
+  const attempts = await db.pitchDrillAttempts
+    .where('vocabularyItemId')
+    .anyOf([...missedAt.keys()])
+    .toArray();
+  const latestAttemptAt = new Map<string, string>();
+  for (const attempt of attempts) {
+    if (!attempt.vocabularyItemId) continue;
+    const current = latestAttemptAt.get(attempt.vocabularyItemId);
+    if (!current || attempt.timestamp > current) {
+      latestAttemptAt.set(attempt.vocabularyItemId, attempt.timestamp);
+    }
+  }
+
+  const focusIds = new Set(
+    [...missedAt.entries()]
+      .filter(([id, missedTimestamp]) => {
+        const practicedAt = latestAttemptAt.get(id);
+        return !practicedAt || practicedAt < missedTimestamp;
+      })
+      .map(([id]) => id),
+  );
+  if (focusIds.size === 0) return [];
+
+  const [vocabularyItems, links] = await Promise.all([
+    db.vocabularyItems.bulkGet([...focusIds]),
+    db.sentenceVocabulary.where('vocabularyItemId').anyOf([...focusIds]).toArray(),
+  ]);
+  const itemById = new Map(
+    vocabularyItems.filter((row): row is VocabularyItem => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const sentenceById = new Map(
+    (await db.sentences.bulkGet([...new Set(links.map((link) => link.sentenceId))]))
+      .filter((row): row is Sentence => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  const bestByItemId = bestExampleOccurrencesByItemId(links, sentenceById, itemById, focusIds);
+
+  const result: PitchAccentDrillWord[] = [];
+  for (const [itemId, { sentence, surfaceForm, followingParticle }] of bestByItemId) {
+    const item = itemById.get(itemId);
+    if (!item) continue;
+    result.push({ vocabularyItem: item, sentence, surfaceForm, followingParticle });
+  }
+  // Most recently missed first.
+  result.sort((a, b) => {
+    const aMissed = missedAt.get(a.vocabularyItem.id) ?? '';
+    const bMissed = missedAt.get(b.vocabularyItem.id) ?? '';
+    return bMissed.localeCompare(aMissed);
+  });
+  return result;
+}
+
+/**
+ * Logs one take on the free, ungated pitch-accent production drill
+ * (`PitchAccentDrillPage`) — one row per scored target word per recording.
+ * Append-only, sync-conflict-free like `recordReview`. Purely a
+ * usage/effectiveness log: never gates or reorders the drill itself.
+ */
+export async function logPitchDrillAttempt(input: {
+  mode: 'sentence' | 'word';
+  vocabularyItemId?: string;
+  surfaceForm: string;
+  reading: string;
+  contextSentenceId: string;
+  measured: boolean;
+  mismatch: boolean;
+  confidence?: 'low' | 'medium' | 'high';
+  expectedShape?: string;
+  measuredShape?: string;
+  focusTriggered: boolean;
+  now?: Date;
+}): Promise<PitchDrillAttempt> {
+  const db = getDb();
+  const attempt: PitchDrillAttempt = {
+    id: createId('pitch_drill'),
+    timestamp: (input.now ?? new Date()).toISOString(),
+    mode: input.mode,
+    vocabularyItemId: input.vocabularyItemId,
+    surfaceForm: input.surfaceForm,
+    reading: input.reading,
+    contextSentenceId: input.contextSentenceId,
+    measured: input.measured,
+    mismatch: input.mismatch,
+    confidence: input.confidence,
+    expectedShape: input.expectedShape,
+    measuredShape: input.measuredShape,
+    focusTriggered: input.focusTriggered,
+  };
+  await db.pitchDrillAttempts.put(attempt);
+  notifySyncMany([
+    { entity: 'pitch_drill_attempts', recordId: attempt.id, payload: attempt },
+  ]);
+  return attempt;
 }
 
 export interface VocabularyOccurrenceCandidate {

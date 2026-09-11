@@ -24,6 +24,7 @@ import {
   remoteToImportBatch,
   remoteToInbox,
   remoteToKanji,
+  remoteToPitchDrillAttempt,
   remoteToPlannerSession,
   remoteToReferenceAudio,
   remoteToReview,
@@ -621,6 +622,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.plannerSessions.get(recordId)) != null;
     case 'sync_issue_reports':
       return (await db.syncIssueReports.get(recordId)) != null;
+    case 'pitch_drill_attempts':
+      return (await db.pitchDrillAttempts.get(recordId)) != null;
     default:
       // Unknown entity — assume present so we don't loop re-fetching it.
       return true;
@@ -818,6 +821,9 @@ async function applyRemoteDelete(
     case 'sync_issue_reports':
       await db.syncIssueReports.delete(recordId);
       break;
+    case 'pitch_drill_attempts':
+      await db.pitchDrillAttempts.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -935,6 +941,9 @@ export async function applyRemoteUpsert(
     case 'sync_issue_reports':
       await db.syncIssueReports.put(remoteToSyncIssueReport(remote));
       break;
+    case 'pitch_drill_attempts':
+      await db.pitchDrillAttempts.put(remoteToPitchDrillAttempt(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -971,6 +980,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const grammarRelationships = await db.grammarRelationships.toArray();
   const plannerSessions = await db.plannerSessions.toArray();
   const syncIssueReports = await db.syncIssueReports.toArray();
+  const pitchDrillAttempts = await db.pitchDrillAttempts.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -1032,6 +1042,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const report of syncIssueReports) {
     await trackAndEnqueue('sync_issue_reports', report.id, report);
   }
+  for (const attempt of pitchDrillAttempts) {
+    await trackAndEnqueue('pitch_drill_attempts', attempt.id, attempt);
+  }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
   await runSyncCycle();
@@ -1087,6 +1100,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.grammarRelationships,
       db.plannerSessions,
       db.syncIssueReports,
+      db.pitchDrillAttempts,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -1111,6 +1125,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.grammarRelationships.clear();
       await db.plannerSessions.clear();
       await db.syncIssueReports.clear();
+      await db.pitchDrillAttempts.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -1182,6 +1197,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('sync_issue_reports', userId, async (rows) => {
     await db.syncIssueReports.bulkPut(rows.map((r) => remoteToSyncIssueReport(r)));
+  });
+  await pullFullTable('pitch_drill_attempts', userId, async (rows) => {
+    await db.pitchDrillAttempts.bulkPut(rows.map((r) => remoteToPitchDrillAttempt(r)));
   });
 
   // Reference audio: metadata only (blob-less placeholders), gated on the

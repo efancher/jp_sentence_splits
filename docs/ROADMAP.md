@@ -147,7 +147,9 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   page. Also 2026-09-07: the scorer itself now measures that following
   particle (`expectedPitchShape`'s 3rd arg + `classifyLearnerMorae`), so
   odaka vs heiban is finally graded, not collapsed — both in the drill and
-  in `AnalysisPanel` shadowing feedback.
+  in `AnalysisPanel` shadowing feedback. **2026-09-11:** every take is now
+  logged (`PitchDrillAttempt`) — see the usage-tracking entry below; the
+  drill itself is still ungated, nothing here blocks or reorders practice.
 - [x] **Retention / progress-over-time view.** (2026-09-01)
   `src/lib/progressReport.ts` (`buildProgressReport`, pure) +
   `ProgressPage` (`/progress`, in the nav + Home shortcut row): vocabulary
@@ -225,6 +227,32 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   `src/lib/suspendedBooks.ts`). Resume spreads now-overdue held-back cards over
   the next week. `BookDetailPage` "Suspend studying" / "Resume studying" toggle;
   "Resume" jump button renamed "Continue". Detail in STATUS.md.
+- [x] **Pitch-accent drill usage tracking + SRS-miss-triggered extra
+  practice + H/L shape tracking.** (2026-09-11) User asked whether the free
+  drill is actually helping their pitch perception — three additive pieces,
+  none of them touch the `pitch_accent` SRS card's FSRS scheduling:
+  1. **Usage log** — `PitchDrillAttempt` (new table, `logPitchDrillAttempt`),
+     one row per scored target word per take on `PitchAccentDrillPage`
+     (both modes): `measured`/`mismatch`/`confidence`, plus the dictionary
+     vs. measured H/L shape strings (`expectedShape`/`measuredShape`).
+  2. **"Missed in review" focus queue** — `getPitchAccentFocusWords`: a word
+     whose `pitch_accent` card's last 2 reviews were both `again`/`hard`
+     surfaces in a new banner on `PitchAccentDrillPage`; "Start extra
+     practice" walks just that list in single-word mode. Clears the moment
+     any drill attempt is logged for the word (any outcome — it's practice,
+     not a retest), reappears on a fresh 2-miss streak. Implements the
+     "Shadowing weak words → pitch-accent drill" idea's sibling for SRS
+     misses, and a pitch-specific slice of "Cross-activity error routing"
+     below.
+  3. **H/L shape tracking on the SRS card too** — `Review` gained
+     `pitchExpectedShape`/`pitchChosenShape` (both `'h'/'l'` strings from
+     `expectedPitchShape`), populated on `pitch_accent` card grading.
+  4. **Query path** — `scripts/report-pitch-drill-effectiveness.ts`: drill
+     usage over time, weekly `pitch_accent` pass-rate, drill-volume-vs-
+     pass-rate, and the most common H/L shape confusions across both the
+     drill and the SRS card. Point-and-run, no export/import. Migration
+     `20260911010000_pitch_drill_attempts.sql` to apply. Detail in
+     STATUS.md.
 
 ## In progress
 
@@ -374,12 +402,15 @@ possibilities, kept here so the thinking isn't lost:
   sentence S floats S up as a shadowing/reading target; a
   `sentence_transformation` miss surfaces the grammar pattern behind that
   form. Extends `preferCoherentChains` from within-plan grouping to
-  miss-driven scheduling.
+  miss-driven scheduling. The `pitch_accent` slice of this shipped
+  2026-09-11 (`getPitchAccentFocusWords`, see Done) — this item is the
+  rest: cloze/shadowing and sentence_transformation/grammar.
 - [ ] **Ambient connective tissue in the reveal** — on a `cloze` reveal,
   "you've shadowed this sentence — replay?"; on `reading_in_context`,
-  highlight the tracked grammar pattern in the passage; on a `pitch_accent`
-  miss, "missed in the drill twice too". Matches the "ambient surfacing"
-  feedback note.
+  highlight the tracked grammar pattern in the passage. Matches the
+  "ambient surfacing" feedback note. (The `pitch_accent` "missed in the
+  drill twice too" case shipped 2026-09-11 as the focus-queue banner
+  instead of an inline reveal note — see Done.)
 - [ ] **Opt-in single-sentence deep dive** — an explicit focus block that
   walks one lagging sentence through recognition → production → listening →
   shadow back to back. Distinct from the default queue, which
@@ -388,7 +419,9 @@ possibilities, kept here so the thinking isn't lost:
   already exists (feeds the `/progress` error-mix panel). Surface those
   words as a "focus" sub-list or badge on `PitchAccentDrillPage`; a
   repo-side sort bias won't work because the drill deliberately
-  `seededShuffle`s its list.
+  `seededShuffle`s its list. (2026-09-11 shipped the sibling feature for
+  `pitch_accent` SRS misses, same UI slot — see Done. This item is still
+  open for shadowing-specifically-weak words.)
 
 ## Not planned (deliberate)
 

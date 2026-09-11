@@ -15,6 +15,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  PitchDrillAttempt,
   PlannerSession,
   ReferenceAlignment,
   Review,
@@ -123,6 +124,9 @@ export class GlossbookDatabase extends Dexie {
   // like cardIssueReports so a future session can review a batch via
   // scripts/list-sync-issues.ts — see docs/STATUS.md.
   syncIssueReports!: EntityTable<SyncIssueReport, 'id'>;
+  // Free pitch-accent drill usage log (docs/STATUS.md), synced like reviews —
+  // one row per scored target word per take on PitchAccentDrillPage.
+  pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -644,6 +648,12 @@ export class GlossbookDatabase extends Dexie {
     // Sync issue reports — purely additive, every store above is unchanged.
     this.version(17).stores({
       syncIssueReports: 'id, status, createdAt',
+    });
+
+    // Pitch-accent drill usage tracking (docs/STATUS.md) — append-only log of
+    // free-drill practice attempts, synced like reviews.
+    this.version(18).stores({
+      pitchDrillAttempts: 'id, timestamp, vocabularyItemId',
     });
   }
 }

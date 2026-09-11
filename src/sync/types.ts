@@ -19,7 +19,8 @@ export type SyncEntity =
   | 'sentence_grammar'
   | 'grammar_relationships'
   | 'planner_sessions'
-  | 'sync_issue_reports';
+  | 'sync_issue_reports'
+  | 'pitch_drill_attempts';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

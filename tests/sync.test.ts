@@ -30,7 +30,12 @@ import { applyBulkConflictResolution } from '../src/sync/resolveConflict';
 import { trackLocalMutation } from '../src/sync/track';
 import { hasLocalStudyData, needsMigrationPrompt } from '../src/sync/migration';
 import { sentenceAudioToReferenceMeta } from '../src/sync/mappers';
-import type { PlannerSession, SentenceAudio } from '../src/domain/types';
+import type {
+  PitchDrillAttempt,
+  PlannerSession,
+  Review,
+  SentenceAudio,
+} from '../src/domain/types';
 
 describe('sync queue and local-first mutations', () => {
   beforeEach(() => {
@@ -803,5 +808,65 @@ describe('sync mappers', () => {
     expect(local.allocation).toEqual(session.allocation);
     expect(local.steps).toEqual(session.steps);
     expect(local.status).toBe('in_progress');
+  });
+
+  it('round-trips a pitch_accent review shape pair through remote shape', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const review: Review = {
+      id: 'review_1',
+      studyItemId: 'study_1',
+      timestamp: '2026-09-11T00:00:00.000Z',
+      rating: 'again',
+      pitchExpectedShape: 'lhhl',
+      pitchChosenShape: 'lhll',
+    };
+    const remote = reviewToRemote(review, 'user-1', 1);
+    expect(remote.pitch_expected_shape).toBe('lhhl');
+    expect(remote.pitch_chosen_shape).toBe('lhll');
+    const local = remoteToReview(remote);
+    expect(local.pitchExpectedShape).toBe('lhhl');
+    expect(local.pitchChosenShape).toBe('lhll');
+
+    const withoutShapes = reviewToRemote({ ...review, pitchExpectedShape: undefined, pitchChosenShape: undefined }, 'user-1', 1);
+    expect(withoutShapes.pitch_expected_shape).toBeNull();
+    expect(remoteToReview(withoutShapes).pitchExpectedShape).toBeUndefined();
+  });
+
+  it('round-trips a pitch drill attempt through remote shape', async () => {
+    const { pitchDrillAttemptToRemote, remoteToPitchDrillAttempt } = await import(
+      '../src/sync/mappers'
+    );
+    const attempt: PitchDrillAttempt = {
+      id: 'pitch_drill_1',
+      timestamp: '2026-09-11T00:00:00.000Z',
+      mode: 'word',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '食べる',
+      reading: 'たべる',
+      contextSentenceId: 'sent-1',
+      measured: true,
+      mismatch: true,
+      confidence: 'medium',
+      expectedShape: 'lh',
+      measuredShape: 'hl',
+      focusTriggered: true,
+    };
+    const remote = pitchDrillAttemptToRemote(attempt, 'user-1', 2);
+    expect(remote.owner_id).toBe('user-1');
+    expect(remote.vocabulary_item_id).toBe('vocab-1');
+    expect(remote.mismatch).toBe(true);
+    expect(remote.focus_triggered).toBe(true);
+    const local = remoteToPitchDrillAttempt(remote);
+    expect(local.mode).toBe('word');
+    expect(local.surfaceForm).toBe('食べる');
+    expect(local.measured).toBe(true);
+    expect(local.confidence).toBe('medium');
+    expect(local.expectedShape).toBe('lh');
+    expect(local.measuredShape).toBe('hl');
+    expect(local.focusTriggered).toBe(true);
+
+    const withoutItem = pitchDrillAttemptToRemote({ ...attempt, vocabularyItemId: undefined }, 'user-1', 1);
+    expect(withoutItem.vocabulary_item_id).toBeNull();
+    expect(remoteToPitchDrillAttempt(withoutItem).vocabularyItemId).toBeUndefined();
   });
 });

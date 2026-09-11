@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
+  ensureStudyItem,
   getDb,
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
+  getPitchAccentFocusWords,
+  logPitchDrillAttempt,
+  recordReview,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 
@@ -108,6 +112,7 @@ describe('getPitchAccentDrillSentences', () => {
     expect(result[0]!.targets).toEqual([
       { surfaceForm: '食べる', reading: 'たべる', pitchAccentPositions: [2], followingMora: '' },
     ]);
+    expect(result[0]!.targetVocabularyItemIds).toEqual({ 食べる: 's1-vocab' });
   });
 
   it('carries the trailing bunsetsu particle on each target', async () => {
@@ -330,5 +335,139 @@ describe('getPitchAccentDrillWords', () => {
 
     const result = await getPitchAccentDrillWords();
     expect(result.map((entry) => entry.vocabularyItem.id)).toEqual(['s1-vocab', 's2-vocab']);
+  });
+});
+
+describe('getPitchAccentFocusWords', () => {
+  beforeEach(async () => {
+    resetDbForTests(`pa-focus-${createId('db')}`);
+    await ensureSettings();
+  });
+
+  it('surfaces a word after its pitch_accent card is missed twice in a row', async () => {
+    await seedEligibleSentence('s1');
+    const studyItem = await ensureStudyItem('vocabularyItem', 's1-vocab', 'pitch_accent');
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'again',
+      now: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    expect(await getPitchAccentFocusWords()).toEqual([]);
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'hard',
+      now: new Date('2026-09-02T00:00:00.000Z'),
+    });
+    const focus = await getPitchAccentFocusWords();
+    expect(focus).toHaveLength(1);
+    expect(focus[0]!.vocabularyItem.id).toBe('s1-vocab');
+    expect(focus[0]!.sentence.id).toBe('s1');
+  });
+
+  it('does not surface a word after a single miss, or once a good/easy review breaks the streak', async () => {
+    await seedEligibleSentence('s1');
+    const studyItem = await ensureStudyItem('vocabularyItem', 's1-vocab', 'pitch_accent');
+    await recordReview({ studyItemId: studyItem.id, rating: 'again' });
+    expect(await getPitchAccentFocusWords()).toEqual([]);
+    await recordReview({ studyItemId: studyItem.id, rating: 'good' });
+    expect(await getPitchAccentFocusWords()).toEqual([]);
+  });
+
+  it('clears once a drill attempt is logged for the word, and reappears after a fresh 2-miss streak', async () => {
+    await seedEligibleSentence('s1');
+    const studyItem = await ensureStudyItem('vocabularyItem', 's1-vocab', 'pitch_accent');
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'again',
+      now: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'again',
+      now: new Date('2026-09-02T00:00:00.000Z'),
+    });
+    expect(await getPitchAccentFocusWords()).toHaveLength(1);
+
+    await logPitchDrillAttempt({
+      mode: 'word',
+      vocabularyItemId: 's1-vocab',
+      surfaceForm: '食べる',
+      reading: 'たべる',
+      contextSentenceId: 's1',
+      measured: true,
+      mismatch: false,
+      focusTriggered: true,
+      now: new Date('2026-09-03T00:00:00.000Z'),
+    });
+    expect(await getPitchAccentFocusWords()).toEqual([]);
+
+    // A passing review after practicing shouldn't resurrect it...
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'good',
+      now: new Date('2026-09-04T00:00:00.000Z'),
+    });
+    expect(await getPitchAccentFocusWords()).toEqual([]);
+
+    // ...but a fresh 2-miss streak does.
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'again',
+      now: new Date('2026-09-05T00:00:00.000Z'),
+    });
+    await recordReview({
+      studyItemId: studyItem.id,
+      rating: 'again',
+      now: new Date('2026-09-06T00:00:00.000Z'),
+    });
+    expect(await getPitchAccentFocusWords()).toHaveLength(1);
+  });
+});
+
+describe('logPitchDrillAttempt', () => {
+  beforeEach(async () => {
+    resetDbForTests(`pa-log-${createId('db')}`);
+    await ensureSettings();
+  });
+
+  it('persists an append-only attempt row', async () => {
+    const attempt = await logPitchDrillAttempt({
+      mode: 'word',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '食べる',
+      reading: 'たべる',
+      contextSentenceId: 'sent-1',
+      measured: true,
+      mismatch: true,
+      confidence: 'medium',
+      expectedShape: 'lh',
+      measuredShape: 'hl',
+      focusTriggered: false,
+    });
+    const persisted = await getDb().pitchDrillAttempts.get(attempt.id);
+    expect(persisted).toBeDefined();
+    expect(persisted?.surfaceForm).toBe('食べる');
+    expect(persisted?.mismatch).toBe(true);
+    expect(persisted?.expectedShape).toBe('lh');
+    expect(persisted?.measuredShape).toBe('hl');
+  });
+});
+
+describe('recordReview pitch-accent shape fields', () => {
+  beforeEach(async () => {
+    resetDbForTests(`pa-shape-${createId('db')}`);
+    await ensureSettings();
+  });
+
+  it('stores the expected/chosen H/L shape strings', async () => {
+    const item = await ensureStudyItem('vocabularyItem', 'word-1', 'pitch_accent');
+    const { review } = await recordReview({
+      studyItemId: item.id,
+      rating: 'again',
+      pitchExpectedShape: 'lhhl',
+      pitchChosenShape: 'lhll',
+    });
+    expect(review.pitchExpectedShape).toBe('lhhl');
+    expect(review.pitchChosenShape).toBe('lhll');
   });
 });

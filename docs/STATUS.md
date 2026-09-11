@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-10.
+Last updated: 2026-09-11.
 
 ## Where things stand
 
@@ -29,6 +29,61 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-11 — Pitch-accent drill usage tracking + SRS-miss-triggered
+  extra practice + H/L shape tracking (user request — "is the drill actually
+  helping?").** Three additive pieces, none touching the `pitch_accent` SRS
+  card's FSRS scheduling (explicitly out of scope — extra practice is a
+  separate, one-time nudge, not a retention-interval change):
+  - **Usage log.** New `PitchDrillAttempt` (`src/domain/types.ts`) +
+    `pitchDrillAttempts` Dexie table (DB v18) + `pitch_drill_attempts`
+    Supabase table, synced like `reviews` (append-only, insert/select-only
+    RLS). `logPitchDrillAttempt` (`src/db/repository.ts`) writes one row per
+    scored target word per take on `PitchAccentDrillPage` — both "Full
+    sentence" and "Single words" modes — recording `measured`/`mismatch`/
+    `confidence` plus the dictionary vs. measured H/L shape strings
+    (`expectedShape`/`measuredShape`, `'h'/'l'` per mora). Wired from a new
+    effect in `PitchAccentDrillPage.tsx` that fires once a take's analysis
+    reaches `status: 'done'`; per-word mismatch/confidence is recovered by
+    matching `buildPitchAccentShapeObservations`'s `pitch-accent-shape-${i}`
+    observation ids back to the `scorableTargets` array
+    (`analyzeRecording`'s new `observationBySurfaceForm` map) rather than
+    re-deriving the match heuristic. `getPitchAccentDrillSentences` gained a
+    `targetVocabularyItemIds` (surface form → vocabulary item id) field on
+    its return type so sentence-mode attempts can resolve an id without
+    threading one through the widely-shared `PitchAccentTarget` type.
+  - **"Missed in review" focus queue.** New `getPitchAccentFocusWords`: a
+    word whose `pitch_accent` card's last 2 reviews were both `again`/`hard`
+    (confirmed rule) surfaces in a banner at the top of
+    `PitchAccentDrillPage` ("You've missed the pitch-accent card twice in a
+    row on N words") with a "Start extra practice" button that walks just
+    that list in single-word mode (`focusMode` state swaps the list source
+    and forces `effectiveMode: 'word'`, tags logged attempts
+    `focusTriggered: true`). Clears the moment *any* drill attempt is
+    logged for the word afterward, regardless of outcome — it's extra
+    practice, not a retest gate — and only reappears on a fresh 2-miss
+    streak. The word-example-picking logic shared with
+    `getPitchAccentDrillWords` was factored into
+    `bestExampleOccurrencesByItemId`.
+  - **H/L shape tracking on the SRS card too (user: "both is fine").**
+    `Review` gained `pitchExpectedShape`/`pitchChosenShape` (both `'h'/'l'`
+    strings from `expectedPitchShape`), computed in `ReviewPage.tsx`'s
+    `handleRate` from `PitchAccentCard`'s already-known chosen/correct drop
+    positions and threaded into `recordReview`. Grading itself is
+    unchanged — this is analysis-only data alongside the existing
+    `responseRaw`/`expectedAnswer` digit strings.
+  - **Query path.** `scripts/report-pitch-drill-effectiveness.ts` (same
+    `createScriptSupabaseClient` pattern as `report-new-card-backlog.ts`):
+    weekly drill-attempt volume vs. `pitch_accent` pass-rate, a drill-heavy-
+    vs-quiet-weeks pass-rate comparison (explicitly flagged correlational,
+    not causal — usage is self-selected), and the most common H/L
+    shape-confusion pairs pooled from both the drill log and the SRS
+    card's review history. Meant to be run directly and read, not
+    exported/imported.
+  - Migration `20260911010000_pitch_drill_attempts.sql` **to apply**
+    (2 new nullable `reviews` columns + the new table). `tests/sync.test.ts`
+    +2 mapper round-trips, `tests/pitchAccentDrill.test.ts` +8. 1337 tests
+    green.
 
 - **2026-09-11 — POS badges in the vocabulary picker (user request, prompted
   by wanting to learn to read Japanese dictionary entries).** New
