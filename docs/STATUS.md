@@ -30,6 +30,47 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-11 — Mis-transcribed sentence + mis-cut reference audio,
+  root-caused and fixed by hand for one sentence (card_issue_6be947e5,
+  pitch_accent on 色々).** User reported the isolated word audio sounded
+  wrong ("irorondesukedo" instead of 色々); investigation escalated to a
+  whole-clip problem. Diagnosed by pulling the source video's cached audio
+  straight from this box's `~/.cache/youtube-mining/source-cache/` (this
+  session runs directly on the codex-dev mining box, tailnet-reachable) and
+  re-transcribing windows of it via shadowing-analysis-api's
+  `/transcribe-source` (word-level timestamps) — no YouTube re-download
+  needed. Found two compounding bugs in `sent_263ac750`:
+  1. **Audio boundaries were off.** Stored `source_start_ms`/`end_ms`
+     (56990/62530) landed 450ms into the word 色々 (explaining the
+     "irorondesukedo" — a clipped いろいろ) and ran ~1.3s past the sentence's
+     end into a trailing ねえ filler with zero gap. Corrected to
+     56540/61200 (the actual いろいろ...まして span) and re-cut from the
+     cached source with the same padding/fade convention `app/clip.py` uses
+     (+300/-250ms pad, 20ms fade-out, aac 192k) — verified by re-transcribing
+     the new clip before upload, which came back exactly `いろいろあるんで
+     すけど` / `今日はそれをほとんど全て楽しんできまして` with no bleed.
+  2. **The sentence text itself was wrong.** Stored text opened with "ま、"
+     (well, ...) but that's never said at this timestamp — the real
+     preceding clause is "この8月はね" (a separate sentence about local
+     produce), not part of this sentence's audio at all. Dropped the
+     spurious leading "ま、" from `japanese`/`reading_only`/`inline_reading`/
+     `normalized_key` and shifted `vocabulary_suggestions` spans left by 2
+     (dropping the two suggestions that had covered "ま"/"、"). Also cleared
+     a stale manual `audio_start_ms`/`audio_end_ms` override on the 色々
+     `sentence_vocabulary` link the user had set (via Adjust) against the
+     old, wrong clip's timeline — now falls back to auto-alignment against
+     the corrected audio.
+  - Pure data fix via a throwaway script (not committed) + Supabase Storage
+    upload (`upsert: true`, same `storage_path` — no new row). No code
+    changed. Root cause (why this one sentence's boundaries/text were wrong)
+    wasn't traced further upstream — plausibly a one-off manual-correction
+    slip rather than a systemic mining-pipeline bug, but see the
+    transcript-validation idea below.
+  - Follow-up idea raised, not yet built: validate a sentence's stored
+    Japanese against a fresh ASR pass of its own clip at import/mining
+    time (or in batch, retroactively) to catch this class of error
+    automatically — see docs/ROADMAP.md.
+
 - **2026-09-11 — Pitch-accent drill usage tracking + SRS-miss-triggered
   extra practice + H/L shape tracking (user request — "is the drill actually
   helping?").** Three additive pieces, none touching the `pitch_accent` SRS
