@@ -344,7 +344,7 @@ describe('PlaybackCoordinator.loopRange', () => {
     await done;
   });
 
-  it('resolves without throwing if play() rejects (e.g. unsupported source)', async () => {
+  it('rejects if the initial play() rejects (e.g. unsupported source), so callers can retry/report it', async () => {
     const coordinator = new PlaybackCoordinator();
     const audio = new FakeAudioElement();
     audio.play = vi.fn(async () => {
@@ -356,7 +356,7 @@ describe('PlaybackCoordinator.loopRange', () => {
         startMs: 0,
         endMs: 1000,
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('NotSupportedError');
   });
 
   it('cancelling one loop does not affect a fresh one on the same coordinator', async () => {

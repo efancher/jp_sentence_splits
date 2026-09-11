@@ -26,6 +26,17 @@ import { WordAudioRangeEditor } from './WordAudioRangeEditor';
  * Starting the loop stops the singleton so a full-sentence play and the
  * word loop can't overlap.
  *
+ * `toggleLoop` retries once off a freshly refetched blob (mirroring
+ * nativeAudioController's recoverAndRetry) when the initial `play()` fails —
+ * Safari's IndexedDB occasionally hands back a Blob that looks intact
+ * locally but won't actually decode (WebKitBlobResource error), which
+ * previously left this button looking inert with zero feedback (user
+ * report card_issue_ed8e9e5e, 2026-09-11: "nothing seemed to happen when I
+ * clicked it"). The retry sets the `<audio>` element's `src` directly on a
+ * temporary object URL rather than going through `setBlob`, since that
+ * would re-trigger the objectUrl effect's cleanup mid-playback and cancel
+ * the very retry it's attempting.
+ *
  * Extracted from PitchAccentNativeAudio (which now wraps it) so the
  * `word_listening` review card can reuse the same isolate-and-loop control.
  *
@@ -66,6 +77,7 @@ export function SegmentLoopPlayer({
   const [speed, setSpeed] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   // Manual override — seeded from the link, then owned locally so a drag
   // reflects instantly without waiting on the DB write / a parent refresh.
@@ -167,8 +179,35 @@ export function SegmentLoopPlayer({
     if (!el || !editRange) return;
     nativeAudioController.stop();
     setIsLooping(true);
+    setPlaybackError(null);
     try {
       await coordinatorRef.current.loopRange(el, editRange, speed);
+    } catch {
+      // Safari's IndexedDB occasionally hands back a Blob that looks intact
+      // locally but fails to actually play (WebKitBlobResource error) —
+      // nativeAudioController already retries this for whole-sentence
+      // playback (recoverAndRetry); this path had none, so a hit here just
+      // looked like the button silently doing nothing (user report
+      // card_issue_ed8e9e5e, 2026-09-11). Mirror it: one retry off a
+      // freshly refetched blob via a temporary object URL, bypassing the
+      // objectUrl/blob state pipeline so a concurrent setBlob doesn't cancel
+      // this retry through the state-driven cleanup effect above.
+      const { repairSentenceAudio } = await import('../sync/audioSync');
+      const freshBlob = await repairSentenceAudio(audio.id);
+      if (!freshBlob) {
+        setPlaybackError('Unable to play this word on this device.');
+      } else {
+        const retryUrl = URL.createObjectURL(freshBlob);
+        el.src = retryUrl;
+        try {
+          await coordinatorRef.current.loopRange(el, editRange, speed);
+        } catch {
+          setPlaybackError('Unable to play this word on this device.');
+        } finally {
+          URL.revokeObjectURL(retryUrl);
+          el.src = objectUrl ?? '';
+        }
+      }
     } finally {
       setIsLooping(false);
     }
@@ -266,6 +305,7 @@ export function SegmentLoopPlayer({
               : fallbackHint}
         </div>
       ) : null}
+      {playbackError ? <div className="muted">{playbackError}</div> : null}
     </div>
   );
 }

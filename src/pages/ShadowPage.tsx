@@ -352,6 +352,8 @@ export function ShadowPage() {
         targetRange,
         speed,
       );
+    } catch (error) {
+      console.error('Target loop playback failed to start.', error);
     } finally {
       setIsLoopingTarget(false);
     }

@@ -554,7 +554,7 @@ function playLoopedRange(
   range: TimeRangeMs,
   signal: AbortSignal,
 ): Promise<void> {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     const startSec = range.startMs / 1000;
     const endSec = range.endMs / 1000;
     if (signal.aborted) {
@@ -599,9 +599,15 @@ function playLoopedRange(
     audio.addEventListener('timeupdate', onTimeUpdate);
     signal.addEventListener('abort', onAbort, { once: true });
     audio.currentTime = startSec;
-    audio.play().catch(() => {
+    // Only the *initial* play() failure is surfaced as a rejection — a
+    // mid-loop rewind's play() (in `rewind` above) stays silently retried
+    // on the next timeupdate tick, since a single stutter there isn't worth
+    // aborting the whole loop over. The initial failure is the one that
+    // otherwise leaves the loop button looking like it did nothing at all
+    // (see `toggleLoop`'s retry in SegmentLoopPlayer).
+    audio.play().catch((error: unknown) => {
       cleanup();
-      resolve();
+      reject(error instanceof Error ? error : new Error('Playback failed to start.'));
     });
   });
 }

@@ -48,6 +48,39 @@ is trimmed.)
     form of the pattern rather than its dictionary form (e.g. てる for ている),
     since the AI-generated `explanation` field doesn't reliably call that out
     itself. (report card_issue_f222efff)
+
+- **2026-09-11 — Two more issue reports, same session: another
+  reading-mismatch instance, and a silent playback-failure bug in the
+  word-loop control.**
+  - cloze report on 並ぶ (card_issue_699e5810): same expression/reading-
+    mismatch bug class as 頑張る above — `vocabulary_items.reading` held
+    `ならび` (masu-stem) instead of `ならぶ`. Cloze is a self-rated reveal
+    (`VocabularyTargetCard`), not auto-graded, so "the answer" it shows is
+    literally `vocabularyItem.reading` — fixing the data fixed the card, no
+    code change needed here.
+  - `SegmentLoopPlayer`'s "Loop native word" button could fail completely
+    silently: its local `<audio>` + `PlaybackCoordinator.loopRange` had no
+    equivalent of `nativeAudioController`'s `recoverAndRetry` (the existing
+    fix for Safari's IndexedDB occasionally handing back a Blob that looks
+    intact locally but won't actually decode — WebKitBlobResource error).
+    `playLoopedRange` (`src/lib/recording.ts`) now *rejects* on the initial
+    `play()` failure instead of silently resolving (mid-loop rewind
+    failures still retry silently — a single stutter isn't worth aborting
+    the loop over); `SegmentLoopPlayer.toggleLoop` catches that and retries
+    once off a freshly refetched blob via a temporary object URL set
+    directly on the `<audio>` element (not through `setBlob`, which would
+    cancel the retry through the objectUrl effect's cleanup), surfacing
+    "Unable to play this word on this device." only if the retry also
+    fails. `ShadowPage`'s other `loopRange` caller got a matching catch so
+    the now-possible rejection doesn't surface as an unhandled promise
+    rejection there. (report card_issue_ed8e9e5e — "nothing seemed to
+    happen when I clicked it"; root cause unconfirmed since it can't be
+    reproduced from data alone, but this closes the actual gap: previously
+    a real playback failure had zero recovery and zero feedback, by design
+    symmetry with the whole-sentence path.)
+  - `tests/recording.test.ts`: updated the loopRange test that asserted the
+    old silent-resolve behavior to assert rejection instead. Full vitest
+    suite green (1323).
   - Both in `src/pages/ReviewPage.tsx`. Full vitest suite green (1323).
   - Also ran `merge:duplicate-vocabulary-items --apply` while triaging a
     third report (reading_production on 頑張る showing expected answer
