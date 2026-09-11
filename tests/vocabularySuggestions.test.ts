@@ -463,5 +463,25 @@ describe('vocabularySuggestions', () => {
       );
       expect(suggestion?.reading).toBe('みつける');
     });
+
+    it('prefers the contextual surface reading over lemmaReading when surface === lemma (uninflected compound member)', () => {
+      // 母 alone has kanaBase (lemmaReading) はは, but inside お母さん its
+      // contextual reading is かあ — surface === lemma here (no inflection to
+      // bridge), so lemmaReading must not override the tokenizer's own
+      // in-context reading (card_issue_7a01be04: お母さん -> おははさん).
+      const suggestion = suggestionFromToken(
+        {
+          surface: '母',
+          start: 1,
+          end: 2,
+          lemma: '母',
+          reading: 'かあ',
+          lemmaReading: 'はは',
+          pos: '名詞/普通名詞',
+        },
+        'お母さん',
+      );
+      expect(suggestion?.reading).toBe('かあ');
+    });
   });
 });

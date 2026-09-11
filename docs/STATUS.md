@@ -30,6 +30,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-11 — Root-caused a compound-noun reading bug the user'd hit
+  before: お母さん → おははさん.** `suggestionFromToken`
+  (`src/lib/vocabularySuggestions.ts`) unconditionally preferred
+  `token.lemmaReading` (UniDic `kanaBase` — the lemma's own out-of-context
+  citation reading) over the tokenizer's contextual `token.reading`, even
+  when `surface === lemma` (nothing inflected, so there was no gap for
+  `lemmaReading` to bridge). For a compound-noun member whose in-context
+  reading legitimately differs from its isolated dictionary reading (母
+  alone kanaBase はは, but inside お母さん its contextual reading is かあ),
+  that silently swapped in the wrong reading — invisible until the learner
+  combined tokens in the picker and the wrong reading rode along. Fixed:
+  `lemmaReading` is now only consulted when `token.surface !== expression`
+  (there's an actual inflection gap); an uninflected token trusts its own
+  contextual `reading`. New regression test in
+  `tests/vocabularySuggestions.test.ts`.
+  - Scanned prod for the same signature across other known irregular
+    family-honorific/date compounds (お父さん, お兄さん, お姉さん, 今日, 明日,
+    昨日, 一日, …) and found one more real hit: お父さん → おちちさん, plus an
+    unrelated orphaned お父さん→おとうさんどり row (dead, no links/study
+    items, likely a stray from an お父さん鳥 combine). Hand-merged/deleted
+    both the same way the two card-issue-report instances were (repoint
+    study_items preserving FSRS + reviews + card_issue_reports, repoint
+    sentence_vocabulary, dedupe vocabulary_kanji) — this bug's trigger
+    (uninflected compound member, not a conjugation surface form) falls
+    outside `merge-duplicate-vocabulary-items.ts`'s detection, so no
+    general backfill script exists for it; the scan was a one-off, not
+    added as a script.
+
 (New detail lands here; swept into `STATUS_ARCHIVE.md` next time this file
 is trimmed.)
 

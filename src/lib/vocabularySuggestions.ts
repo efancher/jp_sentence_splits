@@ -235,11 +235,23 @@ export function suggestionFromToken(
   const expression = token.lemma.trim() || token.surface;
   const pos = token.pos?.trim() ?? '';
   const surfaceReading = token.reading?.trim() ?? '';
-  // The tokenizer's own dictionary-form reading (UniDic kanaBase) when it has
-  // one; otherwise derive it from the surface reading + lemma.
+  // The tokenizer's own dictionary-form reading (UniDic kanaBase) when it
+  // has one; otherwise derive it from the surface reading + lemma. Only
+  // consulted when the surface is actually inflected relative to the lemma
+  // (there's a real gap to bridge) — `lemmaReading` is the lemma's
+  // out-of-context citation reading, which is wrong to prefer when
+  // surface === lemma: the token's own `reading` is then the tokenizer's
+  // in-context pronunciation, and for a noun inside a compound that can
+  // differ from the lemma's isolated reading (母 alone kanaBase はは, but
+  // inside お母さん its contextual reading is かあ) — preferring lemmaReading
+  // there silently swapped in the wrong reading (お母さん -> おははさん,
+  // card_issue_7a01be04, 2026-09-11) since surface and lemma are identical
+  // for an uninflected noun and there's nothing to bridge.
   const lemmaReading = token.lemmaReading?.trim();
   const reading =
-    lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression);
+    token.surface === expression
+      ? surfaceReading || lemmaReading || expression
+      : lemmaReading || deriveDictionaryReading(token.surface, surfaceReading, expression);
   return {
     id: createId('vsug'),
     surface: token.surface,
