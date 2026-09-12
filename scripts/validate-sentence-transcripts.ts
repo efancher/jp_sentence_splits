@@ -112,8 +112,6 @@ async function main() {
   for (const row of audioRows) {
     if (!audioBySentence.has(row.sentenceId)) audioBySentence.set(row.sentenceId, row);
   }
-  const sentenceById = new Map(sentences.map((s) => [s.id, s]));
-
   let candidates = sentences.filter((s) => audioBySentence.has(s.id));
   if (sentenceFilter) candidates = candidates.filter((s) => s.id === sentenceFilter);
   if (batchFilter) candidates = candidates.filter((s) => s.importBatchIds.includes(batchFilter));
