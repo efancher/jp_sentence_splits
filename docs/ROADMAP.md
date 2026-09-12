@@ -303,17 +303,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Same "external per-word data only" limit as verb te-form, for every
     accent class including heiban.
 
-- [ ] **Wiktionary secondary backfill for missing dictionary accent data.**
-  ~89 vocabulary items (as of 2026-09-04, likely more now — no current
-  diagnostic script reports the live count; `npm run backfill:pitch-accent`
-  dry-run logs it) have no `pitchAccentPositions` at all after the
-  existing Kanjium + UniDic backfill passes. New third-pass script,
-  modeled on `scripts/backfill-pitch-accent.ts`: fetch each blank item's
-  real Wiktionary page (with a politeness delay + descriptive User-Agent —
-  first script to do per-page external fetches, be a good citizen),
-  parse the Pronunciation section's accent bracket, skip (don't guess) on
-  ambiguous/missing/multi-reading pages. Dry-run first, always.
-
 - [ ] **Heiban i-adjective predicate-position accent.** Side discovery
   from the 2026-09-12 pitch-accent work, not investigated further: a
   heiban i-adjective may take a *different* accent in bare sentence-final

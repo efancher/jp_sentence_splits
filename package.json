@@ -28,6 +28,7 @@
     "backfill:vocabulary-surface-forms": "tsx scripts/backfill-vocabulary-surface-forms.ts",
     "backfill:pitch-accent": "tsx scripts/backfill-pitch-accent.ts",
     "backfill:pitch-accent-unidic": "tsx scripts/backfill-vocabulary-pitch-accent-unidic.ts",
+    "backfill:pitch-accent-wiktionary": "tsx scripts/backfill-pitch-accent-wiktionary.ts",
     "backfill:resegment-audio": "tsx scripts/backfill-resegment-audio.ts",
     "backfill:source-audio": "tsx scripts/backfill-source-audio.ts",
     "backfill:reference-alignment": "tsx scripts/backfill-reference-alignment.ts",

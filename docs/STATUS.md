@@ -30,6 +30,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — Third-pass Wiktionary backfill for vocabulary items with
+  no dictionary pitch-accent data at all.** New
+  `scripts/backfill-pitch-accent-wiktionary.ts` (`npm run
+  backfill:pitch-accent-wiktionary -- [--apply]`), run after the existing
+  Kanjium (`backfill:pitch-accent`) and UniDic (`backfill:pitch-accent-unidic`)
+  passes, against whatever's still blank. Fetches each item's live
+  Wiktionary page and parses its Pronunciation section's accent citation
+  (e.g. "はしる [hàshíꜜrù] (Nakadaka – [2])") — the same real data this
+  session used to verify `pitchAccentShift.ts`'s formulas. Matches by the
+  kana reading each accent entry is actually *for*, not just "any accent
+  label on the page" — load-bearing, since one spelling can host several
+  distinct Japanese words with different accents (開ける is あける,
+  ひらける, and はだける, each separate); an earlier draft that only
+  checked "how many distinct positions appear anywhere on the page" would
+  have wrongly called 開ける ambiguous even though あける's own entry
+  resolves cleanly. First script in this codebase to do per-page external
+  HTML fetches (as opposed to one bulk download or batched internal-API
+  calls) — sends a descriptive User-Agent and a 1.5s delay between
+  requests, since Wiktionary is a shared community resource. Skips (never
+  guesses) on no page, no accent-tagged entry for that reading, or more
+  than one distinct position cited for that reading. Dry-run by default,
+  same convention as the other two passes. `parseWiktionaryAccentHtml` is
+  exported and unit-tested (`tests/backfillPitchAccentWiktionary.test.ts`,
+  7 cases) independent of the network call.
+
 - **2026-09-12 — Ambient pitch-accent display ("H/L marks" on shadowing
   pages, `AnalysisPanel`, the pitch-accent drill, and the `pitch_accent`
   card's own reveal) is now inflection-aware, matching the review card.**

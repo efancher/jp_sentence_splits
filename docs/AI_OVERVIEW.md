@@ -121,8 +121,12 @@ built out Phases 1–9):
   週間/習慣 stay distinct). Has `meaning`, `partOfSpeech`, optional
   `externalId` (`wk:{id}`/`jmdict:{id}`) for idempotent re-import, and
   optional `pitchAccentPositions` (mora index of the dictionary accent
-  drop, from Kanjium via `scripts/backfill-pitch-accent.ts`) feeding the
-  shadowing feature's ground-truth pitch-accent scoring (§6).
+  drop) feeding the shadowing feature's ground-truth pitch-accent scoring
+  (§6) — backfilled in three passes, run in order: Kanjium
+  (`scripts/backfill-pitch-accent.ts`), UniDic via the mining service
+  (`backfill-vocabulary-pitch-accent-unidic.ts`), then Wiktionary's live
+  Pronunciation-section data for whatever's still blank
+  (`backfill-pitch-accent-wiktionary.ts`, 2026-09-12).
 - `SentenceVocabulary` — join table linking a sentence (optionally a
   specific chunk) to a canonical `VocabularyItem`, carrying `surfaceForm`
   (the exact inflected text as it appeared, e.g. 表れていた for
