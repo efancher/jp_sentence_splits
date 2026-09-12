@@ -1,33 +1,33 @@
 [
   {
-    "expression": "読む",
-    "reading": "よむ",
+    "expression": "買う",
+    "reading": "かう",
     "wordClass": "godan",
     "citationPosition": 0,
     "formKey": "plain_negative",
-    "expectedReading": "よまない",
+    "expectedReading": "かわない",
     "expectedPosition": 0,
-    "note": "unaccented (heiban) godan verb stays heiban in negative"
+    "note": "heiban godan verb (Wiktionary: Heiban [0]) stays heiban in negative — real rendered romaji [kàwánáí], no downstep mark"
   },
   {
-    "expression": "読む",
-    "reading": "よむ",
+    "expression": "買う",
+    "reading": "かう",
     "wordClass": "godan",
     "citationPosition": 0,
     "formKey": "ba_form",
-    "expectedReading": "よめば",
+    "expectedReading": "かえば",
     "expectedPosition": 2,
-    "note": "ば induces its own downstep right before itself on an otherwise-heiban verb (Wiktionary Module:ja-acc-table) — よめ↓ば, not flat"
+    "note": "ば induces its own downstep right before itself on an otherwise-heiban verb — real rendered romaji [kàéꜜbà], drop after mora 2 (え), not flat"
   },
   {
-    "expression": "読む",
-    "reading": "よむ",
+    "expression": "買う",
+    "reading": "かう",
     "wordClass": "godan",
     "citationPosition": 0,
     "formKey": "plain_past_negative",
-    "expectedReading": "よまなかった",
+    "expectedReading": "かわなかった",
     "expectedPosition": 3,
-    "note": "なかった gets a downstep a fixed 3 morae from the end even for a heiban verb — よまな↓かった, not flat"
+    "note": "なかった gets a downstep a fixed 3 morae from the end even for a heiban verb — real rendered romaji [kàwánáꜜkàttà], drop after mora 3 (な), not flat"
   },
   {
     "expression": "走る",
@@ -37,7 +37,7 @@
     "formKey": "plain_negative",
     "expectedReading": "はしらない",
     "expectedPosition": 3,
-    "note": "ない always attaches with its own atamadaka accent, landing right before it — はしら↓ない (position 3, i.e. citationMoraCount), not at the citation stem boundary (position 2)"
+    "note": "ない always attaches with its own atamadaka accent, landing right before it — real rendered romaji [hàshíráꜜnàì], drop after mora 3 (ら), one mora past the citation stem boundary (mora 2)"
   },
   {
     "expression": "走る",
@@ -47,7 +47,7 @@
     "formKey": "ba_form",
     "expectedReading": "はしれば",
     "expectedPosition": 2,
-    "note": "an already-accented verb's ba-form keeps the same absolute mora index as citation — はし↓れば"
+    "note": "an already-accented verb's ba-form keeps the same absolute mora index as citation — real rendered romaji [hàshíꜜrèbà], drop after mora 2 (し)"
   },
   {
     "expression": "走る",
@@ -57,6 +57,6 @@
     "formKey": "plain_past_negative",
     "expectedReading": "はしらなかった",
     "expectedPosition": 3,
-    "note": "なかった carries the negative form's own (already-shifted) downstep straight through — はしら↓なかった"
+    "note": "なかった carries the negative form's own (already-shifted) downstep straight through — real rendered romaji [hàshíráꜜnàkàttà], drop after mora 3 (ら)"
   }
 ]

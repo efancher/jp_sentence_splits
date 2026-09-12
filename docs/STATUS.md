@@ -79,14 +79,30 @@ what's left is one deferred durability item (below).
      derivable from a formula at all** — Wiktionary's own module sources
      their accent from explicit per-word data it doesn't try to compute,
      which is why they're excluded even for godan. Fixed same day, second
-     commit. Ichidan/i-adjective remain deferred — see docs/ROADMAP.md;
-     any future work there should use a primary source the way step 2 did,
-     not summarized web search the way step 1 did.
+     commit.
+  3. User asked to double-check the fix rather than trust it outright.
+     Re-tracing the Lua by hand confirmed the transcription was accurate,
+     but the fixtures' own ground truth wasn't: 読む was assumed heiban
+     [0] without checking — it's actually atamadaka **[1]**. Rather than
+     trust another summary, fetched Wiktionary's *live, rendered* pages
+     for 走る and 買う directly (`curl`, not WebFetch) and read the actual
+     `{{ja-acc-table}}`-computed romaji off the page — real production
+     output, not a re-derivation. Every prediction matched exactly
+     (走らない `[hàshíráꜜnàì]` drop after mora 3, 走れば `[hàshíꜜrèbà]` drop
+     after mora 2, 走らなかった `[hàshíráꜜnàkàttà]` drop after mora 3;
+     買わない `[kàwánáí]` flat, 買えば `[kàéꜜbà]` drop after mora 2,
+     買わなかった `[kàwánáꜜkàttà]` drop after mora 3) — third commit swaps
+     the fixture's heiban example from 読む to the verified-heiban 買う.
+     Ichidan/i-adjective remain deferred — see docs/ROADMAP.md; any future
+     work there should verify against real rendered output the same way,
+     not summarized web search or an untested assumption about which
+     words are heiban.
   New `tests/pitchAccentShift.test.ts` + `fixtures/pitch-accent-shift-fixtures.json`
-  (godan-only, 読む/走る across the 3 supported forms, verified against
-  Module:ja-acc-table) plus two `tests/reviewPage.test.tsx` cases (masu-form
-  regression stays rejected; a 走らない negative occurrence is accepted and
-  graded against はしらない, not はしる).
+  (godan-only, 買う/走る across the 3 supported forms, each row's expected
+  position cross-referenced against Wiktionary's live-rendered accent
+  romaji) plus two `tests/reviewPage.test.tsx` cases (masu-form regression
+  stays rejected; a 走らない negative occurrence is accepted and graded
+  against はしらない, not はしる).
 
 - **2026-09-12 — Grammar production primes with native situational context
   instead of the abstract meaning gloss, when safe (user: "I wonder if we

@@ -21,6 +21,14 @@
  * downstep. See docs/STATUS.md for the correction and what shipped wrong
  * in the interim.
  *
+ * Verified against Wiktionary's own live-rendered {{ja-acc-table}} output
+ * (not just this module's Lua source) for 走る (accented [2]) and 買う
+ * (heiban [0]) — the real rendered romaji for every form below
+ * (走らない [hàshíráꜜnàì], 走れば [hàshíꜜrèbà], 走らなかった [hàshíráꜜnàkàttà],
+ * 買わない [kàwánáí], 買えば [kàéꜜbà], 買わなかった [kàwánáꜜkàttà]) matches
+ * these formulas' predicted downstep exactly. See
+ * fixtures/pitch-accent-shift-fixtures.json.
+ *
  * Scope: GODAN VERBS ONLY, and only the three forms below whose accent is
  * a pure function of the citation accent per Wiktionary's own module.
  * Notably **te-form/past-tense (た) are excluded even for godan** — the
