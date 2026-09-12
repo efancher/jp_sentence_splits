@@ -24,6 +24,7 @@ from app import (
     resegment,
     source_cache,
     status_page,
+    validate,
     waveform,
     youtube,
 )
@@ -47,6 +48,8 @@ from app.models import (
     SourceAudioRequest,
     SourceClipRequest,
     SourceRangeRequest,
+    ValidateTranscriptRequest,
+    ValidateTranscriptResponse,
     WaveformResponse,
 )
 
@@ -425,3 +428,17 @@ async def resegment_sentences(req: ResegmentRequest):
     (drama transcripts); both false is annotate-only (lyrics/manual mode).
     """
     return await asyncio.to_thread(_resegment_sync, req)
+
+
+@app.post("/validate-transcript", response_model=ValidateTranscriptResponse)
+async def validate_transcript(req: ValidateTranscriptRequest):
+    """Cross-checks `expectedText` against a fresh ASR pass of the supplied
+    clip (see app/validate.py) — a review-queue signal, not a gate: this
+    never writes anything, and a low similarity score doesn't mean the
+    stored text is wrong (ASR errs too, especially on short/noisy clips).
+    Stateless, no job."""
+    audio_bytes = base64.b64decode(req.audioBase64)
+    result = await asyncio.to_thread(
+        validate.validate_sentence_audio, audio_bytes, req.mimeType, req.expectedText
+    )
+    return ValidateTranscriptResponse(**result)

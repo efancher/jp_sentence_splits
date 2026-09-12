@@ -93,6 +93,12 @@ USE_ASR_TRANSCRIPT = os.environ.get("MINING_USE_ASR_TRANSCRIPT", "1") != "0"
 # music-heavy track triggers a second no-VAD pass — 30 min covers a long
 # source with headroom.
 ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1800"))
+# A single sentence clip (a few seconds) on the "base" diagnostic model
+# (see app/asr_client.py's transcribe_clip, POST /transcribe rather than
+# /transcribe-source) — seconds, not the long-form timeout above.
+ASR_CLIP_TIMEOUT_SECONDS = float(
+    os.environ.get("MINING_ASR_CLIP_TIMEOUT_SECONDS", "30")
+)
 # An ASR segment is flagged low-confidence (→ review UI marks it) when its
 # mean token log-prob is below this or its no-speech probability is above the
 # next one. Whisper's typical clean-speech avg_logprob is ~-0.25 to -0.4.

@@ -30,6 +30,49 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — First pass at automated transcript validation (follow-up
+  to the sent_263ac750 fix below — user: "is it worthwhile when we do these
+  imports to have you or a tool go through the transcripts and validate the
+  stored japanese?").** New `youtube-mining` endpoint `POST
+  /validate-transcript` (`app/validate.py`, `app/asr_client.py`'s new
+  `transcribe_clip` — the short-utterance `/transcribe` model, not
+  `transcribe_source`'s long-form `/transcribe-source`): re-transcribes a
+  sentence's own reference-audio clip and compares it to the stored
+  `japanese`, on **hiragana readings** rather than raw text — `色々`/`いろいろ`
+  are the same word with zero character overlap, so a raw-text compare
+  would flag the single most common non-bug case in the corpus.
+  `readings.generate_reading` (fugashi, already used elsewhere in this
+  service) handles the kanji side; katakana is independently folded to
+  hiragana via `jaconv.kata2hira` for ASR's habit of rendering names in
+  katakana (found live-testing against prod: 佐藤ゆうじ vs ASR's サトウユージ
+  scored ~0.25 before this fold, ~0.88 after — the residual gap is
+  `kata2hira` not expanding the chōonpu ー to match hiragana's vowel-
+  doubling, an accepted imperfection since the flagging threshold is 0.6,
+  not exactness). Returns a similarity score (0–1) — a review-queue signal,
+  never an auto-fix, since ASR errs too (confirmed live: very short/quiet
+  clips, a couple morae, sometimes produce a plausible-sounding hallucinated
+  word instead of low confidence).
+  - New `scripts/validate-sentence-transcripts.ts`
+    (`npm run validate:sentence-transcripts -- [--book id] [--batch id]
+    [--sentence id] [--limit N] [--threshold 0.6]`) — read-only batch
+    runner: downloads each candidate's stored clip from Supabase Storage,
+    calls the new endpoint, prints anything below threshold side-by-side
+    (stored vs heard). Default limit 50 (each check is a real ASR round
+    trip, ~3s/sentence observed). Live-tested against 30 real prod
+    sentences: 2 flagged (both short single-clause utterances — plausible
+    ASR noise on tiny clips, not confirmed bugs; needs a human listen) and
+    1 ASR-unavailable (transient), 27 clean.
+  - Scope of this pass deliberately stops at the retroactive/on-demand
+    script — not wired into the mining wizard's commit step yet. If the
+    script proves useful in practice, that's the natural next step (flag at
+    commit time instead of requiring a separate manual run).
+  - New Python tests: `tests/test_validate.py` (comparison logic, mocked
+    ASR — kanji/kana equivalence, katakana-name equivalence, genuine
+    mismatch, ASR-unavailable), `tests/test_validate_api.py` (endpoint
+    contract). 102 Python tests green. Full vitest suite unaffected
+    (script has no runtime import from `src/` beyond the already-Node-safe
+    `appConfig.ts`).
+
 - **2026-09-11 — Mis-transcribed sentence + mis-cut reference audio,
   root-caused and fixed by hand for one sentence (card_issue_6be947e5,
   pitch_accent on 色々).** User reported the isolated word audio sounded

@@ -268,6 +268,22 @@ class SourceRangeRequest(BaseModel):
     endMs: int = Field(ge=1)
 
 
+class ValidateTranscriptRequest(BaseModel):
+    """Cross-check a sentence's stored Japanese against a fresh ASR pass of
+    its own reference-audio clip (see app/validate.py). `audioBase64` is the
+    clip exactly as stored — no cutting/padding happens here."""
+
+    audioBase64: str = Field(min_length=1)
+    mimeType: str = "audio/mp4"
+    expectedText: str = Field(min_length=1)
+
+
+class ValidateTranscriptResponse(BaseModel):
+    asrText: str | None
+    similarity: float | None
+    reason: str | None = None
+
+
 class WaveformResponse(BaseModel):
     """Down-sampled peak envelope + pause midpoints for a reviewed span —
     what `SegmentationWaveform` draws instead of decoding the audio itself

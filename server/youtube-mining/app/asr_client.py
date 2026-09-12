@@ -1,4 +1,5 @@
-"""Client for shadowing-analysis-api's `POST /transcribe-source`.
+"""Client for shadowing-analysis-api's `POST /transcribe-source` and
+`POST /transcribe`.
 
 YouTube's Japanese auto-caption track has no reliable kanji and no
 punctuation — the latter being exactly what `resegment.py`'s merge/split
@@ -72,3 +73,27 @@ def transcribe_source(audio_path: Path) -> list[Cue] | None:
         logger.warning("ASR returned no usable segments, using captions")
         return None
     return cues
+
+
+def transcribe_clip(audio_bytes: bytes, mime_type: str) -> str | None:
+    """Short-utterance ASR for a single sentence's reference-audio clip (a
+    few seconds) — the lighter "base" diagnostic model behind `POST
+    /transcribe`, not `transcribe_source`'s long-form `/transcribe-source`
+    one. Used by `app/validate.py` to cross-check a sentence's stored
+    Japanese against what's actually said in its clip. Returns None on any
+    failure (service unreachable, empty result) — same
+    "unavailable, not an error" contract as `transcribe_source`."""
+    if not config.ANALYSIS_API_BASE:
+        return None
+    try:
+        resp = httpx.post(
+            f"{config.ANALYSIS_API_BASE}/transcribe",
+            files={"audio": ("clip.m4a", audio_bytes, mime_type)},
+            timeout=config.ASR_CLIP_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        text = resp.json().get("text")
+    except Exception as exc:  # noqa: BLE001 - any failure -> caller treats as unavailable
+        logger.warning("Clip transcription unavailable: %s", exc)
+        return None
+    return text.strip() if isinstance(text, str) and text.strip() else None
