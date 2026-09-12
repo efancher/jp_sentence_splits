@@ -911,10 +911,18 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   eligibility than the other three — only
   words with dictionary pitch-accent data (`VocabularyItem.pitchAccentPositions`)
   *and* whose context sentence has a native reference recording
-  (`SentenceAudio`) *and* where the word appears in its **citation form**
-  (an inflected occurrence — 速く for 速い — would loop native audio whose
-  morae/accent no longer match the dictionary contour the choices key off;
-  a kana/kanji spelling difference for the same form is still fine) *and*,
+  (`SentenceAudio`). The word must appear either in its **citation form**
+  (a kana/kanji spelling difference for the same form is fine) or, for a
+  **godan verb**, in one of six inflected forms
+  (negative/past/past-negative/te-form/ba-conditional/tara-conditional)
+  whose downstep `src/lib/pitchAccentShift.ts` can confidently place in the
+  *conjugated* reading — an occurrence outside that (ichidan, i-adjective,
+  -masu forms, any other word class) still falls back to citation-form-only,
+  since an inflected occurrence would otherwise loop native audio whose
+  morae/accent don't match the contour the choices key off (the original
+  bug: a ござる card tested against ありがとうございます audio). One card per
+  word — a citation-form occurrence is always preferred when one exists;
+  the shift-covered inflected occurrence is only used as a fallback. *And*,
   when the accent sits on the word's edge (heiban, drop 0; or odaka, drop
   === mora count), where a hiragana mora (particle / copula / auxiliary)
   follows that occurrence in the sentence — the two contours are identical

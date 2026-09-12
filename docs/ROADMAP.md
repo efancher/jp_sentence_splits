@@ -277,6 +277,23 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Extend inflected `pitch_accent` cards to ichidan verbs and
+  i-adjectives.** 2026-09-12 shipped godan-only support (see
+  docs/STATUS.md) — an accented godan verb's downstep carries forward
+  unchanged through negative/past/te-form/conditionals, since
+  conjugation.ts's suffix tables reproduce the stem verbatim. That same
+  "carry forward" rule does **not** hold for ichidan or i-adjectives:
+  cross-checking against real pitch-accent references found ichidan's
+  て/た/ば/たら family retracts the accent one mora earlier than the
+  dictionary form (e.g. たべ↓る → た↓べて), with further exceptions when the
+  retracted mora would be devoiced or moraic ん (つけ↓る/つけ↓て doesn't
+  move; ぞんじ↓る/ぞ↓んじて moves back two), and i-adjective negative/past
+  forms have their own documented exceptions to the "same mora" rule. Needs
+  the actual retraction + exception rules sourced from OJAD or an
+  equivalent primary reference (not summarized web search — that's what
+  surfaced the wrong initial assumption) before extending
+  `src/lib/pitchAccentShift.ts`'s trusted table past godan.
+
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
   "After Work" (`FkX4A-ZLBrc`, 116 sentences, **zero study progress**) is

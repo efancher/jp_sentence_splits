@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-11.
+Last updated: 2026-09-12.
 
 ## Where things stand
 
@@ -29,6 +29,45 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-12 — `pitch_accent` cards accept godan-verb inflected occurrences
+  (user: "is there a way to improve [the citation-form-only restriction]?").**
+  The card previously required a word to appear in its exact dictionary
+  citation form (`isCitationForm`, `getPitchAccentReviewCandidates` in
+  `src/pages/ReviewPage.tsx`) — added 2026-09-02 after a bug where a ござる
+  card was tested against ありがとうございます audio, whose mora count/accent
+  disagreed with the dictionary contour. New `src/lib/pitchAccentShift.ts`
+  (`predictInflectedPitchAccentPosition`) computes the correct downstep for
+  an inflected *godan* occurrence instead of rejecting it outright: for
+  `plain_negative`/`plain_past`/`plain_past_negative`/`te_form`/`ba_form`/
+  `tara_form`, an accented verb's downstep stays on the same absolute mora
+  (the stem is reproduced verbatim; conjugation.ts's suffix tables only
+  append after it) and an unaccented verb stays heiban.
+  `getPitchAccentReviewCandidates` now takes per-occurrence candidates
+  (`VocabularyOccurrenceCandidate[]`, same source `getSentenceConjugationCandidates`/
+  `getWordListeningCandidates` use) instead of one pre-picked occurrence per
+  word, grouping by word and preferring a citation-form occurrence when one
+  exists, falling back to a shift-covered inflected one otherwise —
+  `PitchAccentReviewCandidate` gained a `reading` field so the card, its
+  `PitchAccentDiagram`, and mora choices key off whichever reading the
+  native clip actually says. `pitchAccentRules.ts`'s two-class
+  classification (`position === 0` unaccented / `position === moraCount - 1`
+  accented) was extracted into shared `classifyVerbAdjectiveAccent`.
+  **Scoped down from the original plan mid-implementation**: the plan
+  assumed the same "stem preserved, carry the position forward" rule held
+  uniformly for godan, ichidan, and i-adjectives. Cross-checking that
+  against real pitch-accent references before shipping (this module's own
+  "verify before trusting" mandate) found it's wrong for the other two —
+  ichidan's て/た/ば/たら family actually retracts the accent one mora
+  earlier than the dictionary form (with further exceptions around
+  devoicing and moraic ん), and i-adjective negative/past forms have their
+  own documented exceptions. Both are excluded (return `null`, same as an
+  unrecognized form) pending a follow-up with properly-sourced retraction
+  rules — see docs/ROADMAP.md. New `tests/pitchAccentShift.test.ts` +
+  `fixtures/pitch-accent-shift-fixtures.json` (godan-only, 読む/走る across
+  all 6 v1 forms) plus two `tests/reviewPage.test.tsx` cases (masu-form
+  regression stays rejected; a 走って te-form occurrence is accepted and
+  graded against はしって, not はしる).
 
 - **2026-09-12 — Grammar production primes with native situational context
   instead of the abstract meaning gloss, when safe (user: "I wonder if we

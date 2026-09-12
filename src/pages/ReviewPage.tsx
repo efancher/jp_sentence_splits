@@ -76,6 +76,7 @@ import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
+import { predictInflectedPitchAccentPosition } from '../lib/pitchAccentShift';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
 import {
   expectedPitchShape,
@@ -399,9 +400,16 @@ interface PitchAccentReviewCandidate {
   audio: SentenceAudio;
   /** The link this candidate came from — carries any manual word-audio range for the loop control's "Adjust" editor. */
   link?: SentenceVocabulary;
-  /** Mora kana of the dictionary reading — the drop-position choices and the ✓/✗ both key off these. */
+  /**
+   * Reading whose morae back this card — the dictionary reading for a
+   * citation-form occurrence, or the conjugated reading for an inflected
+   * one (see getPitchAccentReviewCandidates). Always what the native clip
+   * actually says, never assumed to be vocabularyItem.reading.
+   */
+  reading: string;
+  /** Mora kana of `reading` — the drop-position choices and the ✓/✗ both key off these. */
   morae: string[];
-  /** Dictionary downstep clamped into [0, morae.length]: 0 = heiban/no drop, n = drop right after mora n (n === morae.length is odaka). */
+  /** Downstep (in `reading`'s own morae) clamped into [0, morae.length]: 0 = heiban/no drop, n = drop right after mora n (n === morae.length is odaka). */
   correctPosition: number;
   /** Category name (平板/頭高/中高/尾高), shown on the reveal only — the buttons ask for a drop position, not this. */
   correctLabel: PitchAccentPattern;
@@ -422,10 +430,10 @@ function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean 
 }
 
 /**
- * Pure filter over already-fetched vocabulary-target candidates (no DB
- * access needed), mirroring getSentenceConjugationCandidates's shape —
- * a word is a candidate only if it has dictionary pitch-accent data and a
- * segmentable reading.
+ * Pure filter over already-fetched per-occurrence vocabulary candidates (no
+ * DB access needed) — a word is a candidate only if it has dictionary
+ * pitch-accent data and at least one occurrence with a native reference
+ * recording that survives the checks below.
  *
  * The card is an audio-first perception task: the learner loops the native
  * realization of the word (see below) and marks *where the pitch drops* on
@@ -451,56 +459,110 @@ function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean 
  * stance). An internal drop (atamadaka / nakadaka) is audible on the word
  * alone and needs no following particle.
  *
- * The word must also appear in its *citation form* in this sentence: the
- * choices and the ✓/✗ key off the dictionary reading's morae and downstep,
- * so an inflected occurrence (速く for 速い, ございます for ござる) makes the
- * looped audio's mora count and accent disagree with the "correct" answer —
- * unanswerable by ear. Same reason line ~1650 skips the ambient
- * SentencePitchAccentRow for `sentence_transformation`.
+ * An occurrence in citation form is always preferred: the choices and the
+ * ✓/✗ key off the dictionary reading's morae and downstep directly. An
+ * inflected occurrence (読んだ for 読む) is only accepted when
+ * pitchAccentShift.ts's predictInflectedPitchAccentPosition can confidently
+ * place the downstep in the *conjugated* reading's own morae — currently
+ * godan verbs only (see that module's doc comment for why ichidan and
+ * i-adjectives aren't covered yet) — otherwise the looped audio's mora
+ * count and accent would disagree with the "correct" answer (the ござる/
+ * ありがとうございます bug this filter was first written to fix). One card
+ * per word: among all its occurrences, prefer the first citation-form one
+ * with audio; only fall back to an inflected one when no citation-form
+ * occurrence works. Same reason line ~1650 skips the ambient
+ * SentencePitchAccentRow for `sentence_transformation` — that row isn't
+ * wired to the shift calculator (yet).
  */
-function getPitchAccentReviewCandidates(
-  candidates: VocabularyTargetCandidate[],
-  audioBySentenceId: Map<string, SentenceAudio>,
-): PitchAccentReviewCandidate[] {
-  const result: PitchAccentReviewCandidate[] = [];
-  for (const candidate of candidates) {
-    const positions = candidate.vocabularyItem.pitchAccentPositions;
-    if (!positions?.length) continue;
-    const audio = audioBySentenceId.get(candidate.sentence.id);
-    if (!audio) continue;
-    // Citation form only — accept a kana/kanji spelling difference (via the
-    // in-context reading where `inlineReading` is present) but not inflection.
-    const dictionaryReading = candidate.vocabularyItem.reading;
-    const inContextReading = surfaceReadingFromInline(
-      candidate.sentence.inlineReading,
-      candidate.surfaceForm,
-    );
-    const isCitationForm =
-      candidate.surfaceForm === candidate.vocabularyItem.expression ||
-      candidate.surfaceForm === dictionaryReading ||
-      inContextReading === dictionaryReading;
-    if (!isCitationForm) continue;
-    const morae = segmentIntoMorae(dictionaryReading).map((unit) => unit.text);
-    if (morae.length === 0) continue;
-    const correctPosition = Math.max(0, Math.min(positions[0]!, morae.length));
-    // Edge accent (heiban / odaka) is only audible on what follows the word;
-    // skip the occurrence when nothing does (see doc comment).
-    const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
-    if (isEdgeAccent && !hasFollowingVoicedMora(candidate.sentence.japanese, candidate.surfaceForm)) {
-      continue;
-    }
-    result.push({
-      vocabularyItem: candidate.vocabularyItem,
-      sentence: candidate.sentence,
-      surfaceForm: candidate.surfaceForm,
+function buildPitchAccentCandidate(
+  occurrence: VocabularyOccurrenceCandidate,
+  audio: SentenceAudio,
+): { candidate: PitchAccentReviewCandidate; isCitationForm: boolean } | null {
+  const { vocabularyItem, sentence, surfaceForm, link } = occurrence;
+  const positions = vocabularyItem.pitchAccentPositions;
+  if (!positions?.length) return null;
+
+  const dictionaryReading = vocabularyItem.reading;
+  const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
+  const isCitationForm =
+    surfaceForm === vocabularyItem.expression ||
+    surfaceForm === dictionaryReading ||
+    inContextReading === dictionaryReading;
+
+  let reading = dictionaryReading;
+  let correctPositionRaw = positions[0]!;
+
+  if (!isCitationForm) {
+    const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
+    if (!wordClass) return null;
+    const identified =
+      identifyConjugationForm(
+        vocabularyItem.expression,
+        dictionaryReading,
+        wordClass,
+        surfaceForm,
+        inContextReading ?? undefined,
+      ) ??
+      findInflectedSurfaceInSentence(sentence.japanese, vocabularyItem.expression, dictionaryReading, wordClass);
+    if (!identified) return null;
+    const conjugated = conjugate(vocabularyItem.expression, dictionaryReading, wordClass, identified.form.key);
+    if (!conjugated) return null;
+    const citationMoraCount = segmentIntoMorae(dictionaryReading).length;
+    const conjugatedMoraCount = segmentIntoMorae(conjugated.reading).length;
+    const predicted = predictInflectedPitchAccentPosition({
+      wordClass,
+      formKey: identified.form.key,
+      citationPosition: Math.max(0, Math.min(positions[0]!, citationMoraCount)),
+      citationMoraCount,
+      conjugatedMoraCount,
+    });
+    if (predicted === null) return null;
+    reading = conjugated.reading;
+    correctPositionRaw = predicted;
+  }
+
+  const morae = segmentIntoMorae(reading).map((unit) => unit.text);
+  if (morae.length === 0) return null;
+  const correctPosition = Math.max(0, Math.min(correctPositionRaw, morae.length));
+  // Edge accent (heiban / odaka) is only audible on what follows the word;
+  // skip the occurrence when nothing does (see doc comment).
+  const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
+  if (isEdgeAccent && !hasFollowingVoicedMora(sentence.japanese, surfaceForm)) return null;
+
+  return {
+    isCitationForm,
+    candidate: {
+      vocabularyItem,
+      sentence,
+      surfaceForm,
       audio,
-      link: candidate.link,
+      link,
+      reading,
       morae,
       correctPosition,
-      correctLabel: pitchPatternLabel(positions[0]!, morae.length),
-    });
+      correctLabel: pitchPatternLabel(correctPosition, morae.length),
+    },
+  };
+}
+
+function getPitchAccentReviewCandidates(
+  occurrences: VocabularyOccurrenceCandidate[],
+  audioBySentenceId: Map<string, SentenceAudio>,
+): PitchAccentReviewCandidate[] {
+  const bestByItemId = new Map<
+    string,
+    { candidate: PitchAccentReviewCandidate; isCitationForm: boolean }
+  >();
+  for (const occurrence of occurrences) {
+    const existing = bestByItemId.get(occurrence.vocabularyItem.id);
+    if (existing?.isCitationForm) continue; // already have the best possible match for this word
+    const audio = audioBySentenceId.get(occurrence.sentence.id);
+    if (!audio) continue;
+    const result = buildPitchAccentCandidate(occurrence, audio);
+    if (!result) continue;
+    bestByItemId.set(occurrence.vocabularyItem.id, result);
   }
-  return result;
+  return [...bestByItemId.values()].map((entry) => entry.candidate);
 }
 
 const RATINGS: { value: ReviewRating; label: string }[] = [
@@ -1097,7 +1159,7 @@ export function ReviewPage() {
     );
 
     const pitchAccentCandidates = getPitchAccentReviewCandidates(
-      vocabularyTargetCandidates,
+      occurrenceCandidates,
       audioBySentenceId,
     );
     const pitchAccentVocabularyItemIdSet = new Set(
@@ -2242,7 +2304,7 @@ function PitchAccentCard({
   revealed: boolean;
   onCheck: (chosenPosition: string, correctPosition: string) => void;
 }) {
-  const { vocabularyItem, sentence, surfaceForm, audio, morae, correctPosition, correctLabel } =
+  const { vocabularyItem, sentence, surfaceForm, audio, reading, morae, correctPosition, correctLabel } =
     candidate;
   const [selected, setSelected] = useState<number | null>(null);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
@@ -2264,7 +2326,7 @@ function PitchAccentCard({
         <mark>{target || surfaceForm}</mark>
         {after}
       </div>
-      <div className="jp">{vocabularyItem.reading}</div>
+      <div className="jp">{reading}</div>
 
       <PitchAccentNativeAudio
         audio={audio}
@@ -2316,22 +2378,23 @@ function PitchAccentCard({
             {PITCH_ACCENT_PATTERN_LABELS[correctLabel]} —{' '}
             {correctPosition === 0 ? 'no downstep' : `downstep after mora ${correctPosition}`}
           </div>
-          <PitchAccentDiagram
-            reading={vocabularyItem.reading}
-            position={vocabularyItem.pitchAccentPositions?.[0] ?? correctPosition}
-          />
+          <PitchAccentDiagram reading={reading} position={correctPosition} />
           <SentencePitchAccentRow
             japanese={sentence.japanese}
             sentenceId={sentence.id}
             highlightSurfaceForm={surfaceForm}
           />
           {(() => {
+            // Deliberately the *dictionary* reading/position/moraCount, even
+            // for an inflected occurrence: this explains the base word's own
+            // lexical accent class, not the conjugated form's contour.
+            const dictionaryMoraCount = segmentIntoMorae(vocabularyItem.reading).length;
             const explanation = explainPitchAccent({
               expression: vocabularyItem.expression,
               reading: vocabularyItem.reading,
               partOfSpeech: vocabularyItem.partOfSpeech,
               position: vocabularyItem.pitchAccentPositions?.[0] ?? correctPosition,
-              moraCount: morae.length,
+              moraCount: dictionaryMoraCount,
             });
             return (
               <>

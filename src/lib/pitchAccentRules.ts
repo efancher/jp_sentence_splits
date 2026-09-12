@@ -74,6 +74,25 @@ function hasNounTag(partOfSpeech: string | undefined): boolean {
     .some((tag) => tag === 'n' || tag === 'n-pref' || tag === 'n-suf' || tag === 'pn');
 }
 
+export type VerbAdjectiveAccentClass = 'unaccented' | 'accented' | 'irregular';
+
+/**
+ * The two-class system verbs/i-adjectives are lexically split into:
+ * unaccented (heiban, no downstep) or accented (downstep on the word's own
+ * last mora — moraCount - 1). Anything else is an exception the two-class
+ * system doesn't cover. Shared with pitchAccentShift.ts, which needs the
+ * same classification to know whether a conjugated occurrence's downstep
+ * can be safely carried forward.
+ */
+export function classifyVerbAdjectiveAccent(
+  position: number,
+  moraCount: number,
+): VerbAdjectiveAccentClass {
+  if (position === 0) return 'unaccented';
+  if (moraCount >= 2 && position === moraCount - 1) return 'accented';
+  return 'irregular';
+}
+
 function isKatakanaOnly(text: string): boolean {
   // Katakana block U+30A0–U+30FF, which includes the ー prolonged-sound mark.
   return /^[゠-ヿ]+$/.test(text);
@@ -125,19 +144,21 @@ function ruleNoteFor(input: PitchAccentRuleInput): string | undefined {
   // 3. Verb / i-adjective two-class system.
   const wordClass = conjugationWordClassFromPartOfSpeech(partOfSpeech);
   if (wordClass === 'godan' || wordClass === 'ichidan' || wordClass === 'kuru' || wordClass === 'suru') {
-    if (position === 0) {
+    const accentClass = classifyVerbAdjectiveAccent(position, moraCount);
+    if (accentClass === 'unaccented') {
       return 'Verbs come in just two accent classes. This is the unaccented (heiban) class — roughly half of all verbs — so it stays flat.';
     }
-    if (moraCount >= 2 && position === moraCount - 1) {
+    if (accentClass === 'accented') {
       return 'Verbs come in just two accent classes. Accented verbs put the downstep on the second-to-last mora, as here.';
     }
     return undefined;
   }
   if (wordClass === 'i_adjective') {
-    if (position === 0) {
+    const accentClass = classifyVerbAdjectiveAccent(position, moraCount);
+    if (accentClass === 'unaccented') {
       return 'A minority of i-adjectives are unaccented (heiban) and stay flat like this.';
     }
-    if (moraCount >= 2 && position === moraCount - 1) {
+    if (accentClass === 'accented') {
       return 'Accented i-adjectives take the downstep on the second-to-last mora, as here.';
     }
     return undefined;

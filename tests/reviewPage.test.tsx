@@ -1602,6 +1602,132 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('still does not seed a pitch-accent card for a -masu occurrence (regression: ございます/ありがとうございます bug)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // The -masu family is a real accent-neutralizing shift (always accented
+    // right before ます, regardless of the dictionary word's own lexical
+    // class), not the "carry the citation position forward" rule
+    // pitchAccentShift.ts implements — it must stay excluded, the same way
+    // the original citation-form-only filter rejected this shape of bug.
+    await db.sentences.update('sent-1', { japanese: '本を読みます。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-yomu-masu',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      partOfSpeech: 'v5m; vt',
+      pitchAccentPositions: [0],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-yomu-masu',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-yomu-masu',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressAudioCards('sent-1', 'sv-yomu-masu');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    await waitFor(async () => {
+      const studyItems = await db.studyItems
+        .where('subjectId')
+        .equals('vocab-yomu-masu')
+        .toArray();
+      expect(studyItems.length).toBeGreaterThan(0);
+      expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+    });
+  });
+
+  it('seeds a pitch-accent card for a godan te-form occurrence, graded against the conjugated reading', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // 走る [2] is accented (downstep on し, the last stem mora); its te-form
+    // 走って keeps the downstep on the same absolute mora (pitchAccentShift.ts,
+    // godan-only v1 scope) — 4 morae (は/し/っ/て), drop after mora 2.
+    await db.sentences.update('sent-1', { japanese: '公園を走って帰った。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hashiru',
+      expression: '走る',
+      reading: 'はしる',
+      meaning: 'to run',
+      partOfSpeech: 'v5r; vi',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hashiru',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hashiru',
+      surfaceForm: '走って',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hashiru');
+    await suppressAudioCards('sent-1', 'sv-hashiru');
+    // 走って is also a valid sentence_transformation candidate (conjugable
+    // verb) — suppress it so the queue surfaces the pitch-accent card
+    // under test instead.
+    await db.studyItems.add({
+      id: 'si-sv-hashiru-sentence_transformation',
+      subjectType: 'sentenceVocabulary',
+      subjectId: 'sv-hashiru',
+      activityType: 'sentence_transformation',
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { label, correctPosition } = expectedPitchAccentDrop('はしって', 2);
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(/Listen, then mark where it falls/);
+    // The reading line and mora choices must reflect the conjugated はしって,
+    // not the dictionary はしる — otherwise the looped audio disagrees with
+    // the card.
+    expect(screen.getByText('はしって')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: label }));
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe(String(correctPosition));
+    expect(review?.expectedAnswer).toBe(String(correctPosition));
+    expect(review?.errorClassification).toBeUndefined();
+  });
+
   it('offers one fall-position choice per mora plus "no fall" for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();
