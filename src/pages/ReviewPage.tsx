@@ -67,6 +67,7 @@ import {
   blankPatternInSentence,
   buildGrammarCompletionChoices,
   grammarPatternUsedIn,
+  translationLeaksPatternMeaning,
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
@@ -2780,9 +2781,14 @@ function GrammarComprehensionCard({
  * Grammar production (docs/ROADMAP.md "Grammar production ladder"): the
  * output rung the grammar system was missing — recognition cards
  * (comprehension/completion/contrast) all ask the learner to *identify* a
- * construction; this asks them to *use* one. Show the pattern's meaning,
- * take a free-form sentence, then reveal a model (one of the learner's own
- * tagged encounters of the pattern) to self-rate against. The
+ * construction; this asks them to *use* one. Prompts with the situation
+ * from one of the learner's own tagged encounters (its `translation`) when
+ * that's safe to show — `translationLeaksPatternMeaning` catches patterns
+ * whose natural translation restates the meaning gloss almost verbatim
+ * (e.g. ～わけがない → "there's no way..."), falling back to the pattern's
+ * abstract meaning gloss there, and whenever there's no translation to
+ * prime with. Either way the learner free-types a sentence, then reveals
+ * the actual model sentence (the same encounter) to self-rate against. The
  * `grammarPatternUsedIn` check on reveal is a "did you actually use the
  * construction" hint only — meaning and naturalness are the learner's own
  * call, so this stays a self-rated card (no auto ✓/✗ funnel into
@@ -2801,12 +2807,19 @@ function GrammarProductionCard({
   const { pattern, sentence } = candidate;
   const [text, setText] = useState('');
   const used = grammarPatternUsedIn(text, pattern.canonicalName);
+  const translation = sentence.translation?.trim();
+  const primeWithContext = Boolean(translation) && !translationLeaksPatternMeaning(pattern, translation!);
   return (
     <>
       <div className="muted">
-        Write a sentence that uses <span className="jp">{pattern.canonicalName}</span>.
+        Write a sentence that uses <span className="jp">{pattern.canonicalName}</span>
+        {primeWithContext ? ' for a situation like this:' : '.'}
       </div>
-      {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+      {primeWithContext ? (
+        <div className="muted">{translation}</div>
+      ) : pattern.shortMeaning ? (
+        <div>{pattern.shortMeaning}</div>
+      ) : null}
       <textarea
         className="jp"
         rows={2}

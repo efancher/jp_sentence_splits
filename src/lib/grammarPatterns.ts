@@ -76,6 +76,56 @@ export function grammarPatternUsedIn(response: string, canonicalName: string): b
   return fragments.every((fragment) => normalizedResponse.includes(fragment));
 }
 
+const ENGLISH_STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'to', 'of', 'in', 'on', 'for', 'with', 'and', 'or', 'but', 'that',
+  'this', 'it', 'its', 'as', 'at', 'by', 'from', 'into', 'onto', 'than',
+  'then', 'so', 'not', 'no', 'you', 'your', 'i', 'me', 'my', 'do', 'did',
+  'does', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'up',
+  'out', 'about', 'just',
+]);
+
+function contentWords(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 3 && !ENGLISH_STOPWORDS.has(word));
+  return new Set(words);
+}
+
+/**
+ * Heuristic guard for priming a `grammar_production` prompt with a
+ * sentence's natural English translation instead of the pattern's abstract
+ * meaning gloss (design brief follow-up, user: "make grammar production
+ * more driven by native context"). Aspectual/discourse patterns with no
+ * English morphological analog (～てる, ～だね, ～て命令形) translate cleanly
+ * without hinting at the construction — "緊張してる？" → "Are you nervous?"
+ * primes the situation, not the grammar. But modal patterns with a near-1:1
+ * English idiom (～わけがない → "there's no way...") translate so literally
+ * that the translation *is* the gloss; showing it before writing would hand
+ * over the answer. Flags the latter case by checking how much of the
+ * pattern's own meaning text reappears verbatim in the translation — not
+ * semantic, just enough to catch near-restatements. Callers should fall
+ * back to showing the pattern's meaning gloss (today's behavior) when this
+ * returns true, or when there's no translation to prime with at all.
+ */
+export function translationLeaksPatternMeaning(
+  pattern: Pick<GrammarPattern, 'shortMeaning' | 'explanation'>,
+  translation: string,
+): boolean {
+  const meaningText = pattern.shortMeaning?.trim() || pattern.explanation?.trim() || '';
+  if (!meaningText || !translation.trim()) return false;
+  const meaningWords = contentWords(meaningText);
+  if (meaningWords.size === 0) return false;
+  const translationWords = contentWords(translation);
+  let shared = 0;
+  for (const word of meaningWords) {
+    if (translationWords.has(word)) shared += 1;
+  }
+  return shared / meaningWords.size >= 0.4;
+}
+
 export interface SentenceBlank {
   before: string;
   match: string;

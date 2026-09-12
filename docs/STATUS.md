@@ -30,6 +30,33 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — Grammar production primes with native situational context
+  instead of the abstract meaning gloss, when safe (user: "I wonder if we
+  could make [grammar production cards] more driven by native context").**
+  `GrammarProductionCard` (`src/pages/ReviewPage.tsx`) now shows the
+  candidate encounter's `sentence.translation` as the writing prompt ("...
+  for a situation like this: <translation>") instead of
+  `pattern.shortMeaning`, so the learner produces a sentence for a real
+  scenario they've encountered rather than reacting to a dictionary-style
+  definition. New `translationLeaksPatternMeaning` (`src/lib/
+  grammarPatterns.ts`) guards this: some patterns (aspectual/discourse
+  constructions with no English morphological analog, e.g. ～てる, ～だね)
+  translate cleanly without hinting at the grammar, but modal patterns with
+  a near-1:1 English idiom (～わけがない → "there's no way...") translate so
+  literally that the translation *is* the gloss — showing it up front would
+  hand over the answer. The heuristic checks how much of the pattern's own
+  `shortMeaning`/`explanation` text reappears verbatim in the translation
+  (word-overlap ratio ≥ 0.4) and falls back to today's gloss display when
+  it looks like a restatement, or when there's no translation at all.
+  Verified against 6 real corpus patterns — correctly primes with
+  translation for ～てる/～ている（状態描写）/～だね/～て（命令形）, falls back
+  to the gloss for ～わけがない/～でもいい. Reveal step unchanged (same
+  encounter sentence). Scoped down from "pick a different priming encounter
+  than the reveal sentence" after checking live data: only one pattern is
+  currently `grammar_production`-eligible at all, and it has just 2 tagged
+  encounters — not enough headroom to justify sourcing two distinct
+  sentences per pattern yet.
+
 - **2026-09-12 — Fix grammar_production/grammar_completion pattern matching
   against annotated pattern names (user report: 疲れている marked "couldn't
   spot ～ている（状態描写）" despite being a correct example).**
