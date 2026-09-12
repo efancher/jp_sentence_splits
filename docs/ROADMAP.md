@@ -277,22 +277,31 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
-- [ ] **Extend inflected `pitch_accent` cards to ichidan verbs and
-  i-adjectives.** 2026-09-12 shipped godan-only support (see
-  docs/STATUS.md) — an accented godan verb's downstep carries forward
-  unchanged through negative/past/te-form/conditionals, since
-  conjugation.ts's suffix tables reproduce the stem verbatim. That same
-  "carry forward" rule does **not** hold for ichidan or i-adjectives:
-  cross-checking against real pitch-accent references found ichidan's
-  て/た/ば/たら family retracts the accent one mora earlier than the
-  dictionary form (e.g. たべ↓る → た↓べて), with further exceptions when the
-  retracted mora would be devoiced or moraic ん (つけ↓る/つけ↓て doesn't
-  move; ぞんじ↓る/ぞ↓んじて moves back two), and i-adjective negative/past
-  forms have their own documented exceptions to the "same mora" rule. Needs
-  the actual retraction + exception rules sourced from OJAD or an
-  equivalent primary reference (not summarized web search — that's what
-  surfaced the wrong initial assumption) before extending
-  `src/lib/pitchAccentShift.ts`'s trusted table past godan.
+- [ ] **Extend inflected `pitch_accent` cards past the current narrow godan
+  set.** 2026-09-12 shipped godan-only support for exactly three forms
+  (`plain_negative`/`ba_form`/`plain_past_negative`; see docs/STATUS.md for
+  the two rounds of correction it took to get there). Two things are still
+  missing:
+  - **Godan te-form/plain-past(た)/tara-form.** Not a "not yet ported" gap
+    — Wiktionary's `Module:ja-acc-table` (the verified primary source the
+    shipped formulas were ported from) doesn't compute these from a
+    formula at all; it takes an explicit, separately-sourced `te_form_accs`
+    parameter per word. Extending to these needs a real per-word accent
+    data source for te-form (OJAD lookup, or Wiktionary's own per-lemma
+    data if it's bulk-accessible), not a rule.
+  - **Ichidan verbs and i-adjectives.** Ichidan's て/た/ば/たら family
+    retracts the accent one mora earlier than the dictionary form (e.g.
+    たべ↓る → た↓べて), with further exceptions when the retracted mora would
+    be devoiced or moraic ん (つけ↓る/つけ↓て doesn't move; ぞんじ↓る/ぞ↓んじて
+    moves back two); i-adjective negative/past forms have their own
+    exceptions (an unaccented adjective's くない/かった forms are not flat,
+    similar to how the fixed shipped godan bug found ば/なかった aren't flat
+    for unaccented verbs). `Module:ja-acc-table`'s `elseif style.adjective`
+    branch and its ichidan branch likely already encode both correctly —
+    worth porting from there directly (same source, already fetched once
+    this session) rather than re-deriving from scratch or trusting
+    summarized web search, which is what produced the wrong initial godan
+    assumption in the first place.
 
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)

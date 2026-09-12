@@ -461,14 +461,16 @@ function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean 
  *
  * An occurrence in citation form is always preferred: the choices and the
  * ✓/✗ key off the dictionary reading's morae and downstep directly. An
- * inflected occurrence (読んだ for 読む) is only accepted when
+ * inflected occurrence (読まない for 読む) is only accepted when
  * pitchAccentShift.ts's predictInflectedPitchAccentPosition can confidently
- * place the downstep in the *conjugated* reading's own morae — currently
- * godan verbs only (see that module's doc comment for why ichidan and
- * i-adjectives aren't covered yet) — otherwise the looped audio's mora
- * count and accent would disagree with the "correct" answer (the ござる/
- * ありがとうございます bug this filter was first written to fix). One card
- * per word: among all its occurrences, prefer the first citation-form one
+ * place the downstep in the *conjugated* reading's own morae — currently a
+ * narrow set of godan forms only, ported from Wiktionary's audited
+ * Module:ja-acc-table rather than assumed (see that module's doc comment
+ * for what's covered and why ichidan/i-adjectives/te-form aren't) —
+ * otherwise the looped audio's mora count and accent would disagree with
+ * the "correct" answer (the ござる/ありがとうございます bug this filter was
+ * first written to fix). One card per word: among all its occurrences,
+ * prefer the first citation-form one
  * with audio; only fall back to an inflected one when no citation-form
  * occurrence works. Same reason line ~1650 skips the ambient
  * SentencePitchAccentRow for `sentence_transformation` — that row isn't

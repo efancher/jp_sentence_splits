@@ -14,10 +14,10 @@
     "reading": "よむ",
     "wordClass": "godan",
     "citationPosition": 0,
-    "formKey": "plain_past",
-    "expectedReading": "よんだ",
-    "expectedPosition": 0,
-    "note": "unaccented godan verb stays heiban in past, despite onbin sound change"
+    "formKey": "ba_form",
+    "expectedReading": "よめば",
+    "expectedPosition": 2,
+    "note": "ば induces its own downstep right before itself on an otherwise-heiban verb (Wiktionary Module:ja-acc-table) — よめ↓ば, not flat"
   },
   {
     "expression": "読む",
@@ -26,38 +26,8 @@
     "citationPosition": 0,
     "formKey": "plain_past_negative",
     "expectedReading": "よまなかった",
-    "expectedPosition": 0,
-    "note": "unaccented godan verb stays heiban in past negative"
-  },
-  {
-    "expression": "読む",
-    "reading": "よむ",
-    "wordClass": "godan",
-    "citationPosition": 0,
-    "formKey": "te_form",
-    "expectedReading": "よんで",
-    "expectedPosition": 0,
-    "note": "unaccented godan verb stays heiban in te-form"
-  },
-  {
-    "expression": "読む",
-    "reading": "よむ",
-    "wordClass": "godan",
-    "citationPosition": 0,
-    "formKey": "ba_form",
-    "expectedReading": "よめば",
-    "expectedPosition": 0,
-    "note": "unaccented godan verb stays heiban in ba-conditional"
-  },
-  {
-    "expression": "読む",
-    "reading": "よむ",
-    "wordClass": "godan",
-    "citationPosition": 0,
-    "formKey": "tara_form",
-    "expectedReading": "よんだら",
-    "expectedPosition": 0,
-    "note": "unaccented godan verb stays heiban in tara-conditional"
+    "expectedPosition": 3,
+    "note": "なかった gets a downstep a fixed 3 morae from the end even for a heiban verb — よまな↓かった, not flat"
   },
   {
     "expression": "走る",
@@ -66,38 +36,8 @@
     "citationPosition": 2,
     "formKey": "plain_negative",
     "expectedReading": "はしらない",
-    "expectedPosition": 2,
-    "note": "accented godan verb (downstep on last stem mora し) keeps the same absolute mora index in negative"
-  },
-  {
-    "expression": "走る",
-    "reading": "はしる",
-    "wordClass": "godan",
-    "citationPosition": 2,
-    "formKey": "plain_past",
-    "expectedReading": "はしった",
-    "expectedPosition": 2,
-    "note": "accented godan verb keeps the same mora index in past, despite onbin sound change"
-  },
-  {
-    "expression": "走る",
-    "reading": "はしる",
-    "wordClass": "godan",
-    "citationPosition": 2,
-    "formKey": "plain_past_negative",
-    "expectedReading": "はしらなかった",
-    "expectedPosition": 2,
-    "note": "accented godan verb keeps the same mora index in past negative"
-  },
-  {
-    "expression": "走る",
-    "reading": "はしる",
-    "wordClass": "godan",
-    "citationPosition": 2,
-    "formKey": "te_form",
-    "expectedReading": "はしって",
-    "expectedPosition": 2,
-    "note": "accented godan verb keeps the same mora index in te-form"
+    "expectedPosition": 3,
+    "note": "ない always attaches with its own atamadaka accent, landing right before it — はしら↓ない (position 3, i.e. citationMoraCount), not at the citation stem boundary (position 2)"
   },
   {
     "expression": "走る",
@@ -107,16 +47,16 @@
     "formKey": "ba_form",
     "expectedReading": "はしれば",
     "expectedPosition": 2,
-    "note": "accented godan verb keeps the same mora index in ba-conditional"
+    "note": "an already-accented verb's ba-form keeps the same absolute mora index as citation — はし↓れば"
   },
   {
     "expression": "走る",
     "reading": "はしる",
     "wordClass": "godan",
     "citationPosition": 2,
-    "formKey": "tara_form",
-    "expectedReading": "はしったら",
-    "expectedPosition": 2,
-    "note": "accented godan verb keeps the same mora index in tara-conditional"
+    "formKey": "plain_past_negative",
+    "expectedReading": "はしらなかった",
+    "expectedPosition": 3,
+    "note": "なかった carries the negative form's own (already-shifted) downstep straight through — はしら↓なかった"
   }
 ]

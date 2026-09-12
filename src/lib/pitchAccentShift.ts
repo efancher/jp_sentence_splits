@@ -5,38 +5,34 @@
  * combination not yet confidently covered, same "stay silent rather than
  * assert something false" stance pitchAccentRules.ts already takes.
  *
- * Scope is deliberately narrow — GODAN VERBS ONLY. The original v1 design
- * assumed a uniform "the stem is reproduced verbatim, so an accented word's
- * downstep just carries forward at the same absolute mora index" rule for
- * godan, ichidan, and i-adjectives alike. Cross-checking that against real
- * pitch-accent references (OJAD-derived conjugation rules) before shipping
- * — per this module's own "verify before trusting" mandate — surfaced that
- * it's wrong for the other two:
+ * Formulas below are ported from Wiktionary's `Module:ja-acc-table`
+ * (en.wiktionary.org, CC-BY-SA/GFDL) — a real, audited rule engine used to
+ * generate the accent tables shown on live Wiktionary entries, not a
+ * from-scratch derivation. That module was consulted specifically because
+ * this feature's first cut (v1, since revised) assumed an accented godan
+ * verb's downstep simply "carries forward unchanged" (same absolute mora
+ * index as the citation form) across negative/past-negative/ba-conditional —
+ * reasoning from conjugation.ts's stem-preservation alone, without an
+ * independent check. That assumption was **wrong**: per Wiktionary's
+ * module, an accented verb's negative-form downstep actually lands one
+ * mora *later* than the citation position (right before ない, not at the
+ * old stem boundary), and an *unaccented* (heiban) verb's ba-form and
+ * negative-past (なかった) forms are not flat — they acquire their own
+ * downstep. See docs/STATUS.md for the correction and what shipped wrong
+ * in the interim.
  *
- * - Ichidan's て/た/ば/たら family actually RETRACTS the accent one mora
- *   earlier than the dictionary form (たべ↓る → た↓べて, not たべ↓て), with
- *   further exceptions when the retracted mora would be devoiced or moraic
- *   ん (つけ↓る/つけ↓て doesn't move; ぞんじ↓る/ぞ↓んじて moves back two).
- *   Getting this right needs the actual retraction+exception rules, not the
- *   "stays put" formula below.
- * - I-adjective negative/past forms have their own well-documented
- *   exceptions to the "once accented, always accented on the same mora"
- *   generalization.
- *
- * Godan is the one case multiple independent sources agree on without
- * caveats: an accented godan verb's downstep stays on the same mora
- * (relative to the unchanged stem) straight through negative, past,
- * te-form (even though te-form itself undergoes euphonic sound change —
- * 買う→買って — the *accent* isn't affected by that), and the ba/tara
- * conditionals built the same way. Ichidan and i-adjective support is
- * deferred to a follow-up that can properly source the retraction and
- * exception rules (docs/ROADMAP.md).
- *
- * Deliberately NOT attempted: ichidan/i-adjective (see above), godan -masu
- * forms (a real neutralizing shift — always accented right before ます
- * regardless of lexical class), potential/passive/causative (derive a new
- * verb with its own accent), suru, kuru, na_adjective (no two-class system
- * to build on).
+ * Scope: GODAN VERBS ONLY, and only the three forms below whose accent is
+ * a pure function of the citation accent per Wiktionary's own module.
+ * Notably **te-form/past-tense (た) are excluded even for godan** — the
+ * module doesn't compute their accent from a formula at all; it takes an
+ * explicit, separately-sourced `te_form_accs` parameter, meaning even this
+ * audited rule engine doesn't trust "same mora as citation" as safe to
+ * assert without real per-word data. tara-form (which the module derives
+ * from ta) is excluded for the same reason. Ichidan and i-adjectives are
+ * excluded because their conjugation-accent rules involve additional
+ * phonological conditioning (ichidan's て/た family retracts the accent one
+ * mora earlier, with devoicing/moraic-ん exceptions; i-adjective negative/
+ * past forms have their own documented exceptions) not yet ported here.
  */
 
 import type { ConjugationFormKey, ConjugationWordClass } from './conjugation';
@@ -52,24 +48,43 @@ export interface PitchAccentShiftInput {
   conjugatedMoraCount: number;
 }
 
-const GODAN_STEM_PRESERVED_FORMS: ConjugationFormKey[] = [
+const SUPPORTED_GODAN_FORMS: ConjugationFormKey[] = [
   'plain_negative',
-  'plain_past',
   'plain_past_negative',
-  'te_form',
   'ba_form',
-  'tara_form',
 ];
 
 export function predictInflectedPitchAccentPosition(
   input: PitchAccentShiftInput,
 ): number | null {
-  if (input.wordClass !== 'godan' || !GODAN_STEM_PRESERVED_FORMS.includes(input.formKey)) {
+  if (input.wordClass !== 'godan' || !SUPPORTED_GODAN_FORMS.includes(input.formKey)) {
     return null;
   }
 
   const accentClass = classifyVerbAdjectiveAccent(input.citationPosition, input.citationMoraCount);
   if (accentClass === 'irregular') return null;
-  if (accentClass === 'unaccented') return 0;
-  return Math.min(input.citationPosition, input.conjugatedMoraCount);
+  const isUnaccented = accentClass === 'unaccented';
+
+  switch (input.formKey) {
+    case 'plain_negative':
+      // ない always attaches with its own atamadaka accent: an accented
+      // verb's downstep lands right before ない (one mora past the citation
+      // stem boundary — citationMoraCount, not citationPosition), an
+      // unaccented verb stays flat.
+      return isUnaccented ? 0 : input.citationMoraCount;
+    case 'ba_form':
+      // ば induces an accent right before itself on an otherwise-heiban
+      // verb (citationMoraCount = the mora right before ば); an accented
+      // verb's downstep is unaffected — same absolute index as citation.
+      return isUnaccented ? input.citationMoraCount : input.citationPosition;
+    case 'plain_past_negative':
+      // なかった, built from the negative form above: an unaccented verb's
+      // negative was flat, but なかった still isn't — the downstep sits a
+      // fixed 3 morae from the end (…な↓かった), independent of stem
+      // length. An accented verb's negative was already downstepped right
+      // before ない (citationMoraCount) and that carries straight through.
+      return isUnaccented ? input.conjugatedMoraCount - 3 : input.citationMoraCount;
+    default:
+      return null;
+  }
 }

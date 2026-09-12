@@ -17,20 +17,20 @@ interface PitchAccentShiftFixture {
   note: string;
 }
 
-// Hand-curated, not derived from the code under test. Godan-only v1 scope —
-// see pitchAccentShift.ts's doc comment for why ichidan/i-adjective aren't
-// covered: cross-checking the original "stem is preserved verbatim, so the
-// accent carries forward unchanged" assumption against real pitch-accent
-// references (OJAD-derived conjugation rules) showed it holds for godan but
-// not for ichidan's て/た/ば/たら family (which retracts one mora earlier,
-// with devoicing/moraic-ん exceptions) or i-adjective negative/past forms.
+// Hand-curated against Wiktionary's Module:ja-acc-table (en.wiktionary.org,
+// CC-BY-SA/GFDL) — a real, audited rule engine, not derived from the code
+// under test. Godan-only scope, and only plain_negative/ba_form/
+// plain_past_negative — see pitchAccentShift.ts's doc comment for why
+// te-form/plain-past/tara-form and ichidan/i-adjective aren't covered
+// (the module itself doesn't trust a formula for those without real
+// per-word data).
 const fixtures = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../fixtures/pitch-accent-shift-fixtures.json'), 'utf8'),
 ) as PitchAccentShiftFixture[];
 
-describe('predictInflectedPitchAccentPosition (godan v1 fixtures)', () => {
+describe('predictInflectedPitchAccentPosition (godan fixtures, verified against Module:ja-acc-table)', () => {
   it('has the expected fixture count', () => {
-    expect(fixtures).toHaveLength(12);
+    expect(fixtures).toHaveLength(6);
   });
 
   it.each(fixtures)(
@@ -130,11 +130,25 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
     expect(
       predictInflectedPitchAccentPosition({
         wordClass: 'godan',
-        formKey: 'te_form',
+        formKey: 'ba_form',
         citationPosition: 1,
         citationMoraCount: 3,
         conjugatedMoraCount: 4,
       }),
     ).toBeNull();
+  });
+
+  it('returns null for godan te-form/plain-past/tara-form (Module:ja-acc-table sources these from real per-word data, not a formula)', () => {
+    for (const formKey of ['te_form', 'plain_past', 'tara_form'] as const) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass: 'godan',
+          formKey,
+          citationPosition: 0,
+          citationMoraCount: 2,
+          conjugatedMoraCount: 3,
+        }),
+      ).toBeNull();
+    }
   });
 });

@@ -1648,16 +1648,17 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('seeds a pitch-accent card for a godan te-form occurrence, graded against the conjugated reading', async () => {
+  it('seeds a pitch-accent card for a godan negative occurrence, graded against the conjugated reading', async () => {
     await seedBookWithSentence();
     const db = getDb();
     const now = new Date().toISOString();
     await suppressUnconditionalSentenceActivityTypes('sent-1');
     await addReferenceAudio('sent-1');
-    // 走る [2] is accented (downstep on し, the last stem mora); its te-form
-    // 走って keeps the downstep on the same absolute mora (pitchAccentShift.ts,
-    // godan-only v1 scope) — 4 morae (は/し/っ/て), drop after mora 2.
-    await db.sentences.update('sent-1', { japanese: '公園を走って帰った。' });
+    // 走る [2] is accented; its negative 走らない gets a downstep right
+    // before ない (Wiktionary Module:ja-acc-table, pitchAccentShift.ts) —
+    // 5 morae (は/し/ら/な/い), drop after mora 3, one mora past the
+    // citation stem boundary, not at it.
+    await db.sentences.update('sent-1', { japanese: '公園を走らない。' });
 
     await db.vocabularyItems.add({
       id: 'vocab-hashiru',
@@ -1673,13 +1674,13 @@ describe('ReviewPage', () => {
       id: 'sv-hashiru',
       sentenceId: 'sent-1',
       vocabularyItemId: 'vocab-hashiru',
-      surfaceForm: '走って',
+      surfaceForm: '走らない',
       createdAt: now,
       updatedAt: now,
     });
     await suppressVocabularyActivityTypes('vocab-hashiru');
     await suppressAudioCards('sent-1', 'sv-hashiru');
-    // 走って is also a valid sentence_transformation candidate (conjugable
+    // 走らない is also a valid sentence_transformation candidate (conjugable
     // verb) — suppress it so the queue surfaces the pitch-accent card
     // under test instead.
     await db.studyItems.add({
@@ -1702,16 +1703,16 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
 
-    const { label, correctPosition } = expectedPitchAccentDrop('はしって', 2);
+    const { label, correctPosition } = expectedPitchAccentDrop('はしらない', 3);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByText(/Listen, then mark where it falls/);
-    // The reading line and mora choices must reflect the conjugated はしって,
+    // The reading line and mora choices must reflect the conjugated はしらない,
     // not the dictionary はしる — otherwise the looped audio disagrees with
     // the card.
-    expect(screen.getByText('はしって')).toBeInTheDocument();
+    expect(screen.getByText('はしらない')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: label }));
 
