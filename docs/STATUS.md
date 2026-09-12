@@ -30,6 +30,43 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — `pitch_accent` inflected-occurrence support extended to
+  ichidan verbs, i-adjectives, and the -masu family for godan/ichidan**
+  (user follow-up: "are those [Wiktionary] pages useful for other parts of
+  the app?" → yes; scoped and extended same day). `src/lib/pitchAccentShift.ts`
+  now covers, all independently verified against Wiktionary's live-rendered
+  `{{ja-acc-table}}` output for real words (走る/買う godan, 食べる/開ける
+  ichidan, 高い/甘い i-adjective — see the module's doc comment and
+  `fixtures/pitch-accent-shift-fixtures.json`, 26 rows):
+  - `polite_present`/`polite_past`/`polite_negative` (godan + ichidan) —
+    the simplest case: the -ます family's downstep is *class-independent*
+    (only needs the stem's mora count, not whether the citation form is
+    heiban or accented). `polite_past_negative` isn't built by
+    Wiktionary's own module at all — stays excluded.
+  - `plain_negative`/`ba_form` (ichidan) — same `ba_form` shape as godan,
+    but `plain_negative` differs: an accented ichidan verb's negative
+    downstep stays at the *unchanged* citation position, unlike godan's
+    +1 shift. `plain_past_negative` isn't verified for ichidan yet — stays
+    excluded rather than assumed.
+  - `polite` (い-adjective 〜いです) — a full, clean, dual-branch formula.
+  - `plain_negative`/`plain_past_negative` (い-adjective), **heiban only**.
+    The accented case is excluded for a real reason, not just caution:
+    real data for 高くない shows a genuine *two-accent* realization (the
+    く-stem's own downstep plus ない's own atamadaka accent,
+    independently) that isn't representable as one position number —
+    confirmed by finding Wiktionary's own module has a broken placeholder
+    (string concatenation where a number belongs) for exactly this case.
+  Still excluded everywhere: te-form/plain-past/tara-form for every word
+  class (sourced from external per-word data even in Wiktionary's own
+  engine), い-adjective te_form/plain_past/ba_form (same reason), irregular
+  いい/よい, na_adjective/suru/kuru, potential/passive/causative.
+  **Side discovery, not acted on**: heiban i-adjectives may carry a
+  *different* accent in bare sentence-final predicate position than their
+  citation form (甘い is heiban [0] but Wiktionary's "terminal" node
+  renders it as あまꜜい, position 2, used predicatively) — a pre-existing
+  gap in the citation-form path itself, logged in docs/ROADMAP.md for a
+  future look, not fixed here.
+
 - **2026-09-12 — `pitch_accent` cards accept a narrow set of godan-verb
   inflected occurrences (user: "is there a way to improve [the
   citation-form-only restriction]?"); corrected same day after an initial

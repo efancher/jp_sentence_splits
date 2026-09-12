@@ -18,19 +18,19 @@ interface PitchAccentShiftFixture {
 }
 
 // Hand-curated against Wiktionary's Module:ja-acc-table (en.wiktionary.org,
-// CC-BY-SA/GFDL) — a real, audited rule engine, not derived from the code
-// under test. Godan-only scope, and only plain_negative/ba_form/
-// plain_past_negative — see pitchAccentShift.ts's doc comment for why
-// te-form/plain-past/tara-form and ichidan/i-adjective aren't covered
-// (the module itself doesn't trust a formula for those without real
-// per-word data).
+// CC-BY-SA/GFDL) — a real, audited rule engine — and each row's
+// expectedPosition is independently cross-checked against that module's
+// own live-rendered romaji for the real word (fetched with `curl`, not
+// re-derived from the Lua source or from search). Covers godan (走る/買う),
+// ichidan (食べる/開ける), and i-adjective (高い/甘い). See
+// pitchAccentShift.ts's doc comment for exactly what's excluded and why.
 const fixtures = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../fixtures/pitch-accent-shift-fixtures.json'), 'utf8'),
 ) as PitchAccentShiftFixture[];
 
-describe('predictInflectedPitchAccentPosition (godan fixtures, verified against Module:ja-acc-table)', () => {
+describe('predictInflectedPitchAccentPosition (fixtures, verified against Module:ja-acc-table)', () => {
   it('has the expected fixture count', () => {
-    expect(fixtures).toHaveLength(6);
+    expect(fixtures).toHaveLength(26);
   });
 
   it.each(fixtures)(
@@ -47,6 +47,7 @@ describe('predictInflectedPitchAccentPosition (godan fixtures, verified against 
       const predicted = predictInflectedPitchAccentPosition({
         wordClass,
         formKey,
+        citationReading: reading,
         citationPosition,
         citationMoraCount,
         conjugatedMoraCount,
@@ -57,40 +58,77 @@ describe('predictInflectedPitchAccentPosition (godan fixtures, verified against 
 });
 
 describe('predictInflectedPitchAccentPosition (excluded combinations stay silent)', () => {
-  it('returns null for godan -masu forms (a real neutralizing shift, not a carry-forward)', () => {
-    expect(
-      predictInflectedPitchAccentPosition({
-        wordClass: 'godan',
-        formKey: 'polite_present',
-        citationPosition: 0,
-        citationMoraCount: 2,
-        conjugatedMoraCount: 4,
-      }),
-    ).toBeNull();
+  it('returns null for polite_past_negative on any word class (Module:ja-acc-table does not build this node at all)', () => {
+    for (const wordClass of ['godan', 'ichidan'] as const) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass,
+          formKey: 'polite_past_negative',
+          citationReading: 'x',
+          citationPosition: 0,
+          citationMoraCount: 2,
+          conjugatedMoraCount: 6,
+        }),
+      ).toBeNull();
+    }
   });
 
-  it('returns null for ichidan (retraction rule not yet implemented)', () => {
+  it('returns null for ichidan plain_past_negative (not verified this pass)', () => {
     expect(
       predictInflectedPitchAccentPosition({
         wordClass: 'ichidan',
-        formKey: 'te_form',
+        formKey: 'plain_past_negative',
+        citationReading: 'x',
         citationPosition: 2,
         citationMoraCount: 3,
-        conjugatedMoraCount: 3,
+        conjugatedMoraCount: 7,
       }),
     ).toBeNull();
   });
 
-  it('returns null for i_adjective (negative/past exceptions not yet implemented)', () => {
-    expect(
-      predictInflectedPitchAccentPosition({
-        wordClass: 'i_adjective',
-        formKey: 'plain_negative',
-        citationPosition: 2,
-        citationMoraCount: 3,
-        conjugatedMoraCount: 5,
-      }),
-    ).toBeNull();
+  it('returns null for accented i_adjective plain_negative/plain_past_negative (a genuine two-accent realization, not one position)', () => {
+    for (const formKey of ['plain_negative', 'plain_past_negative'] as const) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass: 'i_adjective',
+          formKey,
+          citationReading: 'たかい',
+          citationPosition: 2,
+          citationMoraCount: 3,
+          conjugatedMoraCount: 5,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it('returns null for i_adjective te_form/plain_past/ba_form (external per-word data only, every accent class)', () => {
+    for (const formKey of ['te_form', 'plain_past', 'ba_form'] as const) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass: 'i_adjective',
+          formKey,
+          citationReading: 'あまい',
+          citationPosition: 0,
+          citationMoraCount: 3,
+          conjugatedMoraCount: 4,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it('returns null for irregular いい/よい regardless of form', () => {
+    for (const citationReading of ['いい', 'よい']) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass: 'i_adjective',
+          formKey: 'polite',
+          citationReading,
+          citationPosition: 0,
+          citationMoraCount: 2,
+          conjugatedMoraCount: 4,
+        }),
+      ).toBeNull();
+    }
   });
 
   it('returns null for na_adjective/suru/kuru (no two-class system to build on)', () => {
@@ -98,6 +136,7 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
       predictInflectedPitchAccentPosition({
         wordClass: 'na_adjective',
         formKey: 'plain_negative',
+        citationReading: 'x',
         citationPosition: 0,
         citationMoraCount: 2,
         conjugatedMoraCount: 5,
@@ -107,6 +146,7 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
       predictInflectedPitchAccentPosition({
         wordClass: 'suru',
         formKey: 'te_form',
+        citationReading: 'x',
         citationPosition: 0,
         citationMoraCount: 2,
         conjugatedMoraCount: 2,
@@ -119,6 +159,7 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
       predictInflectedPitchAccentPosition({
         wordClass: 'godan',
         formKey: 'potential',
+        citationReading: 'x',
         citationPosition: 2,
         citationMoraCount: 3,
         conjugatedMoraCount: 5,
@@ -126,11 +167,12 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
     ).toBeNull();
   });
 
-  it('returns null for a godan word whose citation accent is neither heiban nor edge-accented (irregular)', () => {
+  it('returns null for a verb whose citation accent is neither heiban nor edge-accented (irregular)', () => {
     expect(
       predictInflectedPitchAccentPosition({
         wordClass: 'godan',
         formKey: 'ba_form',
+        citationReading: 'x',
         citationPosition: 1,
         citationMoraCount: 3,
         conjugatedMoraCount: 4,
@@ -138,17 +180,20 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
     ).toBeNull();
   });
 
-  it('returns null for godan te-form/plain-past/tara-form (Module:ja-acc-table sources these from real per-word data, not a formula)', () => {
-    for (const formKey of ['te_form', 'plain_past', 'tara_form'] as const) {
-      expect(
-        predictInflectedPitchAccentPosition({
-          wordClass: 'godan',
-          formKey,
-          citationPosition: 0,
-          citationMoraCount: 2,
-          conjugatedMoraCount: 3,
-        }),
-      ).toBeNull();
+  it('returns null for godan/ichidan te-form/plain-past/tara-form (Module:ja-acc-table sources these from real per-word data, not a formula)', () => {
+    for (const wordClass of ['godan', 'ichidan'] as const) {
+      for (const formKey of ['te_form', 'plain_past', 'tara_form'] as const) {
+        expect(
+          predictInflectedPitchAccentPosition({
+            wordClass,
+            formKey,
+            citationReading: 'x',
+            citationPosition: 0,
+            citationMoraCount: 2,
+            conjugatedMoraCount: 3,
+          }),
+        ).toBeNull();
+      }
     }
   });
 });

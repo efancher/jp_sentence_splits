@@ -277,31 +277,70 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
-- [ ] **Extend inflected `pitch_accent` cards past the current narrow godan
-  set.** 2026-09-12 shipped godan-only support for exactly three forms
-  (`plain_negative`/`ba_form`/`plain_past_negative`; see docs/STATUS.md for
-  the two rounds of correction it took to get there). Two things are still
-  missing:
-  - **Godan te-form/plain-past(た)/tara-form.** Not a "not yet ported" gap
-    — Wiktionary's `Module:ja-acc-table` (the verified primary source the
-    shipped formulas were ported from) doesn't compute these from a
-    formula at all; it takes an explicit, separately-sourced `te_form_accs`
-    parameter per word. Extending to these needs a real per-word accent
-    data source for te-form (OJAD lookup, or Wiktionary's own per-lemma
-    data if it's bulk-accessible), not a rule.
-  - **Ichidan verbs and i-adjectives.** Ichidan's て/た/ば/たら family
-    retracts the accent one mora earlier than the dictionary form (e.g.
-    たべ↓る → た↓べて), with further exceptions when the retracted mora would
-    be devoiced or moraic ん (つけ↓る/つけ↓て doesn't move; ぞんじ↓る/ぞ↓んじて
-    moves back two); i-adjective negative/past forms have their own
-    exceptions (an unaccented adjective's くない/かった forms are not flat,
-    similar to how the fixed shipped godan bug found ば/なかった aren't flat
-    for unaccented verbs). `Module:ja-acc-table`'s `elseif style.adjective`
-    branch and its ichidan branch likely already encode both correctly —
-    worth porting from there directly (same source, already fetched once
-    this session) rather than re-deriving from scratch or trusting
-    summarized web search, which is what produced the wrong initial godan
-    assumption in the first place.
+- [ ] **Remaining inflected `pitch_accent` gaps.** 2026-09-12 extended
+  coverage from godan-only to godan + ichidan + i-adjective + the -masu
+  family (see docs/STATUS.md) — all verified against Wiktionary's
+  `Module:ja-acc-table` live-rendered output, not summarized web search.
+  What's still missing, and why each is a real limit rather than a "not
+  yet ported" gap:
+  - **te-form/plain-past(た)/tara-form, every word class.** Wiktionary's
+    own module doesn't compute these from a formula at all; it takes an
+    explicit, separately-sourced per-word parameter. Needs a real
+    per-word accent data source (OJAD lookup, or Wiktionary's own
+    per-lemma data if it's bulk-accessible), not a rule.
+  - **Ichidan `plain_past_negative`.** Unlike godan (where なかった cleanly
+    carries the negative form's value forward), this wasn't verified
+    against real ichidan なかった data this pass — stays excluded until it
+    is.
+  - **Accented i-adjective `plain_negative`/`plain_past_negative`.** Not
+    excluded out of caution — real data for 高くない shows a genuine
+    two-accent realization (the く-stem's own downstep plus ない's own
+    atamadaka accent) that isn't representable as a single position
+    number in this model at all. Would need a different representation
+    (two positions, or a richer contour type) to ever support, not just
+    more verification.
+  - **い-adjective te_form/plain_past/ba_form (kute/katta/kereba).**
+    Same "external per-word data only" limit as verb te-form, for every
+    accent class including heiban.
+
+- [ ] **Wire inflection-awareness into the ambient pitch display.**
+  `SentencePitchAccentRow`/`sentencePitchAccent.ts` (used on shadowing
+  pages, `AnalysisPanel`, and the `pitch_accent` card's own reveal) still
+  sources every word's contour from `getVocabularyTargetCandidates` —
+  dictionary reading only, regardless of whether the occurrence in the
+  sentence is actually inflected. This is the same class of bug the
+  `pitch_accent` card had before 2026-09-12, just never fixed for the
+  ambient display. Fix: factor the citation-vs-inflected resolution logic
+  already in `ReviewPage.tsx`'s `buildPitchAccentCandidate` into a shared
+  helper, swap the ambient loaders to `getVocabularyOccurrenceCandidates`
+  + that helper, then remove the now-redundant `sentence_transformation`
+  exclusion for the ambient row and the duplicate/contradictory render
+  inside the `pitch_accent` card's own reveal.
+
+- [ ] **Wiktionary secondary backfill for missing dictionary accent data.**
+  ~89 vocabulary items (as of 2026-09-04, likely more now — no current
+  diagnostic script reports the live count; `npm run backfill:pitch-accent`
+  dry-run logs it) have no `pitchAccentPositions` at all after the
+  existing Kanjium + UniDic backfill passes. New third-pass script,
+  modeled on `scripts/backfill-pitch-accent.ts`: fetch each blank item's
+  real Wiktionary page (with a politeness delay + descriptive User-Agent —
+  first script to do per-page external fetches, be a good citizen),
+  parse the Pronunciation section's accent bracket, skip (don't guess) on
+  ambiguous/missing/multi-reading pages. Dry-run first, always.
+
+- [ ] **Heiban i-adjective predicate-position accent.** Side discovery
+  from the 2026-09-12 pitch-accent work, not investigated further: a
+  heiban i-adjective may take a *different* accent in bare sentence-final
+  predicate position than its lexical citation form suggests — confirmed
+  via real Wiktionary data for 甘い (heiban [0], but its "terminal"
+  node renders あまꜜい, position 2, in predicate use). If real, this is a
+  pre-existing gap in the *citation-form* pitch_accent path (a "correct"
+  citation-form card could already be asserting the wrong contour for a
+  sentence-final occurrence), independent of anything inflection-related.
+  Not scoped — first step would be checking how common this actually is
+  in the corpus and whether it's audible/testable given the existing
+  edge-accent gating (`hasFollowingVoicedMora`) before deciding it's worth
+  fixing.
 
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)

@@ -1729,6 +1729,154 @@ describe('ReviewPage', () => {
     expect(review?.errorClassification).toBeUndefined();
   });
 
+  it('seeds a pitch-accent card for an ichidan negative occurrence, graded against the conjugated reading', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // 食べる [2] is accented; unlike godan, an ichidan verb's negative stays
+    // at the UNCHANGED citation position (Wiktionary Module:ja-acc-table,
+    // pitchAccentShift.ts) — 食べない, 4 morae (た/べ/な/い), drop after mora 2.
+    await db.sentences.update('sent-1', { japanese: '朝ご飯を食べない。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-taberu',
+      expression: '食べる',
+      reading: 'たべる',
+      meaning: 'to eat',
+      partOfSpeech: 'v1',
+      pitchAccentPositions: [2],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-taberu',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-taberu',
+      surfaceForm: '食べない',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-taberu');
+    await suppressAudioCards('sent-1', 'sv-taberu');
+    await db.studyItems.add({
+      id: 'si-sv-taberu-sentence_transformation',
+      subjectType: 'sentenceVocabulary',
+      subjectId: 'sv-taberu',
+      activityType: 'sentence_transformation',
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { label, correctPosition } = expectedPitchAccentDrop('たべない', 2);
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(/Listen, then mark where it falls/);
+    expect(screen.getByText('たべない')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: label }));
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe(String(correctPosition));
+    expect(review?.expectedAnswer).toBe(String(correctPosition));
+    expect(review?.errorClassification).toBeUndefined();
+  });
+
+  it('seeds a pitch-accent card for an i-adjective polite (です) occurrence, graded against the conjugated reading', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    // 甘い [0] is heiban; its です form is NOT flat — 甘いです gains a
+    // downstep at citationMoraCount - 1 (Wiktionary Module:ja-acc-table,
+    // pitchAccentShift.ts) — 5 morae (あ/ま/い/で/す), drop after mora 2.
+    await db.sentences.update('sent-1', { japanese: 'このケーキは甘いです。' });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-amai',
+      expression: '甘い',
+      reading: 'あまい',
+      meaning: 'sweet',
+      partOfSpeech: 'adj-i',
+      pitchAccentPositions: [0],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-amai',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-amai',
+      surfaceForm: '甘いです',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-amai');
+    await suppressAudioCards('sent-1', 'sv-amai');
+    await db.studyItems.add({
+      id: 'si-sv-amai-sentence_transformation',
+      subjectType: 'sentenceVocabulary',
+      subjectId: 'sv-amai',
+      activityType: 'sentence_transformation',
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { label, correctPosition } = expectedPitchAccentDrop('あまいです', 2);
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText(/Listen, then mark where it falls/);
+    expect(screen.getByText('あまいです')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: label }));
+
+    expect(screen.getByText('✓ Correct')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      expect(await db.reviews.count()).toBe(1);
+    });
+    const [review] = await db.reviews.toArray();
+    expect(review?.responseRaw).toBe(String(correctPosition));
+    expect(review?.expectedAnswer).toBe(String(correctPosition));
+    expect(review?.errorClassification).toBeUndefined();
+  });
+
   it('offers one fall-position choice per mora plus "no fall" for a 1-mora word', async () => {
     await seedBookWithSentence();
     const db = getDb();

@@ -913,19 +913,21 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   *and* whose context sentence has a native reference recording
   (`SentenceAudio`). The word must appear either in its **citation form**
   (a kana/kanji spelling difference for the same form is fine) or, for a
-  **godan verb**, in one of three inflected forms (negative,
-  ba-conditional, past-negative) whose downstep
-  `src/lib/pitchAccentShift.ts` can confidently place in the *conjugated*
-  reading, per formulas ported from Wiktionary's audited
-  `Module:ja-acc-table` rather than assumed — an accented verb's negative
-  actually downsteps one mora *past* the citation position (right before
-  ない), and an unaccented verb's ba-form/past-negative are *not* flat (ば
-  and かった each induce their own downstep). Te-form/past-tense/
-  tara-conditional are excluded even for godan since that source itself
-  doesn't derive their accent from a formula. An occurrence outside that
-  (ichidan, i-adjective, -masu forms, any other word class) still falls
-  back to citation-form-only,
-  since an inflected occurrence would otherwise loop native audio whose
+  **godan/ichidan verb or i-adjective**, in one of a narrow set of
+  inflected forms whose downstep `src/lib/pitchAccentShift.ts` can
+  confidently place in the *conjugated* reading, per formulas ported from
+  Wiktionary's audited `Module:ja-acc-table` rather than assumed (see that
+  module's doc comment for the exact per-word-class/form breakdown and why
+  each gap is a real limit, not an oversight — e.g. an accented godan
+  verb's negative downsteps one mora *past* the citation position, an
+  unaccented verb's ba-form/past-negative are *not* flat, the -masu family
+  is class-independent, and an accented i-adjective's negative is a
+  genuine two-accent realization that isn't representable as a single
+  position at all). Te-form/past-tense/tara-conditional are excluded for
+  every word class since that source itself doesn't derive their accent
+  from a formula. An occurrence outside what's covered still falls back to
+  citation-form-only, since an inflected occurrence would otherwise loop
+  native audio whose
   morae/accent don't match the contour the choices key off (the original
   bug: a ござる card tested against ありがとうございます audio). One card per
   word — a citation-form occurrence is always preferred when one exists;

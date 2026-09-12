@@ -514,6 +514,7 @@ function buildPitchAccentCandidate(
     const predicted = predictInflectedPitchAccentPosition({
       wordClass,
       formKey: identified.form.key,
+      citationReading: dictionaryReading,
       citationPosition: Math.max(0, Math.min(positions[0]!, citationMoraCount)),
       citationMoraCount,
       conjugatedMoraCount,

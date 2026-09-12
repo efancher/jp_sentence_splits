@@ -30,6 +30,36 @@
     "note": "なかった gets a downstep a fixed 3 morae from the end even for a heiban verb — real rendered romaji [kàwánáꜜkàttà], drop after mora 3 (な), not flat"
   },
   {
+    "expression": "買う",
+    "reading": "かう",
+    "wordClass": "godan",
+    "citationPosition": 0,
+    "formKey": "polite_present",
+    "expectedReading": "かいます",
+    "expectedPosition": 3,
+    "note": "-masu family is class-independent (only needs the stem's mora count) — real rendered romaji [kàímáꜜsù], drop after mora 3 (ま)"
+  },
+  {
+    "expression": "買う",
+    "reading": "かう",
+    "wordClass": "godan",
+    "citationPosition": 0,
+    "formKey": "polite_past",
+    "expectedReading": "かいました",
+    "expectedPosition": 3,
+    "note": "ました carries polite_present's own downstep forward unchanged — real rendered romaji [kàímáꜜshìtà]"
+  },
+  {
+    "expression": "買う",
+    "reading": "かう",
+    "wordClass": "godan",
+    "citationPosition": 0,
+    "formKey": "polite_negative",
+    "expectedReading": "かいません",
+    "expectedPosition": 4,
+    "note": "ません is polite_present's downstep +1 — real rendered romaji [kàímáséꜜǹ], drop after mora 4 (せ)"
+  },
+  {
     "expression": "走る",
     "reading": "はしる",
     "wordClass": "godan",
@@ -58,5 +88,175 @@
     "expectedReading": "はしらなかった",
     "expectedPosition": 3,
     "note": "なかった carries the negative form's own (already-shifted) downstep straight through — real rendered romaji [hàshíráꜜnàkàttà], drop after mora 3 (ら)"
+  },
+  {
+    "expression": "走る",
+    "reading": "はしる",
+    "wordClass": "godan",
+    "citationPosition": 2,
+    "formKey": "polite_present",
+    "expectedReading": "はしります",
+    "expectedPosition": 4,
+    "note": "-masu family ignores accent class — real rendered romaji [hàshírímáꜜsù], drop after mora 4 (ま), same offset (+1 from citation moraCount) as the heiban 買う case"
+  },
+  {
+    "expression": "走る",
+    "reading": "はしる",
+    "wordClass": "godan",
+    "citationPosition": 2,
+    "formKey": "polite_past",
+    "expectedReading": "はしりました",
+    "expectedPosition": 4,
+    "note": "real rendered romaji [hàshírímáꜜshìtà]"
+  },
+  {
+    "expression": "走る",
+    "reading": "はしる",
+    "wordClass": "godan",
+    "citationPosition": 2,
+    "formKey": "polite_negative",
+    "expectedReading": "はしりません",
+    "expectedPosition": 5,
+    "note": "real rendered romaji [hàshírímáséꜜǹ], drop after mora 5 (せ)"
+  },
+  {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "plain_negative",
+    "expectedReading": "あけない",
+    "expectedPosition": 0,
+    "note": "heiban ichidan verb (Wiktionary: Heiban [0]) stays heiban in negative — real rendered romaji [àkénáí], no downstep mark"
+  },
+  {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "ba_form",
+    "expectedReading": "あければ",
+    "expectedPosition": 3,
+    "note": "ば induces its own downstep on an otherwise-heiban verb, same shape as godan — real rendered romaji [àkéréꜜbà], drop after mora 3 (れ)"
+  },
+  {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "polite_present",
+    "expectedReading": "あけます",
+    "expectedPosition": 3,
+    "note": "ichidan -masu offset is +0 from citation moraCount (vs godan's +1) — real rendered romaji [àkémáꜜsù], drop after mora 3 (ま)"
+  },
+  {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "polite_past",
+    "expectedReading": "あけました",
+    "expectedPosition": 3,
+    "note": "real rendered romaji [àkémáꜜshìtà]"
+  },
+  {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "polite_negative",
+    "expectedReading": "あけません",
+    "expectedPosition": 4,
+    "note": "real rendered romaji [àkémáséꜜǹ], drop after mora 4 (せ)"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "plain_negative",
+    "expectedReading": "たべない",
+    "expectedPosition": 2,
+    "note": "accented ichidan verb's negative stays at the UNCHANGED citation position — different from godan's +1 shift — real rendered romaji [tàbéꜜnàì], drop after mora 2 (べ)"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "ba_form",
+    "expectedReading": "たべれば",
+    "expectedPosition": 2,
+    "note": "real rendered romaji [tàbéꜜrèbà], drop after mora 2 (べ), same absolute index as citation"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "polite_present",
+    "expectedReading": "たべます",
+    "expectedPosition": 3,
+    "note": "-masu family ignores accent class — real rendered romaji [tàbémáꜜsù], same +0-from-moraCount offset as the heiban 開ける case"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "polite_past",
+    "expectedReading": "たべました",
+    "expectedPosition": 3,
+    "note": "real rendered romaji [tàbémáꜜshìtà]"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "polite_negative",
+    "expectedReading": "たべません",
+    "expectedPosition": 4,
+    "note": "real rendered romaji [tàbémáséꜜǹ], drop after mora 4 (せ)"
+  },
+  {
+    "expression": "甘い",
+    "reading": "あまい",
+    "wordClass": "i_adjective",
+    "citationPosition": 0,
+    "formKey": "polite",
+    "expectedReading": "あまいです",
+    "expectedPosition": 2,
+    "note": "heiban i-adjective's です form is NOT flat — real rendered romaji [àmáꜜì dèsù], drop after mora 2 (ま), i.e. citationMoraCount - 1"
+  },
+  {
+    "expression": "甘い",
+    "reading": "あまい",
+    "wordClass": "i_adjective",
+    "citationPosition": 0,
+    "formKey": "plain_negative",
+    "expectedReading": "あまくない",
+    "expectedPosition": 4,
+    "note": "heiban i-adjective negative gains a downstep right before ない's own final mora — real rendered romaji [àmákú náꜜì], drop after mora 4 (な), i.e. citationMoraCount + 1"
+  },
+  {
+    "expression": "甘い",
+    "reading": "あまい",
+    "wordClass": "i_adjective",
+    "citationPosition": 0,
+    "formKey": "plain_past_negative",
+    "expectedReading": "あまくなかった",
+    "expectedPosition": 4,
+    "note": "same offset as plain_negative — real rendered romaji [àmákú náꜜkàttà], drop after mora 4 (な)"
+  },
+  {
+    "expression": "高い",
+    "reading": "たかい",
+    "wordClass": "i_adjective",
+    "citationPosition": 2,
+    "formKey": "polite",
+    "expectedReading": "たかいです",
+    "expectedPosition": 2,
+    "note": "accented i-adjective's です form keeps the citation position unchanged — real rendered romaji [tàkáꜜì dèsù], drop after mora 2 (か)"
   }
 ]
