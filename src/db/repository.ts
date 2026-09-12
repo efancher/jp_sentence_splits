@@ -70,7 +70,11 @@ import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpo
 import { buildErrorMix, type ErrorMix } from '../lib/errorMix';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
-import { trailingBunsetsuParticles } from '../lib/sentencePitchAccent';
+import {
+  trailingBunsetsuParticles,
+  type SentencePitchAccentTarget,
+} from '../lib/sentencePitchAccent';
+import { resolveInflectedPitchAccent } from '../lib/pitchAccentShift';
 import {
   conjugationTagFromWordClass,
   conjugationWordClassFromPartOfSpeech,
@@ -4055,19 +4059,24 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
     const targetVocabularyItemIds: Record<string, string> = {};
     for (const link of sentenceLinks) {
       const item = vocabularyItemById.get(link.vocabularyItemId);
-      if (link.surfaceForm && item?.pitchAccentPositions?.length) {
-        const occurrence = sentence.japanese.indexOf(link.surfaceForm);
-        targets.push({
-          surfaceForm: link.surfaceForm,
-          reading: item.reading,
-          pitchAccentPositions: item.pitchAccentPositions,
-          followingMora:
-            occurrence >= 0
-              ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
-              : '',
-        });
-        targetVocabularyItemIds[link.surfaceForm] = link.vocabularyItemId;
-      }
+      if (!link.surfaceForm || !item) continue;
+      const resolved = resolveInflectedPitchAccent({
+        vocabularyItem: item,
+        sentence,
+        surfaceForm: link.surfaceForm,
+      });
+      if (!resolved) continue;
+      const occurrence = sentence.japanese.indexOf(link.surfaceForm);
+      targets.push({
+        surfaceForm: link.surfaceForm,
+        reading: resolved.reading,
+        pitchAccentPositions: [resolved.position],
+        followingMora:
+          occurrence >= 0
+            ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
+            : '',
+      });
+      targetVocabularyItemIds[link.surfaceForm] = link.vocabularyItemId;
     }
     if (targets.length === 0) continue;
     result.push({ sentence, targets, targetVocabularyItemIds });
@@ -4387,6 +4396,35 @@ export async function getVocabularyOccurrenceCandidates(
     candidates.push({ link, vocabularyItem, sentence, surfaceForm: link.surfaceForm });
   });
   return candidates;
+}
+
+/**
+ * Per-word pitch-accent targets for the ambient "H/L marks" display
+ * (SentencePitchAccentRow, AnalysisPanel, SyncedShadowText) — like
+ * getVocabularyTargetCandidates but inflection-aware: each occurrence goes
+ * through resolveInflectedPitchAccent (src/lib/pitchAccentShift.ts) so a
+ * word appearing inflected (走らない for 走る) contributes the *conjugated*
+ * reading/position it's actually pronounced with, not the dictionary one.
+ * An occurrence resolveInflectedPitchAccent can't confidently place (no
+ * accent data, or an inflected form outside its narrow coverage) is
+ * dropped rather than shown with a wrong contour — same "skip, don't
+ * guess" stance as everywhere else in this feature.
+ */
+export async function getSentencePitchAccentTargets(
+  sentenceId: string,
+): Promise<SentencePitchAccentTarget[]> {
+  const occurrences = await getVocabularyOccurrenceCandidates([sentenceId]);
+  const targets: SentencePitchAccentTarget[] = [];
+  for (const occurrence of occurrences) {
+    const resolved = resolveInflectedPitchAccent(occurrence);
+    if (!resolved) continue;
+    targets.push({
+      surfaceForm: occurrence.surfaceForm,
+      reading: resolved.reading,
+      pitchAccentPositions: [resolved.position],
+    });
+  }
+  return targets;
 }
 
 /**

@@ -303,20 +303,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Same "external per-word data only" limit as verb te-form, for every
     accent class including heiban.
 
-- [ ] **Wire inflection-awareness into the ambient pitch display.**
-  `SentencePitchAccentRow`/`sentencePitchAccent.ts` (used on shadowing
-  pages, `AnalysisPanel`, and the `pitch_accent` card's own reveal) still
-  sources every word's contour from `getVocabularyTargetCandidates` —
-  dictionary reading only, regardless of whether the occurrence in the
-  sentence is actually inflected. This is the same class of bug the
-  `pitch_accent` card had before 2026-09-12, just never fixed for the
-  ambient display. Fix: factor the citation-vs-inflected resolution logic
-  already in `ReviewPage.tsx`'s `buildPitchAccentCandidate` into a shared
-  helper, swap the ambient loaders to `getVocabularyOccurrenceCandidates`
-  + that helper, then remove the now-redundant `sentence_transformation`
-  exclusion for the ambient row and the duplicate/contradictory render
-  inside the `pitch_accent` card's own reveal.
-
 - [ ] **Wiktionary secondary backfill for missing dictionary accent data.**
   ~89 vocabulary items (as of 2026-09-04, likely more now — no current
   diagnostic script reports the live count; `npm run backfill:pitch-accent`

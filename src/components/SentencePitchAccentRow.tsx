@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { getVocabularyTargetCandidates } from '../db/repository';
+import { getSentencePitchAccentTargets } from '../db/repository';
 import {
   buildSentencePitchAccents,
   type SentencePitchAccentTarget,
@@ -25,8 +25,10 @@ import { PitchAccentWordMarks } from './PitchAccentWordMarks';
  * all when the sentence has no accented words.
  *
  * Pass `targets` when the caller already has them (AnalysisPanel loads the
- * same list for scoring); otherwise pass `sentenceId` and the row loads
- * its own from the confirmed `sentence_vocabulary` links.
+ * same list for scoring); otherwise pass `sentenceId` and the row loads its
+ * own via `getSentencePitchAccentTargets` — inflection-aware: an occurrence
+ * read in an inflected form (走らない for 走る) contributes the conjugated
+ * reading/position it's actually pronounced with, not the dictionary one.
  *
  * `learnerClassesBySurface` (AnalysisPanel) adds a second H/L line per
  * mora — the learner's own measured shape from
@@ -55,15 +57,9 @@ export function SentencePitchAccentRow({
   useEffect(() => {
     if (targets || !sentenceId) return;
     let active = true;
-    void getVocabularyTargetCandidates([sentenceId]).then((candidates) => {
+    void getSentencePitchAccentTargets(sentenceId).then((targets) => {
       if (!active) return;
-      setLoaded(
-        candidates.map((candidate) => ({
-          surfaceForm: candidate.surfaceForm,
-          reading: candidate.vocabularyItem.reading,
-          pitchAccentPositions: candidate.vocabularyItem.pitchAccentPositions,
-        })),
-      );
+      setLoaded(targets);
     });
     return () => {
       active = false;

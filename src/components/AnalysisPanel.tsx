@@ -4,7 +4,7 @@ import {
   getAttemptAlignment,
   getAttemptTranscription,
   getReferenceAlignment,
-  getVocabularyTargetCandidates,
+  getVocabularyOccurrenceCandidates,
   listAttemptAnalysisSummariesForSentence,
   recordShadowingEncounter,
   saveAttemptAlignment,
@@ -13,6 +13,7 @@ import {
   saveReferenceAlignment,
   saveReferencePitchTrack,
 } from '../db/repository';
+import { resolveInflectedPitchAccent } from '../lib/pitchAccentShift';
 import type { AlignmentResult } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { transcribeAudio } from '../lib/analysisApi';
@@ -299,26 +300,25 @@ export function AnalysisPanel({
 
   useEffect(() => {
     let active = true;
-    void getVocabularyTargetCandidates([sentenceId]).then((candidates) => {
+    void getVocabularyOccurrenceCandidates([sentenceId]).then((occurrences) => {
       if (!active) return;
       setPitchAccentTargets(
-        candidates
-          .filter((candidate) => candidate.vocabularyItem.pitchAccentPositions?.length)
-          .map((candidate) => {
-            const occurrence = candidate.sentence.japanese.indexOf(candidate.surfaceForm);
-            return {
-              surfaceForm: candidate.surfaceForm,
-              reading: candidate.vocabularyItem.reading,
-              pitchAccentPositions: candidate.vocabularyItem.pitchAccentPositions!,
+        occurrences.flatMap((occurrence) => {
+          const resolved = resolveInflectedPitchAccent(occurrence);
+          if (!resolved) return [];
+          const found = occurrence.sentence.japanese.indexOf(occurrence.surfaceForm);
+          return [
+            {
+              surfaceForm: occurrence.surfaceForm,
+              reading: resolved.reading,
+              pitchAccentPositions: [resolved.position],
               followingMora:
-                occurrence >= 0
-                  ? trailingBunsetsuParticles(
-                      candidate.sentence.japanese,
-                      occurrence + candidate.surfaceForm.length,
-                    )
+                found >= 0
+                  ? trailingBunsetsuParticles(occurrence.sentence.japanese, found + occurrence.surfaceForm.length)
                   : '',
-            };
-          }),
+            },
+          ];
+        }),
       );
     });
     return () => {

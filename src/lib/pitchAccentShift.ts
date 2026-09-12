@@ -58,8 +58,18 @@
  *   causative (derive a new verb with its own accent): not attempted.
  */
 
-import type { ConjugationFormKey, ConjugationWordClass } from './conjugation';
+import {
+  conjugate,
+  conjugationWordClassFromPartOfSpeech,
+  findInflectedSurfaceInSentence,
+  identifyConjugationForm,
+  type ConjugationFormKey,
+  type ConjugationWordClass,
+} from './conjugation';
+import { segmentIntoMorae } from './mora';
 import { classifyVerbAdjectiveAccent } from './pitchAccentRules';
+import { surfaceReadingFromInline } from './readingAnswer';
+import type { Sentence, VocabularyItem } from '../domain/types';
 
 export interface PitchAccentShiftInput {
   wordClass: ConjugationWordClass;
@@ -167,4 +177,91 @@ export function predictInflectedPitchAccentPosition(
     return predictIAdjectivePosition(input.formKey, input.citationPosition, input.citationMoraCount);
   }
   return null;
+}
+
+export interface ResolvedPitchAccent {
+  /** Reading whose morae the accent position is expressed in — the dictionary reading for a citation-form occurrence, the conjugated reading otherwise. */
+  reading: string;
+  /** Downstep in `reading`'s own morae, clamped into [0, morae.length]. */
+  position: number;
+  isCitationForm: boolean;
+}
+
+/**
+ * Resolves a single occurrence of a word in a sentence to the pitch-accent
+ * reading/position that occurrence's *own* pronunciation actually has —
+ * the dictionary reading/position for a citation-form occurrence, or the
+ * conjugated reading/shifted position (via predictInflectedPitchAccentPosition
+ * above) for a recognized inflected one. Returns null when the word has no
+ * dictionary accent data, or the occurrence is inflected in a way this
+ * module doesn't confidently cover (never guesses).
+ *
+ * Shared by the `pitch_accent` review card (ReviewPage.tsx's
+ * buildPitchAccentCandidate, which layers its own audio/edge-accent
+ * gating on top) and the ambient "H/L marks" display
+ * (getSentencePitchAccentTargets, src/db/repository.ts) — both need the
+ * exact same citation-vs-inflected resolution, and having two independent
+ * implementations is exactly how they used to disagree with each other
+ * (the ambient row inside the pitch_accent card's own reveal used to draw
+ * the citation-form contour even when the card above it was testing an
+ * inflected one).
+ */
+export function resolveInflectedPitchAccent(occurrence: {
+  vocabularyItem: Pick<VocabularyItem, 'expression' | 'reading' | 'partOfSpeech' | 'pitchAccentPositions'>;
+  sentence: Pick<Sentence, 'japanese' | 'inlineReading'>;
+  surfaceForm: string;
+}): ResolvedPitchAccent | null {
+  const { vocabularyItem, sentence, surfaceForm } = occurrence;
+  const positions = vocabularyItem.pitchAccentPositions;
+  if (!positions?.length) return null;
+
+  const dictionaryReading = vocabularyItem.reading;
+  const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
+  const isCitationForm =
+    surfaceForm === vocabularyItem.expression ||
+    surfaceForm === dictionaryReading ||
+    inContextReading === dictionaryReading;
+
+  if (isCitationForm) {
+    const moraCount = segmentIntoMorae(dictionaryReading).length;
+    if (moraCount === 0) return null;
+    return {
+      reading: dictionaryReading,
+      position: Math.max(0, Math.min(positions[0]!, moraCount)),
+      isCitationForm: true,
+    };
+  }
+
+  const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
+  if (!wordClass) return null;
+  const identified =
+    identifyConjugationForm(
+      vocabularyItem.expression,
+      dictionaryReading,
+      wordClass,
+      surfaceForm,
+      inContextReading ?? undefined,
+    ) ??
+    findInflectedSurfaceInSentence(sentence.japanese, vocabularyItem.expression, dictionaryReading, wordClass);
+  if (!identified) return null;
+  const conjugated = conjugate(vocabularyItem.expression, dictionaryReading, wordClass, identified.form.key);
+  if (!conjugated) return null;
+  const citationMoraCount = segmentIntoMorae(dictionaryReading).length;
+  const conjugatedMoraCount = segmentIntoMorae(conjugated.reading).length;
+  if (conjugatedMoraCount === 0) return null;
+  const predicted = predictInflectedPitchAccentPosition({
+    wordClass,
+    formKey: identified.form.key,
+    citationReading: dictionaryReading,
+    citationPosition: Math.max(0, Math.min(positions[0]!, citationMoraCount)),
+    citationMoraCount,
+    conjugatedMoraCount,
+  });
+  if (predicted === null) return null;
+
+  return {
+    reading: conjugated.reading,
+    position: Math.max(0, Math.min(predicted, conjugatedMoraCount)),
+    isCitationForm: false,
+  };
 }

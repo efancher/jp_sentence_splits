@@ -1436,9 +1436,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   `AnalysisPanel`'s pitch-accent section, on the `pitch_accent` review
   reveal, and — since 2026-09-02 — on **every other sentence-bearing review
   reveal** (one shared insert in `ReviewPage` before the rating buttons;
-  excluded only for `pitch_accent`, which highlights its own copy, and
-  `sentence_transformation`, whose inflected verb would clash with the
-  citation-form contour). A compact "H"/"L"-per-mora
+  excluded only for `pitch_accent`, which highlights its own copy). Each
+  word's contour is inflection-aware (since 2026-09-12,
+  `getSentencePitchAccentTargets` in `src/db/repository.ts`): an occurrence
+  read in an inflected form (走らない for 走る) resolves to the *conjugated*
+  reading/position via `resolveInflectedPitchAccent`
+  (`src/lib/pitchAccentShift.ts` — the same resolver the `pitch_accent`
+  card itself uses), and is simply omitted rather than shown with the
+  wrong (citation-form) contour when that resolver's narrow coverage
+  doesn't reach the specific form. A compact "H"/"L"-per-mora
   contour for each confirmed sentence word that carries Kanjium/UniDic
   accent data, plus a following-particle mark. When that sentence also has
   a reference recording, `SentenceNativePitchContour` mounts the measured

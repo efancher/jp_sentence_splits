@@ -30,6 +30,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — Ambient pitch-accent display ("H/L marks" on shadowing
+  pages, `AnalysisPanel`, the pitch-accent drill, and the `pitch_accent`
+  card's own reveal) is now inflection-aware, matching the review card.**
+  Every consumer previously sourced its per-word contour from
+  `getVocabularyTargetCandidates` — dictionary reading only, regardless of
+  whether the sentence's actual occurrence was inflected (the same class
+  of bug `pitch_accent` had before this session, just never fixed for the
+  ambient display). New `resolveInflectedPitchAccent`
+  (`src/lib/pitchAccentShift.ts`) factors the citation-vs-inflected
+  resolution logic out of `ReviewPage.tsx`'s `buildPitchAccentCandidate`
+  into a shared pure function; new `getSentencePitchAccentTargets`
+  (`src/db/repository.ts`) runs every occurrence in a sentence through it
+  and drops (never misdraws) one outside the shift calculator's coverage.
+  `SentencePitchAccentRow.tsx`, `AnalysisPanel.tsx`, and
+  `getPitchAccentDrillSentences` all switched to it; `SyncedShadowText.tsx`
+  needed no change (already `sentenceId`-driven through the row).
+  Cleanup: removed the `sentence_transformation` exclusion for the ambient
+  row (`ReviewPage.tsx`) — its inflected verb now renders correctly
+  instead of being hidden outright — which also fixes a latent bug where
+  the `pitch_accent` card's own reveal could show two disagreeing
+  contours for the same word (the card's `PitchAccentDiagram` correct,
+  the ambient row below it wrong) since both now share one resolver.
+  New `tests/getSentencePitchAccentTargets.test.ts` (citation-form,
+  supported-inflected, unsupported-inflected-dropped, no-accent-data-dropped).
+
 - **2026-09-12 — `pitch_accent` inflected-occurrence support extended to
   ichidan verbs, i-adjectives, and the -masu family for godan/ichidan**
   (user follow-up: "are those [Wiktionary] pages useful for other parts of

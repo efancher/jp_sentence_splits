@@ -76,7 +76,7 @@ import { isVocabularyItemProficient } from '../lib/scheduling';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
-import { predictInflectedPitchAccentPosition } from '../lib/pitchAccentShift';
+import { resolveInflectedPitchAccent } from '../lib/pitchAccentShift';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
 import {
   expectedPitchShape,
@@ -472,61 +472,22 @@ function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean 
  * first written to fix). One card per word: among all its occurrences,
  * prefer the first citation-form one
  * with audio; only fall back to an inflected one when no citation-form
- * occurrence works. Same reason line ~1650 skips the ambient
- * SentencePitchAccentRow for `sentence_transformation` — that row isn't
- * wired to the shift calculator (yet).
+ * occurrence works. The ambient SentencePitchAccentRow shares this same
+ * resolution logic (resolveInflectedPitchAccent in pitchAccentShift.ts)
+ * for its own per-word contours, including under `sentence_transformation`.
  */
 function buildPitchAccentCandidate(
   occurrence: VocabularyOccurrenceCandidate,
   audio: SentenceAudio,
 ): { candidate: PitchAccentReviewCandidate; isCitationForm: boolean } | null {
   const { vocabularyItem, sentence, surfaceForm, link } = occurrence;
-  const positions = vocabularyItem.pitchAccentPositions;
-  if (!positions?.length) return null;
-
-  const dictionaryReading = vocabularyItem.reading;
-  const inContextReading = surfaceReadingFromInline(sentence.inlineReading, surfaceForm);
-  const isCitationForm =
-    surfaceForm === vocabularyItem.expression ||
-    surfaceForm === dictionaryReading ||
-    inContextReading === dictionaryReading;
-
-  let reading = dictionaryReading;
-  let correctPositionRaw = positions[0]!;
-
-  if (!isCitationForm) {
-    const wordClass = conjugationWordClassFromPartOfSpeech(vocabularyItem.partOfSpeech);
-    if (!wordClass) return null;
-    const identified =
-      identifyConjugationForm(
-        vocabularyItem.expression,
-        dictionaryReading,
-        wordClass,
-        surfaceForm,
-        inContextReading ?? undefined,
-      ) ??
-      findInflectedSurfaceInSentence(sentence.japanese, vocabularyItem.expression, dictionaryReading, wordClass);
-    if (!identified) return null;
-    const conjugated = conjugate(vocabularyItem.expression, dictionaryReading, wordClass, identified.form.key);
-    if (!conjugated) return null;
-    const citationMoraCount = segmentIntoMorae(dictionaryReading).length;
-    const conjugatedMoraCount = segmentIntoMorae(conjugated.reading).length;
-    const predicted = predictInflectedPitchAccentPosition({
-      wordClass,
-      formKey: identified.form.key,
-      citationReading: dictionaryReading,
-      citationPosition: Math.max(0, Math.min(positions[0]!, citationMoraCount)),
-      citationMoraCount,
-      conjugatedMoraCount,
-    });
-    if (predicted === null) return null;
-    reading = conjugated.reading;
-    correctPositionRaw = predicted;
-  }
+  const resolved = resolveInflectedPitchAccent({ vocabularyItem, sentence, surfaceForm });
+  if (!resolved) return null;
+  const { reading, isCitationForm } = resolved;
 
   const morae = segmentIntoMorae(reading).map((unit) => unit.text);
   if (morae.length === 0) return null;
-  const correctPosition = Math.max(0, Math.min(correctPositionRaw, morae.length));
+  const correctPosition = Math.max(0, Math.min(resolved.position, morae.length));
   // Edge accent (heiban / odaka) is only audible on what follows the word;
   // skip the occurrence when nothing does (see doc comment).
   const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
@@ -1928,13 +1889,14 @@ export function ReviewPage() {
               // audio-centric cards (listening / word_listening).
               <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
             ) : null}
-            {revealed &&
-            current.studyItem.activityType !== 'pitch_accent' &&
-            current.studyItem.activityType !== 'sentence_transformation' ? (
+            {revealed && current.studyItem.activityType !== 'pitch_accent' ? (
               // Ambient pitch-accent contour for the sentence under review.
-              // `pitch_accent` renders its own (target-highlighted) copy;
-              // `sentence_transformation` is skipped because its verb is
-              // inflected and this row draws the citation-form contour.
+              // `pitch_accent` renders its own (target-highlighted) copy.
+              // `sentence_transformation`'s own inflected verb is included
+              // here now too — getSentencePitchAccentTargets resolves each
+              // occurrence's real conjugated contour via
+              // resolveInflectedPitchAccent, dropping (not misdrawing) any
+              // occurrence outside that resolver's narrow coverage.
               <>
                 {!(current.audio ?? current.wordListening?.audio) ? (
                   // The measured native contour, when the sentence has a
