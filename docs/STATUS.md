@@ -30,6 +30,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-12 — Fix grammar_production/grammar_completion pattern matching
+  against annotated pattern names (user report: 疲れている marked "couldn't
+  spot ～ている（状態描写）" despite being a correct example).**
+  `grammarPatternUsedIn` and `blankPatternInSentence`
+  (`src/lib/grammarPatterns.ts`) matched a pattern's `canonicalName` as a
+  literal substring/fragment set against real Japanese text, but
+  canonicalName can carry a parenthetical sense gloss to disambiguate
+  homographic patterns (e.g. ～ている（状態描写） vs ～ている（動作進行）) —
+  since no real sentence ever contains the literal gloss text, every
+  pattern with an annotation failed both checks unconditionally, regardless
+  of correctness. New `stripPatternAnnotation` strips `（…）`/`(...)` before
+  matching in both functions, while `normalizeGrammarPatternKey` (the
+  dedup key used by `ensureGrammarPattern`) is left untouched since the
+  gloss is part of the pattern's identity there. `GrammarCompletionCard`'s
+  comment updated to match — annotation is no longer the common
+  null-blank case, only genuine conjugated/colloquial surface mismatches
+  are.
+
 - **2026-09-12 — First pass at automated transcript validation (follow-up
   to the sent_263ac750 fix below — user: "is it worthwhile when we do these
   imports to have you or a tool go through the transcripts and validate the

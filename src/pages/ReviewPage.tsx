@@ -2856,12 +2856,13 @@ function GrammarProductionCard({
  * than two choices exist — a fresh corpus with only one tracked pattern
  * has nothing to contrast against yet.
  *
- * When blank is null (no verbatim match — the common case for any pattern
- * with a parenthetical annotation like ～ている（状態描写）, or a conjugated/
- * colloquial surface form), the reveal must still name the correct pattern
- * explicitly, not just mark ✓/✗ — it used to only surface the name inside
- * the now-absent <mark> blank, leaving a wrong answer with no visible
- * correction. Fixed 2026-09-11 per user report (card_issue_f8eb6258).
+ * When blank is null (no verbatim match — e.g. a conjugated/colloquial
+ * surface form, or a pattern annotation like ～ている（状態描写） whose gloss
+ * doesn't otherwise appear in the sentence even after stripping), the
+ * reveal must still name the correct pattern explicitly, not just mark
+ * ✓/✗ — it used to only surface the name inside the now-absent <mark>
+ * blank, leaving a wrong answer with no visible correction. Fixed
+ * 2026-09-11 per user report (card_issue_f8eb6258).
  */
 function GrammarCompletionCard({
   candidate,

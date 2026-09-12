@@ -42,6 +42,19 @@ export function normalizeGrammarPatternKey(canonicalName: string): string {
 }
 
 /**
+ * Strips a parenthetical gloss (e.g. "（状態描写）", "(polite)") that a
+ * canonicalName may carry to disambiguate senses of the same surface form
+ * (e.g. ～ている（状態描写） vs ～ている（動作進行）). The gloss is part of
+ * the pattern's *identity* for dedup (see normalizeGrammarPatternKey) but
+ * is never literally present in real Japanese text, so callers that match
+ * a canonicalName against an actual sentence/response must strip it first
+ * or every such pattern fails unconditionally.
+ */
+function stripPatternAnnotation(text: string): string {
+  return text.replace(/[（(][^）)]*[）)]/g, '').trim();
+}
+
+/**
  * Weak, informational check for the `grammar_production` review card
  * (docs/ROADMAP.md "Grammar production ladder"): did the learner's typed
  * sentence actually use the construction? Normalizes both sides the same
@@ -54,7 +67,7 @@ export function normalizeGrammarPatternKey(canonicalName: string): string {
  * empty/blank response or an un-normalizable pattern.
  */
 export function grammarPatternUsedIn(response: string, canonicalName: string): boolean {
-  const core = normalizeGrammarPatternKey(canonicalName);
+  const core = stripPatternAnnotation(normalizeGrammarPatternKey(canonicalName));
   if (!core) return false;
   const normalizedResponse = stripMarkup(response).normalize('NFC').trim();
   if (!normalizedResponse) return false;
@@ -71,20 +84,20 @@ export interface SentenceBlank {
 
 /**
  * Best-effort blank for a grammar_completion review card (design brief
- * §11E): finds the first occurrence of the pattern's (tilde-stripped)
- * canonicalName as a literal substring of the sentence. Returns null when
- * it doesn't appear verbatim — common for conjugated/colloquial variants
- * (e.g. the sentence has わけない but the canonical name is わけがない) —
- * callers should fall back to showing the full, unblanked sentence rather
- * than guessing at a span. True span-based blanking would need real
- * start/end offsets on SentenceGrammar, which nothing populates yet (see
- * docs/STATUS.md).
+ * §11E): finds the first occurrence of the pattern's (tilde-stripped,
+ * annotation-stripped) canonicalName as a literal substring of the
+ * sentence. Returns null when it doesn't appear verbatim — common for
+ * conjugated/colloquial variants (e.g. the sentence has わけない but the
+ * canonical name is わけがない) — callers should fall back to showing the
+ * full, unblanked sentence rather than guessing at a span. True span-based
+ * blanking would need real start/end offsets on SentenceGrammar, which
+ * nothing populates yet (see docs/STATUS.md).
  */
 export function blankPatternInSentence(
   japanese: string,
   canonicalName: string,
 ): SentenceBlank | null {
-  const needle = normalizeGrammarPatternKey(canonicalName);
+  const needle = stripPatternAnnotation(normalizeGrammarPatternKey(canonicalName));
   if (!needle) return null;
   const index = japanese.indexOf(needle);
   if (index === -1) return null;
