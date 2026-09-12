@@ -66,6 +66,20 @@ what's left is one deferred durability item (below).
     script — not wired into the mining wizard's commit step yet. If the
     script proves useful in practice, that's the natural next step (flag at
     commit time instead of requiring a separate manual run).
+  - UI reminder (user follow-up: "put a reminder in the UI to run this
+    after an import"): `YouTubeMinePage`'s commit now navigates to
+    `/books/:bookId?imported=1`; `BookDetailPage` reads that param on
+    mount, shows a one-time `Snackbar` with the exact
+    `npm run validate:sentence-transcripts -- --book <id>` command (real
+    bookId filled in), and strips the param via `setSearchParams` so it
+    doesn't reappear on a later revisit. Scoped to the mining flow only —
+    `ImportPage.tsx`'s manual `.shadowing.zip` upload shares
+    `ShadowingPreviewCard` but wasn't touched, since the motivating bug
+    class is specific to mining's automated ASR-cut segmentation. No new
+    tests (small navigation+toast wiring; `BookDetailPage` has no existing
+    render-test harness and building one for this alone wasn't worth it —
+    verified by typecheck + full vitest suite green (1337) plus manual
+    read-through of the wiring).
   - New Python tests: `tests/test_validate.py` (comparison logic, mocked
     ASR — kanji/kana equivalence, katakana-name equivalence, genuine
     mismatch, ASR-unavailable), `tests/test_validate_api.py` (endpoint

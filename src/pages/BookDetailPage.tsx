@@ -16,7 +16,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
@@ -245,6 +245,7 @@ const UNASSIGNED_CHAPTER_KEY = '__unassigned__';
 export function BookDetailPage() {
   const { bookId = '' } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [editOrder, setEditOrder] = useState(false);
   const [showPasteOrder, setShowPasteOrder] = useState(false);
   const [pasteOrderText, setPasteOrderText] = useState('');
@@ -275,6 +276,26 @@ export function BookDetailPage() {
     if (!bookId) return;
     void touchBookOpened(bookId);
   }, [bookId]);
+
+  // One-time landing reminder from a fresh mining import (YouTubeMinePage's
+  // navigate(`/books/${bookId}?imported=1`)) — the transcript-validation
+  // script (docs/STATUS.md 2026-09-12) is a manual/terminal tool, not a
+  // wizard step, so this is the nudge to actually run it. Strips the param
+  // immediately so it doesn't reappear on a later revisit/refresh.
+  useEffect(() => {
+    if (searchParams.get('imported') !== '1') return;
+    setSnack({
+      message: `Just imported — run "npm run validate:sentence-transcripts -- --book ${bookId}" to check these transcripts against a fresh ASR pass.`,
+    });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('imported');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams, bookId]);
 
   const data = useLiveQuery(async () => {
     const db = getDb();
