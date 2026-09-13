@@ -72,12 +72,12 @@ what's left is one deferred durability item (below).
   (`tests/backfillTeFormPitchAccentWiktionary.test.ts`, 12 cases,
   synthetic HTML mirroring the real nested-span structure) independent of
   the network call.
-  **Not yet run against production**: the migration needs manual
-  application (no Supabase CLI or service-role/DB credentials available
-  in this environment to apply DDL directly — confirmed by a real dry-run
-  attempt failing cleanly with `column ... does not exist`). Apply the
-  migration file's SQL via the Supabase Dashboard SQL editor, then run
-  the backfill dry-run before `--apply`.
+  **Run against production 2026-09-13** (migration applied by hand via
+  the Supabase Dashboard SQL editor, since this environment has no
+  Supabase CLI/service-role credentials to apply DDL directly): of 134
+  candidate godan/ichidan verbs, 96 matched and were written (including
+  食べる at position 1, confirming the retraction case in production
+  data), 1 had no Wiktionary page, 37 had no usable Conjunctive row.
 
 - **2026-09-12 — Third-pass Wiktionary backfill for vocabulary items with
   no dictionary pitch-accent data at all.** New

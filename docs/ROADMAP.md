@@ -286,11 +286,8 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   - ~~**te-form/plain-past(た)/tara-form, godan/ichidan.**~~ **Closed
     2026-09-13** — `VocabularyItem.teFormAccentPosition`, backfilled
     per-word from Wiktionary's own conjugation table (not a formula; see
-    docs/STATUS.md). **Blocked on manual migration application** — no
-    Supabase CLI/service-role credentials in this environment; apply
-    `supabase/migrations/20260913000000_vocabulary_te_form_pitch_accent.sql`
-    via the Dashboard SQL editor, then run
-    `backfill:te-form-pitch-accent-wiktionary` (dry-run first). i-adjective
+    docs/STATUS.md). Migration applied + backfill run against production
+    2026-09-13: 96 of 134 candidate verbs matched. i-adjective
     te_form/plain_past/ba_form (kute/katta/kereba) still excluded — see
     below, same external-data problem but not yet extended to adjectives.
   - **Ichidan `plain_past_negative`.** Unlike godan (where なかった cleanly
