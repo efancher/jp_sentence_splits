@@ -367,4 +367,33 @@ describe('YouTube mining wizard', () => {
     expect(getMiningJob).toHaveBeenCalledWith('job-elsewhere');
     expect(localStorage.getItem('ytmine.activeJob')).toContain('job-elsewhere');
   }, 30000);
+
+  it('shows the real failure reason when resuming a picked job fails, not a generic "expired" guess', async () => {
+    const { listMiningJobs, getMiningJob } = await import('../src/lib/miningApi');
+    vi.mocked(listMiningJobs).mockResolvedValueOnce([
+      {
+        jobId: 'job-elsewhere',
+        url: 'https://www.youtube.com/watch?v=vidmocked',
+        title: 'Started This Morning',
+        status: 'ready',
+        stage: 'ready',
+        message: 'Ready — 2 sentence(s) found.',
+        createdAt: Date.now() / 1000,
+      },
+    ]);
+    vi.mocked(getMiningJob).mockRejectedValueOnce(
+      new Error('Failed to fetch mining job status: 502 Bad Gateway'),
+    );
+
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    await user.click(await screen.findByRole('button', { name: /Started This Morning/ }));
+
+    expect(
+      await screen.findByText(/Could not resume that import: .*502 Bad Gateway/),
+    ).toBeInTheDocument();
+  }, 30000);
 });

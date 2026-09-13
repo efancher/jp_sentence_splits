@@ -55,6 +55,26 @@ def test_split_multi_sentence_cues_leaves_single_sentence_untouched() -> None:
     assert split[0].endMs == 200
 
 
+def test_split_multi_sentence_cues_does_not_split_a_decimal_point() -> None:
+    # Real 2026-09-13 finding (first caught in app/nhk_easy.py's own
+    # splitter): a bare "." is a legitimate sentence-end char here (needed
+    # for real ASR/caption text), but a decimal point like "1.5倍" isn't —
+    # this used to fragment an otherwise well-formed sentence mid-number,
+    # which is what made an AI-cleaned transcript look like it "reverted"
+    # once resegmented on "Apply & segment."
+    cue = Cue(index=0, startMs=0, endMs=1000, text="売り上げが1.5倍になりました。")
+    split = split_multi_sentence_cues([cue])
+    assert [c.text for c in split] == ["売り上げが1.5倍になりました。"]
+
+
+def test_split_multi_sentence_cues_still_splits_a_real_sentence_end_period() -> None:
+    cue = Cue(index=0, startMs=0, endMs=1000, text="It's fine.今日は晴れです。")
+    split = split_multi_sentence_cues([cue])
+    assert [c.text for c in split] == ["It's fine.", "今日は晴れです。"]
+
+
+
+
 def test_resegment_cues_merges_then_splits() -> None:
     # One cue is a cut-off fragment; once merged with the next, the combined
     # text turns out to bundle two sentences that should end up separate.

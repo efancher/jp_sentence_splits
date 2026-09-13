@@ -35,9 +35,30 @@ _SPLIT_RE = re.compile(
     + re.escape(_CLOSER_CHARS) + r"]*"
 )
 
+# A halfwidth "." is in _TERMINAL_CHARS (needed for a real ASR/caption
+# sentence end), but a decimal point like the one in "1.5倍になりました" is
+# not a sentence boundary — real 2026-09-13 finding (first caught in
+# app/nhk_easy.py's own sentence splitter, then found to affect this
+# general-purpose one too, used by every "Apply & segment" mining-wizard
+# call): splitting on it mid-number fragments an otherwise well-formed
+# sentence, which looked like an AI-cleaned transcript "reverting" once
+# resegmented. Protect a digit-flanked "." with a private-use placeholder
+# before running the split/merge regexes, then restore it — same length,
+# so it doesn't disturb any position/slicing math downstream.
+_DECIMAL_POINT_RE = re.compile(r"(?<=[0-9０-９])\.(?=[0-9０-９])")
+_DECIMAL_PLACEHOLDER = ""
+
+
+def _protect_decimal_points(text: str) -> str:
+    return _DECIMAL_POINT_RE.sub(_DECIMAL_PLACEHOLDER, text)
+
+
+def _restore_decimal_points(text: str) -> str:
+    return text.replace(_DECIMAL_PLACEHOLDER, ".")
+
 
 def _ends_sentence(text: str) -> bool:
-    stripped = text.rstrip()
+    stripped = _protect_decimal_points(text.rstrip())
     if not stripped:
         return False
     index = len(stripped) - 1
@@ -143,9 +164,14 @@ def split_multi_sentence_cues(cues: list[Cue]) -> list[Cue]:
     """Split a cue containing several complete sentences into one cue each."""
     result: list[Cue] = []
     for cue in cues:
-        pieces = [piece.strip() for piece in _SPLIT_RE.findall(cue.text) if piece.strip()]
-        consumed_len = sum(len(piece) for piece in _SPLIT_RE.findall(cue.text))
-        remainder = cue.text[consumed_len:].strip()
+        protected = _protect_decimal_points(cue.text)
+        pieces = [
+            _restore_decimal_points(piece.strip())
+            for piece in _SPLIT_RE.findall(protected)
+            if piece.strip()
+        ]
+        consumed_len = sum(len(piece) for piece in _SPLIT_RE.findall(protected))
+        remainder = _restore_decimal_points(protected[consumed_len:].strip())
         if remainder:
             pieces.append(remainder)
         sources = _source_indexes(cue)

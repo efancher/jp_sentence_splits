@@ -243,9 +243,14 @@ export function YouTubeMinePage() {
         }
         setResuming(false);
       },
-      () => {
+      (err: unknown) => {
         if (cancelled) return;
         clearActiveJob(); // gone / swept
+        setError(
+          `Could not reconnect to your last mining job: ${
+            err instanceof Error ? err.message : 'unknown error'
+          }`,
+        );
         setResuming(false);
       },
     );
@@ -325,8 +330,12 @@ export function YouTubeMinePage() {
         return;
       }
       applyResumedJob(id, job);
-    } catch {
-      setError('Could not resume that import — it may have expired.');
+    } catch (err) {
+      setError(
+        `Could not resume that import: ${
+          err instanceof Error ? err.message : 'unknown error'
+        }`,
+      );
     }
   }
 
@@ -871,6 +880,8 @@ export function YouTubeMinePage() {
                 Start over
               </button>
             </div>
+            {busy ? <div className="muted">{busyNote || 'Working…'}</div> : null}
+            {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
           </section>
         </>
       ) : null}
@@ -907,6 +918,8 @@ export function YouTubeMinePage() {
                 Apply &amp; translate →
               </button>
             </div>
+            {busy ? <div className="muted">{busyNote || 'Working…'}</div> : null}
+            {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
           </section>
         </>
       ) : null}
@@ -984,6 +997,8 @@ export function YouTubeMinePage() {
                 Next →
               </button>
             </div>
+            {busy ? <div className="muted">{busyNote || 'Working…'}</div> : null}
+            {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
           </section>
         </>
       ) : null}

@@ -30,6 +30,37 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Fixed the mining wizard's "Apply & segment" silently
+  fragmenting decimal numbers, and made a stuck/failed step visible without
+  scrolling.** User report: used "Segment with AI help" to clean up a
+  transcript, went back to Transcript to double-check it, and the segments
+  "seemed to revert." Two real, separate bugs found:
+  1. `resegment.py`'s `split_multi_sentence_cues`/`merge_incomplete_cues`
+     (used by every "Apply & segment" call, not just NHK Easy) treats a
+     bare `.` as always sentence-final — the exact same bug class found and
+     fixed earlier today in `app/nhk_easy.py`'s own splitter, never
+     back-ported here. A sentence like "売り上げが1.5倍になりました。" got
+     fragmented into "...1." + "5倍になりました。" the moment it was
+     resegmented, which is exactly what an AI-cleaned, already-correct
+     transcript would look like "reverting" to. Fixed the same way: a
+     digit-flanked `.` is protected (swapped for a private-use placeholder,
+     restored after) before either regex runs. Verified live against the
+     running service, not just unit tests. 2 new tests; the equivalent
+     cross-cue-boundary case (a decimal point that happens to fall exactly
+     at a caption-cue split) is *not* fixed — would need lookahead into the
+     next cue, a rarer case not worth the complexity right now.
+  2. `YouTubeMinePage`'s busy/error status only ever rendered once, at the
+     very top of the page — invisible without scrolling back up once
+     working through Transcript/Segment/Translate, which have their own
+     content below. A failed "Apply & segment" (from bug 1, or anything
+     else) looked like the button did nothing. Each stage's own button row
+     now shows the same busy/error line locally. Also: `resumeJob`'s catch
+     block and the auto-reconnect-on-mount effect both showed a generic
+     "may have expired" guess regardless of the real cause (network error,
+     404, schema mismatch) — now shows the actual error message, so a
+     future recurrence is diagnosable instead of a dead end. 1 new test.
+  Full backend suite green (130), frontend suite green (1433), typecheck
+  and build clean.
 - **2026-09-13 — Podcast episodes and NHK Easy articles now land in one
   shared book per series, chapters kept chronological.** User request,
   after using both flows for the first time today: importing episode by
