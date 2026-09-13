@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { DifficultyBadge } from '../components/DifficultyBadge';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import {
   commitSeriesEpisodeImport,
@@ -320,6 +321,7 @@ export function NhkEasyImportPage() {
               ? `${importResult.sentences.length} sentences, native audio per sentence.`
               : `${importResult.sentences.length} sentences — no usable audio for this article, importing as text-only.`}
           </div>
+          {importResult.difficulty ? <DifficultyBadge score={importResult.difficulty} /> : null}
           <div className="row">
             <button type="button" disabled={realignBusy} onClick={() => void handleAutoFillTranslations()}>
               {realignBusy ? 'Asking the translation AI…' : 'Auto-fill translations (AI)'}

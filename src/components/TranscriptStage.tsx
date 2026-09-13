@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { fetchTranscriptDifficulty, type DifficultyScore } from '../lib/miningApi';
 import {
   editTranscriptSegText,
   formatTranscriptForAI,
@@ -8,6 +9,7 @@ import {
   splitTranscriptSeg,
   type WizardTranscriptSeg,
 } from '../lib/miningTranscript';
+import { DifficultyBadge } from './DifficultyBadge';
 import { SpanAudioButton } from './SpanAudioButton';
 
 /**
@@ -124,6 +126,40 @@ function AiSegmentHelp({
   );
 }
 
+function DifficultyCheck({ segs, disabled }: { segs: WizardTranscriptSeg[]; disabled: boolean }) {
+  const [score, setScore] = useState<DifficultyScore | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function check() {
+    setBusy(true);
+    setError('');
+    try {
+      setScore(await fetchTranscriptDifficulty(segs));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to score difficulty.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <span className="muted" style={{ fontSize: '0.85rem' }}>
+          Rough beginner/intermediate/advanced screen — check before spending time on
+          segmenting/translating.
+        </span>
+        <button type="button" disabled={disabled || busy || segs.length === 0} onClick={() => void check()}>
+          {busy ? 'Checking…' : 'Check difficulty'}
+        </button>
+      </div>
+      {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
+      {score ? <DifficultyBadge score={score} /> : null}
+    </section>
+  );
+}
+
 export function TranscriptStage({
   segs,
   onSegsChange,
@@ -133,6 +169,7 @@ export function TranscriptStage({
 }: TranscriptStageProps) {
   return (
     <div className="stack">
+      <DifficultyCheck segs={segs} disabled={disabled} />
       <AiSegmentHelp
         segs={segs}
         onSegsChange={onSegsChange}

@@ -133,6 +133,33 @@ class SegmentJobRequest(BaseModel):
     split: bool = True
 
 
+DifficultyLevel = Literal["beginner", "intermediate", "advanced"]
+
+
+class DifficultyScore(BaseModel):
+    """Rough "looks beginner/intermediate/advanced" screening readout (see
+    docs/ROADMAP.md, "Podcast mining" item 5) — built from content-word
+    JMDict-common ratio + average sentence length, computed once by
+    app/difficulty.py and shared by the wizard's Transcript stage
+    (POST /difficulty) and NHK Easy import. All fields None when there's no
+    tokenizable content yet (empty/whitespace-only transcript)."""
+
+    commonWordRatio: float | None = None
+    avgSentenceLength: float | None = None
+    # None when no audio duration is available yet (text-only transcript
+    # stage, or an NHK Easy article whose alignment failed).
+    moraePerSecond: float | None = None
+    level: DifficultyLevel | None = None
+
+
+class DifficultyRequest(BaseModel):
+    """Stateless — same segment shape the wizard already holds client-side
+    before "Apply & segment" fires, so no job/tokenized-sentence state is
+    needed to preview a score."""
+
+    segments: list[TranscriptSegmentInput] = Field(min_length=1)
+
+
 class TranslatedRow(BaseModel):
     index: int
     japanese: str
@@ -243,6 +270,9 @@ class NhkEasyImportResponse(BaseModel):
     # None) — every sentence still comes back, just with no audio, rather
     # than failing the whole import.
     audioAligned: bool
+    # Rough difficulty readout over the whole article (app/difficulty.py),
+    # from the same `tokens` already attached to each sentence above.
+    difficulty: DifficultyScore | None = None
 
 
 class ResegmentSentenceInput(BaseModel):

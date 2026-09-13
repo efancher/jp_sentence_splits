@@ -233,10 +233,20 @@ const nhkEasySentenceSchema = z.object({
   tokens: z.array(morphemeTokenSchema).nullable().optional(),
 });
 
+const difficultyScoreSchema = z.object({
+  commonWordRatio: z.number().nullable().optional(),
+  avgSentenceLength: z.number().nullable().optional(),
+  moraePerSecond: z.number().nullable().optional(),
+  level: z.enum(['beginner', 'intermediate', 'advanced']).nullable().optional(),
+});
+
+export type DifficultyScore = z.infer<typeof difficultyScoreSchema>;
+
 const nhkEasyImportResponseSchema = z.object({
   title: z.string(),
   sentences: z.array(nhkEasySentenceSchema),
   audioAligned: z.boolean(),
+  difficulty: difficultyScoreSchema.nullable().optional(),
 });
 
 export type NhkEasySentence = z.infer<typeof nhkEasySentenceSchema>;
@@ -528,6 +538,26 @@ export async function resegmentSentences(
     throw new Error(`Failed to re-segment: ${await readErrorDetail(response)}`);
   }
   return z.array(resegmentedCueSchema).parse(await response.json());
+}
+
+/**
+ * Rough beginner/intermediate/advanced screening readout on the wizard's
+ * current Transcript-stage text (server/youtube-mining `POST /difficulty`,
+ * stateless — no job, works on hand-edited text the reviewer hasn't saved
+ * anywhere yet). See docs/ROADMAP.md, "Podcast mining" item 5.
+ */
+export async function fetchTranscriptDifficulty(
+  segments: { text: string; startMs: number; endMs: number; isAuto?: boolean; lowConfidence?: boolean }[],
+): Promise<DifficultyScore> {
+  const response = await fetch(`${API_BASE}/difficulty`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segments }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to score difficulty: ${await readErrorDetail(response)}`);
+  }
+  return difficultyScoreSchema.parse(await response.json());
 }
 
 const reclipResponseSchema = z.object({

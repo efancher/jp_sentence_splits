@@ -347,19 +347,10 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
      (`src/lib/youtubeUrl.ts`) still only recognizes YouTube URLs — a
      re-mined podcast episode won't get the warning banner. Low priority,
      cosmetic only.
-  5. **Difficulty screening checkpoint** (folds in the 2026-09-13 heuristic-
-     grading idea) — a show's RSS metadata is only a title/description, no
-     Japanese body text, so an episode can't be graded before it's mined;
-     the real checkpoint is right after the wizard's **Transcript** stage
-     produces real text (caption or ASR), before spending time on
-     Segment/Translate/Commit. A small shared utility — tokenize with the
-     existing UniDic pipeline, score % JMDict `common: true` lemmas +
-     average sentence length (+ morae/second from ASR word timings when
-     available) — surfaced as a rough "looks beginner/intermediate/
-     advanced" readout on that stage, so a too-hard episode can be
-     abandoned early. Not podcast-specific: the same utility slots into
-     YouTube mining's Transcript stage and the future NHK Easy import for
-     free, so build it as one shared function rather than three copies.
+  5. ~~**Difficulty screening checkpoint**~~ **Done 2026-09-13** — see
+     "Difficulty screening checkpoint" under Planned below (promoted out of
+     this list since it ended up applying just as much to NHK Easy import
+     as to podcast mining).
   - **Finding a show's RSS URL:** `https://itunes.apple.com/search?term=
     <show name>&media=podcast` returns a `feedUrl` field directly — verified
     2026-09-13 against Nihongo con Teppei
@@ -535,6 +526,23 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     e.g. Nihongo con Teppei's); NHK Easy articles have no pre-import
     duration signal at all (the real clip lengths only exist after forced
     alignment), so that one stays blank by design, not a gap.
+
+- [x] **Difficulty screening checkpoint.** (2026-09-13, was item 5 under
+  Podcast mining above) `server/youtube-mining/app/difficulty.py`
+  (`score_difficulty`) — content-word JMDict-common ratio + average
+  sentence length + morae/second when timing's available, rendered as a
+  rough beginner/intermediate/advanced readout. One shared function, two
+  call sites: a new stateless `POST /difficulty` (wizard Transcript stage,
+  a "Check difficulty" button on `TranscriptStage.tsx` — shared by both
+  YouTube and podcast mining) and inline in NHK Easy import (reuses the
+  tokens already attached to each sentence, no second tokenize pass).
+  JMDict's "common" flag only lives on the Node/TS side and tokenization
+  only in Python, so `scripts/generate-common-words-asset.ts`
+  (`npm run generate:common-words-asset`) flattens it into a committed
+  Python-side asset (38,360 entries). Detail + manual test plan in
+  docs/STATUS.md's 2026-09-13 entry. **Not browser-verified** (this host
+  has no browser libs installed) — shipped on the full test suite +
+  typecheck + a direct curl against the live service instead.
 
 - [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
   promoted from "Possibilities" below) The direct answer to "I have several

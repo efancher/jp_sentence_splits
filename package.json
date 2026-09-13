@@ -16,6 +16,7 @@
     "check": "npm run typecheck && npm run test",
     "ci": "npm run check && npm run build:pages",
     "jmdict:lookup": "tsx scripts/lookup-jmdict.ts",
+    "generate:common-words-asset": "tsx scripts/generate-common-words-asset.ts",
     "build:name-readings": "tsx scripts/build-name-readings.ts",
     "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
     "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts",

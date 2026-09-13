@@ -18,6 +18,7 @@ from app import (
     align_client,
     clip,
     config,
+    difficulty,
     jobs,
     metrics,
     morphology,
@@ -40,6 +41,8 @@ from app.models import (
     CreateJobRequest,
     CreateJobResponse,
     Cue,
+    DifficultyRequest,
+    DifficultyScore,
     JobStatusResponse,
     JobSummary,
     NhkEasyImportRequest,
@@ -120,6 +123,17 @@ async def podcast_feed(req: PodcastFeedRequest):
         raise HTTPException(status_code=502, detail=f"Could not fetch feed: {exc}") from exc
 
 
+def _nhk_easy_difficulty(results: list[NhkEasySentenceResult]) -> DifficultyScore:
+    """Article-level difficulty readout (app/difficulty.py) reusing the
+    `tokens` each result already carries — no second tokenize pass. Duration
+    is the sum of per-sentence clip lengths when audio was cut, else None
+    (text-only import has no timing signal for morae/second)."""
+    groups = [r.tokens for r in results if r.tokens]
+    total_duration_ms = sum(r.durationMs or 0 for r in results)
+    duration_seconds = total_duration_ms / 1000 if total_duration_ms > 0 else None
+    return difficulty.score_difficulty(groups, duration_seconds)
+
+
 def _nhk_easy_import_sync(req: NhkEasyImportRequest) -> NhkEasyImportResponse:
     """Blocking body of POST /nhk-easy/import, run via asyncio.to_thread
     (ffmpeg + the align-service call are both blocking) — same convention
@@ -172,19 +186,26 @@ def _nhk_easy_import_sync(req: NhkEasyImportRequest) -> NhkEasyImportResponse:
                         tokens=morphology.tokenize_japanese(sentence.japanese) or None,
                     )
                 )
-            return NhkEasyImportResponse(title=req.title, sentences=results, audioAligned=True)
+            return NhkEasyImportResponse(
+                title=req.title,
+                sentences=results,
+                audioAligned=True,
+                difficulty=_nhk_easy_difficulty(results),
+            )
 
+    text_only_results = [
+        NhkEasySentenceResult(
+            japanese=s.japanese,
+            inlineReading=s.inline_reading,
+            tokens=morphology.tokenize_japanese(s.japanese) or None,
+        )
+        for s in sentences
+    ]
     return NhkEasyImportResponse(
         title=req.title,
-        sentences=[
-            NhkEasySentenceResult(
-                japanese=s.japanese,
-                inlineReading=s.inline_reading,
-                tokens=morphology.tokenize_japanese(s.japanese) or None,
-            )
-            for s in sentences
-        ],
+        sentences=text_only_results,
         audioAligned=False,
+        difficulty=_nhk_easy_difficulty(text_only_results),
     )
 
 
@@ -531,6 +552,21 @@ async def resegment_sentences(req: ResegmentRequest):
     (drama transcripts); both false is annotate-only (lyrics/manual mode).
     """
     return await asyncio.to_thread(_resegment_sync, req)
+
+
+@app.post("/difficulty", response_model=DifficultyScore)
+async def difficulty_score(req: DifficultyRequest):
+    """Rough beginner/intermediate/advanced screening readout on the
+    wizard's current Transcript-stage text (see docs/ROADMAP.md, "Podcast
+    mining" item 5) — surfaced before "Apply & segment" so a too-hard source
+    can be abandoned early. Stateless, no job: same pattern as /resegment
+    and /validate-transcript, and works on hand-edited text the reviewer
+    hasn't saved anywhere yet."""
+    segments = [(s.text, s.startMs, s.endMs) for s in req.segments]
+    groups, duration_seconds = await asyncio.to_thread(
+        difficulty.tokenize_segments_for_scoring, segments
+    )
+    return difficulty.score_difficulty(groups, duration_seconds)
 
 
 @app.post("/validate-transcript", response_model=ValidateTranscriptResponse)

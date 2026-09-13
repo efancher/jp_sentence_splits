@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-12.
+Last updated: 2026-09-13.
 
 ## Where things stand
 
@@ -29,6 +29,53 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-13 — Difficulty screening checkpoint** (docs/ROADMAP.md,
+  "Podcast mining" item 5, promoted to Done). A rough "looks beginner/
+  intermediate/advanced" readout, computed once and shared across every
+  mining path rather than copied per pipeline:
+  `server/youtube-mining/app/difficulty.py`'s `score_difficulty` scores
+  content-word JMDict-common ratio + average sentence length (+ morae/
+  second when a duration is available), classified by a hand-picked (not
+  corpus-tuned) threshold table. JMDict's "common" flag only lives on the
+  Node/TS side (`scripts/lib/jmdict.ts`) and tokenization only runs in this
+  Python service, so `scripts/generate-common-words-asset.ts` (new
+  `npm run generate:common-words-asset`) flattens every common kanji/kana
+  spelling into a committed asset (`server/youtube-mining/app/data/
+  common_words.json`, 38,360 entries, ~500KB) the Python side loads
+  (`app/common_words.py`). Two call sites: a new stateless
+  `POST /difficulty` endpoint (same no-job pattern as `/resegment` /
+  `/validate-transcript`) scores the wizard's current, possibly hand-edited
+  Transcript-stage text — `TranscriptStage.tsx` gained a "Check difficulty"
+  button + `DifficultyBadge` readout, reused as-is by both YouTube and
+  podcast mining since they share the component; and `_nhk_easy_import_sync`
+  computes it inline from the `tokens` each `NhkEasySentenceResult` already
+  carries (no second tokenize pass), attached to `NhkEasyImportResponse` and
+  shown on `NhkEasyImportPage`. 13 new Python tests (scoring logic,
+  sentence-splitting incl. the decimal-point guard, the common-word lookup,
+  the API endpoint) + full 143-test backend suite green; frontend typecheck
+  + full 1439-test Vitest suite green. Verified live against the real
+  `youtube-mining-api` service (restarted after confirming `GET /jobs` had
+  no in-flight job — all three listed jobs were `error`-terminal):
+  `POST /difficulty` against a plain sentence scored 100% common/beginner,
+  a sentence with several literary/formal words (独白, 不条理, 痛感) scored
+  82% common/intermediate — a real illustration of the heuristic's known
+  ceiling (JMDict's "common" flag is broader than "beginner-friendly," so a
+  formal-register sentence can still read as easier than it is; acceptable
+  for a "should I abandon this" screen, not a calibrated placement test).
+  **Not browser-verified** — this host has no browser libs installed
+  (`libnspr4.so` missing) and no sudo; Docker was viable in an earlier
+  session but felt disproportionate for an additive read-only badge, so
+  this shipped on typecheck + the full test suite + a direct curl against
+  the live service instead of a screenshot. **Manual test plan:** open the
+  YouTube-mining wizard, get to the Transcript stage (paste a URL or resume
+  a job), click "Check difficulty" — expect a short readout line ("Looks
+  intermediate — NN% common vocabulary, avg N.N words/sentence, N.N
+  morae/sec") to appear within a couple seconds, or a red error line if the
+  mining service is down. Separately, import any NHK Easy article
+  (`/import/nhk-easy`) and confirm the same readout appears under the
+  sentence count line once the article loads — no extra click needed there,
+  since the score comes back with the import response.
 
 - **2026-09-13 — Fixed "Apply & segment" re-splitting AI-curated sentence
   boundaries, a second and distinct bug behind the same "segments seemed to
