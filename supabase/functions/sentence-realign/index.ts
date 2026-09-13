@@ -154,21 +154,45 @@ Deno.serve(async (req) => {
       });
     }
 
-    const groups = (Array.isArray(body.groups) ? body.groups : [])
+    // Every input group must keep its position in the response array — the
+    // caller (jp_sentence_splits src/lib/sentenceRealign.ts) maps results
+    // back onto rows by plain array index, not by any echoed id. Previously
+    // a group with only blank/whitespace pieces was dropped here entirely,
+    // which silently shifted every later group's translation onto the wrong
+    // row (2026-09-13 incident: a 162-sentence podcast mine's translations
+    // shifted by one after the first such row). Fix: keep every slot, only
+    // omitting the truly-empty ones from what's actually sent to the model,
+    // then re-expand the model's reply back onto the original slots below.
+    const allGroups = (Array.isArray(body.groups) ? body.groups : [])
       .slice(0, MAX_GROUPS)
       .map((group) => ({
         originalJapanese: String(group.originalJapanese ?? '').trim(),
         originalTranslation: String(group.originalTranslation ?? '').trim(),
         pieces: (Array.isArray(group.pieces) ? group.pieces : [])
           .slice(0, MAX_PIECES_PER_GROUP)
-          .map((piece) => String(piece ?? '').trim())
-          .filter(Boolean),
-      }))
-      .filter((group) => group.pieces.length > 0);
+          .map((piece) => String(piece ?? '').trim()),
+      }));
 
-    if (groups.length === 0) {
+    if (allGroups.length === 0) {
       return new Response(JSON.stringify({ error: 'groups is required' }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const blankReply = () => allGroups.map((group) => ({ pieceTranslations: group.pieces.map(() => '') }));
+
+    const promptIndexes: number[] = [];
+    const groups = allGroups.filter((group, index) => {
+      const hasContent = group.pieces.some((piece) => piece.length > 0);
+      if (hasContent) promptIndexes.push(index);
+      return hasContent;
+    });
+
+    if (groups.length === 0) {
+      // Every group was blank/whitespace-only — nothing to ask the model,
+      // but still a well-formed (all-blank) reply, not an error.
+      return new Response(JSON.stringify({ groups: blankReply() }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -202,7 +226,19 @@ Deno.serve(async (req) => {
       .join('\n\n');
 
     const result = await callAnthropic(anthropicApiKey, system, userText, REALIGN_TOOL);
-    return new Response(JSON.stringify(result), {
+    const modelGroups = Array.isArray((result as { groups?: unknown }).groups)
+      ? ((result as { groups: unknown[] }).groups as Array<{ pieceTranslations?: unknown }>)
+      : [];
+
+    const expanded = blankReply();
+    promptIndexes.forEach((originalIndex, i) => {
+      const pieceTranslations = modelGroups[i]?.pieceTranslations;
+      if (Array.isArray(pieceTranslations)) {
+        expanded[originalIndex] = { pieceTranslations: pieceTranslations.map((p) => String(p ?? '')) };
+      }
+    });
+
+    return new Response(JSON.stringify({ groups: expanded }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

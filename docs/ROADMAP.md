@@ -323,6 +323,19 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
      2026-09-13: a 5:32 episode took ~5 minutes wall-clock end to end
      (download + ASR) on this box — comfortably under the timeout, but not
      fast; a 20-min episode could plausibly approach it.
+  3b. **Found + fixed while dogfooding this feature, not really podcast-
+     specific**: "Auto-fill translations (AI)" silently shifted every
+     translation down by one row on a real 162-sentence episode — the
+     `sentence-realign` Edge Function dropped blank/whitespace rows from its
+     reply array instead of preserving position, and separately its
+     `MAX_GROUPS = 60` cap silently truncated anything past the first 60
+     rows with no client-visible signal. Both are latent bugs in shared
+     mining-wizard translate infrastructure that a long YouTube video could
+     trip too — podcast mining just has a much higher rate of >60-row
+     sources. Full writeup + fix in `docs/STATUS.md`'s 2026-09-13 entry.
+     **Needs `supabase functions deploy sentence-realign` run by someone
+     with Supabase CLI credentials before it's live** — not deployable from
+     this session.
   4. ~~**Dedup/labeling polish**~~ **Partly done 2026-09-13** — the title
      half. `SourceInfo.type` widened to `Literal["youtube", "podcast"]`;
      `CreateJobRequest` gained `title`/`sourceType`, threaded through

@@ -30,6 +30,67 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Fixed a translation-shift data-corruption bug in "Auto-fill
+  translations (AI)" (user report during a live podcast mine: "they're
+  shifted down by 1").** Root cause, in the `sentence-realign` Edge Function
+  (`supabase/functions/sentence-realign/index.ts`): the client
+  (`buildMiningRealignGroups`) maps each sentence row to a "group" and
+  applies the AI's reply back onto rows by plain array **position**
+  (`result.groups[assignment.groupIndex]`), with no id echoed back to
+  re-associate by. The Edge Function used to silently drop any group whose
+  piece(s) were blank/whitespace-only (`.filter((group) => group.pieces.length
+  > 0)`) before calling the model — so a single blank/near-silent row (common
+  in ASR output) shrank the reply array by one, and every group *after* it
+  silently landed on the wrong row for the rest of the batch. Separately, the
+  function's `MAX_GROUPS = 60` cap was enforced with a plain `.slice(0, 60)`
+  and no signal back to the client, so a mined source with more than 60
+  sentences (routine for a podcast episode — the triggering case had 162)
+  got its rows 61+ silently left untranslated with no error. Two-part fix:
+  (1) the Edge Function now keeps every input group's *position* in the
+  response regardless of content — blank groups get re-expanded back onto
+  their original slot instead of being dropped, so one blank row can no
+  longer shift anything after it; (2) `realignTranslations`
+  (`src/lib/sentenceRealign.ts`) now chunks any request into batches of ≤60
+  groups (mirroring the server's own cap) so a long source's rows all
+  actually get sent, and validates every batch's reply length against what
+  was sent — a mismatch now fails the whole call loudly (`ok: false`)
+  instead of ever being applied positionally. 5 new tests
+  (`tests/sentenceRealign.test.ts`) lock in both the chunking and the
+  strict length-parity refusal, reproducing the exact 162-group shape that
+  triggered the incident. **Needs a manual deploy step this session
+  couldn't perform** (no `SUPABASE_ACCESS_TOKEN`/`supabase login` available
+  on this box): run `supabase functions deploy sentence-realign` before this
+  fix takes effect in production — until then, the client-side chunking +
+  strict validation already prevent the *silent corruption* (a mismatch now
+  errors instead of misapplying), but large batches will still error out
+  rather than succeed against the old server code. The user's in-progress
+  162-row podcast mine was not committed with the bad translations; re-run
+  "Auto-fill translations (AI)" after the Edge Function is redeployed.
+- **2026-09-13 — Podcast mining: RSS feed parsing, episode picker, and
+  real-title wiring, verified live end-to-end against production.**
+  Discovered mid-session that this dev sandbox *is* `codex-dev`, the box
+  `youtube-mining-api.service` actually runs on (same checkout, same
+  `.venv`) — so this was validated against the live service, not just unit
+  tests. Added: `server/youtube-mining/app/podcasts.py`
+  (`parse_podcast_feed`/`fetch_podcast_feed`) + `POST /podcast-feed`;
+  `fetchPodcastFeed` in `src/lib/miningApi.ts`; a collapsible "Or import a
+  podcast episode" section on `YouTubeMinePage.tsx`'s idle screen (feed URL
+  → episode list, capped at the latest 30 — some feeds run 1000+ episodes —
+  → tap one to mine it). `SourceInfo.type` widened from
+  `Literal["youtube"]` to `["youtube", "podcast"]`; `CreateJobRequest`
+  gained `title`/`sourceType`, threaded through `create_job` →
+  `Job.title_override`/`source_type` (checkpointed, survives a mid-job
+  restart) → applied onto `SourceInfo` once `info_to_source()` builds it —
+  so a podcast-sourced book gets the real RSS episode title instead of
+  yt-dlp's filename-derived one. Verified against the running service: no
+  jobs in flight, restarted `youtube-mining-api.service` to pick up the
+  code, then ran a real ~9:26 Nihongo con Teppei episode through the full
+  pipeline live — no captions found (podcasts never have them), ASR
+  fallback engaged as designed, produced real sentence cues, and the
+  resulting source carried the correct `type: "podcast"` + real title. See
+  `docs/ROADMAP.md` "Podcast mining" for the full plan and remaining steps
+  (long-episode ASR headroom, the difficulty-screening checkpoint,
+  `alreadyMined`'s cosmetic YouTube-only dedup gap).
 - **2026-09-13 — Fixed word-audio range editor drag handles on wide screens
   (two user reports: "can't adjust the right side... it collapses the left
   side in to the end", "waveform not showing").** Root cause:
