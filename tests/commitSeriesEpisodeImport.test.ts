@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { commitSeriesEpisodeImport, getDb } from '../src/db/repository';
+import {
+  commitSeriesEpisodeImport,
+  getDb,
+  getSeriesImportedSourceIds,
+} from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import {
   buildShadowingPreview,
@@ -48,6 +52,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-abc',
       seriesTitle: 'Example Podcast',
       episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/ep-1.mp3',
       sourceDate: '2026-09-01T00:00:00Z',
       preview: episodePreview('ep-1', 'Episode 1', ['今日は晴れです。']),
     });
@@ -55,6 +60,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-abc',
       seriesTitle: 'Example Podcast',
       episodeTitle: 'Episode 2',
+      sourceId: 'https://example.com/ep-2.mp3',
       sourceDate: '2026-09-02T00:00:00Z',
       preview: episodePreview('ep-2', 'Episode 2', ['明日も晴れるでしょう。']),
     });
@@ -84,6 +90,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-xyz',
       seriesTitle: 'Another Podcast',
       episodeTitle: 'Episode 5',
+      sourceId: 'https://example.com/ep-5.mp3',
       sourceDate: '2026-09-05T00:00:00Z',
       preview: episodePreview('ep-5', 'Episode 5', ['5番目のエピソードです。']),
     });
@@ -91,6 +98,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-xyz',
       seriesTitle: 'Another Podcast',
       episodeTitle: 'Episode 3',
+      sourceId: 'https://example.com/ep-3.mp3',
       sourceDate: '2026-09-03T00:00:00Z',
       preview: episodePreview('ep-3', 'Episode 3', ['3番目のエピソードです。']),
     });
@@ -118,6 +126,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-a',
       seriesTitle: 'Podcast A',
       episodeTitle: 'A1',
+      sourceId: 'https://example.com/a-1.mp3',
       sourceDate: '2026-09-01T00:00:00Z',
       preview: episodePreview('a-1', 'A1', ['Aの文です。']),
     });
@@ -125,6 +134,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-b',
       seriesTitle: 'Podcast B',
       episodeTitle: 'B1',
+      sourceId: 'https://example.com/b-1.mp3',
       sourceDate: '2026-09-01T00:00:00Z',
       preview: episodePreview('b-1', 'B1', ['Bの文です。']),
     });
@@ -136,6 +146,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-dup',
       seriesTitle: 'Dup Podcast',
       episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/ep-dup.mp3',
       sourceDate: '2026-09-01T00:00:00Z',
       preview: episodePreview('ep-dup', 'Episode 1', ['一つ目の文です。']),
     });
@@ -143,6 +154,7 @@ describe('commitSeriesEpisodeImport', () => {
       seriesId: 'podcast-series-dup',
       seriesTitle: 'Dup Podcast',
       episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/ep-dup.mp3',
       sourceDate: '2026-09-01T00:00:00Z',
       preview: episodePreview('ep-dup', 'Episode 1', [
         '一つ目の文です。',
@@ -155,5 +167,42 @@ describe('commitSeriesEpisodeImport', () => {
     const db = getDb();
     const book = await db.books.get(first.bookId);
     expect(book?.chapters).toHaveLength(1);
+  });
+});
+
+describe('getSeriesImportedSourceIds', () => {
+  beforeEach(() => {
+    resetDbForTests(`series-import-${createId('db')}`);
+  });
+
+  it('returns an empty set for a series with no book yet', async () => {
+    const ids = await getSeriesImportedSourceIds('podcast-series-none');
+    expect(ids.size).toBe(0);
+  });
+
+  it('lists every imported episode/article source id, not just the latest', async () => {
+    await commitSeriesEpisodeImport({
+      seriesId: 'podcast-series-lookup',
+      seriesTitle: 'Lookup Podcast',
+      episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/ep-1.mp3',
+      sourceDate: '2026-09-01T00:00:00Z',
+      preview: episodePreview('ep-1', 'Episode 1', ['一つ目の文です。']),
+    });
+    await commitSeriesEpisodeImport({
+      seriesId: 'podcast-series-lookup',
+      seriesTitle: 'Lookup Podcast',
+      episodeTitle: 'Episode 2',
+      sourceId: 'https://example.com/ep-2.mp3',
+      sourceDate: '2026-09-02T00:00:00Z',
+      preview: episodePreview('ep-2', 'Episode 2', ['二つ目の文です。']),
+    });
+
+    const ids = await getSeriesImportedSourceIds('podcast-series-lookup');
+    expect(ids).toEqual(
+      new Set(['https://example.com/ep-1.mp3', 'https://example.com/ep-2.mp3']),
+    );
+    // A different series' episodes never leak in.
+    expect(await getSeriesImportedSourceIds('podcast-series-other')).toEqual(new Set());
   });
 });

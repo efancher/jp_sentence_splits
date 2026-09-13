@@ -2288,6 +2288,16 @@ export async function commitSeriesEpisodeImport(options: {
   seriesTitle: string;
   seriesUrl?: string;
   episodeTitle: string;
+  /**
+   * The episode/article's identity within the series — the caller's own
+   * as-picked feed URL, not the mining job's derived `preview.source.id`
+   * (which depends on yt-dlp's internal id scheme and, for a podcast, can
+   * differ from the feed's enclosure URL after redirect resolution). Used
+   * both to dedup chapters on re-import and, by
+   * `getSeriesImportedSourceIds`, to show an "already imported" mark on a
+   * feed's episode/article picker before anything is fetched.
+   */
+  sourceId: string;
   /** Anything `Date.parse`-able (an RSS pubDate works as-is) — chapters
    * sort by this, not by import order. */
   sourceDate: string;
@@ -2300,7 +2310,7 @@ export async function commitSeriesEpisodeImport(options: {
   // be edited upstream or, rarely, collide between two different episodes;
   // sourceId is what actually identifies "this is the same episode again."
   const existingChapter = existingBook?.chapters.find(
-    (chapter) => chapter.sourceId === options.preview.source.id,
+    (chapter) => chapter.sourceId === options.sourceId,
   );
   const selectedIds = options.preview.drafts.map((item) => item.proposedId);
 
@@ -2337,7 +2347,7 @@ export async function commitSeriesEpisodeImport(options: {
           ? {
               ...chapter,
               title: options.episodeTitle,
-              sourceId: options.preview.source.id,
+              sourceId: options.sourceId,
               sourceDate,
             }
           : chapter,
@@ -2352,6 +2362,27 @@ export async function commitSeriesEpisodeImport(options: {
   await applySentenceAudioForPreview(result.bookId, options.preview);
 
   return { bookId: result.bookId, chapterId: result.chapterId };
+}
+
+/**
+ * Every episode/article `sourceId` already imported under this series
+ * (see `commitSeriesEpisodeImport`), or an empty set if the series has no
+ * book yet — lets a feed's episode/article picker show "already imported"
+ * against its own as-listed URLs without fetching anything.
+ */
+export async function getSeriesImportedSourceIds(
+  seriesId: string,
+): Promise<Set<string>> {
+  const db = getDb();
+  const book = await db.books
+    .where('sourceKey')
+    .equals(`shadowing:${seriesId}`)
+    .first();
+  return new Set(
+    (book?.chapters ?? [])
+      .map((chapter) => chapter.sourceId)
+      .filter((sourceId): sourceId is string => Boolean(sourceId)),
+  );
 }
 
 /**

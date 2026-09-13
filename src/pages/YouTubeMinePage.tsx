@@ -1,3 +1,4 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,7 +7,11 @@ import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
 import { TranslateAiHelp } from '../components/TranslateAiHelp';
-import { commitSeriesEpisodeImport, getDb } from '../db/repository';
+import {
+  commitSeriesEpisodeImport,
+  getDb,
+  getSeriesImportedSourceIds,
+} from '../db/repository';
 import { hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
@@ -195,6 +200,10 @@ export function YouTubeMinePage() {
   // chapter-chronology — MiningSourceInfo (from the job) doesn't carry this,
   // so it's captured client-side at click time and carried through commit.
   const [podcastEpisodeDate, setPodcastEpisodeDate] = useState<string | null>(null);
+  // The as-picked enclosure URL, for commitSeriesEpisodeImport's chapter
+  // identity — kept separate from MiningSourceInfo.url, which can differ
+  // after yt-dlp's redirect resolution.
+  const [podcastEpisodeSourceUrl, setPodcastEpisodeSourceUrl] = useState('');
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -403,6 +412,7 @@ export function YouTubeMinePage() {
     setPodcastFeed(null);
     setPodcastFeedError('');
     setPodcastEpisodeDate(null);
+    setPodcastEpisodeSourceUrl('');
   }
 
   async function startJob(
@@ -440,6 +450,7 @@ export function YouTubeMinePage() {
 
   async function handleStartPodcastEpisode(episode: PodcastEpisode) {
     setPodcastEpisodeDate(episode.publishedAt ?? null);
+    setPodcastEpisodeSourceUrl(episode.url);
     await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
   }
 
@@ -618,6 +629,15 @@ export function YouTubeMinePage() {
 
   const currentStepIndex = STAGE_LABELS.findIndex((s) => s.key === stage);
 
+  const podcastSeriesId = podcastFeedUrl.trim()
+    ? `podcast-series-${hashString(podcastFeedUrl.trim())}`
+    : null;
+  const importedPodcastSourceIds = useLiveQuery(
+    () => (podcastSeriesId ? getSeriesImportedSourceIds(podcastSeriesId) : new Set<string>()),
+    [podcastSeriesId],
+    new Set<string>(),
+  );
+
   return (
     <div className="stack">
       <section className="panel stack">
@@ -698,20 +718,41 @@ export function YouTubeMinePage() {
                     {podcastFeed.episodes.length} episodes
                   </div>
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
-                    {podcastFeed.episodes.slice(0, 30).map((episode) => (
-                      <button
-                        key={episode.url}
-                        type="button"
-                        className="row"
-                        style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
-                        onClick={() => void handleStartPodcastEpisode(episode)}
-                      >
-                        <span>{episode.title}</span>
-                        <span className="muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                          {episode.durationSeconds ? formatElapsed(episode.durationSeconds) : ''}
-                        </span>
-                      </button>
-                    ))}
+                    {podcastFeed.episodes.slice(0, 30).map((episode) => {
+                      const imported = importedPodcastSourceIds?.has(episode.url);
+                      const publishedDate = episode.publishedAt
+                        ? new Date(episode.publishedAt)
+                        : null;
+                      return (
+                        <button
+                          key={episode.url}
+                          type="button"
+                          className="row"
+                          style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
+                          onClick={() => void handleStartPodcastEpisode(episode)}
+                        >
+                          <span>
+                            {imported ? (
+                              <span className="status-pill" style={{ marginRight: '0.4rem' }}>
+                                Imported
+                              </span>
+                            ) : null}
+                            {episode.title}
+                          </span>
+                          <span
+                            className="muted"
+                            style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                          >
+                            {publishedDate && !Number.isNaN(publishedDate.getTime())
+                              ? publishedDate.toLocaleDateString()
+                              : ''}
+                            {episode.durationSeconds
+                              ? ` · ${formatElapsed(episode.durationSeconds)}`
+                              : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -974,6 +1015,7 @@ export function YouTubeMinePage() {
                       seriesTitle: podcastFeed?.title || source.title,
                       seriesUrl: podcastFeedUrl.trim(),
                       episodeTitle: source.title,
+                      sourceId: podcastEpisodeSourceUrl || source.url,
                       sourceDate: podcastEpisodeDate ?? new Date().toISOString(),
                       preview: p,
                     }),

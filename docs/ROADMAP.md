@@ -526,6 +526,15 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     **Known gap**: any book already created under the old one-per-episode
     scheme before this change (e.g. an episode imported earlier today)
     stays a separate single-chapter book — not retroactively merged.
+  - **Follow-up, same day, user request**: the episode/article picker now
+    shows an "Imported" badge (via a new `getSeriesImportedSourceIds`
+    lookup, matched against the same as-picked URL used as the chapter's
+    `sourceId`) and the feed's own publish date next to each row — both
+    pickers were silent about either before. Podcast duration still only
+    shows when the feed's own `itunes:duration` tag is present (many don't,
+    e.g. Nihongo con Teppei's); NHK Easy articles have no pre-import
+    duration signal at all (the real clip lengths only exist after forced
+    alignment), so that one stays blank by design, not a gap.
 
 - [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
   promoted from "Possibilities" below) The direct answer to "I have several

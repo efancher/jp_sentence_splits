@@ -1,8 +1,13 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
-import { commitSeriesEpisodeImport, getDb } from '../db/repository';
+import {
+  commitSeriesEpisodeImport,
+  getDb,
+  getSeriesImportedSourceIds,
+} from '../db/repository';
 import {
   base64ToBlob,
   fetchPodcastFeed,
@@ -64,12 +69,20 @@ export function NhkEasyImportPage() {
   const [feed, setFeed] = useState<PodcastFeed | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState('');
+  const importedArticleSourceIds = useLiveQuery(
+    () => getSeriesImportedSourceIds(NHK_EASY_SERIES_ID),
+    [],
+    new Set<string>(),
+  );
 
   const [importResult, setImportResult] = useState<NhkEasyImportResult | null>(null);
   // The picked article's own publish date, for commitSeriesEpisodeImport's
   // chapter-chronology — captured at pick time since NhkEasyImportResult
   // doesn't carry it.
   const [articleDate, setArticleDate] = useState<string | null>(null);
+  // The as-picked audio URL, for commitSeriesEpisodeImport's chapter
+  // identity — see the same field on YouTubeMinePage's podcast branch.
+  const [articleSourceUrl, setArticleSourceUrl] = useState('');
   const [translations, setTranslations] = useState<string[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState('');
@@ -85,6 +98,7 @@ export function NhkEasyImportPage() {
     setFeedError('');
     setImportResult(null);
     setArticleDate(null);
+    setArticleSourceUrl('');
     setTranslations([]);
     setImportError('');
     setRealignNote('');
@@ -120,6 +134,7 @@ export function NhkEasyImportPage() {
       );
       setImportResult(result);
       setArticleDate(episode.publishedAt ?? null);
+      setArticleSourceUrl(episode.url);
       setTranslations(result.sentences.map(() => ''));
       setStage('imported');
     } catch (err) {
@@ -254,21 +269,38 @@ export function NhkEasyImportPage() {
                 <div className="muted" style={{ fontSize: '0.85rem' }}>
                   {feed.title} — {feed.episodes.length} articles
                 </div>
-                {feed.episodes.map((episode) => (
-                  <button
-                    key={episode.url}
-                    type="button"
-                    className="row"
-                    style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
-                    disabled={importBusy}
-                    onClick={() => void handleImportArticle(episode)}
-                  >
-                    <span>{episode.title}</span>
-                    <span className="muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                      {importBusy ? 'Importing…' : ''}
-                    </span>
-                  </button>
-                ))}
+                {feed.episodes.map((episode) => {
+                  const imported = importedArticleSourceIds?.has(episode.url);
+                  const publishedDate = episode.publishedAt
+                    ? new Date(episode.publishedAt)
+                    : null;
+                  return (
+                    <button
+                      key={episode.url}
+                      type="button"
+                      className="row"
+                      style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
+                      disabled={importBusy}
+                      onClick={() => void handleImportArticle(episode)}
+                    >
+                      <span>
+                        {imported ? (
+                          <span className="status-pill" style={{ marginRight: '0.4rem' }}>
+                            Imported
+                          </span>
+                        ) : null}
+                        {episode.title}
+                      </span>
+                      <span className="muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                        {importBusy
+                          ? 'Importing…'
+                          : publishedDate && !Number.isNaN(publishedDate.getTime())
+                            ? publishedDate.toLocaleDateString()
+                            : ''}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -333,6 +365,7 @@ export function NhkEasyImportPage() {
                 seriesId: NHK_EASY_SERIES_ID,
                 seriesTitle: NHK_EASY_SERIES_TITLE,
                 episodeTitle: p.source.title,
+                sourceId: articleSourceUrl || p.source.id,
                 sourceDate: articleDate ?? new Date().toISOString(),
                 preview: p,
               })
