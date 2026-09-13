@@ -194,6 +194,10 @@ export function YouTubeMinePage() {
   >(new Map());
   const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
   const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
+  // Some feeds run into the hundreds/thousands of episodes (RSS convention
+  // is newest-first) — a host's own "start from the beginning" advice is
+  // otherwise unreachable behind the latest-30 cap below.
+  const [podcastFeedSort, setPodcastFeedSort] = useState<'newest' | 'oldest'>('newest');
   const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
   const [podcastFeedError, setPodcastFeedError] = useState('');
   // The picked episode's own publish date, for commitSeriesEpisodeImport's
@@ -419,6 +423,7 @@ export function YouTubeMinePage() {
     setPreview(null);
     setPodcastFeedUrl('');
     setPodcastFeed(null);
+    setPodcastFeedSort('newest');
     setPodcastFeedError('');
     setPodcastEpisodeDate(null);
     setPodcastEpisodeSourceUrl('');
@@ -721,13 +726,38 @@ export function YouTubeMinePage() {
               ) : null}
               {podcastFeed ? (
                 <div className="stack" style={{ gap: '0.4rem' }}>
-                  <div className="muted" style={{ fontSize: '0.85rem' }}>
-                    {podcastFeed.title} — showing the latest{' '}
-                    {Math.min(30, podcastFeed.episodes.length)} of{' '}
-                    {podcastFeed.episodes.length} episodes
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      {podcastFeed.title} — showing the{' '}
+                      {podcastFeedSort === 'newest' ? 'latest' : 'oldest'}{' '}
+                      {Math.min(30, podcastFeed.episodes.length)} of{' '}
+                      {podcastFeed.episodes.length} episodes
+                    </div>
+                    <div className="row" style={{ gap: '0.25rem' }}>
+                      <button
+                        type="button"
+                        className={podcastFeedSort === 'newest' ? 'primary' : undefined}
+                        onClick={() => setPodcastFeedSort('newest')}
+                      >
+                        Newest first
+                      </button>
+                      <button
+                        type="button"
+                        className={podcastFeedSort === 'oldest' ? 'primary' : undefined}
+                        onClick={() => setPodcastFeedSort('oldest')}
+                        title="Some hosts recommend starting from their earliest episodes"
+                      >
+                        Oldest first
+                      </button>
+                    </div>
                   </div>
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
-                    {podcastFeed.episodes.slice(0, 30).map((episode) => {
+                    {(podcastFeedSort === 'oldest'
+                      ? [...podcastFeed.episodes].reverse()
+                      : podcastFeed.episodes
+                    )
+                      .slice(0, 30)
+                      .map((episode) => {
                       const imported = importedPodcastSourceIds?.has(episode.url);
                       const publishedDate = episode.publishedAt
                         ? new Date(episode.publishedAt)

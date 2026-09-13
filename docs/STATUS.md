@@ -30,6 +30,21 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Podcast episode picker gained a "Newest first / Oldest
+  first" sort.** A show with a long backlog (checked live: 770 episodes for
+  one recommended show) is ordered newest-first by RSS convention, and the
+  picker's own latest-30 cap made a host's own "start from my earliest
+  episodes, I spoke slower back then" advice completely unreachable — no
+  way to get there. Also found (same live check) that a show's own
+  "seasons" don't necessarily correspond to a clean `itunes:season` RSS
+  tag — this one's early years are simply untagged, mixed in with an
+  ongoing untagged side-series, so a season-number filter wouldn't have
+  reliably found "the beginning" either; sorting chronologically oldest-
+  first does. `YouTubeMinePage.tsx` gained a `podcastFeedSort` toggle;
+  the same latest/oldest-30 slice just runs over a reversed array when
+  "Oldest first" is selected. Typecheck and full suite green (1433);
+  no dedicated test added for this one (a plain array reverse), per this
+  repo's manual-test-plan convention for lower-risk UI toggles.
 - **2026-09-13 — Fixed the mining wizard's "Apply & segment" silently
   fragmenting decimal numbers, and made a stuck/failed step visible without
   scrolling.** User report: used "Segment with AI help" to clean up a
