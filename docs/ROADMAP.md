@@ -303,6 +303,19 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
      video-id matching (`src/lib/youtubeUrl.ts`) assume a YouTube id; fall
      back to a plain `sourceUrl` string match and whatever title `yt-dlp`'s
      generic extractor returns for non-YouTube sources.
+  5. **Difficulty screening checkpoint** (folds in the 2026-09-13 heuristic-
+     grading idea) — a show's RSS metadata is only a title/description, no
+     Japanese body text, so an episode can't be graded before it's mined;
+     the real checkpoint is right after the wizard's **Transcript** stage
+     produces real text (caption or ASR), before spending time on
+     Segment/Translate/Commit. A small shared utility — tokenize with the
+     existing UniDic pipeline, score % JMDict `common: true` lemmas +
+     average sentence length (+ morae/second from ASR word timings when
+     available) — surfaced as a rough "looks beginner/intermediate/
+     advanced" readout on that stage, so a too-hard episode can be
+     abandoned early. Not podcast-specific: the same utility slots into
+     YouTube mining's Transcript stage and the future NHK Easy import for
+     free, so build it as one shared function rather than three copies.
   - **Finding a show's RSS URL:** `https://itunes.apple.com/search?term=
     <show name>&media=podcast` returns a `feedUrl` field directly — verified
     2026-09-13 against Nihongo con Teppei
