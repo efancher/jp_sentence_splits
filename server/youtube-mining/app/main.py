@@ -8,17 +8,20 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.background import BackgroundTask
 
 from app import (
+    align_client,
     clip,
     config,
     jobs,
     metrics,
     morphology,
+    nhk_easy,
     podcasts,
     readings,
     reclip,
@@ -39,6 +42,9 @@ from app.models import (
     Cue,
     JobStatusResponse,
     JobSummary,
+    NhkEasyImportRequest,
+    NhkEasyImportResponse,
+    NhkEasySentenceResult,
     PodcastFeed,
     PodcastFeedRequest,
     ReclipClip,
@@ -112,6 +118,82 @@ async def podcast_feed(req: PodcastFeedRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - network failure, surfaced as-is
         raise HTTPException(status_code=502, detail=f"Could not fetch feed: {exc}") from exc
+
+
+def _nhk_easy_import_sync(req: NhkEasyImportRequest) -> NhkEasyImportResponse:
+    """Blocking body of POST /nhk-easy/import, run via asyncio.to_thread
+    (ffmpeg + the align-service call are both blocking) — same convention
+    as _reclip_sync/_source_range_sync below."""
+    sentences = nhk_easy.parse_nhkeasier_description(req.descriptionHtml)
+    if not sentences:
+        raise HTTPException(status_code=400, detail="No sentences found in description")
+
+    audio_bytes: bytes | None = None
+    if req.audioUrl:
+        try:
+            resp = httpx.get(req.audioUrl, timeout=30.0, follow_redirects=True)
+            resp.raise_for_status()
+            audio_bytes = resp.content
+        except Exception:  # noqa: BLE001 - degrade to text-only import
+            logger.warning("Could not fetch NHK Easy audio %s", req.audioUrl, exc_info=True)
+
+    spans = None
+    if audio_bytes:
+        transcript = "".join(s.japanese for s in sentences)
+        words = align_client.align_audio(audio_bytes, "audio/mpeg", transcript)
+        if words:
+            spans = nhk_easy.assign_sentence_spans(sentences, words)
+
+    if audio_bytes and spans:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "source.mp3"
+            source_path.write_bytes(audio_bytes)
+            results = []
+            for i, (sentence, span) in enumerate(zip(sentences, spans)):
+                out_path = Path(tmp) / f"clip_{i}.m4a"
+                audio_b64: str | None = None
+                duration_ms: int | None = None
+                try:
+                    duration_ms = clip.clip_audio(
+                        source_path,
+                        out_path,
+                        start_ms=round(span.start_seconds * 1000),
+                        end_ms=round(span.end_seconds * 1000),
+                    )
+                    audio_b64 = base64.b64encode(out_path.read_bytes()).decode()
+                except Exception:  # noqa: BLE001 - this one sentence loses audio, not the import
+                    logger.warning("Could not clip NHK Easy sentence %d", i, exc_info=True)
+                results.append(
+                    NhkEasySentenceResult(
+                        japanese=sentence.japanese,
+                        inlineReading=sentence.inline_reading,
+                        audioBase64=audio_b64,
+                        durationMs=duration_ms,
+                    )
+                )
+            return NhkEasyImportResponse(title=req.title, sentences=results, audioAligned=True)
+
+    return NhkEasyImportResponse(
+        title=req.title,
+        sentences=[
+            NhkEasySentenceResult(japanese=s.japanese, inlineReading=s.inline_reading)
+            for s in sentences
+        ],
+        audioAligned=False,
+    )
+
+
+@app.post("/nhk-easy/import", response_model=NhkEasyImportResponse)
+async def nhk_easy_import(req: NhkEasyImportRequest):
+    """Parse an nhkeasier.com RSS item's known-good furigana text
+    (app/nhk_easy.py) and, when its audio is reachable and forced-alignment
+    lines up well enough to trust, cut one clip per sentence from the real
+    NHK narration — never transcribes it, since the text is already known
+    correct. Degrades to text-only sentences (audioAligned: false) when
+    there's no audio, the align service is unreachable, or the alignment
+    doesn't line up (app/nhk_easy.py's assign_sentence_spans returned None)
+    — never fails the whole import over the audio half."""
+    return await asyncio.to_thread(_nhk_easy_import_sync, req)
 
 
 @app.get("/jobs", response_model=list[JobSummary])

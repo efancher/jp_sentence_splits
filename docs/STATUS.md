@@ -30,6 +30,33 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — NHK Easy import: forced-alignment pipeline built and
+  deployed, blocked on one cross-service decision.** Follow-up to the same
+  day's text-extraction work (below). Built `app/align_client.py` (calls
+  `shadowing-analysis-api`'s `POST /align`), `assign_sentence_spans()` in
+  `nhk_easy.py` (maps its word-level output back onto sentence boundaries),
+  and `POST /nhk-easy/import` (`main.py`) wiring parse → fetch audio →
+  align → cut clips (`clip.py`) → degrade to text-only on any failure.
+  Deployed and verified against two different held-out real articles end
+  to end, not just unit tests. Two more real bugs found this way (on top
+  of the decimal-point one from the parsing pass): (1) sentence-final `。`
+  is never itself a spoken word, so targeting a sentence's full length
+  overshot into the next sentence's first match — fixed by targeting the
+  last non-punctuation character instead; (2) real prose embeds quoted
+  titles/reported-speech *mid*-sentence, and treating `」`/`』` as
+  sentence-final (inherited from `subtitles.py`'s ASR-tuned char set) cut
+  88 of 471 real sentences (19%) apart at the bracket — fixed with a
+  narrower, NHK-Easy-specific `SENTENCE_END_CHARS`. 23 tests total, full
+  backend suite green (127). **Found a real blocker, not implemented
+  around yet**: `shadowing-analysis-api`'s `/align` rejects any transcript
+  over 200 characters (`ANALYSIS_MAX_TRANSCRIPT_LENGTH`), and 80% of the
+  real 50-item nhkeasier.com corpus exceeds that once joined into one
+  whole-article transcript — most real articles currently fail the audio
+  half (still import fine as text-only). The fix (raise that env var) means
+  editing a separate, already-live production service that also backs
+  real-time shadowing-practice grading on the same memory-constrained box —
+  flagged for the user rather than changed silently. Full detail in
+  `docs/ROADMAP.md`.
 - **2026-09-13 — NHK Easy import: original plan invalidated by checking
   live, corrected plan found and the first real module built.** Started
   from the morning's ROADMAP plan ("scrape NHK Easy directly, crib parsing

@@ -29,7 +29,18 @@ import html
 import re
 from dataclasses import dataclass
 
-from app.subtitles import SENTENCE_END_CHARS
+# Deliberately narrower than subtitles.py's SENTENCE_END_CHARS (which
+# includes 」』): that set is tuned for noisy ASR/caption text, where a
+# closing bracket is a reasonable proxy for "quoted utterance, probably the
+# end." NHK Easy is edited prose that routinely embeds a quoted title or
+# reported speech *mid*-sentence (「スター・ウォーズ」などたくさんの映画を
+# 監督しています。; 区の人は「...」と話しています。) — real 2026-09-13 finding
+# from a full-corpus dry run: treating 」/』 as sentence-final cut 88 of 471
+# real sentences (19%) apart at the bracket, well before the actual 。. NHK
+# Easy's controlled style always closes a real sentence with proper
+# terminal punctuation even when it contains a quote, so dropping the
+# bracket chars here doesn't cost any real splits.
+SENTENCE_END_CHARS = "。｡．.！!？?…"
 
 _RUBY_RE = re.compile(r"<ruby>(?P<base>.*?)<rt>(?P<reading>.*?)</rt></ruby>", re.DOTALL)
 _BRACKET_READING_RE = re.compile(r"\[[^\]]*\]")
@@ -86,6 +97,96 @@ def _split_sentences(inline_reading_text: str) -> list[str]:
     if start < len(inline_reading_text):
         sentences.append(inline_reading_text[start:])
     return [s.strip() for s in sentences if s.strip()]
+
+
+@dataclass(frozen=True)
+class SentenceSpan:
+    """A sentence's aligned position in the narration audio, in seconds."""
+
+    start_seconds: float
+    end_seconds: float
+
+
+# Below this fraction of the transcript successfully anchored to a real
+# (non-<eps>/<unk>) aligner word, treat the alignment as untrustworthy —
+# see assign_sentence_spans.
+_MIN_MATCHED_CHAR_RATIO = 0.6
+
+
+def assign_sentence_spans(
+    sentences: list[NhkEasySentence], words: list[dict]
+) -> list[SentenceSpan] | None:
+    """Map shadowing-analysis-api's `POST /align` word timings (seconds)
+    back onto sentence boundaries.
+
+    Real 2026-09-13 finding, from actually calling `/align` on a live
+    nhkeasier.com article rather than assuming: forced-alignment word
+    output isn't a clean concatenation of the input transcript the way
+    Whisper ASR's word timings are (`resegment.py`'s `_split_ends_from_words`
+    assumes exactly that, for that different input). MFA/kalpy interleaves
+    `<eps>` (silence) and `<unk>` (out-of-vocabulary — on real data this was
+    almost always a bare arabic numeral like the "11" in "11日", which the
+    lexicon has no pronunciation entry for) tokens that don't correspond to
+    any specific span of the known text. On that same real article, every
+    *other* word (99/102) matched the known transcript as a literal,
+    in-order substring — so this walks the transcript with a search cursor,
+    anchors on each substring match, and simply skips `<eps>`/unmatched
+    words rather than trusting their length. A sentence boundary lands on
+    the first anchor reaching that sentence's cumulative character count,
+    so a numeral near a boundary shifts it by at most that numeral's own
+    duration, not into a different sentence entirely.
+
+    Returns None — caller should skip audio for that one article rather
+    than trust a guess — when too little of the transcript anchored to a
+    real word at all (a genuine mismatch: wrong audio, garbled OCR-ish
+    text, etc.), not just an OOV numeral or two.
+    """
+    transcript = "".join(s.japanese for s in sentences)
+    if not transcript or not words:
+        return None
+
+    cursor = 0
+    matched_chars = 0
+    anchors: list[tuple[int, float]] = [(0, 0.0)]
+    for word in words:
+        text = str(word.get("text", ""))
+        if text in ("<eps>", "<unk>", ""):
+            continue
+        found = transcript.find(text, cursor)
+        if found == -1:
+            continue
+        cursor = found + len(text)
+        matched_chars += len(text)
+        anchors.append((cursor, float(word.get("end", anchors[-1][1]))))
+
+    if matched_chars < len(transcript) * _MIN_MATCHED_CHAR_RATIO:
+        return None
+
+    def time_at(target_chars: int) -> float:
+        for chars, seconds in anchors:
+            if chars >= target_chars:
+                return seconds
+        return anchors[-1][1]
+
+    spans: list[SentenceSpan] = []
+    sentence_start_char = 0
+    prev_end = 0.0
+    for sentence in sentences:
+        full_end_char = sentence_start_char + len(sentence.japanese)
+        # Trailing 。！？ etc. is never itself a spoken/aligned word (real
+        # finding: looking for the *full* sentence length landed on the
+        # next sentence's first matched word instead, since nothing anchors
+        # exactly at the punctuation's own position) — the last real anchor
+        # sits at the sentence's last non-punctuation character.
+        stripped_length = len(sentence.japanese.rstrip(SENTENCE_END_CHARS))
+        target_char = sentence_start_char + stripped_length
+        end_time = time_at(target_char)
+        if end_time < prev_end:
+            return None
+        spans.append(SentenceSpan(start_seconds=prev_end, end_seconds=end_time))
+        prev_end = end_time
+        sentence_start_char = full_end_char
+    return spans
 
 
 def parse_nhkeasier_description(description_html: str) -> list[NhkEasySentence]:

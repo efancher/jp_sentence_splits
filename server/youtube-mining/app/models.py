@@ -207,6 +207,34 @@ class PodcastFeed(BaseModel):
     episodes: list[PodcastEpisode]
 
 
+class NhkEasyImportRequest(BaseModel):
+    """One nhkeasier.com RSS `<item>`'s fields — the client already has
+    these from `POST /podcast-feed` against an nhkeasier.com feed URL, this
+    endpoint is what turns them into committable sentences (see
+    app/nhk_easy.py, app/align_client.py)."""
+
+    title: str = Field(min_length=1)
+    descriptionHtml: str = Field(min_length=1)
+    audioUrl: str | None = None
+
+
+class NhkEasySentenceResult(BaseModel):
+    japanese: str
+    inlineReading: str
+    audioBase64: str | None = None
+    durationMs: int | None = None
+
+
+class NhkEasyImportResponse(BaseModel):
+    title: str
+    sentences: list[NhkEasySentenceResult]
+    # False when audio existed but alignment failed/didn't line up well
+    # enough to trust (app/nhk_easy.py's assign_sentence_spans returned
+    # None) — every sentence still comes back, just with no audio, rather
+    # than failing the whole import.
+    audioAligned: bool
+
+
 class ResegmentSentenceInput(BaseModel):
     japanese: str = Field(min_length=1)
     startMs: int = Field(ge=0)

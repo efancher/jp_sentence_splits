@@ -397,31 +397,73 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     known text out of the description instead of transcribing the audio**.
   - **Done 2026-09-13**: `server/youtube-mining/app/nhk_easy.py` —
     `parse_nhkeasier_description()` converts `<ruby>` spans to this app's
-    `漢字[かな]` `inlineReading` format and splits into sentences, tested
-    against a real fetched item (7 tests) and dry-run against the *entire*
-    live 50-item feed (471 sentences, zero parse errors/suspicious
-    fragments after the fix below). One real bug found and fixed by that
-    full-corpus dry run, not by the unit tests alone: NHK Easy articles
-    routinely report measurements like `350.5ミリ`/`36.5度`, and a naive
-    split on `.` (a legitimate sentence-end character for ASR/caption text)
-    cut those mid-number — `_is_decimal_point` now guards any `.` flanked by
-    digits on both sides.
-  - **Not done — the actual integration:**
-    1. A server endpoint/wizard step that, given an nhkeasier.com item,
-       calls `parse_nhkeasier_description()` for the known text and
-       forced-aligns it against the item's enclosure audio (reusing the
-       same MFA aligner service behind reference alignment/shadowing) —
-       never transcribes it. Cut clips with the existing `clip.py` ffmpeg
-       logic once alignment gives spans; reuses `ResegmentSourcePage`'s
-       "known text, need audio boundaries" shape, not YouTube mining's
-       "unknown text" ASR shape.
-    2. Translation — still needs the existing `sentence-realign` "Auto-fill
-       translations (AI)" step; NHK Easy is JA-only, no English given.
-    3. Wizard/commit UI — likely a variant of the podcast episode picker
-       already built, since the RSS shape is identical; needs a way to
-       flag "this feed's items carry known text, skip ASR" rather than
-       generic podcast handling.
-    4. Text-only fallback for the rare item with no audio.
+    `漢字[かな]` `inlineReading` format and splits into sentences.
+    `assign_sentence_spans()` maps `shadowing-analysis-api`'s `/align`
+    word-level output back onto sentence boundaries, discovered/verified by
+    actually calling the live aligner on real articles rather than assuming
+    the shape of its output (see below). `app/align_client.py` calls
+    `POST /align`. `POST /nhk-easy/import` (`main.py`) wires it all
+    together: parse → fetch audio → align → cut per-sentence clips with the
+    existing `clip.py` ffmpeg logic → degrade to text-only sentences
+    (`audioAligned: false`) on any failure, never failing the whole import
+    over the audio half. 23 tests (parsing + span-assignment against a real
+    baked-in alignment fixture + the import endpoint with network/ffmpeg
+    mocked), full backend suite green (127). Deployed and verified against
+    the live service end to end on two different held-out real articles.
+    Three real bugs found this way, not by unit tests against a
+    hand-picked fixture:
+    1. NHK Easy articles routinely report measurements like `350.5ミリ`/
+       `36.5度`; a naive split on `.` (otherwise a legitimate sentence-end
+       char) cut those mid-number. Fixed: `_is_decimal_point` guards any
+       `.` flanked by digits.
+    2. Sentence-final punctuation (`。`) is never itself a spoken/aligned
+       word, so targeting a sentence's *full* length (including its
+       trailing `。`) for the anchor lookup overshot into the next
+       sentence's first matched word. Fixed: target the sentence's
+       last *non-punctuation* character instead.
+    3. Real prose routinely embeds a quoted title or reported speech
+       *mid*-sentence (`「スター・ウォーズ」などたくさんの映画を監督してい
+       ます。`; `区の人は「…」と話しています。`) — treating `」`/`』` as
+       sentence-final (`subtitles.py`'s `SENTENCE_END_CHARS`, tuned for
+       noisy ASR/caption text) cut 88 of 471 real sentences (19%) apart at
+       the bracket. Fixed: `nhk_easy.py` now defines its own narrower
+       `SENTENCE_END_CHARS` (drops the bracket chars) rather than reusing
+       the ASR-tuned one — NHK Easy's edited-prose style always closes a
+       real sentence with proper terminal punctuation even around a quote,
+       so this costs no real splits.
+  - **Blocked — a real constraint found by testing against the live
+    service, not assumed:** `shadowing-analysis-api`'s `/align` rejects any
+    transcript over `ANALYSIS_MAX_TRANSCRIPT_LENGTH` (default 200 chars,
+    `422 transcript too long`) — a cap sized for its original per-sentence
+    reference-alignment use case. **80% of the real 50-item corpus's
+    articles exceed 200 characters** (median 239, max 335) once joined into
+    one whole-article transcript, so most real NHK Easy articles fail
+    alignment outright with the service as currently configured (they still
+    import fine as text-only — `audioAligned: false` — this only blocks the
+    audio half). Options, none implemented yet:
+    1. **Raise the cap** (`ANALYSIS_MAX_TRANSCRIPT_LENGTH` env var on
+       `shadowing-analysis-api`, e.g. to 500) — the direct fix, and
+       probably safe (it's a defensive input-size limit, not a technical
+       ceiling of the aligner itself; NHK Easy audio is still under a
+       minute). **Not done because this crosses into a separate,
+       already-live production service** (also backs real-time shadowing-
+       practice grading, on the same memory-constrained box that needs
+       weekly aligner restarts) — a config change there deserves a
+       deliberate decision, not a silent edit from this session.
+    2. Chunk by paragraph and align each chunk separately — doesn't
+       actually work: alignment needs audio whose duration matches its
+       given transcript, and there's no way to know where in the audio one
+       paragraph ends and the next begins without already having aligned
+       it (the exact problem this feature exists to solve).
+    3. Silence-gap-based audio chunking (reusing `waveform.py`'s existing
+       pause detection, already trusted elsewhere in this codebase for
+       "Snap to pauses") matched to paragraph boundaries — plausible, but
+       relies on the number of major pauses lining up with paragraph
+       breaks, not guaranteed.
+  - **Not done — the wizard/commit UI**: a picker step (likely a variant of
+    the podcast episode picker already built, since the RSS shape is
+    identical) that calls `POST /nhk-easy/import` and commits the result
+    into a book the same way `commitShadowingPackageImport()` does.
   - Rights note: nhkeasier.com is itself a third-party redistribution of
     NHK's copyrighted news content for learners; using its feed for
     personal single-user study is the same posture as the existing

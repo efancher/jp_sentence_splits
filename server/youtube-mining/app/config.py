@@ -99,6 +99,12 @@ ASR_TIMEOUT_SECONDS = float(os.environ.get("MINING_ASR_TIMEOUT_SECONDS", "1800")
 ASR_CLIP_TIMEOUT_SECONDS = float(
     os.environ.get("MINING_ASR_CLIP_TIMEOUT_SECONDS", "30")
 )
+# Forced-alignment of a whole short article's audio against its known text
+# (app/align_client.py, NHK Easy import) — a single call covering a whole
+# article (tens of seconds), not per-sentence, so this needs more headroom
+# than ASR_CLIP_TIMEOUT_SECONDS but nowhere near ASR_TIMEOUT_SECONDS's
+# long-form scale.
+ALIGN_TIMEOUT_SECONDS = float(os.environ.get("MINING_ALIGN_TIMEOUT_SECONDS", "120"))
 # An ASR segment is flagged low-confidence (→ review UI marks it) when its
 # mean token log-prob is below this or its no-speech probability is above the
 # next one. Whisper's typical clean-speech avg_logprob is ~-0.25 to -0.4.
