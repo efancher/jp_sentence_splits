@@ -21,6 +21,17 @@ interface TranscriptStageProps {
   onSegsChange: (segs: WizardTranscriptSeg[]) => void;
   fetchAudio: (startMs: number, endMs: number) => Promise<Blob>;
   disabled?: boolean;
+  /**
+   * Fired (in addition to onSegsChange) only when "Segment with AI help"
+   * replaces the transcript — real 2026-09-13 finding: "Apply & segment"'s
+   * default merge/split pass assumes raw, uncurated ASR fragments and
+   * re-splits on ANY sentence-final punctuation it finds inside a segment,
+   * even one the AI/user deliberately kept merged on purpose (e.g. a bare
+   * interjection like "しゃっ！" folded into the next clause rather than
+   * left as its own throwaway "sentence"). The parent uses this signal to
+   * skip that pass and trust the reviewed boundaries exactly.
+   */
+  onAiSegmentsApplied?: () => void;
 }
 
 function formatTimestamp(ms: number): string {
@@ -33,10 +44,12 @@ function formatTimestamp(ms: number): string {
 function AiSegmentHelp({
   segs,
   onSegsChange,
+  onAiSegmentsApplied,
   disabled,
 }: {
   segs: WizardTranscriptSeg[];
   onSegsChange: (segs: WizardTranscriptSeg[]) => void;
+  onAiSegmentsApplied?: () => void;
   disabled: boolean;
 }) {
   const [pasted, setPasted] = useState('');
@@ -64,6 +77,7 @@ function AiSegmentHelp({
       return;
     }
     onSegsChange(next);
+    onAiSegmentsApplied?.();
     setStatus(`Replaced ${segs.length} fragment(s) with ${next.length} sentence(s).`);
     setPasted('');
   }
@@ -115,10 +129,16 @@ export function TranscriptStage({
   onSegsChange,
   fetchAudio,
   disabled = false,
+  onAiSegmentsApplied,
 }: TranscriptStageProps) {
   return (
     <div className="stack">
-      <AiSegmentHelp segs={segs} onSegsChange={onSegsChange} disabled={disabled} />
+      <AiSegmentHelp
+        segs={segs}
+        onSegsChange={onSegsChange}
+        onAiSegmentsApplied={onAiSegmentsApplied}
+        disabled={disabled}
+      />
       {segs.map((seg, index) => (
         <section className="panel stack" key={index}>
           <div className="row" style={{ justifyContent: 'space-between' }}>

@@ -184,6 +184,13 @@ export function YouTubeMinePage() {
   const [transcript, setTranscript] = useState<WizardTranscriptSeg[]>([]);
   const [rows, setRows] = useState<ResegmentReviewRow[]>([]);
   const [realignNote, setRealignNote] = useState('');
+  // Set once "Segment with AI help" replaces the transcript — the reviewed
+  // boundaries are already final (including a deliberately-merged fragment
+  // like "しゃっ！" folded into the next clause), so "Apply & segment" must
+  // trust them exactly instead of running its default merge/split pass,
+  // which otherwise re-splits on any sentence-final punctuation it finds
+  // inside a segment regardless of intent (real 2026-09-13 finding).
+  const [aiSegmented, setAiSegmented] = useState(false);
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
   const [resuming, setResuming] = useState(true);
   const [resumable, setResumable] = useState<MiningJobSummary[]>([]);
@@ -426,6 +433,7 @@ export function YouTubeMinePage() {
     setTranscript([]);
     setRows([]);
     setRealignNote('');
+    setAiSegmented(false);
     setPreview(null);
     setPodcastFeedUrl('');
     setPodcastFeed(null);
@@ -495,16 +503,21 @@ export function YouTubeMinePage() {
 
   const applyAndSegment = () =>
     runApply('Segmenting…', async () => {
-      const job = await applyJobSegments(
-        jobId!,
-        transcript.map((seg) => ({
-          text: seg.text,
-          startMs: seg.startMs,
-          endMs: seg.endMs,
-          isAuto: seg.isAuto,
-          lowConfidence: seg.lowConfidence,
-        })),
-      );
+      const segments = transcript.map((seg) => ({
+        text: seg.text,
+        startMs: seg.startMs,
+        endMs: seg.endMs,
+        isAuto: seg.isAuto,
+        lowConfidence: seg.lowConfidence,
+      }));
+      // Trust AI-reviewed boundaries exactly — the default merge/split pass
+      // assumes raw ASR fragments and re-splits on any sentence-final
+      // punctuation it finds inside a segment, even one deliberately kept
+      // merged on purpose (e.g. a bare interjection folded into the next
+      // clause rather than left as its own throwaway "sentence").
+      const job = aiSegmented
+        ? await applyJobSegments(jobId!, segments, { merge: false, split: false })
+        : await applyJobSegments(jobId!, segments);
       setRows(rowsFromCues(job.cues ?? []));
       setRealignNote('');
       setStage('segment');
@@ -958,6 +971,7 @@ export function YouTubeMinePage() {
           <TranscriptStage
             segs={transcript}
             onSegsChange={setTranscript}
+            onAiSegmentsApplied={() => setAiSegmented(true)}
             fetchAudio={(s, e) => fetchJobAudioRange(jobId!, s, e)}
             disabled={busy}
           />

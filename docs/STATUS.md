@@ -30,6 +30,32 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Fixed "Apply & segment" re-splitting AI-curated sentence
+  boundaries, a second and distinct bug behind the same "segments seemed to
+  revert" report.** The earlier same-day fix (decimal points) turned out not
+  to be the whole story. User's follow-up repro, job #1556「田舎日記①」:
+  pasted a "Segment with AI help" reply that deliberately keeps
+  "しゃっ！今日は田舎日記。" (an interjection folded into the next clause)
+  on one `[0:01]`-tagged line, and "Apply & segment" still split it into
+  "しゃっ！" + "今日は田舎日記。" — the app was ignoring the curated
+  boundary. Root cause: `applyAndSegment()` always called `applyJobSegments`
+  with its default options, which run `resegment.py`'s generic
+  `split_multi_sentence_cues` merge/split heuristic on the transcript before
+  showing it in the Segment stage. That heuristic is meant for *raw*,
+  uncurated ASR fragments — it has no way to know a boundary was already
+  reviewed and finalized rather than left mid-sentence by chance. Fixed by
+  tracking a new `aiSegmented` flag (`YouTubeMinePage.tsx`), set the moment
+  "Apply pasted sentences" replaces the transcript
+  (`TranscriptStage`/`AiSegmentHelp` gained an `onAiSegmentsApplied`
+  callback for this) and cleared on `reset()`; `applyAndSegment()` now calls
+  `applyJobSegments(jobId, segments, { merge: false, split: false })` when
+  the flag is set, trusting the reviewed transcript exactly — the same
+  "annotate-only" mode already used elsewhere (lyrics/manual resegmentation)
+  for content whose boundaries shouldn't be second-guessed. Going back to
+  Transcript and re-pasting still works the same way each time. 1 new test
+  reproducing the exact しゃっ！ case end-to-end (paste → apply → segment
+  stage keeps one row, not two). Typecheck, full suite (1434), and
+  production build all clean.
 - **2026-09-13 — Podcast episode picker gained pagination + a title
   search, follow-up to the same-day sort toggle.** User feedback: a
   newest/oldest toggle alone still leaves 770 episodes to scroll through 30

@@ -217,6 +217,52 @@ describe('YouTube mining wizard', () => {
     ).toBeInTheDocument();
   }, 30000);
 
+  it('preserves AI-curated sentence boundaries instead of re-splitting them on "Apply & segment"', async () => {
+    // Real 2026-09-13 report: pasting an AI-cleaned reply that deliberately
+    // keeps "しゃっ！今日は田舎日記。" on one line (an interjection folded
+    // into the next clause) still got split back into two at the Segment
+    // stage, because "Apply & segment" always ran the generic split/merge
+    // pass — which knows nothing about a boundary a human/AI just curated.
+    const { applyJobSegments } = await import('../src/lib/miningApi');
+    const user = userEvent.setup();
+    render(withAppProviders(<App />));
+    await openNavMenu(user);
+    await user.click(await screen.findByRole('link', { name: 'Import from YouTube' }));
+
+    await user.type(
+      await screen.findByPlaceholderText('https://www.youtube.com/watch?v=…'),
+      'https://www.youtube.com/watch?v=vidmocked',
+    );
+    await user.click(screen.getByRole('button', { name: 'Start' }));
+
+    expect(await screen.findByText(/step 1 of 4: Transcript/)).toBeInTheDocument();
+
+    await user.click(screen.getByText('Segment with AI help'));
+    await user.type(
+      screen.getByPlaceholderText(/Paste the assistant's reply here/),
+      '[[0:01] しゃっ！今日は田舎日記。{Enter}[[0:09] はい、みなさんおはようございます。',
+    );
+    await user.click(screen.getByRole('button', { name: 'Apply pasted sentences' }));
+
+    // Applying the AI reply replaced the transcript with the curated lines.
+    expect(await screen.findByDisplayValue('しゃっ！今日は田舎日記。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Apply & segment/ }));
+
+    // The AI-curated boundary is trusted exactly (merge: false, split: false)
+    // rather than run back through the generic sentence-final-punctuation
+    // splitter, which would have cut it at 「！」.
+    expect(applyJobSegments).toHaveBeenCalledWith(
+      'job-1',
+      expect.arrayContaining([expect.objectContaining({ text: 'しゃっ！今日は田舎日記。' })]),
+      { merge: false, split: false },
+    );
+
+    expect(await screen.findByText(/step 2 of 4: Segment/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('しゃっ！今日は田舎日記。')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('しゃっ！')).not.toBeInTheDocument();
+  }, 30000);
+
   it('warns when the pasted URL points at an already-imported video', async () => {
     await getDb().books.put({
       id: 'book-existing',
