@@ -24,6 +24,13 @@ describe('parseWiktionaryAccentHtml', () => {
     expect(parseWiktionaryAccentHtml(html, 'はしる')).toEqual({ kind: 'found', position: 2 });
   });
 
+  it('finds the position when the moraic ん is marked with an acute-n (ń), not just grave (ǹ)', () => {
+    // ぞんじる's real romaji is [zòńjíꜜrù] — an earlier draft's character
+    // class only had ǹ and silently failed to match this shape at all.
+    const html = `<html>${pronunciationEntry('ぞんじる', 2, 'zòńjíꜜrù', 'Nakadaka', 3)}</html>`;
+    expect(parseWiktionaryAccentHtml(html, 'ぞんじる')).toEqual({ kind: 'found', position: 3 });
+  });
+
   it('resolves a multi-reading page by matching the target reading, not just any accent entry', () => {
     // 開ける-shaped page: あける [0], ひらける [3], and はだける both [3] and
     // [0] for two different senses — only the あける entry should match.

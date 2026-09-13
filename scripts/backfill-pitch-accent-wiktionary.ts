@@ -67,12 +67,16 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // ひらける, and はだける, each with its own accent and none matching the
 // others), so matching on kana lets a multi-reading page still resolve
 // cleanly instead of always looking "ambiguous". Verified against real
-// fetched pages for 走る/買う/食べる/開ける/高い/甘い this session, including
-// the ꜜ downstep mark itself inside the romaji brackets — an earlier draft
-// of this pattern omitted ꜜ from its character class and silently failed
-// to match any non-heiban word (docs/STATUS.md 2026-09-12).
+// fetched pages for 走る/買う/食べる/開ける/高い/甘い/存じる and others this
+// session, including the ꜜ downstep mark and the acute-n moraic marker
+// (ń, e.g. ぞんじる's [zòńjíꜜrù]) inside the romaji brackets — two earlier
+// drafts of this pattern each omitted one of those from the character
+// class and silently failed to match (docs/STATUS.md 2026-09-12/13). A
+// missing character here is a false negative (item stays blank, safe) not
+// a false positive, but still worth widening deliberately rather than
+// finding gaps one skipped word at a time.
 const ACCENT_PATTERN =
-  /([ぁ-んー]+)\s*\[[a-zàáâèéêìíîòóôùúûǹꜜ ]+\]\s*\((?:Heiban|Nakadaka|Atamadaka|Odaka)\s*[–-]\s*\[(\d+)\]\)/g;
+  /([ぁ-んー]+)\s*\[[a-zàáâèéêìíîòóôùúûǹńꜜ ]+\]\s*\((?:Heiban|Nakadaka|Atamadaka|Odaka)\s*[–-]\s*\[(\d+)\]\)/g;
 
 export type LookupResult =
   | { kind: 'found'; position: number }
