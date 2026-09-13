@@ -76,7 +76,16 @@ afterEach(async () => {
   // multi-await Dexie transaction under heavy CPU contention). Verified
   // empirically (35 consecutive full-suite runs, 0 failures) rather than
   // proven airtight; if this ever regresses, that's the gap to close next.
+  // 2026-09-13: it did — CI (reviewPage.test.tsx, a sentence_transformation
+  // scheduling test) hit exactly the DatabaseClosedError this comment
+  // anticipated, under CI's heavier CPU contention than local runs ever
+  // reproduced. Widened to two ticks plus a short real delay rather than
+  // just one — still a heuristic, not a proof, but gives Dexie's own
+  // internal re-query scheduling (which can itself be multiple queued
+  // tasks deep under contention) more room before the db closes under it.
   await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
   const db = getDb();
   db.close();
   await db.delete();
