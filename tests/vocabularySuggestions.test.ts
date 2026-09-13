@@ -484,4 +484,57 @@ describe('vocabularySuggestions', () => {
       expect(suggestion?.reading).toBe('かあ');
     });
   });
+
+  describe('numeral+counter fusion', () => {
+    it('fuses a digit and an adjacent calendar-month counter into one suggestion', () => {
+      const japanese = '10月に会う。';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: '10', start: 0, end: 2, lemma: '10', reading: '', pos: '名詞/数詞' },
+        { surface: '月', start: 2, end: 3, lemma: '月', reading: 'がつ', pos: '接尾辞/名詞的' },
+        { surface: 'に', start: 3, end: 4, lemma: 'に', reading: 'に', pos: '助詞/格助詞' },
+        { surface: '会う', start: 4, end: 6, lemma: '会う', reading: 'あう', pos: '動詞/一般' },
+        { surface: '。', start: 6, end: 7, lemma: '。', reading: '', pos: '補助記号/句点' },
+      ]);
+      const fused = suggestions.find((s) => s.surface === '10月');
+      expect(fused).toBeTruthy();
+      expect(fused?.reading).toBe('じゅうがつ');
+      expect(fused?.start).toBe(0);
+      expect(fused?.end).toBe(3);
+      expect(fused?.selectedByDefault).toBe(true);
+      // No separate "10" or bare "月" suggestion left over.
+      expect(suggestions.some((s) => s.surface === '10')).toBe(false);
+      expect(suggestions.some((s) => s.surface === '月')).toBe(false);
+    });
+
+    it('fuses irregular day-of-month and object-counter readings', () => {
+      const japanese = '3日に3本買った。';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: '3', start: 0, end: 1, lemma: '3', reading: '', pos: '名詞/数詞' },
+        { surface: '日', start: 1, end: 2, lemma: '日', reading: 'にち', pos: '接尾辞/名詞的' },
+        { surface: 'に', start: 2, end: 3, lemma: 'に', reading: 'に', pos: '助詞/格助詞' },
+        { surface: '3', start: 3, end: 4, lemma: '3', reading: '', pos: '名詞/数詞' },
+        { surface: '本', start: 4, end: 5, lemma: '本', reading: 'ほん', pos: '接尾辞/名詞的' },
+        { surface: '買っ', start: 5, end: 7, lemma: '買う', reading: 'かっ', pos: '動詞/一般' },
+        { surface: 'た', start: 7, end: 8, lemma: 'た', reading: 'た', pos: '助動詞' },
+        { surface: '。', start: 8, end: 9, lemma: '。', reading: '', pos: '補助記号/句点' },
+      ]);
+      expect(suggestions.find((s) => s.surface === '3日')?.reading).toBe('みっか');
+      expect(suggestions.find((s) => s.surface === '3本')?.reading).toBe('さんぼん');
+    });
+
+    it('leaves a digit token alone when not followed by a known counter', () => {
+      const japanese = '10杯飲んだ。';
+      const suggestions = suggestionsFromTokens(japanese, [
+        { surface: '10', start: 0, end: 2, lemma: '10', reading: '', pos: '名詞/数詞' },
+        { surface: '杯', start: 2, end: 3, lemma: '杯', reading: 'はい', pos: '接尾辞/名詞的' },
+        { surface: '飲ん', start: 3, end: 5, lemma: '飲む', reading: 'のん', pos: '動詞/一般' },
+        { surface: 'だ', start: 5, end: 6, lemma: 'だ', reading: 'だ', pos: '助動詞' },
+        { surface: '。', start: 6, end: 7, lemma: '。', reading: '', pos: '補助記号/句点' },
+      ]);
+      // 杯 isn't in the known-counter table, so digit and counter stay separate.
+      expect(suggestions.some((s) => s.surface === '10杯')).toBe(false);
+      expect(suggestions.find((s) => s.surface === '10')).toBeTruthy();
+      expect(suggestions.find((s) => s.surface === '杯')).toBeTruthy();
+    });
+  });
 });

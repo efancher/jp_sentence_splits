@@ -12,6 +12,7 @@ import type {
 } from '../domain/types';
 import { createId } from './ids';
 import { containsKanji } from './kanji';
+import { KNOWN_COUNTERS, readCounter, toAsciiDigits } from './japaneseNumberReading';
 
 export interface MorphologyToken {
   surface: string;
@@ -269,15 +270,71 @@ export function suggestionFromToken(
   };
 }
 
+const ALL_DIGITS_RE = /^[0-9０-９]+$/;
+const COUNTER_SURFACES = new Set(KNOWN_COUNTERS);
+
+/**
+ * UniDic tags a bare Arabic numeral as 名詞/数詞 with no reading of its own,
+ * and reads a following counter in isolation (10月 → "10" + 月[がつ] read as
+ * plain がつ, dropping the "10" entirely; 3日 → "3" + 日 read かい instead of
+ * みっか). Two separate vocab suggestions then surface: the counter alone
+ * (wrong, isolated reading) and the bare numeral (no reading at all). This
+ * fuses a digit token with an immediately-adjacent known-counter token into
+ * one suggestion spanning both, using `japaneseNumberReading`'s irregular
+ * tables (the same source `inlineReadingFromTokens` already uses for the
+ * ruby/furigana display) — so "10月" comes through as one card, reading
+ * じゅうがつ. Returns null when the counter isn't adjacent/recognised or the
+ * fusion can't produce a reading, so the caller falls back to the normal
+ * per-token suggestions.
+ */
+function numeralCounterSuggestion(
+  digitToken: MorphologyToken,
+  counterToken: MorphologyToken,
+  japanese: string,
+): VocabularySuggestion | null {
+  if (counterToken.start !== digitToken.end) return null;
+  if (!COUNTER_SURFACES.has(counterToken.surface)) return null;
+  if (!validateSpan(japanese, digitToken.start, digitToken.end, digitToken.surface)) return null;
+  if (!validateSpan(japanese, counterToken.start, counterToken.end, counterToken.surface)) {
+    return null;
+  }
+  const value = Number(toAsciiDigits(digitToken.surface));
+  if (!Number.isInteger(value)) return null;
+  const reading = readCounter(value, counterToken.surface, counterToken.reading?.trim());
+  if (!reading) return null;
+  const surface = digitToken.surface + counterToken.surface;
+  return {
+    id: createId('vsug'),
+    surface,
+    start: digitToken.start,
+    end: counterToken.end,
+    expression: surface,
+    reading,
+    pos: [digitToken.pos, counterToken.pos].filter(Boolean).join('+'),
+    source: 'morphology',
+    selectedByDefault: true,
+  };
+}
+
 export function suggestionsFromTokens(
   japanese: string,
   tokens: MorphologyToken[],
 ): VocabularySuggestion[] {
   const out: VocabularySuggestion[] = [];
-  tokens.forEach((token, index) => {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    const nextToken = tokens[index + 1];
+    if (nextToken && ALL_DIGITS_RE.test(token.surface)) {
+      const fused = numeralCounterSuggestion(token, nextToken, japanese);
+      if (fused) {
+        out.push(fused);
+        index += 1; // also consumes the counter token
+        continue;
+      }
+    }
     const suggestion = suggestionFromToken(token, japanese, tokens[index - 1]);
     if (suggestion) out.push(suggestion);
-  });
+  }
   return out;
 }
 

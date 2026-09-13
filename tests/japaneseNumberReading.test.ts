@@ -69,7 +69,37 @@ describe('readCounter', () => {
   });
 
   it('falls back to number + counter kana for an unknown counter', () => {
-    expect(readCounter(3, '軒', 'けん')).toBe('さんけん');
-    expect(readCounter(3, '軒')).toBeNull();
+    expect(readCounter(3, '杯', 'はい')).toBe('さんはい');
+    expect(readCounter(3, '杯')).toBeNull();
+  });
+
+  it('reads calendar months and days of the month', () => {
+    expect(readCounter(10, '月')).toBe('じゅうがつ');
+    expect(readCounter(4, '月')).toBe('しがつ');
+    expect(readCounter(7, '月')).toBe('しちがつ');
+    expect(readCounter(9, '月')).toBe('くがつ');
+    expect(readCounter(1, '日')).toBe('ついたち');
+    expect(readCounter(2, '日')).toBe('ふつか');
+    expect(readCounter(4, '日')).toBe('よっか');
+    expect(readCounter(14, '日')).toBe('じゅうよっか');
+    expect(readCounter(20, '日')).toBe('はつか');
+    expect(readCounter(24, '日')).toBe('にじゅうよっか');
+    expect(readCounter(30, '日')).toBe('さんじゅうにち');
+  });
+
+  it('reads common object counters with their euphonic changes', () => {
+    expect(readCounter(1, '本')).toBe('いっぽん');
+    expect(readCounter(3, '本')).toBe('さんぼん');
+    expect(readCounter(2, '匹')).toBe('にひき');
+    expect(readCounter(3, '匹')).toBe('さんびき');
+    expect(readCounter(1, '回')).toBe('いっかい');
+    expect(readCounter(1, '個')).toBe('いっこ');
+    expect(readCounter(5, '枚')).toBe('ごまい');
+    expect(readCounter(1, '冊')).toBe('いっさつ');
+    expect(readCounter(3, '台')).toBe('さんだい');
+    expect(readCounter(9, '円')).toBe('きゅうえん');
+    expect(readCounter(4, '時')).toBe('よじ');
+    expect(readCounter(4, '時間')).toBe('よじかん');
+    expect(readCounter(3, '軒')).toBe('さんげん');
   });
 });

@@ -11,8 +11,9 @@
  * `reading_only` string fixer (`fixNumeralReadings.ts`) calls it too.
  *
  * Scope: 0–9999 for the plain number, and the counters that actually occur in
- * this corpus (人 つ ヶ月 分 番 歳 才 年 週間 羽) with their irregular /
- * euphonic readings. An unrecognised counter falls back to
+ * this corpus (人 つ ヶ月 分 番 歳 才 年 週間 羽 月 日 本 匹 回 個 枚 冊 台 円
+ * 時 時間 軒) with their irregular / euphonic readings. An unrecognised
+ * counter falls back to
  * `readNumber(n) + <counter's own kana>` with no euphony — good enough for a
  * mora row, and `readCounter` returns null when it can't do even that so the
  * caller can leave the token alone.
@@ -157,6 +158,113 @@ const COUNTERS: Record<string, CounterSpec> = {
   羽: {
     kana: 'わ',
     irregular: { 1: 'いちわ', 6: 'ろっぱ', 8: 'はっぱ', 10: 'じゅっぱ' },
+  },
+  // Calendar month (10月 → じゅうがつ) — distinct from ヶ月 (counting a
+  // *duration* in months, いっかげつ). Fully irregular 1–12; the tokenizer
+  // only ever pairs this with a digit in that range.
+  月: {
+    kana: 'がつ',
+    irregular: {
+      1: 'いちがつ',
+      2: 'にがつ',
+      3: 'さんがつ',
+      4: 'しがつ',
+      5: 'ごがつ',
+      6: 'ろくがつ',
+      7: 'しちがつ',
+      8: 'はちがつ',
+      9: 'くがつ',
+      10: 'じゅうがつ',
+      11: 'じゅういちがつ',
+      12: 'じゅうにがつ',
+    },
+  },
+  // Day of the month (3日 → みっか). Fully irregular 1–31 — day names don't
+  // reduce to a number reading + euphony rule the way most counters do.
+  日: {
+    kana: 'にち',
+    irregular: {
+      1: 'ついたち',
+      2: 'ふつか',
+      3: 'みっか',
+      4: 'よっか',
+      5: 'いつか',
+      6: 'むいか',
+      7: 'なのか',
+      8: 'ようか',
+      9: 'ここのか',
+      10: 'とおか',
+      11: 'じゅういちにち',
+      12: 'じゅうににち',
+      13: 'じゅうさんにち',
+      14: 'じゅうよっか',
+      15: 'じゅうごにち',
+      16: 'じゅうろくにち',
+      17: 'じゅうしちにち',
+      18: 'じゅうはちにち',
+      19: 'じゅうくにち',
+      20: 'はつか',
+      21: 'にじゅういちにち',
+      22: 'にじゅうににち',
+      23: 'にじゅうさんにち',
+      24: 'にじゅうよっか',
+      25: 'にじゅうごにち',
+      26: 'にじゅうろくにち',
+      27: 'にじゅうしちにち',
+      28: 'にじゅうはちにち',
+      29: 'にじゅうくにち',
+      30: 'さんじゅうにち',
+      31: 'さんじゅういちにち',
+    },
+  },
+  本: {
+    kana: 'ほん',
+    irregular: {
+      1: 'いっぽん',
+      3: 'さんぼん',
+      6: 'ろっぽん',
+      8: 'はっぽん',
+      10: 'じゅっぽん',
+    },
+  },
+  匹: {
+    kana: 'ひき',
+    irregular: {
+      1: 'いっぴき',
+      3: 'さんびき',
+      6: 'ろっぴき',
+      8: 'はっぴき',
+      10: 'じゅっぴき',
+    },
+  },
+  回: {
+    kana: 'かい',
+    euphonic: true,
+    irregular: { 1: 'いっかい', 6: 'ろっかい', 8: 'はっかい', 10: 'じゅっかい' },
+  },
+  個: {
+    kana: 'こ',
+    euphonic: true,
+    irregular: { 1: 'いっこ', 6: 'ろっこ', 8: 'はっこ', 10: 'じゅっこ' },
+  },
+  枚: { kana: 'まい' },
+  冊: {
+    kana: 'さつ',
+    irregular: { 1: 'いっさつ', 8: 'はっさつ', 10: 'じゅっさつ' },
+  },
+  台: { kana: 'だい' },
+  円: { kana: 'えん' },
+  時: {
+    kana: 'じ',
+    irregular: { 4: 'よじ', 7: 'しちじ', 9: 'くじ' },
+  },
+  時間: {
+    kana: 'じかん',
+    irregular: { 4: 'よじかん', 7: 'しちじかん', 9: 'くじかん' },
+  },
+  軒: {
+    kana: 'けん',
+    irregular: { 1: 'いっけん', 3: 'さんげん', 6: 'ろっけん', 8: 'はっけん', 10: 'じゅっけん' },
   },
 };
 
