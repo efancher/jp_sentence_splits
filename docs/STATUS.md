@@ -30,6 +30,22 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Fixed extra-practice auto-exit in the pitch-accent drill
+  (user report: "exits immediately after it displays the analysis, I don't
+  even have time to see it").** Root cause: in focus mode (`/pitch-accent`,
+  "Extra practice"), `activeWords` tracked the live `getPitchAccentFocusWords`
+  query directly; logging a take (`logPitchDrillAttempt`) writes to
+  `pitchDrillAttempts`, which the query watches, so it immediately reran and
+  dropped the just-practiced word out of the list — shifting whatever word
+  sat at the same `position` into view, which looked like an instant,
+  uncontrollable advance and wiped the analysis panel via the
+  `currentId`-keyed reset effect. Fix: `PitchAccentDrillPage.tsx` now snapshots
+  the focus queue into `focusSession` state once when focus mode is switched
+  on, instead of reading the live query on every render; the queue no longer
+  changes underneath the learner mid-session, so they can re-record and
+  review the same word as many times as they like, and only advance via the
+  existing manual Previous/Next buttons. A fresh queue is drawn the next time
+  extra practice is started.
 - **2026-09-13 — Per-word te-form pitch-accent data, closing the
   `te_form`/`plain_past`/`tara_form` gap in `pitchAccentShift.ts`
   (user follow-up on the OJAD question: "can we get that data from

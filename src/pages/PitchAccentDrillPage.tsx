@@ -185,7 +185,23 @@ export function PitchAccentDrillPage() {
         : rawWords,
     [rawWords, shuffleSeed],
   );
-  const activeWords = focusMode ? focusWords : words;
+  // A snapshot of the focus queue, taken once when focus mode is switched on.
+  // `focusWords` is a live query that reruns the moment `logPitchDrillAttempt`
+  // writes a row (it just practiced a word out of the queue) — if `activeWords`
+  // tracked it directly, that write would shrink the list out from under the
+  // learner mid-review and silently swap in whatever word now sits at the same
+  // `position`, wiping the just-shown analysis before they could read it.
+  // Freezing the list for the session lets them re-record and review the same
+  // word as many times as they like; a fresh queue is drawn next time they
+  // start extra practice.
+  const [focusSession, setFocusSession] = useState<PitchAccentDrillWord[] | undefined>(undefined);
+  useEffect(() => {
+    setFocusSession(focusMode ? focusWords : undefined);
+    // Intentionally only re-snapshot when focus mode toggles, not on every
+    // `focusWords` change — see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode]);
+  const activeWords = focusMode ? focusSession : words;
 
   const reshuffle = () => {
     setShuffleSeed(newShuffleSeed());
