@@ -500,6 +500,32 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     personal single-user study is the same posture as the existing
     YouTube-mining approach, just a different (and more permissive-in-
     intent) rights-holder relationship.
+  - ~~One book per episode/article~~ **Changed 2026-09-13, per user
+    request**: a podcast's episodes and every NHK Easy article now land in
+    one shared book per series (one book overall for NHK Easy, one per
+    podcast feed), each as its own chapter, kept chronological by publish
+    date regardless of import-click order. New repository function
+    `commitSeriesEpisodeImport` (`src/db/repository.ts`) — looks up the
+    book by a series-level `sourceKey` (`podcast-series-<hash of feed URL>`
+    or the fixed `nhk-easy-news`) instead of a per-episode one, dedups
+    chapters by the episode's own `source.id` (a new `BookChapter.sourceId`
+    field — matching by title alone would risk merging two differently-
+    titled re-imports of the same episode, or duplicating on a title that
+    changed upstream) so re-importing the same episode updates its chapter
+    rather than duplicating it, and `reorderChaptersChronologically`
+    cascades a new `BookChapter.sourceDate` field into
+    `bookSentences.position` (chapter-major order) after every import.
+    `ShadowingPreviewCard` gained an `onCommit` override (defaulting to the
+    original one-book-per-source `commitShadowingPackageImport`, still used
+    for plain YouTube videos and `.shadowing.zip` uploads) so both
+    `YouTubeMinePage`'s podcast branch and `NhkEasyImportPage` route through
+    the new series-aware path instead. 4 new repository tests. Deliberately
+    scoped down from a fuller "bulk-import a whole feed" ask (would need
+    real throttling/pause-resume design for a 1000+-episode feed) to just
+    this structural change — still click episodes/articles one at a time.
+    **Known gap**: any book already created under the old one-per-episode
+    scheme before this change (e.g. an episode imported earlier today)
+    stays a separate single-chapter book — not retroactively merged.
 
 - [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
   promoted from "Possibilities" below) The direct answer to "I have several

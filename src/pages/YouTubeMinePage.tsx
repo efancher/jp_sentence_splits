@@ -6,7 +6,8 @@ import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
 import { TranslateAiHelp } from '../components/TranslateAiHelp';
-import { getDb } from '../db/repository';
+import { commitSeriesEpisodeImport, getDb } from '../db/repository';
+import { hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
   applyJobSegments,
@@ -190,6 +191,10 @@ export function YouTubeMinePage() {
   const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
   const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
   const [podcastFeedError, setPodcastFeedError] = useState('');
+  // The picked episode's own publish date, for commitSeriesEpisodeImport's
+  // chapter-chronology — MiningSourceInfo (from the job) doesn't carry this,
+  // so it's captured client-side at click time and carried through commit.
+  const [podcastEpisodeDate, setPodcastEpisodeDate] = useState<string | null>(null);
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -397,6 +402,7 @@ export function YouTubeMinePage() {
     setPodcastFeedUrl('');
     setPodcastFeed(null);
     setPodcastFeedError('');
+    setPodcastEpisodeDate(null);
   }
 
   async function startJob(
@@ -433,6 +439,7 @@ export function YouTubeMinePage() {
   }
 
   async function handleStartPodcastEpisode(episode: PodcastEpisode) {
+    setPodcastEpisodeDate(episode.publishedAt ?? null);
     await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
   }
 
@@ -958,6 +965,20 @@ export function YouTubeMinePage() {
           <ShadowingPreviewCard
             preview={preview}
             retentionNote="Native clips are not included in Glossbook JSON backups. Re-mine this video to restore them if needed."
+            {...(source?.type === 'podcast' && podcastFeedUrl.trim()
+              ? {
+                  commitLabel: 'Add as a new chapter',
+                  onCommit: (p) =>
+                    commitSeriesEpisodeImport({
+                      seriesId: `podcast-series-${hashString(podcastFeedUrl.trim())}`,
+                      seriesTitle: podcastFeed?.title || source.title,
+                      seriesUrl: podcastFeedUrl.trim(),
+                      episodeTitle: source.title,
+                      sourceDate: podcastEpisodeDate ?? new Date().toISOString(),
+                      preview: p,
+                    }),
+                }
+              : {})}
             onImported={(result) => {
               if (jobId) void deleteMiningJob(jobId);
               clearActiveJob();

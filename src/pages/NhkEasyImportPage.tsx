@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
-import { getDb } from '../db/repository';
+import { commitSeriesEpisodeImport, getDb } from '../db/repository';
 import {
   base64ToBlob,
   fetchPodcastFeed,
@@ -33,6 +33,11 @@ const MANIFEST = {
 
 type Stage = 'idle' | 'imported' | 'commit';
 
+// Fixed, not per-feed — every NHK Easy article lands in the same one book
+// regardless of which nhkeasier.com-shaped feed URL it came from.
+const NHK_EASY_SERIES_ID = 'nhk-easy-news';
+const NHK_EASY_SERIES_TITLE = 'NHK Easy News';
+
 /** Flatten NHK's own `漢字[かな]` inline reading into a plain kana string —
  * same "each segment's reading, falling back to its base" shape mora.ts /
  * readingAnswer.ts already use for the same conversion. */
@@ -61,6 +66,10 @@ export function NhkEasyImportPage() {
   const [feedError, setFeedError] = useState('');
 
   const [importResult, setImportResult] = useState<NhkEasyImportResult | null>(null);
+  // The picked article's own publish date, for commitSeriesEpisodeImport's
+  // chapter-chronology — captured at pick time since NhkEasyImportResult
+  // doesn't carry it.
+  const [articleDate, setArticleDate] = useState<string | null>(null);
   const [translations, setTranslations] = useState<string[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState('');
@@ -75,6 +84,7 @@ export function NhkEasyImportPage() {
     setFeed(null);
     setFeedError('');
     setImportResult(null);
+    setArticleDate(null);
     setTranslations([]);
     setImportError('');
     setRealignNote('');
@@ -109,6 +119,7 @@ export function NhkEasyImportPage() {
         episode.url,
       );
       setImportResult(result);
+      setArticleDate(episode.publishedAt ?? null);
       setTranslations(result.sentences.map(() => ''));
       setStage('imported');
     } catch (err) {
@@ -316,6 +327,16 @@ export function NhkEasyImportPage() {
         <section className="panel stack">
           <ShadowingPreviewCard
             preview={preview}
+            commitLabel="Add as a new chapter"
+            onCommit={(p) =>
+              commitSeriesEpisodeImport({
+                seriesId: NHK_EASY_SERIES_ID,
+                seriesTitle: NHK_EASY_SERIES_TITLE,
+                episodeTitle: p.source.title,
+                sourceDate: articleDate ?? new Date().toISOString(),
+                preview: p,
+              })
+            }
             onImported={(result) => navigate(`/books/${result.bookId}`)}
             onCancel={() => setStage('imported')}
             retentionNote="Audio was clipped from the article's real narration — there's no source ZIP to keep."

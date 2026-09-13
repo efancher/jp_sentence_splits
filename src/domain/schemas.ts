@@ -102,6 +102,8 @@ export const bookSchema = z.object({
         id: z.string(),
         title: z.string(),
         position: z.number(),
+        sourceDate: z.string().optional(),
+        sourceId: z.string().optional(),
       }),
     )
     .default([]),

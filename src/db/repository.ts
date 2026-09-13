@@ -2184,6 +2184,30 @@ export async function commitShadowingPackageImport(
   // notes are untouched because only bookSentences.position changes.
   await reorderBookSentences(result.bookId, selectedIds);
 
+  await applySentenceAudioForPreview(result.bookId, preview);
+
+  return {
+    batchId: result.batchId,
+    bookId: result.bookId,
+    refreshed: Boolean(existingBook),
+  };
+}
+
+/**
+ * Write/refresh a preview's native audio clips as `SentenceAudio` rows
+ * (keyed by `preview.source.id`, so re-committing the same episode/video
+ * replaces its own clips without touching another episode's in a shared
+ * book) and, if cloud audio sync is on, opportunistically upload them.
+ * Shared by `commitShadowingPackageImport` (one book per source) and
+ * `commitSeriesEpisodeImport` (one shared book per podcast/NHK-Easy series,
+ * one chapter per episode/article) — the audio provenance is always
+ * per-episode even when the book isn't.
+ */
+async function applySentenceAudioForPreview(
+  bookId: string,
+  preview: ShadowingImportPreview,
+): Promise<void> {
+  const db = getDb();
   const sentenceByKey = new Map(
     (await db.sentences.toArray()).map((sentence) => [
       sentence.normalizedKey,
@@ -2238,24 +2262,147 @@ export async function commitShadowingPackageImport(
       const supabase = getSupabase();
       const userId = (await supabase?.auth.getSession())?.data.session?.user
         ?.id;
-      if (!userId || !result.bookId) return;
+      if (!userId) return;
       for (const audio of audioRecords) {
-        await uploadReferenceAudio({
-          audio,
-          bookId: result.bookId,
-          ownerId: userId,
-        });
+        await uploadReferenceAudio({ audio, bookId, ownerId: userId });
       }
     } catch {
       // Local import must succeed even if optional audio upload fails.
     }
   })();
+}
 
-  return {
-    batchId: result.batchId,
-    bookId: result.bookId,
-    refreshed: Boolean(existingBook),
-  };
+/**
+ * Add one podcast episode's or NHK Easy article's sentences into a shared
+ * per-series book (docs/ROADMAP.md "one book per podcast, one book overall
+ * for NHK Easy") — every call sharing the same `seriesId` lands in the same
+ * book, each as its own new chapter, chronologically ordered by
+ * `sourceDate` regardless of import-click order (see
+ * `reorderChaptersChronologically`).
+ */
+export async function commitSeriesEpisodeImport(options: {
+  /** Stable id for the whole series (e.g. a hash of the podcast feed URL,
+   * or a fixed constant for NHK Easy) — every episode/article with the same
+   * seriesId lands in the same book. */
+  seriesId: string;
+  seriesTitle: string;
+  seriesUrl?: string;
+  episodeTitle: string;
+  /** Anything `Date.parse`-able (an RSS pubDate works as-is) — chapters
+   * sort by this, not by import order. */
+  sourceDate: string;
+  preview: ShadowingImportPreview;
+}): Promise<{ bookId: string; chapterId: string }> {
+  const db = getDb();
+  const sourceKey = `shadowing:${options.seriesId}`;
+  const existingBook = await db.books.where('sourceKey').equals(sourceKey).first();
+  // Match by the episode/article's own source id, not title — a title can
+  // be edited upstream or, rarely, collide between two different episodes;
+  // sourceId is what actually identifies "this is the same episode again."
+  const existingChapter = existingBook?.chapters.find(
+    (chapter) => chapter.sourceId === options.preview.source.id,
+  );
+  const selectedIds = options.preview.drafts.map((item) => item.proposedId);
+
+  const result = await commitImport({
+    preview: options.preview,
+    selectedIds,
+    destination: existingBook ? 'existing_book' : 'new_book',
+    bookId: existingBook?.id,
+    newBookTitle: options.seriesTitle,
+    orderMode: 'first_occurrence',
+    ...(existingChapter
+      ? { chapterId: existingChapter.id }
+      : { newChapterTitle: options.episodeTitle }),
+  });
+  if (!result.bookId || !result.chapterId) {
+    throw new Error('Series episode import did not create a book/chapter.');
+  }
+
+  await updateBook(result.bookId, {
+    sourceKey,
+    title: options.seriesTitle,
+    ...(options.seriesUrl ? { sourceUrl: options.seriesUrl } : {}),
+  });
+  const parsedDate = new Date(options.sourceDate);
+  const sourceDate = Number.isNaN(parsedDate.getTime())
+    ? nowIso()
+    : parsedDate.toISOString();
+  const book = await db.books.get(result.bookId);
+  if (book) {
+    await db.books.put({
+      ...book,
+      chapters: book.chapters.map((chapter) =>
+        chapter.id === result.chapterId
+          ? {
+              ...chapter,
+              title: options.episodeTitle,
+              sourceId: options.preview.source.id,
+              sourceDate,
+            }
+          : chapter,
+      ),
+      updatedAt: nowIso(),
+    });
+    const updated = await db.books.get(result.bookId);
+    if (updated) notifySync('books', updated.id, updated);
+  }
+
+  await reorderChaptersChronologically(result.bookId);
+  await applySentenceAudioForPreview(result.bookId, options.preview);
+
+  return { bookId: result.bookId, chapterId: result.chapterId };
+}
+
+/**
+ * Re-sort a book's chapters by their `sourceDate` (oldest first) and cascade
+ * that into `bookSentences.position` — chapter-major, each chapter's own
+ * sentences kept in their existing relative order — so importing episode 3
+ * after episode 5 still lands episode 3's chapter before episode 5's.
+ * Chapters with no `sourceDate` (hand-created chapters in an unrelated book)
+ * sort last, in their prior relative order — this is only ever called on
+ * books `commitSeriesEpisodeImport` manages, where every chapter it created
+ * has one.
+ */
+async function reorderChaptersChronologically(bookId: string): Promise<void> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) return;
+
+  const withDate = book.chapters.filter((chapter) => chapter.sourceDate);
+  const withoutDate = book.chapters.filter((chapter) => !chapter.sourceDate);
+  withDate.sort((a, b) => a.sourceDate!.localeCompare(b.sourceDate!));
+  const sortedChapters = [...withDate, ...withoutDate];
+  const nextChapters = sortedChapters.map((chapter, position) => ({
+    ...chapter,
+    position,
+  }));
+  await db.books.put({ ...book, chapters: nextChapters, updatedAt: nowIso() });
+  const updated = await db.books.get(bookId);
+  if (updated) notifySync('books', updated.id, updated);
+
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+  const byChapter = new Map<string, BookSentence[]>();
+  const unassigned: BookSentence[] = [];
+  for (const membership of memberships) {
+    if (!membership.chapterId) {
+      unassigned.push(membership);
+      continue;
+    }
+    const arr = byChapter.get(membership.chapterId);
+    if (arr) arr.push(membership);
+    else byChapter.set(membership.chapterId, [membership]);
+  }
+  const orderedSentenceIds: string[] = [];
+  for (const chapter of nextChapters) {
+    const inChapter = (byChapter.get(chapter.id) ?? []).sort(
+      (a, b) => a.position - b.position,
+    );
+    orderedSentenceIds.push(...inChapter.map((item) => item.sentenceId));
+  }
+  unassigned.sort((a, b) => a.position - b.position);
+  orderedSentenceIds.push(...unassigned.map((item) => item.sentenceId));
+  await reorderBookSentences(bookId, orderedSentenceIds);
 }
 
 export async function renameImportBatch(

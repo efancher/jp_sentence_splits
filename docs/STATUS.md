@@ -30,6 +30,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Podcast episodes and NHK Easy articles now land in one
+  shared book per series, chapters kept chronological.** User request,
+  after using both flows for the first time today: importing episode by
+  episode was creating a whole new book per episode/article, which doesn't
+  scale for a podcast with hundreds of episodes or a growing NHK Easy
+  habit. New `commitSeriesEpisodeImport` (`src/db/repository.ts`) looks up
+  the book by a series-level `sourceKey` (one per podcast feed, one fixed
+  key for all of NHK Easy) instead of per-episode, adds each import as its
+  own chapter, and cascades a new `BookChapter.sourceDate` field into
+  `bookSentences.position` so chapters — and their sentences — stay in
+  publish-date order even if episodes are clicked out of order. Chapters
+  dedup by a new `BookChapter.sourceId` (the episode's own source id, not
+  its title, which can change or collide) so re-importing an episode
+  updates its existing chapter instead of duplicating it.
+  `ShadowingPreviewCard` gained an `onCommit` override so
+  `YouTubeMinePage`'s podcast branch and `NhkEasyImportPage` route through
+  this instead of the original one-book-per-source path (still used
+  unchanged for plain YouTube videos and `.shadowing.zip` uploads). 4 new
+  repository tests, full suite green (1430). Deliberately scoped down from
+  "bulk-import a whole feed automatically" (real cost/throttling concerns
+  for a 1000+-episode podcast) — still one click per episode/article, just
+  landing in the right shared place now. Detail + the one known gap
+  (books already created under the old per-episode scheme aren't
+  retroactively merged) in `docs/ROADMAP.md`.
 - **2026-09-13 — NHK Easy import v1 complete: wizard UI + vocabulary
   tokens, closing out the day's feature.** Final piece after the
   text-extraction and forced-alignment work below: `NhkEasyImportPage.tsx`

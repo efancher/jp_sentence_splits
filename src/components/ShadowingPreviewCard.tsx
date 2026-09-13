@@ -23,6 +23,13 @@ interface ShadowingPreviewCardProps {
   /** Overrides the default "keep the ZIP to restore it" note — the
    * YouTube-mining flow has no ZIP to keep, so it needs different text. */
   retentionNote?: ReactNode;
+  /** Overrides the default one-book-per-source commit
+   * (`commitShadowingPackageImport`) — the podcast/NHK-Easy series flows
+   * pass one that adds this preview as a new chapter in one shared
+   * per-series book instead. */
+  onCommit?: (preview: ShadowingImportPreview) => Promise<{ bookId: string }>;
+  /** Overrides the default "Import complete project" button label. */
+  commitLabel?: string;
 }
 
 /**
@@ -37,6 +44,8 @@ export function ShadowingPreviewCard({
   onImported,
   onCancel,
   retentionNote,
+  onCommit,
+  commitLabel,
 }: ShadowingPreviewCardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -113,7 +122,7 @@ export function ShadowingPreviewCard({
             setBusy(true);
             setError('');
             try {
-              const result = await commitShadowingPackageImport(preview);
+              const result = await (onCommit ?? commitShadowingPackageImport)(preview);
               onImported(result);
             } catch (err) {
               setError(
@@ -126,7 +135,7 @@ export function ShadowingPreviewCard({
             }
           }}
         >
-          Import complete project
+          {commitLabel ?? 'Import complete project'}
         </button>
         <button type="button" disabled={busy} onClick={onCancel}>
           Cancel

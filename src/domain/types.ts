@@ -278,6 +278,21 @@ export interface BookChapter {
   id: string;
   title: string;
   position: number;
+  /**
+   * ISO 8601 — set only on chapters `commitSeriesEpisodeImport` creates
+   * (one podcast episode or NHK Easy article per chapter), so the book's
+   * chapters can be kept chronological regardless of import-click order.
+   * Undefined on a hand-created chapter, which just sorts by `position`
+   * as always.
+   */
+  sourceDate?: string;
+  /**
+   * The episode/article's own `ShadowingSource.id` — lets
+   * `commitSeriesEpisodeImport` find and update *this* chapter on a
+   * re-import instead of matching by (renameable, occasionally duplicate)
+   * title and creating a second chapter for the same episode.
+   */
+  sourceId?: string;
 }
 
 export interface BookSentence {
