@@ -304,18 +304,37 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     accent class including heiban.
 
 - [ ] **Heiban i-adjective predicate-position accent.** Side discovery
-  from the 2026-09-12 pitch-accent work, not investigated further: a
-  heiban i-adjective may take a *different* accent in bare sentence-final
-  predicate position than its lexical citation form suggests — confirmed
-  via real Wiktionary data for 甘い (heiban [0], but its "terminal"
-  node renders あまꜜい, position 2, in predicate use). If real, this is a
-  pre-existing gap in the *citation-form* pitch_accent path (a "correct"
-  citation-form card could already be asserting the wrong contour for a
-  sentence-final occurrence), independent of anything inflection-related.
-  Not scoped — first step would be checking how common this actually is
-  in the corpus and whether it's audible/testable given the existing
-  edge-accent gating (`hasFollowingVoicedMora`) before deciding it's worth
-  fixing.
+  from the 2026-09-12 pitch-accent work; investigated 2026-09-13, still
+  not acted on. Confirmed real and general, not a 甘い one-off: live
+  `Module:ja-acc-table` output for both 甘い and 赤い (both heiban, `acc=0`)
+  shows the same thing — the "Terminal" (predicate) row renders *two*
+  valid pronunciations, the plain heiban one and an alternate with a
+  downstep at `moraCount - 1`, both dictionary-attested (SMK2/NHK/DJR),
+  in free variation. This isn't isolated to bare-terminal position either:
+  the same module already emits the downstep-2 form as the *only* value
+  for くて/かった/ければ/です — i.e. `pitchAccentPositions` in this corpus's
+  own data already carries exactly this kind of multi-value ambiguity for
+  some words (e.g. 危ない, 怪しい are stored as `[0, 3]`), and
+  `resolveInflectedPitchAccent`'s citation-form branch
+  (`src/lib/pitchAccentShift.ts:230`) always takes `positions[0]` and
+  silently discards the rest — same in the ambient display
+  (`getSentencePitchAccentTargets`, `src/db/repository.ts`), which calls
+  the same resolver. So the real gap is "no representation for a
+  dictionary-attested alternate accent," not something specific to
+  predicate position.
+  `hasFollowingVoicedMora` (`src/pages/ReviewPage.tsx:426`) does not gate
+  this case either — it's a bare `/^[ぁ-ゟ]/` check, not phonetic voicing,
+  so です/よ/ね/か all count as "following voiced mora" and let the
+  edge-accent skip pass through untouched.
+  Currently latent, not live: of 39 `adj-i`/`adj-ix` vocabulary items in
+  the corpus, only 2 (危ない, 怪しい) are heiban, and neither has a single
+  `sentence_vocabulary` link — zero occurrences anywhere, predicate-final
+  or otherwise. Not worth fixing today. Revisit when a heiban i-adjective
+  actually gets mined into a sentence; at that point the fix is either
+  (a) stop truncating to `positions[0]` and pick the entry that matches
+  context, or (b) keep asserting the primary/first-cited pronunciation
+  but only within the existing "never assert something false" gate — i.e.
+  route to (a).
 
 - [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
   clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
