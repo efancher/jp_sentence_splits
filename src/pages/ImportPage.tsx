@@ -107,58 +107,100 @@ export function ImportPage() {
   return (
     <div className="stack">
       <section className="panel stack">
-        <h2 style={{ margin: 0 }}>Import shadowing project</h2>
+        <h2 style={{ margin: 0 }}>Import</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Choose a <code>.shadowing.zip</code>. Glossbook creates or refreshes
-          one book in the original video order and imports its native sentence
-          recordings. Audio stays in this browser. Mining a project from a
-          YouTube URL or podcast episode directly is on the{' '}
-          <Link to="/import/youtube">Import from YouTube</Link> page; graded
-          NHK Easy News articles are on the{' '}
-          <Link to="/import/nhk-easy">Import from NHK Easy News</Link> page.
+          Four ways to bring sentences in — pick one below.
         </p>
-        <label>
-          Shadowing project ZIP
-          <input
-            type="file"
-            accept=".zip,.shadowing.zip,application/zip"
-            onChange={(event) =>
-              void handleShadowingPackage(event.target.files?.[0] ?? null)
-            }
-          />
-        </label>
-        {shadowingPreview ? (
+      </section>
+
+      <section
+        className="stack"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: '1rem',
+        }}
+      >
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Satori CSV</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            A vocabulary export from Files. Data stays in this browser unless
+            you export a backup.
+          </p>
+          <label>
+            CSV file
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          {busy ? <div className="muted">Parsing…</div> : null}
+          {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Shadowing project ZIP</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            A <code>.shadowing.zip</code> package. Creates or refreshes one
+            book in the original video order, with native sentence
+            recordings. Audio stays in this browser.
+          </p>
+          <label>
+            Shadowing project ZIP
+            <input
+              type="file"
+              accept=".zip,.shadowing.zip,application/zip"
+              onChange={(event) =>
+                void handleShadowingPackage(event.target.files?.[0] ?? null)
+              }
+            />
+          </label>
+          {shadowingBusy ? <div className="muted">Reading package…</div> : null}
+          {shadowingError ? (
+            <div style={{ color: 'var(--danger)' }}>{shadowingError}</div>
+          ) : null}
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>YouTube or podcast</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            Paste a YouTube URL or a podcast's RSS feed. Downloads audio,
+            transcribes it, and walks you through fixing sentence boundaries
+            and translations before adding a book.
+          </p>
+          <Link to="/import/youtube">
+            <button type="button" className="primary">
+              Start
+            </button>
+          </Link>
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>NHK Easy News</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            Paste an nhkeasier.com feed URL and pick a graded news article —
+            furigana-annotated text plus the real NHK narration audio, no
+            transcription needed.
+          </p>
+          <Link to="/import/nhk-easy">
+            <button type="button" className="primary">
+              Start
+            </button>
+          </Link>
+        </div>
+      </section>
+
+      {shadowingPreview ? (
+        <section className="panel stack">
+          <h3 style={{ margin: 0 }}>Shadowing project preview</h3>
           <ShadowingPreviewCard
             preview={shadowingPreview}
             onImported={(result) => navigate(`/books/${result.bookId}`)}
             onCancel={() => setShadowingPreview(null)}
           />
-        ) : null}
-        {shadowingBusy ? (
-          <div className="muted">Reading package…</div>
-        ) : null}
-        {shadowingError ? (
-          <div style={{ color: 'var(--danger)' }}>{shadowingError}</div>
-        ) : null}
-      </section>
-
-      <section className="panel stack">
-        <h2 style={{ margin: 0 }}>Import Satori CSV</h2>
-        <p className="muted" style={{ margin: 0 }}>
-          Choose a vocabulary export from Files. Data stays in this browser unless
-          you export a backup.
-        </p>
-        <label>
-          CSV file
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        {busy ? <div className="muted">Parsing…</div> : null}
-        {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
-      </section>
+        </section>
+      ) : null}
 
       {preview ? (
         <>
