@@ -19,6 +19,7 @@ from app import (
     jobs,
     metrics,
     morphology,
+    podcasts,
     readings,
     reclip,
     resegment,
@@ -38,6 +39,8 @@ from app.models import (
     Cue,
     JobStatusResponse,
     JobSummary,
+    PodcastFeed,
+    PodcastFeedRequest,
     ReclipClip,
     ReclipRequest,
     ReclipResponse,
@@ -96,6 +99,19 @@ async def status_json(days: int = 3):
 async def create_job(req: CreateJobRequest):
     job = jobs.create_job(req.url)
     return CreateJobResponse(jobId=job.id)
+
+
+@app.post("/podcast-feed", response_model=PodcastFeed)
+async def podcast_feed(req: PodcastFeedRequest):
+    """Fetch+parse a podcast RSS feed so the wizard can offer an episode
+    picker instead of requiring a raw enclosure/mp3 URL. Server-side because
+    a browser fetch of an arbitrary feed host would hit CORS."""
+    try:
+        return await podcasts.fetch_podcast_feed(req.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - network failure, surfaced as-is
+        raise HTTPException(status_code=502, detail=f"Could not fetch feed: {exc}") from exc
 
 
 @app.get("/jobs", response_model=list[JobSummary])

@@ -176,6 +176,28 @@ class CreateJobResponse(BaseModel):
     jobId: str
 
 
+class PodcastFeedRequest(BaseModel):
+    url: str = Field(min_length=1)
+
+
+class PodcastEpisode(BaseModel):
+    """One RSS <item> with a playable enclosure — the picker's row shape.
+
+    durationSeconds comes from the (optional) itunes:duration tag, not a
+    real audio probe, so it's a display hint only.
+    """
+
+    title: str
+    url: str
+    publishedAt: str | None = None
+    durationSeconds: int | None = None
+
+
+class PodcastFeed(BaseModel):
+    title: str
+    episodes: list[PodcastEpisode]
+
+
 class ResegmentSentenceInput(BaseModel):
     japanese: str = Field(min_length=1)
     startMs: int = Field(ge=0)

@@ -285,14 +285,38 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   already handle direct audio URLs and many non-YouTube hosts, and the
   no-captions **ASR fallback already built** for undercaptioned YouTube
   videos covers "podcast has no JA subtitle track" for free. Plan:
-  1. **Smoke-test first** — paste a real episode's audio/RSS-enclosure URL
-     through `/import/youtube` unmodified and see what actually breaks,
-     before writing new code.
-  2. **RSS episode picker** — a small new `server/youtube-mining` endpoint
-     that fetches+parses a podcast's RSS feed server-side (a browser-side
-     fetch would hit CORS) and returns episode title/date/enclosure URL, so
-     the learner pastes a feed URL once and picks an episode from a list
-     instead of hunting down a raw mp3 link each time.
+  1. ~~**Smoke-test first**~~ **Done 2026-09-13** — called
+     `youtube.fetch_audio`/`inspect_url`/`download_subtitles` directly
+     (not through the deployed tailnet service, which isn't reachable from
+     a dev sandbox) against a real live episode (Nihongo con Teppei #1581,
+     a plain `media.blubrry.com` mp3 URL pulled from the show's real RSS
+     feed). Download succeeded (7.4MB m4a, no exit-node/bot-blocking issue
+     — that's YouTube-specific), and `download_subtitles` correctly found
+     nothing, confirming the ASR fallback path would engage. Two real rough
+     edges found: `inspect_url`'s generic extractor has no page metadata for
+     a bare mp3 URL, so `title` comes back as the filename
+     (`Beginners-con-Teppei1581`) and `duration` as `None` — the RSS
+     picker (next) needs to carry the feed's real title/duration through
+     rather than trusting yt-dlp for it. Also `SourceInfo.type` is
+     currently `Literal["youtube"]` (`app/models.py`) — needs widening to
+     `"podcast"` once a podcast-sourced job actually gets created (not done
+     yet, no job-creation code path exercises it today).
+  2. **RSS episode picker.** *Backend half done 2026-09-13*:
+     `app/podcasts.py` (`parse_podcast_feed` — pure, tested against a
+     trimmed real Nihongo con Teppei feed fixture; `fetch_podcast_feed` —
+     `httpx` GET, server-side to dodge the browser-CORS problem) +
+     `POST /podcast-feed` (`app/main.py`), 8 new tests, full suite still
+     green (110 passed). Verified live against the real feed URL end to
+     end: 1581 episodes parsed correctly. One real-world finding: this
+     particular feed has no `<itunes:duration>` tags at all, so
+     `durationSeconds` is `None` for every episode — confirms the field
+     has to be optional/best-effort in the UI, not assumed present.
+     **Still open:** the actual picker UI (a list step ahead of the
+     existing `/import/youtube` wizard, calling this endpoint and letting
+     the learner choose an episode by title instead of pasting an
+     enclosure URL by hand) and threading the chosen episode's real
+     title/publish date into `create_job` so the created book doesn't
+     inherit yt-dlp's filename-derived title.
   3. **Long-episode ASR headroom** — `ASR_TIMEOUT_SECONDS` (1800s default)
      and the 8GB analysis box's memory ceiling (the same host the MFA
      aligner leaks memory on, per its weekly restart timer) may need a bump
