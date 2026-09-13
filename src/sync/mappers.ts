@@ -457,6 +457,7 @@ export function vocabularyItemToRemote(
     notes: item.notes ?? null,
     external_id: item.externalId ?? null,
     pitch_accent_positions: item.pitchAccentPositions ?? null,
+    te_form_accent_position: item.teFormAccentPosition ?? null,
     created_at: item.createdAt,
     updated_at: item.updatedAt,
     deleted_at: null,
@@ -477,6 +478,8 @@ export function remoteToVocabularyItem(
     externalId: (row.external_id as string | null) ?? undefined,
     pitchAccentPositions:
       (row.pitch_accent_positions as number[] | null) ?? undefined,
+    teFormAccentPosition:
+      (row.te_form_accent_position as number | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

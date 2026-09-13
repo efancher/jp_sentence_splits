@@ -36,10 +36,22 @@
  *   but plain_negative differs — an accented ichidan verb's negative
  *   downstep stays at the *unchanged* citation position (not +1 like
  *   godan). `plain_past_negative` isn't verified for ichidan and stays
- *   excluded. te-form/plain-past/tara-form are excluded for every word
- *   class including godan — Wiktionary's own module sources those from
- *   external per-word data, not a formula, meaning even this audited
- *   engine doesn't trust "same mora as citation" as safe to assert.
+ *   excluded.
+ * - **te_form/plain_past/tara_form (godan + ichidan)**: not formula-
+ *   derivable at all — confirmed by real data, not just by Wiktionary's
+ *   module structure: 走って keeps 走る's citation downstep, but 食べて
+ *   *retracts* one mora earlier than 食べる's, and Wiktionary's own module
+ *   sources these from external per-word data for exactly this reason.
+ *   Covered here instead via `VocabularyItem.teFormAccentPosition`
+ *   (`teFormAccentPosition` input below), backfilled per-word from
+ *   Wiktionary's conjugation table
+ *   (`scripts/backfill-te-form-pitch-accent-wiktionary.ts`) rather than
+ *   computed — when present, `plain_past` reuses it directly (て/で vs
+ *   た/だ never changes the mora count) and `tara_form` derives from it
+ *   (heiban te → tara gains its own accent at the mora right before ら;
+ *   accented te → carries straight through), mirroring the shipped
+ *   godan なかった derivation. Without it, all three keep returning
+ *   `null` exactly as before — purely additive.
  * - **i-adjective polite (〜いです)**: a full, clean, dual-branch formula
  *   like godan/ichidan ba_form.
  * - **i-adjective plain_negative/plain_past_negative, HEIBAN ONLY**: an
@@ -81,6 +93,8 @@ export interface PitchAccentShiftInput {
   citationMoraCount: number;
   /** The conjugated reading's own mora count — the prediction is expressed in this space. */
   conjugatedMoraCount: number;
+  /** VocabularyItem.teFormAccentPosition, when backfilled — the only way te_form/plain_past/tara_form become predictable (see doc comment). */
+  teFormAccentPosition?: number;
 }
 
 const IRREGULAR_I_ADJECTIVE_READINGS = new Set(['いい', 'よい']);
@@ -101,7 +115,26 @@ function predictVerbPosition(
   citationPosition: number,
   citationMoraCount: number,
   conjugatedMoraCount: number,
+  teFormAccentPosition: number | undefined,
 ): number | null {
+  if (teFormAccentPosition !== undefined) {
+    switch (formKey) {
+      case 'te_form':
+      case 'plain_past':
+        // て/で vs た/だ is always a same-mora swap — ta reuses te's value directly.
+        return teFormAccentPosition;
+      case 'tara_form':
+        // たら = た/だ-form + ら. A heiban te-form gains its own accent
+        // right before the added ら (mora count of the ta-form itself,
+        // i.e. one less than tara's own); an accented te-form's downstep
+        // carries straight through unchanged — mirrors the shipped godan
+        // なかった derivation.
+        return teFormAccentPosition === 0 ? conjugatedMoraCount - 1 : teFormAccentPosition;
+      default:
+        break;
+    }
+  }
+
   const accentClass = classifyVerbAdjectiveAccent(citationPosition, citationMoraCount);
   if (accentClass === 'irregular') return null;
   const isUnaccented = accentClass === 'unaccented';
@@ -171,6 +204,7 @@ export function predictInflectedPitchAccentPosition(
       input.citationPosition,
       input.citationMoraCount,
       input.conjugatedMoraCount,
+      input.teFormAccentPosition,
     );
   }
   if (input.wordClass === 'i_adjective') {
@@ -207,7 +241,10 @@ export interface ResolvedPitchAccent {
  * inflected one).
  */
 export function resolveInflectedPitchAccent(occurrence: {
-  vocabularyItem: Pick<VocabularyItem, 'expression' | 'reading' | 'partOfSpeech' | 'pitchAccentPositions'>;
+  vocabularyItem: Pick<
+    VocabularyItem,
+    'expression' | 'reading' | 'partOfSpeech' | 'pitchAccentPositions' | 'teFormAccentPosition'
+  >;
   sentence: Pick<Sentence, 'japanese' | 'inlineReading'>;
   surfaceForm: string;
 }): ResolvedPitchAccent | null {
@@ -256,6 +293,7 @@ export function resolveInflectedPitchAccent(occurrence: {
     citationPosition: Math.max(0, Math.min(positions[0]!, citationMoraCount)),
     citationMoraCount,
     conjugatedMoraCount,
+    teFormAccentPosition: vocabularyItem.teFormAccentPosition,
   });
   if (predicted === null) return null;
 

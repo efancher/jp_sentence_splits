@@ -502,6 +502,19 @@ export interface VocabularyItem {
    * backfilled or no dictionary match (`scripts/backfill-pitch-accent.ts`).
    */
   pitchAccentPositions?: number[];
+  /**
+   * Mora index of the te-form's own pitch-accent drop (0 = heiban),
+   * expressed in the *te-form's own reading's* mora count — not
+   * derivable from `pitchAccentPositions` by formula, since an accented
+   * word's te-form can retract to a different mora or stay put depending
+   * on the word (`src/lib/pitchAccentShift.ts`'s doc comment). Also
+   * covers `plain_past`/`tara_form`, both derived from this same value.
+   * Sourced from Wiktionary's per-word conjugation table
+   * (`scripts/backfill-te-form-pitch-accent-wiktionary.ts`); absent means
+   * not yet backfilled, no accent-tagged Conjunctive row found, or more
+   * than one variant cited (not guessed).
+   */
+  teFormAccentPosition?: number;
   createdAt: string;
   updatedAt: string;
 }

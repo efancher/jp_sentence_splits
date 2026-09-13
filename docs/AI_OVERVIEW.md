@@ -126,7 +126,13 @@ built out Phases 1–9):
   (`scripts/backfill-pitch-accent.ts`), UniDic via the mining service
   (`backfill-vocabulary-pitch-accent-unidic.ts`), then Wiktionary's live
   Pronunciation-section data for whatever's still blank
-  (`backfill-pitch-accent-wiktionary.ts`, 2026-09-12).
+  (`backfill-pitch-accent-wiktionary.ts`, 2026-09-12). Separately, optional
+  `teFormAccentPosition` (2026-09-13) stores the te-form's own downstep —
+  not derivable from `pitchAccentPositions` by formula (an accented word's
+  te-form can retract to an earlier mora depending on the specific word)
+  — backfilled per-word from the same Wiktionary page's conjugation table
+  (`backfill-te-form-pitch-accent-wiktionary.ts`); feeds
+  `pitchAccentShift.ts`'s `te_form`/`plain_past`/`tara_form` predictions.
 - `SentenceVocabulary` — join table linking a sentence (optionally a
   specific chunk) to a canonical `VocabularyItem`, carrying `surfaceForm`
   (the exact inflected text as it appeared, e.g. 表れていた for

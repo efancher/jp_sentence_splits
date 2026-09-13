@@ -30,6 +30,55 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Per-word te-form pitch-accent data, closing the
+  `te_form`/`plain_past`/`tara_form` gap in `pitchAccentShift.ts`
+  (user follow-up on the OJAD question: "can we get that data from
+  Wiktionary directly?" — yes).** New `VocabularyItem.teFormAccentPosition`
+  (migration `20260913000000_vocabulary_te_form_pitch_accent.sql`,
+  nullable/additive, mirrors `pitchAccentPositions`'s own addition exactly
+  — schema, Zod, sync mapper) stores the te-form's own downstep, sourced
+  per-word since it can't be derived by formula: real data confirms 走って
+  keeps 走る's citation downstep (mora 2) but 食べて *retracts* one mora
+  earlier than 食べる's (mora 2 → 1) — two accented verbs, two different
+  behaviors, exactly why this needed real data and not a rule.
+  `pitchAccentShift.ts`'s `predictInflectedPitchAccentPosition` now takes
+  an optional `teFormAccentPosition` input: when present, `plain_past`
+  reuses it directly (て/で vs た/だ never changes mora count) and
+  `tara_form` derives from it (heiban te → たら gains its own accent right
+  before ら; accented te → carries straight through) — mirrors the
+  already-shipped godan なかった derivation. Without it, all three forms
+  keep returning `null` exactly as before — purely additive, no change to
+  already-verified behavior.
+  New `scripts/backfill-te-form-pitch-accent-wiktionary.ts`
+  (`npm run backfill:te-form-pitch-accent-wiktionary -- [--apply]`) —
+  a separate script from the citation-form backfill (different target
+  set: confirmed godan/ichidan verbs that already have citation data but
+  no te-form data yet, not "items with no accent data at all"). Sources
+  the same Wiktionary page's "Extended conjugation" table's Conjunctive
+  row, which — unlike the citation form — has no explicit
+  "(Nakadaka – [N])" annotation; the downstep is only encoded
+  structurally (a `<span style="border-top:...">` wraps the high-pitch
+  span, and a nested empty `<span style="position:absolute;...
+  border-right:...">` marks exactly which mora the drop lands after; no
+  nested marker means heiban). Parsed from raw HTML (not the tag-stripped
+  text the citation pattern uses, since the nesting must survive) via a
+  bounded-depth regex plus `segmentIntoMorae` for the actual mora
+  counting. Reuses the citation-form pattern purely to anchor position in
+  the page and bound the search window per reading, so a multi-reading
+  page (開ける: あける/ひらける/はだける) still resolves each reading's own
+  Conjunctive row correctly — verified directly (ひらける's own te-form
+  value differs from あける's and doesn't leak across). `parseKanaCellPosition`/
+  `extractTeFormAccentPosition` exported and unit-tested
+  (`tests/backfillTeFormPitchAccentWiktionary.test.ts`, 12 cases,
+  synthetic HTML mirroring the real nested-span structure) independent of
+  the network call.
+  **Not yet run against production**: the migration needs manual
+  application (no Supabase CLI or service-role/DB credentials available
+  in this environment to apply DDL directly — confirmed by a real dry-run
+  attempt failing cleanly with `column ... does not exist`). Apply the
+  migration file's SQL via the Supabase Dashboard SQL editor, then run
+  the backfill dry-run before `--apply`.
+
 - **2026-09-12 — Third-pass Wiktionary backfill for vocabulary items with
   no dictionary pitch-accent data at all.** New
   `scripts/backfill-pitch-accent-wiktionary.ts` (`npm run

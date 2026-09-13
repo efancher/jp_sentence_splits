@@ -283,11 +283,16 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   `Module:ja-acc-table` live-rendered output, not summarized web search.
   What's still missing, and why each is a real limit rather than a "not
   yet ported" gap:
-  - **te-form/plain-past(た)/tara-form, every word class.** Wiktionary's
-    own module doesn't compute these from a formula at all; it takes an
-    explicit, separately-sourced per-word parameter. Needs a real
-    per-word accent data source (OJAD lookup, or Wiktionary's own
-    per-lemma data if it's bulk-accessible), not a rule.
+  - ~~**te-form/plain-past(た)/tara-form, godan/ichidan.**~~ **Closed
+    2026-09-13** — `VocabularyItem.teFormAccentPosition`, backfilled
+    per-word from Wiktionary's own conjugation table (not a formula; see
+    docs/STATUS.md). **Blocked on manual migration application** — no
+    Supabase CLI/service-role credentials in this environment; apply
+    `supabase/migrations/20260913000000_vocabulary_te_form_pitch_accent.sql`
+    via the Dashboard SQL editor, then run
+    `backfill:te-form-pitch-accent-wiktionary` (dry-run first). i-adjective
+    te_form/plain_past/ba_form (kute/katta/kereba) still excluded — see
+    below, same external-data problem but not yet extended to adjectives.
   - **Ichidan `plain_past_negative`.** Unlike godan (where なかった cleanly
     carries the negative form's value forward), this wasn't verified
     against real ichidan なかった data this pass — stays excluded until it

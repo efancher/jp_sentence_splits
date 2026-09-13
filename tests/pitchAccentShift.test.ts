@@ -57,6 +57,100 @@ describe('predictInflectedPitchAccentPosition (fixtures, verified against Module
   );
 });
 
+describe('predictInflectedPitchAccentPosition (te-form override, from VocabularyItem.teFormAccentPosition)', () => {
+  // Real per-word data, not a formula — 走る does not retract, 食べる does.
+  // Verified against Wiktionary's live "Extended conjugation" table
+  // (docs/STATUS.md 2026-09-13): 走って keeps 走る's citation downstep
+  // (mora 2); 食べて retracts one mora earlier than 食べる's (mora 2 -> 1).
+  it('te_form: uses the stored per-word value directly, not the citation position', () => {
+    expect(
+      predictInflectedPitchAccentPosition({
+        wordClass: 'godan',
+        formKey: 'te_form',
+        citationReading: 'はしる',
+        citationPosition: 2,
+        citationMoraCount: 3,
+        conjugatedMoraCount: 4, // はしって
+        teFormAccentPosition: 2,
+      }),
+    ).toBe(2);
+
+    expect(
+      predictInflectedPitchAccentPosition({
+        wordClass: 'ichidan',
+        formKey: 'te_form',
+        citationReading: 'たべる',
+        citationPosition: 2,
+        citationMoraCount: 3,
+        conjugatedMoraCount: 3, // たべて
+        teFormAccentPosition: 1, // retracted from citation's 2
+      }),
+    ).toBe(1);
+  });
+
+  it('plain_past: reuses the te-form value directly (て/で vs た/だ is always a same-mora swap)', () => {
+    expect(
+      predictInflectedPitchAccentPosition({
+        wordClass: 'godan',
+        formKey: 'plain_past',
+        citationReading: 'かう',
+        citationPosition: 0,
+        citationMoraCount: 2,
+        conjugatedMoraCount: 3, // かった
+        teFormAccentPosition: 0,
+      }),
+    ).toBe(0);
+  });
+
+  it('tara_form: heiban te gains its own accent right before the added ら (mora count of the ta-form itself)', () => {
+    // 買ったら [kàttáꜜrà] — real data: drop after mora 3 (た), i.e.
+    // conjugatedMoraCount(かったら=4) - 1 = 3.
+    expect(
+      predictInflectedPitchAccentPosition({
+        wordClass: 'godan',
+        formKey: 'tara_form',
+        citationReading: 'かう',
+        citationPosition: 0,
+        citationMoraCount: 2,
+        conjugatedMoraCount: 4, // かったら
+        teFormAccentPosition: 0,
+      }),
+    ).toBe(3);
+  });
+
+  it('tara_form: an accented te-form carries its downstep straight through unchanged', () => {
+    // 走ったら [hàshíꜜttàrà] — real data: drop after mora 2 (し), same as
+    // citation and te-form, not shifted by the added ら.
+    expect(
+      predictInflectedPitchAccentPosition({
+        wordClass: 'godan',
+        formKey: 'tara_form',
+        citationReading: 'はしる',
+        citationPosition: 2,
+        citationMoraCount: 3,
+        conjugatedMoraCount: 5, // はしったら
+        teFormAccentPosition: 2,
+      }),
+    ).toBe(2);
+  });
+
+  it('without a stored value, te_form/plain_past/tara_form keep returning null exactly as before', () => {
+    for (const formKey of ['te_form', 'plain_past', 'tara_form'] as const) {
+      expect(
+        predictInflectedPitchAccentPosition({
+          wordClass: 'godan',
+          formKey,
+          citationReading: 'かう',
+          citationPosition: 0,
+          citationMoraCount: 2,
+          conjugatedMoraCount: 3,
+          // teFormAccentPosition omitted
+        }),
+      ).toBeNull();
+    }
+  });
+});
+
 describe('predictInflectedPitchAccentPosition (excluded combinations stay silent)', () => {
   it('returns null for polite_past_negative on any word class (Module:ja-acc-table does not build this node at all)', () => {
     for (const wordClass of ['godan', 'ichidan'] as const) {
