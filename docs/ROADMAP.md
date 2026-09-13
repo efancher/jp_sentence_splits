@@ -367,38 +367,66 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Most indie-hosted shows also link "RSS" directly on their own site.
     Spotify-exclusive shows generally have no public feed and won't work.
 
-- [ ] **NHK News Web Easy import.** (2026-09-13) A genuinely new, small
-  ingestion path rather than an extension of YouTube mining — `yt-dlp`
-  doesn't extract NHK Easy at all (an article page, not a supported media
-  host) — but the text being already-correct makes the pipeline *simpler*
-  in one way: forced-alignment instead of transcription. Native narrated
-  audio + furigana-graded text is a stronger comprehensible-input fit than
-  YouTube auto-captions. Plan:
-  1. **Scraper module** — fetch an article's title, `<ruby>`-annotated body
-     (maps close to directly onto this app's `漢字[かな]` `inlineReading`
-     format — no tokenizer inference needed), and narration audio URL when
-     present (not every article has one). Crib parsing logic from existing
-     OSS reference scrapers (`nhk-easy-api`, `nhkeasy`) rather than
-     reverse-engineering the HTML cold.
-  2. **Sentence splitting** off clean punctuation — trivial compared to
-     resegmenting noisy ASR output.
-  3. **Forced-align, don't transcribe** — when audio exists, align the
-     already-correct per-sentence text against the whole-article narration
-     using the existing MFA aligner service (same one behind reference
-     alignment/shadowing), then cut clips with the existing `clip.py`
-     ffmpeg logic — reuses `ResegmentSourcePage`'s "known text, need audio
-     boundaries" shape, not the "unknown text" ASR shape.
-  4. **Translation** — still needs the existing `sentence-realign` Claude
-     Haiku "Auto-fill translations (AI)" step; NHK Easy is JA-only.
-  5. **Wizard/commit** — either a new early stage on `/import/youtube`
-     (paste an NHK Easy URL, skip straight past transcript-correction/ASR)
-     or a small dedicated import page; both commit through the existing
-     `commitShadowingPackageImport()`-style path.
-  6. **Text-only fallback** for audio-less articles — imports fine as
-     sentence-only, same as a Satori CSV import.
-  - Scraping NHK's copyrighted news content is for personal single-user
-    study, same posture as existing YouTube mining but a different
-    rights-holder — worth being aware of, not a blocker.
+- [ ] **NHK News Web Easy import.** (2026-09-13, plan corrected same day
+  after verifying against the live sites — see below) Native narrated audio
+  + furigana-graded text is a stronger comprehensible-input fit than YouTube
+  auto-captions, and the text being already-correct makes the pipeline
+  *simpler* in one way: forced-alignment instead of transcription.
+  1. ~~**Scraper module** (direct NHK scrape)~~ **Abandoned 2026-09-13,
+     verified live, not guessed:** `https://www3.nhk.or.jp/news/easy/`
+     redirects to a rebuilt `news.web.nhk` Next.js SPA (part of the new
+     "NHK ONE" platform) — the listing/article content isn't in the initial
+     HTML at all, and its `api.web.nhk` backend 403s on a plain
+     unauthenticated request. The OSS reference scrapers this plan
+     originally cited (`nhk-easy-api`, `nhkeasy`) target the old static-HTML
+     site and no longer apply. Direct NHK scraping is not practical right
+     now.
+  2. ~~**Sentence splitting off clean punctuation**~~ **Done differently,
+     2026-09-13** — see below; turned out to need one real fix.
+  - **Found instead, verified live:** https://nhkeasier.com — an existing
+    third-party site that already republishes NHK Easy articles for
+    learners specifically, as a **standard RSS feed**
+    (`https://nhkeasier.com/feed/`, confirmed live, 50 items). Each item is
+    exactly the same "podcast" shape `podcasts.py` (above) already parses —
+    title, `pubDate`, and an `<enclosure>` pointing at the real NHK
+    narration audio (hosted on nhkeasier.com's own media server, not
+    NHK's) — **plus** a `<description>` containing the full article body as
+    `<ruby>漢字<rt>かな</rt></ruby>` HTML, which is the piece a real podcast
+    never has. This reframes the whole feature: it's not a bespoke scraper,
+    it's **the existing podcast RSS path, plus one new module that pulls
+    known text out of the description instead of transcribing the audio**.
+  - **Done 2026-09-13**: `server/youtube-mining/app/nhk_easy.py` —
+    `parse_nhkeasier_description()` converts `<ruby>` spans to this app's
+    `漢字[かな]` `inlineReading` format and splits into sentences, tested
+    against a real fetched item (7 tests) and dry-run against the *entire*
+    live 50-item feed (471 sentences, zero parse errors/suspicious
+    fragments after the fix below). One real bug found and fixed by that
+    full-corpus dry run, not by the unit tests alone: NHK Easy articles
+    routinely report measurements like `350.5ミリ`/`36.5度`, and a naive
+    split on `.` (a legitimate sentence-end character for ASR/caption text)
+    cut those mid-number — `_is_decimal_point` now guards any `.` flanked by
+    digits on both sides.
+  - **Not done — the actual integration:**
+    1. A server endpoint/wizard step that, given an nhkeasier.com item,
+       calls `parse_nhkeasier_description()` for the known text and
+       forced-aligns it against the item's enclosure audio (reusing the
+       same MFA aligner service behind reference alignment/shadowing) —
+       never transcribes it. Cut clips with the existing `clip.py` ffmpeg
+       logic once alignment gives spans; reuses `ResegmentSourcePage`'s
+       "known text, need audio boundaries" shape, not YouTube mining's
+       "unknown text" ASR shape.
+    2. Translation — still needs the existing `sentence-realign` "Auto-fill
+       translations (AI)" step; NHK Easy is JA-only, no English given.
+    3. Wizard/commit UI — likely a variant of the podcast episode picker
+       already built, since the RSS shape is identical; needs a way to
+       flag "this feed's items carry known text, skip ASR" rather than
+       generic podcast handling.
+    4. Text-only fallback for the rare item with no audio.
+  - Rights note: nhkeasier.com is itself a third-party redistribution of
+    NHK's copyrighted news content for learners; using its feed for
+    personal single-user study is the same posture as the existing
+    YouTube-mining approach, just a different (and more permissive-in-
+    intent) rights-holder relationship.
 
 - [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
   promoted from "Possibilities" below) The direct answer to "I have several

@@ -30,6 +30,38 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — NHK Easy import: original plan invalidated by checking
+  live, corrected plan found and the first real module built.** Started
+  from the morning's ROADMAP plan ("scrape NHK Easy directly, crib parsing
+  from `nhk-easy-api`/`nhkeasy`") — verifying it against the live site
+  first (rather than building against a stale assumption) found NHK's own
+  News Web Easy site has been rebuilt as a `news.web.nhk` Next.js SPA
+  (part of the new "NHK ONE" platform): `www3.nhk.or.jp/news/easy/`
+  redirects there, article content isn't in the initial HTML at all, and
+  its `api.web.nhk` backend 403s unauthenticated. The cited OSS scrapers
+  target the old static-HTML-era site and no longer apply — direct NHK
+  scraping is dead. Found instead: **https://nhkeasier.com**, a third-party
+  site already republishing NHK Easy articles for learners as a standard
+  RSS feed (confirmed live, 50 items) — each item is the exact same shape
+  the morning's podcast-mining `podcasts.py` already parses (title,
+  pubDate, an `<enclosure>` audio URL — hosted on nhkeasier.com, pointing
+  at the real NHK narration) **plus** a `<description>` carrying the full
+  article body as `<ruby>漢字<rt>かな</rt></ruby>` HTML, which a real
+  podcast never has. This reframes the feature entirely: not a bespoke
+  scraper, but the existing podcast RSS path plus one new module that pulls
+  already-correct text out of the description instead of transcribing
+  audio. Built that module: `server/youtube-mining/app/nhk_easy.py`
+  (`parse_nhkeasier_description`) converts ruby spans to this app's
+  `漢字[かな]` `inlineReading` format and splits into sentences — 7 unit
+  tests plus a dry run against the *entire* live 50-item feed (471
+  sentences, zero errors after one fix). That full-corpus dry run (not the
+  unit tests) caught a real bug the unit tests' hand-picked fixture didn't:
+  NHK Easy articles routinely report measurements like `350.5ミリ`/`36.5度`,
+  and splitting on `.` (a legitimate sentence-end character elsewhere in
+  this codebase, e.g. `subtitles.py` for ASR/caption text) cut those
+  mid-number — `_is_decimal_point` now guards a `.` flanked by digits on
+  both sides. Full plan + what's still not built (the forced-alignment
+  integration, wizard UI, translation step) in `docs/ROADMAP.md`.
 - **2026-09-13 — "Ready to read" per-book vocabulary-coverage scoring +
   sort, closing the first two steps of the promoted ROADMAP item.**
   `src/lib/bookCoverage.ts` (`buildBookCoverage`, pure, 8 tests) answers
