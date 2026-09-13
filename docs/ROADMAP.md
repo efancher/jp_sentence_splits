@@ -277,6 +277,95 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Podcast mining.** (2026-09-13) Extend the existing YouTube-mining
+  pipeline to podcast episodes rather than building a new one — the backend
+  is already more source-agnostic than it looks: `POST /jobs` takes a raw
+  URL with no YouTube-only gate, `youtube.fetch_audio`/`download_subtitles`
+  (`server/youtube-mining/app/youtube.py`) are plain `yt-dlp` calls that
+  already handle direct audio URLs and many non-YouTube hosts, and the
+  no-captions **ASR fallback already built** for undercaptioned YouTube
+  videos covers "podcast has no JA subtitle track" for free. Plan:
+  1. **Smoke-test first** — paste a real episode's audio/RSS-enclosure URL
+     through `/import/youtube` unmodified and see what actually breaks,
+     before writing new code.
+  2. **RSS episode picker** — a small new `server/youtube-mining` endpoint
+     that fetches+parses a podcast's RSS feed server-side (a browser-side
+     fetch would hit CORS) and returns episode title/date/enclosure URL, so
+     the learner pastes a feed URL once and picks an episode from a list
+     instead of hunting down a raw mp3 link each time.
+  3. **Long-episode ASR headroom** — `ASR_TIMEOUT_SECONDS` (1800s default)
+     and the 8GB analysis box's memory ceiling (the same host the MFA
+     aligner leaks memory on, per its weekly restart timer) may need a bump
+     or chunked transcription past ~30 min; the recommended intermediate
+     shows (Nihongo con Teppei, Miku Real Japanese, Sakura Tips) run
+     10–20 min/episode, so this likely doesn't block v1.
+  4. **Dedup/labeling polish** — `alreadyMined` and the "already imported"
+     video-id matching (`src/lib/youtubeUrl.ts`) assume a YouTube id; fall
+     back to a plain `sourceUrl` string match and whatever title `yt-dlp`'s
+     generic extractor returns for non-YouTube sources.
+  - **Finding a show's RSS URL:** `https://itunes.apple.com/search?term=
+    <show name>&media=podcast` returns a `feedUrl` field directly — verified
+    2026-09-13 against Nihongo con Teppei
+    (`feedUrl: http://nihongoconteppei.com/feed/podcast`, confirmed live).
+    Most indie-hosted shows also link "RSS" directly on their own site.
+    Spotify-exclusive shows generally have no public feed and won't work.
+
+- [ ] **NHK News Web Easy import.** (2026-09-13) A genuinely new, small
+  ingestion path rather than an extension of YouTube mining — `yt-dlp`
+  doesn't extract NHK Easy at all (an article page, not a supported media
+  host) — but the text being already-correct makes the pipeline *simpler*
+  in one way: forced-alignment instead of transcription. Native narrated
+  audio + furigana-graded text is a stronger comprehensible-input fit than
+  YouTube auto-captions. Plan:
+  1. **Scraper module** — fetch an article's title, `<ruby>`-annotated body
+     (maps close to directly onto this app's `漢字[かな]` `inlineReading`
+     format — no tokenizer inference needed), and narration audio URL when
+     present (not every article has one). Crib parsing logic from existing
+     OSS reference scrapers (`nhk-easy-api`, `nhkeasy`) rather than
+     reverse-engineering the HTML cold.
+  2. **Sentence splitting** off clean punctuation — trivial compared to
+     resegmenting noisy ASR output.
+  3. **Forced-align, don't transcribe** — when audio exists, align the
+     already-correct per-sentence text against the whole-article narration
+     using the existing MFA aligner service (same one behind reference
+     alignment/shadowing), then cut clips with the existing `clip.py`
+     ffmpeg logic — reuses `ResegmentSourcePage`'s "known text, need audio
+     boundaries" shape, not the "unknown text" ASR shape.
+  4. **Translation** — still needs the existing `sentence-realign` Claude
+     Haiku "Auto-fill translations (AI)" step; NHK Easy is JA-only.
+  5. **Wizard/commit** — either a new early stage on `/import/youtube`
+     (paste an NHK Easy URL, skip straight past transcript-correction/ASR)
+     or a small dedicated import page; both commit through the existing
+     `commitShadowingPackageImport()`-style path.
+  6. **Text-only fallback** for audio-less articles — imports fine as
+     sentence-only, same as a Satori CSV import.
+  - Scraping NHK's copyrighted news content is for personal single-user
+    study, same posture as existing YouTube mining but a different
+    rights-holder — worth being aware of, not a blocker.
+
+- [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
+  promoted from "Possibilities" below) The direct answer to "I have several
+  books/sources now, which is the easiest one to pick up next" — and the
+  natural companion to the two importers above: NHK Easy content is
+  *labeled* easy by NHK, but Satori books, YouTube-mined books, and future
+  podcast/NHK imports all need the same yardstick to be comparable. Plan:
+  1. **Per-book/chapter known-word coverage** — % of a book's distinct
+     vocabulary already at FSRS reading-proficiency (reuse the same
+     proficiency gate already driving shadowing-candidate/glossing-readiness
+     logic, `isSentenceReadyForFullReview`), surfaced on `BooksPage`/
+     `BookDetailPage` as a simple "~96% known" badge per book (and per
+     chapter — early chapters are usually easier than later ones).
+  2. **Sort/filter by coverage** on `BooksPage` — "show me what I could
+     read right now," ordered easiest-first, distinct from the existing
+     recency-based ordering.
+  3. **Feed `findExploreCandidates`** (session planner's `continue_book`
+     candidate ranking) with the same coverage number as a secondary sort
+     key, so an easier caught-up book edges out a harder one when neglect
+     scores are close — a light touch on top of the existing vocab-first
+     gating, not a rewrite of it.
+  - Out of scope for v1: cross-book recommendation ("read X before Y") —
+    just a per-book number the learner reads themselves.
+
 - [ ] **Remaining inflected `pitch_accent` gaps.** 2026-09-12 extended
   coverage from godan-only to godan + ichidan + i-adjective + the -masu
   family (see docs/STATUS.md) — all verified against Wiktionary's
@@ -445,10 +534,8 @@ possibilities, kept here so the thinking isn't lost:
   objectively-graded ones (`cloze`, `reading_production`,
   `grammar_completion`) on overlapping subjects; flag over-confidence
   (rated "good", failed the graded card).
-- [ ] **"Ready to read" coverage** — proficient-word coverage per
-  book/chapter ("Episode 4 is 96% known-word coverage — read it straight
-  through"), to direct which native material to pick up next. The planner
-  currently only points at the next unstudied sentence.
+- [x] **"Ready to read" coverage** — promoted to "Planned" 2026-09-13 as
+  "'Ready to read' difficulty/coverage scoring," see above.
 - [ ] **FSRS calibration surfacing** — predicted retrievability vs actual
   pass-rate on `/progress`, plus an explicit desired-retention knob, so
   over/under-reviewing is visible.
