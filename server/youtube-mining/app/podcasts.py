@@ -50,6 +50,7 @@ def parse_podcast_feed(xml_text: str) -> PodcastFeed:
                 url=url,
                 publishedAt=item.findtext("pubDate"),
                 durationSeconds=_parse_itunes_duration(item),
+                descriptionHtml=item.findtext("description"),
             )
         )
     return PodcastFeed(title=feed_title, episodes=episodes)

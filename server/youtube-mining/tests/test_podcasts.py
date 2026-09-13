@@ -40,6 +40,9 @@ def test_parse_podcast_feed_basic() -> None:
     assert first.url == "http://media.blubrry.com/nihongo_con_teppei/Beginners-con-Teppei1581.mp3"
     assert first.publishedAt == "Fri, 12 Sep 2026 00:00:00 +0000"
     assert first.durationSeconds == 5 * 60 + 32
+    # A real podcast has no <description> body worth extracting — None,
+    # not a crash. nhkeasier.com items do (see test_nhk_easy.py).
+    assert first.descriptionHtml is None
 
 
 def test_parse_podcast_feed_bare_seconds_duration() -> None:
@@ -63,3 +66,13 @@ def test_parse_podcast_feed_invalid_xml_raises() -> None:
 def test_parse_podcast_feed_no_channel_raises() -> None:
     with pytest.raises(ValueError, match="no <channel>"):
         parse_podcast_feed("<rss></rss>")
+
+
+def test_parse_podcast_feed_captures_description_html() -> None:
+    xml = """<rss><channel><title>T</title>
+    <item><title>Ep</title><enclosure url="http://x/e.mp3" type="audio/mpeg"/>
+    <description>&lt;p&gt;&lt;ruby&gt;日&lt;rt&gt;にち&lt;/rt&gt;&lt;/ruby&gt;です。&lt;/p&gt;</description>
+    </item>
+    </channel></rss>"""
+    feed = parse_podcast_feed(xml)
+    assert feed.episodes[0].descriptionHtml == "<p><ruby>日<rt>にち</rt></ruby>です。</p>"

@@ -169,6 +169,7 @@ def _nhk_easy_import_sync(req: NhkEasyImportRequest) -> NhkEasyImportResponse:
                         inlineReading=sentence.inline_reading,
                         audioBase64=audio_b64,
                         durationMs=duration_ms,
+                        tokens=morphology.tokenize_japanese(sentence.japanese) or None,
                     )
                 )
             return NhkEasyImportResponse(title=req.title, sentences=results, audioAligned=True)
@@ -176,7 +177,11 @@ def _nhk_easy_import_sync(req: NhkEasyImportRequest) -> NhkEasyImportResponse:
     return NhkEasyImportResponse(
         title=req.title,
         sentences=[
-            NhkEasySentenceResult(japanese=s.japanese, inlineReading=s.inline_reading)
+            NhkEasySentenceResult(
+                japanese=s.japanese,
+                inlineReading=s.inline_reading,
+                tokens=morphology.tokenize_japanese(s.japanese) or None,
+            )
             for s in sentences
         ],
         audioAligned=False,

@@ -14,6 +14,7 @@ import {
   fetchSourceAudioRange,
   fetchSourceWaveform,
   getMiningJob,
+  importNhkEasyArticle,
   translateJob,
 } from '../src/lib/miningApi';
 
@@ -454,6 +455,77 @@ describe('fetchSourceAudioRange', () => {
       startMs: 1001,
       endMs: 4000,
     });
+  });
+});
+
+describe('importNhkEasyArticle', () => {
+  it('sends title/descriptionHtml/audioUrl and parses the result', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            title: '雨が続きそう',
+            audioAligned: true,
+            sentences: [
+              {
+                japanese: '今日は雨です。',
+                inlineReading: '今日[きょう]は雨[あめ]です。',
+                audioBase64: 'ZmFrZQ==',
+                durationMs: 2000,
+                tokens: null,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await importNhkEasyArticle(
+      '雨が続きそう',
+      '<p>今日は雨です。</p>',
+      'https://nhkeasier.com/media/mp3/x.mp3',
+    );
+
+    expect(result.audioAligned).toBe(true);
+    expect(result.sentences).toHaveLength(1);
+    expect(result.sentences[0]!.japanese).toBe('今日は雨です。');
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toEqual({
+      title: '雨が続きそう',
+      descriptionHtml: '<p>今日は雨です。</p>',
+      audioUrl: 'https://nhkeasier.com/media/mp3/x.mp3',
+    });
+  });
+
+  it('sends null audioUrl when omitted', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ title: 'T', audioAligned: false, sentences: [] }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await importNhkEasyArticle('T', '<p>x</p>');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.audioUrl).toBeNull();
+  });
+
+  it('throws with the server detail message on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: 'No sentences found in description' }), {
+            status: 400,
+          }),
+      ),
+    );
+    await expect(importNhkEasyArticle('T', '<img>')).rejects.toThrow(
+      'No sentences found in description',
+    );
   });
 });
 

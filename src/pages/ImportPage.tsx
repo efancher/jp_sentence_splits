@@ -112,8 +112,10 @@ export function ImportPage() {
           Choose a <code>.shadowing.zip</code>. Glossbook creates or refreshes
           one book in the original video order and imports its native sentence
           recordings. Audio stays in this browser. Mining a project from a
-          YouTube URL directly is on the{' '}
-          <Link to="/import/youtube">Import from YouTube</Link> page.
+          YouTube URL or podcast episode directly is on the{' '}
+          <Link to="/import/youtube">Import from YouTube</Link> page; graded
+          NHK Easy News articles are on the{' '}
+          <Link to="/import/nhk-easy">Import from NHK Easy News</Link> page.
         </p>
         <label>
           Shadowing project ZIP

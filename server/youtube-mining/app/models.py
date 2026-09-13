@@ -193,13 +193,18 @@ class PodcastEpisode(BaseModel):
     """One RSS <item> with a playable enclosure — the picker's row shape.
 
     durationSeconds comes from the (optional) itunes:duration tag, not a
-    real audio probe, so it's a display hint only.
+    real audio probe, so it's a display hint only. descriptionHtml is the
+    raw <description> field when present — a real podcast never needs it
+    (the audio itself is the content), but an nhkeasier.com item's
+    <description> carries the full furigana-annotated article body
+    (app/nhk_easy.py), which POST /nhk-easy/import needs.
     """
 
     title: str
     url: str
     publishedAt: str | None = None
     durationSeconds: int | None = None
+    descriptionHtml: str | None = None
 
 
 class PodcastFeed(BaseModel):
@@ -223,6 +228,11 @@ class NhkEasySentenceResult(BaseModel):
     inlineReading: str
     audioBase64: str | None = None
     durationMs: int | None = None
+    # UniDic tokens, same shape YouTube-mined sentences carry — feeds the
+    # client's existing suggestionsFromTokens (vocabulary picker chips).
+    # NHK's own inlineReading (above) is authoritative and kept as-is on
+    # commit, not re-derived from these tokens.
+    tokens: list[MorphemeToken] | None = None
 
 
 class NhkEasyImportResponse(BaseModel):

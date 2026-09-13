@@ -194,6 +194,9 @@ const podcastEpisodeSchema = z.object({
   url: z.string(),
   publishedAt: z.string().nullable().optional(),
   durationSeconds: z.number().nullable().optional(),
+  /** An nhkeasier.com item's furigana-annotated article body — see
+   * fetchNhkEasyArticle. A real podcast episode never has this. */
+  descriptionHtml: z.string().nullable().optional(),
 });
 
 const podcastFeedSchema = z.object({
@@ -220,6 +223,48 @@ export async function fetchPodcastFeed(url: string): Promise<PodcastFeed> {
     throw new Error(`Failed to load podcast feed: ${await readErrorDetail(response)}`);
   }
   return podcastFeedSchema.parse(await response.json());
+}
+
+const nhkEasySentenceSchema = z.object({
+  japanese: z.string(),
+  inlineReading: z.string(),
+  audioBase64: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+  tokens: z.array(morphemeTokenSchema).nullable().optional(),
+});
+
+const nhkEasyImportResponseSchema = z.object({
+  title: z.string(),
+  sentences: z.array(nhkEasySentenceSchema),
+  audioAligned: z.boolean(),
+});
+
+export type NhkEasySentence = z.infer<typeof nhkEasySentenceSchema>;
+export type NhkEasyImportResult = z.infer<typeof nhkEasyImportResponseSchema>;
+
+/**
+ * Turn one nhkeasier.com RSS item (from {@link fetchPodcastFeed} against an
+ * nhkeasier.com feed URL — its `descriptionHtml` carries the furigana body
+ * `POST /nhk-easy/import` needs) into committable sentences: known-correct
+ * text plus, when the narration audio is reachable and forced-alignment
+ * lines up well enough to trust, one real audio clip per sentence — never
+ * transcribed. `audioAligned: false` in the result means every sentence
+ * still came back, just text-only (no audio) that time.
+ */
+export async function importNhkEasyArticle(
+  title: string,
+  descriptionHtml: string,
+  audioUrl?: string,
+): Promise<NhkEasyImportResult> {
+  const response = await fetch(`${API_BASE}/nhk-easy/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, descriptionHtml, audioUrl: audioUrl ?? null }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to import NHK Easy article: ${await readErrorDetail(response)}`);
+  }
+  return nhkEasyImportResponseSchema.parse(await response.json());
 }
 
 const jobSummarySchema = z.object({
@@ -495,7 +540,7 @@ const reclipResponseSchema = z.object({
   ),
 });
 
-function base64ToBlob(base64: string, type: string): Blob {
+export function base64ToBlob(base64: string, type: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);

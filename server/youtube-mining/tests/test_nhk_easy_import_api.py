@@ -69,6 +69,10 @@ def test_full_import_with_successful_alignment(
     assert len(body["sentences"]) == 2
     assert body["sentences"][0]["japanese"] == "今日は晴れです。"
     assert body["sentences"][0]["inlineReading"] == "今日[きょう]は晴[は]れです。"
+    # Real UniDic tokenization (not mocked) — feeds the client's vocabulary
+    # picker the same way YouTube-mined sentences' tokens do.
+    assert body["sentences"][0]["tokens"]
+    assert any(t["surface"] == "今日" for t in body["sentences"][0]["tokens"])
     assert body["sentences"][0]["audioBase64"]
     assert body["sentences"][1]["japanese"] == "明日も晴れでしょう。"
     assert body["sentences"][1]["audioBase64"]
