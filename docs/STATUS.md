@@ -30,6 +30,20 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Podcast episode picker gained pagination + a title
+  search, follow-up to the same-day sort toggle.** User feedback: a
+  newest/oldest toggle alone still leaves 770 episodes to scroll through 30
+  at a time with no way to reach the middle. Added `podcastFeedPage` (Back
+  →/Forward → over `PODCAST_PAGE_SIZE` = 30-episode pages, page count
+  computed from whatever the current sort + search have narrowed the list
+  to) and a plain title-substring search box (case-insensitive, no
+  pagination while active — just shows every match, since a search has
+  presumably already narrowed things down). Page resets to 0 whenever the
+  sort, the search text, or the loaded feed itself changes, so it can never
+  point past the end of a freshly-narrowed list. Typecheck, full suite
+  (1433), and production build all clean; no dedicated test for this one
+  (page-count/slice arithmetic over already-tested sort logic) per this
+  repo's manual-test-plan convention for lower-risk UI additions.
 - **2026-09-13 — Podcast episode picker gained a "Newest first / Oldest
   first" sort.** A show with a long backlog (checked live: 770 episodes for
   one recommended show) is ordered newest-first by RSS convention, and the

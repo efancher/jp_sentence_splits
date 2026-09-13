@@ -48,6 +48,7 @@ import {
 } from '../lib/shadowingImport';
 
 const POLL_INTERVAL_MS = 1500;
+const PODCAST_PAGE_SIZE = 30;
 
 /**
  * The in-flight job id is kept in `localStorage` so a refresh / accidental
@@ -198,6 +199,11 @@ export function YouTubeMinePage() {
   // is newest-first) — a host's own "start from the beginning" advice is
   // otherwise unreachable behind the latest-30 cap below.
   const [podcastFeedSort, setPodcastFeedSort] = useState<'newest' | 'oldest'>('newest');
+  // A feed with hundreds of episodes needs more than "the first 30 of the
+  // sorted list" to actually reach the middle — page through 30 at a time,
+  // or search by title to jump straight there.
+  const [podcastFeedPage, setPodcastFeedPage] = useState(0);
+  const [podcastFeedSearch, setPodcastFeedSearch] = useState('');
   const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
   const [podcastFeedError, setPodcastFeedError] = useState('');
   // The picked episode's own publish date, for commitSeriesEpisodeImport's
@@ -424,6 +430,8 @@ export function YouTubeMinePage() {
     setPodcastFeedUrl('');
     setPodcastFeed(null);
     setPodcastFeedSort('newest');
+    setPodcastFeedPage(0);
+    setPodcastFeedSearch('');
     setPodcastFeedError('');
     setPodcastEpisodeDate(null);
     setPodcastEpisodeSourceUrl('');
@@ -452,6 +460,8 @@ export function YouTubeMinePage() {
   async function handleLoadPodcastFeed() {
     setPodcastFeedError('');
     setPodcastFeed(null);
+    setPodcastFeedPage(0);
+    setPodcastFeedSearch('');
     setPodcastFeedLoading(true);
     try {
       setPodcastFeed(await fetchPodcastFeed(podcastFeedUrl.trim()));
@@ -652,6 +662,26 @@ export function YouTubeMinePage() {
     new Set<string>(),
   );
 
+  const sortedPodcastEpisodes = podcastFeed
+    ? podcastFeedSort === 'oldest'
+      ? [...podcastFeed.episodes].reverse()
+      : podcastFeed.episodes
+    : [];
+  const searchedPodcastEpisodes = podcastFeedSearch.trim()
+    ? sortedPodcastEpisodes.filter((episode) =>
+        episode.title.toLowerCase().includes(podcastFeedSearch.trim().toLowerCase()),
+      )
+    : sortedPodcastEpisodes;
+  const podcastPageCount = Math.max(
+    1,
+    Math.ceil(searchedPodcastEpisodes.length / PODCAST_PAGE_SIZE),
+  );
+  const clampedPodcastFeedPage = Math.min(podcastFeedPage, podcastPageCount - 1);
+  const visiblePodcastEpisodes = searchedPodcastEpisodes.slice(
+    clampedPodcastFeedPage * PODCAST_PAGE_SIZE,
+    (clampedPodcastFeedPage + 1) * PODCAST_PAGE_SIZE,
+  );
+
   return (
     <div className="stack">
       <section className="panel stack">
@@ -728,36 +758,71 @@ export function YouTubeMinePage() {
                 <div className="stack" style={{ gap: '0.4rem' }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <div className="muted" style={{ fontSize: '0.85rem' }}>
-                      {podcastFeed.title} — showing the{' '}
-                      {podcastFeedSort === 'newest' ? 'latest' : 'oldest'}{' '}
-                      {Math.min(30, podcastFeed.episodes.length)} of{' '}
-                      {podcastFeed.episodes.length} episodes
+                      {podcastFeed.title} — {podcastFeed.episodes.length} episodes
                     </div>
                     <div className="row" style={{ gap: '0.25rem' }}>
                       <button
                         type="button"
                         className={podcastFeedSort === 'newest' ? 'primary' : undefined}
-                        onClick={() => setPodcastFeedSort('newest')}
+                        onClick={() => {
+                          setPodcastFeedSort('newest');
+                          setPodcastFeedPage(0);
+                        }}
                       >
                         Newest first
                       </button>
                       <button
                         type="button"
                         className={podcastFeedSort === 'oldest' ? 'primary' : undefined}
-                        onClick={() => setPodcastFeedSort('oldest')}
+                        onClick={() => {
+                          setPodcastFeedSort('oldest');
+                          setPodcastFeedPage(0);
+                        }}
                         title="Some hosts recommend starting from their earliest episodes"
                       >
                         Oldest first
                       </button>
                     </div>
                   </div>
+                  <input
+                    value={podcastFeedSearch}
+                    placeholder="Search episode titles…"
+                    onChange={(event) => {
+                      setPodcastFeedSearch(event.target.value);
+                      setPodcastFeedPage(0);
+                    }}
+                  />
+                  {!podcastFeedSearch.trim() ? (
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <button
+                        type="button"
+                        disabled={clampedPodcastFeedPage === 0}
+                        onClick={() => setPodcastFeedPage((page) => Math.max(0, page - 1))}
+                      >
+                        ← Back
+                      </button>
+                      <span className="muted" style={{ fontSize: '0.85rem' }}>
+                        Page {clampedPodcastFeedPage + 1} of {podcastPageCount} (
+                        {podcastFeedSort === 'newest' ? 'newest' : 'oldest'} first)
+                      </span>
+                      <button
+                        type="button"
+                        disabled={clampedPodcastFeedPage >= podcastPageCount - 1}
+                        onClick={() =>
+                          setPodcastFeedPage((page) => Math.min(podcastPageCount - 1, page + 1))
+                        }
+                      >
+                        Forward →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      {searchedPodcastEpisodes.length} match
+                      {searchedPodcastEpisodes.length === 1 ? '' : 'es'}
+                    </div>
+                  )}
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
-                    {(podcastFeedSort === 'oldest'
-                      ? [...podcastFeed.episodes].reverse()
-                      : podcastFeed.episodes
-                    )
-                      .slice(0, 30)
-                      .map((episode) => {
+                    {visiblePodcastEpisodes.map((episode) => {
                       const imported = importedPodcastSourceIds?.has(episode.url);
                       const publishedDate = episode.publishedAt
                         ? new Date(episode.publishedAt)
