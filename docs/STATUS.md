@@ -30,6 +30,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — NHK Easy import v1 complete: wizard UI + vocabulary
+  tokens, closing out the day's feature.** Final piece after the
+  text-extraction and forced-alignment work below: `NhkEasyImportPage.tsx`
+  (`/import/nhk-easy`) — feed URL → article picker → one
+  `POST /nhk-easy/import` call (no job/polling/ASR, the text is already
+  known-correct) → "Auto-fill translations (AI)" (calls
+  `realignTranslations` directly, one group per sentence) → the same
+  `ShadowingPreviewCard` commit step the YouTube-mining wizard already
+  ends on. `PodcastEpisode` gained `descriptionHtml` (an nhkeasier.com
+  item's furigana body — a real podcast never has this) so the existing
+  `/podcast-feed` endpoint feeds the picker directly, no parallel endpoint.
+  `NhkEasySentenceResult` gained UniDic `tokens`
+  (`morphology.tokenize_japanese`) so the vocabulary picker gets
+  suggestions the same way YouTube-mined sentences do — but the committed
+  `inlineReading` stays NHK's own authoritative furigana (overwritten
+  after `buildShadowingPreview` runs, since that function otherwise
+  re-derives it from tokens) and the plain-kana `reading` field is
+  likewise derived from that furigana rather than left blank. 23 new
+  backend tests + 6 new frontend tests across the day's three commits, full
+  suites green (128 backend, 1426 frontend), production build clean.
+  Verified live end-to-end on a fresh, previously-untested article: 9 real
+  sentences, real audio, correct furigana, real vocabulary tokens, all in
+  one pass. Not yet manually clicked-through in a browser — see
+  `docs/ROADMAP.md`'s entry for the manual test plan.
 - **2026-09-13 — NHK Easy import: forced-alignment pipeline built and
   deployed, blocked on one cross-service decision.** Follow-up to the same
   day's text-extraction work (below). Built `app/align_client.py` (calls

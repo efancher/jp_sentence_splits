@@ -367,7 +367,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Most indie-hosted shows also link "RSS" directly on their own site.
     Spotify-exclusive shows generally have no public feed and won't work.
 
-- [ ] **NHK News Web Easy import.** (2026-09-13, plan corrected same day
+- [x] **NHK News Web Easy import.** (2026-09-13, plan corrected same day
   after verifying against the live sites — see below) Native narrated audio
   + furigana-graded text is a stronger comprehensible-input fit than YouTube
   auto-captions, and the text being already-correct makes the pipeline
@@ -460,10 +460,41 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        "Snap to pauses") matched to paragraph boundaries — plausible, but
        relies on the number of major pauses lining up with paragraph
        breaks, not guaranteed.
-  - **Not done — the wizard/commit UI**: a picker step (likely a variant of
-    the podcast episode picker already built, since the RSS shape is
-    identical) that calls `POST /nhk-easy/import` and commits the result
-    into a book the same way `commitShadowingPackageImport()` does.
+  - ~~**Not done — the wizard/commit UI**~~ **Done 2026-09-13**:
+    `NhkEasyImportPage.tsx` (`/import/nhk-easy`, linked from `ImportPage`) —
+    paste a feed URL (reuses `fetchPodcastFeed`/`POST /podcast-feed`, now
+    carrying each item's `descriptionHtml`), pick an article (one
+    `POST /nhk-easy/import` call, no job/polling/ASR since the text is
+    already known-correct), "Auto-fill translations (AI)" (calls
+    `realignTranslations` directly, one group per sentence — no
+    provenance-grouping needed since there's no resegmentation happening),
+    then the same `ShadowingPreviewCard` commit step the YouTube-mining
+    wizard ends on. `NhkEasySentenceResult` also carries UniDic `tokens`
+    now (`morphology.tokenize_japanese`, same as YouTube-mined sentences)
+    so the vocabulary picker gets suggestions — but NHK's own furigana
+    stays the committed `inlineReading` (overwritten after
+    `buildShadowingPreview` runs, since that function otherwise re-derives
+    it from tokens, which can differ on names/uncommon readings); the
+    plain-kana `reading` field is similarly derived from NHK's furigana
+    (`parseInlineReadings`) rather than left blank. Verified live
+    end-to-end on a fresh, previously-untested article — 9 real sentences,
+    real audio, correct furigana, real vocabulary tokens, all in one pass.
+    **v1 of NHK Easy import is now feature-complete**: import → translate →
+    commit all work. Remaining known gaps (per-chapter granularity for
+    "Ready to read" scoring against these books, and the silence-gap
+    audio-chunking idea above) are optional refinements, not blockers.
+    **Manual test plan:** go to `/import` → "Import from NHK Easy News",
+    paste `https://nhkeasier.com/feed/`, "Load articles," pick any article.
+    Correct: a short wait, then a sentence list each with a real playable
+    audio clip (native NHK narration) and an editable translation box.
+    Click "Auto-fill translations (AI)" — every box should fill with a
+    plausible English sentence (needs a signed-in, synced session; degrades
+    to an inline "unavailable" note otherwise, same as the mining wizard's
+    equivalent button). Click "Continue to review," then commit. Corruption
+    spot-check: open the new book and confirm sentence text isn't garbled
+    mid-word (the closing-bracket bug's old symptom) and that a couple of
+    audio clips actually contain the right words, not silence or the wrong
+    sentence.
   - Rights note: nhkeasier.com is itself a third-party redistribution of
     NHK's copyrighted news content for learners; using its feed for
     personal single-user study is the same posture as the existing
