@@ -53,7 +53,14 @@ what's left is one deferred durability item (below).
   than one distinct position cited for that reading. Dry-run by default,
   same convention as the other two passes. `parseWiktionaryAccentHtml` is
   exported and unit-tested (`tests/backfillPitchAccentWiktionary.test.ts`,
-  7 cases) independent of the network call.
+  7 cases) independent of the network call. **Run against production
+  2026-09-13**: of 196 items with no pitch-accent data, 60 matched and
+  were written, 61 had no Wiktionary page, 65 had no accent-tagged entry
+  for that reading, and 10 were correctly skipped as genuinely ambiguous
+  (including known variable-accent words like 明日/あす and 難しい) — left
+  for a hand check, not guessed. 141 items remain blank; the un-appliable
+  ambiguous ones plus anything with no Wiktionary presence would need a
+  different source (OJAD, or manual lookup) to close further.
 
 - **2026-09-12 — Ambient pitch-accent display ("H/L marks" on shadowing
   pages, `AnalysisPanel`, the pitch-accent drill, and the `pitch_accent`
