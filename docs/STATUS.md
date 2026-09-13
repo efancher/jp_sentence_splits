@@ -30,6 +30,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — "Ready to read" per-book vocabulary-coverage scoring +
+  sort, closing the first two steps of the promoted ROADMAP item.**
+  `src/lib/bookCoverage.ts` (`buildBookCoverage`, pure, 8 tests) answers
+  "what fraction of this book's confirmed vocabulary do I already know" by
+  reusing the exact same primitives `isSentenceReadyForFullReview` is built
+  from (`getReviewableVocabularyItemIdsBySentence` /
+  `getProficientVocabularyItemIds`) — no new proficiency concept, same
+  "known" as everywhere else. `getBookVocabularyCoverage()`
+  (`src/db/repository.ts`) batches this once across every book, same
+  one-pass convention as `getBlindSpots`. `BooksPage.tsx` shows "~NN% known
+  vocabulary (X/Y words)" (or "Vocabulary not confirmed yet" for an
+  unanalyzed book — a `null` ratio, deliberately not 0%) per book, plus a
+  "Recent" / "Easiest first" sort toggle; easiest-first always sorts
+  unanalyzed books last regardless of ratio. Per-chapter breakdown and
+  feeding the session planner's `continue_book` ranking are deferred — see
+  `docs/ROADMAP.md`. Not yet browser-verified (no existing `BooksPage` test
+  file to extend; the underlying pure function is fully unit tested,
+  following the same convention as `getBlindSpots`) — manual test plan in
+  the ROADMAP entry.
 - **2026-09-13 — Fixed a translation-shift data-corruption bug in "Auto-fill
   translations (AI)" (user report during a live podcast mine: "they're
   shifted down by 1").** Root cause, in the `sentence-realign` Edge Function

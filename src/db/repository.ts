@@ -67,6 +67,7 @@ import {
 } from '../lib/pronunciationProfile';
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
 import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpots';
+import { buildBookCoverage, type BookCoverage } from '../lib/bookCoverage';
 import { buildErrorMix, type ErrorMix } from '../lib/errorMix';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
@@ -3186,6 +3187,46 @@ export async function getProficientVocabularyItemIds(
       )
       .map((item) => item.subjectId),
   );
+}
+
+/**
+ * "Ready to read" coverage (docs/ROADMAP.md) — per-book known-vocabulary
+ * ratio, for `BooksPage` to show "which of these is easiest to pick up
+ * right now." Reuses the same `getReviewableVocabularyItemIdsBySentence` /
+ * `getProficientVocabularyItemIds` primitives `getSentenceFullReviewReadiness`
+ * is built from, batched once across every book rather than per-book, so
+ * this stays one pass regardless of library size.
+ */
+export async function getBookVocabularyCoverage(): Promise<Map<string, BookCoverage>> {
+  const db = getDb();
+  const [books, bookSentences] = await Promise.all([
+    db.books.toArray(),
+    db.bookSentences.toArray(),
+  ]);
+  const sentenceIdsByBook = new Map<string, string[]>();
+  for (const membership of bookSentences) {
+    const arr = sentenceIdsByBook.get(membership.bookId);
+    if (arr) arr.push(membership.sentenceId);
+    else sentenceIdsByBook.set(membership.bookId, [membership.sentenceId]);
+  }
+  const allSentenceIds = [...new Set(bookSentences.map((m) => m.sentenceId))];
+  const vocabularyItemIdsBySentence =
+    await getReviewableVocabularyItemIdsBySentence(allSentenceIds);
+  const allVocabularyItemIds = [
+    ...new Set([...vocabularyItemIdsBySentence.values()].flat()),
+  ];
+  const proficientVocabularyItemIds = await getProficientVocabularyItemIds(
+    allVocabularyItemIds,
+  );
+  const coverage = buildBookCoverage(
+    books.map((book) => ({
+      bookId: book.id,
+      sentenceIds: sentenceIdsByBook.get(book.id) ?? [],
+    })),
+    vocabularyItemIdsBySentence,
+    proficientVocabularyItemIds,
+  );
+  return new Map(coverage.map((entry) => [entry.bookId, entry]));
 }
 
 /**

@@ -406,20 +406,42 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   natural companion to the two importers above: NHK Easy content is
   *labeled* easy by NHK, but Satori books, YouTube-mined books, and future
   podcast/NHK imports all need the same yardstick to be comparable. Plan:
-  1. **Per-book/chapter known-word coverage** — % of a book's distinct
-     vocabulary already at FSRS reading-proficiency (reuse the same
-     proficiency gate already driving shadowing-candidate/glossing-readiness
-     logic, `isSentenceReadyForFullReview`), surfaced on `BooksPage`/
-     `BookDetailPage` as a simple "~96% known" badge per book (and per
-     chapter — early chapters are usually easier than later ones).
-  2. **Sort/filter by coverage** on `BooksPage` — "show me what I could
-     read right now," ordered easiest-first, distinct from the existing
-     recency-based ordering.
+  1. ~~**Per-book known-word coverage**~~ **Done 2026-09-13** —
+     `src/lib/bookCoverage.ts` (`buildBookCoverage`, pure, 8 tests) reuses
+     the exact same primitives `isSentenceReadyForFullReview` is built from
+     (`getReviewableVocabularyItemIdsBySentence` /
+     `getProficientVocabularyItemIds`) so "known" means the same thing here
+     as everywhere else in the app — no new proficiency concept.
+     `getBookVocabularyCoverage()` (`src/db/repository.ts`) batches this
+     once across every book (one pass, not N+1), same convention as
+     `getBlindSpots`. Ratio is `null` (not 0%) for a book with zero
+     confirmed vocabulary yet — "not analyzed" is a different state from
+     "read and found unfamiliar." **Per-chapter** breakdown not done —
+     v1 is book-level only; a chapter's sentences aren't currently queried
+     separately from the rest of the book's, so this would need a real slice
+     of new code, not just a smaller reuse of the same function.
+  2. ~~**Sort/filter by coverage**~~ **Done 2026-09-13** — `BooksPage.tsx`
+     gained a "Recent" / "Easiest first" toggle (`SortMode`); easiest-first
+     sorts by coverage ratio descending, with not-yet-analyzed books (null
+     ratio) always last rather than sorting as 0%. Each book row shows
+     "~NN% known vocabulary (X/Y words)" or "Vocabulary not confirmed yet."
+     Not yet browser-verified — `BooksPage` has no existing test file to
+     extend and the underlying `buildBookCoverage` logic is fully unit
+     tested, so this follows the same "pure function tested, thin
+     Dexie-reading page left for manual verification" convention as
+     `getBlindSpots`/`/progress`'s other panels rather than a new component
+     test. **Manual test plan:** open `/books` with at least one book whose
+     vocabulary is partly confirmed+proficient and one that's unanalyzed;
+     toggle "Easiest first" and confirm the higher-coverage book floats up
+     and the unanalyzed one sorts to the bottom regardless of ratio.
   3. **Feed `findExploreCandidates`** (session planner's `continue_book`
      candidate ranking) with the same coverage number as a secondary sort
      key, so an easier caught-up book edges out a harder one when neglect
      scores are close — a light touch on top of the existing vocab-first
-     gating, not a rewrite of it.
+     gating, not a rewrite of it. **Not done** — deferred; `BooksPage`'s
+     manual sort already answers "which book is easiest" for a learner who
+     asks, and the planner already has its own vocab-readiness gate, so this
+     is a nice-to-have ranking nudge, not a gap.
   - Out of scope for v1: cross-book recommendation ("read X before Y") —
     just a per-book number the learner reads themselves.
 
