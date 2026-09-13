@@ -15,6 +15,7 @@ import {
   deleteMiningJob,
   fetchJobAudioRange,
   fetchJobWaveform,
+  fetchPodcastFeed,
   getMiningJob,
   listMiningJobs,
   translateJob,
@@ -23,6 +24,8 @@ import {
   type MiningJobSummary,
   type MiningSourceInfo,
   type MiningTranscriptSource,
+  type PodcastEpisode,
+  type PodcastFeed,
 } from '../lib/miningApi';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import {
@@ -183,6 +186,10 @@ export function YouTubeMinePage() {
   const [minedVideos, setMinedVideos] = useState<
     Map<string, { title: string; createdAt: string }>
   >(new Map());
+  const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
+  const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
+  const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
+  const [podcastFeedError, setPodcastFeedError] = useState('');
   // Wall-clock ms at which the current progress message started (server's
   // elapsedSeconds, converted). A 1s tick forces the "N:NN elapsed" re-render.
   const progressStartedAtRef = useRef<number>(Date.now());
@@ -387,19 +394,46 @@ export function YouTubeMinePage() {
     setRows([]);
     setRealignNote('');
     setPreview(null);
+    setPodcastFeedUrl('');
+    setPodcastFeed(null);
+    setPodcastFeedError('');
   }
 
-  async function handleStart() {
+  async function startJob(
+    jobUrl: string,
+    options: { title?: string; sourceType?: 'youtube' | 'podcast' } = {},
+  ) {
     setError('');
     setProgress('Starting…');
     setStage('starting');
     try {
-      const id = await createMiningJob(url.trim());
+      const id = await createMiningJob(jobUrl, options);
       setJobId(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start mining job');
       setStage('idle');
     }
+  }
+
+  async function handleStart() {
+    await startJob(url.trim());
+  }
+
+  async function handleLoadPodcastFeed() {
+    setPodcastFeedError('');
+    setPodcastFeed(null);
+    setPodcastFeedLoading(true);
+    try {
+      setPodcastFeed(await fetchPodcastFeed(podcastFeedUrl.trim()));
+    } catch (err) {
+      setPodcastFeedError(err instanceof Error ? err.message : 'Failed to load podcast feed');
+    } finally {
+      setPodcastFeedLoading(false);
+    }
+  }
+
+  async function handleStartPodcastEpisode(episode: PodcastEpisode) {
+    await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
   }
 
   async function runApply(note: string, fn: () => Promise<void>) {
@@ -615,6 +649,67 @@ export function YouTubeMinePage() {
               </div>
             ) : null}
           </div>
+        ) : null}
+        {!resuming && stage === 'idle' ? (
+          <details className="stack" style={{ gap: '0.4rem' }}>
+            <summary className="muted" style={{ cursor: 'pointer' }}>
+              Or import a podcast episode
+            </summary>
+            <div className="stack" style={{ gap: '0.4rem' }}>
+              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                Paste a show's RSS feed URL (not its Apple/Spotify page) and
+                pick an episode. Finding a feed URL: search{' '}
+                <code>itunes.apple.com/search?term=&lt;show name&gt;&media=podcast</code>{' '}
+                and look for <code>feedUrl</code> in the response, or check the
+                show's own site for an "RSS" link.
+              </p>
+              <div className="row">
+                <input
+                  style={{ flex: 1 }}
+                  value={podcastFeedUrl}
+                  placeholder="https://example.com/feed/podcast"
+                  onChange={(event) => setPodcastFeedUrl(event.target.value)}
+                />
+                <button
+                  type="button"
+                  disabled={!podcastFeedUrl.trim() || podcastFeedLoading}
+                  onClick={() => void handleLoadPodcastFeed()}
+                >
+                  {podcastFeedLoading ? 'Loading…' : 'Load episodes'}
+                </button>
+              </div>
+              {podcastFeedError ? (
+                <div className="muted" style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>
+                  {podcastFeedError}
+                </div>
+              ) : null}
+              {podcastFeed ? (
+                <div className="stack" style={{ gap: '0.4rem' }}>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    {podcastFeed.title} — showing the latest{' '}
+                    {Math.min(30, podcastFeed.episodes.length)} of{' '}
+                    {podcastFeed.episodes.length} episodes
+                  </div>
+                  <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
+                    {podcastFeed.episodes.slice(0, 30).map((episode) => (
+                      <button
+                        key={episode.url}
+                        type="button"
+                        className="row"
+                        style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
+                        onClick={() => void handleStartPodcastEpisode(episode)}
+                      >
+                        <span>{episode.title}</span>
+                        <span className="muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                          {episode.durationSeconds ? formatElapsed(episode.durationSeconds) : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </details>
         ) : null}
         {!resuming && stage === 'idle' && resumable.length > 0 ? (
           <div className="stack" style={{ gap: '0.4rem' }}>

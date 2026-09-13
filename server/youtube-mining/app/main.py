@@ -97,7 +97,7 @@ async def status_json(days: int = 3):
 
 @app.post("/jobs", response_model=CreateJobResponse)
 async def create_job(req: CreateJobRequest):
-    job = jobs.create_job(req.url)
+    job = jobs.create_job(req.url, title=req.title, source_type=req.sourceType)
     return CreateJobResponse(jobId=job.id)
 
 

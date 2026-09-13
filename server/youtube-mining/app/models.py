@@ -65,9 +65,12 @@ class MorphemeToken(BaseModel):
     accentType: str = ""
 
 
+SourceType = Literal["youtube", "podcast"]
+
+
 class SourceInfo(BaseModel):
     id: str
-    type: Literal["youtube"] = "youtube"
+    type: SourceType = "youtube"
     url: str
     videoId: str
     title: str
@@ -170,6 +173,12 @@ class JobSummary(BaseModel):
 
 class CreateJobRequest(BaseModel):
     url: str = Field(min_length=1)
+    # Set by the podcast-episode picker, which already knows the real
+    # episode title from RSS metadata — yt-dlp's generic extractor has no
+    # page metadata for a bare enclosure URL and would otherwise derive an
+    # ugly filename-based title (see docs/ROADMAP.md "Podcast mining").
+    title: str | None = None
+    sourceType: SourceType = "youtube"
 
 
 class CreateJobResponse(BaseModel):

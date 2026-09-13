@@ -285,48 +285,55 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   already handle direct audio URLs and many non-YouTube hosts, and the
   no-captions **ASR fallback already built** for undercaptioned YouTube
   videos covers "podcast has no JA subtitle track" for free. Plan:
-  1. ~~**Smoke-test first**~~ **Done 2026-09-13** — called
-     `youtube.fetch_audio`/`inspect_url`/`download_subtitles` directly
-     (not through the deployed tailnet service, which isn't reachable from
-     a dev sandbox) against a real live episode (Nihongo con Teppei #1581,
-     a plain `media.blubrry.com` mp3 URL pulled from the show's real RSS
-     feed). Download succeeded (7.4MB m4a, no exit-node/bot-blocking issue
-     — that's YouTube-specific), and `download_subtitles` correctly found
-     nothing, confirming the ASR fallback path would engage. Two real rough
-     edges found: `inspect_url`'s generic extractor has no page metadata for
-     a bare mp3 URL, so `title` comes back as the filename
-     (`Beginners-con-Teppei1581`) and `duration` as `None` — the RSS
-     picker (next) needs to carry the feed's real title/duration through
-     rather than trusting yt-dlp for it. Also `SourceInfo.type` is
-     currently `Literal["youtube"]` (`app/models.py`) — needs widening to
-     `"podcast"` once a podcast-sourced job actually gets created (not done
-     yet, no job-creation code path exercises it today).
-  2. **RSS episode picker.** *Backend half done 2026-09-13*:
-     `app/podcasts.py` (`parse_podcast_feed` — pure, tested against a
-     trimmed real Nihongo con Teppei feed fixture; `fetch_podcast_feed` —
-     `httpx` GET, server-side to dodge the browser-CORS problem) +
-     `POST /podcast-feed` (`app/main.py`), 8 new tests, full suite still
-     green (110 passed). Verified live against the real feed URL end to
-     end: 1581 episodes parsed correctly. One real-world finding: this
-     particular feed has no `<itunes:duration>` tags at all, so
-     `durationSeconds` is `None` for every episode — confirms the field
-     has to be optional/best-effort in the UI, not assumed present.
-     **Still open:** the actual picker UI (a list step ahead of the
-     existing `/import/youtube` wizard, calling this endpoint and letting
-     the learner choose an episode by title instead of pasting an
-     enclosure URL by hand) and threading the chosen episode's real
-     title/publish date into `create_job` so the created book doesn't
-     inherit yt-dlp's filename-derived title.
+  1. ~~**Smoke-test first**~~ **Done 2026-09-13.** (Correction: this dev
+     session turned out to be running directly on `codex-dev`, the same box
+     the `youtube-mining-api` systemd service runs on — not a separate
+     sandbox, per the unit file's `WorkingDirectory` pointing at this exact
+     checkout.) Called `youtube.fetch_audio`/`inspect_url`/
+     `download_subtitles` directly against a real live episode (Nihongo con
+     Teppei #1581, a plain `media.blubrry.com` mp3 URL pulled from the
+     show's real RSS feed). Download succeeded (7.4MB m4a, no exit-node/
+     bot-blocking issue — that's YouTube-specific), and `download_subtitles`
+     correctly found nothing, confirming the ASR fallback path would engage.
+     Found `inspect_url`'s generic extractor has no page metadata for a bare
+     mp3 URL (title comes back as the filename, duration as `None`) —
+     motivated steps 2/4 below.
+  2. ~~**RSS episode picker**~~ **Done 2026-09-13**, backend + UI + wiring,
+     all verified live against the real production service (not just unit
+     tests): `app/podcasts.py` (`parse_podcast_feed`/`fetch_podcast_feed`) +
+     `POST /podcast-feed`; `fetchPodcastFeed` in `src/lib/miningApi.ts`; a
+     collapsible "Or import a podcast episode" section on
+     `YouTubeMinePage.tsx`'s idle screen (feed URL → episode list, capped at
+     the latest 30 — some feeds run 1000+ episodes — → tap one to mine it).
+     Restarted `youtube-mining-api.service` (checked `GET /jobs` was empty
+     first, so nothing in flight got dropped) and ran a real episode through
+     the live service end to end: downloaded, correctly found no captions,
+     fell back to ASR, and produced 107 real sentence cues from actual
+     speech (~5 min wall-clock for a 5:32 episode on this box — real
+     evidence for step 3 below). Test job deleted after verifying. One
+     real-world finding: Nihongo con Teppei's feed has no `<itunes:duration>`
+     tags at all, so durations show blank for every episode there — the UI
+     already treats the field as optional, not assumed present.
   3. **Long-episode ASR headroom** — `ASR_TIMEOUT_SECONDS` (1800s default)
      and the 8GB analysis box's memory ceiling (the same host the MFA
      aligner leaks memory on, per its weekly restart timer) may need a bump
      or chunked transcription past ~30 min; the recommended intermediate
      shows (Nihongo con Teppei, Miku Real Japanese, Sakura Tips) run
-     10–20 min/episode, so this likely doesn't block v1.
-  4. **Dedup/labeling polish** — `alreadyMined` and the "already imported"
-     video-id matching (`src/lib/youtubeUrl.ts`) assume a YouTube id; fall
-     back to a plain `sourceUrl` string match and whatever title `yt-dlp`'s
-     generic extractor returns for non-YouTube sources.
+     10–20 min/episode, so this likely doesn't block v1. Real data point
+     2026-09-13: a 5:32 episode took ~5 minutes wall-clock end to end
+     (download + ASR) on this box — comfortably under the timeout, but not
+     fast; a 20-min episode could plausibly approach it.
+  4. ~~**Dedup/labeling polish**~~ **Partly done 2026-09-13** — the title
+     half. `SourceInfo.type` widened to `Literal["youtube", "podcast"]`;
+     `CreateJobRequest` gained `title`/`sourceType`, threaded through
+     `create_job` → `Job.title_override`/`source_type` (checkpointed, so it
+     survives a process restart mid-job) → applied onto `SourceInfo` once
+     `info_to_source()` builds it. Verified live: the created book's title
+     is the real RSS episode title, not yt-dlp's filename-derived one.
+     Still open: `alreadyMined`'s "already imported" video-id matching
+     (`src/lib/youtubeUrl.ts`) still only recognizes YouTube URLs — a
+     re-mined podcast episode won't get the warning banner. Low priority,
+     cosmetic only.
   5. **Difficulty screening checkpoint** (folds in the 2026-09-13 heuristic-
      grading idea) — a show's RSS metadata is only a title/description, no
      Japanese body text, so an episode can't be graded before it's mined;

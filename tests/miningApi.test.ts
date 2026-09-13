@@ -10,6 +10,7 @@ import {
   fetchJobAudioRange,
   fetchJobWaveform,
   fetchMiningClipAudio,
+  fetchPodcastFeed,
   fetchSourceAudioRange,
   fetchSourceWaveform,
   getMiningJob,
@@ -38,6 +39,71 @@ describe('createMiningJob', () => {
       ),
     );
     await expect(createMiningJob('not a url')).rejects.toThrow('invalid url');
+  });
+
+  it('defaults to sourceType "youtube" with no title override', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ jobId: 'abc123' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await createMiningJob('https://www.youtube.com/watch?v=xyz');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toEqual({ url: 'https://www.youtube.com/watch?v=xyz', title: null, sourceType: 'youtube' });
+  });
+
+  it('passes a podcast episode title and sourceType through', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ jobId: 'abc123' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await createMiningJob('https://media.example.com/ep1.mp3', {
+      title: 'Episode 1',
+      sourceType: 'podcast',
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toEqual({
+      url: 'https://media.example.com/ep1.mp3',
+      title: 'Episode 1',
+      sourceType: 'podcast',
+    });
+  });
+});
+
+describe('fetchPodcastFeed', () => {
+  it('parses a feed with episodes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              title: 'Example Show',
+              episodes: [
+                { title: 'Ep 1', url: 'https://x/1.mp3', publishedAt: null, durationSeconds: 332 },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    const feed = await fetchPodcastFeed('https://example.com/feed.rss');
+    expect(feed.title).toBe('Example Show');
+    expect(feed.episodes).toEqual([
+      { title: 'Ep 1', url: 'https://x/1.mp3', publishedAt: null, durationSeconds: 332 },
+    ]);
+  });
+
+  it('throws with the server detail message on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: 'Not a valid RSS/XML feed' }), { status: 400 }),
+      ),
+    );
+    await expect(fetchPodcastFeed('https://example.com/not-a-feed')).rejects.toThrow(
+      'Not a valid RSS/XML feed',
+    );
   });
 });
 

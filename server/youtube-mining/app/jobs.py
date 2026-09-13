@@ -53,6 +53,7 @@ from app.models import (
     JobState,
     JobStatusResponse,
     SourceInfo,
+    SourceType,
     TranscriptSegment,
     TranscriptSegmentInput,
     TranslatedRow,
@@ -90,6 +91,12 @@ class Job:
     message_started_at: float = field(default_factory=time.time)
     error: str | None = None
     source: SourceInfo | None = None
+    # Set from CreateJobRequest for podcast-episode jobs — applied onto
+    # `source` once youtube.info_to_source() builds it in _fetch_transcript,
+    # since a bare enclosure URL has no page metadata of its own to derive a
+    # real title/type from.
+    title_override: str | None = None
+    source_type: SourceType = "youtube"
     is_music: bool = False
     # "asr" | "human-caption" | "auto-caption" | "lyrics" — set in
     # `_fetch_transcript`. `auto-caption` is the degraded path the wizard warns about.
@@ -150,6 +157,8 @@ def _write_checkpoint(job: Job) -> None:
             "message": job.message,
             "error": job.error,
             "is_music": job.is_music,
+            "title_override": job.title_override,
+            "source_type": job.source_type,
             "transcript_source": job.transcript_source,
             "next_sentence_seq": job.next_sentence_seq,
             "source": job.source.model_dump() if job.source else None,
@@ -204,6 +213,8 @@ def _rehydrate(job_id: str) -> Job | None:
     job.message = state.get("message", "Resumed.")
     job.error = state.get("error")
     job.is_music = state.get("is_music", False)
+    job.title_override = state.get("title_override")
+    job.source_type = state.get("source_type", "youtube")
     job.transcript_source = state.get("transcript_source")
     job.next_sentence_seq = state.get("next_sentence_seq", 1)
     job.source = SourceInfo(**state["source"]) if state.get("source") else None
@@ -260,7 +271,9 @@ def _find_reusable_job(url: str) -> Job | None:
     return None
 
 
-def create_job(url: str) -> Job:
+def create_job(
+    url: str, title: str | None = None, source_type: SourceType = "youtube"
+) -> Job:
     existing = _find_reusable_job(url)
     if existing is not None:
         logger.info("Reusing mining job %s for %s", existing.id, url)
@@ -268,7 +281,7 @@ def create_job(url: str) -> Job:
     job_id = uuid.uuid4().hex[:12]
     job_dir = _job_dir(job_id)
     (job_dir / "clips").mkdir(parents=True, exist_ok=True)
-    job = Job(id=job_id, dir=job_dir, url=url)
+    job = Job(id=job_id, dir=job_dir, url=url, title_override=title, source_type=source_type)
     _JOBS[job_id] = job
     threading.Thread(target=_run_job, args=(job, url), daemon=True).start()
     return job
@@ -393,6 +406,13 @@ def _fetch_transcript(job: Job, url: str) -> None:
         job.set_message("Reading video info…")
         info = youtube.inspect_url(url)
     job.source = youtube.info_to_source(info)
+    if job.title_override or job.source_type != "youtube":
+        job.source = job.source.model_copy(
+            update={
+                "title": job.title_override or job.source.title,
+                "type": job.source_type,
+            }
+        )
 
     # Stash a compressed copy of the source outside the job sweep so a
     # later re-segment / audio repair re-cuts from the original, not from

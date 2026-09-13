@@ -134,6 +134,27 @@ def test_job_lifecycle_fetch_to_clip(client: TestClient) -> None:
     assert delete_response.status_code == 200
 
 
+def test_podcast_job_uses_title_override_and_source_type(client: TestClient) -> None:
+    """A podcast-episode job supplies its real title from RSS metadata,
+    since a bare enclosure URL has no page metadata of its own — see
+    docs/ROADMAP.md "Podcast mining"."""
+    create = client.post(
+        "/jobs",
+        json={
+            "url": "https://media.example.com/episode-1581.mp3",
+            "title": "#1581「きみちゃんが新しい生徒を探しています！！」",
+            "sourceType": "podcast",
+        },
+    )
+    assert create.status_code == 200
+    job_id = create.json()["jobId"]
+
+    status = _wait_until_ready(client, job_id)
+    assert status["status"] == "ready"
+    assert status["source"]["title"] == "#1581「きみちゃんが新しい生徒を探しています！！」"
+    assert status["source"]["type"] == "podcast"
+
+
 def test_uses_asr_transcript_over_captions_when_available(
     client: TestClient, monkeypatch
 ) -> None:

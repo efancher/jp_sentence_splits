@@ -28,7 +28,7 @@ const morphemeTokenSchema = z.object({
 
 const sourceInfoSchema = z.object({
   id: z.string(),
-  type: z.literal('youtube'),
+  type: z.enum(['youtube', 'podcast']),
   url: z.string(),
   videoId: z.string(),
   title: z.string(),
@@ -169,17 +169,57 @@ async function readErrorDetail(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`;
 }
 
-export async function createMiningJob(url: string): Promise<string> {
+export async function createMiningJob(
+  url: string,
+  options: { title?: string; sourceType?: 'youtube' | 'podcast' } = {},
+): Promise<string> {
   const response = await fetch(`${API_BASE}/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({
+      url,
+      title: options.title ?? null,
+      sourceType: options.sourceType ?? 'youtube',
+    }),
   });
   if (!response.ok) {
     throw new Error(`Failed to start mining job: ${await readErrorDetail(response)}`);
   }
   const data = (await response.json()) as { jobId: string };
   return data.jobId;
+}
+
+const podcastEpisodeSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  publishedAt: z.string().nullable().optional(),
+  durationSeconds: z.number().nullable().optional(),
+});
+
+const podcastFeedSchema = z.object({
+  title: z.string(),
+  episodes: z.array(podcastEpisodeSchema),
+});
+
+export type PodcastEpisode = z.infer<typeof podcastEpisodeSchema>;
+export type PodcastFeed = z.infer<typeof podcastFeedSchema>;
+
+/**
+ * Fetch+parse a podcast's RSS feed (`POST /podcast-feed`) so the wizard can
+ * offer an episode picker instead of requiring a raw enclosure/mp3 URL.
+ * Server-side because a browser fetch of an arbitrary feed host would hit
+ * CORS.
+ */
+export async function fetchPodcastFeed(url: string): Promise<PodcastFeed> {
+  const response = await fetch(`${API_BASE}/podcast-feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load podcast feed: ${await readErrorDetail(response)}`);
+  }
+  return podcastFeedSchema.parse(await response.json());
 }
 
 const jobSummarySchema = z.object({
