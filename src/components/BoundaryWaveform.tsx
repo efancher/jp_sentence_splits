@@ -227,6 +227,7 @@ export function BoundaryWaveform({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_WIDTH} ${WAVE_HEIGHT}`}
+        preserveAspectRatio="none"
         role="img"
         aria-label="Sentence waveform with draggable start and end"
         style={{

@@ -97,6 +97,13 @@ export function WordAudioRangeEditor({
   const span = durationMs > 0 ? durationMs : Math.max(1, value.endMs);
   const xForMs = (ms: number) => (ms / span) * VIEW_WIDTH;
 
+  // Assumes the svg's rendered box maps 1:1 onto its viewBox — true only
+  // because the svg below sets preserveAspectRatio="none". The default
+  // "meet" letterboxes horizontally whenever the box is wider than
+  // VIEW_WIDTH (any content column past ~600px, i.e. most non-mobile
+  // widths), so rect.width overstates the drawn content's width and every
+  // drag maps to the wrong ms — reported 2026-09-13 as handles that
+  // "collapse" onto each other instead of tracking the pointer.
   const msForClientX = (clientX: number): number => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return 0;
@@ -209,6 +216,7 @@ export function WordAudioRangeEditor({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_WIDTH} ${WAVE_HEIGHT}`}
+        preserveAspectRatio="none"
         role="img"
         aria-label="Word audio range editor"
         style={{

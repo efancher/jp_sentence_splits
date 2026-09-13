@@ -30,6 +30,28 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-13 — Fixed word-audio range editor drag handles on wide screens
+  (two user reports: "can't adjust the right side... it collapses the left
+  side in to the end", "waveform not showing").** Root cause:
+  `WordAudioRangeEditor`'s `<svg>` uses a `viewBox` of `600×88` with a CSS
+  width of `100%` and no `preserveAspectRatio` override, while
+  `msForClientX` maps pointer position to milliseconds by dividing by the
+  rendered box's full `getBoundingClientRect().width`. The app's content
+  column is up to 720px (`--content-max`), wider than the 600 viewBox units,
+  so the default `xMidYMid meet` scaling letterboxes the drawn waveform
+  horizontally on any screen past ~600px — the box is wider than what's
+  actually drawn, so dividing by the full box width maps every drag to the
+  wrong millisecond, worst near the edges where a handle drag would look
+  like it snapped or dragged the other handle instead. Fixed by adding
+  `preserveAspectRatio="none"` so the svg always stretches to fill its box
+  exactly, matching what the JS math already assumed. `BoundaryWaveform.tsx`
+  (the mining re-segmentation boundary editor) has the identical
+  `viewBox`/`msForClientX` pattern and got the same fix pre-emptively, even
+  though no report has come in against it yet. `LiveShadowWaveform.tsx`
+  shares the viewBox pattern but isn't draggable, so it's unaffected. The
+  "waveform not showing" half of one report is not explained by this and
+  is still open — ask the reporter for browser/device details if it
+  recurs after this fix.
 - **2026-09-13 — Fixed extra-practice auto-exit in the pitch-accent drill
   (user report: "exits immediately after it displays the analysis, I don't
   even have time to see it").** Root cause: in focus mode (`/pitch-accent`,
