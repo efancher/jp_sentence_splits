@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { getReferenceAlignment, saveReferenceAlignment, setSentenceVocabularyAudioRange } from '../db/repository';
 import type { SentenceAudio, SentenceVocabulary } from '../domain/types';
+import { useRangeLoop } from '../hooks/useRangeLoop';
+import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { isolatedWordRange } from '../lib/isolatedWordRange';
-import { nativeAudioController } from '../lib/nativeAudio';
-import { PlaybackCoordinator, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
+import { PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 
 import { NativeAudioButton } from './NativeAudioButton';
 import { WordAudioRangeEditor } from './WordAudioRangeEditor';
@@ -26,16 +27,11 @@ import { WordAudioRangeEditor } from './WordAudioRangeEditor';
  * Starting the loop stops the singleton so a full-sentence play and the
  * word loop can't overlap.
  *
- * `toggleLoop` retries once off a freshly refetched blob (mirroring
- * nativeAudioController's recoverAndRetry) when the initial `play()` fails —
- * Safari's IndexedDB occasionally hands back a Blob that looks intact
- * locally but won't actually decode (WebKitBlobResource error), which
- * previously left this button looking inert with zero feedback (user
- * report card_issue_ed8e9e5e, 2026-09-11: "nothing seemed to happen when I
- * clicked it"). The retry sets the `<audio>` element's `src` directly on a
- * temporary object URL rather than going through `setBlob`, since that
- * would re-trigger the objectUrl effect's cleanup mid-playback and cancel
- * the very retry it's attempting.
+ * The blob-fetch and loop/retry mechanics (including the Safari
+ * WebKitBlobResource retry — user report card_issue_ed8e9e5e, 2026-09-11)
+ * live in `useSentenceAudioBlob`/`useRangeLoop`, reused by the pitch
+ * word-vs-phrase warm-up (`PitchWordPhraseWarmup`) to loop two independent
+ * spans of the same clip.
  *
  * Extracted from PitchAccentNativeAudio (which now wraps it) so the
  * `word_listening` review card can reuse the same isolate-and-loop control.
@@ -66,18 +62,20 @@ export function SegmentLoopPlayer({
   fallbackHint?: string;
   wordOnly?: boolean;
 }) {
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-  const coordinatorRef = useRef(new PlaybackCoordinator());
-  const [blob, setBlob] = useState<Blob | null>(
-    audio.blob && audio.blob.size > 0 ? audio.blob : null,
-  );
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const blob = useSentenceAudioBlob(audio);
+  const {
+    audioElRef,
+    objectUrl,
+    isLooping,
+    playbackError,
+    speed,
+    setSpeed,
+    toggleLoop: toggleRangeLoop,
+    cancel: cancelLoop,
+  } = useRangeLoop(audio.id, blob);
   const [autoRange, setAutoRange] = useState<TimeRangeMs | null>(null);
   const [alignmentResolved, setAlignmentResolved] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [isLooping, setIsLooping] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   // Manual override — seeded from the link, then owned locally so a drag
   // reflects instantly without waiting on the DB write / a parent refresh.
@@ -122,20 +120,6 @@ export function SegmentLoopPlayer({
   // have one, else the guess while the editor is open (for a drag preview).
   const editRange = range ?? (editing ? proportionalSeed : null);
 
-  // Metadata-only row (audio synced from another device, blob not
-  // downloaded yet) — fetch the clip before it can be looped.
-  useEffect(() => {
-    if (blob) return;
-    let cancelled = false;
-    void import('../sync/audioSync').then(async ({ repairSentenceAudio }) => {
-      const fetched = await repairSentenceAudio(audio.id);
-      if (!cancelled && fetched) setBlob(fetched);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [audio.id, blob]);
-
   useEffect(() => {
     let cancelled = false;
     setAutoRange(null);
@@ -157,66 +141,14 @@ export function SegmentLoopPlayer({
     };
   }, [audio.id, blob, japanese, surfaceForm]);
 
-  useEffect(() => {
-    const coordinator = coordinatorRef.current;
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    setObjectUrl(url);
-    return () => {
-      coordinator.cancel();
-      URL.revokeObjectURL(url);
-      setObjectUrl(null);
-    };
-  }, [blob]);
-
   async function toggleLoop() {
-    if (isLooping) {
-      coordinatorRef.current.cancel();
-      setIsLooping(false);
-      return;
-    }
-    const el = audioElRef.current;
-    if (!el || !editRange) return;
-    nativeAudioController.stop();
-    setIsLooping(true);
-    setPlaybackError(null);
-    try {
-      await coordinatorRef.current.loopRange(el, editRange, speed);
-    } catch {
-      // Safari's IndexedDB occasionally hands back a Blob that looks intact
-      // locally but fails to actually play (WebKitBlobResource error) —
-      // nativeAudioController already retries this for whole-sentence
-      // playback (recoverAndRetry); this path had none, so a hit here just
-      // looked like the button silently doing nothing (user report
-      // card_issue_ed8e9e5e, 2026-09-11). Mirror it: one retry off a
-      // freshly refetched blob via a temporary object URL, bypassing the
-      // objectUrl/blob state pipeline so a concurrent setBlob doesn't cancel
-      // this retry through the state-driven cleanup effect above.
-      const { repairSentenceAudio } = await import('../sync/audioSync');
-      const freshBlob = await repairSentenceAudio(audio.id);
-      if (!freshBlob) {
-        setPlaybackError('Unable to play this word on this device.');
-      } else {
-        const retryUrl = URL.createObjectURL(freshBlob);
-        el.src = retryUrl;
-        try {
-          await coordinatorRef.current.loopRange(el, editRange, speed);
-        } catch {
-          setPlaybackError('Unable to play this word on this device.');
-        } finally {
-          URL.revokeObjectURL(retryUrl);
-          el.src = objectUrl ?? '';
-        }
-      }
-    } finally {
-      setIsLooping(false);
-    }
+    if (!editRange) return;
+    await toggleRangeLoop(editRange);
   }
 
   const persistOverride = (next: TimeRangeMs | null) => {
     setOverride(next);
-    coordinatorRef.current.cancel();
-    setIsLooping(false);
+    cancelLoop();
     if (link) void setSentenceVocabularyAudioRange(link.id, next);
   };
 
@@ -250,10 +182,7 @@ export function SegmentLoopPlayer({
           <NativeAudioButton
             audio={audio}
             displayLabel="Whole sentence"
-            onPlay={() => {
-              coordinatorRef.current.cancel();
-              setIsLooping(false);
-            }}
+            onPlay={cancelLoop}
           />
         )}
         {editRange ? (
@@ -263,8 +192,7 @@ export function SegmentLoopPlayer({
               value={speed}
               onChange={(event) => {
                 const next = Number(event.target.value);
-                coordinatorRef.current.cancel();
-                setIsLooping(false);
+                cancelLoop();
                 setSpeed(next);
               }}
             >
