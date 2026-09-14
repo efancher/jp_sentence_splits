@@ -14,7 +14,7 @@ import {
 } from '../db/repository';
 import type { Sentence, WordAlignment } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
-import { alignAudio } from '../lib/analysisApi';
+import { alignAudioDetailed, type AlignAudioFailureReason } from '../lib/analysisApi';
 import { buildKanaTimeline, type KanaTimelineEntry } from '../lib/kanaTimeline';
 import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
 import { extractPitch, type PitchAnalysisPayload } from '../lib/pitch';
@@ -74,7 +74,11 @@ const newShuffleSeed = () => Math.random().toString(36).slice(2);
 type AnalysisState =
   | { status: 'idle' }
   | { status: 'analyzing' }
-  | { status: 'unavailable'; learnerPitch?: PitchAnalysisPayload }
+  | {
+      status: 'unavailable';
+      learnerPitch?: PitchAnalysisPayload;
+      reason?: AlignAudioFailureReason;
+    }
   | {
       status: 'done';
       observations: TimingObservation[];
@@ -107,8 +111,8 @@ async function analyzeRecording(
     pitch = undefined;
   }
   try {
-    const alignment = await alignAudio(blob, transcript);
-    if (!alignment || !pitch) return { status: 'unavailable', learnerPitch: pitch };
+    const { result: alignment, reason } = await alignAudioDetailed(blob, transcript);
+    if (!alignment || !pitch) return { status: 'unavailable', learnerPitch: pitch, reason };
     const scorableTargets = targets
       .filter((target) => target.pitchAccentPositions?.length)
       .map((target) => ({
@@ -673,8 +677,9 @@ function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
   if (analysis.status === 'unavailable') {
     return (
       <p className="muted">
-        Couldn't reach the alignment service, so there's no pitch-accent feedback for this take.
-        Try again in a moment.
+        {analysis.reason === 'rejected'
+          ? "The alignment service couldn't line up this take with the text (short isolated-word clips are the hardest case for it), so there's no pitch-accent feedback for this take. Try recording it again."
+          : "Couldn't reach the alignment service, so there's no pitch-accent feedback for this take. Try again in a moment."}
       </p>
     );
   }

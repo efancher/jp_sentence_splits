@@ -19,30 +19,60 @@ export const TRANSCRIPTION_VERSION = 1;
 const ALIGN_TIMEOUT_MS = 60_000;
 const TRANSCRIBE_TIMEOUT_MS = 60_000;
 
-export async function alignAudio(
+/**
+ * `'unreachable'`: the request never got a response (network error, off
+ * tailnet, timed-out cold start) — nothing to say about this particular
+ * take, any take would fail the same way right now.
+ * `'rejected'`: the service responded but declined this audio/transcript
+ * (e.g. the MFA aligner couldn't find a path within its beam for a very
+ * short/isolated-word clip) — the service itself is up and reachable.
+ */
+export type AlignAudioFailureReason = 'unreachable' | 'rejected';
+
+export interface AlignAudioOutcome {
+  result: AlignmentResult | null;
+  reason?: AlignAudioFailureReason;
+}
+
+/** Reason-preserving version of `alignAudio`, for callers that want to tell "server down" apart from "this take couldn't be aligned". */
+export async function alignAudioDetailed(
   blob: Blob,
   transcript: string,
-): Promise<AlignmentResult | null> {
+): Promise<AlignAudioOutcome> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ALIGN_TIMEOUT_MS);
+  let response: Response;
   try {
     const form = new FormData();
     form.append('audio', blob);
     form.append('transcript', transcript);
-    const response = await fetch(`${SHADOWING_ANALYSIS_API_BASE}/align`, {
+    response = await fetch(`${SHADOWING_ANALYSIS_API_BASE}/align`, {
       method: 'POST',
       body: form,
       signal: controller.signal,
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as AlignmentResult;
-    if (!Array.isArray(data.words)) return null;
-    return data;
   } catch {
-    return null;
+    return { result: null, reason: 'unreachable' };
   } finally {
     clearTimeout(timeout);
   }
+  // A response — even a bad one — means the service was reached; anything
+  // that goes wrong from here is "rejected", not "unreachable".
+  if (!response.ok) return { result: null, reason: 'rejected' };
+  try {
+    const data = (await response.json()) as AlignmentResult;
+    if (!Array.isArray(data.words)) return { result: null, reason: 'rejected' };
+    return { result: data };
+  } catch {
+    return { result: null, reason: 'rejected' };
+  }
+}
+
+export async function alignAudio(
+  blob: Blob,
+  transcript: string,
+): Promise<AlignmentResult | null> {
+  return (await alignAudioDetailed(blob, transcript)).result;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { alignAudio, transcribeAudio } from '../src/lib/analysisApi';
+import { alignAudio, alignAudioDetailed, transcribeAudio } from '../src/lib/analysisApi';
 
 const blob = new Blob(['audio'], { type: 'audio/webm' });
 
@@ -71,6 +71,64 @@ describe('alignAudio', () => {
     );
 
     await expect(alignAudio(blob, '今日は')).resolves.toBeNull();
+  });
+});
+
+describe('alignAudioDetailed', () => {
+  it('tags a non-200 response as "rejected" (service reachable, this take failed)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Alignment failed', { status: 500 })),
+    );
+
+    expect(await alignAudioDetailed(blob, '今日は')).toEqual({ result: null, reason: 'rejected' });
+  });
+
+  it('tags a network error as "unreachable"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+
+    expect(await alignAudioDetailed(blob, '今日は')).toEqual({
+      result: null,
+      reason: 'unreachable',
+    });
+  });
+
+  it('tags a timeout as "unreachable"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }),
+    );
+
+    expect(await alignAudioDetailed(blob, '今日は')).toEqual({
+      result: null,
+      reason: 'unreachable',
+    });
+  });
+
+  it('tags malformed JSON as "rejected"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not json', { status: 200 })),
+    );
+
+    expect(await alignAudioDetailed(blob, '今日は')).toEqual({ result: null, reason: 'rejected' });
+  });
+
+  it('returns just the result, no reason, on success', async () => {
+    const result = { durationSeconds: 1.7, words: [] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(result), { status: 200 })),
+    );
+
+    expect(await alignAudioDetailed(blob, '今日は')).toEqual({ result });
   });
 });
 

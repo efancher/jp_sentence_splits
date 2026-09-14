@@ -30,6 +30,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — `alignAudioDetailed` distinguishes "service unreachable"
+  from "service reached but declined this take" (user report: the
+  pitch-accent drill said "couldn't reach the alignment service" while
+  `AnalysisPanel` aligned fine minutes later — the service was up the whole
+  time; MFA's beam search was failing on that specific isolated-word clip
+  and returning 500, which the old `alignAudio` collapsed into the same
+  `null` as a genuine network failure).** New `alignAudioDetailed` in
+  `src/lib/analysisApi.ts` returns `{ result, reason? }`, `reason` being
+  `'unreachable'` (fetch itself failed/timed out) or `'rejected'` (got a
+  response — non-2xx, or a 2xx that didn't parse/shape-check). Plain
+  `alignAudio` (used by `alignmentCache.ts`) is now a thin wrapper, unchanged
+  behavior. `PitchAccentDrillPage`'s `AnalysisState` threads the reason
+  through to `PitchAccentFeedback`, which now shows a distinct message for
+  "this take's alignment failed, try recording it again" vs. the original
+  "can't reach the server" copy. Root cause of the 500s themselves (MFA's
+  beam=10/retry_beam=40 failing on short isolated-word audio) lives in the
+  sibling `shadowing-analysis-api` repo, not fixed here. `tests/analysisApi`
+  +5.
+
 - **2026-09-14 — Kana ruler under `AnalysisPanel`'s pitch contours now
   spreads one label per mora instead of one per forced-alignment word
   (user ask: "could the hiragana mora be spread out to reflect where they
