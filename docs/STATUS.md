@@ -138,6 +138,30 @@ what's left is one deferred durability item (below).
   reproducing the resolver's actual (wrong→right) output for this word, not
   by re-clicking through the review UI.
 
+- **2026-09-14 — Sweep stale no-diff conflicts every sync cycle.** Two new
+  "Report sync issue" reports (`sync_issue_a0716156-…`,
+  `sync_issue_6675650d-…`) both said "the diff doesn't show a difference" on
+  `reviews` conflicts — and both conflicts' `createdAt` predated the
+  same-day `createdAt`-noise fix below (2026-09-08, 2026-09-12, 2026-09-04
+  vs. the fix landing 01:18 that day). That fix only changed what
+  `handlePushConflict` decides for *new* `version_conflict`s going forward;
+  a conflict already sitting in the local `syncConflicts` Dexie table from
+  before the fix landed is never re-evaluated, so it stays open forever even
+  after `ConflictPanel`'s diff view catches up and starts rendering it as
+  "No field-level differences" — a conflict card with nothing left to
+  decide, which is exactly what confused both reporters. Added
+  `sweepNoopConflicts` (`src/sync/queue.ts`): re-runs `conflictContentsMatch`
+  against every open conflict's already-frozen `localPayload`/`remotePayload`
+  and auto-resolves (`resolution: 'auto_noop'`, new `SyncConflict.resolution`
+  member) any that now match. Called once per `runSyncCycle`
+  (`src/sync/engine.ts`), after `pullChanges`. Typecheck + `src/sync` Vitest
+  green. The two reporters' specific stale conflicts still need one
+  in-app sync cycle on their own device to clear (no server-side conflict
+  store to sweep from a script — same Dexie-only caveat as the entry
+  below); tell them to open the app once online and the cards should
+  disappear on their own, then mark both sync issue reports resolved in
+  Card Issues.
+
 - **2026-09-14 — Fix spurious `createdAt` noise on `reviews` sync
   conflicts.** Root-caused from a user "Report sync issue" (§7 of
   `.claude/skills/card-issue-triage`): "missing a remote createdAt date".

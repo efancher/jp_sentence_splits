@@ -12,6 +12,7 @@ import {
   updateSyncMeta,
   getRecordMeta,
   hasOpenConflict,
+  sweepNoopConflicts,
 } from './queue';
 import {
   idColumnForEntity,
@@ -63,6 +64,10 @@ export async function runSyncCycle(): Promise<void> {
       // stayed on "Pending N" forever (e.g. after a missing SQL migration).
       const pushFailure = await pushMutations();
       await pullChanges();
+      const swept = await sweepNoopConflicts();
+      if (swept > 0) {
+        syncLog('debug', `Auto-resolved ${swept} stale no-diff conflict(s)`, 'CONFLICT_SWEEP');
+      }
       // Best-effort: pull down blobs for any metadata-only reference-audio
       // rows the pull just created. Never fails the cycle.
       try {

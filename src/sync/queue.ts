@@ -1,5 +1,6 @@
 import { createId } from '../lib/ids';
 import { getDb } from '../db/database';
+import { conflictContentsMatch } from './conflictDiff';
 import type {
   SyncConflict,
   SyncEntity,
@@ -207,4 +208,34 @@ export async function pendingCount(): Promise<number> {
 export async function openConflictCount(): Promise<number> {
   const open = await listOpenConflicts();
   return open.length;
+}
+
+/**
+ * Auto-resolves already-open conflicts whose frozen local/remote payloads no
+ * longer show a real difference under the current `conflictDiff.ts`
+ * normalization. `handlePushConflict` (engine.ts) only runs this check at
+ * the moment a conflict is *created* — a conflict recorded before a diff
+ * normalization fix landed (e.g. the `reviews` `createdAt` strip,
+ * 2026-09-14) sits open forever otherwise, since nothing ever re-checks it
+ * once ConflictPanel's diff view catches up and starts rendering it as "no
+ * differences" (reported via Report sync issue, 2026-09-14 — "the diff
+ * doesn't show a difference" on conflicts that predated the fix). Called
+ * once per sync cycle; cheap, since it only touches already-open conflicts.
+ */
+export async function sweepNoopConflicts(): Promise<number> {
+  const open = await listOpenConflicts();
+  let swept = 0;
+  for (const conflict of open) {
+    if (
+      conflictContentsMatch(
+        conflict.localPayload,
+        conflict.remotePayload,
+        conflict.entity,
+      )
+    ) {
+      await resolveConflictLocally(conflict.id, 'auto_noop');
+      swept += 1;
+    }
+  }
+  return swept;
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { addConflict, listOpenConflicts, resolveConflictLocally } from './queue';
+import {
+  addConflict,
+  listOpenConflicts,
+  resolveConflictLocally,
+  sweepNoopConflicts,
+} from './queue';
 
 describe('addConflict', () => {
   it('upserts on (entity, recordId) among open conflicts instead of always inserting', async () => {
@@ -80,5 +85,51 @@ describe('addConflict', () => {
     const open = await listOpenConflicts();
     expect(open.filter((c) => c.recordId === 'sent_3')).toHaveLength(1);
     expect(open.filter((c) => c.recordId === 'sent_4')).toHaveLength(1);
+  });
+});
+
+describe('sweepNoopConflicts', () => {
+  it('auto-resolves an already-open conflict whose frozen payloads no longer diverge', async () => {
+    // Regression: a `reviews` conflict recorded before the createdAt-strip
+    // fix (conflictDiff.ts's ENTITY_EXTRA_KEYS) sat open forever, since
+    // handlePushConflict only re-checks conflictContentsMatch at creation
+    // time, not on every later sync cycle (reported via two "Report sync
+    // issue" submissions, 2026-09-14 — "the diff doesn't show a difference").
+    const conflict = await addConflict({
+      entity: 'reviews',
+      recordId: 'review_stale',
+      localPayload: { id: 'review_stale', timestamp: '2026-09-01T00:00:00Z' },
+      remotePayload: {
+        id: 'review_stale',
+        timestamp: '2026-09-01T00:00:00Z',
+        created_at: '2026-09-01T00:00:00Z',
+        version: 1,
+      },
+      localVersion: 0,
+      remoteVersion: 1,
+    });
+
+    const swept = await sweepNoopConflicts();
+
+    expect(swept).toBe(1);
+    const open = await listOpenConflicts();
+    expect(open.find((c) => c.id === conflict.id)).toBeUndefined();
+  });
+
+  it('leaves a conflict with a real content difference open', async () => {
+    await addConflict({
+      entity: 'reviews',
+      recordId: 'review_real',
+      localPayload: { id: 'review_real', rating: 'good' },
+      remotePayload: { id: 'review_real', rating: 'again', version: 1 },
+      localVersion: 0,
+      remoteVersion: 1,
+    });
+
+    const swept = await sweepNoopConflicts();
+
+    expect(swept).toBe(0);
+    const open = await listOpenConflicts();
+    expect(open.find((c) => c.recordId === 'review_real')).toBeDefined();
   });
 });
