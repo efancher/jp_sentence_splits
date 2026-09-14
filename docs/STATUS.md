@@ -30,6 +30,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — Fix spurious `createdAt` noise on `reviews` sync
+  conflicts.** Root-caused from a user "Report sync issue" (§6 of
+  `.claude/skills/card-issue-triage`): "missing a remote createdAt date".
+  `Review` (domain/types.ts) has no `createdAt` field — only `timestamp` —
+  but `reviewToRemote` (src/sync/mappers.ts) copies `timestamp` into the
+  remote row's `created_at` column purely to satisfy the table schema.
+  `ConflictPanel`'s diff (`forDiff`/`conflictContentsMatch`,
+  src/sync/conflictDiff.ts) had no way to know this was bookkeeping rather
+  than a real field, so every `reviews` conflict showed a spurious
+  remote-only `createdAt` line — and, more importantly, `conflictContentsMatch`
+  (used by `handlePushConflict` in src/sync/engine.ts to auto-settle a bare
+  CAS-mismatch with no actual content divergence) could never return `true`
+  for `reviews`, so even a harmless race between two devices always
+  surfaced as a manual conflict card. Fix: `forDiff`/`conflictContentsMatch`
+  now take an optional `SyncEntity` and strip a small per-entity extra-keys
+  table (`ENTITY_EXTRA_KEYS`, currently just `reviews` → `createdAt`) on top
+  of the existing universal `SYNC_BOOKKEEPING_KEYS`; both call sites
+  (`ConflictPanel.tsx`, `engine.ts`'s `handlePushConflict`) now pass
+  `conflict.entity`/`item.entity`. New regression test in
+  `conflictDiff.test.ts`. Full 1440-test Vitest suite + typecheck + oxlint
+  green. `addConflict` (src/sync/queue.ts) writes conflict rows to local
+  Dexie only, not Supabase, so the reporter's specific open conflict
+  (`sync_issue_d4f8988e-cfa1-4f6c-9fb2-d76b48a5eaca`, `review_f68e6482-…`)
+  isn't inspectable from a script — the fix stops the spurious `createdAt`
+  line going forward, but whether that conflict card still has a real diff
+  underneath (and so still needs a manual keep-local/keep-remote) can only
+  be seen in-app on the reporter's own device.
+
 - **2026-09-13 — Difficulty screening checkpoint** (docs/ROADMAP.md,
   "Podcast mining" item 5, promoted to Done). A rough "looks beginner/
   intermediate/advanced" readout, computed once and shared across every

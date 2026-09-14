@@ -447,7 +447,7 @@ async function handlePushConflict(
   // automatically instead of asking the learner to click through a
   // conflict card with no real diff (reported 2026-09-04 — "no other diff
   // lines highlighted").
-  if (conflictContentsMatch(item.payload, remote)) {
+  if (conflictContentsMatch(item.payload, remote, item.entity)) {
     syncLog('debug', 'Conflict auto-settled: no content difference', 'CONFLICT_NOOP', {
       entity: item.entity,
       recordId: item.recordId,

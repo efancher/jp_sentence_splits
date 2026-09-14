@@ -25,8 +25,8 @@ const DIFF_PREFIX: Record<DiffRow['type'], string> = {
 };
 
 function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
-  const local = prettyLines(forDiff(conflict.localPayload));
-  const remote = prettyLines(forDiff(conflict.remotePayload));
+  const local = prettyLines(forDiff(conflict.localPayload, conflict.entity));
+  const remote = prettyLines(forDiff(conflict.remotePayload, conflict.entity));
   const rows = diffLines(local, remote);
   const changes = countChanges(rows);
 

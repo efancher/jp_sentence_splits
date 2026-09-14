@@ -161,4 +161,24 @@ describe('conflictContentsMatch', () => {
     const remote = { status: 'done', version: 46 };
     expect(conflictContentsMatch(local, remote)).toBe(false);
   });
+
+  it('drops createdAt for reviews, which has no local-domain counterpart', () => {
+    // Review (domain/types.ts) has no createdAt field — only `timestamp` —
+    // but reviewToRemote copies `timestamp` into the created_at column to
+    // satisfy the table schema. Without stripping this, every reviews
+    // conflict shows a spurious remote-only createdAt line and can never
+    // auto-settle even when nothing actually diverged (reported via Report
+    // sync issue, 2026-09-14 — "missing a remote createdAt date").
+    const local = { rating: 'good', timestamp: '2026-09-12T18:55:28.220Z' };
+    const remote = {
+      rating: 'good',
+      timestamp: '2026-09-12T18:55:28.220Z',
+      created_at: '2026-09-12T18:55:28.220Z',
+      version: 1,
+      owner_id: 'user-1',
+    };
+    expect(conflictContentsMatch(local, remote, 'reviews')).toBe(true);
+    // Without the entity hint, other entities' real createdAt still diffs.
+    expect(conflictContentsMatch(local, remote)).toBe(false);
+  });
 });

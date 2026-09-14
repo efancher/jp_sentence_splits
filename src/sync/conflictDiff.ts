@@ -5,6 +5,8 @@
  * stands out instead of every line reading as "changed".
  */
 
+import type { SyncEntity } from './types';
+
 function toCamel(key: string): string {
   return key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
@@ -64,6 +66,26 @@ const SYNC_BOOKKEEPING_KEYS = new Set([
   'updatedAt',
 ]);
 
+/**
+ * Per-entity keys stripped in addition to `SYNC_BOOKKEEPING_KEYS`, for
+ * columns that exist on the remote row but have no analog on that entity's
+ * local domain object at all (so they always show up as remote-only diff
+ * noise, never a real edit).
+ *
+ * `reviews`: `Review` (domain/types.ts) has no `createdAt` — only
+ * `timestamp`, which `reviewToRemote` also copies into the `created_at`
+ * column purely to satisfy the table's schema. Every `reviews` conflict
+ * therefore always showed a spurious "+ createdAt" line on the remote side
+ * with no local counterpart, and — since `conflictContentsMatch` reuses
+ * this same normalization — this also meant an otherwise-identical review
+ * (e.g. a harmless CAS race from two devices syncing the same review) could
+ * never auto-settle and always landed as a manual conflict (reported via
+ * Report sync issue, 2026-09-14 — "missing a remote createdAt date").
+ */
+const ENTITY_EXTRA_KEYS: Partial<Record<SyncEntity, Set<string>>> = {
+  reviews: new Set(['createdAt']),
+};
+
 const ISO_TIMESTAMP_RE =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -111,14 +133,15 @@ function normalizeForDiff(value: unknown): unknown {
  * since a real version/owner/null mismatch is exactly what debugging a
  * conflict sometimes needs to see.
  */
-export function forDiff(value: unknown): unknown {
+export function forDiff(value: unknown, entity?: SyncEntity): unknown {
   const normalized = normalizeForDiff(canonicalize(value));
   if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
     return normalized;
   }
+  const extraKeys = entity ? ENTITY_EXTRA_KEYS[entity] : undefined;
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(normalized as Record<string, unknown>)) {
-    if (!SYNC_BOOKKEEPING_KEYS.has(key)) out[key] = v;
+    if (!SYNC_BOOKKEEPING_KEYS.has(key) && !extraKeys?.has(key)) out[key] = v;
   }
   return out;
 }
@@ -137,9 +160,11 @@ export function forDiff(value: unknown): unknown {
 export function conflictContentsMatch(
   localPayload: unknown,
   remotePayload: unknown,
+  entity?: SyncEntity,
 ): boolean {
   return (
-    JSON.stringify(forDiff(localPayload)) === JSON.stringify(forDiff(remotePayload))
+    JSON.stringify(forDiff(localPayload, entity)) ===
+    JSON.stringify(forDiff(remotePayload, entity))
   );
 }
 
