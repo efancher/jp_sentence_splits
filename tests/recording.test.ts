@@ -168,6 +168,7 @@ describe('RecordingService', () => {
 class FakeAudioElement {
   listeners: Record<string, Array<() => void>> = {};
   currentTime = 0;
+  duration = NaN;
   preload = '';
   playbackRate = 1;
   preservesPitch = true;
@@ -379,6 +380,56 @@ describe('PlaybackCoordinator.loopRange', () => {
     coordinator.cancel();
     await secondDone;
     expect(second.pause).toHaveBeenCalledOnce();
+  });
+
+  // Regression, user report 2026-09-14: a requested end beyond the clip's
+  // real duration (e.g. isolatedWordRange's fixed +120ms tail pad pushing
+  // past a clip whose target word sits right at the end) meant currentTime
+  // could never reach it — playback just ran off the end of the file and
+  // the "loop" silently stopped after one play-through.
+  it('clamps the loop end to the media duration, so an out-of-range requested end still rewinds', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+    audio.duration = 2; // shorter than the requested 3000ms end
+
+    const done = coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+      startMs: 1000,
+      endMs: 3000,
+    });
+
+    audio.currentTime = 2; // reaches the real duration, not the requested end
+    audio.dispatch('timeupdate');
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(audio.currentTime).toBe(1);
+
+    audio.dispatch('seeked');
+    expect(audio.play).toHaveBeenCalledTimes(2);
+
+    coordinator.cancel();
+    await done;
+  });
+
+  it('rewinds on the media\'s own "ended" event too, not just a timeupdate crossing', async () => {
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+
+    const done = coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+      startMs: 0,
+      endMs: 1000,
+    });
+
+    // Media reaches its own natural end without a timeupdate tick catching
+    // the crossing first — previously nothing was listening for this, so
+    // the loop just stalled here forever (promise never resolving).
+    audio.dispatch('ended');
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(audio.currentTime).toBe(0);
+
+    audio.dispatch('seeked');
+    expect(audio.play).toHaveBeenCalledTimes(2);
+
+    coordinator.cancel();
+    await done;
   });
 });
 

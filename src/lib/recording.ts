@@ -565,6 +565,7 @@ function playLoopedRange(
     let tailTimer: number | undefined;
     const cleanup = () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
       signal.removeEventListener('abort', onAbort);
       window.clearTimeout(tailTimer);
     };
@@ -581,8 +582,8 @@ function playLoopedRange(
       audio.addEventListener('seeked', resume, { once: true });
       audio.currentTime = startSec;
     };
-    const onTimeUpdate = () => {
-      if (restarting || audio.currentTime < endSec) return;
+    const triggerRewind = () => {
+      if (restarting) return;
       restarting = true;
       const tailLag = loopTailLagMs(audio.playbackRate || 1);
       if (tailLag === 0) {
@@ -591,12 +592,31 @@ function playLoopedRange(
       }
       tailTimer = window.setTimeout(rewind, tailLag);
     };
+    const onTimeUpdate = () => {
+      // Clamp to the media's own real duration once known — a requested end
+      // beyond it (e.g. isolatedWordRange's fixed +120ms tail pad pushing
+      // past a clip whose target word sits right at the end) is otherwise
+      // never reached: playback just runs off the end of the file and the
+      // loop silently stops after exactly one play-through instead of
+      // rewinding (user report, 2026-09-14 — "only doing one play through").
+      const effectiveEnd =
+        Number.isFinite(audio.duration) ? Math.min(endSec, audio.duration) : endSec;
+      if (restarting || audio.currentTime < effectiveEnd) return;
+      triggerRewind();
+    };
+    // Belt-and-suspenders: if the media reaches its own real end before a
+    // `timeupdate` tick catches the crossing (coarse event granularity, or
+    // `duration` still unknown when the clamp above ran), rewind from here
+    // too — otherwise the loop stalls silently at the end of the file with
+    // its promise never resolving (button stuck saying "Looping…").
+    const onEnded = () => triggerRewind();
     const onAbort = () => {
       audio.pause();
       cleanup();
       resolve();
     };
     audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
     signal.addEventListener('abort', onAbort, { once: true });
     audio.currentTime = startSec;
     // Only the *initial* play() failure is surfaced as a rejection — a

@@ -30,6 +30,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — Fix `SegmentLoopPlayer`'s native-audio loop stalling after
+  one play-through.** Third report in the same triage session: "the loop
+  native word is only doing one play through" — a genuinely different bug
+  from the two pitch_accent fixes above/below, this one in the shared
+  loop primitive itself (`playLoopedRange`, src/lib/recording.ts), so it
+  affects every caller (`pitch_accent`'s and `word_listening`'s native-word
+  loop, both via `SegmentLoopPlayer`). Root cause: `onTimeUpdate` only
+  rewound when `audio.currentTime` crossed the *requested* `endMs` — with
+  no clamp against the clip's actual duration. `isolatedWordRange`
+  (src/lib/isolatedWordRange.ts) adds a flat, unclamped `+120ms` tail pad
+  to the isolated word's end (deliberately, to include the trailing
+  particle/mora that disambiguates heiban/odaka by ear) — for a word whose
+  isolated span sits near the very end of the clip, that pad can push the
+  requested end past the audio's real length. `currentTime` can then never
+  reach it: playback just runs off the end of the file, the browser's own
+  `ended` fires with nothing listening for it (no `ended` handler existed),
+  and `playLoopedRange`'s promise never resolves — the loop button stays
+  stuck saying "Looping…" having played exactly once, needing a manual
+  stop click to recover (matches the report, and likely explains the odder
+  half of it too — a stuck loop interacting with `SegmentLoopPlayer`'s own
+  Safari-blob retry path is a plausible route to the "first click nothing,
+  then plays the whole sentence" follow-up the user also described, though
+  that half wasn't independently reproduced). Fix: `onTimeUpdate` now
+  clamps its crossing check to `Math.min(endSec, audio.duration)` when
+  `duration` is a finite number, and a new `ended` listener triggers the
+  same rewind as a fallback regardless of what caused native playback to
+  stop. Two new tests in `tests/recording.test.ts` (duration-clamped
+  crossing; rewinds off `ended` with no `timeupdate` crossing at all) plus
+  the existing loop/rewind/cancel/rate tests all still green. Full
+  1444-test Vitest suite + typecheck + oxlint green. **Not browser-verified
+  against the user's exact repro** (no live reproduction environment in
+  this session) — ask the user to re-test both the plain "loops
+  indefinitely" case and the whole-sentence-then-loop sequence and report
+  back if either still misbehaves.
+
 - **2026-09-14 — Fix pitch_accent native-audio loop stopping mid-word for
   -masu (and other multi-morpheme conjugated) occurrences.** User follow-up
   to the same triage session as the `createdAt` fix below: on re-reading the
