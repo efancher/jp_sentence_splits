@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-13.
+Last updated: 2026-09-14.
 
 ## Where things stand
 
@@ -29,6 +29,27 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-14 — Kana ruler under `AnalysisPanel`'s pitch contours now
+  spreads one label per mora instead of one per forced-alignment word
+  (user ask: "could the hiragana mora be spread out to reflect where they
+  were actually voiced, so I can see where I'm saying a mora too long/
+  slow").** `buildKanaTimeline` (`src/lib/kanaTimeline.ts`) still decides
+  *which* morae belong to which aligned word via the existing
+  audible-character-count proportion (unchanged, still the cross-
+  tokenization approximation from 2026-09-07 below), but now sub-divides
+  each word's own `[start, end]` span across its morae using that word's
+  own `phones` sub-alignment (already returned by the forced-alignment
+  service, previously unused): each mora claims a proportional slice of
+  phone-index space (`phones.length / moraCount`), with real time coming
+  from linear interpolation between actual phone boundaries. Phone count
+  and mora count aren't equal in general (gemination/long vowels collapse
+  two morae onto one shared phone in MFA's output), so this is still an
+  approximation, but unlike an even word-internal split it lets a
+  learner's actual drawn-out mora show up as a wider label — an even split
+  can't show that at all, which was the point of the ask. One-mora words
+  and words with no phone data fall back to the prior single-label
+  behavior. `tests/kanaTimeline` +2.
 
 - **2026-09-14 — Fix `SegmentLoopPlayer`'s native-audio loop stalling after
   one play-through.** Third report in the same triage session: "the loop

@@ -1379,9 +1379,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   - **Kana ruler under the pitch contours** — once the forced alignment is
     available, `buildKanaTimeline` (`src/lib/kanaTimeline.ts`) lays the
     sentence's kana along each contour's linear time axis (the same voiced
-    span as the contour above it), one label per aligned word, positioned by
-    the word's `start`/`end` over the contour duration. Word→kana split is by character-count proportion onto the mora
-    sequence (same approximation as `SyncedShadowText`); reference side is
+    span as the contour above it), one label per mora, positioned by real
+    timing rather than evenly spaced: which morae belong to which aligned
+    word is still decided by character-count proportion onto the mora
+    sequence (same approximation as `SyncedShadowText`), but within a word
+    each mora then claims a proportional slice of that word's own `phones`
+    sub-alignment (interpolated between real phone boundaries), so a mora
+    the speaker held longer renders as a visibly wider label instead of
+    every mora in a word looking identical. Reference side is
     offset-corrected for a practice-target slice. Degrades to nothing when
     the aligner is unreachable. The row component (`KanaTimelineRow`) is
     shared with the pitch-accent drill's own-recording contour (§8). Not on
