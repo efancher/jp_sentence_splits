@@ -27,11 +27,18 @@ import type { TimeRangeMs } from './recording';
  * than a confidently-wrong span. (`<eps>` is ordinary inter-word silence
  * and doesn't trigger this.)
  */
-export function isolatedWordRange(
+interface WordMatch {
+  startMs: number;
+  matchEndMs: number;
+  lastIndex: number;
+  usable: WordAlignment[];
+}
+
+function matchWord(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
-): TimeRangeMs | null {
+): WordMatch | null {
   const charIndex = japanese.indexOf(surfaceForm);
   if (charIndex === -1 || surfaceForm.length === 0) return null;
 
@@ -67,8 +74,54 @@ export function isolatedWordRange(
     return null;
   }
 
+  return { startMs, matchEndMs, lastIndex, usable };
+}
+
+function pad(startMs: number, endMs: number): TimeRangeMs {
+  return { startMs: Math.max(0, startMs - 60), endMs: endMs + 120 };
+}
+
+export function isolatedWordRange(
+  words: WordAlignment[],
+  japanese: string,
+  surfaceForm: string,
+): TimeRangeMs | null {
+  const match = matchWord(words, japanese, surfaceForm);
+  if (!match) return null;
+  const { startMs, matchEndMs, lastIndex, usable } = match;
+
+  let endMs = matchEndMs;
   const nextWord = usable[lastIndex + 1];
   if (nextWord && nextWord.text.length <= 2) endMs = nextWord.end * 1000;
 
-  return { startMs: Math.max(0, startMs - 60), endMs: endMs + 120 };
+  return pad(startMs, endMs);
+}
+
+/**
+ * Like `isolatedWordRange`, but returns the strict word-only span alongside
+ * the particle-inclusive one instead of picking one — for callers that need
+ * to play both and let the learner compare them (the heiban/odaka warm-up:
+ * the word alone sounds identical either way, only the particle's pitch
+ * differs). `withParticle` is null when there's no short following word to
+ * fold in, i.e. nothing to contrast against `wordOnly`.
+ */
+export interface IsolatedWordSpans {
+  wordOnly: TimeRangeMs;
+  withParticle: TimeRangeMs | null;
+}
+
+export function isolatedWordSpans(
+  words: WordAlignment[],
+  japanese: string,
+  surfaceForm: string,
+): IsolatedWordSpans | null {
+  const match = matchWord(words, japanese, surfaceForm);
+  if (!match) return null;
+  const { startMs, matchEndMs, lastIndex, usable } = match;
+
+  const nextWord = usable[lastIndex + 1];
+  const withParticle =
+    nextWord && nextWord.text.length <= 2 ? pad(startMs, nextWord.end * 1000) : null;
+
+  return { wordOnly: pad(startMs, matchEndMs), withParticle };
 }

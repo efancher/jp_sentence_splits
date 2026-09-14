@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WordAlignment } from '../src/domain/types';
-import { isolatedWordRange } from '../src/lib/isolatedWordRange';
+import { isolatedWordRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
 
 const word = (text: string, start: number, end: number): WordAlignment => ({
   text,
@@ -74,5 +74,35 @@ describe('isolatedWordRange', () => {
     const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
     // について (4 chars) is left out; range ends at 本's own end + 120ms.
     expect(isolatedWordRange(trailing, '本について', '本')).toEqual({ startMs: 0, endMs: 720 });
+  });
+});
+
+describe('isolatedWordSpans', () => {
+  const japanese = '私は本を読む';
+  const words: WordAlignment[] = [
+    word('私', 0, 0.5),
+    word('は', 0.5, 0.8),
+    word('本', 0.8, 1.4),
+    word('を', 1.4, 1.6),
+    word('読む', 1.6, 2.4),
+  ];
+
+  it('returns both the word-alone span and the particle-inclusive span', () => {
+    expect(isolatedWordSpans(words, japanese, '本')).toEqual({
+      wordOnly: { startMs: 740, endMs: 1520 },
+      withParticle: { startMs: 740, endMs: 1720 },
+    });
+  });
+
+  it('leaves withParticle null when nothing short follows', () => {
+    const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
+    expect(isolatedWordSpans(trailing, '本について', '本')).toEqual({
+      wordOnly: { startMs: 0, endMs: 720 },
+      withParticle: null,
+    });
+  });
+
+  it('returns null when the word can’t be located', () => {
+    expect(isolatedWordSpans(words, japanese, '猫')).toBeNull();
   });
 });
