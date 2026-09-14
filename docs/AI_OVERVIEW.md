@@ -1725,9 +1725,11 @@ aren't JSON-serializable/aren't worth backing up).
   editing, delayed-shadowing/meaning-production toggles, the duplicate-row
   sync self-heal, the reference-audio self-heal) are **not yet manually
   verified in a real browser** at time of writing — verified only via unit/
-  component tests and code review, per repeated notes in `docs/STATUS.md`
-  that browser automation tooling isn't available in the development
-  sandbox.
+  component tests and code review. This is a backlog gap, not a hard
+  blocker: real-browser verification is viable here (see below) and has
+  been used successfully for newer features (e.g. the 2026-09-14
+  pitch word-vs-phrase warm-up, seeded directly into Dexie and click-tested
+  in headless Chromium).
 - **No export-back-to-Anki path**, and none planned — migration away from
   Anki was a deliberate one-way decision.
 - **Learning Orchestrator known limitations** (see docs/STATUS_ARCHIVE.md's
@@ -1747,13 +1749,21 @@ aren't JSON-serializable/aren't worth backing up).
   entity, unlike the `kanji`/`vocabulary_items` get-or-create pattern).
   The old "no 'continue longer'
   extend-in-place action" limitation is now resolved — that's what the
-  daily top-up model *is*. Browser automation is usually unavailable in
-  this sandbox (Playwright Chromium/WebKit fail to launch on missing
-  system libraries, no passwordless sudo to install them) — occasionally
-  worked around per-session by pointing `LD_LIBRARY_PATH` at a manually
-  pre-extracted lib directory when one happens to already exist, but that's
-  not a standing dependency, so most features are still verified only via
-  unit/component tests plus code review.
+  daily top-up model *is*.
+
+**Browser automation is viable, not blocked.** Playwright's own Chromium/
+WebKit builds fail to launch on this host (missing system libs, no
+passwordless sudo to `apt install` them), but a manually-extracted NSS/NSPR
+lib directory at `/tmp/chromium-libs` (present since 2026-08-27, reused
+successfully as recently as 2026-09-14) lets `playwright-core` launch
+headless Chromium via `LD_LIBRARY_PATH=/tmp/chromium-libs`. Docker
+(`mcr.microsoft.com/playwright`, `--network host`) is the fallback when
+that directory is unavailable (e.g. a fresh sandbox after `/tmp` is
+cleared) — both approaches have shipped real click-through verification
+(seed data into Dexie via the page's own `getDb()`, drive the UI, screenshot).
+Most older features were still verified only via unit/component tests plus
+code review, but that reflects when they shipped, not a standing tooling
+gap — new UI work should default to a real-browser check per CLAUDE.md.
 
 ## External services & dependencies
 
