@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { DifficultyBadge } from '../components/DifficultyBadge';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
@@ -64,12 +64,22 @@ function flatReading(inlineReading: string): string {
  */
 export function NhkEasyImportPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [stage, setStage] = useState<Stage>('idle');
 
-  const [feedUrl, setFeedUrl] = useState('');
+  // BookDetailPage's per-chapter "Reimport" button lands here with the
+  // (fixed, always-the-same) feed URL prefilled.
+  const [feedUrl, setFeedUrl] = useState(() => searchParams.get('feedUrl') ?? '');
   const [feed, setFeed] = useState<PodcastFeed | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState('');
+  const autoLoadedFeedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedFeedRef.current || !feedUrl.trim()) return;
+    autoLoadedFeedRef.current = true;
+    void handleLoadFeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const importedArticleSourceIds = useLiveQuery(
     () => getSeriesImportedSourceIds(NHK_EASY_SERIES_ID),
     [],

@@ -451,6 +451,18 @@ export function BookDetailPage() {
               <button type="button">Re-segment captions</button>
             </Link>
           ) : null}
+          {data.book.sourceKey?.startsWith('shadowing:source-') && data.book.sourceUrl ? (
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  `/import/youtube?url=${encodeURIComponent(data.book.sourceUrl!)}`,
+                )
+              }
+            >
+              Reimport
+            </button>
+          ) : null}
           <button type="button" onClick={() => setEditMetadata(true)}>
             Edit details
           </button>
@@ -986,6 +998,36 @@ export function BookDetailPage() {
                       >
                         Down
                       </button>
+                      {chapter.sourceId && data.book.sourceKey === 'shadowing:nhk-easy-news' ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `/import/nhk-easy?feedUrl=${encodeURIComponent(
+                                'https://nhkeasier.com/feed/',
+                              )}`,
+                            )
+                          }
+                        >
+                          Reimport
+                        </button>
+                      ) : null}
+                      {chapter.sourceId &&
+                      data.book.sourceKey?.startsWith('shadowing:podcast-series-') &&
+                      data.book.sourceUrl ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `/import/youtube?podcastFeedUrl=${encodeURIComponent(
+                                data.book.sourceUrl!,
+                              )}&q=${encodeURIComponent(chapter.title)}`,
+                            )
+                          }
+                        >
+                          Reimport
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => {

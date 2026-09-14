@@ -30,6 +30,28 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — "Reimport" buttons on `BookDetailPage`** (user ask: find
+  a source's URL then be taken straight back to its import page). A plain
+  mined-video book (`sourceKey` starting `shadowing:source-`) gets a
+  book-level "Reimport" linking to `/import/youtube?url=<sourceUrl>` — the
+  existing "Mine again" flow on that page already handles the actual
+  re-mine once the URL is prefilled. A series book (NHK Easy News, or a
+  podcast under `shadowing:podcast-series-*`) gets a per-chapter
+  "Reimport" instead, since the book is shared across many episodes/
+  articles: NHK links to `/import/nhk-easy?feedUrl=<fixed feed>`, podcast
+  links to `/import/youtube?podcastFeedUrl=<book.sourceUrl>&q=<chapter
+  title>`. Both target pages now read those query params on mount
+  (`useSearchParams`) to prefill the URL/feed field and, for a feed,
+  auto-load it (cheap GET) — episode/article picking stays a manual click
+  so nothing auto-starts a real mining job unexpectedly; the already-
+  existing "Imported" pill (matched by the feed item's own URL against the
+  stored chapter `sourceId`) plus the prefilled search term make the
+  right one easy to spot. `YouTubeMinePage`'s podcast `<details>` section
+  auto-opens when arriving this way. No schema changes — both `sourceUrl`
+  (plain video, podcast series) and per-chapter `sourceId` (episode/
+  article identity) were already persisted by `commitShadowingPackageImport`/
+  `commitSeriesEpisodeImport`.
+
 - **2026-09-14 — Word-alone vs. word-in-phrase pitch warm-up** (roadmap
   "Real-audio pitch-perception bridge," exercise 1). Heiban (no downstep)
   and odaka (downstep right after the word) have an identical contour

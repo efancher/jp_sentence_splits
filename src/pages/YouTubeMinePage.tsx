@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { SegmentationEditor } from '../components/SegmentationEditor';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
@@ -171,8 +171,15 @@ function translatedRowsFromJob(job: MiningJobStatus): ResegmentReviewRow[] {
 
 export function YouTubeMinePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // BookDetailPage's "Reimport" button lands here with these prefilled —
+  // a plain video via `url`, a podcast episode via `podcastFeedUrl` (+ `q`
+  // to filter the episode list down to the one chapter it came from).
+  const [initialUrl] = useState(() => searchParams.get('url') ?? '');
+  const [initialPodcastFeedUrl] = useState(() => searchParams.get('podcastFeedUrl') ?? '');
+  const [initialPodcastFeedSearch] = useState(() => searchParams.get('q') ?? '');
   const [stage, setStage] = useState<Stage>('idle');
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(initialUrl);
   const [jobId, setJobId] = useState<string | null>(null);
   const [source, setSource] = useState<MiningSourceInfo | null>(null);
   const [transcriptSource, setTranscriptSource] =
@@ -200,7 +207,8 @@ export function YouTubeMinePage() {
   const [minedVideos, setMinedVideos] = useState<
     Map<string, { title: string; createdAt: string }>
   >(new Map());
-  const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
+  const [podcastFeedUrl, setPodcastFeedUrl] = useState(initialPodcastFeedUrl);
+  const [podcastDetailsOpen] = useState(Boolean(initialPodcastFeedUrl));
   const [podcastFeed, setPodcastFeed] = useState<PodcastFeed | null>(null);
   // Some feeds run into the hundreds/thousands of episodes (RSS convention
   // is newest-first) — a host's own "start from the beginning" advice is
@@ -210,7 +218,7 @@ export function YouTubeMinePage() {
   // sorted list" to actually reach the middle — page through 30 at a time,
   // or search by title to jump straight there.
   const [podcastFeedPage, setPodcastFeedPage] = useState(0);
-  const [podcastFeedSearch, setPodcastFeedSearch] = useState('');
+  const [podcastFeedSearch, setPodcastFeedSearch] = useState(initialPodcastFeedSearch);
   const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
   const [podcastFeedError, setPodcastFeedError] = useState('');
   // The picked episode's own publish date, for commitSeriesEpisodeImport's
@@ -322,6 +330,25 @@ export function YouTubeMinePage() {
       cancelled = true;
     };
   }, [stage]);
+
+  // Auto-load the podcast feed when arriving from BookDetailPage's
+  // "Reimport" button (podcastFeedUrl prefilled) — cheap fetch, saves a
+  // click. Doesn't auto-pick an episode; the (already-loaded) "Imported"
+  // pill plus the prefilled search term is enough to find and click it.
+  const autoLoadedPodcastFeedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedPodcastFeedRef.current || !initialPodcastFeedUrl) return;
+    autoLoadedPodcastFeedRef.current = true;
+    setPodcastFeedError('');
+    setPodcastFeedPage(0);
+    setPodcastFeedLoading(true);
+    void fetchPodcastFeed(initialPodcastFeedUrl.trim())
+      .then((feed) => setPodcastFeed(feed))
+      .catch((err: unknown) =>
+        setPodcastFeedError(err instanceof Error ? err.message : 'Failed to load podcast feed'),
+      )
+      .finally(() => setPodcastFeedLoading(false));
+  }, [initialPodcastFeedUrl]);
 
   const alreadyMined = (() => {
     const videoId = extractYouTubeId(url);
@@ -735,7 +762,7 @@ export function YouTubeMinePage() {
           </div>
         ) : null}
         {!resuming && stage === 'idle' ? (
-          <details className="stack" style={{ gap: '0.4rem' }}>
+          <details className="stack" style={{ gap: '0.4rem' }} open={podcastDetailsOpen}>
             <summary className="muted" style={{ cursor: 'pointer' }}>
               Or import a podcast episode
             </summary>
