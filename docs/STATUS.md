@@ -30,6 +30,27 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — Word-alone vs. word-in-phrase pitch warm-up** (roadmap
+  "Real-audio pitch-perception bridge," exercise 1). Heiban (no downstep)
+  and odaka (downstep right after the word) have an identical contour
+  *within* the word — the only audible cue is whether the following
+  particle stays high or drops. The `pitch_accent` SRS card now shows an
+  ungraded warm-up (`PitchWordPhraseWarmup`) for exactly those two edge
+  cases: loop the word alone, loop word+particle, then self-check "stays
+  high or drops" before answering the real graded question below. Gated to
+  render only when forced alignment resolves both spans (silent no-render
+  otherwise, same degrade pattern as `SegmentLoopPlayer`'s `wordOnly` mode).
+  `isolatedWordRange.ts` gained `isolatedWordSpans` (returns `wordOnly` +
+  `withParticle` instead of picking one); `SegmentLoopPlayer`'s blob-fetch
+  and loop/retry logic were extracted into `useSentenceAudioBlob`/
+  `useRangeLoop` (`src/hooks/`) so the warm-up can loop two independent
+  spans of the same clip without duplicating the Safari retry handling —
+  pure internal refactor, `SegmentLoopPlayer`'s three existing callers are
+  unaffected. Verified in a real browser session (seeded heiban/odaka/
+  nakadaka cards directly into Dexie): warm-up renders and self-checks
+  correctly for heiban/odaka, is absent for nakadaka, doesn't disturb the
+  graded flow. Exercise 2 (near-minimal-pair ABX) remains open.
+
 - **2026-09-14 — `alignAudioDetailed` distinguishes "service unreachable"
   from "service reached but declined this take" (user report: the
   pitch-accent drill said "couldn't reach the alignment service" while

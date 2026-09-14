@@ -673,10 +673,14 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   dictionary `pitchAccentPositions`), staged as an optional warm-up **inside
   the drill**, not a standalone module (keeps the "skill over metalabel
   quiz" principle):
-  - **Word-alone vs. word-in-phrase** — play the isolated word span, then
-    the word + following particle span, ask "did the drop land before the
-    particle?" The odaka-vs-heiban bridge, which no isolated view can teach.
-  - **Same/different + ABX on near-minimal pairs** — same mora count +
+  - [x] **Word-alone vs. word-in-phrase.** (2026-09-14) Play the isolated
+    word span, then the word + following particle span, ask "did the drop
+    land before the particle?" The odaka-vs-heiban bridge, which no
+    isolated view can teach. Shipped as `PitchWordPhraseWarmup` inside the
+    `pitch_accent` SRS card, gated to heiban/odaka candidates where forced
+    alignment locates both spans; ungraded, local state only. Detail in
+    STATUS.md.
+  - [ ] **Same/different + ABX on near-minimal pairs** — same mora count +
     reading shape, different accent position; same-speaker first, then
     cross-speaker. 3–5 trials, not a scored drill.
   - **Not** an F0-resynthesis pipeline (ChatGPT's centre-piece): real
