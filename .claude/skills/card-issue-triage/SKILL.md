@@ -7,7 +7,7 @@ description: Use when the user asks to check, see, triage, or give an opinion on
 
 Learners flag review cards mid-study via ReviewPage's "Report issue" button,
 and flag sync trouble via ConflictPanel/Account & sync settings' "Report
-sync issue" button (§6). Reports land in Supabase (`card_issue_reports` /
+sync issue" button (§7). Reports land in Supabase (`card_issue_reports` /
 `sync_issue_reports`) and pile up for batch triage — they are not meant to
 be actioned one at a time as they arrive.
 
@@ -168,7 +168,35 @@ Not every audio complaint is this bug: also check that `source_start_ms` /
 at all (a card with no `reference_audio` row falls back to whatever the UI
 does then — that may itself be the reported problem).
 
-## 5. Resolution is client-side, not scriptable
+## 5. Fixed bug: pitch_accent native-audio loop isolates a truncated stem, not the tested word (2026-09-14)
+
+A report on a `pitch_accent` card saying the native-audio loop "cuts off" or
+"leaves off" a trailing part of the word (e.g. "cut off at いい and left off
+the ました") is **not** automatically the intentional isolate-just-the-word
+design (`SegmentLoopPlayer` deliberately loops only the target word's span,
+not the whole sentence — that part *is* by design). Check what reading/morae
+the card is actually testing before concluding "working as intended": for a
+conjugated occurrence (読みます for 読む), `resolveInflectedPitchAccent`
+(src/lib/pitchAccentShift.ts) resolves the pitch test to the *whole*
+conjugated reading (よみます, 4 morae, shifted per the -masu offset) — so if
+the isolated/highlighted span is shorter than that reading (e.g. only よみ,
+missing ます), the loop is genuinely isolating the wrong — too-short — span,
+not doing its job correctly. Root cause (now fixed): `sentence_vocabulary.
+surfaceForm` is sometimes stored as a truncated stem rather than the full
+conjugated word (言い for 言います), and every caller of
+`resolveInflectedPitchAccent` used to isolate/highlight off that raw stored
+surfaceForm instead of the resolver's own fully-conjugated surface. Fixed by
+adding `surfaceForm` to `ResolvedPitchAccent` and switching all four
+consumers (`ReviewPage.tsx`'s `buildPitchAccentCandidate`, `AnalysisPanel.tsx`,
+`repository.ts`'s `getSentencePitchAccentTargets`/
+`getPitchAccentDrillSentences`) to use it. If a *new* report of this shape
+turns up, compare the loop's apparent stopping point against
+`resolveInflectedPitchAccent`'s `reading` for that occurrence (or just check
+whether the sentence_vocabulary `surfaceForm` for that occurrence is a
+strict prefix of what's actually in the sentence at that point) before
+assuming it's this exact bug recurring vs. something new.
+
+## 6. Resolution is client-side, not scriptable
 
 There is no CLI/script path to mark a report resolved — `list-card-issues.ts`
 is deliberately read-only. Resolving happens in the app itself
@@ -177,7 +205,7 @@ to Dexie and syncs up). After fixing a root cause, tell the user to mark the
 corresponding reports resolved in-app; don't write a new resolve script
 unless asked.
 
-## 6. Sync issue reports (added 2026-09-04)
+## 7. Sync issue reports (added 2026-09-04)
 
 ```bash
 npm run issues:list-sync

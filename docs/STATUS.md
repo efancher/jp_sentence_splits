@@ -64,7 +64,7 @@ what's left is one deferred durability item (below).
   by re-clicking through the review UI.
 
 - **2026-09-14 — Fix spurious `createdAt` noise on `reviews` sync
-  conflicts.** Root-caused from a user "Report sync issue" (§6 of
+  conflicts.** Root-caused from a user "Report sync issue" (§7 of
   `.claude/skills/card-issue-triage`): "missing a remote createdAt date".
   `Review` (domain/types.ts) has no `createdAt` field — only `timestamp` —
   but `reviewToRemote` (src/sync/mappers.ts) copies `timestamp` into the
