@@ -30,6 +30,39 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-14 — Fix pitch_accent native-audio loop stopping mid-word for
+  -masu (and other multi-morpheme conjugated) occurrences.** User follow-up
+  to the same triage session as the `createdAt` fix below: on re-reading the
+  card_issue_e9445133 report ("cut off at いい and left off the ました") the
+  user pointed out the card *tests* the full conjugated word (言います), not
+  the bare stem — so "cut off" wasn't the intended isolate-just-the-word
+  design after all, it was really isolating the *wrong* span. Root cause:
+  `resolveInflectedPitchAccent` (src/lib/pitchAccentShift.ts) already
+  resolves the correct -masu-family reading (`いいます`, 5 morae, accent
+  shifted per the fixed ます offset) via `findInflectedSurfaceInSentence`
+  falling back off the raw `identifyConjugationForm` miss on the truncated
+  stored surface — but it discarded the resolved *surface* (`conjugated.
+  expression` = 言います) and every caller kept using the input
+  `occurrence.surfaceForm`, which is whatever `sentence_vocabulary.
+  surfaceForm` happened to store (here: `言い`, the bare stem before ます).
+  `ReviewPage.tsx`'s `buildPitchAccentCandidate` then isolates/highlights
+  off that truncated surfaceForm, so `SegmentLoopPlayer`'s forced-alignment
+  loop (via `isolatedWordRange`) stopped right after いい — correct for
+  what it was told to isolate, wrong word. Fix: `ResolvedPitchAccent` gained
+  a `surfaceForm` field (the full citation expression or the full
+  `conjugated.expression`, not the input); all four call sites now use it —
+  `ReviewPage.tsx` (pitch_accent card audio isolation + target highlight),
+  `AnalysisPanel.tsx` and `repository.ts`'s `getSentencePitchAccentTargets`/
+  `getPitchAccentDrillSentences` (ambient H/L marks + drill sentence prep,
+  same latent bug, not yet reported but same root cause). New
+  `resolveInflectedPitchAccent surfaceForm` describe block in
+  `tests/pitchAccentShift.test.ts` pins the exact 言う/言います scenario from
+  the report. Full 1442-test Vitest suite + typecheck + oxlint green.
+  **Not yet browser-verified** — no way to reproduce the learner's specific
+  card session from here; the fix is confirmed by the new unit test
+  reproducing the resolver's actual (wrong→right) output for this word, not
+  by re-clicking through the review UI.
+
 - **2026-09-14 — Fix spurious `createdAt` noise on `reviews` sync
   conflicts.** Root-caused from a user "Report sync issue" (§6 of
   `.claude/skills/card-issue-triage`): "missing a remote createdAt date".

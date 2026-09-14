@@ -484,6 +484,12 @@ function buildPitchAccentCandidate(
   const resolved = resolveInflectedPitchAccent({ vocabularyItem, sentence, surfaceForm });
   if (!resolved) return null;
   const { reading, isCitationForm } = resolved;
+  // The stored occurrence surfaceForm can be a truncated stem (言い for
+  // 言います) — use the resolver's own full conjugated surface for anything
+  // that isolates/highlights the word in the sentence, so the native-audio
+  // loop and target underline cover the same span the tested reading/morae
+  // do (see ResolvedPitchAccent.surfaceForm doc comment).
+  const targetSurfaceForm = resolved.surfaceForm;
 
   const morae = segmentIntoMorae(reading).map((unit) => unit.text);
   if (morae.length === 0) return null;
@@ -491,14 +497,14 @@ function buildPitchAccentCandidate(
   // Edge accent (heiban / odaka) is only audible on what follows the word;
   // skip the occurrence when nothing does (see doc comment).
   const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
-  if (isEdgeAccent && !hasFollowingVoicedMora(sentence.japanese, surfaceForm)) return null;
+  if (isEdgeAccent && !hasFollowingVoicedMora(sentence.japanese, targetSurfaceForm)) return null;
 
   return {
     isCitationForm,
     candidate: {
       vocabularyItem,
       sentence,
-      surfaceForm,
+      surfaceForm: targetSurfaceForm,
       audio,
       link,
       reading,

@@ -219,6 +219,22 @@ export interface ResolvedPitchAccent {
   /** Downstep in `reading`'s own morae, clamped into [0, morae.length]. */
   position: number;
   isCitationForm: boolean;
+  /**
+   * The full surface text `reading` actually covers — `vocabularyItem.expression`
+   * for a citation-form occurrence, or the *whole* conjugated expression
+   * (e.g. `言います`, not the possibly-truncated stored `言い`) for an
+   * inflected one. Callers that index into the sentence to isolate/highlight
+   * the tested word (audio-loop span, target underline, "what follows the
+   * word" lookahead) must use this instead of the input `surfaceForm` — that
+   * input is whatever `sentence_vocabulary.surfaceForm` happened to store,
+   * which the vocab picker sometimes truncates to the bare stem (`言い` for
+   * `言います`); using it directly for isolation cuts the loop/highlight off
+   * mid-word while `reading`/`position` above already cover the full
+   * conjugated form, including the very ます/ない/etc. suffix that carries
+   * the pitch shift being tested (user report, 2026-09-14 — pitch_accent
+   * native-audio loop stopping at いい, before ます).
+   */
+  surfaceForm: string;
 }
 
 /**
@@ -266,6 +282,7 @@ export function resolveInflectedPitchAccent(occurrence: {
       reading: dictionaryReading,
       position: Math.max(0, Math.min(positions[0]!, moraCount)),
       isCitationForm: true,
+      surfaceForm: vocabularyItem.expression,
     };
   }
 
@@ -301,5 +318,6 @@ export function resolveInflectedPitchAccent(occurrence: {
     reading: conjugated.reading,
     position: Math.max(0, Math.min(predicted, conjugatedMoraCount)),
     isCitationForm: false,
+    surfaceForm: conjugated.expression,
   };
 }

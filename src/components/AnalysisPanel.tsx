@@ -306,15 +306,19 @@ export function AnalysisPanel({
         occurrences.flatMap((occurrence) => {
           const resolved = resolveInflectedPitchAccent(occurrence);
           if (!resolved) return [];
-          const found = occurrence.sentence.japanese.indexOf(occurrence.surfaceForm);
+          // Use the resolver's own full conjugated surface, not the stored
+          // occurrence surfaceForm — that can be a truncated stem (言い for
+          // 言います), which would look up "what follows" from mid-word.
+          const { surfaceForm } = resolved;
+          const found = occurrence.sentence.japanese.indexOf(surfaceForm);
           return [
             {
-              surfaceForm: occurrence.surfaceForm,
+              surfaceForm,
               reading: resolved.reading,
               pitchAccentPositions: [resolved.position],
               followingMora:
                 found >= 0
-                  ? trailingBunsetsuParticles(occurrence.sentence.japanese, found + occurrence.surfaceForm.length)
+                  ? trailingBunsetsuParticles(occurrence.sentence.japanese, found + surfaceForm.length)
                   : '',
             },
           ];

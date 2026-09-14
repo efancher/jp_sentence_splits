@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import { conjugate, type ConjugationFormKey, type ConjugationWordClass } from '../src/lib/conjugation';
 import { segmentIntoMorae } from '../src/lib/mora';
-import { predictInflectedPitchAccentPosition } from '../src/lib/pitchAccentShift';
+import {
+  predictInflectedPitchAccentPosition,
+  resolveInflectedPitchAccent,
+} from '../src/lib/pitchAccentShift';
 
 interface PitchAccentShiftFixture {
   expression: string;
@@ -289,5 +292,48 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
         ).toBeNull();
       }
     }
+  });
+});
+
+describe('resolveInflectedPitchAccent surfaceForm (user report, 2026-09-14)', () => {
+  // The stored sentence_vocabulary.surfaceForm for a -masu occurrence is
+  // sometimes truncated to the bare stem (言い for 言います) — reported via
+  // the pitch_accent card's native-audio loop stopping right at いい, before
+  // ます, even though the -masu family's pitch shift (see pitchAccentShift.ts
+  // doc comment) is a property of the whole conjugated word. The resolver
+  // must return the full conjugated surface so callers isolating/
+  // highlighting the word cover the same span reading/position describe.
+  const iu = {
+    expression: '言う',
+    reading: 'いう',
+    partOfSpeech: 'v5u',
+    pitchAccentPositions: [0],
+    teFormAccentPosition: undefined,
+  };
+  const sentence = {
+    japanese: '地震で「揺れる」と言いますね。',
+    inlineReading: '地震[じしん]で「揺れる[ゆれる]」と言い[いい]ますね。',
+  };
+
+  it('returns the full conjugated surface (言います), not the truncated stored stem (言い)', () => {
+    const resolved = resolveInflectedPitchAccent({
+      vocabularyItem: iu,
+      sentence,
+      surfaceForm: '言い',
+    });
+    expect(resolved).not.toBeNull();
+    expect(resolved?.surfaceForm).toBe('言います');
+    expect(resolved?.reading).toBe('いいます');
+    expect(resolved?.isCitationForm).toBe(false);
+  });
+
+  it('citation-form occurrences resolve surfaceForm to vocabularyItem.expression', () => {
+    const resolved = resolveInflectedPitchAccent({
+      vocabularyItem: iu,
+      sentence: { japanese: '言うとおりです。', inlineReading: '言う[いう]とおりです。' },
+      surfaceForm: '言う',
+    });
+    expect(resolved?.surfaceForm).toBe('言う');
+    expect(resolved?.isCitationForm).toBe(true);
   });
 });

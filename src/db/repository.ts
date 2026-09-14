@@ -4285,17 +4285,22 @@ export async function getPitchAccentDrillSentences(): Promise<PitchAccentDrillSe
         surfaceForm: link.surfaceForm,
       });
       if (!resolved) continue;
-      const occurrence = sentence.japanese.indexOf(link.surfaceForm);
+      // The resolver's own full conjugated surface, not the possibly-
+      // truncated stored link.surfaceForm (言い for 言います) — keeps the
+      // highlighted span and "what follows" lookup aligned with the reading/
+      // position above, which already cover the whole conjugated word.
+      const { surfaceForm } = resolved;
+      const occurrence = sentence.japanese.indexOf(surfaceForm);
       targets.push({
-        surfaceForm: link.surfaceForm,
+        surfaceForm,
         reading: resolved.reading,
         pitchAccentPositions: [resolved.position],
         followingMora:
           occurrence >= 0
-            ? trailingBunsetsuParticles(sentence.japanese, occurrence + link.surfaceForm.length)
+            ? trailingBunsetsuParticles(sentence.japanese, occurrence + surfaceForm.length)
             : '',
       });
-      targetVocabularyItemIds[link.surfaceForm] = link.vocabularyItemId;
+      targetVocabularyItemIds[surfaceForm] = link.vocabularyItemId;
     }
     if (targets.length === 0) continue;
     result.push({ sentence, targets, targetVocabularyItemIds });
@@ -4638,7 +4643,9 @@ export async function getSentencePitchAccentTargets(
     const resolved = resolveInflectedPitchAccent(occurrence);
     if (!resolved) continue;
     targets.push({
-      surfaceForm: occurrence.surfaceForm,
+      // resolved.surfaceForm, not occurrence.surfaceForm — see the doc
+      // comment on ResolvedPitchAccent.surfaceForm (truncated stems).
+      surfaceForm: resolved.surfaceForm,
       reading: resolved.reading,
       pitchAccentPositions: [resolved.position],
     });
