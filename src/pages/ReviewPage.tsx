@@ -8,6 +8,7 @@ import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
+import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { VocabChips } from '../components/VocabChips';
@@ -2305,6 +2306,15 @@ function PitchAccentCard({
         surfaceForm={surfaceForm}
         link={candidate.link}
       />
+
+      {correctPosition === 0 || correctPosition === morae.length ? (
+        <PitchWordPhraseWarmup
+          audio={audio}
+          japanese={sentence.japanese}
+          surfaceForm={surfaceForm}
+          isHeiban={correctPosition === 0}
+        />
+      ) : null}
 
       {!revealed ? (
         <>
