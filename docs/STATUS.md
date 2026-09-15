@@ -6,16 +6,18 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-14.
+Last updated: 2026-09-15.
 
 ## Where things stand
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,
-vocabulary glossing, contextual conjugation cards,
-progressive listening, grammar-learning system incl. `grammar_production`)
-are shipped and, in almost every case, verified against production data by
-the user directly. ~1117 TS tests, green.
+vocabulary glossing, contextual conjugation cards, progressive listening,
+grammar-pattern browsing/annotation) are shipped and, in almost every
+case, verified against production data by the user directly. The
+grammar-learning system's FSRS card ladder (incl. `grammar_production`)
+was retired 2026-09-15 in favor of in-context noticing — see Recent
+changes. ~1422 TS tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
 awareness, cross-sentence pronunciation profile (`/pronunciation`, closes
@@ -29,6 +31,50 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-15 — Grammar SRS collapsed into in-context noticing**
+  (docs/ROADMAP.md — resolves the 2026-09-09 open question). A
+  performance check (`scripts/report-grammar-card-performance.ts`) found
+  the `grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
+  `grammar_production` FSRS ladder essentially never fired (2 of 74
+  tracked patterns had ever produced a study item) because
+  `pickContextSentenceForGrammarPattern` gated every card on the same
+  strict vocab-proficiency rule `reading_in_context` already uses. All
+  four card types, their `ReviewPage.tsx` components, and their
+  `repository.ts`/`grammarPatterns.ts`/`sessionPlannerConfig.ts` machinery
+  were removed rather than fixed. Replacement:
+  - `GrammarPicker`'s "Track" button is gone — "Got it"
+    (`SentenceGrammar.confirmedByLearner`) is the sole tracking signal now,
+    and `listGrammarPatternSummaries`/`computeGrammarLearnerState`/
+    `computeGrammarPriorityBucket` (`grammarPatterns.ts`) were rewritten
+    around it. The learner-state ladder dropped from 5 rungs to 3
+    (`encountered`/`noticed`/`recognized` — the top two, `distinguished`/
+    `productive`, had no evidence source once the FSRS cards were gone).
+  - `scoreReviewPriority` (`sessionPlanner.ts`) gives a `reading_in_context`
+    item a small priority bump when its sentence carries an unconfirmed
+    grammar tag — "tracked grammar drives reading_in_context selection"
+    without a dedicated seeding path.
+  - New `SentenceGrammarNoticeRow` component renders under every revealed
+    review card (same convention as `SentencePitchAccentRow`): a tagged
+    pattern's explanation + inline highlight (`blankPatternInSentence`)
+    always shows, and an unconfirmed tag adds "Got it"/"Not this" buttons —
+    the lightweight noticing check, reachable during regular review
+    instead of only from `GrammarPicker`/`GrammarNoticingFlowPage`.
+  - `PracticePage`'s natural-encounter panel for grammar now calls
+    `ensureSentenceGrammar(..., { confirmedByLearner: true })` directly
+    instead of rating an FSRS review.
+  - `progressReport.ts`'s `grammar.tracked`/`grammar.recognized` are now a
+    pre-computed input (`getProgressReport` sources them from
+    `listGrammarPatternSummaries()`) rather than derived from
+    `grammarPattern`-subject study items, which no longer exist.
+  - `scripts/retire-grammar-study-items.ts` soft-deleted the 5 live prod
+    `grammar_*` study items (2 patterns) — `sentence_grammar`/
+    `grammar_patterns` rows untouched, verified after the fact.
+    `scripts/diagnose-grammar-review-queue.ts` and
+    `scripts/defer-unready-grammar-reviews.ts` were deleted (their whole
+    purpose no longer exists). `StudySubjectType`'s `'grammarPattern'`
+    member stays in the schema for historical/synced-data parsing only —
+    nothing writes it anymore.
 
 - **2026-09-14 — "Reimport" buttons on `BookDetailPage`** (user ask: find
   a source's URL then be taken straight back to its import page). A plain

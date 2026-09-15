@@ -253,6 +253,42 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
      drill and the SRS card. Point-and-run, no export/import. Migration
      `20260911010000_pitch_drill_attempts.sql` to apply. Detail in
      STATUS.md.
+- [x] **Grammar SRS collapsed into in-context noticing.** (2026-09-15) Open
+  question from 2026-09-09 resolved: the `grammar_comprehension` /
+  `grammar_completion` / `grammar_contrast` / `grammar_production` FSRS
+  ladder was the part of the system that most resembled a siloed metalabel
+  drill — the same shape trimmed elsewhere (comprehension retired for
+  `reading_in_context`; "prefer in-context over isolated"). A
+  2026-09-15 performance check (`scripts/report-grammar-card-performance.ts`)
+  found the ladder barely ever fired — of 74 tracked patterns only 2 had
+  ever produced a study item (5 items, 17 reviews total) — because
+  `pickContextSentenceForGrammarPattern` gated every card on the same
+  strict "vocab already proficient" rule `reading_in_context` uses. Rather
+  than loosen that gate, the four card types were removed outright:
+  - **Tracking is now `SentenceGrammar.confirmedByLearner`** — no separate
+    FSRS study item. `GrammarPicker`'s "Track" button (which used to seed
+    `grammar_comprehension`/`grammar_completion`) is gone; "Got it" is the
+    only action, collapsing a two-control pair into one.
+  - **Ladder simplified to 3 rungs** — `encountered` → `noticed` →
+    `recognized` (`computeGrammarLearnerState`, `grammarPatterns.ts`);
+    `recognized` now means confirmed across 2+ distinct sources, replacing
+    the FSRS-proficiency signal the top two retired rungs depended on.
+  - **`reading_in_context` selection bias** — `scoreReviewPriority`
+    (`sessionPlanner.ts`) adds a small priority bonus for a sentence
+    carrying an unconfirmed grammar tag, so it surfaces sooner in the due
+    queue instead of waiting indefinitely.
+  - **Ambient reveal + lightweight noticing check** —
+    `SentenceGrammarNoticeRow` (new component), rendered under every
+    revealed review card (same "always-on strip" convention as
+    `SentencePitchAccentRow`): shows a tagged pattern's explanation
+    inline-highlighted in the sentence (`blankPatternInSentence`) for any
+    link, plus "Got it"/"Not this" buttons for an unconfirmed one — the
+    same two actions `GrammarPicker` already exposed, just reachable
+    during regular review instead of only from a separate annotation
+    panel.
+  - `scripts/retire-grammar-study-items.ts` soft-deleted the 5 live
+    `grammar_*` study items in prod; `sentence_grammar`/`grammar_patterns`
+    rows untouched. Detail in STATUS.md.
 
 ## In progress
 
@@ -717,44 +753,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   - Deliberately **not** a standalone blind-A/B perception quiz — cuts
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
-
-- [ ] **Grammar SRS: noticing + in-context reading vs. the isolated drill
-  ladder.** Open design question from a 2026-09-09 discussion (conjugation
-  coverage → vocab/grammar recommender boundary). The
-  `grammar_comprehension` / `grammar_completion` / `grammar_contrast` /
-  `grammar_production` ladder is the part of the system that most resembles
-  a siloed metalabel drill — the same shape the user has trimmed elsewhere
-  (comprehension retired for `reading_in_context`; "prefer in-context over
-  isolated"; "skill over metalabel quiz"). External precedent: jpdb ships a
-  strong tool with **no grammar SRS at all** (deconjugation + graded
-  reading only); the immersion/sentence-mining tradition treats a grammar
-  point as just another i+1 target on one card type, not its own ladder;
-  Bunpro keeps a full grammar ladder but merges it into one review queue.
-  Conjugation is explicitly *not* in scope here — it rides on vocab
-  (deconjugation is part of knowing the word) and that half is settled.
-  The question is only whether tracked grammar patterns should drive
-  `reading_in_context` selection + a lightweight "did you notice it"
-  check + ambient reveal highlighting, rather than four dedicated card
-  types. Not scheduled; would want a real look at how the current grammar
-  cards are actually performing (leech rate, self-rating calibration)
-  before committing either way.
-  **2026-09-15 performance check** (`scripts/report-grammar-card-performance.ts`,
-  cross-checked against `scripts/diagnose-grammar-review-queue.ts`): of 74
-  tracked `grammar_patterns` (42 linked to a sentence), only **2** have ever
-  produced a study item, for **5** `grammar_*` study items total and **17**
-  reviews ever recorded across all four activity types combined — too little
-  volume for leech rate or self-rating calibration to mean anything (0
-  leeches either way; self-rated "good"+"easy" 66.7% vs. graded
-  `grammar_completion` 62.5%, a gap too small on n=9/n=8 to call drift). The
-  real finding is upstream of leech rate: the ladder barely ever seeds,
-  because `pickContextSentenceForGrammarPattern` requires a linked sentence
-  where vocabulary is confirmed *and* every surface-form word is already
-  FSRS-proficient — the same strict readiness gate `reading_in_context`
-  uses — so a pattern only gets a card once its example sentence has fully
-  "graduated" on the vocab side. That's consistent with, not against, the
-  in-context direction: the gating already treats the sentence as the real
-  unit and the grammar ladder as secondary to it. Leans toward collapsing
-  the four card types rather than trying to fix the ladder's throughput.
 
 ## Possibilities (analytics & cross-activity coherence)
 

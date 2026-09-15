@@ -186,18 +186,11 @@ built out Phases 1–9):
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a
   batch via `scripts/list-card-issues.ts`.
-- **Grammar-learning system** (new; Phases 1-8 plus a Contrast slice of
-  Phase 9 — schema/repository/sync/backup foundation, manual annotation
-  from Analyze, the `/grammar` browser/detail UI, AI-assisted suggestion/
-  explanation, `grammar_comprehension`/`grammar_completion`/
-  `grammar_contrast` review cards, a derived learner-state ladder, a
-  personalized `/grammar` curriculum dashboard, and `GrammarRelationship`
-  browsing/creation, see the Feature walkthrough below — are all done, plus
-  a `grammar_production` card (2026-09-01, the output rung — produce a
-  sentence using a recognized pattern, self-rated); prediction/
-  transformation activity types deliberately not started — see
-  `docs/STATUS.md`): a second layer on top of the
-  Cure-Dolly structural analysis, answering "what reusable
+- **Grammar-learning system** (schema/repository/sync/backup foundation,
+  manual annotation from Analyze, the `/grammar` browser/detail UI,
+  AI-assisted suggestion/explanation, and `GrammarRelationship`
+  browsing/creation — see the Feature walkthrough below): a second layer
+  on top of the Cure-Dolly structural analysis, answering "what reusable
   construction is operating here" rather than "how is this sentence
   assembled" (`SentenceAnalysis.chunks` is untouched). `GrammarPattern` —
   the canonical construction (e.g. ～わけがない), corpus-wide, deduped on a
@@ -207,24 +200,40 @@ built out Phases 1–9):
   with a pattern in one sentence (mirrors `SentenceVocabulary`, including
   its "chunkId isn't a real FK" limitation), carrying
   `confirmedByLearner`/`source` so a passively-AI-suggested occurrence is
-  distinguishable from one the learner actually acted on.
-  `GrammarRelationship` — a *typed* edge between two patterns
-  (`similar_meaning`/`contrast`/`commonly_confused`/`stronger_stance`/
-  `weaker_stance`/`formal_variant`/`structural_relative`); structurally
-  mirrors `VocabularyConfusion`'s canonicalized-pair get-or-create shape but
-  is its own table (not a reuse) and, unlike `VocabularyConfusion`, allows
-  more than one row per pair — one per distinct `relationshipType`, since
-  two patterns can be both `structural_relative` and independently
-  `commonly_confused`. `StudySubjectType` gained `'grammarPattern'`, so
-  grammar review reuses `StudyItem`/`Review`/FSRS/`natural_encounter`
-  unchanged — no parallel scheduler is planned. `GrammarSuggestion` is
-  embedded on `SentenceAnalysis.grammarSuggestions` (not a table),
-  mirroring `VocabularySuggestion`'s provisional-until-confirmed shape, but
-  lives on `SentenceAnalysis` rather than `Sentence` since grammar
-  detection is an analysis-time concern, not an import-time tokenizer
-  artifact. No `GrammarPattern` rows are seeded — every one is created from
-  a real encounter, matching this app's native-media-first principle at
-  the pattern level, not just the example-sentence level.
+  distinguishable from one the learner actually acted on —
+  `confirmedByLearner` is now the *only* tracking signal for a pattern
+  (see below), no separate study item. `GrammarRelationship` — a *typed*
+  edge between two patterns (`similar_meaning`/`contrast`/
+  `commonly_confused`/`stronger_stance`/`weaker_stance`/`formal_variant`/
+  `structural_relative`); structurally mirrors `VocabularyConfusion`'s
+  canonicalized-pair get-or-create shape but is its own table (not a
+  reuse) and, unlike `VocabularyConfusion`, allows more than one row per
+  pair — one per distinct `relationshipType`, since two patterns can be
+  both `structural_relative` and independently `commonly_confused`.
+  `GrammarSuggestion` is embedded on `SentenceAnalysis.grammarSuggestions`
+  (not a table), mirroring `VocabularySuggestion`'s provisional-until-
+  confirmed shape, but lives on `SentenceAnalysis` rather than `Sentence`
+  since grammar detection is an analysis-time concern, not an import-time
+  tokenizer artifact. No `GrammarPattern` rows are seeded — every one is
+  created from a real encounter, matching this app's native-media-first
+  principle at the pattern level, not just the example-sentence level.
+  **A 4-card FSRS ladder** (`grammar_comprehension`/`grammar_completion`/
+  `grammar_contrast`/`grammar_production` on `StudySubjectType`
+  `'grammarPattern'`, entered via a "Track" button) **existed 2026-08
+  through 2026-09-14 and was retired 2026-09-15** — a performance check
+  found it essentially never produced a card (its context-sentence gate
+  required the same vocab-proficiency bar `reading_in_context` uses, so a
+  pattern only qualified once its example sentence had fully graduated on
+  the vocab side). Tracked patterns now influence review through
+  `reading_in_context` instead: `scoreReviewPriority` gives a small
+  priority bonus to a `reading_in_context` item whose sentence carries an
+  unconfirmed grammar tag, and `SentenceGrammarNoticeRow` (rendered under
+  every revealed review card) shows a tagged pattern's explanation
+  inline-highlighted in the sentence, with "Got it"/"Not this" for an
+  unconfirmed one. `StudySubjectType` still lists `'grammarPattern'` for
+  historical/synced-data parsing, but nothing creates one anymore. See
+  `docs/ROADMAP.md` "Grammar SRS collapsed into in-context noticing" and
+  `docs/STATUS.md`.
 - `AppSettings` (singleton) — theme, TTS voice/rate, `newCardsPerSessionLimit`
   (session planner cap on new-subject introduction),
   `graduationMinScheduledDays` (retirement threshold from the due
@@ -733,13 +742,14 @@ context — useful for short conversational lines; their translations show
 only when "Show Satori English" is toggled on. A **"Grammar noticed" panel**
 (`GrammarPicker.tsx`) is the entry point for the grammar-learning system's
 second layer: search-existing-or-create-new pattern tagging (autocomplete
-against every `GrammarPattern` already in the corpus), with three
+against every `GrammarPattern` already in the corpus), with two
 per-occurrence actions — **Got it** (confirms the occurrence,
-`SentenceGrammar.confirmedByLearner`, no SRS involvement), **Track**
-(confirms *and* seeds a `grammarPattern`-subject `StudyItem`, entering the
-pattern into the same FSRS due-queue vocabulary/sentences use), and
-**Explain** (an inline, no-modal edit form for the pattern's meaning/
-structural notes and this occurrence's own context-specific explanation).
+`SentenceGrammar.confirmedByLearner` — this is the pattern's sole
+"tracked" signal now, no SRS involvement; a separate "Track" button used
+to also seed a `grammarPattern`-subject FSRS `StudyItem`, retired
+2026-09-15) and **Explain** (an inline, no-modal edit form for the
+pattern's meaning/structural notes and this occurrence's own
+context-specific explanation).
 Unlike `VocabularyPicker`, this panel is deliberately decoupled from the
 page's autosave/chunks state — every action is an immediate repository
 write, not a debounced draft. A **"Suggest grammar (AI)"** button (panel
@@ -797,11 +807,12 @@ fallback (`scripts/lib/jmnedict.ts`) for proper nouns.
   nav. Also hosts a "Recognized these without hints?" panel that lets the
   user self-report natural encounters with vocabulary outside the formal
   review queue (`recordNaturalEncounter`, feeds `Review.source =
-  'natural_encounter'`), and (Phase 6/7/8 of the grammar-learning system)
-  an analogous "Recognized this grammar without hints?" panel — only for
-  patterns already tracked (a `grammarPattern` study item exists) and
-  linked to the current sentence via `SentenceGrammar`, feeding
-  `recordGrammarNaturalEncounter`. A third `natural_encounter` source
+  'natural_encounter'`), and an analogous "Noticed this grammar without
+  hints?" panel for any not-yet-confirmed `SentenceGrammar` link tagged on
+  the current sentence — a tap calls `ensureSentenceGrammar(sentenceId,
+  patternId, { confirmedByLearner: true })` directly (no FSRS review
+  involved, unlike the vocabulary panel; the grammar ladder that once fed
+  a review here was retired 2026-09-15). A third `natural_encounter` source
   (2026-09-08) is the shadowing bridge: a close shadow (computed analysis,
   or a manual `better`/`same` fallback) calls `recordShadowingEncounter`
   (§6), which logs one against the sentence's `reading_in_context` card if
@@ -1041,50 +1052,27 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   (`ActivityDescriptor.isReady`, like tier-1 `word_listening`): withheld
   from queue and seed pool until **both** member words' readings have
   reached FSRS proficiency.
-- **GrammarPattern subject** (grammar-learning system Phase 5):
-  `grammar_comprehension` (show a sentence containing the tracked pattern,
-  reveal what it contributes) and `grammar_completion` (multiple choice
-  among the pattern and up to 3 distractors from the corpus, blanking the
-  sentence when the pattern's canonical name happens to appear in it
-  verbatim — `blankPatternInSentence`, `src/lib/grammarPatterns.ts`).
-  Uniquely among activity types, **never lazily seeded by `ReviewPage`
-  itself** — only "Track" in `GrammarPicker.tsx` creates these study
-  items (both together), and only in the global `/review` queue, never
-  book-scoped (a tracked pattern isn't "of" one book).
-  `grammar_completion`'s distractor pool ranks `GrammarRelationship`-linked
-  patterns first (Phase 8, `buildGrammarCompletionChoices`'s
-  `relatedPatternIds` param) — a distractor the learner flagged as
-  confusable via the detail page is a more useful contrast than a random
-  one from the corpus. `grammar_contrast` (Phase 9 Contrast slice, design
-  brief §11C): "can you tell these two apart," specifically for a
-  `GrammarRelationship`-linked pair — always exactly two choices, the
-  full unblanked sentence (blanking would risk erasing the very
-  distinction under test), auto-graded via the same typed-response funnel
-  as `grammar_completion`. Its eligibility is narrower than the other two
-  grammar activity types (needs a relationship, not just tracking), so
-  **it's the one grammar activity type that can get lazily seeded by
-  `ReviewPage`'s generic pending-seed pool** — the moment a relationship
-  makes a candidate available for an already-tracked pattern, no
-  `GrammarPicker.tsx` change needed. Reaching FSRS proficiency on this
-  study item is what lets `computeGrammarLearnerState` return
-  `'distinguished'`, one rung above `'recognized'`.
-  `grammar_production` (docs/ROADMAP.md, 2026-09-01 — the output rung the
-  grammar system was missing; every other grammar card asks the learner to
-  *identify* a construction, this asks them to *use* one): shows the
-  pattern's meaning, takes a free-form sentence, then reveals a model (one
-  of the learner's own tagged encounters, `pickContextSentenceForGrammarPattern`)
-  to self-rate against. `grammarPatternUsedIn` (`src/lib/grammarPatterns.ts`)
-  is a weak "did you actually use it" hint on reveal (every wave-dash-
-  separated fragment of the tilde-stripped canonical name present, any
-  order) — meaning and naturalness are the learner's own call, so unlike
-  `grammar_completion`/`grammar_contrast` this is **self-rated with no
-  `expectedAnswer`** and `classifyReviewError` leaves it unclassified.
-  Eligibility is narrower than plain grammar review — only a tracked
-  pattern whose `grammar_comprehension` item is FSRS-proficient (learner
-  state `recognized`+), mirroring `reading_retrieval` → `reading_production`
-  — and like `grammar_contrast` it can be lazily seeded by the generic
-  pending-seed pool once a pattern crosses that bar. `computeGrammarLearnerState`
-  is unchanged (no `productive` rung yet).
+- **GrammarPattern subject — retired 2026-09-15.** A 4-card FSRS ladder
+  (`grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
+  `grammar_production`) lived here through 2026-09-14; all four activity
+  types, their `ReviewPage.tsx` card components, and the seeding/gating
+  machinery around them (`ensureGrammarStudyItem`,
+  `pickContextSentenceForGrammarPattern`, `deferUnreadyGrammarReviews`,
+  `buildGrammarCompletionChoices`, `grammarPatternUsedIn`,
+  `translationLeaksPatternMeaning`) were deleted outright rather than kept
+  running — a performance check found the ladder essentially never
+  produced a card (see docs/ROADMAP.md "Grammar SRS collapsed into
+  in-context noticing" for the data and reasoning). Nothing creates a
+  `grammarPattern`-subject `StudyItem` anymore. What replaced it, entirely
+  within the existing `sentence`-subject `reading_in_context` machinery:
+  `scoreReviewPriority` (`sessionPlanner.ts`) adds a small priority bonus
+  when a `reading_in_context` item's sentence carries an unconfirmed
+  `SentenceGrammar` tag, and `SentenceGrammarNoticeRow` (new component,
+  rendered under every revealed review card) shows each tagged pattern's
+  explanation with an inline highlight (`blankPatternInSentence`, kept —
+  still the best-effort span finder, now serving the ambient row instead
+  of a blanked-cloze card) plus "Got it"/"Not this" for an unconfirmed
+  link.
 
 **Gating and assistance tracking**: a sentence's full-sentence card
 (`reading_in_context`) is deliberately withheld
@@ -1108,23 +1096,15 @@ above): `getSentenceListeningReadiness` also requires every
 `word_listening` itself is gated behind the word's reading proficiency —
 both via the generic `ActivityDescriptor.isReady` hook rather than a
 `deferUnreadySentenceReviews` pass. The same
-readiness rule gates which sentence a grammar review card shows, too
-(2026-08-27 follow-up): `pickContextSentenceForGrammarPattern` — which
-`ReviewPage` uses to choose which of a tracked pattern's sentence encounters
-to show for `grammar_comprehension`/`grammar_completion`/`grammar_contrast`
-— skips any encounter whose vocabulary isn't confirmed+proficient,
-preferring an older-but-ready encounter over the most recent unready one,
-and simply not offering the pattern as a review candidate at all if none of
-its encounters qualify. Since a `grammarPattern`-subject StudyItem has no
-single fixed sentence to defer against, a due card for such a pattern would
-otherwise stay perpetually due (invisible in `/review` but inflating the
-planner backlog); `deferUnreadyGrammarReviews` (2026-09-02, the grammar twin
-of `deferUnreadySentenceReviews`, run by `ReviewPage`) pushes those out ≥7
-days, and `getSessionPlannerInput` filters them out of its due-review batch
-read-only via `filterReadyGrammarDueItems`. `GrammarPicker`'s **Track**
-button — the only entry point that seeds grammar StudyItems — is itself
-disabled until the sentence passes `getSentenceFullReviewReadiness`, so
-tracking can't create a card before its context is reviewable.
+readiness rule used to gate which sentence a grammar review card showed,
+too (2026-08-27 follow-up, `pickContextSentenceForGrammarPattern`) — that
+whole mechanism was deleted along with the 4-card grammar ladder
+(2026-09-15, see "GrammarPattern subject" above): the performance data
+showed this exact gate was *why* the ladder almost never fired (a pattern
+only qualified once its example sentence had fully graduated on vocab),
+so rather than keep threading readiness through a parallel FSRS subject,
+tracked grammar now rides on `reading_in_context`'s own readiness/priority
+machinery directly.
 Assistance flags (furigana-shown/audio-replayed/etc.) are recorded on
 `Review.assistance` without penalizing the score — informational only for
 future planning. (A "Show mnemonic" scaffolding tier on vocabulary-target
@@ -1182,19 +1162,21 @@ A personalized curriculum dashboard (Phase 7), not a flat browsable list:
 Recently encountered / Strong, via `computeGrammarPriorityBucket`), each
 pattern showing a prose explanation of its own bucket
 (`explainGrammarPriority`, e.g. "Encountered 3 times, across 2 sources,
-needed help on 1 of the last 5 reviews.") rather than a bare number or an
-opaque score — closer to "what's actually showing up, and how well do you
-know it" than a dictionary or a JLPT-ordered syllabus. A pattern whose
-`sentence_grammar` links were all removed (sentence deleted / re-segmented /
-last occurrence mis-tag-corrected) is filtered out of the list —
-`listGrammarPatternSummaries` keeps only `encounterCount > 0 || tracked` —
-though the canonical row itself is never deleted, so it reappears intact if
-the pattern is encountered again. The detail page
-shows a derived learner-state badge (`GrammarLearnerState` — Encountered /
-Noticed / Recognized / Distinguished (the last requires FSRS proficiency
-on the pattern's own `grammar_contrast` study item, Phase 9 Contrast
-slice), `computeGrammarLearnerState`, Phase 6; never manually set)
-alongside "Your encounters" (design brief §5/§6 — "where
+confirmed noticing it.") rather than a bare number or an opaque score —
+closer to "what's actually showing up, and how well do you know it" than
+a dictionary or a JLPT-ordered syllabus. A pattern whose `sentence_grammar`
+links were all removed (sentence deleted / re-segmented / last occurrence
+mis-tag-corrected) is filtered out of the list —
+`listGrammarPatternSummaries` keeps only `encounterCount > 0` — though the
+canonical row itself is never deleted, so it reappears intact if the
+pattern is encountered again. The detail page shows a derived
+learner-state badge (`GrammarLearnerState` — Encountered / Noticed /
+Recognized, `computeGrammarLearnerState`; never manually set — `Recognized`
+means confirmed across 2+ distinct sources. Originally a 5-rung ladder
+whose top two tiers depended on FSRS proficiency on the retired
+`grammar_comprehension`/`grammar_contrast` study items; collapsed
+2026-09-15 along with the ladder itself) alongside "Your encounters"
+(design brief §5/§6 — "where
 else have I seen this?"): every sentence a pattern has been tagged in, via
 `listSentenceGrammarForPattern`, each linking into
 `/books/:bookId/analyze/:sentenceId` when a book membership exists (plain
