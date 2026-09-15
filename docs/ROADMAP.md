@@ -738,6 +738,23 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   types. Not scheduled; would want a real look at how the current grammar
   cards are actually performing (leech rate, self-rating calibration)
   before committing either way.
+  **2026-09-15 performance check** (`scripts/report-grammar-card-performance.ts`,
+  cross-checked against `scripts/diagnose-grammar-review-queue.ts`): of 74
+  tracked `grammar_patterns` (42 linked to a sentence), only **2** have ever
+  produced a study item, for **5** `grammar_*` study items total and **17**
+  reviews ever recorded across all four activity types combined — too little
+  volume for leech rate or self-rating calibration to mean anything (0
+  leeches either way; self-rated "good"+"easy" 66.7% vs. graded
+  `grammar_completion` 62.5%, a gap too small on n=9/n=8 to call drift). The
+  real finding is upstream of leech rate: the ladder barely ever seeds,
+  because `pickContextSentenceForGrammarPattern` requires a linked sentence
+  where vocabulary is confirmed *and* every surface-form word is already
+  FSRS-proficient — the same strict readiness gate `reading_in_context`
+  uses — so a pattern only gets a card once its example sentence has fully
+  "graduated" on the vocab side. That's consistent with, not against, the
+  in-context direction: the gating already treats the sentence as the real
+  unit and the grammar ladder as secondary to it. Leans toward collapsing
+  the four card types rather than trying to fix the ladder's throughput.
 
 ## Possibilities (analytics & cross-activity coherence)
 
