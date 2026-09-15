@@ -32,6 +32,7 @@ import {
   exportBookMiningPackage,
   applyCuratedVocabularyForBook,
   findResumeSentence,
+  getBookVocabularyCoverage,
   getDb,
   moveBookSentence,
   previewBookOrderFromPaste,
@@ -47,6 +48,7 @@ import {
   updateBook,
   updateBookChapter,
 } from '../db/repository';
+import { coveragePercent } from '../lib/bookCoverage';
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
@@ -347,6 +349,36 @@ export function BookDetailPage() {
     return computeGraduatedSubjectIds(sentenceStudyItems, settings.graduationMinScheduledDays);
   }, [sentenceStudyItems, settings]);
 
+  const coverage = useLiveQuery(async () => {
+    if (!bookId) return null;
+    const byBook = await getBookVocabularyCoverage();
+    return byBook.get(bookId) ?? null;
+  }, [bookId]);
+
+  // Book-level progress summary (docs/ROADMAP.md "Ready to read" scoring
+  // sibling): a rollup of the per-row status pills already rendered below,
+  // plus the same known-vocabulary coverage BooksPage's list card shows.
+  const progressSummary = useMemo(() => {
+    const rows = data?.rows ?? [];
+    const total = rows.length;
+    const byStatus = { unstarted: 0, in_progress: 0, needs_review: 0, complete: 0 };
+    let vocabConfirmed = 0;
+    let graduated = 0;
+    for (const row of rows) {
+      byStatus[row.membership.status] += 1;
+      if (row.analysis?.vocabularyReviewStatus === 'confirmed') vocabConfirmed += 1;
+      if (row.sentence && graduatedSentenceIds.has(row.sentence.id)) graduated += 1;
+    }
+    return {
+      total,
+      complete: byStatus.complete,
+      percent: total ? Math.round((byStatus.complete / total) * 100) : 0,
+      byStatus,
+      vocabConfirmed,
+      graduated,
+    };
+  }, [data, graduatedSentenceIds]);
+
   const collapsedChapters = useMemo(
     () => new Set(data?.book?.collapsedChapterIds ?? []),
     [data?.book?.collapsedChapterIds],
@@ -413,6 +445,48 @@ export function BookDetailPage() {
           </a>
         ) : null}
         {data.book.notes ? <p style={{ margin: 0 }}>{data.book.notes}</p> : null}
+        <section className="panel stack">
+          <h3 style={{ margin: 0 }}>Progress</h3>
+          {progressSummary.total === 0 ? (
+            <div className="muted">No sentences yet.</div>
+          ) : (
+            <>
+              <div className="muted">
+                {progressSummary.complete}/{progressSummary.total} sentences complete ·{' '}
+                {progressSummary.percent}%
+              </div>
+              <div className="progress-bar" aria-hidden="true">
+                <span style={{ width: `${progressSummary.percent}%` }} />
+              </div>
+              <div className="row">
+                <span className="status-pill unstarted">
+                  {progressSummary.byStatus.unstarted} unstarted
+                </span>
+                <span className="status-pill in_progress">
+                  {progressSummary.byStatus.in_progress} in progress
+                </span>
+                <span className="status-pill needs_review">
+                  {progressSummary.byStatus.needs_review} needs review
+                </span>
+                <span className="status-pill complete">
+                  {progressSummary.byStatus.complete} complete
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: '0.85rem' }}>
+                Vocabulary confirmed: {progressSummary.vocabConfirmed}/{progressSummary.total}{' '}
+                sentences
+              </div>
+              <div className="muted" style={{ fontSize: '0.85rem' }}>
+                {coverage && coveragePercent(coverage) !== null
+                  ? `~${coveragePercent(coverage)}% known vocabulary (${coverage.knownCount}/${coverage.totalCount} words at reading proficiency)`
+                  : 'Known vocabulary: not confirmed yet'}
+              </div>
+              <div className="muted" style={{ fontSize: '0.85rem' }}>
+                Graduated (mastered) sentences: {progressSummary.graduated}/{progressSummary.total}
+              </div>
+            </>
+          )}
+        </section>
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />
         </section>

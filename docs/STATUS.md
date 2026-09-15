@@ -16,7 +16,8 @@ vocabulary glossing, contextual conjugation cards, progressive listening,
 grammar-pattern browsing/annotation) are shipped and, in almost every
 case, verified against production data by the user directly. The
 grammar-learning system's 4-card FSRS ladder was collapsed to one
-`grammar_completion` card 2026-09-15 — see Recent changes. ~1442 TS
+`grammar_completion` card 2026-09-15, and `BookDetailPage` gained a
+book-level progress section the same day — see Recent changes. ~1442 TS
 tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
@@ -31,6 +32,27 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-15 — Book-level progress section on `BookDetailPage`** (user
+  ask: summarize a book's current state and progress toward completion in
+  one place, instead of only inferring it from scrolling the sentence
+  list). A new "Progress" panel sits above the action-button row,
+  book-level only (matches the existing "per-chapter breakdown not done"
+  scope note on the "Ready to read" coverage work in ROADMAP.md — a
+  chapter's sentences aren't queried separately today). Shows: sentence
+  completion count/percent + bar and a status-pill breakdown
+  (unstarted/in progress/needs review/complete), vocabulary-confirmed
+  sentence count, known-vocabulary coverage (reuses
+  `getBookVocabularyCoverage`/`coveragePercent`, same "not confirmed yet"
+  wording as `BooksPage`'s list card), and graduated (mastered) sentence
+  count (reuses the `computeGraduatedSubjectIds` set the page already
+  computed for per-row "Graduated" pills). All of it is derived from data
+  the page's `useLiveQuery` was already fetching, plus one added
+  `getBookVocabularyCoverage()` call — no new repository query or schema
+  change. Renders "No sentences yet." for an empty book instead of a 0%
+  bar. Verified by hand: fresh CSV import (3 sentences, all unstarted,
+  vocab unconfirmed) and a brand-new empty book, both via a headless
+  Playwright run against the dev server — no console errors either way.
 
 - **2026-09-15 — Recent feed URLs remembered on podcast/NHK Easy import**
   (user ask: don't make them re-find/re-paste the same RSS URL every
