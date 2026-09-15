@@ -6,16 +6,18 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-14.
+Last updated: 2026-09-15.
 
 ## Where things stand
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,
-vocabulary glossing, contextual conjugation cards,
-progressive listening, grammar-learning system incl. `grammar_production`)
-are shipped and, in almost every case, verified against production data by
-the user directly. ~1117 TS tests, green.
+vocabulary glossing, contextual conjugation cards, progressive listening,
+grammar-pattern browsing/annotation) are shipped and, in almost every
+case, verified against production data by the user directly. The
+grammar-learning system's 4-card FSRS ladder was collapsed to one
+`grammar_completion` card 2026-09-15 — see Recent changes. ~1442 TS
+tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
 awareness, cross-sentence pronunciation profile (`/pronunciation`, closes
@@ -29,6 +31,49 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-15 — Grammar SRS: 4-card ladder collapsed to one
+  `grammar_completion` card** (docs/ROADMAP.md — resolves the 2026-09-09
+  open question). A performance check
+  (`scripts/report-grammar-card-performance.ts`) found the
+  `grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
+  `grammar_production` ladder essentially never fired (2 of 74 tracked
+  patterns had ever produced a study item) because
+  `pickContextSentenceForGrammarPattern` gated every card on the same
+  strict vocab-proficiency rule `reading_in_context` already uses. First
+  attempt collapsed all four into an ambient "noticing" strip under every
+  review card; tried in real use it "makes the review cards clunky and
+  doesn't help with learning" (user) — reverted same day. Second attempt,
+  kept:
+  - `grammar_comprehension`/`grammar_contrast`/`grammar_production`
+    retired outright; `grammar_completion` survives as the sole grammar
+    activity type and was rebuilt.
+  - **Gating loosened to vocabulary's level** —
+    `pickContextSentenceForGrammarPattern` (`repository.ts`) dropped its
+    `getSentenceFullReviewReadiness` call, mirroring
+    `pickContextSentenceForVocabularyItem` exactly (just needs a linked
+    sentence, no requirement on the rest of that sentence's vocabulary).
+  - **`GrammarCompletionCard` rebuilt** (`ReviewPage.tsx`): the target
+    sentence's English translation is now always visible — the input
+    signal for picking the right construct, before choosing, not gated
+    behind reveal — and the sentence is framed by its reading-order
+    passage context (before untranslated always, after translated only
+    post-reveal), same convention `ReadingInContextCard` uses. New
+    `getReadingContextForSentence` (`repository.ts`) resolves this per
+    pattern with bounded per-sentence queries rather than the shared
+    scope-wide context map, since grammar patterns are global-scope and
+    can reference a sentence from any book.
+  - `GrammarPicker`'s "Track" seeds only `grammar_completion` now (was
+    seeding `grammar_comprehension` + `grammar_completion` together).
+  - Learner-state ladder (`grammarPatterns.ts`) back to 3 rungs
+    (encountered/noticed/recognized) — `recognized` now reads FSRS
+    proficiency off `grammar_completion` instead of the retired
+    `grammar_comprehension`.
+  - `scripts/retire-non-completion-grammar-items.ts` soft-deleted the 3
+    non-`grammar_completion` study items across the 2 tracked patterns —
+    both patterns' `grammar_completion` items (`reps`/`due`/`lapses`)
+    verified unchanged afterward; `sentence_grammar`/`grammar_patterns`
+    rows untouched throughout both passes.
 
 - **2026-09-14 — "Reimport" buttons on `BookDetailPage`** (user ask: find
   a source's URL then be taken straight back to its import page). A plain

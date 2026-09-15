@@ -90,28 +90,32 @@ suggestion only materializes on explicit Add, and a drafted explanation only
 pre-fills the existing manual-edit form, saved by the same Save action. (A
 second Edge Function, `vocab-assist`, followed the same pattern for
 vocabulary meanings — see "External interop" / AI_OVERVIEW §2.)
-Phase 5 added FSRS-scheduled review: `grammar_comprehension`/
-`grammar_completion` activity types on the existing `StudyItem`/`Review`
-machinery, entered only via "Track" (never lazily seeded by `ReviewPage`
-itself, unlike every other category), global scope only. Phases 6+7+8
-(shipped together) added a derived learner-state ladder
-(`computeGrammarLearnerState`: Encountered → Noticed → Recognized from
-existing evidence, never manually set), a personalized `/grammar`
-dashboard that groups tagged patterns into explainable priority buckets
-instead of one encounter-count list (`computeGrammarPriorityBucket`/
-`explainGrammarPriority` — prose, not an opaque score), a "Related
-patterns" section on the detail page to view/create `GrammarRelationship`
-edges, a grammar natural-encounter panel on `PracticePage` mirroring the
-vocabulary one, and relationship-aware distractor ranking in
-`ReviewPage`'s `grammar_completion` cards. A subsequent Contrast slice of
-Phase 9 added `grammar_contrast` (design brief §11C, "can you tell these
-two apart"): unlike every other grammar activity type, this one **can**
-get lazily seeded by `ReviewPage`'s generic pending-seed pool, since its
-candidate only exists once an already-tracked pattern has a
-`GrammarRelationship` — reaching this tier surfaces as the ladder's
-`distinguished` state. Prediction/transformation/production (the rest of
-design brief §11 D/F/G) remain deliberately deferred — see
-`docs/STATUS.md`.
+
+Phase 5 onward added FSRS-scheduled review, eventually growing into a
+4-card ladder (`grammar_comprehension`/`grammar_completion`/
+`grammar_contrast`/`grammar_production`) with a 5-rung learner-state
+ladder derived from their FSRS proficiency. **Collapsed 2026-09-15**
+(docs/ROADMAP.md): a performance check found the ladder essentially never
+fired (2 of 74 tracked patterns had ever produced a study item) because
+its context-sentence gate required the same "vocab already proficient"
+bar `reading_in_context` uses. `grammar_completion` is now the sole
+grammar activity type, entered only via "Track" in `GrammarPicker.tsx`
+(never lazily seeded by `ReviewPage`, unlike every other category),
+global scope only, rebuilt around two changes: `pickContextSentenceForGrammarPattern`
+(`repository.ts`) dropped the vocab-proficiency gate entirely — mirrors
+`pickContextSentenceForVocabularyItem` exactly, just needs a linked
+sentence — and the card (`GrammarCompletionCard` in `ReviewPage.tsx`) now
+always shows the target sentence's English translation up front (the
+input signal for picking the right construct) plus its reading-order
+passage context (`ReadingContext`, same shape `reading_in_context` uses,
+resolved per-pattern via a new bounded-query `getReadingContextForSentence`
+rather than the shared scope-wide context map, since a tracked pattern's
+sentence can come from any book). The learner-state ladder
+(`computeGrammarLearnerState`) is back to 3 rungs (Encountered → Noticed →
+Recognized) — `Recognized` now reads FSRS proficiency off
+`grammar_completion`. A "Related patterns" section on the detail page
+(`GrammarRelationship` edges) still feeds `grammar_completion`'s
+distractor ranking even with no dedicated contrast card.
 
 ## Sync engine
 
@@ -181,9 +185,9 @@ more `activityType`s (`reading_production`, `sentence_transformation` — now
 one card per word-in-sentence occurrence, quizzing the conjugation form that
 sentence used — `listening`, `word_listening` — a per-occurrence "hear just
 this word" card gating the full-sentence `listening` card, cloze), and to
-the `grammarPattern` subject
-(grammar-learning system Phase 5, `grammar_comprehension`/`grammar_completion`)
-— see `docs/STATUS.md` for the full list. Also includes
+the `grammarPattern` subject (grammar-learning system Phase 5,
+`grammar_completion` — see the grammar-learning system section above for
+its history) — see `docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
 (`isGraduated`, retiring a study item from the due rotation past a
 configurable FSRS-interval threshold).
