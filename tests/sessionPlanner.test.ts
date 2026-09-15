@@ -36,7 +36,6 @@ function dueCandidate(overrides: Partial<ReviewPriorityInput> = {}): ReviewPrior
     distinctSentenceCount: 1,
     recentAgainCount: 0,
     recentReviewCount: 2,
-    hasUnconfirmedGrammar: false,
     daysSinceLastEncounter: null,
     now: NOW,
     ...overrides,
@@ -96,17 +95,6 @@ describe('scoreReviewPriority / rankReviewPriorities', () => {
     expect(first!.studyItemId).toBe('strong');
     expect(second!.studyItemId).toBe('weak');
     expect(first!.reasons.length).toBeGreaterThan(0);
-  });
-
-  it('scores a reading_in_context item with an unconfirmed grammar tag higher than an identical one without', () => {
-    const withGrammar = scoreReviewPriority(
-      dueCandidate({ activityType: 'reading_in_context', hasUnconfirmedGrammar: true }),
-    );
-    const withoutGrammar = scoreReviewPriority(
-      dueCandidate({ activityType: 'reading_in_context', hasUnconfirmedGrammar: false }),
-    );
-    expect(withGrammar.score).toBeGreaterThan(withoutGrammar.score);
-    expect(withGrammar.reasons).toContain('has an unconfirmed grammar pattern');
   });
 
   it('never fully zeroes out a stale, never-re-encountered item — it just scores lower', () => {

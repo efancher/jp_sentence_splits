@@ -129,14 +129,6 @@ export interface ReviewPriorityInput {
   recentAgainCount: number;
   recentReviewCount: number;
   /**
-   * `reading_in_context` items only: does this sentence carry a
-   * `SentenceGrammar` link the learner hasn't confirmed noticing yet?
-   * (docs/ROADMAP.md "Grammar SRS" collapse, 2026-09-15 — tracked grammar
-   * patterns influence `reading_in_context` priority instead of riding
-   * their own FSRS card.) Always false for other activity types.
-   */
-  hasUnconfirmedGrammar: boolean;
-  /**
    * Days since this subject was last freshly encountered (a natural
    * encounter, or a new sentence/context linking it) beyond its original
    * creation — null when there's no re-encounter signal at all, which is
@@ -197,10 +189,7 @@ export function scoreReviewPriority(input: ReviewPriorityInput): ReviewPriorityR
           1,
         );
 
-  const score =
-    forgettingRisk * usefulness * staleness +
-    weakness * 0.5 +
-    (input.hasUnconfirmedGrammar ? 0.3 : 0);
+  const score = forgettingRisk * usefulness * staleness + weakness * 0.5;
 
   const reasons: string[] = [];
   if (input.state === 'new' || input.state === 'learning') {
@@ -213,7 +202,6 @@ export function scoreReviewPriority(input: ReviewPriorityInput): ReviewPriorityR
     reasons.push(`missed ${input.recentAgainCount}/${input.recentReviewCount} recently`);
   }
   if (staleness < 1) reasons.push('not re-encountered in a while');
-  if (input.hasUnconfirmedGrammar) reasons.push('has an unconfirmed grammar pattern');
 
   return {
     studyItemId: input.studyItemId,

@@ -71,56 +71,47 @@ between two patterns (structurally mirrors `VocabularyConfusion`'s
 canonicalized-pair shape but is its own table — more than one relationship
 row can exist per pair, one per `relationshipType`, since e.g.
 "structurally related" and "commonly confused" are independent facts).
-`GrammarSuggestion` (embedded on `SentenceAnalysis.grammarSuggestions`, not
-a table) is the provisional, pre-confirmation counterpart, mirroring
-`VocabularySuggestion`. Phase 2 added the first UI writer — a "Grammar
-noticed" panel (`src/components/GrammarPicker.tsx`) in `AnalyzePage.tsx`,
-manual annotation only (search-existing-or-create-new, Got it/Explain/
-Remove). Phase 3 added browsing — `/grammar` and `/grammar/:patternId`,
-mirroring `VocabularyListPage.tsx`/`KanjiDetailPage.tsx`, with "Your
-encounters" linking back to sentences/books/native audio. Phase 4 added
-the first AI integration in this codebase — a `grammar-assist` Supabase
-Edge Function (Claude Haiku, forced structured tool output) for
-candidate-pattern suggestion and context-specific explanation, called from
-`GrammarPicker.tsx` via `src/lib/grammarAssist.ts`. AI output is never
-authoritative: a suggestion only materializes on explicit Add, and a
-drafted explanation only pre-fills the existing manual-edit form, saved by
-the same Save action. (A second Edge Function, `vocab-assist`, followed
-the same pattern for vocabulary meanings — see "External interop" /
-AI_OVERVIEW §2.)
-
-Phases 5–9 (2026-08 through early 2026-09) built a 4-card FSRS ladder on
-top of this — `grammar_comprehension`/`grammar_completion`/
-`grammar_contrast`/`grammar_production` activity types on `StudyItem`/
-`Review`, entered via a "Track" button, with a 5-rung learner-state ladder
-(Encountered → Noticed → Recognized → Distinguished → Productive) derived
-from FSRS proficiency on those cards. **Retired 2026-09-15**
-(docs/ROADMAP.md "Grammar SRS collapsed into in-context noticing"): a
-performance check found the ladder essentially never fired — its
-context-sentence gate (`pickContextSentenceForGrammarPattern`, since
-deleted) required the same "vocab already proficient" bar
-`reading_in_context` uses, so a pattern only ever got a card once its
-example sentence had fully graduated on the vocab side; 72 of 74 tracked
-patterns never crossed it. Rather than loosen the gate, the four card
-types were removed. The current design:
-- **Tracking** is just `SentenceGrammar.confirmedByLearner` — no separate
-  study item. `GrammarPicker`'s only action on an unconfirmed link is "Got
-  it"; the old two-button Confirm/Track pair collapsed into one.
-- **Learner-state ladder** shrank to 3 rungs (`GrammarLearnerState` in
-  `src/lib/grammarPatterns.ts`) — `recognized` now means confirmed across
-  2+ distinct sources (mirrors vocabulary's own context-diversity signal),
-  replacing the FSRS-proficiency evidence the two retired top rungs relied
-  on.
-- **`reading_in_context` selection bias** — `scoreReviewPriority`
-  (`sessionPlanner.ts`) adds a small bonus for a sentence carrying an
-  unconfirmed grammar tag, surfacing it sooner in the due queue. This is
-  the one genuinely new mechanism (nothing previously ranked
-  `reading_in_context` candidates beyond generic FSRS due-ness).
-- **Ambient reveal + noticing check** — `SentenceGrammarNoticeRow` (new
-  component) renders under every revealed review card, same "always-on
-  strip" convention as `SentencePitchAccentRow`: shows a tagged pattern's
-  explanation with an inline highlight (`blankPatternInSentence`) for any
-  link, plus "Got it"/"Not this" for an unconfirmed one.
+`StudySubjectType` gained `'grammarPattern'`, so grammar review reuses
+`StudyItem`/`Review`/FSRS/natural-encounter machinery unchanged — no
+parallel scheduler. `GrammarSuggestion` (embedded on
+`SentenceAnalysis.grammarSuggestions`, not a table) is the provisional,
+pre-confirmation counterpart, mirroring `VocabularySuggestion`. Phase 2
+added the first UI writer — a "Grammar noticed" panel
+(`src/components/GrammarPicker.tsx`) in `AnalyzePage.tsx`, manual
+annotation only (search-existing-or-create-new, Got it/Explain/Track).
+Phase 3 added browsing — `/grammar` and `/grammar/:patternId`, mirroring
+`VocabularyListPage.tsx`/`KanjiDetailPage.tsx`, with "Your encounters"
+linking back to sentences/books/native audio. Phase 4 added the first AI
+integration in this codebase — a `grammar-assist` Supabase Edge Function
+(Claude Haiku, forced structured tool output) for candidate-pattern
+suggestion and context-specific explanation, called from `GrammarPicker.tsx`
+via `src/lib/grammarAssist.ts`. AI output is never authoritative: a
+suggestion only materializes on explicit Add, and a drafted explanation only
+pre-fills the existing manual-edit form, saved by the same Save action. (A
+second Edge Function, `vocab-assist`, followed the same pattern for
+vocabulary meanings — see "External interop" / AI_OVERVIEW §2.)
+Phase 5 added FSRS-scheduled review: `grammar_comprehension`/
+`grammar_completion` activity types on the existing `StudyItem`/`Review`
+machinery, entered only via "Track" (never lazily seeded by `ReviewPage`
+itself, unlike every other category), global scope only. Phases 6+7+8
+(shipped together) added a derived learner-state ladder
+(`computeGrammarLearnerState`: Encountered → Noticed → Recognized from
+existing evidence, never manually set), a personalized `/grammar`
+dashboard that groups tagged patterns into explainable priority buckets
+instead of one encounter-count list (`computeGrammarPriorityBucket`/
+`explainGrammarPriority` — prose, not an opaque score), a "Related
+patterns" section on the detail page to view/create `GrammarRelationship`
+edges, a grammar natural-encounter panel on `PracticePage` mirroring the
+vocabulary one, and relationship-aware distractor ranking in
+`ReviewPage`'s `grammar_completion` cards. A subsequent Contrast slice of
+Phase 9 added `grammar_contrast` (design brief §11C, "can you tell these
+two apart"): unlike every other grammar activity type, this one **can**
+get lazily seeded by `ReviewPage`'s generic pending-seed pool, since its
+candidate only exists once an already-tracked pattern has a
+`GrammarRelationship` — reaching this tier surfaces as the ladder's
+`distinguished` state. Prediction/transformation/production (the rest of
+design brief §11 D/F/G) remain deliberately deferred — see
+`docs/STATUS.md`.
 
 ## Sync engine
 
@@ -189,11 +180,10 @@ subjects and several
 more `activityType`s (`reading_production`, `sentence_transformation` — now
 one card per word-in-sentence occurrence, quizzing the conjugation form that
 sentence used — `listening`, `word_listening` — a per-occurrence "hear just
-this word" card gating the full-sentence `listening` card, cloze). The
-`grammarPattern` subject (grammar-learning system Phase 5) briefly added
-its own FSRS-scheduled activity types too, retired 2026-09-15 — see the
-grammar-learning system section above and `docs/STATUS.md` for the full
-list. Also includes
+this word" card gating the full-sentence `listening` card, cloze), and to
+the `grammarPattern` subject
+(grammar-learning system Phase 5, `grammar_comprehension`/`grammar_completion`)
+— see `docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
 (`isGraduated`, retiring a study item from the due rotation past a
 configurable FSRS-interval threshold).

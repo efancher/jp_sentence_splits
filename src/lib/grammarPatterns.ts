@@ -1,4 +1,5 @@
-import type { GrammarRelationshipType } from '../domain/types';
+import type { GrammarPattern, GrammarRelationshipType } from '../domain/types';
+import { hashString } from './ids';
 import { stripMarkup } from './normalize';
 
 /** Human-readable labels for GrammarRelationshipType, for the detail page's "Related patterns" section. */
@@ -53,6 +54,78 @@ function stripPatternAnnotation(text: string): string {
   return text.replace(/[（(][^）)]*[）)]/g, '').trim();
 }
 
+/**
+ * Weak, informational check for the `grammar_production` review card
+ * (docs/ROADMAP.md "Grammar production ladder"): did the learner's typed
+ * sentence actually use the construction? Normalizes both sides the same
+ * way `normalizeGrammarPatternKey` does, then requires every wave-dash-
+ * separated fragment of the pattern to appear in the response (in any
+ * position — surface order isn't checked, since a produced sentence
+ * legitimately reorders around the pattern). Purely a "you used it / you
+ * didn't" hint shown on reveal — the learner still self-rates meaning and
+ * naturalness, which no substring check can judge. Returns false for an
+ * empty/blank response or an un-normalizable pattern.
+ */
+export function grammarPatternUsedIn(response: string, canonicalName: string): boolean {
+  const core = stripPatternAnnotation(normalizeGrammarPatternKey(canonicalName));
+  if (!core) return false;
+  const normalizedResponse = stripMarkup(response).normalize('NFC').trim();
+  if (!normalizedResponse) return false;
+  const fragments = core.split(/[~〜～]/).map((part) => part.trim()).filter(Boolean);
+  if (fragments.length === 0) return false;
+  return fragments.every((fragment) => normalizedResponse.includes(fragment));
+}
+
+const ENGLISH_STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'to', 'of', 'in', 'on', 'for', 'with', 'and', 'or', 'but', 'that',
+  'this', 'it', 'its', 'as', 'at', 'by', 'from', 'into', 'onto', 'than',
+  'then', 'so', 'not', 'no', 'you', 'your', 'i', 'me', 'my', 'do', 'did',
+  'does', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'up',
+  'out', 'about', 'just',
+]);
+
+function contentWords(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 3 && !ENGLISH_STOPWORDS.has(word));
+  return new Set(words);
+}
+
+/**
+ * Heuristic guard for priming a `grammar_production` prompt with a
+ * sentence's natural English translation instead of the pattern's abstract
+ * meaning gloss (design brief follow-up, user: "make grammar production
+ * more driven by native context"). Aspectual/discourse patterns with no
+ * English morphological analog (～てる, ～だね, ～て命令形) translate cleanly
+ * without hinting at the construction — "緊張してる？" → "Are you nervous?"
+ * primes the situation, not the grammar. But modal patterns with a near-1:1
+ * English idiom (～わけがない → "there's no way...") translate so literally
+ * that the translation *is* the gloss; showing it before writing would hand
+ * over the answer. Flags the latter case by checking how much of the
+ * pattern's own meaning text reappears verbatim in the translation — not
+ * semantic, just enough to catch near-restatements. Callers should fall
+ * back to showing the pattern's meaning gloss (today's behavior) when this
+ * returns true, or when there's no translation to prime with at all.
+ */
+export function translationLeaksPatternMeaning(
+  pattern: Pick<GrammarPattern, 'shortMeaning' | 'explanation'>,
+  translation: string,
+): boolean {
+  const meaningText = pattern.shortMeaning?.trim() || pattern.explanation?.trim() || '';
+  if (!meaningText || !translation.trim()) return false;
+  const meaningWords = contentWords(meaningText);
+  if (meaningWords.size === 0) return false;
+  const translationWords = contentWords(translation);
+  let shared = 0;
+  for (const word of meaningWords) {
+    if (translationWords.has(word)) shared += 1;
+  }
+  return shared / meaningWords.size >= 0.4;
+}
+
 export interface SentenceBlank {
   before: string;
   match: string;
@@ -60,16 +133,15 @@ export interface SentenceBlank {
 }
 
 /**
- * Best-effort in-sentence span for a grammar pattern (used by
- * `SentenceGrammarNoticeRow`'s ambient highlight on a review reveal):
- * finds the first occurrence of the pattern's (tilde-stripped,
+ * Best-effort blank for a grammar_completion review card (design brief
+ * §11E): finds the first occurrence of the pattern's (tilde-stripped,
  * annotation-stripped) canonicalName as a literal substring of the
  * sentence. Returns null when it doesn't appear verbatim — common for
  * conjugated/colloquial variants (e.g. the sentence has わけない but the
- * canonical name is わけがない) — callers should fall back to naming the
- * pattern next to the full, unmarked sentence rather than guessing at a
- * span. True span-based highlighting would need real start/end offsets on
- * SentenceGrammar, which nothing populates yet (see docs/STATUS.md).
+ * canonical name is わけがない) — callers should fall back to showing the
+ * full, unblanked sentence rather than guessing at a span. True span-based
+ * blanking would need real start/end offsets on SentenceGrammar, which
+ * nothing populates yet (see docs/STATUS.md).
  */
 export function blankPatternInSentence(
   japanese: string,
@@ -86,27 +158,37 @@ export function blankPatternInSentence(
   };
 }
 
-export type GrammarLearnerState = 'encountered' | 'noticed' | 'recognized';
+export type GrammarLearnerState =
+  | 'encountered'
+  | 'noticed'
+  | 'recognized'
+  | 'distinguished'
+  | 'productive';
 
 /**
- * Derives the Encountered -> Noticed -> Recognized ladder from accumulated
- * evidence — never a manually-set field. Originally a 5-rung ladder whose
- * top two tiers (Distinguished/Productive) depended on FSRS proficiency on
- * dedicated `grammar_contrast`/`grammar_production` study items; those
- * activity types were retired 2026-09-15 (docs/ROADMAP.md "Grammar SRS:
- * noticing + in-context reading vs. the isolated drill ladder" — the
- * ladder rarely produced a card at all, and duplicated what
- * `reading_in_context` already tests once a pattern's sentence is
- * vocab-ready). Recognized now means "confirmed across more than one
- * occurrence" — repetition-across-contexts, the same signal
- * `distinctSourceCount` already uses for vocabulary maturity — rather than
- * a separate spaced-repetition card.
+ * Derives the design brief's Encountered -> Noticed -> Recognized ->
+ * Distinguished -> Productive ladder (§9) from accumulated evidence —
+ * never a manually-set field. `contrastProficient` (grammar-learning
+ * system Phase 9 slice) reflects FSRS proficiency on the pattern's own
+ * `grammar_contrast` study item — "can you tell this apart from a pattern
+ * you actually confuse it with," not just "recall the right one from a
+ * pool" (grammar_completion tests the latter). Omitted/false simply means
+ * no contrast evidence exists yet (e.g. the pattern has no
+ * `GrammarRelationship` to contrast against), which is the common case and
+ * caps a pattern at `recognized`. The top tier, Productive, is still
+ * architecturally reachable (the type exists) but nothing produces its
+ * evidence yet — that needs a production/transformation activity (design
+ * brief §11 D/F/G), deliberately still deferred — see docs/STATUS.md.
  */
 export function computeGrammarLearnerState(input: {
+  encounterCount: number;
   confirmedCount: number;
-  distinctSourceCount: number;
+  tracked: boolean;
+  proficient: boolean;
+  contrastProficient?: boolean;
 }): GrammarLearnerState {
-  if (input.confirmedCount > 0 && input.distinctSourceCount >= 2) return 'recognized';
+  if (input.tracked && input.proficient && input.contrastProficient) return 'distinguished';
+  if (input.tracked && input.proficient) return 'recognized';
   if (input.confirmedCount > 0) return 'noticed';
   return 'encountered';
 }
@@ -116,6 +198,8 @@ export const GRAMMAR_LEARNER_STATE_LABELS: Record<GrammarLearnerState, string> =
   encountered: 'Encountered',
   noticed: 'Noticed',
   recognized: 'Recognized',
+  distinguished: 'Distinguished',
+  productive: 'Productive',
 };
 
 export type GrammarPriorityBucket =
@@ -141,32 +225,92 @@ export const GRAMMAR_PRIORITY_BUCKET_ORDER: GrammarPriorityBucket[] = [
 
 export interface GrammarPriorityInput {
   encounterCount: number;
-  confirmedCount: number;
-  distinctSourceCount: number;
+  tracked: boolean;
   state: GrammarLearnerState;
+  /** Among the tracked pattern's most recent grammar_comprehension reviews. */
+  recentAgainCount: number;
+  recentReviewCount: number;
 }
 
 /**
- * A simple, explainable heuristic grouping a pattern for the /grammar
- * dashboard — four buckets, each derivable at a glance from the same
- * fields explainGrammarPriority renders as prose, not a numeric score
- * nobody can audit.
+ * A simple, explainable heuristic (design brief §14 explicitly prefers this
+ * over opaque scoring) grouping a pattern for the /grammar dashboard — four
+ * buckets, each derivable at a glance from the same fields
+ * explainGrammarPriority renders as prose, not a numeric score nobody can
+ * audit.
  */
 export function computeGrammarPriorityBucket(
   input: GrammarPriorityInput,
 ): GrammarPriorityBucket {
-  if (input.state === 'recognized') return 'strong';
-  if (input.confirmedCount > 0) return 'developing';
+  const recognizedOrBetter = input.state === 'recognized' || input.state === 'distinguished';
+  if (recognizedOrBetter && input.recentAgainCount === 0) return 'strong';
+  if (input.tracked) return 'developing';
   if (input.encounterCount >= 3) return 'worth_learning_now';
   return 'recently_encountered';
 }
 
-/** Explainable one-liner behind a bucket assignment. */
-export function explainGrammarPriority(input: GrammarPriorityInput): string {
+/** Explainable one-liner behind a bucket assignment — design brief §14's own worked example. */
+export function explainGrammarPriority(
+  input: GrammarPriorityInput & { distinctSourceCount: number },
+): string {
   const parts = [`Encountered ${input.encounterCount} time${input.encounterCount === 1 ? '' : 's'}`];
   if (input.distinctSourceCount > 1) {
     parts.push(`across ${input.distinctSourceCount} sources`);
   }
-  parts.push(input.confirmedCount > 0 ? 'confirmed noticing it' : 'not confirmed yet');
+  if (input.tracked && input.recentReviewCount > 0) {
+    parts.push(
+      `needed help on ${input.recentAgainCount} of the last ${input.recentReviewCount} review${
+        input.recentReviewCount === 1 ? '' : 's'
+      }`,
+    );
+  } else if (!input.tracked) {
+    parts.push('not tracked yet');
+  }
   return `${parts.join(', ')}.`;
+}
+
+/** Default number of options on a grammar_completion multiple-choice card, including the correct one. */
+export const GRAMMAR_COMPLETION_CHOICE_COUNT = 4;
+
+/**
+ * Multiple-choice options for a grammar_completion card: the correct
+ * pattern plus up to `count - 1` distractors drawn from `otherPatterns`
+ * (design brief §7/§8 — "distractors from confusable pairs when
+ * available" is a natural future extension here once GrammarRelationship
+ * data exists; for now this draws from the whole corpus). Both the
+ * distractor pick and the final option order are deterministic, seeded
+ * from the pattern's own id (same hash-based approach as
+ * ReviewPage.tsx's pickTransformationTarget) — the same pattern always
+ * gets the same choices in the same order across reloads/re-renders,
+ * rather than reshuffling on every render.
+ *
+ * `relatedPatternIds` (design brief §7/§8, grammar-learning system Phase
+ * 8) — patterns explicitly linked to the correct one via
+ * `GrammarRelationship` are ranked ahead of the rest of the corpus: a
+ * distractor the learner has actually flagged as confusable (via the
+ * detail page's "Related patterns" control) is a more useful contrast
+ * than a random unrelated one. Falls back to the whole-corpus hash order
+ * when no relationships exist yet, same as before this parameter existed.
+ */
+export function buildGrammarCompletionChoices(
+  pattern: GrammarPattern,
+  otherPatterns: readonly GrammarPattern[],
+  count = GRAMMAR_COMPLETION_CHOICE_COUNT,
+  relatedPatternIds: ReadonlySet<string> = new Set(),
+): GrammarPattern[] {
+  const ranked = [...otherPatterns].sort((a, b) => {
+    const relatedA = relatedPatternIds.has(a.id) ? 0 : 1;
+    const relatedB = relatedPatternIds.has(b.id) ? 0 : 1;
+    if (relatedA !== relatedB) return relatedA - relatedB;
+    const ha = Number.parseInt(hashString(`${pattern.id}:pick:${a.id}`), 16);
+    const hb = Number.parseInt(hashString(`${pattern.id}:pick:${b.id}`), 16);
+    return ha - hb;
+  });
+  const distractors = ranked.slice(0, Math.max(0, count - 1));
+  const choices = [pattern, ...distractors];
+  return choices.sort((a, b) => {
+    const ha = Number.parseInt(hashString(`${pattern.id}:order:${a.id}`), 16);
+    const hb = Number.parseInt(hashString(`${pattern.id}:order:${b.id}`), 16);
+    return ha - hb;
+  });
 }

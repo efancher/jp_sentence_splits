@@ -603,13 +603,6 @@ export interface VocabularyKanji {
  * Added for the contextual conjugation card (docs/STATUS.md): a verb read in
  * three sentences gets three independently-scheduled cards, each quizzing
  * the form that sentence actually used.
- *
- * `grammarPattern` is retired (docs/ROADMAP.md, 2026-09-15) — the 4-card
- * `grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
- * `grammar_production` ladder was collapsed into `SentenceGrammar.
- * confirmedByLearner` plus ambient reveal highlighting, no dedicated
- * FSRS card. Kept in this union only so old synced rows still parse;
- * nothing creates a `grammarPattern`-subject StudyItem anymore.
  */
 export type StudySubjectType =
   | 'sentence'
@@ -896,12 +889,10 @@ export interface SentenceGrammar {
   /** Explanation specific to *this* occurrence — what the construction is doing here, not the pattern's generic explanation. */
   occurrenceExplanation?: string;
   /**
-   * True once the learner has explicitly confirmed noticing this occurrence
-   * (GrammarPicker's "Got it", or the ambient check on a review reveal —
-   * SentenceGrammarNoticeRow) — false for an AI-suggested or manually
-   * tagged occurrence nobody has confirmed yet. This is the sole "tracked"
-   * signal for a grammar pattern now (see listGrammarPatternSummaries in
-   * repository.ts) — no separate FSRS study item involved.
+   * True once the learner has explicitly acted on this occurrence (Got it /
+   * Explain / Track) — false for an AI-suggested occurrence nobody has
+   * looked at yet. Does not by itself imply a StudyItem exists; see
+   * ensureGrammarStudyItem in repository.ts.
    */
   confirmedByLearner: boolean;
   source: 'manual' | 'ai_suggested';

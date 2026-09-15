@@ -5,7 +5,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
+  confirmSentenceVocabulary,
   ensureGrammarPattern,
+  ensureGrammarRelationship,
+  ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
   setBookSuspended,
@@ -13,6 +16,7 @@ import {
 } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
+import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
@@ -364,51 +368,6 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await getDb().studyItems.count()).toBe(1); // reading_in_context only
     });
-  });
-
-  // The 4-card grammar_* FSRS ladder was retired 2026-09-15 (docs/ROADMAP.md)
-  // in favor of SentenceGrammarNoticeRow: an ambient strip under any revealed
-  // card's sentence, surfacing a tagged pattern's explanation and — for an
-  // unconfirmed tag — a lightweight "did you notice it" Got it/Not this check.
-  it('shows the ambient grammar notice row on reveal, and Got it confirms the tag', async () => {
-    await seedBookWithSentence();
-    const pattern = await ensureGrammarPattern('〜ます', { shortMeaning: 'polite non-past' });
-    await ensureSentenceGrammar('sent-1', pattern.id, {});
-
-    const user = userEvent.setup();
-    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
-    await screen.findByText('本を読みます。');
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
-
-    expect(await screen.findByText('Notice this?')).toBeInTheDocument();
-    expect(screen.getByText('polite non-past')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Got it' }));
-
-    await waitFor(async () => {
-      const link = await getDb()
-        .sentenceGrammar.where('grammarPatternId')
-        .equals(pattern.id)
-        .first();
-      expect(link?.confirmedByLearner).toBe(true);
-    });
-    await waitFor(() => {
-      expect(screen.queryByText('Notice this?')).not.toBeInTheDocument();
-    });
-  });
-
-  it('renders a confirmed grammar tag as pure explanation, with no Got it/Not this controls', async () => {
-    await seedBookWithSentence();
-    const pattern = await ensureGrammarPattern('〜ます', { shortMeaning: 'polite non-past' });
-    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
-
-    const user = userEvent.setup();
-    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
-    await screen.findByText('本を読みます。');
-    await user.click(screen.getByRole('button', { name: 'Reveal' }));
-
-    expect(await screen.findByText('polite non-past')).toBeInTheDocument();
-    expect(screen.queryByText('Notice this?')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Got it' })).not.toBeInTheDocument();
   });
 
   it('holds a suspended book out of the global queue but not its own book review', async () => {
@@ -3020,6 +2979,436 @@ describe('ReviewPage', () => {
     // get a slot today.
     const cloze = await db.studyItems.get('si-cloze');
     expect(cloze?.fsrsState.due).toBe('2020-01-01T00:00:01.000Z');
+  });
+
+  // ---------------------------------------------------------------------
+  // Grammar-pattern review (grammar-learning system Phase 5, docs/STATUS.md).
+  // Global scope only (no bookId) — see GRAMMAR_ACTIVITY_TYPES's doc
+  // comment in ReviewPage.tsx. Unlike every other category, a grammar
+  // study item is never lazily seeded by ReviewPage itself, so these tests
+  // pre-seed via ensureGrammarStudyItem directly (mirroring how "Track" in
+  // GrammarPicker would) rather than relying on the pending-seed pool.
+  // ---------------------------------------------------------------------
+
+  it('renders a grammar_comprehension card, reveals the pattern meaning, and records the review', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-1',
+      normalizedKey: 'sent-grammar-1',
+      japanese: 'そんなこと言うわけないでしょ。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd say something like that.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-1');
+    await confirmSentenceVocabulary('sent-grammar-1', []);
+
+    const pattern = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    await ensureSentenceGrammar('sent-grammar-1', pattern.id, { confirmedByLearner: true });
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    // Keep grammar_completion out of this test's queue/pending-seed pool
+    // entirely — it already has a study item, just far in the future.
+    const completionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await db.studyItems.update(completionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText('そんなこと言うわけないでしょ。');
+    expect(screen.getByText(/What does/)).toBeInTheDocument();
+    expect(screen.getByText(/Grammar comprehension/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    expect(await screen.findByText("there's no way...")).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const reviews = await db.reviews.toArray();
+      expect(reviews.some((review) => review.rating === 'good')).toBe(true);
+    });
+  });
+
+  it('renders a grammar_completion card, grades the chosen construction, and records the review', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-2',
+      normalizedKey: 'sent-grammar-2',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-2');
+    await confirmSentenceVocabulary('sent-grammar-2', []);
+
+    const correct = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarPattern('〜てしまう');
+    await ensureSentenceGrammar('sent-grammar-2', correct.id, { confirmedByLearner: true });
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction/);
+    // Blanking: 〜わけがない strips to わけがない, which appears verbatim
+    // in 忘れるわけがない — so the sentence should render blanked.
+    expect(screen.queryByText('忘れるわけがない。')).not.toBeInTheDocument();
+    expect(screen.getByText('_____')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '〜わけがない' }));
+
+    expect(await screen.findByText('✓ Correct')).toBeInTheDocument();
+    expect(screen.queryByText('_____')).not.toBeInTheDocument();
+    expect(screen.getAllByText('〜わけがない').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const reviews = await db.reviews.toArray();
+      expect(reviews.some((review) => review.responseRaw === '〜わけがない')).toBe(true);
+    });
+    const [review] = await db.reviews
+      .filter((item) => item.responseRaw === '〜わけがない')
+      .toArray();
+    expect(review?.expectedAnswer).toBe('〜わけがない');
+    expect(review?.rating).toBe('good');
+  });
+
+  it('ranks a GrammarRelationship-linked pattern ahead of the rest of the corpus as a grammar_completion distractor', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-3',
+      normalizedKey: 'sent-grammar-3',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-3');
+    await confirmSentenceVocabulary('sent-grammar-3', []);
+
+    const correct = await ensureGrammarPattern('〜わけがない');
+    const others = await Promise.all(
+      ['〜はずがない', '〜てしまう', '〜ながら', '〜ば', '〜たら', '〜のに'].map((name) =>
+        ensureGrammarPattern(name),
+      ),
+    );
+    // Find a pattern that would NOT be among the default (no-relationship)
+    // distractor picks, so linking it is the only way it can show up —
+    // proving the relationship, not hash luck, drove the selection.
+    const unranked = buildGrammarCompletionChoices(correct, others);
+    const excluded = others.find(
+      (pattern) => !unranked.some((choice) => choice.id === pattern.id),
+    );
+    expect(excluded).toBeDefined();
+    await ensureGrammarRelationship(correct.id, excluded!.id, 'commonly_confused');
+
+    await ensureSentenceGrammar('sent-grammar-3', correct.id, { confirmedByLearner: true });
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 1,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction/);
+    expect(screen.getByRole('button', { name: excluded!.canonicalName })).toBeInTheDocument();
+  });
+
+  it('renders a grammar_contrast card, grades the chosen construction, and records the review', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-4',
+      normalizedKey: 'sent-grammar-4',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-4');
+    await confirmSentenceVocabulary('sent-grammar-4', []);
+
+    const correct = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: "there's no way...",
+    });
+    const confusable = await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarRelationship(correct.id, confusable.id, 'commonly_confused');
+    await ensureSentenceGrammar('sent-grammar-4', correct.id, { confirmedByLearner: true });
+
+    const futureFsrsState = {
+      due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 1,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, { fsrsState: futureFsrsState });
+    const completionItem = await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+    await db.studyItems.update(completionItem.id, { fsrsState: futureFsrsState });
+    // Left due now (default new-item state) — the only card that should
+    // actually surface in this test's queue.
+    await ensureGrammarStudyItem(correct.id, 'grammar_contrast');
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction is used here/);
+    expect(screen.getByText('忘れるわけがない。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '〜わけがない' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '〜はずがない' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '〜わけがない' }));
+
+    expect(await screen.findByText('✓ Correct')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const reviews = await db.reviews.toArray();
+      expect(reviews.some((review) => review.responseRaw === '〜わけがない')).toBe(true);
+    });
+    const [review] = await db.reviews
+      .filter((item) => item.responseRaw === '〜わけがない')
+      .toArray();
+    expect(review?.expectedAnswer).toBe('〜わけがない');
+    expect(review?.rating).toBe('good');
+  });
+
+  it('lazily seeds a grammar_contrast study item once a relationship makes a candidate available for an already-tracked pattern', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-5',
+      normalizedKey: 'sent-grammar-5',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-5');
+    await confirmSentenceVocabulary('sent-grammar-5', []);
+
+    const correct = await ensureGrammarPattern('〜わけがない');
+    const confusable = await ensureGrammarPattern('〜はずがない');
+    await ensureGrammarRelationship(correct.id, confusable.id, 'commonly_confused');
+    await ensureSentenceGrammar('sent-grammar-5', correct.id, { confirmedByLearner: true });
+
+    const futureFsrsState = {
+      due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 1,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    const comprehensionItem = await ensureGrammarStudyItem(correct.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, { fsrsState: futureFsrsState });
+    const completionItem = await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+    await db.studyItems.update(completionItem.id, { fsrsState: futureFsrsState });
+    // No grammar_contrast study item pre-seeded — this test's whole point
+    // is that the generic pending-seed pool creates one once a candidate
+    // (the relationship above) exists for an already-tracked pattern.
+    expect(
+      await db.studyItems.where('subjectId').equals(correct.id).count(),
+    ).toBe(2);
+
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Which construction is used here/);
+    const studyItems = await db.studyItems.where('subjectId').equals(correct.id).toArray();
+    expect(studyItems.some((item) => item.activityType === 'grammar_contrast')).toBe(true);
+  });
+
+  it('lazily seeds and renders a grammar_production card once the pattern is recognized (comprehension FSRS-proficient), self-rated with no expectedAnswer', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-6',
+      normalizedKey: 'sent-grammar-6',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-6');
+    await confirmSentenceVocabulary('sent-grammar-6', []);
+
+    const pattern = await ensureGrammarPattern('〜わけがない', { shortMeaning: "there's no way..." });
+    await ensureSentenceGrammar('sent-grammar-6', pattern.id, { confirmedByLearner: true });
+
+    const proficient = {
+      due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 1,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    };
+    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await db.studyItems.update(comprehensionItem.id, { fsrsState: proficient });
+    const completionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await db.studyItems.update(completionItem.id, { fsrsState: proficient });
+    // No grammar_production item pre-seeded — the pending-seed pool creates it.
+
+    const user = userEvent.setup();
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/Write a sentence that uses/);
+    const box = screen.getByPlaceholderText('Your sentence…');
+    await user.type(box, 'そんなことあるわけがない。');
+    await user.click(screen.getByRole('button', { name: 'Reveal model' }));
+
+    expect(await screen.findByText(/appears in your sentence/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await waitFor(async () => {
+      const items = await db.studyItems.where('subjectId').equals(pattern.id).toArray();
+      expect(items.some((item) => item.activityType === 'grammar_production')).toBe(true);
+    });
+    const productionItem = (await db.studyItems.where('subjectId').equals(pattern.id).toArray()).find(
+      (item) => item.activityType === 'grammar_production',
+    );
+    const [review] = await db.reviews.where('studyItemId').equals(productionItem!.id).toArray();
+    expect(review?.responseRaw).toBe('そんなことあるわけがない。');
+    expect(review?.expectedAnswer).toBeUndefined();
+    expect(review?.rating).toBe('good');
+  });
+
+  it('withholds grammar_production while the pattern is only tracked, not yet recognized', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-grammar-7',
+      normalizedKey: 'sent-grammar-7',
+      japanese: '忘れるわけがない。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: "There's no way I'd forget.",
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-grammar-7');
+    await confirmSentenceVocabulary('sent-grammar-7', []);
+
+    const pattern = await ensureGrammarPattern('〜わけがない', { shortMeaning: "there's no way..." });
+    await ensureSentenceGrammar('sent-grammar-7', pattern.id, { confirmedByLearner: true });
+    // Comprehension tracked but left in the default 'new' state — not recognized yet.
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+
+    renderReviewPage('/review', '/review');
+    await screen.findByText(/What does/);
+    const items = await db.studyItems.where('subjectId').equals(pattern.id).toArray();
+    expect(items.some((item) => item.activityType === 'grammar_production')).toBe(false);
   });
 });
 

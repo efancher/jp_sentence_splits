@@ -12,9 +12,9 @@ import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { SpeakButton } from '../components/SpeakButton';
 import { VocabChips } from '../components/VocabChips';
 import {
-  ensureSentenceGrammar,
   getDb,
   getVocabularyTargetCandidates,
+  recordGrammarNaturalEncounter,
   recordNaturalEncounter,
   setBookSentenceStatus,
   type VocabularyTargetCandidate,
@@ -132,24 +132,30 @@ export function PracticePage() {
     // rating for words the learner has already chosen to track, not every
     // word in the sentence.
     const materializedVocabulary = await getVocabularyTargetCandidates([sentenceId]);
-    // Grammar patterns tagged in this sentence but not yet confirmed noticed
-    // (AI-suggested or manually added via GrammarPicker) — mirrors the
-    // vocabulary natural-encounter panel above, offering a quick "noticed
-    // it without hints" tap. No more FSRS gate here (the 4-card grammar
-    // ladder was retired 2026-09-15, docs/ROADMAP.md) — this just confirms
-    // the SentenceGrammar link directly.
+    // Tracked grammar patterns linked to this sentence (Phase 6/7/8 slice of
+    // the grammar-learning system) — mirrors the vocabulary natural-encounter
+    // panel above, but only surfaces patterns the learner already opted into
+    // tracking via GrammarPicker's "Track" button (see
+    // recordGrammarNaturalEncounter's doc comment: that policy lives here,
+    // not in the repository primitive).
     const sentenceGrammarLinks = await db.sentenceGrammar
       .where('sentenceId')
       .equals(sentenceId)
       .toArray();
-    const unconfirmedLinks = sentenceGrammarLinks.filter((link) => !link.confirmedByLearner);
-    let unconfirmedGrammarPatterns: GrammarPattern[] = [];
-    if (unconfirmedLinks.length > 0) {
-      const patterns = await db.grammarPatterns.bulkGet(
-        unconfirmedLinks.map((link) => link.grammarPatternId),
+    let trackedGrammarPatterns: GrammarPattern[] = [];
+    if (sentenceGrammarLinks.length > 0) {
+      const patternIds = [...new Set(sentenceGrammarLinks.map((link) => link.grammarPatternId))];
+      const [patterns, grammarStudyItems] = await Promise.all([
+        db.grammarPatterns.bulkGet(patternIds),
+        db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
+      ]);
+      const trackedPatternIds = new Set(
+        grammarStudyItems
+          .filter((item) => patternIds.includes(item.subjectId))
+          .map((item) => item.subjectId),
       );
-      unconfirmedGrammarPatterns = patterns.filter((pattern): pattern is GrammarPattern =>
-        Boolean(pattern),
+      trackedGrammarPatterns = patterns.filter(
+        (pattern): pattern is GrammarPattern => !!pattern && trackedPatternIds.has(pattern.id),
       );
     }
     return {
@@ -162,7 +168,7 @@ export function PracticePage() {
       membership: memberships[index] ?? null,
       sentenceAudio,
       materializedVocabulary,
-      unconfirmedGrammarPatterns,
+      trackedGrammarPatterns,
     };
   }, [bookId, routeSentenceId, scope, shuffled]);
 
@@ -294,12 +300,16 @@ export function PracticePage() {
     });
   }
 
-  async function markGrammarNoticed(grammarPatternId: string) {
+  async function markGrammarEncounter(grammarPatternId: string, rating: ReviewRating) {
     if (encounteredGrammarPatternIds.has(grammarPatternId)) return;
     setEncounteredGrammarPatternIds(
       (current) => new Set(current).add(grammarPatternId),
     );
-    await ensureSentenceGrammar(sentence.id, grammarPatternId, { confirmedByLearner: true });
+    await recordGrammarNaturalEncounter({
+      grammarPatternId,
+      sentenceId: sentence.id,
+      rating,
+    });
   }
 
   return (
@@ -427,12 +437,12 @@ export function PracticePage() {
             ))}
           </div>
         ) : null}
-        {data.unconfirmedGrammarPatterns.length > 0 ? (
+        {data.trackedGrammarPatterns.length > 0 ? (
           <div className="stack" style={{ gap: '0.35rem' }}>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
-              Noticed this grammar without hints?
+              Recognized this grammar without hints?
             </div>
-            {data.unconfirmedGrammarPatterns.map((pattern) => (
+            {data.trackedGrammarPatterns.map((pattern) => (
               <div key={pattern.id} className="row" style={{ alignItems: 'center' }}>
                 <span className="jp">{pattern.canonicalName}</span>
                 {pattern.shortMeaning ? (
@@ -441,9 +451,15 @@ export function PracticePage() {
                 {encounteredGrammarPatternIds.has(pattern.id) ? (
                   <span className="muted">Recorded</span>
                 ) : (
-                  <button type="button" onClick={() => void markGrammarNoticed(pattern.id)}>
-                    Got it
-                  </button>
+                  NATURAL_ENCOUNTER_RATINGS.map((rating) => (
+                    <button
+                      key={rating.value}
+                      type="button"
+                      onClick={() => void markGrammarEncounter(pattern.id, rating.value)}
+                    >
+                      {rating.label}
+                    </button>
+                  ))
                 )}
               </div>
             ))}

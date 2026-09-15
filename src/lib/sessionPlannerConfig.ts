@@ -44,6 +44,7 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_retrieval',
   'listening',
   'word_listening',
+  'grammar_comprehension',
 ];
 
 /**
@@ -59,6 +60,9 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_production',
   'sentence_transformation',
   'contrastive',
+  'grammar_completion',
+  'grammar_contrast',
+  'grammar_production',
 ];
 
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */

@@ -8,6 +8,7 @@ import {
   createBook,
   ensureGrammarPattern,
   ensureGrammarRelationship,
+  ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
 } from '../src/db/repository';
@@ -67,8 +68,7 @@ describe('GrammarPatternDetailPage', () => {
     const pattern = await ensureGrammarPattern('〜わけがない', {
       aliases: ['わけない'],
     });
-    await stubSentence('sent-1', '忘れるわけがない。');
-    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
 
     renderPage(pattern.id);
 
@@ -130,37 +130,34 @@ describe('GrammarPatternDetailPage', () => {
     );
   });
 
-  it('shows Recognized once a pattern is confirmed across 2+ distinct sources', async () => {
+  it('shows Recognized once a tracked pattern is FSRS-proficient', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    await stubSentence('sent-1', '忘れるわけがない。');
-    await stubSentence('sent-2', 'そんなことあるわけがない。');
-    const bookA = await createBook({ title: 'Book A' });
-    const bookB = await createBook({ title: 'Book B' });
-    await getDb().bookSentences.bulkAdd([
-      {
-        id: 'bs-1',
-        bookId: bookA.id,
-        sentenceId: 'sent-1',
-        position: 0,
-        status: 'unstarted',
-        addedAt: new Date().toISOString(),
-      },
-      {
-        id: 'bs-2',
-        bookId: bookB.id,
-        sentenceId: 'sent-2',
-        position: 0,
-        status: 'unstarted',
-        addedAt: new Date().toISOString(),
-      },
-    ]);
-    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
-    await ensureSentenceGrammar('sent-2', pattern.id, { confirmedByLearner: true });
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review' },
+    });
 
     renderPage(pattern.id);
 
     await screen.findByText('〜わけがない');
     expect(screen.getByText('Recognized')).toBeInTheDocument();
+  });
+
+  it('shows Distinguished once tracked, comprehension-proficient, and contrast-proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().studyItems.update(comprehensionItem.id, {
+      fsrsState: { ...comprehensionItem.fsrsState, state: 'review' },
+    });
+    const contrastItem = await ensureGrammarStudyItem(pattern.id, 'grammar_contrast');
+    await getDb().studyItems.update(contrastItem.id, {
+      fsrsState: { ...contrastItem.fsrsState, state: 'review' },
+    });
+
+    renderPage(pattern.id);
+
+    await screen.findByText('〜わけがない');
+    expect(screen.getByText('Distinguished')).toBeInTheDocument();
   });
 
   it('shows an empty related-patterns state with no relationships', async () => {

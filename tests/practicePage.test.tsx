@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { ensureGrammarPattern, ensureSentenceGrammar, getDb } from '../src/db/repository';
+import {
+  ensureGrammarPattern,
+  ensureGrammarStudyItem,
+  ensureSentenceGrammar,
+  getDb,
+} from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { PracticePage } from '../src/pages/PracticePage';
 import { withAppProviders } from '../src/test/providers';
@@ -125,7 +130,7 @@ describe('PracticePage natural-encounter panel (Phase 7.8)', () => {
   });
 });
 
-describe('PracticePage grammar noticing panel', () => {
+describe('PracticePage grammar natural-encounter panel (grammar-learning system Phase 6/7/8)', () => {
   beforeEach(async () => {
     resetDbForTests(`practice-page-grammar-${createId('db')}`);
     await ensureSettings();
@@ -137,11 +142,11 @@ describe('PracticePage grammar noticing panel', () => {
 
     await screen.findByText('電気を付けました。');
     expect(
-      screen.queryByText('Noticed this grammar without hints?'),
+      screen.queryByText('Recognized this grammar without hints?'),
     ).not.toBeInTheDocument();
   });
 
-  it('does not render an already-confirmed grammar pattern', async () => {
+  it('does not render an untracked (only noticed) grammar pattern', async () => {
     await seedBookWithSentence();
     const pattern = await ensureGrammarPattern('〜ました');
     await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
@@ -150,30 +155,38 @@ describe('PracticePage grammar noticing panel', () => {
 
     await screen.findByText('電気を付けました。');
     expect(
-      screen.queryByText('Noticed this grammar without hints?'),
+      screen.queryByText('Recognized this grammar without hints?'),
     ).not.toBeInTheDocument();
   });
 
-  it('confirms an unconfirmed grammar pattern and disables the row after tapping Got it', async () => {
+  it('records a natural-encounter review for a tracked grammar pattern and disables the row after rating', async () => {
     await seedBookWithSentence();
     const pattern = await ensureGrammarPattern('〜ました', { shortMeaning: 'past tense' });
-    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
 
     const user = userEvent.setup();
     renderPracticePage('/books/book-1/practice/sent-1');
 
-    await screen.findByText('Noticed this grammar without hints?');
+    await screen.findByText('Recognized this grammar without hints?');
     expect(screen.getByText('〜ました')).toBeInTheDocument();
     expect(screen.getByText('past tense')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
 
     expect(await screen.findByText('Recorded')).toBeInTheDocument();
 
     const db = getDb();
     await waitFor(async () => {
-      const link = await db.sentenceGrammar.where('grammarPatternId').equals(pattern.id).first();
-      expect(link?.confirmedByLearner).toBe(true);
+      expect(await db.reviews.count()).toBe(1);
     });
+    const [review] = await db.reviews.toArray();
+    expect(review?.source).toBe('natural_encounter');
+    expect(review?.contextSentenceId).toBe('sent-1');
+
+    const studyItems = await db.studyItems.where('subjectId').equals(pattern.id).toArray();
+    expect(studyItems).toHaveLength(1);
+    expect(studyItems[0]?.subjectType).toBe('grammarPattern');
+    expect(studyItems[0]?.activityType).toBe('grammar_comprehension');
   });
 });

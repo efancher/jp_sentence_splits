@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
   ensureGrammarPattern,
+  ensureGrammarStudyItem,
   ensureSentenceGrammar,
   removeSentenceGrammar,
 } from '../src/db/repository';
@@ -55,9 +56,10 @@ describe('GrammarListPage', () => {
     expect(link).toHaveAttribute('href', expect.stringContaining(`/grammar/${pattern.id}`));
   });
 
-  it('shows a Tracked badge for patterns confirmed noticed', async () => {
+  it('shows a Tracked badge for patterns with a study item', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
 
     renderPage();
 
@@ -71,7 +73,8 @@ describe('GrammarListPage', () => {
     await ensureSentenceGrammar('sent-2', worthLearning.id, {});
     await ensureSentenceGrammar('sent-3', worthLearning.id, {});
     const developing = await ensureGrammarPattern('〜てしまう');
-    await ensureSentenceGrammar('sent-4', developing.id, { confirmedByLearner: true });
+    await ensureSentenceGrammar('sent-4', developing.id, {});
+    await ensureGrammarStudyItem(developing.id, 'grammar_comprehension');
 
     renderPage();
 
@@ -96,20 +99,15 @@ describe('GrammarListPage', () => {
     expect(screen.queryByText('それより')).not.toBeInTheDocument();
   });
 
-  it('drops a once-confirmed pattern once its only link is removed — tracked state lives on the link now', async () => {
-    // Unlike the old FSRS-study-item-backed "tracked" flag, confirmedByLearner
-    // lives on the SentenceGrammar link itself (docs/ROADMAP.md, 2026-09-15) —
-    // there's no durable tracking state that survives every link disappearing.
+  it('keeps a tracked pattern even with zero live encounters', async () => {
     const pattern = await ensureGrammarPattern('〜じゃん');
-    const link = await ensureSentenceGrammar('sent-1', pattern.id, {
-      confirmedByLearner: true,
-    });
+    const link = await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
     await removeSentenceGrammar(link.id);
 
     renderPage();
 
-    await screen.findByText(/no grammar patterns tagged yet/i);
-    expect(screen.queryByText('〜じゃん')).not.toBeInTheDocument();
+    expect(await screen.findByText('〜じゃん')).toBeInTheDocument();
   });
 
   it('filters by search query against name, meaning, and family', async () => {
