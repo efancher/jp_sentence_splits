@@ -251,12 +251,7 @@ export function GrammarPatternDetailPage() {
     ).length;
     const proficient = patternStudyItems.some(
       (item) =>
-        item.activityType === 'grammar_comprehension' &&
-        isVocabularyItemProficient(item.fsrsState.state),
-    );
-    const contrastProficient = patternStudyItems.some(
-      (item) =>
-        item.activityType === 'grammar_contrast' &&
+        item.activityType === 'grammar_completion' &&
         isVocabularyItemProficient(item.fsrsState.state),
     );
     const state = computeGrammarLearnerState({
@@ -264,7 +259,6 @@ export function GrammarPatternDetailPage() {
       confirmedCount,
       tracked,
       proficient,
-      contrastProficient,
     });
     return { pattern, encounters, tracked, state, relationships, allPatterns };
   }, [patternId]);

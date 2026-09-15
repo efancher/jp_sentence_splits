@@ -54,78 +54,6 @@ function stripPatternAnnotation(text: string): string {
   return text.replace(/[（(][^）)]*[）)]/g, '').trim();
 }
 
-/**
- * Weak, informational check for the `grammar_production` review card
- * (docs/ROADMAP.md "Grammar production ladder"): did the learner's typed
- * sentence actually use the construction? Normalizes both sides the same
- * way `normalizeGrammarPatternKey` does, then requires every wave-dash-
- * separated fragment of the pattern to appear in the response (in any
- * position — surface order isn't checked, since a produced sentence
- * legitimately reorders around the pattern). Purely a "you used it / you
- * didn't" hint shown on reveal — the learner still self-rates meaning and
- * naturalness, which no substring check can judge. Returns false for an
- * empty/blank response or an un-normalizable pattern.
- */
-export function grammarPatternUsedIn(response: string, canonicalName: string): boolean {
-  const core = stripPatternAnnotation(normalizeGrammarPatternKey(canonicalName));
-  if (!core) return false;
-  const normalizedResponse = stripMarkup(response).normalize('NFC').trim();
-  if (!normalizedResponse) return false;
-  const fragments = core.split(/[~〜～]/).map((part) => part.trim()).filter(Boolean);
-  if (fragments.length === 0) return false;
-  return fragments.every((fragment) => normalizedResponse.includes(fragment));
-}
-
-const ENGLISH_STOPWORDS = new Set([
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'to', 'of', 'in', 'on', 'for', 'with', 'and', 'or', 'but', 'that',
-  'this', 'it', 'its', 'as', 'at', 'by', 'from', 'into', 'onto', 'than',
-  'then', 'so', 'not', 'no', 'you', 'your', 'i', 'me', 'my', 'do', 'did',
-  'does', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'up',
-  'out', 'about', 'just',
-]);
-
-function contentWords(text: string): Set<string> {
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9'\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length >= 3 && !ENGLISH_STOPWORDS.has(word));
-  return new Set(words);
-}
-
-/**
- * Heuristic guard for priming a `grammar_production` prompt with a
- * sentence's natural English translation instead of the pattern's abstract
- * meaning gloss (design brief follow-up, user: "make grammar production
- * more driven by native context"). Aspectual/discourse patterns with no
- * English morphological analog (～てる, ～だね, ～て命令形) translate cleanly
- * without hinting at the construction — "緊張してる？" → "Are you nervous?"
- * primes the situation, not the grammar. But modal patterns with a near-1:1
- * English idiom (～わけがない → "there's no way...") translate so literally
- * that the translation *is* the gloss; showing it before writing would hand
- * over the answer. Flags the latter case by checking how much of the
- * pattern's own meaning text reappears verbatim in the translation — not
- * semantic, just enough to catch near-restatements. Callers should fall
- * back to showing the pattern's meaning gloss (today's behavior) when this
- * returns true, or when there's no translation to prime with at all.
- */
-export function translationLeaksPatternMeaning(
-  pattern: Pick<GrammarPattern, 'shortMeaning' | 'explanation'>,
-  translation: string,
-): boolean {
-  const meaningText = pattern.shortMeaning?.trim() || pattern.explanation?.trim() || '';
-  if (!meaningText || !translation.trim()) return false;
-  const meaningWords = contentWords(meaningText);
-  if (meaningWords.size === 0) return false;
-  const translationWords = contentWords(translation);
-  let shared = 0;
-  for (const word of meaningWords) {
-    if (translationWords.has(word)) shared += 1;
-  }
-  return shared / meaningWords.size >= 0.4;
-}
-
 export interface SentenceBlank {
   before: string;
   match: string;
@@ -158,36 +86,23 @@ export function blankPatternInSentence(
   };
 }
 
-export type GrammarLearnerState =
-  | 'encountered'
-  | 'noticed'
-  | 'recognized'
-  | 'distinguished'
-  | 'productive';
+export type GrammarLearnerState = 'encountered' | 'noticed' | 'recognized';
 
 /**
- * Derives the design brief's Encountered -> Noticed -> Recognized ->
- * Distinguished -> Productive ladder (§9) from accumulated evidence —
- * never a manually-set field. `contrastProficient` (grammar-learning
- * system Phase 9 slice) reflects FSRS proficiency on the pattern's own
- * `grammar_contrast` study item — "can you tell this apart from a pattern
- * you actually confuse it with," not just "recall the right one from a
- * pool" (grammar_completion tests the latter). Omitted/false simply means
- * no contrast evidence exists yet (e.g. the pattern has no
- * `GrammarRelationship` to contrast against), which is the common case and
- * caps a pattern at `recognized`. The top tier, Productive, is still
- * architecturally reachable (the type exists) but nothing produces its
- * evidence yet — that needs a production/transformation activity (design
- * brief §11 D/F/G), deliberately still deferred — see docs/STATUS.md.
+ * Derives the Encountered -> Noticed -> Recognized ladder from accumulated
+ * evidence — never a manually-set field. Originally a 5-rung ladder whose
+ * top two tiers (Distinguished/Productive) depended on FSRS proficiency on
+ * dedicated `grammar_contrast`/`grammar_production` study items; those
+ * activity types were retired 2026-09-15 (docs/ROADMAP.md) in favor of a
+ * single `grammar_completion` card — `proficient` now reflects that card's
+ * own FSRS state.
  */
 export function computeGrammarLearnerState(input: {
   encounterCount: number;
   confirmedCount: number;
   tracked: boolean;
   proficient: boolean;
-  contrastProficient?: boolean;
 }): GrammarLearnerState {
-  if (input.tracked && input.proficient && input.contrastProficient) return 'distinguished';
   if (input.tracked && input.proficient) return 'recognized';
   if (input.confirmedCount > 0) return 'noticed';
   return 'encountered';
@@ -198,8 +113,6 @@ export const GRAMMAR_LEARNER_STATE_LABELS: Record<GrammarLearnerState, string> =
   encountered: 'Encountered',
   noticed: 'Noticed',
   recognized: 'Recognized',
-  distinguished: 'Distinguished',
-  productive: 'Productive',
 };
 
 export type GrammarPriorityBucket =
@@ -227,7 +140,7 @@ export interface GrammarPriorityInput {
   encounterCount: number;
   tracked: boolean;
   state: GrammarLearnerState;
-  /** Among the tracked pattern's most recent grammar_comprehension reviews. */
+  /** Among the tracked pattern's most recent grammar_completion reviews. */
   recentAgainCount: number;
   recentReviewCount: number;
 }
@@ -242,8 +155,7 @@ export interface GrammarPriorityInput {
 export function computeGrammarPriorityBucket(
   input: GrammarPriorityInput,
 ): GrammarPriorityBucket {
-  const recognizedOrBetter = input.state === 'recognized' || input.state === 'distinguished';
-  if (recognizedOrBetter && input.recentAgainCount === 0) return 'strong';
+  if (input.state === 'recognized' && input.recentAgainCount === 0) return 'strong';
   if (input.tracked) return 'developing';
   if (input.encounterCount >= 3) return 'worth_learning_now';
   return 'recently_encountered';

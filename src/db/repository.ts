@@ -105,7 +105,7 @@ import {
 } from '../lib/maturity';
 import { inlineReadingFromTokens } from '../lib/inlineReadingFromTokens';
 import { nowIso, normalizeSentenceKey } from '../lib/normalize';
-import { buildReadingContextMap } from '../lib/readingContext';
+import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import {
   isBookInStudyRotation,
   studyItemIsHeldBackBySuspension,
@@ -3623,16 +3623,18 @@ export async function deferUnreadyReadingInContextReviews(
 
 /**
  * Grammar analogue of deferUnreadySentenceReviews (user request,
- * 2026-09-02): a `grammarPattern`-subject study item — any of
- * grammar_comprehension / grammar_completion / grammar_contrast /
- * grammar_production — can't render a card unless
- * pickContextSentenceForGrammarPattern finds one of the pattern's linked
- * sentences that is itself full-review-ready (vocab confirmed AND every
- * surface-form vocab item FSRS-proficient). Before this, such items still
- * read as due: invisible in /review (ReviewPage drops the pattern) but
- * inflating the session planner's review backlog and sitting stuck-due
- * forever. This pushes any currently-due grammar item whose pattern has no
- * ready context out to at least `minDeferDays` from `now`. Like
+ * 2026-09-02): a `grammarPattern`-subject `grammar_completion` study item
+ * can't render a card unless pickContextSentenceForGrammarPattern finds a
+ * linked sentence at all (2026-09-15: no longer gated on that sentence's
+ * *other* vocabulary being proficient too — see the "same gate as
+ * vocabulary" note on pickContextSentenceForGrammarPattern). This mostly
+ * only matters for the edge case of a pattern whose last live
+ * `sentence_grammar` link was removed (see removeSentenceGrammar /
+ * cascadeRetireSentenceLocal) while its study item lingers — such an item
+ * would otherwise read as permanently due: invisible in /review but
+ * inflating the session planner's review backlog. This pushes any
+ * currently-due grammar item whose pattern has no linked sentence at all
+ * out to at least `minDeferDays` from `now`. Like
  * deferUnreadySentenceReviews it only ever pushes a due date later, never
  * earlier, and is idempotent once an item has been deferred.
  */
@@ -5486,12 +5488,10 @@ export interface GrammarPatternSummary {
  * pattern count, same discipline as listStudyItemSummaries.
  *
  * "Recent" reviews (for the priority explanation's "needed help on N of
- * the last M reviews") are scoped to each pattern's own
- * `grammar_comprehension` study item specifically, not `grammar_completion`
- * too — comprehension is self-rated on every review regardless of whether
- * the learner actually struggled, so its rating history is the more direct
- * "did this feel hard" signal; completion's auto-graded correctness is a
- * different kind of evidence already folded into its own FSRS state.
+ * the last M reviews") are scoped to each pattern's own `grammar_completion`
+ * study item — the only surviving grammar activity type since
+ * `grammar_comprehension`/`grammar_contrast`/`grammar_production` were
+ * retired 2026-09-15 (docs/ROADMAP.md).
  */
 export async function listGrammarPatternSummaries(): Promise<GrammarPatternSummary[]> {
   const db = getDb();
@@ -5526,11 +5526,11 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     if (list) list.push(item);
     else studyItemsByPatternId.set(item.subjectId, [item]);
   }
-  const comprehensionStudyItemIds = studyItems
-    .filter((item) => item.activityType === 'grammar_comprehension')
+  const completionStudyItemIds = studyItems
+    .filter((item) => item.activityType === 'grammar_completion')
     .map((item) => item.id);
-  const recentReviews = comprehensionStudyItemIds.length
-    ? await db.reviews.where('studyItemId').anyOf(comprehensionStudyItemIds).toArray()
+  const recentReviews = completionStudyItemIds.length
+    ? await db.reviews.where('studyItemId').anyOf(completionStudyItemIds).toArray()
     : [];
   const reviewsByStudyItemId = new Map<string, Review[]>();
   for (const review of recentReviews) {
@@ -5551,11 +5551,11 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
 
     const patternStudyItems = studyItemsByPatternId.get(pattern.id) ?? [];
     const tracked = patternStudyItems.length > 0;
-    const comprehensionItem = patternStudyItems.find(
-      (item) => item.activityType === 'grammar_comprehension',
+    const completionItem = patternStudyItems.find(
+      (item) => item.activityType === 'grammar_completion',
     );
-    const recent = comprehensionItem
-      ? (reviewsByStudyItemId.get(comprehensionItem.id) ?? [])
+    const recent = completionItem
+      ? (reviewsByStudyItemId.get(completionItem.id) ?? [])
           .slice()
           .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
           .slice(0, 7)
@@ -5563,12 +5563,7 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
     const proficient = patternStudyItems.some(
       (item) =>
-        item.activityType === 'grammar_comprehension' &&
-        isVocabularyItemProficient(item.fsrsState.state),
-    );
-    const contrastProficient = patternStudyItems.some(
-      (item) =>
-        item.activityType === 'grammar_contrast' &&
+        item.activityType === 'grammar_completion' &&
         isVocabularyItemProficient(item.fsrsState.state),
     );
 
@@ -5577,7 +5572,6 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
       confirmedCount,
       tracked,
       proficient,
-      contrastProficient,
     });
     const priorityInput = {
       encounterCount,
@@ -5646,23 +5640,69 @@ export async function listGrammarRelationshipsForPattern(
 }
 
 /**
- * Most-recently-linked sentence for a grammar pattern whose own vocabulary
- * is confirmed and proficient — mirrors pickContextSentenceForVocabularyItem's
- * shape, plus the same "vocab before sentence-level context" gate as
- * getSentenceFullReviewReadiness (user request, 2026-08-27): testing
- * grammar comprehension in a sentence full of unfamiliar words isn't a
- * useful signal any more than testing sentence comprehension is. Used by
- * ReviewPage to pick which of a tracked pattern's encounters to show for a
- * grammar_comprehension/grammar_completion/grammar_contrast card — a
- * pattern with no ready encounter yet simply isn't offered as a candidate
- * this pass (mirrors deferUnreadySentenceReviews's effect, but via
- * candidate selection rather than a stored due-date push, since a
- * grammarPattern-subject StudyItem has no fixed one-sentence FK to defer
- * against).
+ * Reading-order neighbours for one sentence (before=2/after=1, same
+ * defaults and home-book-by-`lastOpenedAt` logic as buildReadingContextMap
+ * in src/lib/readingContext.ts), resolved with bounded per-sentence
+ * queries rather than a full-corpus fetch. Grammar patterns are
+ * global-scope (a tracked pattern's sentence can come from any book) and
+ * this runs once per tracked pattern on every `/review` load, so the
+ * "fetch every sentence/book/bookSentence up front" approach
+ * deferUnreadyReadingInContextReviews uses (fine for an occasional
+ * maintenance pass over the whole corpus) would not scale here.
+ */
+async function getReadingContextForSentence(sentenceId: string): Promise<ReadingContext> {
+  const db = getDb();
+  const memberships = await db.bookSentences.where('sentenceId').equals(sentenceId).toArray();
+  if (memberships.length === 0) return { before: [], after: [] };
+  const bookIds = [...new Set(memberships.map((m) => m.bookId))];
+  const books = await db.books.bulkGet(bookIds);
+  const bookById = new Map<string, Book>();
+  books.forEach((book, index) => {
+    if (book) bookById.set(bookIds[index]!, book);
+  });
+  const home = [...memberships].sort((a, b) => {
+    const openedA = bookById.get(a.bookId)?.lastOpenedAt;
+    const openedB = bookById.get(b.bookId)?.lastOpenedAt;
+    return (openedB ? Date.parse(openedB) : 0) - (openedA ? Date.parse(openedA) : 0);
+  })[0]!;
+  const orderedRows = await db.bookSentences.where('bookId').equals(home.bookId).sortBy('position');
+  const index = orderedRows.findIndex((row) => row.sentenceId === sentenceId);
+  if (index === -1) return { before: [], after: [] };
+  const beforeRows = orderedRows.slice(Math.max(0, index - 2), index);
+  const afterRows = orderedRows.slice(index + 1, index + 2);
+  const neighbourIds = [...beforeRows, ...afterRows].map((row) => row.sentenceId);
+  const neighbourSentences = neighbourIds.length ? await db.sentences.bulkGet(neighbourIds) : [];
+  const sentenceById = new Map<string, Sentence>();
+  neighbourSentences.forEach((sentence, i) => {
+    if (sentence) sentenceById.set(neighbourIds[i]!, sentence);
+  });
+  return {
+    before: beforeRows
+      .map((row) => sentenceById.get(row.sentenceId))
+      .filter((s): s is Sentence => Boolean(s)),
+    after: afterRows
+      .map((row) => sentenceById.get(row.sentenceId))
+      .filter((s): s is Sentence => Boolean(s)),
+    bookTitle: bookById.get(home.bookId)?.title,
+  };
+}
+
+/**
+ * Most-recently-linked sentence for a grammar pattern — mirrors
+ * pickContextSentenceForVocabularyItem's shape exactly, including its lack
+ * of any "rest of the sentence must be proficient" gate (2026-09-15, user
+ * request: grammar review should be gated the same as vocabulary review,
+ * not more strictly — the earlier stricter gate, mirroring
+ * getSentenceFullReviewReadiness, made the pattern almost never eligible
+ * at all, see docs/ROADMAP.md). Used by ReviewPage to pick which of a
+ * tracked pattern's encounters to show for its `grammar_completion` card,
+ * along with the encounter's reading-order passage context.
  */
 export async function pickContextSentenceForGrammarPattern(
   grammarPatternId: string,
-): Promise<{ sentence: Sentence; sentenceGrammar: SentenceGrammar } | undefined> {
+): Promise<
+  { sentence: Sentence; sentenceGrammar: SentenceGrammar; readingContext: ReadingContext } | undefined
+> {
   const db = getDb();
   const links = await db.sentenceGrammar
     .where('grammarPatternId')
@@ -5670,11 +5710,11 @@ export async function pickContextSentenceForGrammarPattern(
     .toArray();
   if (links.length === 0) return undefined;
   const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const readiness = await getSentenceFullReviewReadiness(sorted.map((link) => link.sentenceId));
   for (const link of sorted) {
-    if (!readiness.get(link.sentenceId)) continue;
     const sentence = await db.sentences.get(link.sentenceId);
-    if (sentence) return { sentence, sentenceGrammar: link };
+    if (!sentence) continue;
+    const readingContext = await getReadingContextForSentence(sentence.id);
+    return { sentence, sentenceGrammar: link, readingContext };
   }
   return undefined;
 }
@@ -5706,7 +5746,7 @@ export async function recordGrammarNaturalEncounter(input: {
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const studyItem = await ensureGrammarStudyItem(
     input.grammarPatternId,
-    input.activityType ?? 'grammar_comprehension',
+    input.activityType ?? 'grammar_completion',
   );
   return recordReview({
     studyItemId: studyItem.id,

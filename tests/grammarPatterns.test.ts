@@ -7,7 +7,6 @@ import {
   computeGrammarLearnerState,
   computeGrammarPriorityBucket,
   explainGrammarPriority,
-  grammarPatternUsedIn,
   normalizeGrammarPatternKey,
 } from '../src/lib/grammarPatterns';
 
@@ -24,31 +23,6 @@ function stubPattern(id: string, canonicalName: string): GrammarPattern {
     updatedAt: now,
   };
 }
-
-describe('grammarPatternUsedIn', () => {
-  it('accepts a sentence that contains the tilde-stripped construction', () => {
-    expect(grammarPatternUsedIn('そんなことあるわけがない。', '〜わけがない')).toBe(true);
-  });
-
-  it('rejects a sentence that omits the construction', () => {
-    expect(grammarPatternUsedIn('そんなことはないと思う。', '〜わけがない')).toBe(false);
-  });
-
-  it('rejects an empty or whitespace-only response', () => {
-    expect(grammarPatternUsedIn('', '〜わけがない')).toBe(false);
-    expect(grammarPatternUsedIn('   ', '〜わけがない')).toBe(false);
-  });
-
-  it('requires every wave-dash-separated fragment to appear, in any order', () => {
-    expect(grammarPatternUsedIn('お金しか見ていない。', 'しか〜ない')).toBe(true);
-    expect(grammarPatternUsedIn('お金しか見ている。', 'しか〜ない')).toBe(false);
-  });
-
-  it('is NFC-insensitive', () => {
-    const decomposed = 'わけがない'.normalize('NFD');
-    expect(grammarPatternUsedIn(`ある${decomposed}`, 'わけがない')).toBe(true);
-  });
-});
 
 describe('normalizeGrammarPatternKey', () => {
   it('strips a leading full-width wave dash', () => {
@@ -196,40 +170,6 @@ describe('computeGrammarLearnerState', () => {
     ).toBe('noticed');
   });
 
-  it('is distinguished once tracked, proficient, and contrast-proficient', () => {
-    expect(
-      computeGrammarLearnerState({
-        encounterCount: 5,
-        confirmedCount: 1,
-        tracked: true,
-        proficient: true,
-        contrastProficient: true,
-      }),
-    ).toBe('distinguished');
-  });
-
-  it('stays recognized (not distinguished) with no contrast evidence', () => {
-    expect(
-      computeGrammarLearnerState({
-        encounterCount: 5,
-        confirmedCount: 1,
-        tracked: true,
-        proficient: true,
-        contrastProficient: false,
-      }),
-    ).toBe('recognized');
-  });
-
-  it('defaults contrastProficient to false when omitted', () => {
-    expect(
-      computeGrammarLearnerState({
-        encounterCount: 5,
-        confirmedCount: 1,
-        tracked: true,
-        proficient: true,
-      }),
-    ).toBe('recognized');
-  });
 });
 
 describe('computeGrammarPriorityBucket', () => {
@@ -293,17 +233,6 @@ describe('computeGrammarPriorityBucket', () => {
     ).toBe('developing');
   });
 
-  it('is strong when distinguished with no recent again ratings', () => {
-    expect(
-      computeGrammarPriorityBucket({
-        encounterCount: 10,
-        tracked: true,
-        state: 'distinguished',
-        recentAgainCount: 0,
-        recentReviewCount: 5,
-      }),
-    ).toBe('strong');
-  });
 });
 
 describe('explainGrammarPriority', () => {

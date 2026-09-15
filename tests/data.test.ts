@@ -1114,7 +1114,7 @@ describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
 
   it('defers a due grammar item whose pattern has no linked sentence at all', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await dueGrammarItem(pattern.id, 'grammar_comprehension');
+    const item = await dueGrammarItem(pattern.id, 'grammar_completion');
 
     const now = new Date();
     const result = await deferUnreadyGrammarReviews({ now });
@@ -1125,25 +1125,12 @@ describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
     );
   });
 
-  it("defers a due grammar item whose only linked sentence isn't full-review-ready", async () => {
+  it("leaves a due grammar item alone even when its only linked sentence isn't full-review-ready — gated like vocabulary now, not on the rest of the sentence", async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await getDb().sentences.put(stubSentence('sent-1'));
     await ensureSentenceGrammar('sent-1', pattern.id, {});
-    // No analyses row → sentence vocab unreviewed → not ready.
+    // No analyses row → sentence vocab unreviewed — no longer a reason to defer.
     const item = await dueGrammarItem(pattern.id, 'grammar_completion');
-
-    const result = await deferUnreadyGrammarReviews();
-    expect(result).toEqual({ deferred: 1, checked: 1 });
-    const persisted = await getDb().studyItems.get(item.id);
-    expect(new Date(persisted!.fsrsState.due).getTime()).toBeGreaterThan(Date.now());
-  });
-
-  it('leaves a due grammar item alone once a linked sentence is full-review-ready', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
-    await getDb().sentences.put(stubSentence('sent-1'));
-    await ensureSentenceGrammar('sent-1', pattern.id, {});
-    await confirmSentenceVocabulary('sent-1', []);
-    const item = await dueGrammarItem(pattern.id, 'grammar_comprehension');
 
     const result = await deferUnreadyGrammarReviews();
     expect(result).toEqual({ deferred: 0, checked: 1 });
@@ -1151,9 +1138,22 @@ describe('deferUnreadyGrammarReviews (grammar context gating)', () => {
     expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
   });
 
-  it('never pulls a due date earlier — a not-yet-due unready grammar item is untouched', async () => {
+  it('leaves a due grammar item alone once a linked sentence is full-review-ready', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await getDb().sentences.put(stubSentence('sent-1'));
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    await confirmSentenceVocabulary('sent-1', []);
+    const item = await dueGrammarItem(pattern.id, 'grammar_completion');
+
+    const result = await deferUnreadyGrammarReviews();
+    expect(result).toEqual({ deferred: 0, checked: 1 });
+    const persisted = await getDb().studyItems.get(item.id);
+    expect(persisted?.fsrsState.due).toBe(item.fsrsState.due);
+  });
+
+  it('never pulls a due date earlier — a not-yet-due grammar item with no linked sentence is untouched', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
     const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     await getDb().studyItems.update(item.id, {
       fsrsState: { ...item.fsrsState, due: farFuture },
@@ -2092,7 +2092,7 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(studyItem.subjectId).toBe(pattern.id);
   });
 
-  it('pickContextSentenceForGrammarPattern returns the most recently linked sentence whose vocabulary is confirmed and proficient', async () => {
+  it('pickContextSentenceForGrammarPattern returns the most recently linked sentence', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
     const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {});
@@ -2103,11 +2103,10 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     await getDb().sentenceGrammar.update(newLink.id, {
       createdAt: '2026-02-01T00:00:00.000Z',
     });
-    await confirmSentenceVocabulary('sent-old', []);
-    await confirmSentenceVocabulary('sent-new', []);
 
     const picked = await pickContextSentenceForGrammarPattern(pattern.id);
     expect(picked?.sentence.id).toBe('sent-new');
+    expect(picked?.readingContext).toEqual({ before: [], after: [] });
   });
 
   it('pickContextSentenceForGrammarPattern returns undefined with no links', async () => {
@@ -2115,25 +2114,13 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(await pickContextSentenceForGrammarPattern(pattern.id)).toBeUndefined();
   });
 
-  it("pickContextSentenceForGrammarPattern skips the most recent link if its vocabulary isn't confirmed+proficient, and returns undefined if none qualify", async () => {
+  it('pickContextSentenceForGrammarPattern is gated the same as vocabulary — no requirement that the rest of the sentence be proficient', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    await getDb().sentences.bulkPut([stubSentence('sent-old'), stubSentence('sent-new')]);
-    const oldLink = await ensureSentenceGrammar('sent-old', pattern.id, {});
-    const newLink = await ensureSentenceGrammar('sent-new', pattern.id, {});
-    await getDb().sentenceGrammar.update(oldLink.id, {
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
-    await getDb().sentenceGrammar.update(newLink.id, {
-      createdAt: '2026-02-01T00:00:00.000Z',
-    });
-
-    // Neither sentence has confirmed vocabulary yet — no candidate at all.
-    expect(await pickContextSentenceForGrammarPattern(pattern.id)).toBeUndefined();
-
-    // Only the older sentence is ready — it's picked over the unready newer one.
-    await confirmSentenceVocabulary('sent-old', []);
+    await getDb().sentences.put(stubSentence('sent-1'));
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    // No analyses row at all → sentence vocab unreviewed — still a candidate.
     const picked = await pickContextSentenceForGrammarPattern(pattern.id);
-    expect(picked?.sentence.id).toBe('sent-old');
+    expect(picked?.sentence.id).toBe('sent-1');
   });
 
   it('computeGrammarPatternContextDiversity mirrors the vocabulary version, over sentenceGrammar', async () => {
@@ -2224,7 +2211,7 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(await getDb().grammarRelationships.count()).toBe(1);
   });
 
-  it('recordGrammarNaturalEncounter creates the pattern\'s grammar_comprehension study item and tags the review source/context', async () => {
+  it('recordGrammarNaturalEncounter creates the pattern\'s grammar_completion study item and tags the review source/context', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await getDb().sentences.add(stubSentence('sent-natural'));
 
@@ -2236,14 +2223,14 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
 
     expect(studyItem.subjectType).toBe('grammarPattern');
     expect(studyItem.subjectId).toBe(pattern.id);
-    expect(studyItem.activityType).toBe('grammar_comprehension');
+    expect(studyItem.activityType).toBe('grammar_completion');
     expect(review.source).toBe('natural_encounter');
     expect(review.contextSentenceId).toBe('sent-natural');
   });
 
   it('recordGrammarNaturalEncounter reuses an existing tracked study item rather than creating a second one', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const tracked = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const tracked = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
     await getDb().sentences.add(stubSentence('sent-natural'));
 
     const { studyItem } = await recordGrammarNaturalEncounter({
@@ -2386,7 +2373,7 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
 
   it('buckets a tracked but not-yet-proficient pattern as developing', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
 
     const summaries = await listGrammarPatternSummaries();
     expect(summaries[0]).toMatchObject({ tracked: true, priorityBucket: 'developing' });
@@ -2394,7 +2381,7 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
 
   it('buckets a tracked, proficient pattern with no recent again ratings as strong', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
     await getDb().studyItems.update(item.id, {
       fsrsState: { ...item.fsrsState, state: 'review' },
     });
@@ -2407,27 +2394,9 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
     });
   });
 
-  it('buckets a tracked, contrast-proficient pattern as distinguished', async () => {
+  it('reports needed-help counts from the last 7 grammar_completion reviews in the priority explanation', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
-    await getDb().studyItems.update(comprehensionItem.id, {
-      fsrsState: { ...comprehensionItem.fsrsState, state: 'review' },
-    });
-    const contrastItem = await ensureGrammarStudyItem(pattern.id, 'grammar_contrast');
-    await getDb().studyItems.update(contrastItem.id, {
-      fsrsState: { ...contrastItem.fsrsState, state: 'review' },
-    });
-
-    const summaries = await listGrammarPatternSummaries();
-    expect(summaries[0]).toMatchObject({
-      state: 'distinguished',
-      priorityBucket: 'strong',
-    });
-  });
-
-  it('reports needed-help counts from the last 7 grammar_comprehension reviews in the priority explanation', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
     await recordReview({ studyItemId: item.id, rating: 'again' });
     await recordReview({ studyItemId: item.id, rating: 'good' });
 

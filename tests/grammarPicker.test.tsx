@@ -101,7 +101,7 @@ describe('GrammarPicker', () => {
     expect(await screen.findByText(/Track becomes available once/i)).toBeInTheDocument();
   });
 
-  it('"Track" confirms the occurrence and creates both starting grammarPattern study items', async () => {
+  it('"Track" confirms the occurrence and creates the grammar_completion study item', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-1', pattern.id, {});
     await confirmSentenceVocabulary('sent-1', []); // sentence vocab ready → Track enabled
@@ -112,20 +112,13 @@ describe('GrammarPicker', () => {
 
     await screen.findByText('Confirmed');
     await screen.findByText('Tracked');
-    // onTrack fires its two ensureGrammarStudyItem writes as a detached
-    // async chain (not awaited by the click event itself), and "Tracked"
-    // renders as soon as the *first* one lands — so this needs its own
-    // wait rather than assuming both are done the instant "Tracked" shows.
     const studyItems = await waitFor(async () => {
       const items = await getDb().studyItems.where('subjectId').equals(pattern.id).toArray();
-      expect(items).toHaveLength(2);
+      expect(items).toHaveLength(1);
       return items;
     });
-    expect(studyItems.every((item) => item.subjectType === 'grammarPattern')).toBe(true);
-    expect(studyItems.map((item) => item.activityType).sort()).toEqual([
-      'grammar_completion',
-      'grammar_comprehension',
-    ]);
+    expect(studyItems[0]?.subjectType).toBe('grammarPattern');
+    expect(studyItems[0]?.activityType).toBe('grammar_completion');
   });
 
   it('"Explain" expands the form and Save persists edits to the pattern and the occurrence', async () => {

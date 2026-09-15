@@ -251,12 +251,12 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                   await ensureSentenceGrammar(sentenceId, pattern.id, {
                     confirmedByLearner: true,
                   });
-                  // Seed both starting activity types together (design
-                  // brief §11's "smallest set that provides substantial
-                  // value") — Track is the only entry point into grammar's
-                  // FSRS rotation, ReviewPage never lazily seeds a new
-                  // grammar study item on its own.
-                  await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+                  // Track is the only entry point into grammar's FSRS
+                  // rotation, ReviewPage never lazily seeds a new grammar
+                  // study item on its own. `grammar_completion` is the
+                  // sole grammar activity type since grammar_comprehension/
+                  // grammar_contrast/grammar_production were retired
+                  // 2026-09-15 (docs/ROADMAP.md).
                   await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
                 })()
               }

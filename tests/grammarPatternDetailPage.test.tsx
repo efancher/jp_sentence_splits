@@ -68,7 +68,7 @@ describe('GrammarPatternDetailPage', () => {
     const pattern = await ensureGrammarPattern('〜わけがない', {
       aliases: ['わけない'],
     });
-    await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
 
     renderPage(pattern.id);
 
@@ -132,7 +132,7 @@ describe('GrammarPatternDetailPage', () => {
 
   it('shows Recognized once a tracked pattern is FSRS-proficient', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
     await getDb().studyItems.update(item.id, {
       fsrsState: { ...item.fsrsState, state: 'review' },
     });
@@ -141,23 +141,6 @@ describe('GrammarPatternDetailPage', () => {
 
     await screen.findByText('〜わけがない');
     expect(screen.getByText('Recognized')).toBeInTheDocument();
-  });
-
-  it('shows Distinguished once tracked, comprehension-proficient, and contrast-proficient', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
-    const comprehensionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
-    await getDb().studyItems.update(comprehensionItem.id, {
-      fsrsState: { ...comprehensionItem.fsrsState, state: 'review' },
-    });
-    const contrastItem = await ensureGrammarStudyItem(pattern.id, 'grammar_contrast');
-    await getDb().studyItems.update(contrastItem.id, {
-      fsrsState: { ...contrastItem.fsrsState, state: 'review' },
-    });
-
-    renderPage(pattern.id);
-
-    await screen.findByText('〜わけがない');
-    expect(screen.getByText('Distinguished')).toBeInTheDocument();
   });
 
   it('shows an empty related-patterns state with no relationships', async () => {
