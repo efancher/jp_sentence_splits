@@ -32,6 +32,7 @@ import {
   exportBookMiningPackage,
   applyCuratedVocabularyForBook,
   findResumeSentence,
+  getBookGrammarProgress,
   getBookVocabularyCoverage,
   getDb,
   moveBookSentence,
@@ -355,6 +356,11 @@ export function BookDetailPage() {
     return byBook.get(bookId) ?? null;
   }, [bookId]);
 
+  const grammarProgress = useLiveQuery(
+    () => (bookId ? getBookGrammarProgress(bookId) : null),
+    [bookId],
+  );
+
   // Book-level progress summary (docs/ROADMAP.md "Ready to read" scoring
   // sibling): a rollup of the per-row status pills already rendered below,
   // plus the same known-vocabulary coverage BooksPage's list card shows.
@@ -483,6 +489,11 @@ export function BookDetailPage() {
               </div>
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 Graduated (mastered) sentences: {progressSummary.graduated}/{progressSummary.total}
+              </div>
+              <div className="muted" style={{ fontSize: '0.85rem' }}>
+                {grammarProgress && grammarProgress.encountered > 0
+                  ? `Grammar patterns: ${grammarProgress.graduated}/${grammarProgress.tracked} graduated (${grammarProgress.tracked} tracked, ${grammarProgress.encountered} encountered)`
+                  : 'No grammar patterns tagged yet'}
               </div>
             </>
           )}

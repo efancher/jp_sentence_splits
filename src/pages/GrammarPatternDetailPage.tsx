@@ -8,6 +8,7 @@ import {
   getDb,
   listGrammarRelationshipsForPattern,
   listSentenceGrammarForPattern,
+  readSettings,
   updateGrammarPattern,
   type GrammarRelationshipView,
 } from '../db/repository';
@@ -18,7 +19,7 @@ import {
   GRAMMAR_RELATIONSHIP_TYPE_LABELS,
   GRAMMAR_RELATIONSHIP_TYPES,
 } from '../lib/grammarPatterns';
-import { isVocabularyItemProficient } from '../lib/scheduling';
+import { computeGraduatedSubjectIds, isVocabularyItemProficient } from '../lib/scheduling';
 
 function GrammarPatternFields({ pattern }: { pattern: GrammarPattern }) {
   const [shortMeaning, setShortMeaning] = useState(pattern.shortMeaning);
@@ -230,12 +231,13 @@ export function GrammarPatternDetailPage() {
         pattern: null,
         encounters: [],
         tracked: false,
+        graduated: false,
         state: 'encountered' as const,
         relationships: [],
         allPatterns: [],
       };
     }
-    const [encounters, studyItems, relationships, allPatterns] = await Promise.all([
+    const [encounters, studyItems, relationships, allPatterns, settings] = await Promise.all([
       listSentenceGrammarForPattern(patternId),
       db.studyItems
         .where('subjectType')
@@ -243,6 +245,7 @@ export function GrammarPatternDetailPage() {
         .toArray(),
       listGrammarRelationshipsForPattern(patternId),
       db.grammarPatterns.toArray(),
+      readSettings(db),
     ]);
     const patternStudyItems = studyItems.filter((item) => item.subjectId === patternId);
     const tracked = patternStudyItems.length > 0;
@@ -254,13 +257,17 @@ export function GrammarPatternDetailPage() {
         item.activityType === 'grammar_completion' &&
         isVocabularyItemProficient(item.fsrsState.state),
     );
+    const graduated = computeGraduatedSubjectIds(
+      patternStudyItems,
+      settings.graduationMinScheduledDays,
+    ).has(patternId);
     const state = computeGrammarLearnerState({
       encounterCount: encounters.length,
       confirmedCount,
       tracked,
       proficient,
     });
-    return { pattern, encounters, tracked, state, relationships, allPatterns };
+    return { pattern, encounters, tracked, graduated, state, relationships, allPatterns };
   }, [patternId]);
 
   return (
@@ -280,6 +287,7 @@ export function GrammarPatternDetailPage() {
               <div className="row" style={{ gap: '0.5rem' }}>
                 <span className="status-pill">{GRAMMAR_LEARNER_STATE_LABELS[data.state]}</span>
                 {data.tracked ? <span className="status-pill">Tracked</span> : null}
+                {data.graduated ? <span className="status-pill">Graduated</span> : null}
               </div>
             </div>
             {data.pattern.aliases.length ? (

@@ -119,6 +119,7 @@ import {
 import { suggestionsFromTokens } from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
+  computeGraduatedSubjectIds,
   createInitialFsrsState,
   isGraduated,
   isSentenceReadyForFullReview,
@@ -3433,6 +3434,53 @@ export async function getBookVocabularyCoverage(): Promise<Map<string, BookCover
 }
 
 /**
+ * Grammar-pattern rollup for a book's progress section — mirrors
+ * getBookVocabularyCoverage's chain but for grammarPattern subjects:
+ * bookSentences -> sentenceGrammar (indexed on sentenceId) -> distinct
+ * grammarPatternIds -> their grammarPattern-subject study items ->
+ * graduation (computeGraduatedSubjectIds, same "every study item crossed
+ * the threshold" rule listGrammarPatternSummaries uses for its own
+ * `graduated` field). Grammar patterns are deliberately book-agnostic
+ * (src/lib/suspendedBooks.ts), so "encountered" here means "tagged on a
+ * sentence that happens to be in this book," not "owned by" it — the same
+ * pattern can show up in several books' rollups.
+ */
+export async function getBookGrammarProgress(bookId: string): Promise<{
+  encountered: number;
+  tracked: number;
+  graduated: number;
+}> {
+  const db = getDb();
+  const sentenceIds = (
+    await db.bookSentences.where('bookId').equals(bookId).toArray()
+  ).map((item) => item.sentenceId);
+  if (sentenceIds.length === 0) return { encountered: 0, tracked: 0, graduated: 0 };
+
+  const links = await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray();
+  const patternIds = new Set(links.map((link) => link.grammarPatternId));
+  if (patternIds.size === 0) return { encountered: 0, tracked: 0, graduated: 0 };
+
+  const [studyItems, settings] = await Promise.all([
+    db.studyItems
+      .where('subjectType')
+      .equals('grammarPattern')
+      .filter((item) => patternIds.has(item.subjectId))
+      .toArray(),
+    readSettings(db),
+  ]);
+  const trackedPatternIds = new Set(studyItems.map((item) => item.subjectId));
+  const graduatedPatternIds = computeGraduatedSubjectIds(
+    studyItems,
+    settings.graduationMinScheduledDays,
+  );
+  return {
+    encountered: patternIds.size,
+    tracked: trackedPatternIds.size,
+    graduated: [...graduatedPatternIds].filter((id) => patternIds.has(id)).length,
+  };
+}
+
+/**
  * Tier-2 gate for the `listening` (full-sentence audio) review card, layered
  * on top of getSentenceFullReviewReadiness: a sentence isn't ready until
  * every one of its surface-form vocabulary occurrences has a `word_listening`
@@ -5497,6 +5545,8 @@ export interface GrammarPatternSummary {
   confirmedCount: number;
   distinctSourceCount: number;
   tracked: boolean;
+  /** Every one of this pattern's grammarPattern-subject study items has crossed the graduation threshold. */
+  graduated: boolean;
   state: GrammarLearnerState;
   priorityBucket: GrammarPriorityBucket;
   priorityExplanation: string;
@@ -5520,13 +5570,18 @@ export interface GrammarPatternSummary {
  */
 export async function listGrammarPatternSummaries(): Promise<GrammarPatternSummary[]> {
   const db = getDb();
-  const [patterns, links, studyItems, bookSentences, books] = await Promise.all([
+  const [patterns, links, studyItems, bookSentences, books, settings] = await Promise.all([
     db.grammarPatterns.toArray(),
     db.sentenceGrammar.toArray(),
     db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
     db.bookSentences.toArray(),
     db.books.toArray(),
+    readSettings(db),
   ]);
+  const graduatedPatternIds = computeGraduatedSubjectIds(
+    studyItems,
+    settings.graduationMinScheduledDays,
+  );
 
   const sourceKeyByBookId = new Map(books.map((book) => [book.id, book.sourceKey ?? book.id]));
   const sourceKeysBySentenceId = new Map<string, Set<string>>();
@@ -5617,6 +5672,7 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
       confirmedCount,
       distinctSourceCount: sourceKeys.size,
       tracked,
+      graduated: graduatedPatternIds.has(pattern.id),
       state,
       priorityBucket,
       priorityExplanation,

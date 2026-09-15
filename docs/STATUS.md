@@ -33,6 +33,36 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-15 — Grammar-pattern "Graduated" badges + book-level grammar
+  rollup** (follow-up to the book-progress section below, prompted by "how
+  are the different pieces graduated" / "make that more consistent"). The
+  existing `sentence`/`vocabularyItem` "Graduated" pill
+  (`computeGraduatedSubjectIds`/`isGraduated`, every study item for the
+  subject past `graduationMinScheduledDays`) now also applies to
+  `grammarPattern` subjects — a third `graduated: boolean` field on
+  `GrammarPatternSummary` (`listGrammarPatternSummaries`, `repository.ts`),
+  rendered as a pill on `GrammarListPage` (next to "Tracked") and
+  `GrammarPatternDetailPage` (next to the learner-state pill). New
+  `getBookGrammarProgress(bookId)` (`repository.ts`) mirrors
+  `getBookVocabularyCoverage`'s join chain — `bookSentences` →
+  `sentenceGrammar` (indexed on `sentenceId`) → distinct
+  `grammarPatternId`s → their study items → graduation — and feeds a new
+  "Grammar patterns: G/T graduated (T tracked, E encountered)" line in
+  `BookDetailPage`'s progress section. Deliberately did **not** extend
+  graduation to the `chunk` subjectType — grepped confirmed no code path
+  anywhere ever creates a `chunk`-subject study item (vestigial union
+  member), so there's nothing to badge. Given the 2026-09-15 finding that
+  the grammar ladder "essentially never fired" (2/74 patterns had study
+  items pre-fix), expect this badge to show 0 graduated for most patterns
+  for a while — that's expected, not a bug. 6 new repository tests
+  (`tests/data.test.ts`) cover `graduated` on `listGrammarPatternSummaries`
+  and all four `getBookGrammarProgress` cases (empty book, untagged,
+  encountered-only, tracked-only, graduated, cross-book isolation).
+  Verified by hand: tagged an untracked pattern via the Analyze page's
+  "Grammar noticed" panel, confirmed `/grammar`, `/grammar/:id`, and the
+  book's progress line all render it correctly with no console errors
+  (headless Playwright against the dev server).
+
 - **2026-09-15 — Book-level progress section on `BookDetailPage`** (user
   ask: summarize a book's current state and progress toward completion in
   one place, instead of only inferring it from scrolling the sentence

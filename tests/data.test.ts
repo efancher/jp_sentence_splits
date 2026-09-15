@@ -30,6 +30,7 @@ import {
   exportFullBackup,
   getAttemptAlignment,
   getAttemptTranscription,
+  getBookGrammarProgress,
   getDb,
   getDueStudyItems,
   getReferenceAlignment,
@@ -2394,6 +2395,23 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
     });
   });
 
+  it('reports graduated: false for a proficient-but-not-yet-graduated pattern, true once scheduledDays crosses the default 180-day threshold', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', scheduledDays: 30 },
+    });
+
+    let summaries = await listGrammarPatternSummaries();
+    expect(summaries[0].graduated).toBe(false);
+
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+    summaries = await listGrammarPatternSummaries();
+    expect(summaries[0].graduated).toBe(true);
+  });
+
   it('reports needed-help counts from the last 7 grammar_completion reviews in the priority explanation', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
@@ -2424,6 +2442,104 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
     const fromHazuga = await listGrammarRelationshipsForPattern(hazuga.id);
     expect(fromHazuga).toHaveLength(1);
     expect(fromHazuga[0].otherPattern.id).toBe(wakega.id);
+  });
+});
+
+describe('getBookGrammarProgress (book progress section grammar rollup)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-book-grammar-progress-${createId('db')}`);
+  });
+
+  const addBookSentence = async (bookId: string, sentenceId: string, position = 0) => {
+    await getDb().sentences.add(stubSentence(sentenceId));
+    await getDb().bookSentences.add({
+      id: createId('bs'),
+      bookId,
+      sentenceId,
+      position,
+      status: 'unstarted',
+      addedAt: nowIsoForTest(),
+    });
+  };
+
+  it('returns all zeros for a book with no sentences', async () => {
+    const book = await createBook({ title: 'Empty' });
+    expect(await getBookGrammarProgress(book.id)).toEqual({
+      encountered: 0,
+      tracked: 0,
+      graduated: 0,
+    });
+  });
+
+  it('returns all zeros for a book whose sentences have no grammar tagged', async () => {
+    const book = await createBook({ title: 'Untagged' });
+    await addBookSentence(book.id, 'sent-1');
+    expect(await getBookGrammarProgress(book.id)).toEqual({
+      encountered: 0,
+      tracked: 0,
+      graduated: 0,
+    });
+  });
+
+  it('counts an encountered-but-untracked pattern as encountered only', async () => {
+    const book = await createBook({ title: 'Book A' });
+    await addBookSentence(book.id, 'sent-1');
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id);
+
+    expect(await getBookGrammarProgress(book.id)).toEqual({
+      encountered: 1,
+      tracked: 0,
+      graduated: 0,
+    });
+  });
+
+  it('counts a tracked-but-not-graduated pattern as tracked only', async () => {
+    const book = await createBook({ title: 'Book A' });
+    await addBookSentence(book.id, 'sent-1');
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id);
+    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+
+    expect(await getBookGrammarProgress(book.id)).toEqual({
+      encountered: 1,
+      tracked: 1,
+      graduated: 0,
+    });
+  });
+
+  it('counts a graduated pattern once its study item crosses the graduation threshold', async () => {
+    const book = await createBook({ title: 'Book A' });
+    await addBookSentence(book.id, 'sent-1');
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id);
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review', scheduledDays: 200 },
+    });
+
+    expect(await getBookGrammarProgress(book.id)).toEqual({
+      encountered: 1,
+      tracked: 1,
+      graduated: 1,
+    });
+  });
+
+  it('only counts patterns linked to this book, not other books', async () => {
+    const bookA = await createBook({ title: 'Book A' });
+    const bookB = await createBook({ title: 'Book B' });
+    await addBookSentence(bookA.id, 'sent-1');
+    await addBookSentence(bookB.id, 'sent-2');
+    const patternA = await ensureGrammarPattern('〜わけがない');
+    const patternB = await ensureGrammarPattern('〜はずがない');
+    await ensureSentenceGrammar('sent-1', patternA.id);
+    await ensureSentenceGrammar('sent-2', patternB.id);
+
+    expect(await getBookGrammarProgress(bookA.id)).toEqual({
+      encountered: 1,
+      tracked: 0,
+      graduated: 0,
+    });
   });
 });
 

@@ -82,7 +82,7 @@ export function GrammarListPage() {
           <section key={section.bucket} className="stack">
             <h3 style={{ margin: 0 }}>{section.label}</h3>
             {section.summaries.map(
-              ({ pattern, tracked, priorityExplanation }) => (
+              ({ pattern, tracked, graduated, priorityExplanation }) => (
                 <Link
                   key={pattern.id}
                   to={`/grammar/${encodeURIComponent(pattern.id)}`}
@@ -90,7 +90,10 @@ export function GrammarListPage() {
                 >
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <strong className="jp">{pattern.canonicalName}</strong>
-                    {tracked ? <span className="status-pill">Tracked</span> : null}
+                    <span className="row" style={{ gap: '0.4rem' }}>
+                      {tracked ? <span className="status-pill">Tracked</span> : null}
+                      {graduated ? <span className="status-pill">Graduated</span> : null}
+                    </span>
                   </div>
                   {pattern.shortMeaning ? (
                     <div className="muted">{pattern.shortMeaning}</div>
