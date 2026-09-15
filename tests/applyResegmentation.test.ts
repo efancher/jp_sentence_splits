@@ -459,7 +459,7 @@ describe('deleteSentenceCascade', () => {
     expect(await db.sentenceAudio.where('sentenceId').equals(s.id).count()).toBe(0);
   });
 
-  it('retires per-occurrence and last-occurrence-grammar study items too', async () => {
+  it('retires per-occurrence study items and unlinks grammar tags too', async () => {
     const db = getDb();
     const s = shadowingSentence('これはテストです。', 0);
     await db.sentences.put(s);
@@ -490,8 +490,9 @@ describe('deleteSentenceCascade', () => {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });
+    const linkId = createId('sg');
     await db.sentenceGrammar.put({
-      id: createId('sg'),
+      id: linkId,
       sentenceId: s.id,
       grammarPatternId: patternId,
       confirmedByLearner: true,
@@ -499,21 +500,16 @@ describe('deleteSentenceCascade', () => {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });
-    const grammarStudy = await ensureStudyItem(
-      'grammarPattern',
-      patternId,
-      'grammar_comprehension',
-    );
 
     await deleteSentenceCascade(s.id);
 
     expect(await db.studyItems.get(wordListening.id)).toBeUndefined();
-    expect(await db.studyItems.get(grammarStudy.id)).toBeUndefined();
+    expect(await db.sentenceGrammar.get(linkId)).toBeUndefined();
     // The pattern itself is corpus-global and stays.
     expect(await db.grammarPatterns.get(patternId)).toBeDefined();
   });
 
-  it('keeps a grammar study item whose pattern still has another occurrence', async () => {
+  it('leaves another sentence\'s grammar link alone when one sentence is retired', async () => {
     const db = getDb();
     const s1 = shadowingSentence('これはテストです。', 0);
     const s2 = shadowingSentence('それもテストです。', 1);
@@ -530,9 +526,10 @@ describe('deleteSentenceCascade', () => {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });
-    for (const sid of [s1.id, s2.id]) {
+    const linkIds = [createId('sg'), createId('sg')];
+    for (const [index, sid] of [s1.id, s2.id].entries()) {
       await db.sentenceGrammar.put({
-        id: createId('sg'),
+        id: linkIds[index]!,
         sentenceId: sid,
         grammarPatternId: patternId,
         confirmedByLearner: true,
@@ -541,15 +538,11 @@ describe('deleteSentenceCascade', () => {
         updatedAt: nowIso(),
       });
     }
-    const grammarStudy = await ensureStudyItem(
-      'grammarPattern',
-      patternId,
-      'grammar_comprehension',
-    );
 
     await deleteSentenceCascade(s1.id);
 
-    expect(await db.studyItems.get(grammarStudy.id)).toBeDefined();
+    expect(await db.sentenceGrammar.get(linkIds[0]!)).toBeUndefined();
+    expect(await db.sentenceGrammar.get(linkIds[1]!)).toBeDefined();
   });
 });
 

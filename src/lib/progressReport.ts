@@ -44,6 +44,15 @@ export interface ProgressReportInput {
   now: Date;
   reviews: ProgressReviewInput[];
   studyItems: ProgressStudyItemInput[];
+  /**
+   * Pre-computed rather than derived from `studyItems` — grammar tracking
+   * moved off FSRS study items entirely (the 4-card ladder was retired
+   * 2026-09-15, docs/ROADMAP.md) onto `SentenceGrammar.confirmedByLearner`,
+   * which lives outside this module's Dexie-free "pure" boundary. The
+   * caller (`getProgressReport`) sources it from the same
+   * `listGrammarPatternSummaries()` the /grammar browser uses.
+   */
+  grammar: { tracked: number; recognized: number };
   shadowing: ShadowingProgress;
   retentionWindowDays?: number;
   weeks?: number;
@@ -78,8 +87,9 @@ export interface ProgressReport {
     learnedInWindow: number;
   };
   grammar: {
+    /** Patterns confirmed noticed at least once. */
     tracked: number;
-    /** Tracked patterns whose `grammar_comprehension` card is FSRS-proficient. */
+    /** …confirmed across 2+ distinct sources (computeGrammarLearnerState's `recognized`). */
     recognized: number;
   };
   retention: {
@@ -119,6 +129,7 @@ export function buildProgressReport(input: ProgressReportInput): ProgressReport 
     now,
     reviews,
     studyItems,
+    grammar,
     shadowing,
     retentionWindowDays = DEFAULT_RETENTION_WINDOW_DAYS,
     weeks = DEFAULT_WEEKS,
@@ -171,20 +182,6 @@ export function buildProgressReport(input: ProgressReportInput): ProgressReport 
     if (learnedAt) {
       wordLearnedAt.set(subjectId, learnedAt);
       if (new Date(learnedAt).getTime() >= windowCutoff) learnedInWindow += 1;
-    }
-  }
-
-  // --- Grammar ---------------------------------------------------------
-  const grammarSubjects = new Set<string>();
-  const grammarRecognized = new Set<string>();
-  for (const item of studyItems) {
-    if (item.subjectType !== 'grammarPattern') continue;
-    grammarSubjects.add(item.subjectId);
-    if (
-      item.activityType === 'grammar_comprehension' &&
-      isVocabularyItemProficient(item.state)
-    ) {
-      grammarRecognized.add(item.subjectId);
     }
   }
 
@@ -242,10 +239,7 @@ export function buildProgressReport(input: ProgressReportInput): ProgressReport 
       mature,
       learnedInWindow,
     },
-    grammar: {
-      tracked: grammarSubjects.size,
-      recognized: grammarRecognized.size,
-    },
+    grammar,
     retention: {
       windowDays: retentionWindowDays,
       scheduledReviews: windowScheduled.length,

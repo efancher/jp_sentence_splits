@@ -44,6 +44,7 @@ function run(overrides: Partial<ProgressReportInput>) {
     now: NOW,
     reviews: [],
     studyItems: [],
+    grammar: { tracked: 0, recognized: 0 },
     shadowing: NO_SHADOWING,
     ...overrides,
   });
@@ -124,34 +125,13 @@ describe('buildProgressReport', () => {
     expect(report.retention.allTimeRate).toBeCloseTo(2 / 4);
   });
 
-  it('counts tracked and recognized grammar patterns', () => {
-    const report = run({
-      studyItems: [
-        studyItem({
-          id: 'g1',
-          subjectId: 'p1',
-          subjectType: 'grammarPattern',
-          activityType: 'grammar_comprehension',
-          state: 'review',
-        }),
-        studyItem({
-          id: 'g2',
-          subjectId: 'p1',
-          subjectType: 'grammarPattern',
-          activityType: 'grammar_completion',
-          state: 'learning',
-        }),
-        studyItem({
-          id: 'g3',
-          subjectId: 'p2',
-          subjectType: 'grammarPattern',
-          activityType: 'grammar_comprehension',
-          state: 'learning',
-        }),
-      ],
-    });
-    expect(report.grammar.tracked).toBe(2);
-    expect(report.grammar.recognized).toBe(1);
+  it('passes the pre-computed grammar counts through unchanged', () => {
+    // Grammar tracking moved off FSRS study items (docs/ROADMAP.md, the
+    // 4-card ladder was retired 2026-09-15) onto SentenceGrammar links —
+    // buildProgressReport no longer derives these counts itself, the
+    // caller (getProgressReport) does via listGrammarPatternSummaries.
+    const report = run({ grammar: { tracked: 2, recognized: 1 } });
+    expect(report.grammar).toEqual({ tracked: 2, recognized: 1 });
   });
 
   it('builds a cumulative words-learned trend from first passing reviews', () => {

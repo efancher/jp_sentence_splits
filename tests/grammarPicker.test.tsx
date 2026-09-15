@@ -4,12 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import {
-  confirmSentenceVocabulary,
-  ensureGrammarPattern,
-  ensureSentenceGrammar,
-  getDb,
-} from '../src/db/repository';
+import { ensureGrammarPattern, ensureSentenceGrammar, getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { GrammarPicker } from '../src/components/GrammarPicker';
 import { withAppProviders } from '../src/test/providers';
@@ -90,42 +85,6 @@ describe('GrammarPicker', () => {
     expect(
       await getDb().studyItems.where('subjectId').equals(pattern.id).count(),
     ).toBe(0);
-  });
-
-  it('Track is disabled until the sentence\'s own vocabulary is confirmed + proficient', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
-    await ensureSentenceGrammar('sent-1', pattern.id, {});
-    renderPicker('sent-1');
-
-    expect(await screen.findByRole('button', { name: 'Track' })).toBeDisabled();
-    expect(await screen.findByText(/Track becomes available once/i)).toBeInTheDocument();
-  });
-
-  it('"Track" confirms the occurrence and creates both starting grammarPattern study items', async () => {
-    const pattern = await ensureGrammarPattern('〜わけがない');
-    await ensureSentenceGrammar('sent-1', pattern.id, {});
-    await confirmSentenceVocabulary('sent-1', []); // sentence vocab ready → Track enabled
-    const user = userEvent.setup();
-    renderPicker('sent-1');
-
-    await user.click(await screen.findByRole('button', { name: 'Track' }));
-
-    await screen.findByText('Confirmed');
-    await screen.findByText('Tracked');
-    // onTrack fires its two ensureGrammarStudyItem writes as a detached
-    // async chain (not awaited by the click event itself), and "Tracked"
-    // renders as soon as the *first* one lands — so this needs its own
-    // wait rather than assuming both are done the instant "Tracked" shows.
-    const studyItems = await waitFor(async () => {
-      const items = await getDb().studyItems.where('subjectId').equals(pattern.id).toArray();
-      expect(items).toHaveLength(2);
-      return items;
-    });
-    expect(studyItems.every((item) => item.subjectType === 'grammarPattern')).toBe(true);
-    expect(studyItems.map((item) => item.activityType).sort()).toEqual([
-      'grammar_completion',
-      'grammar_comprehension',
-    ]);
   });
 
   it('"Explain" expands the form and Save persists edits to the pattern and the occurrence', async () => {

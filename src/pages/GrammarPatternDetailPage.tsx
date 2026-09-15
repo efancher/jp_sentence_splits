@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import {
+  computeGrammarPatternContextDiversity,
   ensureGrammarRelationship,
   getDb,
   listGrammarRelationshipsForPattern,
@@ -18,7 +19,6 @@ import {
   GRAMMAR_RELATIONSHIP_TYPE_LABELS,
   GRAMMAR_RELATIONSHIP_TYPES,
 } from '../lib/grammarPatterns';
-import { isVocabularyItemProficient } from '../lib/scheduling';
 
 function GrammarPatternFields({ pattern }: { pattern: GrammarPattern }) {
   const [shortMeaning, setShortMeaning] = useState(pattern.shortMeaning);
@@ -235,36 +235,19 @@ export function GrammarPatternDetailPage() {
         allPatterns: [],
       };
     }
-    const [encounters, studyItems, relationships, allPatterns] = await Promise.all([
+    const [encounters, diversity, relationships, allPatterns] = await Promise.all([
       listSentenceGrammarForPattern(patternId),
-      db.studyItems
-        .where('subjectType')
-        .equals('grammarPattern')
-        .toArray(),
+      computeGrammarPatternContextDiversity(patternId),
       listGrammarRelationshipsForPattern(patternId),
       db.grammarPatterns.toArray(),
     ]);
-    const patternStudyItems = studyItems.filter((item) => item.subjectId === patternId);
-    const tracked = patternStudyItems.length > 0;
     const confirmedCount = encounters.filter(
       (encounter) => encounter.sentenceGrammar.confirmedByLearner,
     ).length;
-    const proficient = patternStudyItems.some(
-      (item) =>
-        item.activityType === 'grammar_comprehension' &&
-        isVocabularyItemProficient(item.fsrsState.state),
-    );
-    const contrastProficient = patternStudyItems.some(
-      (item) =>
-        item.activityType === 'grammar_contrast' &&
-        isVocabularyItemProficient(item.fsrsState.state),
-    );
+    const tracked = confirmedCount > 0;
     const state = computeGrammarLearnerState({
-      encounterCount: encounters.length,
       confirmedCount,
-      tracked,
-      proficient,
-      contrastProficient,
+      distinctSourceCount: diversity.distinctSourceCount,
     });
     return { pattern, encounters, tracked, state, relationships, allPatterns };
   }, [patternId]);

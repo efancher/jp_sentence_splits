@@ -4,10 +4,8 @@ import { Link } from 'react-router-dom';
 
 import {
   ensureGrammarPattern,
-  ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
-  getSentenceFullReviewReadiness,
   removeSentenceGrammar,
   setSentenceGrammarReviewStatus,
   updateGrammarPattern,
@@ -23,7 +21,7 @@ import {
 /**
  * Grammar-pattern annotation for a sentence (grammar-learning system — see
  * docs/STATUS.md). Deliberately *not* routed through AnalyzePage's
- * autosave/chunks state: each action here (add/confirm/track/remove) is an
+ * autosave/chunks state: each action here (add/confirm/remove) is an
  * immediate, deliberate repository write, not a draft field — the "Grammar
  * noticed" panel should stay fast and skippable, not gate on the debounced
  * save cycle.
@@ -44,7 +42,6 @@ export interface GrammarPickerProps {
 interface LinkedPattern {
   link: SentenceGrammar;
   pattern: GrammarPattern;
-  tracked: boolean;
 }
 
 export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerProps) {
@@ -65,34 +62,22 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
     const patterns = await db.grammarPatterns.bulkGet(
       links.map((link) => link.grammarPatternId),
     );
-    const grammarStudyItems = await db.studyItems
-      .where('subjectType')
-      .equals('grammarPattern')
-      .toArray();
-    const trackedPatternIds = new Set(grammarStudyItems.map((item) => item.subjectId));
     const linked: LinkedPattern[] = links
       .map((link, index) => {
         const pattern = patterns[index];
         if (!pattern) return null;
-        return { link, pattern, tracked: trackedPatternIds.has(pattern.id) };
+        return { link, pattern };
       })
       .filter((item): item is LinkedPattern => Boolean(item))
       .sort((a, b) => a.link.createdAt.localeCompare(b.link.createdAt));
     const allPatterns = await db.grammarPatterns.toArray();
-    // Grammar review needs this sentence's own vocabulary learned first
-    // (same bar as pickContextSentenceForGrammarPattern / the "vocab before
-    // glossing" rule) — otherwise Track just seeds a card that can never
-    // render and sits stuck-due. Gate the Track button on it.
-    const vocabReady =
-      (await getSentenceFullReviewReadiness([sentenceId])).get(sentenceId) ?? false;
     const analysis = await db.analyses.get(sentenceId);
     const grammarReviewed = (analysis?.grammarReviewStatus ?? 'unreviewed') === 'confirmed';
-    return { linked, allPatterns, vocabReady, grammarReviewed };
+    return { linked, allPatterns, grammarReviewed };
   }, [sentenceId]);
 
   const linked = data?.linked ?? [];
   const allPatterns = data?.allPatterns ?? [];
-  const vocabReady = data?.vocabReady ?? false;
   const grammarReviewed = data?.grammarReviewed ?? false;
   const linkedPatternIds = new Set(linked.map((item) => item.pattern.id));
   const linkedNames = new Set(
@@ -226,13 +211,11 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
         </p>
       ) : (
         <div className="stack">
-          {linked.map(({ link, pattern, tracked }) => (
+          {linked.map(({ link, pattern }) => (
             <GrammarPatternCard
               key={link.id}
               link={link}
               pattern={pattern}
-              tracked={tracked}
-              trackable={vocabReady}
               japanese={japanese}
               chunks={chunks}
               expanded={expandedPatternId === pattern.id}
@@ -246,29 +229,9 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                   confirmedByLearner: true,
                 })
               }
-              onTrack={() =>
-                void (async () => {
-                  await ensureSentenceGrammar(sentenceId, pattern.id, {
-                    confirmedByLearner: true,
-                  });
-                  // Seed both starting activity types together (design
-                  // brief §11's "smallest set that provides substantial
-                  // value") — Track is the only entry point into grammar's
-                  // FSRS rotation, ReviewPage never lazily seeds a new
-                  // grammar study item on its own.
-                  await ensureGrammarStudyItem(pattern.id, 'grammar_comprehension');
-                  await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
-                })()
-              }
               onRemove={() => void removeSentenceGrammar(link.id)}
             />
           ))}
-          {!vocabReady && linked.some(({ tracked }) => !tracked) ? (
-            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-              Track becomes available once this sentence&rsquo;s vocabulary is confirmed and
-              proficient — grammar review needs its words already learned.
-            </p>
-          ) : null}
         </div>
       )}
       <form
@@ -329,27 +292,20 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
 function GrammarPatternCard({
   link,
   pattern,
-  tracked,
-  trackable,
   japanese,
   chunks,
   expanded,
   onToggleExpand,
   onGotIt,
-  onTrack,
   onRemove,
 }: {
   link: SentenceGrammar;
   pattern: GrammarPattern;
-  tracked: boolean;
-  /** Is this sentence's own vocabulary confirmed + proficient? Tracking before that just seeds a stuck-due card. */
-  trackable: boolean;
   japanese: string;
   chunks?: GrammarAssistChunkContext[];
   expanded: boolean;
   onToggleExpand: () => void;
   onGotIt: () => void;
-  onTrack: () => void;
   onRemove: () => void;
 }) {
   const [shortMeaning, setShortMeaning] = useState(pattern.shortMeaning);
@@ -444,7 +400,6 @@ function GrammarPatternCard({
           {link.confirmedByLearner ? (
             <span className="status-pill confirmed">Confirmed</span>
           ) : null}
-          {tracked ? <span className="status-pill">Tracked</span> : null}
         </div>
       </div>
       <div className="row">
@@ -456,20 +411,6 @@ function GrammarPatternCard({
         <button type="button" onClick={onToggleExpand}>
           {expanded ? 'Hide explanation' : 'Explain'}
         </button>
-        {!tracked ? (
-          <button
-            type="button"
-            onClick={onTrack}
-            disabled={!trackable}
-            title={
-              trackable
-                ? undefined
-                : "Confirm this sentence's vocabulary first — grammar review needs its words already learned"
-            }
-          >
-            Track
-          </button>
-        ) : null}
         <button type="button" className="ghost" onClick={onRemove}>
           Remove
         </button>
