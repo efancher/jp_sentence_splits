@@ -2711,6 +2711,31 @@ export async function updateSettings(
   return next;
 }
 
+const RECENT_FEED_URL_LIMIT = 8;
+
+function withRecentUrl(list: string[] | undefined, url: string): string[] {
+  return [url, ...(list ?? []).filter((existing) => existing !== url)].slice(
+    0,
+    RECENT_FEED_URL_LIMIT,
+  );
+}
+
+/** Remembers a podcast RSS feed URL for YouTubeMinePage's datalist. */
+export async function rememberPodcastFeedUrl(url: string): Promise<void> {
+  const current = await ensureSettings();
+  await updateSettings({
+    recentPodcastFeedUrls: withRecentUrl(current.recentPodcastFeedUrls, url),
+  });
+}
+
+/** Remembers an nhkeasier.com-mirror feed URL for NhkEasyImportPage's datalist. */
+export async function rememberNhkEasyFeedUrl(url: string): Promise<void> {
+  const current = await ensureSettings();
+  await updateSettings({
+    recentNhkEasyFeedUrls: withRecentUrl(current.recentNhkEasyFeedUrls, url),
+  });
+}
+
 export async function searchAll(query: string): Promise<{
   books: Book[];
   sentences: Sentence[];

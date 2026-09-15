@@ -8,6 +8,7 @@ import {
   commitSeriesEpisodeImport,
   getDb,
   getSeriesImportedSourceIds,
+  rememberNhkEasyFeedUrl,
 } from '../db/repository';
 import {
   base64ToBlob,
@@ -85,6 +86,11 @@ export function NhkEasyImportPage() {
     [],
     new Set<string>(),
   );
+  const recentFeedUrls = useLiveQuery(
+    async () => (await getDb().settings.get('settings'))?.recentNhkEasyFeedUrls ?? [],
+    [],
+    [],
+  );
 
   const [importResult, setImportResult] = useState<NhkEasyImportResult | null>(null);
   // The picked article's own publish date, for commitSeriesEpisodeImport's
@@ -121,7 +127,9 @@ export function NhkEasyImportPage() {
     setFeed(null);
     setFeedLoading(true);
     try {
-      setFeed(await fetchPodcastFeed(feedUrl.trim()));
+      const trimmedUrl = feedUrl.trim();
+      setFeed(await fetchPodcastFeed(trimmedUrl));
+      void rememberNhkEasyFeedUrl(trimmedUrl);
     } catch (err) {
       setFeedError(err instanceof Error ? err.message : 'Failed to load feed');
     } finally {
@@ -254,8 +262,12 @@ export function NhkEasyImportPage() {
                 style={{ flex: 1 }}
                 value={feedUrl}
                 placeholder="https://nhkeasier.com/feed/"
+                list="recent-nhk-easy-feed-urls"
                 onChange={(event) => setFeedUrl(event.target.value)}
               />
+              <datalist id="recent-nhk-easy-feed-urls">
+                {recentFeedUrls?.map((url) => <option key={url} value={url} />)}
+              </datalist>
               <button
                 type="button"
                 className="primary"

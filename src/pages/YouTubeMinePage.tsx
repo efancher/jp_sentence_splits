@@ -11,6 +11,7 @@ import {
   commitSeriesEpisodeImport,
   getDb,
   getSeriesImportedSourceIds,
+  rememberPodcastFeedUrl,
 } from '../db/repository';
 import { hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
@@ -499,7 +500,9 @@ export function YouTubeMinePage() {
     setPodcastFeedSearch('');
     setPodcastFeedLoading(true);
     try {
-      setPodcastFeed(await fetchPodcastFeed(podcastFeedUrl.trim()));
+      const trimmedUrl = podcastFeedUrl.trim();
+      setPodcastFeed(await fetchPodcastFeed(trimmedUrl));
+      void rememberPodcastFeedUrl(trimmedUrl);
     } catch (err) {
       setPodcastFeedError(err instanceof Error ? err.message : 'Failed to load podcast feed');
     } finally {
@@ -701,6 +704,11 @@ export function YouTubeMinePage() {
     [podcastSeriesId],
     new Set<string>(),
   );
+  const recentPodcastFeedUrls = useLiveQuery(
+    async () => (await getDb().settings.get('settings'))?.recentPodcastFeedUrls ?? [],
+    [],
+    [],
+  );
 
   const sortedPodcastEpisodes = podcastFeed
     ? podcastFeedSort === 'oldest'
@@ -779,8 +787,12 @@ export function YouTubeMinePage() {
                   style={{ flex: 1 }}
                   value={podcastFeedUrl}
                   placeholder="https://example.com/feed/podcast"
+                  list="recent-podcast-feed-urls"
                   onChange={(event) => setPodcastFeedUrl(event.target.value)}
                 />
+                <datalist id="recent-podcast-feed-urls">
+                  {recentPodcastFeedUrls?.map((url) => <option key={url} value={url} />)}
+                </datalist>
                 <button
                   type="button"
                   disabled={!podcastFeedUrl.trim() || podcastFeedLoading}

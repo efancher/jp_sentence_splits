@@ -460,6 +460,19 @@ export interface AppSettings {
    * page you only open when you can.)
    */
   quietMode?: boolean;
+  /**
+   * Most-recently-used podcast RSS feed URLs (newest first), so
+   * YouTubeMinePage's "Or import a podcast episode" input can offer them
+   * back via a datalist instead of making the user re-paste/re-find the
+   * feed URL every time. Capped at RECENT_FEED_URL_LIMIT (repository.ts).
+   */
+  recentPodcastFeedUrls?: string[];
+  /**
+   * Same idea as recentPodcastFeedUrls, but for NhkEasyImportPage's
+   * nhkeasier.com-mirror feed URL input — kept separate since the two
+   * inputs accept differently-shaped feeds.
+   */
+  recentNhkEasyFeedUrls?: string[];
 }
 
 export interface InboxMembership {

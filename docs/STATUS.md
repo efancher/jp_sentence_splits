@@ -32,6 +32,20 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-15 — Recent feed URLs remembered on podcast/NHK Easy import**
+  (user ask: don't make them re-find/re-paste the same RSS URL every
+  time). `AppSettings` gained two optional arrays,
+  `recentPodcastFeedUrls`/`recentNhkEasyFeedUrls` (newest first, capped at
+  8, deduped) — kept separate since the two inputs take differently-shaped
+  feeds. `rememberPodcastFeedUrl`/`rememberNhkEasyFeedUrl`
+  (`repository.ts`) append on a successful `fetchPodcastFeed` load and
+  persist via the existing `updateSettings`. `YouTubeMinePage`'s podcast
+  URL input and `NhkEasyImportPage`'s feed URL input each read their list
+  via `useLiveQuery` and offer it through a native `<datalist>` (typing
+  still free-text, no separate list-management UI). No new Dexie table —
+  reused the existing per-device `settings` singleton, same pattern as
+  `quietMode`.
+
 - **2026-09-15 — Grammar SRS: 4-card ladder collapsed to one
   `grammar_completion` card** (docs/ROADMAP.md — resolves the 2026-09-09
   open question). A performance check
