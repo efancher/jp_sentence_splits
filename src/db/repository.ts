@@ -15,6 +15,7 @@ import type {
   CardIssueReport,
   CardIssueStatus,
   ErrorClassification,
+  FsrsState,
   GrammarPattern,
   GrammarRelationship,
   GrammarRelationshipType,
@@ -123,6 +124,7 @@ import {
   createInitialFsrsState,
   isGraduated,
   isSentenceReadyForFullReview,
+  isVocabularyItemIntroduced,
   isVocabularyItemProficient,
   scheduleReview,
 } from '../lib/scheduling';
@@ -3408,6 +3410,142 @@ export async function getProficientVocabularyItemIds(
 }
 
 /**
+ * Reading/meaning vocabulary cards (subjectType `vocabularyItem`) — the
+ * activity types that actually test recalling a word's reading or meaning,
+ * as opposed to `pitch_accent` on the same subject, a different skill (see
+ * getSentenceShadowingReadiness below). Mirrors ReviewPage's
+ * VOCABULARY_ACTIVITY_TYPES; kept separate rather than imported since
+ * repository.ts is the data layer and shouldn't depend on a page module.
+ */
+const VOCABULARY_RECALL_ACTIVITY_TYPES: StudyActivityType[] = [
+  'reading_retrieval',
+  'cloze',
+  'reading_production',
+];
+
+const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
+
+/**
+ * Same query shape as getProficientVocabularyItemIds, scoped to a specific
+ * activity-type set and FSRS-state predicate instead of "any activity type,
+ * review/relearning" — lets a caller ask about reading/meaning progress and
+ * pitch progress separately rather than blended.
+ */
+async function filterVocabularyItemIdsByActivity(
+  vocabularyItemIds: string[],
+  activityTypes: readonly StudyActivityType[],
+  isMatch: (state: FsrsState['state']) => boolean,
+): Promise<Set<string>> {
+  if (vocabularyItemIds.length === 0) return new Set();
+  const db = getDb();
+  const idSet = new Set(vocabularyItemIds);
+  return new Set(
+    (await db.studyItems.where('subjectType').equals('vocabularyItem').toArray())
+      .filter(
+        (item) =>
+          idSet.has(item.subjectId) &&
+          activityTypes.includes(item.activityType) &&
+          isMatch(item.fsrsState.state),
+      )
+      .map((item) => item.subjectId),
+  );
+}
+
+/**
+ * The subset of `vocabularyItemIds` that have at least one reading/meaning
+ * study item that's left FSRS's `new` state (isVocabularyItemIntroduced) —
+ * i.e. actually been reviewed once, not just picked during vocabulary
+ * confirmation. `pitch_accent` reps on the same subject don't count. Feeds
+ * getSentenceReadingIntroducedReadiness, the `continue_book` gate.
+ */
+export async function getIntroducedReadingVocabularyItemIds(
+  vocabularyItemIds: string[],
+): Promise<Set<string>> {
+  return filterVocabularyItemIdsByActivity(
+    vocabularyItemIds,
+    VOCABULARY_RECALL_ACTIVITY_TYPES,
+    isVocabularyItemIntroduced,
+  );
+}
+
+/**
+ * `continue_book` readiness (2026-09-16), the "has each word at least been
+ * reviewed once" half — paired with `vocabularyConfirmed` in
+ * classifyExploreSentences (sessionPlanner.ts). A sentence with zero
+ * reviewable vocabulary items has nothing to gate on and is ready
+ * (mirrors isSentenceVocabularyReady).
+ */
+export async function getSentenceReadingIntroducedReadiness(
+  sentenceIds: string[],
+): Promise<Map<string, boolean>> {
+  const readiness = new Map<string, boolean>();
+  if (sentenceIds.length === 0) return readiness;
+  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
+  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
+  const introducedIds = await getIntroducedReadingVocabularyItemIds(allVocabularyItemIds);
+  for (const sentenceId of sentenceIds) {
+    const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
+    readiness.set(sentenceId, vocabularyItemIds.every((id) => introducedIds.has(id)));
+  }
+  return readiness;
+}
+
+/**
+ * Shadowing readiness (user request, 2026-08-27; pitch requirement added
+ * 2026-09-16). A sentence's vocabulary must be confirmed, every linked word
+ * must have shown reading/meaning recall — the original rationale: shadowing
+ * a sentence full of unfamiliar words splits attention between recalling
+ * the words and imitating the pronunciation — *and*, separately, every
+ * linked word's pitch pattern must itself be FSRS-proficient, so shadowing
+ * reinforces a pitch pattern already learned rather than one never
+ * practiced. Unlike getSentenceFullReviewReadiness, reading and pitch
+ * proficiency are checked against their own activity types rather than
+ * blended into one "any activity type reached review/relearning" set — a
+ * word's pitch_accent reps no longer stand in for having recalled its
+ * reading, and vice versa (user report, 2026-09-16: a word with only
+ * pitch_accent reps was passing as "known" for gates that meant reading
+ * recall).
+ */
+export async function getSentenceShadowingReadiness(
+  sentenceIds: string[],
+): Promise<Map<string, boolean>> {
+  const readiness = new Map<string, boolean>();
+  if (sentenceIds.length === 0) return readiness;
+  const db = getDb();
+  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
+  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
+  const [readingProficientIds, pitchProficientIds, analyses] = await Promise.all([
+    filterVocabularyItemIdsByActivity(
+      allVocabularyItemIds,
+      VOCABULARY_RECALL_ACTIVITY_TYPES,
+      isVocabularyItemProficient,
+    ),
+    filterVocabularyItemIdsByActivity(
+      allVocabularyItemIds,
+      PITCH_ACCENT_ACTIVITY_TYPES,
+      isVocabularyItemProficient,
+    ),
+    db.analyses.bulkGet(sentenceIds),
+  ]);
+  const analysesBySentenceId = new Map(
+    analyses
+      .filter((item): item is SentenceAnalysis => Boolean(item))
+      .map((item) => [item.sentenceId, item]),
+  );
+  for (const sentenceId of sentenceIds) {
+    const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
+    const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
+    readiness.set(
+      sentenceId,
+      vocabularyReviewStatus === 'confirmed' &&
+        vocabularyItemIds.every((id) => readingProficientIds.has(id)) &&
+        vocabularyItemIds.every((id) => pitchProficientIds.has(id)),
+    );
+  }
+  return readiness;
+}
+
+/**
  * "Ready to read" coverage (docs/ROADMAP.md) — per-book known-vocabulary
  * ratio, for `BooksPage` to show "which of these is easiest to pick up
  * right now." Reuses the same `getReviewableVocabularyItemIdsBySentence` /
@@ -6109,6 +6247,10 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
+        // Patched below, once readiness is known for every candidate
+        // sentence at once (batched, not N+1) — see classifyExploreSentences
+        // in sessionPlanner.ts for why continue_book waits on this too.
+        vocabularyIntroduced: false,
       })),
     });
   }
@@ -6117,7 +6259,7 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
   // so recency order is preserved within each group. Done before the slice
   // so a slightly-less-recent book with a confirmation backlog isn't dropped
   // in favour of a more-recent book that's already caught up.
-  return candidates
+  const limited = candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
       const rank = (c: ExploreCandidate) =>
@@ -6126,6 +6268,15 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
     })
     .slice(0, limit)
     .map((entry) => entry.candidate);
+  const readiness = await getSentenceReadingIntroducedReadiness(
+    limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
+  );
+  for (const candidate of limited) {
+    for (const sentence of candidate.sentences) {
+      sentence.vocabularyIntroduced = readiness.get(sentence.sentenceId) ?? false;
+    }
+  }
+  return limited;
 }
 
 /**
@@ -6254,11 +6405,11 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
 /**
  * Practice(shadowing) candidates: sentences with reference audio and the
  * fewest existing attempts, scoped to sentences actually in progress and
- * whose vocabulary is confirmed and proficient (user request, 2026-08-27,
- * same getSentenceFullReviewReadiness gate as glossing/grammar — shadowing
- * a sentence full of unfamiliar words splits attention between recalling
- * the words and imitating the pronunciation, when the whole point is to
- * free up attention for the latter).
+ * ready per getSentenceShadowingReadiness (user request, 2026-08-27;
+ * pitch requirement layered on 2026-09-16) — vocabulary confirmed, every
+ * linked word's reading/meaning proficient (so shadowing doesn't split
+ * attention between recalling words and imitating pronunciation), and
+ * every linked word's pitch pattern proficient too.
  */
 async function findShadowCandidates(limit: number, activeSentenceIds: Set<string>): Promise<ShadowCandidate[]> {
   if (activeSentenceIds.size === 0) return [];
@@ -6267,7 +6418,7 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
   const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(activeIds).toArray();
   if (audioRows.length === 0) return [];
   const sentenceIdsWithAudioUnfiltered = [...new Set(audioRows.map((audio) => audio.sentenceId))];
-  const readiness = await getSentenceFullReviewReadiness(sentenceIdsWithAudioUnfiltered);
+  const readiness = await getSentenceShadowingReadiness(sentenceIdsWithAudioUnfiltered);
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
 

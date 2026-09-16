@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-15.
+Last updated: 2026-09-16.
 
 ## Where things stand
 
@@ -32,6 +32,48 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-16 — Split the blended vocabulary-proficiency signal:
+  `continue_book` gates on reading/meaning "introduced," shadowing gates
+  on reading/meaning *and* pitch proficiency, separately** (user report:
+  a sentence with 皆 — zero study items of any kind — surfaced for
+  Analyze right after the same-day fix below loosened `continue_book` to
+  just `confirmed`; separately, 元気 looked "known" to a shared gate
+  because of a `pitch_accent` rep, even though its reading/meaning card
+  had never been touched). Root cause both times:
+  `getProficientVocabularyItemIds` (`repository.ts`) treats *any*
+  `vocabularyItem`-subject study item — `pitch_accent` included — as
+  proof the word is "known," so pitch-drill reps could stand in for
+  reading/meaning recall and vice versa. Fix, scoped to the two consumers
+  actually discussed (grammar/conjugation/full-sentence-review/book-
+  coverage still use the original blended gate unchanged):
+  - New `isVocabularyItemIntroduced` (`scheduling.ts`): state `!== 'new'`
+    — reviewed at least once, not necessarily proficient.
+  - New `getSentenceReadingIntroducedReadiness` (`repository.ts`), scoped
+    to `reading_retrieval`/`cloze`/`reading_production` activity types
+    only. `findExploreCandidates` now patches
+    `ExploreCandidate.sentences[].vocabularyIntroduced` from it (the same
+    batched-after-slice shape the old, removed `vocabularyReady` field
+    used), and `classifyExploreSentences` (`sessionPlanner.ts`) requires
+    both `vocabularyConfirmed` and `vocabularyIntroduced` before drafting
+    `continue_book` — confirmed-but-never-reviewed sentences get no
+    glossing step that pass, same as before, just for a different reason.
+  - New `getSentenceShadowingReadiness` (`repository.ts`), replacing
+    `findShadowCandidates`'s old `getSentenceFullReviewReadiness` call:
+    `vocabularyReviewStatus === 'confirmed'` *and* every linked word
+    proficient on `reading_retrieval`/`cloze`/`reading_production` *and*
+    proficient on `pitch_accent`, checked as two separate sets rather than
+    one blended one. Reading proficiency preserves the original
+    2026-08-27 intent (don't split attention between recalling words and
+    imitating pronunciation); the pitch requirement is new — shadowing
+    should reinforce a pitch pattern already learned, not one never
+    practiced.
+  - `tests/scheduling.test.ts` (`isVocabularyItemIntroduced`),
+    `tests/sessionPlanner.test.ts` (fixtures updated for the new required
+    `vocabularyIntroduced` field + one new "confirmed but not introduced"
+    case), and `tests/sessionPlannerRepository.test.ts` (two new
+    end-to-end cases reproducing the 皆/元気 scenarios against real
+    vocabulary links and FSRS state) all updated; full suite green.
 
 - **2026-09-16 — UI-triggerable, book-scoped alignment backfill** (user
   doesn't always have SSH access to codex-dev, wanted the equivalent of

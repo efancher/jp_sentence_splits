@@ -146,6 +146,21 @@ export function isVocabularyItemProficient(state: FsrsState['state']): boolean {
 }
 
 /**
+ * A vocabulary item has left FSRS's initial `new` state — reviewed at
+ * least once, successfully or not — as opposed to
+ * isVocabularyItemProficient's higher "shown recall" bar. `continue_book`
+ * (structural analysis) gates on this lower bar rather than proficiency:
+ * a word merely picked during vocabulary confirmation and never actually
+ * seen in a review rep shouldn't count as "looked at" (user report,
+ * 2026-09-16 — 皆 in "皆さん元気ですか" surfaced for analysis with zero
+ * study items at all), but requiring full proficiency reintroduces the
+ * starvation bug continue_book's confirmed-only gate was built to fix.
+ */
+export function isVocabularyItemIntroduced(state: FsrsState['state']): boolean {
+  return state !== 'new';
+}
+
+/**
  * Full-sentence review gating (user request, 2026-08-16), the "vocabulary
  * is confirmed, is it proficient" half: given the vocabulary items already
  * confirmed for a sentence, every one of them must have been shown

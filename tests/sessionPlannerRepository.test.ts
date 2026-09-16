@@ -26,8 +26,21 @@ import {
   updateSettings,
 } from '../src/db/repository';
 import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
-import type { Sentence } from '../src/domain/types';
+import type { Sentence, VocabularySelection } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
+
+function makeSelection(overrides: Partial<VocabularySelection> = {}): VocabularySelection {
+  return {
+    id: createId('vocab_selection'),
+    surface: '皆',
+    start: 0,
+    end: 1,
+    expression: '皆',
+    reading: 'みな',
+    source: 'manual',
+    ...overrides,
+  };
+}
 
 function makeSentence(overrides: Partial<Sentence> = {}): Sentence {
   const timestamp = new Date().toISOString();
@@ -363,6 +376,88 @@ describe('Learning Orchestrator repository layer', () => {
     await updateSettings({ quietMode: false });
     const loud = await planRecommendedSession(60);
     expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
+  });
+
+  it('withholds continue_book until a confirmed word\'s reading/meaning card has been reviewed at least once — pitch-only reps do not count (user report, 2026-09-16)', async () => {
+    const book = await createBook({ title: 'Continue Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
+    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
+    const vocabularyItemId = link!.vocabularyItemId;
+
+    // Confirmed but never reviewed at all (the "皆" case): withheld.
+    const beforeAnyReview = await planRecommendedSession(60);
+    expect(beforeAnyReview.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
+
+    // A pitch_accent rep alone doesn't count — pitch practice isn't reading/meaning recall.
+    const pitchItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'pitch_accent');
+    await recordReview({ studyItemId: pitchItem.id, rating: 'good' });
+    const afterPitchOnly = await planRecommendedSession(60);
+    expect(afterPitchOnly.steps.some((step) => step.targetKind === 'continue_book')).toBe(false);
+
+    // One reading/meaning rep unlocks it, even far short of FSRS proficiency.
+    const readingItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
+    await recordReview({ studyItemId: readingItem.id, rating: 'good' });
+    const afterReadingRep = await planRecommendedSession(60);
+    const continueStep = afterReadingRep.steps.find((step) => step.targetKind === 'continue_book');
+    expect(continueStep).toBeDefined();
+    expect(continueStep!.sentenceId).toBe(sentence.id);
+  });
+
+  it('withholds a shadow step unless a confirmed word is both reading-proficient and pitch-proficient — either alone is not enough (2026-09-16)', async () => {
+    const book = await createBook({ title: 'Shadow Me' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
+    await db.sentenceAudio.add({
+      id: 'audio-shadow-2',
+      sentenceId: sentence.id,
+      sourceId: 'source-1',
+      sourceSentenceId: 'src-sent-1',
+      sourceTitle: 'Test Source',
+      mimeType: 'audio/mp3',
+      durationMs: 1500,
+      startMs: 0,
+      endMs: 1500,
+      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+      importedAt: new Date().toISOString(),
+    });
+    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
+    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
+    const vocabularyItemId = link!.vocabularyItemId;
+
+    // Push a study item to FSRS "review" (proficient) with a few spaced "good" ratings.
+    const advanceToProficient = async (activityType: string) => {
+      const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, activityType);
+      let studyItemId = item.id;
+      for (let i = 0; i < 3; i += 1) {
+        const day = new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000);
+        const result = await recordReview({ studyItemId, rating: 'good', now: day });
+        studyItemId = result.studyItem.id;
+      }
+    };
+
+    // Neither reading nor pitch proficient yet: withheld.
+    const beforeEither = await planRecommendedSession(60);
+    expect(beforeEither.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
+
+    // Reading proficient, pitch still untouched: still withheld.
+    await advanceToProficient('reading_retrieval');
+    const readingOnly = await planRecommendedSession(60);
+    expect(readingOnly.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
+
+    // Both proficient: shadow becomes eligible.
+    await advanceToProficient('pitch_accent');
+    const both = await planRecommendedSession(60);
+    const shadowStep = both.steps.find((step) => step.targetKind === 'shadow');
+    expect(shadowStep).toBeDefined();
+    expect(shadowStep!.sentenceId).toBe(sentence.id);
   });
 
   it('surfaces a worked-through, vocab-ready sentence as a grammar_noticing step, gated on vocab and cleared once grammar is marked reviewed', async () => {

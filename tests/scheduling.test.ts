@@ -7,6 +7,7 @@ import {
   isGraduated,
   isSentenceReadyForFullReview,
   isSentenceVocabularyReady,
+  isVocabularyItemIntroduced,
   isVocabularyItemProficient,
   scheduleReview,
 } from '../src/lib/scheduling';
@@ -120,6 +121,18 @@ describe('isVocabularyItemProficient (full-sentence gating)', () => {
   it('is false while still new or in initial learning', () => {
     expect(isVocabularyItemProficient('new')).toBe(false);
     expect(isVocabularyItemProficient('learning')).toBe(false);
+  });
+});
+
+describe('isVocabularyItemIntroduced (continue_book gating)', () => {
+  it('is false only while still new', () => {
+    expect(isVocabularyItemIntroduced('new')).toBe(false);
+  });
+
+  it('is true for every state reached after at least one review, including a failed one', () => {
+    expect(isVocabularyItemIntroduced('learning')).toBe(true);
+    expect(isVocabularyItemIntroduced('review')).toBe(true);
+    expect(isVocabularyItemIntroduced('relearning')).toBe(true);
   });
 });
 

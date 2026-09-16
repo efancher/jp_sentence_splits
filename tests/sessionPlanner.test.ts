@@ -567,7 +567,12 @@ describe('buildRecommendedSession', () => {
         label: 'Book',
         reason: 'Continue',
         sentences: [
-          { sentenceId: 'sent_confirmed', preview: 'x', vocabularyConfirmed: true },
+          {
+            sentenceId: 'sent_confirmed',
+            preview: 'x',
+            vocabularyConfirmed: true,
+            vocabularyIntroduced: true,
+          },
         ],
       },
     ];
@@ -584,7 +589,12 @@ describe('buildRecommendedSession', () => {
         label: 'Book',
         reason: 'Continue',
         sentences: [
-          { sentenceId: 'sent_new', preview: 'x', vocabularyConfirmed: false },
+          {
+            sentenceId: 'sent_new',
+            preview: 'x',
+            vocabularyConfirmed: false,
+            vocabularyIntroduced: false,
+          },
         ],
       },
     ];
@@ -592,6 +602,26 @@ describe('buildRecommendedSession', () => {
     const stepsForSentence = session.steps.filter((step) => step.sentenceId === 'sent_new');
     expect(stepsForSentence).toHaveLength(1);
     expect(stepsForSentence[0]!.targetKind).toBe('vocabulary_review');
+  });
+
+  it('gives a confirmed sentence no glossing step at all until its reading/meaning cards have been reviewed once', () => {
+    const exploreCandidates: ExploreCandidate[] = [
+      {
+        bookId: 'book_1',
+        label: 'Book',
+        reason: 'Continue',
+        sentences: [
+          {
+            sentenceId: 'sent_confirmed_unintroduced',
+            preview: 'x',
+            vocabularyConfirmed: true,
+            vocabularyIntroduced: false,
+          },
+        ],
+      },
+    ];
+    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates }));
+    expect(session.steps.some((step) => step.sentenceId === 'sent_confirmed_unintroduced')).toBe(false);
   });
 
   it('vocabulary confirmations get first claim on the glossing budget, ahead of continue_book for already-confirmed sentences', () => {
@@ -605,12 +635,13 @@ describe('buildRecommendedSession', () => {
           // still gives vocabulary confirmations first claim on the budget,
           // so these continue_book steps shouldn't crowd out the unconfirmed
           // sentences below.
-          { sentenceId: 'ready_1', preview: 'a', vocabularyConfirmed: true },
-          { sentenceId: 'ready_2', preview: 'b', vocabularyConfirmed: true },
+          { sentenceId: 'ready_1', preview: 'a', vocabularyConfirmed: true, vocabularyIntroduced: true },
+          { sentenceId: 'ready_2', preview: 'b', vocabularyConfirmed: true, vocabularyIntroduced: true },
           ...Array.from({ length: 20 }, (_, i) => ({
             sentenceId: `new_${i}`,
             preview: `n${i}`,
             vocabularyConfirmed: false,
+            vocabularyIntroduced: false,
           })),
         ],
       },
@@ -637,6 +668,7 @@ describe('buildRecommendedSession', () => {
           sentenceId: `ready_${i}`,
           preview: `r${i}`,
           vocabularyConfirmed: true,
+          vocabularyIntroduced: true,
         })),
       },
     ];
@@ -646,15 +678,25 @@ describe('buildRecommendedSession', () => {
     expect(glossing.every((step) => step.targetKind === 'continue_book')).toBe(true);
   });
 
-  it('gives a continue_book step to a sentence whose vocab is confirmed even if not yet FSRS-proficient', () => {
+  it('gives a continue_book step to a sentence whose vocab is confirmed and introduced even if not yet FSRS-proficient', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {
         bookId: 'book_1',
         label: 'Book',
         reason: 'Continue',
         sentences: [
-          { sentenceId: 'sent_maturing', preview: 'x', vocabularyConfirmed: true },
-          { sentenceId: 'sent_next', preview: 'y', vocabularyConfirmed: false },
+          {
+            sentenceId: 'sent_maturing',
+            preview: 'x',
+            vocabularyConfirmed: true,
+            vocabularyIntroduced: true,
+          },
+          {
+            sentenceId: 'sent_next',
+            preview: 'y',
+            vocabularyConfirmed: false,
+            vocabularyIntroduced: false,
+          },
         ],
       },
     ];

@@ -358,6 +358,8 @@ export interface ExploreCandidate {
     sentenceId: string;
     preview: string;
     vocabularyConfirmed: boolean;
+    /** Every reviewable vocabulary item linked to this sentence has a reading/meaning study item that's left FSRS's `new` state — see isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
+    vocabularyIntroduced: boolean;
   }[];
 }
 
@@ -538,16 +540,19 @@ interface ExploreSentenceEntry {
   sentence: ExploreCandidate['sentences'][number];
 }
 
-/** Classifies every candidate sentence into the one glossing step it's eligible for right now, preserving book-then-position reading order. */
+/** Classifies every candidate sentence into the one glossing step it's eligible for right now (or none), preserving book-then-position reading order. */
 function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSentenceEntry[] {
   const entries: ExploreSentenceEntry[] = [];
   for (const candidate of candidates) {
     for (const sentence of candidate.sentences) {
-      entries.push(
-        sentence.vocabularyConfirmed
-          ? { kind: 'analyze', candidate, sentence }
-          : { kind: 'vocabulary', candidate, sentence },
-      );
+      if (!sentence.vocabularyConfirmed) {
+        entries.push({ kind: 'vocabulary', candidate, sentence });
+      } else if (sentence.vocabularyIntroduced) {
+        entries.push({ kind: 'analyze', candidate, sentence });
+      }
+      // else: confirmed but its reading/meaning cards haven't been reviewed
+      // even once yet — no glossing step this pass; the planner moves on
+      // to the next sentence rather than blocking the book on it.
     }
   }
   return entries;
@@ -598,14 +603,18 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
  *    English glosses per chunk) in the same pass (2026-08-27) — otherwise
  *    the learner sees a sentence's grammar/meaning glossed before they've
  *    even looked at its words. Once vocabulary is confirmed, `continue_book`
- *    is immediately eligible — unlike full-sentence *review* cards
- *    (`isSentenceReadyForFullReview`), structural analysis and
- *    grammar-noticing aren't testing recall, so they don't need every word
- *    to have already proven itself in the SRS first (that gate used to sit
- *    here too, but on a corpus with several books mid-read it left the
- *    `continue_book` supply near zero most days — nearly every sentence's
- *    vocab was confirmed-but-still-learning, never advancing enough for
- *    Analyze to come up in the daily session — 2026-09-16).
+ *    becomes eligible once every linked word has at least been reviewed
+ *    once (`vocabularyIntroduced`, isVocabularyItemIntroduced) — a lower
+ *    bar than full-sentence *review* cards (`isSentenceReadyForFullReview`),
+ *    which require FSRS proficiency, since structural analysis and
+ *    grammar-noticing aren't testing recall the way a review card is. This
+ *    gate used to be "confirmed" alone (2026-09-16 fix for `continue_book`
+ *    supply near zero, when it wrongly required full proficiency), but a
+ *    word merely picked during vocabulary confirmation and never actually
+ *    reviewed shouldn't count as "looked at" either (user report, 2026-09-16
+ *    — 皆 in "皆さん元気ですか" surfaced for analysis with zero study items
+ *    of any kind; separately, a word with only `pitch_accent` reps doesn't
+ *    count as introduced — pitch practice isn't reading/meaning recall).
  *
  * 2. Vocabulary confirmations get first claim on the glossing budget
  *    (2026-08-29): pass 1 spends up to VOCAB_CONFIRM_MIN_GLOSSING_SHARE of
