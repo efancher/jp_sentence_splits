@@ -764,20 +764,46 @@ possibilities, kept here so the thinking isn't lost:
   `weakness` term, show the `errorClassification` reason, offer a real
   intervention per item (re-gloss / shadow / contrastive pair / track the
   grammar), never a leech drill. Overlaps the error-mix view.
-- [ ] **Skill-imbalance metric** — of reading-proficient words, what
-  fraction are `word_listening`-proficient? `reading_production`-proficient?
-  A "listening trails reading by ~N words" line to steer bucket allocation
-  by *skill gap*, not just the neglect score's *recency*.
-- [ ] **Self-rating calibration** — compare self-rated cards
-  (`reading_in_context`, `listening`, `grammar_production`) against
-  objectively-graded ones (`cloze`, `reading_production`,
-  `grammar_completion`) on overlapping subjects; flag over-confidence
-  (rated "good", failed the graded card).
+- [x] **Skill-imbalance metric** — shipped 2026-09-16 as "Skill coverage"
+  on `/progress`: of reading-*recognized* words (`reading_retrieval`/`cloze`
+  proficient — the recognition-only denominator, deliberately excluding
+  `reading_production`, a separate rung), what share have also reached
+  production, pitch, and word-listening proficiency. `skillCoverage.ts` /
+  `repository.ts#getSkillCoverage`.
+- [x] **Self-rating calibration** — shipped 2026-09-16 as "Self-rating
+  check" on `/progress`: global pass-rate comparison between self-rated
+  activity types (`reading_retrieval`/`cloze`/`reading_in_context`/
+  `listening`/`word_listening` — `grammar_production` from the original
+  note no longer exists, retired 2026-09-15) and objectively-graded ones
+  (`reading_production`/`sentence_transformation`/`grammar_completion`/
+  `pitch_accent`/`contrastive`), plus a per-self-rated-activity-type
+  breakdown. Deliberately a global comparison, not a same-subject join —
+  see `selfRatingCalibration.ts`'s doc comment for why.
 - [x] **"Ready to read" coverage** — promoted to "Planned" 2026-09-13 as
   "'Ready to read' difficulty/coverage scoring," see above.
-- [ ] **FSRS calibration surfacing** — predicted retrievability vs actual
-  pass-rate on `/progress`, plus an explicit desired-retention knob, so
-  over/under-reviewing is visible.
+- [x] **FSRS calibration surfacing** — shipped 2026-09-16, scoped down to
+  the buildable half: "FSRS confidence" on `/progress` shows a live
+  bucketed snapshot of every active study item's *current* predicted
+  retrievability (`scheduling.ts#predictRetrievability`, wrapping
+  ts-fsrs's own `get_retrievability` rather than reimplementing the
+  formula). **Not** predicted-vs-actual validation or a desired-retention
+  knob — both need the predicted retrievability logged on each `Review`
+  row at grading time, which nothing does today; still open if wanted.
+- [x] **Step usefulness** (new, 2026-09-16) — `PlannerSessionStep.status`
+  already recorded completed/skipped per step, but nothing rolled it up
+  across sessions by `targetKind` — no way to see "which step kinds
+  actually get done vs. quietly skipped every time" without a one-off
+  script. Shipped as a `/progress` panel, 56-day window, sorted by skip
+  rate. `stepUsefulness.ts` / `repository.ts#getStepUsefulness`.
+- [x] **Gate funnel / "what's stuck"** (new, 2026-09-16) — every gate-
+  starvation bug found earlier the same session (`continue_book`, shadow,
+  listening) was caught by a one-off Node script against Supabase or a
+  user report, not by anything the app itself surfaced. Shipped as a
+  `/progress` panel: confirmed sentences whose words were never reviewed
+  (`continue_book` backlog), and shadow-/listening-ready sentences blocked
+  on specifically the pitch requirement. `repository.ts#getGateFunnelSnapshot`
+  — no separate pure lib module, since the logic is mostly Dexie-side
+  counting reusing the gate primitives directly.
 - [ ] **Velocity / ETA** — surface the new-card-backlog drain rate
   (`report:new-card-backlog` already computes it) and ~words/week.
 - [ ] **Per-sentence mastery arc** — one ladder per encountered sentence

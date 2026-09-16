@@ -505,7 +505,36 @@ count / share / recent-vs-earlier trend / next-action-route per category, a
 30d/90d/all window toggle, a hedged "N more self-rated misses, no
 breakdown" footnote, and a Pronunciation block folding in the shadowing
 side (`getPronunciationProfile` top focus area + `buildShadowingWeakWords`
-named weak words). **`SessionRunnerPage`** sequences today's steps, deep-linking into
+named weak words). Five more panels (2026-09-16, from a "how do we ground
+feature decisions in data" discussion): **Self-rating check**
+(`selfRatingCalibration.ts` / `getSelfRatingCalibration`) — self-rated
+activity types (`reading_retrieval`/`cloze`/`reading_in_context`/
+`listening`/`word_listening`, no objective correctness check) vs.
+objectively-graded ones (`reading_production`/`sentence_transformation`/
+`grammar_completion`/`pitch_accent`/`contrastive`), global pass-rate
+comparison plus a per-self-rated-type breakdown — flags whether self-rating
+runs generous or harsh relative to measured performance. **Skill coverage**
+(`skillCoverage.ts` / `getSkillCoverage`) — of recognition-proficient words
+(`reading_retrieval`/`cloze`, deliberately excluding `reading_production`,
+a separate rung), what share have also reached production/pitch/
+word-listening proficiency; the concrete version of "listening trails
+reading by ~N words" instead of a hunch. **FSRS confidence**
+(`fsrsConfidence.ts` / `getFsrsConfidenceSnapshot`) — every active study
+item's *current* predicted retrievability (`scheduling.ts#predictRetrievability`,
+wrapping ts-fsrs's own `get_retrievability` rather than reimplementing the
+forgetting-curve formula), bucketed; a live snapshot, not a
+predicted-vs-actual validation, since that needs the prediction logged on
+each `Review` row at grading time and nothing does that yet. **Step
+usefulness** (`stepUsefulness.ts` / `getStepUsefulness`) — flattens every
+`PlannerSession.steps` in a 56-day window, grouped by `targetKind`,
+sorted by skip rate — the longitudinal companion to `sessionRecap.ts`'s
+same-day recap. **What's stuck** (`repository.ts#getGateFunnelSnapshot`,
+no separate pure lib module) — sentences that clear every dimension of a
+gate except one specifically-named requirement (confirmed-but-never-
+reviewed for `continue_book`; reading/word-listening-ready-but-pitch-not
+for shadow/listening) — a standing version of the one-off diagnostic
+script used earlier the same session to trace the 皆/元気 gating bugs.
+**`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/
 end-early are real, tracked actions. Once the day's session is settled it

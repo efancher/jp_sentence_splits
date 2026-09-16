@@ -2,7 +2,16 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getBlindSpots, getErrorMix, getProgressReport } from '../db/repository';
+import {
+  getBlindSpots,
+  getErrorMix,
+  getFsrsConfidenceSnapshot,
+  getGateFunnelSnapshot,
+  getProgressReport,
+  getSelfRatingCalibration,
+  getSkillCoverage,
+  getStepUsefulness,
+} from '../db/repository';
 import type { ErrorCategory } from '../lib/errorMix';
 import type { TrendDirection } from '../lib/pronunciationProfile';
 import type { WeekBucket } from '../lib/progressReport';
@@ -133,11 +142,26 @@ const ERROR_WINDOWS = [
   { days: 0, label: 'All time' },
 ];
 
+const TARGET_KIND_LABELS: Record<string, string> = {
+  continue_book: 'Analyze',
+  grammar_detail: 'Grammar detail',
+  grammar_noticing: 'Notice grammar',
+  shadow: 'Shadow',
+  review: 'Due review',
+  vocabulary_detail: 'Vocabulary detail',
+  vocabulary_review: 'Confirm vocabulary',
+};
+
 export function ProgressPage() {
   const [errorWindow, setErrorWindow] = useState(30);
   const report = useLiveQuery(() => getProgressReport(), []);
   const blindSpots = useLiveQuery(() => getBlindSpots(), []);
   const errorMix = useLiveQuery(() => getErrorMix({ windowDays: errorWindow }), [errorWindow]);
+  const calibration = useLiveQuery(() => getSelfRatingCalibration(), []);
+  const skillCoverage = useLiveQuery(() => getSkillCoverage(), []);
+  const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
+  const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
+  const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
 
   return (
     <div className="stack">
@@ -390,6 +414,157 @@ export function ProgressPage() {
           </section>
         </>
       ) : null}
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Self-rating check</h3>
+        {calibration === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !calibration.hasData ? (
+          <p className="muted">
+            Not enough reviews yet on both self-rated cards (reading in context, listening, word
+            listening, reading retrieval, cloze) and graded ones (reading production, conjugation,
+            grammar, pitch accent, contrastive pairs) to compare.
+          </p>
+        ) : (
+          <>
+            <StatRow
+              label="Self-rated pass rate"
+              value={formatPercent(calibration.selfRated.passRate)}
+              hint={`${calibration.selfRated.reviewCount} reviews`}
+            />
+            <StatRow
+              label="Graded pass rate"
+              value={formatPercent(calibration.graded.passRate)}
+              hint={`${calibration.graded.reviewCount} reviews`}
+            />
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              {calibration.gap === null
+                ? 'Not enough data on both sides to compare.'
+                : calibration.gap > 0.05
+                  ? `Self-rated cards pass ${Math.round(calibration.gap * 100)} points more often than graded ones — worth rating a bit more strictly.`
+                  : calibration.gap < -0.05
+                    ? `Self-rated cards pass ${Math.round(Math.abs(calibration.gap) * 100)} points less often than graded ones — you may be rating yourself harder than your actual recall.`
+                    : 'Self-rated and graded cards pass at about the same rate — self-rating looks honest.'}
+            </p>
+            {calibration.selfRatedByActivityType
+              .filter((row) => row.reviewCount > 0)
+              .map((row) => (
+                <StatRow
+                  key={row.activityType}
+                  label={row.activityType}
+                  value={formatPercent(row.passRate)}
+                  hint={`${row.reviewCount} reviews`}
+                />
+              ))}
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Skill coverage</h3>
+        {skillCoverage === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !skillCoverage.hasData ? (
+          <p className="muted">No recognized vocabulary yet.</p>
+        ) : (
+          <>
+            <StatRow label="Words recognized" value={String(skillCoverage.recognized)} />
+            {skillCoverage.rungs.map((rung) => (
+              <StatRow
+                key={rung.label}
+                label={rung.label}
+                value={formatPercent(rung.share)}
+                hint={`${rung.count} of ${skillCoverage.recognized}`}
+              />
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Of the words you can recognize, how many have also reached the other skills
+              (producing the reading, pitch, being heard in a sentence) — the biggest gap is
+              where a bucket is trailing.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>FSRS confidence</h3>
+        {fsrsConfidence === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !fsrsConfidence.hasData ? (
+          <p className="muted">No active study items yet.</p>
+        ) : (
+          <>
+            <StatRow
+              label="Average predicted recall right now"
+              value={formatPercent(fsrsConfidence.averageRetrievability)}
+              hint={`${fsrsConfidence.activeCount} active items`}
+            />
+            {fsrsConfidence.buckets.map((bucket) => (
+              <StatRow key={bucket.label} label={bucket.label} value={String(bucket.count)} />
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              FSRS's own live estimate of how likely you are to recall each active item right
+              now — a lot piled in the low buckets means reviews are lagging behind schedule;
+              everything at 95%+ means you're reviewing more than the schedule needs.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Step usefulness</h3>
+        {stepUsefulness === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !stepUsefulness.hasData ? (
+          <p className="muted">No settled session steps yet.</p>
+        ) : (
+          <>
+            {stepUsefulness.rows.map((row) => (
+              <StatRow
+                key={row.targetKind}
+                label={`${TARGET_KIND_LABELS[row.targetKind] ?? row.targetKind} — skip rate`}
+                value={formatPercent(row.skipRate)}
+                hint={`${row.completed} done, ${row.skipped} skipped`}
+              />
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Last {stepUsefulness.windowDays} days — which planner step kinds actually get done
+              vs. quietly skipped every time.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>What's stuck</h3>
+        {gateFunnel === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !gateFunnel.hasData ? (
+          <p className="muted">Nothing to check yet.</p>
+        ) : (
+          <>
+            <StatRow
+              label="Confirmed, words never reviewed"
+              value={String(gateFunnel.continueBookBlocked)}
+              hint="waiting on Analyze"
+            />
+            <StatRow
+              label="Shadow-ready except pitch"
+              value={String(gateFunnel.shadowBlockedOnPitch)}
+              hint="words known, pitch not yet"
+            />
+            <StatRow
+              label="Listening-ready except pitch"
+              value={String(gateFunnel.listeningBlockedOnPitch)}
+              hint="words heard, pitch not yet"
+            />
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Sentences that clear every other requirement for a step and are blocked on
+              specifically the one named — not a general readiness count.
+            </p>
+          </>
+        )}
+      </section>
     </div>
   );
 }

@@ -87,6 +87,18 @@ export function scheduleReview(
 }
 
 /**
+ * FSRS's own predicted probability of recall for `fsrsState` right now
+ * (`scheduler.get_retrievability`, the same forgetting-curve formula and
+ * parameters `scheduleReview` schedules against — not reimplemented here,
+ * so this can never drift from what the scheduler actually uses). `new`
+ * cards have no stability/last-review yet, so this is only meaningful for
+ * `learning`/`review`/`relearning` — callers should filter to those first.
+ */
+export function predictRetrievability(fsrsState: FsrsState, now: Date = new Date()): number {
+  return scheduler.get_retrievability(toCard(fsrsState), now, false);
+}
+
+/**
  * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
  * treated as "due" once its FSRS interval has grown past
  * `minScheduledDays` while in the stable `review` state — the algorithm's

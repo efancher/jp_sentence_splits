@@ -33,6 +33,49 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-16 — Five data-grounding panels on `/progress`** (user: "any
+  recommendations for types of data we should collect or improving what
+  we already collect" → "maybe build all 5?" → "All 5 on /progress").
+  Three were already-identified but unbuilt ROADMAP possibilities from a
+  2026-09-08 discussion; two ("step usefulness," "gate funnel") were new,
+  motivated directly by the gate-starvation bugs found earlier the same
+  session. All five are pure `src/lib/*.ts` modules (same "no Dexie,
+  unit-testable" convention as `progressReport.ts`/`errorMix.ts`) fed by a
+  thin `repository.ts` fetcher, following the exact existing pattern:
+  - **Self-rating check** (`selfRatingCalibration.ts`) — global pass-rate
+    comparison, self-rated activity types vs. objectively-graded ones.
+  - **Skill coverage** (`skillCoverage.ts`) — of recognition-proficient
+    words, share also production/pitch/word-listening proficient. New
+    `getProficientRecognitionVocabularyItemIds` (reading_retrieval/cloze
+    only, excluding reading_production — a separate rung).
+  - **FSRS confidence** (`fsrsConfidence.ts`) — live retrievability
+    snapshot. New `scheduling.ts#predictRetrievability` wraps ts-fsrs's
+    own `get_retrievability` (never reimplement the forgetting curve).
+    True predicted-vs-actual calibration and a desired-retention knob were
+    scoped out — both need per-review logging that doesn't exist yet;
+    left as an explicit ROADMAP follow-up rather than rushed.
+  - **Step usefulness** (`stepUsefulness.ts`) — `PlannerSession.steps`
+    flattened across a 56-day window, grouped by `targetKind`, sorted by
+    skip rate.
+  - **What's stuck** (`repository.ts#getGateFunnelSnapshot`, no pure lib
+    module — mostly Dexie-side counting) — a standing version of the
+    one-off Node script used earlier the same session to diagnose the
+    皆/元気 gating bugs: sentences blocked on specifically one named
+    requirement, not a general readiness count.
+  Caught one real bug before it reached anything except a test: a
+  `review`-state `StudyItem` fixture with no `lastReview` set crashed
+  ts-fsrs's `get_retrievability` (`FSRSValidationError: Invalid date`) —
+  guarded in `getFsrsConfidenceSnapshot` (every item `scheduleReview` has
+  ever touched has `lastReview` set; the guard is for legacy/malformed
+  rows, not a "can't happen" case, since a real test fixture had it).
+  Browser-verified against the Vite dev server (seeded real data via a
+  dynamic `import('/src/db/repository.ts')` in-page, the same
+  fixture-free-seeding technique used 2026-09-14) — all 5 panels render
+  correctly empty and with real numbers, zero console errors. 10 new
+  repository-integration tests (`tests/progressPanels.test.ts`) + 13 new
+  pure-function unit tests across 4 new test files; full suite green
+  (1482 tests).
+
 - **2026-09-16 — Skill-graph pass 2: word_listening/listening/contrastive
   un-blended from pitch, plus a starvation-bug preempt on the two new
   pitch gates from pass 1.** Same-day follow-up to the split below, after

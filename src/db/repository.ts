@@ -126,8 +126,20 @@ import {
   isSentenceReadyForFullReview,
   isVocabularyItemIntroduced,
   isVocabularyItemProficient,
+  predictRetrievability,
   scheduleReview,
 } from '../lib/scheduling';
+import {
+  buildFsrsConfidenceSnapshot,
+  type FsrsConfidenceSnapshot,
+} from '../lib/fsrsConfidence';
+import {
+  buildSelfRatingCalibration,
+  type CalibrationReviewInput,
+  type SelfRatingCalibration,
+} from '../lib/selfRatingCalibration';
+import { buildSkillCoverage, type SkillCoverage } from '../lib/skillCoverage';
+import { buildStepUsefulness, type StepUsefulnessReport } from '../lib/stepUsefulness';
 import {
   parseShadowingPackage,
   type ShadowingImportPreview,
@@ -3301,6 +3313,210 @@ export async function getBlindSpots(): Promise<BlindSpots> {
   });
 }
 
+/**
+ * "Self-rating check" (2026-09-16, docs/ROADMAP.md "Self-rating
+ * calibration"). Read-only; every `Review` row already carries
+ * `activityType`/`rating`, so this only fetches — see
+ * `buildSelfRatingCalibration` for the actual comparison.
+ */
+export async function getSelfRatingCalibration(): Promise<SelfRatingCalibration> {
+  const db = getDb();
+  const [reviews, studyItems] = await Promise.all([db.reviews.toArray(), db.studyItems.toArray()]);
+  const activityTypeByStudyItemId = new Map(
+    studyItems.map((item) => [item.id, item.activityType]),
+  );
+  const calibrationReviews: CalibrationReviewInput[] = [];
+  for (const review of reviews) {
+    const activityType = activityTypeByStudyItemId.get(review.studyItemId);
+    if (activityType) calibrationReviews.push({ activityType, rating: review.rating });
+  }
+  return buildSelfRatingCalibration(calibrationReviews);
+}
+
+/**
+ * "Skill coverage" (2026-09-16, docs/ROADMAP.md "Skill-imbalance metric").
+ * Denominator is every vocabulary item recognition-proficient
+ * (`reading_retrieval`/`cloze`); numerators are the subset also proficient
+ * on production, pitch, and word-listening (at least one occurrence).
+ */
+export async function getSkillCoverage(): Promise<SkillCoverage> {
+  const db = getDb();
+  const vocabularyItems = await db.vocabularyItems.toArray();
+  const allIds = vocabularyItems.map((item) => item.id);
+  const [recognizedIds, productionProficientIds, pitchProficientIds, wordListeningItems] =
+    await Promise.all([
+      getProficientRecognitionVocabularyItemIds(allIds).then((set) => [...set]),
+      filterVocabularyItemIdsByActivity(allIds, ['reading_production'], isVocabularyItemProficient),
+      getProficientPitchAccentVocabularyItemIds(allIds),
+      db.studyItems.where('activityType').equals('word_listening').toArray(),
+    ]);
+  const proficientLinkIds = new Set(
+    wordListeningItems
+      .filter((item) => isVocabularyItemProficient(item.fsrsState.state))
+      .map((item) => item.subjectId),
+  );
+  const heardProficientIds = new Set<string>();
+  if (proficientLinkIds.size > 0) {
+    const links = await db.sentenceVocabulary
+      .where('id')
+      .anyOf([...proficientLinkIds])
+      .toArray();
+    for (const link of links) heardProficientIds.add(link.vocabularyItemId);
+  }
+  return buildSkillCoverage({
+    recognizedIds,
+    productionProficientIds,
+    pitchProficientIds,
+    heardProficientIds,
+  });
+}
+
+/**
+ * "FSRS confidence snapshot" (2026-09-16, docs/ROADMAP.md "FSRS
+ * calibration surfacing"). Every non-`new` study item's current predicted
+ * retrievability (`predictRetrievability`), bucketed — see
+ * `fsrsConfidence.ts` for why this is a live snapshot, not a
+ * predicted-vs-actual validation.
+ */
+export async function getFsrsConfidenceSnapshot(options: { now?: Date } = {}): Promise<FsrsConfidenceSnapshot> {
+  const now = options.now ?? new Date();
+  const studyItems = await getDb().studyItems.toArray();
+  const retrievabilities = studyItems
+    // Every item scheduleReview has ever touched has lastReview set — this
+    // guards against legacy/malformed rows where it's missing despite a
+    // non-'new' state, which ts-fsrs's get_retrievability throws on rather
+    // than tolerates.
+    .filter((item) => item.fsrsState.state !== 'new' && item.fsrsState.lastReview)
+    .map((item) => predictRetrievability(item.fsrsState, now));
+  return buildFsrsConfidenceSnapshot(retrievabilities);
+}
+
+/**
+ * "Step usefulness" (2026-09-16, docs/ROADMAP.md). Flattens every
+ * `PlannerSession.steps` created in the last `windowDays` (tagged with the
+ * owning session's `date`), grouped by `targetKind` — see
+ * `buildStepUsefulness` for the completed/skipped rollup.
+ */
+export async function getStepUsefulness(
+  options: { windowDays?: number; now?: Date } = {},
+): Promise<StepUsefulnessReport> {
+  const windowDays = options.windowDays ?? 56;
+  const now = options.now ?? new Date();
+  const cutoff = localDateKey(new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000));
+  const sessions = await getDb().plannerSessions.where('date').aboveOrEqual(cutoff).toArray();
+  const steps = sessions.flatMap((session) =>
+    session.steps.map((step) => ({ targetKind: step.targetKind, status: step.status })),
+  );
+  return buildStepUsefulness(steps, windowDays);
+}
+
+export interface GateFunnelSnapshot {
+  hasData: boolean;
+  /** Confirmed sentences whose linked words haven't all been reviewed once yet — the continue_book backlog. */
+  continueBookBlocked: number;
+  /** In-progress, audio-bearing, reading-proficient sentences blocked from shadowing only by the pitch requirement. */
+  shadowBlockedOnPitch: number;
+  /** Audio-bearing sentences with every word_listening occurrence proficient, blocked from the sentence `listening` card only by the pitch requirement. */
+  listeningBlockedOnPitch: number;
+}
+
+/**
+ * "What's stuck, and on what" (2026-09-16 discussion — a standing version
+ * of the one-off Supabase script used earlier the same day to diagnose why
+ * 皆 in "皆さん元気ですか" was surfacing for Analyze). Each count is
+ * sentences that clear every *other* dimension of a gate and are blocked
+ * on specifically the one named — not a general "how many sentences are
+ * ready" count, which the planner's own candidate lists already cover.
+ */
+export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
+  const db = getDb();
+  const [analyses, audioRows, bookSentences] = await Promise.all([
+    db.analyses.toArray(),
+    db.sentenceAudio.toArray(),
+    db.bookSentences.toArray(),
+  ]);
+
+  // --- continue_book: confirmed but not yet reading-introduced ----------
+  const confirmedSentenceIds = analyses
+    .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+    .map((analysis) => analysis.sentenceId);
+  const introducedReadiness = await getSentenceReadingIntroducedReadiness(confirmedSentenceIds);
+  const continueBookBlocked = confirmedSentenceIds.filter(
+    (id) => introducedReadiness.get(id) === false,
+  ).length;
+
+  // --- shadow / listening: in-progress or audio-bearing sentences -------
+  const inProgressSentenceIds = new Set(
+    bookSentences.filter((row) => row.status === 'in_progress').map((row) => row.sentenceId),
+  );
+  const audioSentenceIds = [...new Set(audioRows.map((row) => row.sentenceId))];
+  const analysisBySentenceId = new Map(analyses.map((a) => [a.sentenceId, a]));
+
+  const shadowCandidateIds = audioSentenceIds.filter(
+    (id) =>
+      inProgressSentenceIds.has(id) && analysisBySentenceId.get(id)?.vocabularyReviewStatus === 'confirmed',
+  );
+  const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(
+    audioSentenceIds,
+  );
+  const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
+  const [readingProficientIds, pitchProficientIds, vocabularyItems] = await Promise.all([
+    getProficientReadingVocabularyItemIds(allVocabularyItemIds),
+    getProficientPitchAccentVocabularyItemIds(allVocabularyItemIds),
+    db.vocabularyItems.bulkGet(allVocabularyItemIds),
+  ]);
+  const pitchEligibleIds = new Set(
+    vocabularyItems
+      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
+      .map((item) => item.id),
+  );
+  const isPitchSatisfied = (id: string) => !pitchEligibleIds.has(id) || pitchProficientIds.has(id);
+
+  const shadowBlockedOnPitch = shadowCandidateIds.filter((sentenceId) => {
+    const ids = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
+    const readingOk = ids.every((id) => readingProficientIds.has(id));
+    const pitchOk = ids.every(isPitchSatisfied);
+    return readingOk && !pitchOk;
+  }).length;
+
+  const wordListeningItems = await db.studyItems
+    .where('activityType')
+    .equals('word_listening')
+    .toArray();
+  const proficientLinkIds = new Set(
+    wordListeningItems
+      .filter((item) => isVocabularyItemProficient(item.fsrsState.state))
+      .map((item) => item.subjectId),
+  );
+  const links = (await db.sentenceVocabulary.where('sentenceId').anyOf(audioSentenceIds).toArray()).filter(
+    (link) => !!link.surfaceForm,
+  );
+  const linkIdsBySentence = new Map<string, string[]>();
+  const wordIdsBySentence = new Map<string, string[]>();
+  for (const link of links) {
+    linkIdsBySentence.set(link.sentenceId, [...(linkIdsBySentence.get(link.sentenceId) ?? []), link.id]);
+    wordIdsBySentence.set(link.sentenceId, [
+      ...(wordIdsBySentence.get(link.sentenceId) ?? []),
+      link.vocabularyItemId,
+    ]);
+  }
+  const listeningBlockedOnPitch = audioSentenceIds.filter((sentenceId) => {
+    const linkIds = linkIdsBySentence.get(sentenceId) ?? [];
+    const wordIds = wordIdsBySentence.get(sentenceId) ?? [];
+    if (linkIds.length === 0) return false;
+    const wordListeningOk = linkIds.every((id) => proficientLinkIds.has(id));
+    const pitchOk = wordIds.every(isPitchSatisfied);
+    return wordListeningOk && !pitchOk;
+  }).length;
+
+  return {
+    hasData: confirmedSentenceIds.length > 0 || audioSentenceIds.length > 0,
+    continueBookBlocked,
+    shadowBlockedOnPitch,
+    listeningBlockedOnPitch,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // FSRS-scheduled review (docs/UNIFIED_APP_ARCHITECTURE.md §10, Phase 4).
 // study_items are created lazily the first time a subject is encountered in
@@ -3423,6 +3639,9 @@ const VOCABULARY_RECALL_ACTIVITY_TYPES: StudyActivityType[] = [
   'reading_production',
 ];
 
+/** Recognition only (see a word, recall its reading/meaning) — excludes `reading_production`, a separate "produce it" skill per the 2026-09-16 skill-graph discussion. Used by getSkillCoverage's "recognized" denominator. */
+const RECOGNITION_ACTIVITY_TYPES: StudyActivityType[] = ['reading_retrieval', 'cloze'];
+
 const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
 
 /**
@@ -3486,6 +3705,38 @@ export async function getProficientReadingVocabularyItemIds(
   return filterVocabularyItemIdsByActivity(
     vocabularyItemIds,
     VOCABULARY_RECALL_ACTIVITY_TYPES,
+    isVocabularyItemProficient,
+  );
+}
+
+/**
+ * Recognition-only proficiency (`reading_retrieval`/`cloze`) — narrower
+ * than getProficientReadingVocabularyItemIds, which also counts
+ * `reading_production`. Feeds getSkillCoverage's "recognized" denominator,
+ * where recognition and production are deliberately two different rungs,
+ * not one blended "reading" bucket.
+ */
+export async function getProficientRecognitionVocabularyItemIds(
+  vocabularyItemIds: string[],
+): Promise<Set<string>> {
+  return filterVocabularyItemIdsByActivity(
+    vocabularyItemIds,
+    RECOGNITION_ACTIVITY_TYPES,
+    isVocabularyItemProficient,
+  );
+}
+
+/**
+ * Pitch-accent proficiency, exported standalone (the two gate functions
+ * below compute this inline) for getSkillCoverage and getGateFunnelSnapshot
+ * to reuse without duplicating the query.
+ */
+export async function getProficientPitchAccentVocabularyItemIds(
+  vocabularyItemIds: string[],
+): Promise<Set<string>> {
+  return filterVocabularyItemIdsByActivity(
+    vocabularyItemIds,
+    PITCH_ACCENT_ACTIVITY_TYPES,
     isVocabularyItemProficient,
   );
 }
