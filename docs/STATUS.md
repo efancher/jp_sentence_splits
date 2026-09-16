@@ -33,6 +33,29 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-16 — `continue_book` (Analyze) steps no longer wait on vocab
+  FSRS proficiency** (user report: "haven't been getting many sentences
+  in my daily session for analyzing"). `buildExploreSteps`
+  (`sessionPlanner.ts`) used to withhold a sentence's `continue_book` step
+  until *every* confirmed vocabulary item had independently reached FSRS
+  `review`/`relearning` (`isSentenceReadyForFullReview`) — a rule meant
+  for full-sentence *review* cards (don't test recall of an unproven
+  word), reused here even though structural analysis/grammar-noticing
+  isn't a recall test. With several books mid-read and vocab flowing in
+  continuously, most frontier sentences sat "confirmed but still
+  learning" indefinitely, producing no glossing step at all
+  (spot-checked against prod: 4 active books' next ~20 unstarted
+  sentences each — 68/75 stuck in that limbo, only 6 actually
+  analyze-eligible, one book at 0/15). `continue_book` is now eligible as
+  soon as `vocabularyReviewStatus === 'confirmed'`, matching the
+  `vocabulary_review`-then-`continue_book` ordering rule that already
+  existed; the unused `ExploreCandidate.sentences[].vocabularyReady`
+  field and its batched `getSentenceFullReviewReadiness` lookup in
+  `findExploreCandidates` (`repository.ts`) were removed along with it.
+  Full-sentence review cards are untouched — they still gate on
+  `isSentenceReadyForFullReview` directly. `tests/sessionPlanner.test.ts`
+  updated for the new behavior; full suite green.
+
 - **2026-09-16 — "Imported" badge now finds pre-series-model episodes
   too** (user report: two already-imported `nihongoconteppei.com`
   episodes showed no mark in the podcast picker). Root cause: both were

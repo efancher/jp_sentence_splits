@@ -270,17 +270,20 @@ rather than one step bundling a whole book's worth of new sentences into a
 single "N new sentences" line (follow-up, 2026-08-22). The two are no
 longer always paired in the same pass (vocabulary-first reorder, user
 request, 2026-08-27): a not-yet-confirmed sentence gets only
-`vocabulary_review`; `continue_book` is withheld until the sentence's
-vocabulary is both confirmed (`SentenceAnalysis.vocabularyReviewStatus`)
-*and* every linked vocabulary item has itself reached FSRS proficiency
-(`buildExploreSteps`'s `vocabularyReady`, reusing the same
-`isSentenceReadyForFullReview` rule that gates full-sentence review cards,
-§4) — so structural analysis/grammar glossing never surfaces before the
-learner has actually demonstrated recall of the sentence's words, typically
-landing a day or more after the vocabulary step once a review cycle has
-passed. A sentence whose vocabulary is confirmed but not yet proficient
-gets no glossing step at all that pass; the planner moves on to the next
-sentence rather than blocking the book on it. Within the glossing bucket,
+`vocabulary_review`; `continue_book` becomes eligible as soon as the
+sentence's vocabulary is confirmed
+(`SentenceAnalysis.vocabularyReviewStatus === 'confirmed'`) — so structural
+analysis/grammar-noticing never surfaces before the learner has at least
+looked at the sentence's words. `continue_book` used to also wait on every
+linked vocabulary item independently reaching FSRS proficiency (reusing
+`isSentenceReadyForFullReview`, §4, the same gate full-sentence review
+cards use), but that reuse was a bug, not a deliberate rule: on a corpus
+with several books mid-read, most frontier sentences sat "confirmed but
+still learning" indefinitely, starving the glossing bucket's `continue_book`
+supply to near zero (user report, 2026-09-16 — see docs/STATUS.md). Fixed
+by dropping the proficiency wait for `continue_book` specifically; full-
+sentence review cards still gate on `isSentenceReadyForFullReview` directly,
+unchanged. Within the glossing bucket,
 vocabulary confirmations get first claim on the minutes (user request,
 2026-08-29): `buildExploreSteps` runs two passes — pass 1 spends up to
 `VOCAB_CONFIRM_MIN_GLOSSING_SHARE` (0.6) of the bucket on `vocabulary_review`

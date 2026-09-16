@@ -6109,10 +6109,6 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
-        // Patched below, once readiness is known for every candidate
-        // sentence at once (batched, not N+1) — see buildExploreSteps for
-        // why continue_book waits on this rather than just confirmation.
-        vocabularyReady: false,
       })),
     });
   }
@@ -6121,7 +6117,7 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
   // so recency order is preserved within each group. Done before the slice
   // so a slightly-less-recent book with a confirmation backlog isn't dropped
   // in favour of a more-recent book that's already caught up.
-  const limited = candidates
+  return candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
       const rank = (c: ExploreCandidate) =>
@@ -6130,15 +6126,6 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
     })
     .slice(0, limit)
     .map((entry) => entry.candidate);
-  const readiness = await getSentenceFullReviewReadiness(
-    limited.flatMap((candidate) => candidate.sentences.map((sentence) => sentence.sentenceId)),
-  );
-  for (const candidate of limited) {
-    for (const sentence of candidate.sentences) {
-      sentence.vocabularyReady = readiness.get(sentence.sentenceId) ?? false;
-    }
-  }
-  return limited;
 }
 
 /**

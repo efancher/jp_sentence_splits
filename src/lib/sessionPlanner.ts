@@ -358,8 +358,6 @@ export interface ExploreCandidate {
     sentenceId: string;
     preview: string;
     vocabularyConfirmed: boolean;
-    /** Every reviewable vocabulary item confirmed for this sentence has itself reached FSRS proficiency (review/relearning), per isSentenceReadyForFullReview — see buildExploreSteps. */
-    vocabularyReady: boolean;
   }[];
 }
 
@@ -540,18 +538,16 @@ interface ExploreSentenceEntry {
   sentence: ExploreCandidate['sentences'][number];
 }
 
-/** Classifies every candidate sentence into the one glossing step it's eligible for right now (or none), preserving book-then-position reading order. */
+/** Classifies every candidate sentence into the one glossing step it's eligible for right now, preserving book-then-position reading order. */
 function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSentenceEntry[] {
   const entries: ExploreSentenceEntry[] = [];
   for (const candidate of candidates) {
     for (const sentence of candidate.sentences) {
-      if (!sentence.vocabularyConfirmed) {
-        entries.push({ kind: 'vocabulary', candidate, sentence });
-      } else if (sentence.vocabularyReady) {
-        entries.push({ kind: 'analyze', candidate, sentence });
-      }
-      // confirmed-but-not-proficient: no step this pass — its words mature
-      // via the review bucket; move on rather than block the book.
+      entries.push(
+        sentence.vocabularyConfirmed
+          ? { kind: 'analyze', candidate, sentence }
+          : { kind: 'vocabulary', candidate, sentence },
+      );
     }
   }
   return entries;
@@ -602,11 +598,14 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
  *    English glosses per chunk) in the same pass (2026-08-27) — otherwise
  *    the learner sees a sentence's grammar/meaning glossed before they've
  *    even looked at its words. Once vocabulary is confirmed, `continue_book`
- *    stays withheld further still until every one of the sentence's
- *    vocabulary items has itself reached FSRS proficiency (`vocabularyReady`,
- *    reusing the same `isSentenceReadyForFullReview` rule that gates full-
- *    sentence review cards) — confirming a word isn't the same as having
- *    demonstrated recall of it.
+ *    is immediately eligible — unlike full-sentence *review* cards
+ *    (`isSentenceReadyForFullReview`), structural analysis and
+ *    grammar-noticing aren't testing recall, so they don't need every word
+ *    to have already proven itself in the SRS first (that gate used to sit
+ *    here too, but on a corpus with several books mid-read it left the
+ *    `continue_book` supply near zero most days — nearly every sentence's
+ *    vocab was confirmed-but-still-learning, never advancing enough for
+ *    Analyze to come up in the daily session — 2026-09-16).
  *
  * 2. Vocabulary confirmations get first claim on the glossing budget
  *    (2026-08-29): pass 1 spends up to VOCAB_CONFIRM_MIN_GLOSSING_SHARE of
