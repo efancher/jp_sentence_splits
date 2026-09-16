@@ -75,27 +75,15 @@ Requires root or the tailscale operator
 `funnel` — tailnet-only, matching this whole app ecosystem's privacy
 posture.
 
-### Alignment backfill credentials (optional)
+### Alignment backfill (`POST /alignment-backfill/jobs`)
 
-`POST /alignment-backfill/jobs` (the "Precompute word audio alignment"
-button on a book's detail page) shells out to
-`scripts/backfill-reference-alignment.ts`, which needs an authed Supabase
-session the same way the other maintenance scripts do. The service's env
-doesn't carry those creds by default — create
-`~/.config/youtube-mining-alignment-backfill.env` (referenced by the unit's
-`EnvironmentFile=-...`, so it's fine to skip this if you don't need the
-feature):
-
-```
-SCRIPT_SUPABASE_EMAIL=you@example.com
-SCRIPT_SUPABASE_PASSWORD=...
-VITE_SUPABASE_URL=https://....supabase.co
-VITE_SUPABASE_ANON_KEY=...
-```
-
-then `systemctl --user restart youtube-mining-api`. Without this file the
-rest of the service works fine; that one endpoint just fails until it's
-added.
+The "Precompute word audio alignment" button on a book's detail page shells
+out to `scripts/backfill-reference-alignment.ts` (`app/alignment_backfill.py`)
+with `cwd` set to the repo root, so it needs no extra credential setup here:
+`tsx` auto-loads that root's `.env` (the same file the CLI maintenance
+scripts already require — `SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD`/
+`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`), independent of whatever env
+vars the systemd unit itself carries.
 
 ### `/status` resource page
 
