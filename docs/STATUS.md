@@ -33,6 +33,50 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-16 — Skill-graph pass 2: word_listening/listening/contrastive
+  un-blended from pitch, plus a starvation-bug preempt on the two new
+  pitch gates from pass 1.** Same-day follow-up to the split below, after
+  mapping the full card-type → skill dependency graph with the user
+  (docs/AI_OVERVIEW.md's glossing/listening sections). Three fixes:
+  - New `getProficientReadingVocabularyItemIds` (`repository.ts`, reuses
+    the `filterVocabularyItemIdsByActivity` helper from pass 1). `word_listening`'s
+    tier-1 gate and the `contrastive` (confusion pair) gate in
+    `ReviewPage.tsx` both already documented their `GateContext.proficientVocabularyItemIds`
+    field as meaning "the word's reading proficiency" — they were just
+    getting it from the blended `getProficientVocabularyItemIds`, so a
+    word with only `pitch_accent` reps could satisfy either gate. Swapped
+    to the new function; both gates now mean what they already claimed to.
+  - `getSentenceListeningReadiness` (the `listening` card's tier-2 gate)
+    now also requires every dictionary-pitch-eligible underlying word's
+    `pitch_accent` card to be proficient, alongside the existing
+    `word_listening`-proficiency requirement — pitch perception and
+    word-level listening are two different skills that both support
+    sentence-level listening (user framing), not one blended signal.
+  - Caught before shipping, not after a report this time: both this new
+    pitch requirement and `getSentenceShadowingReadiness`'s pitch
+    requirement (pass 1, same day) would otherwise `.every()`-block a
+    sentence forever if any linked word has no dictionary pitch data
+    (`VocabularyItem.pitchAccentPositions` empty) — such a word can never
+    seed a `pitch_accent` card, so it's now exempt from the pitch
+    dimension entirely rather than gating on something structurally
+    unreachable. Exact shape of the starvation bug `continue_book`'s
+    FSRS-proficiency gate hit earlier the same day (see below) — this
+    time found by inspection while writing the docstring, not by a user
+    report.
+  - `tests/data.test.ts` (`getSentenceListeningReadiness` describe block:
+    3 new cases for the pitch dimension + the no-dictionary-data
+    exemption) and `tests/sessionPlannerRepository.test.ts` (1 new case
+    for the shadowing exemption; 1 existing case's fixture updated to set
+    `pitchAccentPositions` since it now needs to be pitch-eligible to test
+    what it claims) updated; full suite green (1459 tests).
+  - Deferred, discussed but explicitly not built this pass (still
+    "sitting on it," user's words): a free-composition/"writing" skill
+    node (given an intent, produce Japanese from scratch — `reading_production`
+    only tests reading-back a word already placed in a sentence, a much
+    narrower skill) and a context-aware 4-option comprehension check for
+    `reading_in_context`/`listening` (add an objective signal to what's
+    currently pure self-rating) — see docs/ROADMAP.md.
+
 - **2026-09-16 — Split the blended vocabulary-proficiency signal:
   `continue_book` gates on reading/meaning "introduced," shadowing gates
   on reading/meaning *and* pitch proficiency, separately** (user report:

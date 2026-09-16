@@ -3469,6 +3469,28 @@ export async function getIntroducedReadingVocabularyItemIds(
 }
 
 /**
+ * The subset of `vocabularyItemIds` that have at least one reading/meaning
+ * study item at FSRS proficiency (review/relearning) — `pitch_accent` reps
+ * on the same subject don't count. This is what `word_listening`'s tier-1
+ * gate and the `contrastive` (confusion pair) gate in ReviewPage already
+ * document their `proficientVocabularyItemIds`/`GateContext` field as
+ * meaning ("the word's reading proficiency"); before 2026-09-16 they got it
+ * from the blended `getProficientVocabularyItemIds` instead, so a word with
+ * only `pitch_accent` reps could satisfy a gate meant to test reading
+ * recall. See getSentenceShadowingReadiness for the same split applied to
+ * shadowing.
+ */
+export async function getProficientReadingVocabularyItemIds(
+  vocabularyItemIds: string[],
+): Promise<Set<string>> {
+  return filterVocabularyItemIdsByActivity(
+    vocabularyItemIds,
+    VOCABULARY_RECALL_ACTIVITY_TYPES,
+    isVocabularyItemProficient,
+  );
+}
+
+/**
  * `continue_book` readiness (2026-09-16), the "has each word at least been
  * reviewed once" half — paired with `vocabularyConfirmed` in
  * classifyExploreSentences (sessionPlanner.ts). A sentence with zero
@@ -3504,7 +3526,12 @@ export async function getSentenceReadingIntroducedReadiness(
  * word's pitch_accent reps no longer stand in for having recalled its
  * reading, and vice versa (user report, 2026-09-16: a word with only
  * pitch_accent reps was passing as "known" for gates that meant reading
- * recall).
+ * recall). A word with no dictionary pitch data (`VocabularyItem.
+ * pitchAccentPositions` empty — the same field `pitch_accent`'s own
+ * eligibility rule keys on) can never seed a `pitch_accent` card, so it's
+ * exempt from the pitch requirement rather than blocking the sentence
+ * forever — the same starvation shape `continue_book`'s FSRS-proficiency
+ * gate hit before (docs/STATUS.md 2026-09-16), checked for up front here.
  */
 export async function getSentenceShadowingReadiness(
   sentenceIds: string[],
@@ -3514,7 +3541,7 @@ export async function getSentenceShadowingReadiness(
   const db = getDb();
   const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
   const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [readingProficientIds, pitchProficientIds, analyses] = await Promise.all([
+  const [readingProficientIds, pitchProficientIds, analyses, vocabularyItems] = await Promise.all([
     filterVocabularyItemIdsByActivity(
       allVocabularyItemIds,
       VOCABULARY_RECALL_ACTIVITY_TYPES,
@@ -3526,11 +3553,17 @@ export async function getSentenceShadowingReadiness(
       isVocabularyItemProficient,
     ),
     db.analyses.bulkGet(sentenceIds),
+    db.vocabularyItems.bulkGet(allVocabularyItemIds),
   ]);
   const analysesBySentenceId = new Map(
     analyses
       .filter((item): item is SentenceAnalysis => Boolean(item))
       .map((item) => [item.sentenceId, item]),
+  );
+  const pitchEligibleVocabularyItemIds = new Set(
+    vocabularyItems
+      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
+      .map((item) => item.id),
   );
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
@@ -3539,7 +3572,9 @@ export async function getSentenceShadowingReadiness(
       sentenceId,
       vocabularyReviewStatus === 'confirmed' &&
         vocabularyItemIds.every((id) => readingProficientIds.has(id)) &&
-        vocabularyItemIds.every((id) => pitchProficientIds.has(id)),
+        vocabularyItemIds.every(
+          (id) => !pitchEligibleVocabularyItemIds.has(id) || pitchProficientIds.has(id),
+        ),
     );
   }
   return readiness;
@@ -3638,7 +3673,19 @@ export async function getBookGrammarProgress(bookId: string): Promise<{
  * every one of its surface-form vocabulary occurrences has a `word_listening`
  * study item that has itself reached FSRS proficiency — the learner has
  * shown they can hear each word in isolation before being asked to parse
- * the whole clip. A missing `word_listening` item counts as not-ready
+ * the whole clip — *and*, separately (pitch requirement added 2026-09-16,
+ * per user framing: pitch detection and word-level listening both support
+ * sentence-level listening), every underlying word that's dictionary-pitch-
+ * eligible (`VocabularyItem.pitchAccentPositions` non-empty — the same
+ * field `pitch_accent`'s own eligibility rule keys on; the recording-side
+ * half of that rule is already covered by this function's own
+ * `audioSentenceIds` scoping) has a `pitch_accent` study item that's also
+ * reached proficiency. A word with no dictionary pitch data at all could
+ * never seed a `pitch_accent` card, so it's exempt on that dimension rather
+ * than blocking the sentence forever — the exact starvation shape
+ * `continue_book`'s FSRS-proficiency gate hit before (see docs/STATUS.md
+ * 2026-09-16), so checked for up front here instead of discovered later. A
+ * missing `word_listening` item counts as not-ready on its own dimension
  * (mirrors isSentenceReadyForFullReview treating 'unreviewed' as gating).
  * Only sentences with a SentenceAudio row matter; one with audio but no
  * surface-form vocabulary has nothing to gate on and is ready.
@@ -3658,7 +3705,8 @@ export async function getSentenceListeningReadiness(
     await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
   ).filter((link) => !!link.surfaceForm && audioSentenceIds.has(link.sentenceId));
   const linkIdSet = new Set(links.map((link) => link.id));
-  const proficientLinkIds = new Set(
+  const vocabularyItemIds = [...new Set(links.map((link) => link.vocabularyItemId))];
+  const [proficientLinkIds, pitchProficientVocabularyItemIds, vocabularyItems] = await Promise.all([
     linkIdSet.size
       ? (await db.studyItems.where('activityType').equals('word_listening').toArray())
           .filter(
@@ -3669,18 +3717,39 @@ export async function getSentenceListeningReadiness(
           )
           .map((item) => item.subjectId)
       : [],
+    filterVocabularyItemIdsByActivity(
+      vocabularyItemIds,
+      PITCH_ACCENT_ACTIVITY_TYPES,
+      isVocabularyItemProficient,
+    ),
+    db.vocabularyItems.bulkGet(vocabularyItemIds),
+  ]);
+  const proficientLinkIdSet = new Set(proficientLinkIds);
+  const pitchEligibleVocabularyItemIds = new Set(
+    vocabularyItems
+      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
+      .map((item) => item.id),
   );
   const linkIdsBySentence = new Map<string, string[]>();
+  const vocabularyItemIdsBySentence = new Map<string, string[]>();
   for (const link of links) {
-    const arr = linkIdsBySentence.get(link.sentenceId) ?? [];
-    arr.push(link.id);
-    linkIdsBySentence.set(link.sentenceId, arr);
+    const linkArr = linkIdsBySentence.get(link.sentenceId) ?? [];
+    linkArr.push(link.id);
+    linkIdsBySentence.set(link.sentenceId, linkArr);
+    const wordArr = vocabularyItemIdsBySentence.get(link.sentenceId) ?? [];
+    wordArr.push(link.vocabularyItemId);
+    vocabularyItemIdsBySentence.set(link.sentenceId, wordArr);
   }
   for (const sentenceId of sentenceIds) {
-    const ids = linkIdsBySentence.get(sentenceId) ?? [];
+    const linkIds = linkIdsBySentence.get(sentenceId) ?? [];
+    const wordIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
     readiness.set(
       sentenceId,
-      ids.every((id) => proficientLinkIds.has(id)),
+      linkIds.every((id) => proficientLinkIdSet.has(id)) &&
+        wordIds.every(
+          (id) =>
+            !pitchEligibleVocabularyItemIds.has(id) || pitchProficientVocabularyItemIds.has(id),
+        ),
     );
   }
   return readiness;

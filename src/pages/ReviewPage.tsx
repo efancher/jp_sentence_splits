@@ -26,7 +26,7 @@ import {
   getReferencePitchTrack,
   loadSuspendedBookIndex,
   saveReferencePitchTrack,
-  getProficientVocabularyItemIds,
+  getProficientReadingVocabularyItemIds,
   getSentenceFullReviewReadiness,
   getSentenceListeningReadiness,
   getVocabularyOccurrenceCandidates,
@@ -148,11 +148,15 @@ const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
  * sentence is played, then shown with the target word blanked (+ its
  * translation) for the learner to recall from sound + context — see
  * WordListeningCard. A two-tier listening ladder: these are gated behind the
- * word's own reading proficiency (tier 1, ActivityDescriptor.isReady →
- * getProficientVocabularyItemIds), and in turn the full-sentence `listening`
- * card is gated behind *these* (tier 2, getSentenceListeningReadiness) — so
- * the learner has parsed every content word inside its clause before being
- * asked to parse the whole clip cold.
+ * word's own reading/meaning proficiency (tier 1, ActivityDescriptor.isReady
+ * → getProficientReadingVocabularyItemIds — scoped to reading_retrieval/
+ * cloze/reading_production specifically since 2026-09-16; `pitch_accent`
+ * reps on the same subject don't count here), and in turn the full-sentence
+ * `listening` card is gated behind *these* plus its own separate
+ * `pitch_accent`-proficiency requirement (tier 2,
+ * getSentenceListeningReadiness) — so the learner has parsed every content
+ * word inside its clause, by both reading and ear, before being asked to
+ * parse the whole clip cold.
  */
 const WORD_LISTENING_ACTIVITY_TYPES: StudyActivityType[] = ['word_listening'];
 
@@ -624,7 +628,7 @@ interface ActivityDescriptor {
 
 /** Shared inputs for ActivityDescriptor.isReady, built once per queue build. */
 interface GateContext {
-  /** Vocabulary item ids (in scope) whose reading has reached FSRS proficiency. */
+  /** Vocabulary item ids (in scope) whose reading/meaning study item(s) have reached FSRS proficiency — pitch_accent reps on the same subject don't count (getProficientReadingVocabularyItemIds). */
   proficientVocabularyItemIds: Set<string>;
   /** Sentence id -> every surface-form occurrence has a proficient `word_listening` item. */
   listeningReadiness: Map<string, boolean>;
@@ -1219,7 +1223,7 @@ export function ReviewPage() {
       // no defer pass of their own — the isGatedOut filter below keeps them out
       // of the queue and the pending-seed pool.
       const gateContext: GateContext = {
-        proficientVocabularyItemIds: await getProficientVocabularyItemIds([
+        proficientVocabularyItemIds: await getProficientReadingVocabularyItemIds([
           ...new Set([
             ...scope.wordListeningCandidates.map((candidate) => candidate.vocabularyItem.id),
             // Contrastive pair members are gated on their own reading

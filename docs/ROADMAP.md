@@ -809,6 +809,49 @@ possibilities, kept here so the thinking isn't lost:
   `seededShuffle`s its list. (2026-09-11 shipped the sibling feature for
   `pitch_accent` SRS misses, same UI slot — see Done. This item is still
   open for shadowing-specifically-weak words.)
+- [ ] **Free-composition ("writing") skill node** (2026-09-16 discussion,
+  card-type/skill graph mapping). `reading_production` only tests
+  decode→encode of a word already placed in a sentence (type its reading);
+  the user's actual "writing" goal is a level up — given an intent (an
+  English prompt, or "how would you say X"), produce Japanese words *and*
+  grammar from scratch. Nothing today tests that; it would sit above
+  `reading_production`/`sentence_transformation`/`grammar_completion` as
+  the point where their outputs get used together unprompted, rather than
+  each being gated tightly by the others. Explicitly deferred — user:
+  "once I can consistently and across a good range of sentences produce
+  vocabulary in context, then I'll start looking at what else I might
+  need." Revisit once `reading_production` mastery is broad, and pin down
+  first whether "communicate what I want" means free-form text (hard to
+  auto-grade) or something more constrained (translate this prompt,
+  graded against expected structure).
+- [ ] **Context-aware comprehension check for `reading_in_context`/`listening`**
+  (2026-09-16 discussion). Both cards are currently pure self-rating — read
+  or listen, reveal, self-rate Again/Hard/Good/Easy with no objective check
+  that comprehension actually happened (`classifyReviewError` already
+  documents this as a known gap: "a bare 'again' there could mean anything").
+  Idea: reuse `reading_in_context`'s existing passage-context display (the
+  `before`-sentences block, already shown pre-reveal) and add a 4-option
+  "which English sentence best represents this sentence *in context*"
+  pick before reveal — testing whether context actually resolved an
+  ambiguity (dropped subject/pronoun referent, tense/aspect, register),
+  not just general reading. A `listening`-side equivalent (play the
+  Japanese audio, same 4-option pick) was also floated. Distractor
+  authoring: the user asked whether this could reuse the "Segment with AI
+  help" pattern (`formatTranscriptForAI`/`parseAiSegmentedTranscript` in
+  `miningTranscript.ts` — build a copy-pasteable prompt, the learner pastes
+  it into whatever external AI they already have open, pastes the reply
+  back in to parse) rather than a server-side LLM call; the recipe for
+  *good* distractors is "translate this sentence cold vs. with its
+  preceding context — the cold-reading's plausible errors are the
+  distractors," authored once per sentence and stored, not recomputed per
+  review. User flagged wanting to think further about distractor
+  *difficulty* selection specifically — if the learner is getting them
+  consistently right, the distractors may need to get harder (closer
+  near-misses) to stay useful, an adaptive-difficulty angle not yet
+  designed. Open question left unresolved: does a wrong pick override the
+  self-rating (e.g. force "again"), or just inform it (show ✓/✗ before the
+  learner rates, rating stays theirs)? Explicitly parked — user: "sitting
+  on it would be good."
 
 ## Not planned (deliberate)
 

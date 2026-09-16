@@ -2692,22 +2692,50 @@ describe('getSentenceListeningReadiness (word_listening tier-2 gate)', () => {
     });
   }
 
-  async function linkVocab(sentenceId: string, surfaceForm: string): Promise<string> {
+  async function linkVocab(
+    sentenceId: string,
+    surfaceForm: string,
+    options: { pitchEligible?: boolean } = {},
+  ): Promise<{ linkId: string; vocabularyItemId: string }> {
     const now = nowIsoForTest();
-    const id = createId('svoc');
+    const linkId = createId('svoc');
+    const vocabularyItemId = createId('vocab');
+    if (options.pitchEligible) {
+      await getDb().vocabularyItems.add({
+        id: vocabularyItemId,
+        expression: surfaceForm,
+        reading: surfaceForm,
+        meaning: 'test',
+        pitchAccentPositions: [1],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     await getDb().sentenceVocabulary.add({
-      id,
+      id: linkId,
       sentenceId,
-      vocabularyItemId: createId('vocab'),
+      vocabularyItemId,
       surfaceForm,
       createdAt: now,
       updatedAt: now,
     });
-    return id;
+    return { linkId, vocabularyItemId };
   }
 
   async function addWordListeningItem(linkId: string, state: 'new' | 'learning' | 'review') {
     const item = await ensureStudyItem('sentenceVocabulary', linkId, 'word_listening');
+    if (state !== 'new') {
+      await getDb().studyItems.update(item.id, {
+        fsrsState: { ...item.fsrsState, state },
+      });
+    }
+  }
+
+  async function addPitchAccentItem(
+    vocabularyItemId: string,
+    state: 'new' | 'learning' | 'review',
+  ) {
+    const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'pitch_accent');
     if (state !== 'new') {
       await getDb().studyItems.update(item.id, {
         fsrsState: { ...item.fsrsState, state },
@@ -2722,12 +2750,12 @@ describe('getSentenceListeningReadiness (word_listening tier-2 gate)', () => {
     expect(readiness.get('sent-1')).toBe(false);
   });
 
-  it('is ready once every occurrence has a proficient word_listening item', async () => {
+  it('is ready once every occurrence has a proficient word_listening item (neither word is pitch-eligible)', async () => {
     await addAudio('sent-1');
     const a = await linkVocab('sent-1', '本');
     const b = await linkVocab('sent-1', '読み');
-    await addWordListeningItem(a, 'review');
-    await addWordListeningItem(b, 'review');
+    await addWordListeningItem(a.linkId, 'review');
+    await addWordListeningItem(b.linkId, 'review');
     const readiness = await getSentenceListeningReadiness(['sent-1']);
     expect(readiness.get('sent-1')).toBe(true);
   });
@@ -2736,10 +2764,35 @@ describe('getSentenceListeningReadiness (word_listening tier-2 gate)', () => {
     await addAudio('sent-1');
     const a = await linkVocab('sent-1', '本');
     const b = await linkVocab('sent-1', '読み');
-    await addWordListeningItem(a, 'review');
-    await addWordListeningItem(b, 'learning');
+    await addWordListeningItem(a.linkId, 'review');
+    await addWordListeningItem(b.linkId, 'learning');
     const readiness = await getSentenceListeningReadiness(['sent-1']);
     expect(readiness.get('sent-1')).toBe(false);
+  });
+
+  it('is not ready when a pitch-eligible word has no pitch_accent item, even with word_listening proficient (2026-09-16)', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本', { pitchEligible: true });
+    await addWordListeningItem(a.linkId, 'review');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(false);
+  });
+
+  it('is ready once a pitch-eligible word has both word_listening and pitch_accent proficient (2026-09-16)', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本', { pitchEligible: true });
+    await addWordListeningItem(a.linkId, 'review');
+    await addPitchAccentItem(a.vocabularyItemId, 'review');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(true);
+  });
+
+  it('does not withhold on pitch for a word with no dictionary pitch data — it could never seed a pitch_accent card (2026-09-16)', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本'); // not pitch-eligible
+    await addWordListeningItem(a.linkId, 'review');
+    const readiness = await getSentenceListeningReadiness(['sent-1']);
+    expect(readiness.get('sent-1')).toBe(true);
   });
 
   it('is ready for an audio sentence with no surface-form vocabulary (nothing to gate on)', async () => {

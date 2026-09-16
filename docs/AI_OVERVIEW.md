@@ -329,7 +329,13 @@ specifically rather than blended with pitch (the same
 word could look "proficient" off pitch-drill reps alone, with its
 reading/meaning card never touched). The pitch half is new: shadowing
 should reinforce a pitch pattern the learner has already practiced to
-proficiency, not one they've never drilled. Unlike glossing's not-ready
+proficiency, not one they've never drilled — except for a word with no
+dictionary pitch data at all (`VocabularyItem.pitchAccentPositions`
+empty), which is exempt from the pitch half entirely, since it could never
+seed a `pitch_accent` card in the first place and would otherwise block
+the sentence forever (the same shape of starvation `continue_book`'s
+FSRS-proficiency gate hit — caught up front here, not after a report).
+Unlike glossing's not-ready
 sentences (which fall back to a `vocabulary_review` step), an unready
 sentence simply isn't a shadow candidate at all — there's no
 shadow-adjacent activity to substitute in, so `buildShadowSteps` needed no
@@ -887,11 +893,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   A smaller kana line (`sentence.readingOnly`) underneath is the separate
   pronunciation guide. This full-sentence `listening` card is **tier 2 of a
   listening ladder**: withheld until every `word_listening` card (below) for
-  the sentence's vocabulary occurrences is FSRS-proficient
-  (`getSentenceListeningReadiness`), on top of the usual
-  vocab-confirmed-and-proficient gate — so the learner has parsed each
-  content word inside its own clause (tier 1, below) before being asked to
-  parse the whole clip cold.
+  the sentence's vocabulary occurrences is FSRS-proficient, *and*,
+  separately, every dictionary-pitch-eligible underlying word's
+  `pitch_accent` card is also proficient (`getSentenceListeningReadiness`,
+  pitch requirement added 2026-09-16 — pitch perception and word-level
+  listening are two different skills that both support sentence-level
+  listening, not one blended signal; a word with no dictionary pitch data
+  is exempt from the pitch half so it can't block the sentence forever), on
+  top of the usual vocab-confirmed-and-proficient gate — so the learner has
+  parsed each content word inside its own clause, by both reading and ear,
+  before being asked to parse the whole clip cold.
 - **SentenceVocabulary subject, audio-gated**: `word_listening` — tier 1 of
   that ladder. One card **per surface-form occurrence** of a word in a
   sentence that has a `SentenceAudio` row (like the contextual conjugation
@@ -909,11 +920,15 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   isolate the word. (Before the 2026-09-02 rework the card *was* that
   isolated loop with all text hidden — an unfair vacuum test for short
   function words like いい, and it degraded to bare whole-sentence playback
-  whenever alignment failed.) Eligible only once the word's own reading is
-  FSRS-proficient
-  (`getProficientVocabularyItemIds`, via the new
-  `ActivityDescriptor.isReady` hook) — so the ladder is cloze/reading →
-  word listening → sentence listening. Words with no separate vocabulary
+  whenever alignment failed.) Eligible only once the word's own
+  reading/meaning is FSRS-proficient
+  (`getProficientReadingVocabularyItemIds`, via the
+  `ActivityDescriptor.isReady` hook — scoped to
+  `reading_retrieval`/`cloze`/`reading_production` specifically since
+  2026-09-16; a word with only `pitch_accent` reps on the same
+  `vocabularyItem` subject used to satisfy this too, before the blended
+  `getProficientVocabularyItemIds` was split) — so the ladder is
+  cloze/reading → word listening → sentence listening. Words with no separate vocabulary
   entry (particles, function words) get no tier-1 card and are only ever
   tested inside the full sentence. Like the conjugation card, neither tier
   has a `deferUnreadySentenceReviews` pass — the `isGatedOut` filter keeps
@@ -1066,7 +1081,9 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   apart," fed by `getConfusionPairCandidates`. Vocab-gated
   (`ActivityDescriptor.isReady`, like tier-1 `word_listening`): withheld
   from queue and seed pool until **both** member words' readings have
-  reached FSRS proficiency.
+  reached FSRS proficiency (`getProficientReadingVocabularyItemIds` since
+  2026-09-16 — telling two words apart on the page is a reading/meaning
+  skill; pitch-drill reps on either member no longer count).
 - **GrammarPattern subject**: a single activity type, `grammar_completion`
   — multiple choice among the tracked pattern and up to 3 distractors from
   the corpus, blanking the sentence when the pattern's canonical name
@@ -1129,10 +1146,13 @@ the learner never reads a passage full of unconfirmed words — with its own
 passage ⇒ nothing to gate on, card falls back to the isolated layout). The
 `listening` card adds a second layer on top (the listening ladder, §4
 above): `getSentenceListeningReadiness` also requires every
-`word_listening` occurrence for the sentence to be proficient, and
-`word_listening` itself is gated behind the word's reading proficiency —
-both via the generic `ActivityDescriptor.isReady` hook rather than a
-`deferUnreadySentenceReviews` pass. Grammar review used to share this same
+`word_listening` occurrence for the sentence to be proficient *and* every
+dictionary-pitch-eligible underlying word's `pitch_accent` card to be
+proficient (added 2026-09-16), and `word_listening` itself is gated behind
+the word's reading/meaning proficiency (`getProficientReadingVocabularyItemIds`,
+not blended with pitch since 2026-09-16) — all via the generic
+`ActivityDescriptor.isReady` hook rather than a `deferUnreadySentenceReviews`
+pass. Grammar review used to share this same
 strict readiness rule (2026-08-27 follow-up) — and that turned out to be
 *why* the old 4-card ladder almost never fired (see "GrammarPattern
 subject" above and docs/ROADMAP.md). Since 2026-09-15,
