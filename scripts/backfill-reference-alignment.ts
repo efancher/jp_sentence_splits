@@ -16,7 +16,7 @@
  *
  * Usage:
  *   ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002 \
- *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N]
+ *   npx tsx scripts/backfill-reference-alignment.ts [--apply] [--limit N] [--book ID]
  *
  * Dry-run by default (lists what it would do). Needs SCRIPT_SUPABASE_EMAIL
  * / SCRIPT_SUPABASE_PASSWORD / VITE_SUPABASE_* like the other scripts, and
@@ -42,6 +42,7 @@ interface AudioRow {
   sentenceId: string;
   sourceTitle: string;
   storagePath: string | null;
+  bookId: string | null;
 }
 
 async function align(blob: Blob, transcript: string): Promise<AlignmentResult> {
@@ -62,23 +63,27 @@ async function main() {
   const apply = parseApplyFlag(argv);
   const limitArg = argv[argv.indexOf('--limit') + 1];
   const limit = argv.includes('--limit') && limitArg ? Number(limitArg) : Infinity;
+  const bookArg = argv[argv.indexOf('--book') + 1];
+  const bookId = argv.includes('--book') && bookArg ? bookArg : null;
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
 
   // Reference recordings (owner-scoped, live).
-  const audio = await fetchAll<AudioRow>(
+  const audioAll = await fetchAll<AudioRow>(
     supabase,
     'reference_audio',
-    'id, sentence_id, source_title, storage_path',
+    'id, sentence_id, source_title, storage_path, book_id',
     user.id,
     (row) => ({
       id: String(row.id),
       sentenceId: String(row.sentence_id ?? ''),
       sourceTitle: String(row.source_title ?? ''),
       storagePath: (row.storage_path as string | null) ?? null,
+      bookId: (row.book_id as string | null) ?? null,
     }),
   );
+  const audio = bookId ? audioAll.filter((a) => a.bookId === bookId) : audioAll;
 
   // Alignments already present at the current version — skip these.
   const { data: existingRows, error: existingErr } = await supabase
@@ -120,8 +125,10 @@ async function main() {
     (a) => a.storagePath && !current.has(a.id) && !japaneseById.get(a.sentenceId)?.trim(),
   ).length;
 
+  const alreadyAligned = audio.filter((a) => current.has(a.id)).length;
+  if (bookId) console.log(`Scoped to book ${bookId}.`);
   console.log(
-    `${audio.length} recording(s); ${current.size} already aligned (v${ALIGNMENT_VERSION}), ` +
+    `${audio.length} recording(s); ${alreadyAligned} already aligned (v${ALIGNMENT_VERSION}), ` +
       `${candidates.length} to do` +
       (skippedNoPath ? `, ${skippedNoPath} skipped (no cloud blob)` : '') +
       (skippedNoText ? `, ${skippedNoText} skipped (no sentence text)` : ''),

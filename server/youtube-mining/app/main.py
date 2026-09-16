@@ -16,6 +16,7 @@ from starlette.background import BackgroundTask
 
 from app import (
     align_client,
+    alignment_backfill,
     clip,
     config,
     difficulty,
@@ -34,6 +35,9 @@ from app import (
     youtube,
 )
 from app.models import (
+    AlignmentBackfillJobResponse,
+    AlignmentBackfillRequest,
+    AlignmentBackfillStatusResponse,
     ClipRequest,
     ClipResponse,
     CommitJobRequest,
@@ -108,6 +112,31 @@ async def status_json(days: int = 3):
 async def create_job(req: CreateJobRequest):
     job = jobs.create_job(req.url, title=req.title, source_type=req.sourceType)
     return CreateJobResponse(jobId=job.id)
+
+
+@app.post("/alignment-backfill/jobs", response_model=AlignmentBackfillJobResponse)
+async def create_alignment_backfill_job(req: AlignmentBackfillRequest):
+    """Precompute forced-alignment for reference audio (optionally scoped to
+    one book) without needing SSH access to run the script by hand — see
+    app/alignment_backfill.py."""
+    job = alignment_backfill.start(req.bookId)
+    return AlignmentBackfillJobResponse(jobId=job.id)
+
+
+@app.get(
+    "/alignment-backfill/jobs/{job_id}", response_model=AlignmentBackfillStatusResponse
+)
+async def get_alignment_backfill_job(job_id: str):
+    try:
+        job = alignment_backfill.get(job_id)
+    except alignment_backfill.JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return AlignmentBackfillStatusResponse(
+        status=job.status,
+        message=job.message,
+        log=job.log,
+        startedAt=job.started_at,
+    )
 
 
 @app.post("/podcast-feed", response_model=PodcastFeed)

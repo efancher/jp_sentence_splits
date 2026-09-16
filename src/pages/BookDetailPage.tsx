@@ -49,6 +49,11 @@ import {
   updateBook,
   updateBookChapter,
 } from '../db/repository';
+import {
+  getAlignmentBackfillJob,
+  startAlignmentBackfill,
+  type AlignmentBackfillStatus,
+} from '../lib/alignmentBackfillApi';
 import { coveragePercent } from '../lib/bookCoverage';
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
@@ -274,11 +279,53 @@ export function BookDetailPage() {
     message: string;
     undo?: () => Promise<void>;
   } | null>(null);
+  const [alignmentJobId, setAlignmentJobId] = useState<string | null>(null);
+  const [alignmentStatus, setAlignmentStatus] = useState<AlignmentBackfillStatus | null>(null);
 
   useEffect(() => {
     if (!bookId) return;
     void touchBookOpened(bookId);
   }, [bookId]);
+
+  // Polls a box-triggered "precompute word audio alignment" job (see
+  // src/lib/alignmentBackfillApi.ts) until it reaches a terminal state.
+  useEffect(() => {
+    if (!alignmentJobId || alignmentStatus?.status !== 'running') return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void getAlignmentBackfillJob(alignmentJobId).then(
+        (status) => {
+          if (!cancelled) setAlignmentStatus(status);
+        },
+        (error: unknown) => {
+          if (cancelled) return;
+          setAlignmentStatus({
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+            log: [],
+            startedAt: Date.now(),
+          });
+        },
+      );
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [alignmentJobId, alignmentStatus]);
+
+  const handleStartAlignmentBackfill = () => {
+    if (!bookId) return;
+    setAlignmentStatus({ status: 'running', message: 'Starting…', log: [], startedAt: Date.now() });
+    startAlignmentBackfill(bookId).then(setAlignmentJobId, (error: unknown) => {
+      setAlignmentStatus({
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        log: [],
+        startedAt: Date.now(),
+      });
+    });
+  };
 
   // One-time landing reminder from a fresh mining import (YouTubeMinePage's
   // navigate(`/books/${bookId}?imported=1`)) — the transcript-validation
@@ -497,6 +544,27 @@ export function BookDetailPage() {
               </div>
             </>
           )}
+          <div className="row" style={{ alignItems: 'center', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={handleStartAlignmentBackfill}
+              disabled={alignmentStatus?.status === 'running'}
+            >
+              Precompute word audio alignment
+            </button>
+            {alignmentStatus ? (
+              <span
+                className="muted"
+                style={{ fontSize: '0.85rem' }}
+                title="Speeds up word audio on pitch accent / word listening cards for this book by aligning it ahead of time, instead of on first use."
+              >
+                {alignmentStatus.status === 'error'
+                  ? `Failed — ${alignmentStatus.message}`
+                  : alignmentStatus.message}
+              </span>
+            ) : null}
+          </div>
         </section>
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />

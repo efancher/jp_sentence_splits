@@ -178,10 +178,13 @@ built out Phases 1–9):
   — treated like the reference-audio blobs) → the tailnet-only MFA service.
   A fresh service result is written to the local cache and opportunistically
   pushed to the table, so a client off the tailnet still gets a span for
-  any clip aligned once elsewhere (backfilled corpus-wide by
-  `scripts/backfill-reference-alignment.ts`, run on the box that hosts the
-  aligner). `AttemptAlignment` / `AttemptTranscription` stay local-only
-  (per-attempt, not shared).
+  any clip aligned once elsewhere (backfilled corpus-wide or per-book by
+  `scripts/backfill-reference-alignment.ts` — run directly on the box that
+  hosts the aligner, or triggered from a book's detail page via
+  `server/youtube-mining/app/alignment_backfill.py`'s
+  `POST /alignment-backfill/jobs`, which shells out to that same script so
+  it doesn't need SSH access). `AttemptAlignment` / `AttemptTranscription`
+  stay local-only (per-attempt, not shared).
 - `CardIssueReport` — a learner-authored free-text flag on a review card
   ("this reading looks wrong"), `status: open | resolved`, synced to
   Supabase specifically so a future AI/scripting session can triage a

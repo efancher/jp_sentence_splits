@@ -439,3 +439,26 @@ class CommitSentence(ClipResponse):
 
 class CommitJobResponse(BaseModel):
     sentences: list[CommitSentence]
+
+
+AlignmentBackfillStatus = Literal["running", "done", "error"]
+
+
+class AlignmentBackfillRequest(BaseModel):
+    """Trigger scripts/backfill-reference-alignment.ts as a subprocess,
+    optionally scoped to one book (see app/alignment_backfill.py)."""
+
+    bookId: str | None = None
+
+
+class AlignmentBackfillJobResponse(BaseModel):
+    jobId: str
+
+
+class AlignmentBackfillStatusResponse(BaseModel):
+    status: AlignmentBackfillStatus
+    message: str
+    # Tail of the script's stdout, newest last — the UI shows this as a
+    # scrolling progress line, not a full log viewer.
+    log: list[str]
+    startedAt: float

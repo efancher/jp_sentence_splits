@@ -75,6 +75,28 @@ Requires root or the tailscale operator
 `funnel` — tailnet-only, matching this whole app ecosystem's privacy
 posture.
 
+### Alignment backfill credentials (optional)
+
+`POST /alignment-backfill/jobs` (the "Precompute word audio alignment"
+button on a book's detail page) shells out to
+`scripts/backfill-reference-alignment.ts`, which needs an authed Supabase
+session the same way the other maintenance scripts do. The service's env
+doesn't carry those creds by default — create
+`~/.config/youtube-mining-alignment-backfill.env` (referenced by the unit's
+`EnvironmentFile=-...`, so it's fine to skip this if you don't need the
+feature):
+
+```
+SCRIPT_SUPABASE_EMAIL=you@example.com
+SCRIPT_SUPABASE_PASSWORD=...
+VITE_SUPABASE_URL=https://....supabase.co
+VITE_SUPABASE_ANON_KEY=...
+```
+
+then `systemctl --user restart youtube-mining-api`. Without this file the
+rest of the service works fine; that one endpoint just fails until it's
+added.
+
 ### `/status` resource page
 
 `GET /status` (HTML, no JS) shows the box's RAM + disk trend over the last

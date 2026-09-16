@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-16 — UI-triggerable, book-scoped alignment backfill** (user
+  doesn't always have SSH access to codex-dev, wanted the equivalent of
+  `scripts/backfill-reference-alignment.ts` from a phone). Two additions,
+  no new Python dependencies:
+  - The script itself gained an optional `--book <id>` filter
+    (`reference_audio.book_id`, direct + indexed column) so a run can be
+    scoped to one book instead of the whole corpus.
+  - `server/youtube-mining/app/alignment_backfill.py` is a new, minimal
+    job type — deliberately separate from `jobs.py` (mining-pipeline
+    scratch dirs/checkpoints don't apply) — that shells out to the script
+    as a subprocess (reusing its already-authed Supabase logic verbatim
+    rather than reimplementing it in Python, which has no Supabase client
+    today) and tracks progress in memory. New routes `POST
+    /alignment-backfill/jobs` / `GET /alignment-backfill/jobs/{id}`;
+    client `src/lib/alignmentBackfillApi.ts`; a "Precompute word audio
+    alignment" button + inline poll on `BookDetailPage`. Needs Node
+    resolved via the same `MINING_YTDLP_JS_RUNTIME_PATH` nvm symlink
+    yt-dlp's JS solver already uses (systemd's PATH lacks nvm's). Requires
+    a one-time manual step: create
+    `~/.config/youtube-mining-alignment-backfill.env` with
+    `SCRIPT_SUPABASE_EMAIL`/`SCRIPT_SUPABASE_PASSWORD`/`VITE_SUPABASE_URL`/
+    `VITE_SUPABASE_ANON_KEY` (referenced via the service's new, optional
+    `EnvironmentFile=`) and restart `youtube-mining-api` — not done as
+    part of this change since it's plaintext credentials on the box.
+
 - **2026-09-16 — `continue_book` (Analyze) steps no longer wait on vocab
   FSRS proficiency** (user report: "haven't been getting many sentences
   in my daily session for analyzing"). `buildExploreSteps`
