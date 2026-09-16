@@ -852,6 +852,31 @@ possibilities, kept here so the thinking isn't lost:
   self-rating (e.g. force "again"), or just inform it (show ✓/✗ before the
   learner rates, rating stays theirs)? Explicitly parked — user: "sitting
   on it would be good."
+- [ ] **Pull the pitch-accent production drill into a review card**
+  (2026-09-16 discussion). `PitchAccentDrillPage` (`/pitch-accent`) already
+  measures the learner's recording against the dictionary target per mora
+  (`buildPitchAccentShapeObservations`/`learnerClassesBySurface`) — real
+  scored data, not just a self-tap — and it's the *only* pitch-production
+  surface that reaches most of the corpus, since it needs no reference
+  recording (unlike the perception `pitch_accent` SRS card, which is
+  reference-audio-gated and so only reaches a minority of sentences). Not
+  a simple "add scheduling" move — two real blockers:
+  1. **Rating derivation.** Every existing card gets a rating from a typed
+     match or a self-tap; this one would need a policy for turning a noisy
+     per-mora accuracy score into again/hard/good/easy, plus a fallback for
+     the real fraction of takes that come back `unavailable` (alignment
+     failed, no score at all). This is the actual unlock — worth designing
+     before anything else here.
+  2. **Cost model.** Record → upload → align → score takes real seconds per
+     rep, unlike a tap — the planner's per-card time estimates and
+     quiet-mode exclusion (shadowing already gets excluded since it needs
+     speaking aloud) would need the same treatment, not the normal
+     review-card assumptions.
+  Direct consequence if this ships: shadowing's and listening's
+  pitch-proficiency requirement (2026-09-16, this same session) currently
+  points at the *perception* `pitch_accent` card specifically — would need
+  a decision on whether it stays there, moves to the new production card,
+  or requires both. Explicitly parked — user: "in the roadmap is fine."
 
 ## Not planned (deliberate)
 
