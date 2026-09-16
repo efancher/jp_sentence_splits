@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import {
   commitSeriesEpisodeImport,
+  commitShadowingPackageImport,
   getDb,
   getSeriesImportedSourceIds,
 } from '../src/db/repository';
@@ -24,6 +25,7 @@ function episodePreview(
   sourceId: string,
   title: string,
   japanese: string[],
+  url?: string,
 ): ShadowingImportPreview {
   const sentences: ShadowingSentenceInput[] = japanese.map((text, index) => ({
     id: `${sourceId}-${index}`,
@@ -34,7 +36,7 @@ function episodePreview(
     transcriptStatus: 'verified',
   }));
   return buildShadowingPreview(
-    { id: sourceId, type: 'other', title },
+    { id: sourceId, type: 'other', title, url },
     MANIFEST,
     sentences,
     [],
@@ -204,5 +206,21 @@ describe('getSeriesImportedSourceIds', () => {
     );
     // A different series' episodes never leak in.
     expect(await getSeriesImportedSourceIds('podcast-series-other')).toEqual(new Set());
+  });
+
+  it('still flags an episode imported before commitSeriesEpisodeImport existed, via its standalone book sourceUrl', async () => {
+    // Pre-01fa81a (2026-09-13) behavior: every podcast episode got its own
+    // one-off book instead of a chapter in a shared series book.
+    await commitShadowingPackageImport(
+      episodePreview(
+        'legacy-ep',
+        'Legacy Episode',
+        ['昔のエピソードです。'],
+        'https://example.com/legacy-ep.mp3',
+      ),
+    );
+
+    const ids = await getSeriesImportedSourceIds('podcast-series-legacy');
+    expect(ids.has('https://example.com/legacy-ep.mp3')).toBe(true);
   });
 });

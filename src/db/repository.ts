@@ -2366,24 +2366,38 @@ export async function commitSeriesEpisodeImport(options: {
 }
 
 /**
- * Every episode/article `sourceId` already imported under this series
- * (see `commitSeriesEpisodeImport`), or an empty set if the series has no
- * book yet — lets a feed's episode/article picker show "already imported"
+ * Every episode/article URL already imported under this series (see
+ * `commitSeriesEpisodeImport`), or an empty set if the series has no book
+ * yet — lets a feed's episode/article picker show "already imported"
  * against its own as-listed URLs without fetching anything.
+ *
+ * Also matches any standalone book's `sourceUrl` (not just the series
+ * book's chapters): episodes/articles imported before
+ * `commitSeriesEpisodeImport` existed (01fa81a, 2026-09-13) landed as
+ * their own single-chapter book instead of a chapter in the shared series
+ * book, and were never retroactively merged ("Known gap" in that commit).
+ * A standalone book's `sourceUrl` is exactly the enclosure/article URL the
+ * picker already keys episodes by, so exact-string matching against it is
+ * safe — a collision would mean two different podcasts serving the same
+ * media file URL.
  */
 export async function getSeriesImportedSourceIds(
   seriesId: string,
 ): Promise<Set<string>> {
   const db = getDb();
-  const book = await db.books
-    .where('sourceKey')
-    .equals(`shadowing:${seriesId}`)
-    .first();
-  return new Set(
-    (book?.chapters ?? [])
+  const [seriesBook, allBooks] = await Promise.all([
+    db.books.where('sourceKey').equals(`shadowing:${seriesId}`).first(),
+    db.books.toArray(),
+  ]);
+  const sourceIds = new Set(
+    (seriesBook?.chapters ?? [])
       .map((chapter) => chapter.sourceId)
       .filter((sourceId): sourceId is string => Boolean(sourceId)),
   );
+  for (const book of allBooks) {
+    if (book.sourceUrl) sourceIds.add(book.sourceUrl);
+  }
+  return sourceIds;
 }
 
 /**

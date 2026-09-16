@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-16 — "Imported" badge now finds pre-series-model episodes
+  too** (user report: two already-imported `nihongoconteppei.com`
+  episodes showed no mark in the podcast picker). Root cause: both were
+  imported same-day as, but just before,
+  `commitSeriesEpisodeImport`/one-shared-book-per-series (01fa81a,
+  2026-09-13) — they landed as their own standalone single-chapter books
+  (via `commitShadowingPackageImport`) rather than a chapter in the series
+  book, exactly the "Known gap" that commit's message flagged and
+  deferred. `getSeriesImportedSourceIds` (`repository.ts`) only checked
+  the series book's chapter `sourceId`s, so it never saw them.
+  `getSeriesImportedSourceIds` now also matches any standalone book's
+  `sourceUrl` against the episode/article URL — exact-string matching is
+  safe since a `sourceUrl` collision would mean two different feeds
+  serving the same media file. No data migration; confirmed against prod
+  Supabase (`scripts/diagnose-podcast-imported-books.ts`, kept for future
+  spot-checks) that the two affected books really were standalone before
+  writing the fix.
+
 - **2026-09-15 — Grammar-pattern "Graduated" badges + book-level grammar
   rollup** (follow-up to the book-progress section below, prompted by "how
   are the different pieces graduated" / "make that more consistent"). The
