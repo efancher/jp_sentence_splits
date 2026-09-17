@@ -3239,4 +3239,34 @@ describe('spaceOutSiblingCards', () => {
       'c:reading_retrieval',
     ]);
   });
+
+  it('never places two cards on the same word in the same sentence adjacently even across descriptors', () => {
+    // reading_retrieval keys on the vocabularyItem; word_listening keys on
+    // the sentenceVocabulary occurrence — different subjectKeys, but the
+    // same word in the same sentence (user report 2026-09-17).
+    const readingCard = {
+      studyItem: {
+        subjectType: 'vocabularyItem',
+        subjectId: 'zettai-item',
+        activityType: 'reading_retrieval',
+      },
+      sentence: { id: 'sentence-1' },
+      target: { vocabularyItem: { id: 'zettai-item' } },
+    } as unknown as Parameters<typeof spaceOutSiblingCards>[0][number];
+    const listeningCard = {
+      studyItem: {
+        subjectType: 'sentenceVocabulary',
+        subjectId: 'zettai-link',
+        activityType: 'word_listening',
+      },
+      sentence: { id: 'sentence-1' },
+      wordListening: { vocabularyItem: { id: 'zettai-item' } },
+    } as unknown as Parameters<typeof spaceOutSiblingCards>[0][number];
+    const other = card('other', 'reading_retrieval');
+    const result = spaceOutSiblingCards([readingCard, listeningCard, other]);
+    const subjectIds = result.map((c) => (c as { studyItem: { subjectId: string } }).studyItem.subjectId);
+    const readingIndex = subjectIds.indexOf('zettai-item');
+    const listeningIndex = subjectIds.indexOf('zettai-link');
+    expect(Math.abs(readingIndex - listeningIndex)).toBeGreaterThan(1);
+  });
 });

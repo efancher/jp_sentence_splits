@@ -546,30 +546,65 @@ function queueCardSubjectKey(card: QueueCard): string {
 }
 
 /**
- * Reorders a due queue so two cards on the same subject are never adjacent
- * unless every remaining card shares that subject (user request
- * 2026-09-04). The sibling-bury filter above only holds back `review`/
- * `relearning` siblings; a word whose reading_retrieval / cloze /
- * reading_production are all still `learning` (e.g. rated "again" every
- * sitting for days) keeps all three — and due-sorted they land adjacent,
- * so revealing the first turns the next into a short-term echo test.
- * Greedy: always take the earliest-due card whose subject differs from the
- * one just emitted; fall back to plain due order only when it can't.
+ * A word-in-sentence has different subjectKeys across descriptors — e.g.
+ * `reading_retrieval` keys on the vocabularyItem, `word_listening` keys on
+ * the sentenceVocabulary occurrence — so two cards drilling the *same* word
+ * in the *same* sentence don't share a subjectKey and slip past both the
+ * bury filter and spaceOutSiblingCards's subjectKey check. Resolved whenever
+ * the card carries a single target word (vocabulary/wordListening/
+ * conjugation/pitchAccent); undefined for sentence/listening/grammar/
+ * confusion-pair cards, which have no one vocabulary item to key on (user
+ * report 2026-09-17: same word+sentence cards landing back to back).
  */
-export function spaceOutSiblingCards(cards: QueueCard[]): QueueCard[] {
-  const remaining = [...cards];
-  const spaced: QueueCard[] = [];
-  let lastKey: string | null = null;
+function queueCardVocabularySiblingKey(card: QueueCard): string | undefined {
+  const vocabularyItemId =
+    card.target?.vocabularyItem.id ??
+    card.wordListening?.vocabularyItem.id ??
+    card.conjugation?.vocabularyItem.id ??
+    card.pitchAccent?.vocabularyItem.id;
+  return vocabularyItemId ? `vocab:${card.sentence.id}:${vocabularyItemId}` : undefined;
+}
+
+function queueCardSiblingKeys(card: QueueCard): string[] {
+  const vocabularyKey = queueCardVocabularySiblingKey(card);
+  return vocabularyKey ? [queueCardSubjectKey(card), vocabularyKey] : [queueCardSubjectKey(card)];
+}
+
+/**
+ * Reorders a list so two items sharing a sibling key are never adjacent
+ * unless every remaining item shares one of the keys just emitted. Greedy:
+ * always take the earliest item whose sibling keys don't overlap the
+ * previous item's; fall back to plain order only when it can't.
+ */
+function spaceOutBySiblingKeys<T>(items: T[], siblingKeys: (item: T) => string[]): T[] {
+  const remaining = [...items];
+  const spaced: T[] = [];
+  let lastKeys: string[] = [];
   while (remaining.length > 0) {
     let index = remaining.findIndex(
-      (card) => queueCardSubjectKey(card) !== lastKey,
+      (item) => !siblingKeys(item).some((key) => lastKeys.includes(key)),
     );
     if (index === -1) index = 0;
-    const [card] = remaining.splice(index, 1);
-    spaced.push(card!);
-    lastKey = queueCardSubjectKey(card!);
+    const [item] = remaining.splice(index, 1);
+    spaced.push(item!);
+    lastKeys = siblingKeys(item!);
   }
   return spaced;
+}
+
+/**
+ * Reorders a due queue so two cards on the same subject (or same word in the
+ * same sentence, across descriptors — queueCardSiblingKeys) are never
+ * adjacent unless every remaining card shares that subject (user request
+ * 2026-09-04, broadened 2026-09-17). The sibling-bury filter above only
+ * holds back `review`/`relearning` siblings; a word whose reading_retrieval /
+ * cloze / reading_production are all still `learning` (e.g. rated "again"
+ * every sitting for days) keeps all three — and due-sorted they land
+ * adjacent, so revealing the first turns the next into a short-term echo
+ * test.
+ */
+export function spaceOutSiblingCards(cards: QueueCard[]): QueueCard[] {
+  return spaceOutBySiblingKeys(cards, queueCardSiblingKeys);
 }
 
 // ---------------------------------------------------------------------------
@@ -855,6 +890,51 @@ interface PendingSeed {
   candidate: unknown;
   activityType: StudyActivityType;
   subjectId: string;
+}
+
+/**
+ * The vocabulary/wordListening/conjugation/pitchAccent candidate shapes all
+ * carry `.vocabularyItem` and `.sentence` directly (see buildActivityDescriptors)
+ * even though their `subjectId` differs by descriptor — duck-typed here so
+ * batch spacing below doesn't need a descriptor-specific switch.
+ */
+function pendingSeedVocabularySiblingKey(candidate: unknown): string | undefined {
+  const { vocabularyItem, sentence } = candidate as {
+    vocabularyItem?: { id: string };
+    sentence?: { id: string };
+  };
+  return vocabularyItem && sentence ? `vocab:${sentence.id}:${vocabularyItem.id}` : undefined;
+}
+
+/**
+ * Reorders pending-seed batches (one batch = one descriptorKey+subjectId's
+ * activity types, always introduced together) so two batches on the same
+ * word in the same sentence aren't the two consecutive "new card" reveals —
+ * e.g. the `vocabulary` descriptor's reading cards and the `wordListening`
+ * descriptor's occurrence card for the same just-confirmed word commonly
+ * sit at the same round-robin index (both candidate lists are in the same
+ * sentence order) and would otherwise land back to back (user report
+ * 2026-09-17). Batches with no resolvable vocabulary item (sentence/
+ * listening/grammar/confusion) are left unconstrained.
+ */
+function spaceOutPendingSeedBatches(seeds: PendingSeed[]): PendingSeed[] {
+  const batchOrder: string[] = [];
+  const batches = new Map<string, PendingSeed[]>();
+  for (const seed of seeds) {
+    const batchKey = `${seed.descriptorKey}:${seed.subjectId}`;
+    let batch = batches.get(batchKey);
+    if (!batch) {
+      batch = [];
+      batches.set(batchKey, batch);
+      batchOrder.push(batchKey);
+    }
+    batch.push(seed);
+  }
+  const spacedBatchOrder = spaceOutBySiblingKeys(batchOrder, (batchKey) => {
+    const vocabularyKey = pendingSeedVocabularySiblingKey(batches.get(batchKey)![0]!.candidate);
+    return vocabularyKey ? [vocabularyKey] : [];
+  });
+  return spacedBatchOrder.flatMap((batchKey) => batches.get(batchKey)!);
 }
 
 export function ReviewPage() {
@@ -1333,10 +1413,14 @@ export function ReviewPage() {
           if (seeds[index]) pendingSeeds.push(seeds[index]!);
         }
       }
+      // Interleaving above still leaves same-word batches from different
+      // descriptors adjacent (see spaceOutPendingSeedBatches); space them
+      // apart before they're lazily seeded one batch at a time.
+      const spacedPendingSeeds = spaceOutPendingSeedBatches(pendingSeeds);
 
       if (cancelled) return;
       setQueue(spaced);
-      setPool(pendingSeeds);
+      setPool(spacedPendingSeeds);
       setInitialized(true);
     })();
     return () => {

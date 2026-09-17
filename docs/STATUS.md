@@ -17,7 +17,7 @@ grammar-pattern browsing/annotation) are shipped and, in almost every
 case, verified against production data by the user directly. The
 grammar-learning system's 4-card FSRS ladder was collapsed to one
 `grammar_completion` card 2026-09-15, and `BookDetailPage` gained a
-book-level progress section the same day — see Recent changes. ~1508 TS
+book-level progress section the same day — see Recent changes. ~1509 TS
 tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — sibling-spacing broadened to span descriptors** (user:
+  "still see new cards that ask about the same vocabulary in the same
+  sentence one right after another"). `spaceOutSiblingCards`
+  (`ReviewPage.tsx`) only compared `subjectType:subjectId`, but a word's
+  `reading_retrieval` (subjectType `vocabularyItem`) and its
+  `word_listening` (subjectType `sentenceVocabulary`, the occurrence link)
+  never shared that key even though they drill the same word in the same
+  sentence — so they slipped past both the bury filter and the spacing
+  pass. Added `queueCardVocabularySiblingKey` (resolves through
+  `target`/`wordListening`/`conjugation`/`pitchAccent`'s `vocabularyItem` +
+  the card's `sentence.id`) as a second sibling key, and generalized the
+  greedy spacer to `spaceOutBySiblingKeys` so it checks both keys. Also hit
+  new-card seeding, which never ran spacing at all: `vocabulary` and
+  `wordListening`'s per-descriptor candidate lists are both ordered by
+  sentence, so their pending-seed batches commonly land at the same
+  round-robin index and get lazily seeded back to back. Added
+  `spaceOutPendingSeedBatches`, applied once when the pool is built, to
+  reorder whole (descriptorKey, subjectId) batches on the same duck-typed
+  vocabulary+sentence key before they're queued for seeding. Not a shuffle
+  (considered and rejected — a plain shuffle wouldn't guarantee
+  non-adjacency and would fight the due-date sort feeding this same
+  function); this reuses the existing 2026-09-04 spacing approach with a
+  wider sibling key instead. Test added:
+  "never places two cards on the same word in the same sentence adjacently
+  even across descriptors" (`tests/reviewPage.test.tsx`).
 - **2026-09-17 — three ROADMAP items closed: velocity/ETA, "Ready to read"
   step 3, leech list** (user, after reviewing the roadmap for "other items
   that would be good to do"). All three shipped together, browser-verified
