@@ -312,7 +312,12 @@ whole bucket). `findExploreCandidates` reinforces this by floating books
 whose next sentences still need vocabulary confirmed above fully-confirmed
 books (recency order preserved within each group) before the
 candidate-slot slice, so a slightly-older book with a backlog isn't
-dropped for a caught-up newer one.
+dropped for a caught-up newer one. Within the fully-confirmed group,
+2026-09-17 added a second tiebreak: `getBookVocabularyCoverage()`'s ratio
+breaks ties before falling back to recency, so an easier caught-up book
+edges out a harder one opened more recently (unanalyzed books, `ratio:
+null`, still sort last — same convention as `BooksPage`'s "Easiest first"
+toggle).
 
 The **shadowing bucket** has its own, stricter readiness gate
 (`getSentenceShadowingReadiness`, `repository.ts`, replacing
@@ -537,6 +542,20 @@ gate except one specifically-named requirement (confirmed-but-never-
 reviewed for `continue_book`; reading/word-listening-ready-but-pitch-not
 for shadow/listening) — a standing version of the one-off diagnostic
 script used earlier the same session to trace the 皆/元気 gating bugs.
+**New-card backlog** (`velocity.ts` / `buildVelocityReport`) — combines
+`countNewVocabularyCardBacklog()` with the words-learned-per-week trend
+`buildProgressReport` already computes into a "confirmed but not yet in
+the SRS" count, recent words/week pace, and a weeks-to-clear estimate
+(averaged over complete weeks only; "no estimate yet" rather than a
+divide-by-zero when the recent rate is 0). **Leech list**
+(`leechList.ts` / `repository.ts#getLeechList`) — every study item with a
+real FSRS `lapses > 0`, ranked by lapses + the session planner's own
+`weakness` term, each row showing its most common recent
+`errorClassification` reason and next action (reuses `errorMix.ts`'s
+label/route table, `metaFor`/`classificationKey`, rather than a second
+copy). Deliberately gated on a genuine lapse, not just recent misses, and
+never a standalone drill — each row links to the existing `/study-items/:id`
+debug view and the same next-action route `errorMix` points at.
 **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/

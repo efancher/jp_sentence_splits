@@ -17,7 +17,7 @@ grammar-pattern browsing/annotation) are shipped and, in almost every
 case, verified against production data by the user directly. The
 grammar-learning system's 4-card FSRS ladder was collapsed to one
 `grammar_completion` card 2026-09-15, and `BookDetailPage` gained a
-book-level progress section the same day — see Recent changes. ~1494 TS
+book-level progress section the same day — see Recent changes. ~1508 TS
 tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
@@ -33,6 +33,52 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — three ROADMAP items closed: velocity/ETA, "Ready to read"
+  step 3, leech list** (user, after reviewing the roadmap for "other items
+  that would be good to do"). All three shipped together, browser-verified
+  on `/progress` and Home with a live dev server (Playwright against real
+  seeded data through the app's own repository module, no fixtures) — no
+  console errors, screenshots confirmed correct rendering including the
+  "no estimate yet" zero-rate edge case.
+  - **Velocity/ETA** (`src/lib/velocity.ts`, `buildVelocityReport`) — a new
+    "New-card backlog" `/progress` panel combining
+    `countNewVocabularyCardBacklog()`'s count with the words-learned-per-
+    week trend `buildProgressReport` already computes (`ProgressReport.weeks`);
+    computed client-side in `ProgressPage`, no new Dexie reads. Averages
+    only complete weeks (excludes the current in-progress bucket, which
+    would understate the rate) and reports "no estimate yet" rather than
+    dividing by zero when the recent rate is 0 — real behavior hit live
+    during verification (a freshly-recalled word only counts once its week
+    is complete).
+  - **"Ready to read" step 3** (`repository.ts#findExploreCandidates`) —
+    among explore candidates that are otherwise tied (both already caught
+    up on vocabulary confirmation — the existing rank-0-vs-1 split is
+    untouched), `getBookVocabularyCoverage()`'s ratio now breaks the tie
+    before falling back to recency, so an easier caught-up book edges out
+    a harder one opened more recently. Unanalyzed books (`ratio: null`)
+    still sort last, matching `BooksPage`'s "Easiest first" convention.
+    Test: `tests/sessionPlannerRepository.test.ts` builds a harder book
+    opened *after* an easier one and asserts the easier one still ranks
+    first.
+  - **Leech list** (`src/lib/leechList.ts`, `buildLeechList`) — a new
+    "Leech list" `/progress` panel: every study item with a real FSRS
+    `lapses > 0`, ranked by `lapses + weakness` (same
+    `recentAgainCount / recentReviewCount` term `sessionPlanner.ts`'s
+    `scoreReviewPriority` uses), each row showing its most common recent
+    `errorClassification` reason and a next action. Reuses `errorMix.ts`'s
+    label/route table (`metaFor`/`classificationKey`, both newly exported)
+    rather than a second copy, so the leech list and "What to work on"
+    never disagree on what a classification means. Deliberately gated on
+    a real lapse, not just recent misses — a still-new item's `weakness`
+    defaults nonzero in the planner's own formula, which would otherwise
+    leak brand-new items in here too. `repository.ts#getLeechList` only
+    queries reviews for the lapsed subset (via `listStudyItemSummaries`'s
+    existing subject-label batching), not the whole `reviews` table. Each
+    row links to `/study-items/:id` (existing debug view) and, when
+    classified, the same next-action route `errorMix` points at.
+  - 14 new tests (`tests/velocity.test.ts`, `tests/leechList.test.ts`, plus
+    additions to `tests/progressPanels.test.ts` and
+    `tests/sessionPlannerRepository.test.ts`); full suite green (1508).
 - **2026-09-17 — per-review predicted-retrievability logging** (user asked
   about the "FSRS calibration surfacing" ROADMAP entry, then asked to close
   the gap it flagged). "FSRS confidence" on `/progress` only ever showed a

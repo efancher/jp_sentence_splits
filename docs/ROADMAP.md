@@ -605,8 +605,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   has no browser libs installed) — shipped on the full test suite +
   typecheck + a direct curl against the live service instead.
 
-- [ ] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
-  promoted from "Possibilities" below) The direct answer to "I have several
+- [x] **"Ready to read" difficulty/coverage scoring.** (2026-09-13,
+  promoted from "Possibilities" below; step 3 closed 2026-09-17) The direct
+  answer to "I have several
   books/sources now, which is the easiest one to pick up next" — and the
   natural companion to the two importers above: NHK Easy content is
   *labeled* easy by NHK, but Satori books, YouTube-mined books, and future
@@ -639,14 +640,16 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
      vocabulary is partly confirmed+proficient and one that's unanalyzed;
      toggle "Easiest first" and confirm the higher-coverage book floats up
      and the unanalyzed one sorts to the bottom regardless of ratio.
-  3. **Feed `findExploreCandidates`** (session planner's `continue_book`
-     candidate ranking) with the same coverage number as a secondary sort
-     key, so an easier caught-up book edges out a harder one when neglect
-     scores are close — a light touch on top of the existing vocab-first
-     gating, not a rewrite of it. **Not done** — deferred; `BooksPage`'s
-     manual sort already answers "which book is easiest" for a learner who
-     asks, and the planner already has its own vocab-readiness gate, so this
-     is a nice-to-have ranking nudge, not a gap.
+  3. ~~**Feed `findExploreCandidates`**~~ **Done 2026-09-17** — among books
+     that are otherwise tied (both caught up on vocabulary confirmation, the
+     existing rank-0-vs-1 gate untouched), `getBookVocabularyCoverage()` now
+     breaks the tie by coverage ratio descending before falling back to
+     recency; unanalyzed books (`ratio: null`) still sort last, same
+     convention as `BooksPage`'s "Easiest first" toggle. A light touch on
+     top of the existing vocab-first gating, not a rewrite of it — verified
+     with a repository test (`tests/sessionPlannerRepository.test.ts`) where
+     a more-recently-opened harder book is deliberately outranked by an
+     older, fully-known one.
   - Out of scope for v1: cross-book recommendation ("read X before Y") —
     just a per-book number the learner reads themselves.
 
@@ -788,10 +791,21 @@ other instead of running as silos. **Blind-spot surfacing**, the
 2026-09-08 — see "Analytics pass 1" under Done. The rest are unscheduled
 possibilities, kept here so the thinking isn't lost:
 
-- [ ] **Leech list** — rank study items by lapses + the planner's existing
-  `weakness` term, show the `errorClassification` reason, offer a real
-  intervention per item (re-gloss / shadow / contrastive pair / track the
-  grammar), never a leech drill. Overlaps the error-mix view.
+- [x] **Leech list** — shipped 2026-09-17 as a `/progress` panel:
+  `src/lib/leechList.ts` (`buildLeechList`) ranks every study item with a
+  real FSRS `lapses > 0` by `lapses + weakness` (the same
+  `recentAgainCount / recentReviewCount` term `sessionPlanner.ts`'s
+  `scoreReviewPriority` uses), each row showing its most common recent
+  `errorClassification` reason and a next action — reuses `errorMix.ts`'s
+  `metaFor`/`classificationKey` (both exported for this) rather than a
+  second label table, so the two views never disagree. Deliberately
+  excludes items whose recent misses haven't produced a real lapse yet
+  (a still-new item defaults to a nonzero `weakness` in the planner's own
+  formula, which would otherwise leak in here too). `repository.ts#getLeechList`
+  only fetches reviews for the lapsed subset, not the whole `reviews`
+  table. Not a standalone drill — each row links to `/study-items/:id`
+  (existing debug view) and, when classified, the same next-action route
+  `errorMix` already points at.
 - [x] **Skill-imbalance metric** — shipped 2026-09-16 as "Skill coverage"
   on `/progress`: of reading-*recognized* words (`reading_retrieval`/`cloze`
   proficient — the recognition-only denominator, deliberately excluding
@@ -848,8 +862,15 @@ possibilities, kept here so the thinking isn't lost:
   on specifically the pitch requirement. `repository.ts#getGateFunnelSnapshot`
   — no separate pure lib module, since the logic is mostly Dexie-side
   counting reusing the gate primitives directly.
-- [ ] **Velocity / ETA** — surface the new-card-backlog drain rate
-  (`report:new-card-backlog` already computes it) and ~words/week.
+- [x] **Velocity / ETA** — shipped 2026-09-17 as a "New-card backlog"
+  `/progress` panel. `src/lib/velocity.ts` (`buildVelocityReport`) combines
+  `countNewVocabularyCardBacklog()`'s raw count with the words-learned-per-
+  week trend `buildProgressReport` already computes (`ProgressReport.weeks`)
+  — no new Dexie reads, computed client-side in `ProgressPage` from data
+  it's already fetching. Averages only *complete* weeks (the most recent
+  bucket is the current, still-in-progress week and would understate the
+  rate); reports "no estimate yet" rather than a divide-by-zero/infinity
+  when the recent rate is 0.
 - [ ] **Per-sentence mastery arc** — one ladder per encountered sentence
   (vocab confirmed → words reading-proficient → listening-proficient →
   conjugations → grammar noticed → `reading_in_context` mature → shadowed
