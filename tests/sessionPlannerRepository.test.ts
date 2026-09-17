@@ -109,6 +109,46 @@ describe('Learning Orchestrator repository layer', () => {
     expect(after.retainDue.some((d) => d.studyItemId === card.id)).toBe(false);
   });
 
+  it('among caught-up books, an easier (higher known-vocabulary coverage) book edges out a harder one opened more recently ("Ready to read" step 3)', async () => {
+    const db = getDb();
+
+    const easyBook = await createBook({ title: 'Older Easy' });
+    const easySentence = makeSentence({ japanese: '猫が寝ています。' });
+    await db.sentences.put(easySentence);
+    await addSentencesToBook(easyBook.id, [easySentence.id]);
+    await confirmSentenceVocabulary(easySentence.id, [
+      makeSelection({ surface: '猫', expression: '猫', reading: 'ねこ' }),
+    ]);
+    const easyWord = await db.vocabularyItems
+      .where('[expression+reading]')
+      .equals(['猫', 'ねこ'])
+      .first();
+    const easyStudyItem = await ensureStudyItem('vocabularyItem', easyWord!.id, 'reading_retrieval');
+    // 100% known.
+    await db.studyItems.update(easyStudyItem.id, {
+      fsrsState: { ...easyStudyItem.fsrsState, state: 'review' },
+    });
+
+    // Created after easyBook, so recency alone would rank this first.
+    const hardBook = await createBook({ title: 'Recent Hard' });
+    const hardSentence = makeSentence({ japanese: '犬が走ります。' });
+    await db.sentences.put(hardSentence);
+    await addSentencesToBook(hardBook.id, [hardSentence.id]);
+    await confirmSentenceVocabulary(hardSentence.id, [
+      makeSelection({ surface: '犬', expression: '犬', reading: 'いぬ' }),
+    ]);
+    const hardWord = await db.vocabularyItems
+      .where('[expression+reading]')
+      .equals(['犬', 'いぬ'])
+      .first();
+    // Left at 'new' — 0% known.
+    await ensureStudyItem('vocabularyItem', hardWord!.id, 'reading_retrieval');
+
+    const input = await getSessionPlannerInput(60);
+    const ids = input.exploreCandidates.map((c) => c.bookId);
+    expect(ids.indexOf(easyBook.id)).toBeLessThan(ids.indexOf(hardBook.id));
+  });
+
   it('counts confirmed-but-never-introduced words as the new-card backlog, and the planner reserves review minutes for them', async () => {
     const db = getDb();
     const now = new Date().toISOString();

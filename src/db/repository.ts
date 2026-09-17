@@ -69,7 +69,8 @@ import {
 import { buildProgressReport, type ProgressReport } from '../lib/progressReport';
 import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpots';
 import { buildBookCoverage, type BookCoverage } from '../lib/bookCoverage';
-import { buildErrorMix, type ErrorMix } from '../lib/errorMix';
+import { buildErrorMix, classificationKey, type ErrorMix } from '../lib/errorMix';
+import { buildLeechList, type LeechListReport } from '../lib/leechList';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import {
@@ -3252,6 +3253,65 @@ export async function getErrorMix(
         }
       : null,
   });
+}
+
+/**
+ * "Leech list" (`buildLeechList`, docs/ROADMAP.md "Possibilities") — every
+ * study item with at least one real FSRS lapse, ranked by lapses + recent
+ * weakness, each with its most common recent `errorClassification` reason.
+ * Reuses `listStudyItemSummaries` for the label (no separate subject-lookup
+ * pass) and only fetches reviews for the lapsed subset, not the whole
+ * `reviews` table.
+ */
+export async function getLeechList(options: { limit?: number } = {}): Promise<LeechListReport> {
+  const db = getDb();
+  const summaries = await listStudyItemSummaries();
+  const candidates = summaries.filter((summary) => summary.studyItem.fsrsState.lapses > 0);
+  if (candidates.length === 0) return buildLeechList([]);
+
+  const candidateIds = candidates.map((summary) => summary.studyItem.id);
+  const reviews = await db.reviews.where('studyItemId').anyOf(candidateIds).toArray();
+  const reviewsByStudyItemId = new Map<string, Review[]>();
+  for (const review of reviews) {
+    const list = reviewsByStudyItemId.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByStudyItemId.set(review.studyItemId, [review]);
+  }
+
+  const inputs = candidates.map(({ studyItem, subjectLabel }) => {
+    const recent = (reviewsByStudyItemId.get(studyItem.id) ?? [])
+      .slice()
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, 7);
+    const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
+
+    const classificationCounts = new Map<string, number>();
+    for (const review of recent) {
+      if (review.rating !== 'again' || !review.errorClassification) continue;
+      const key = classificationKey(review.errorClassification);
+      classificationCounts.set(key, (classificationCounts.get(key) ?? 0) + 1);
+    }
+    let topErrorClassificationKey: string | null = null;
+    let topCount = 0;
+    for (const [key, count] of classificationCounts) {
+      if (count > topCount) {
+        topErrorClassificationKey = key;
+        topCount = count;
+      }
+    }
+
+    return {
+      studyItemId: studyItem.id,
+      subjectLabel,
+      activityType: studyItem.activityType,
+      lapses: studyItem.fsrsState.lapses,
+      recentAgainCount,
+      recentReviewCount: recent.length,
+      topErrorClassificationKey,
+    };
+  });
+
+  return buildLeechList(inputs, options.limit);
 }
 
 /**
@@ -6547,7 +6607,11 @@ async function buildReviewPriorityInputs(
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]> {
   const db = getDb();
-  const books = (await db.books.toArray())
+  const [allBooks, coverageByBookId] = await Promise.all([
+    db.books.toArray(),
+    getBookVocabularyCoverage(),
+  ]);
+  const books = allBooks
     .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
@@ -6589,7 +6653,23 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
     .sort((a, b) => {
       const rank = (c: ExploreCandidate) =>
         c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
-      return rank(a.candidate) - rank(b.candidate) || a.index - b.index;
+      const rankA = rank(a.candidate);
+      const rankB = rank(b.candidate);
+      if (rankA !== rankB) return rankA - rankB;
+      if (rankA === 1) {
+        // Both caught up on vocabulary confirmation: an easier (higher
+        // known-vocabulary ratio) book edges out a harder one — "Ready to
+        // read" step 3, docs/ROADMAP.md. Unanalyzed books (null ratio) sort
+        // last, same convention as BooksPage's "Easiest first" toggle.
+        const ratioA = coverageByBookId.get(a.candidate.bookId)?.ratio ?? null;
+        const ratioB = coverageByBookId.get(b.candidate.bookId)?.ratio ?? null;
+        if (ratioA !== ratioB) {
+          if (ratioA === null) return 1;
+          if (ratioB === null) return -1;
+          return ratioB - ratioA;
+        }
+      }
+      return a.index - b.index;
     })
     .slice(0, limit)
     .map((entry) => entry.candidate);

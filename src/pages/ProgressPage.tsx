@@ -3,10 +3,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
+  countNewVocabularyCardBacklog,
   getBlindSpots,
   getErrorMix,
   getFsrsConfidenceSnapshot,
   getGateFunnelSnapshot,
+  getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
   getSkillCoverage,
@@ -15,6 +17,7 @@ import {
 import type { ErrorCategory } from '../lib/errorMix';
 import type { TrendDirection } from '../lib/pronunciationProfile';
 import type { WeekBucket } from '../lib/progressReport';
+import { buildVelocityReport } from '../lib/velocity';
 
 /**
  * "How am I doing" progress screen (docs/ROADMAP.md — "Retention /
@@ -162,6 +165,12 @@ export function ProgressPage() {
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
+  const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
+  const leechList = useLiveQuery(() => getLeechList(), []);
+  const velocity =
+    report && newCardBacklog !== undefined
+      ? buildVelocityReport(newCardBacklog, report.weeks)
+      : undefined;
 
   return (
     <div className="stack">
@@ -412,6 +421,40 @@ export function ProgressPage() {
               Running total of words you've recalled for the first time, by week.
             </p>
           </section>
+
+          <section className="panel stack">
+            <h3 style={{ margin: 0 }}>New-card backlog</h3>
+            {velocity === undefined ? (
+              <p className="muted">Loading…</p>
+            ) : velocity.backlogSize === 0 ? (
+              <p className="muted">No backlog — every confirmed word is already in the SRS.</p>
+            ) : (
+              <>
+                <StatRow label="Confirmed, not yet in the SRS" value={String(velocity.backlogSize)} />
+                <StatRow
+                  label="Recent pace"
+                  value={
+                    velocity.weeklyWordsLearnedRate === null
+                      ? '—'
+                      : `${velocity.weeklyWordsLearnedRate.toFixed(1)} words/week`
+                  }
+                />
+                <StatRow
+                  label="At this rate"
+                  value={
+                    velocity.weeksToClearBacklog === null
+                      ? 'no estimate yet'
+                      : `~${velocity.weeksToClearBacklog} week${velocity.weeksToClearBacklog === 1 ? '' : 's'} to clear`
+                  }
+                />
+                <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  Based on the last {Math.max(0, report.weeks.length - 1)} complete week
+                  {report.weeks.length - 1 === 1 ? '' : 's'} of newly-recalled words. Raise "New
+                  cards per review session" in Settings to go faster.
+                </p>
+              </>
+            )}
+          </section>
         </>
       ) : null}
 
@@ -561,6 +604,51 @@ export function ProgressPage() {
             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
               Sentences that clear every other requirement for a step and are blocked on
               specifically the one named — not a general readiness count.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Leech list</h3>
+        {leechList === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !leechList.hasData ? (
+          <p className="muted">
+            No real leeches yet — nothing has failed after being on a genuine review schedule.
+          </p>
+        ) : (
+          <>
+            {leechList.rows.map((row) => (
+              <div
+                key={row.studyItemId}
+                className="row"
+                style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
+              >
+                <span>
+                  <Link to={`/study-items/${row.studyItemId}`} className="jp">
+                    {row.subjectLabel}
+                  </Link>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {' '}
+                    · {row.activityType} · {row.lapses} lapse{row.lapses === 1 ? '' : 's'} ·{' '}
+                    {row.reasonLabel}
+                  </span>
+                </span>
+                {row.route ? (
+                  <Link to={row.route} className="muted" style={{ fontSize: '0.85rem' }}>
+                    {row.nextAction} →
+                  </Link>
+                ) : (
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    {row.nextAction}
+                  </span>
+                )}
+              </div>
+            ))}
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Ranked by real FSRS lapses plus recent miss rate — never a separate drill, just
+              where to focus next.
             </p>
           </>
         )}

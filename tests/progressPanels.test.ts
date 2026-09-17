@@ -9,6 +9,7 @@ import {
   getDb,
   getFsrsConfidenceSnapshot,
   getGateFunnelSnapshot,
+  getLeechList,
   getSelfRatingCalibration,
   getSkillCoverage,
   getStepUsefulness,
@@ -322,5 +323,69 @@ describe('getGateFunnelSnapshot', () => {
     await advanceToProficient(vocabularyItemId, 'pitch_accent');
     const after = await getGateFunnelSnapshot();
     expect(after.shadowBlockedOnPitch).toBe(0);
+  });
+});
+
+describe('getLeechList', () => {
+  beforeEach(() => {
+    resetDbForTests(`progress-panels-${createId('db')}`);
+  });
+
+  it('excludes an item with recent misses but no real FSRS lapse yet', async () => {
+    const item = await ensureStudyItem('vocabularyItem', 'vi-new', 'reading_production');
+    await recordReview({
+      studyItemId: item.id,
+      rating: 'again',
+      responseRaw: 'たべる',
+      expectedAnswer: 'たべた',
+    });
+    const result = await getLeechList();
+    expect(result.hasData).toBe(false);
+  });
+
+  it('surfaces a lapsed item with its subject label and most common recent error reason', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.vocabularyItems.add({
+      id: 'vi-1',
+      expression: '食べる',
+      reading: 'たべる',
+      meaning: 'to eat',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const item = await ensureStudyItem('vocabularyItem', 'vi-1', 'reading_production');
+    await advanceToProficient('vi-1', 'reading_production'); // -> FSRS 'review' state
+    // A real lapse: failing from 'review' state.
+    await recordReview({
+      studyItemId: item.id,
+      rating: 'again',
+      responseRaw: 'たべる',
+      expectedAnswer: 'たべた',
+      now: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    });
+
+    const result = await getLeechList();
+    expect(result.hasData).toBe(true);
+    const row = result.rows.find((r) => r.studyItemId === item.id);
+    expect(row).toBeDefined();
+    expect(row!.lapses).toBeGreaterThan(0);
+    expect(row!.subjectLabel).toBe('食べる (たべる)');
+    expect(row!.reasonLabel).toBe('Wrong reading');
+    expect(row!.nextAction).toBe('Drill readings');
+  });
+
+  it('respects the limit option', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      const item = await ensureStudyItem('vocabularyItem', `vi-${i}`, 'reading_production');
+      await advanceToProficient(`vi-${i}`, 'reading_production');
+      await recordReview({
+        studyItemId: item.id,
+        rating: 'again',
+        now: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+      });
+    }
+    const result = await getLeechList({ limit: 2 });
+    expect(result.rows).toHaveLength(2);
   });
 });

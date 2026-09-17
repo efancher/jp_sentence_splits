@@ -72,7 +72,8 @@ export interface ErrorMix {
   } | null;
 }
 
-function classificationKey(classification: ErrorClassification): string {
+/** Exported for `leechList.ts` — same classification-to-string collapse, shared rather than duplicated. */
+export function classificationKey(classification: ErrorClassification): string {
   return typeof classification === 'string' ? classification : classification.userDefined;
 }
 
@@ -112,7 +113,8 @@ const META: Record<string, { label: string; nextAction: string; route?: string }
   },
 };
 
-function metaFor(key: string): { label: string; nextAction: string; route?: string } {
+/** Exported for `leechList.ts` — same label/next-action lookup, shared rather than duplicated. */
+export function metaFor(key: string): { label: string; nextAction: string; route?: string } {
   return META[key] ?? { label: key, nextAction: 'Review these' };
 }
 
