@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-16.
+Last updated: 2026-09-17.
 
 ## Where things stand
 
@@ -32,6 +32,26 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-17 — `WordAudioRangeEditor` drag dispatched by DOM z-order,
+  not pointer proximity: the ungrabbable/collapsing handle bug (card issue
+  triage).** Two same-day reports (まあ / 夏休み, both short words inside a
+  long clip) described the same symptom: "can't adjust the right side, if
+  I try the left side collapses and I can't move either." Each handle drags
+  via its own invisible 24-viewBox-unit-wide hit-line, and the `end`
+  handle's line is drawn after (on top of) `start`'s — for a short word the
+  two starting handle positions sit well within that 24-unit overlap, so
+  every pointerdown in that zone hit `end` regardless of intent: a drag
+  meant to widen `start` leftward instead dragged `end` down onto it,
+  collapsing the range, after which both handles occupied the same point
+  and `start` was permanently unreachable. Fixed by moving pointerdown
+  dispatch to the `<svg>` itself and picking whichever handle's *current
+  position* is nearer the click, not whichever hit-line happens to be
+  topmost. `src/components/WordAudioRangeEditor.tsx`; 1 new regression test
+  in `tests/wordAudioRangeEditor.test.tsx`. Third open report this session
+  (`grammar_completion`, "just kind of a search and find") is UX feedback
+  on the rebuilt card's design, not a data bug — left for the user to weigh
+  in on rather than acted on unilaterally.
 
 - **2026-09-16 — Five data-grounding panels on `/progress`** (user: "any
   recommendations for types of data we should collect or improving what

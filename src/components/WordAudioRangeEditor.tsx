@@ -161,8 +161,20 @@ export function WordAudioRangeEditor({
     onCommit(next);
   };
 
-  const beginDrag = (edge: 'start' | 'end') => (event: React.PointerEvent) => {
+  // Dispatches to whichever handle's *current position* is nearer the
+  // pointer, rather than relying on which handle's invisible hit-line is
+  // drawn on top. The two hit-lines are 24 viewBox units wide each, so for
+  // a short word deep in a longer clip (handles naturally close together)
+  // they overlap — with z-order dispatch, the topmost one wins every time,
+  // making the other handle permanently ungrabbable once they're close,
+  // and a drag meant for it instead drags the topmost one on top of it,
+  // collapsing the range further (reported 2026-09-17: "can't adjust the
+  // right side, if I try the left side collapses and I can't move either").
+  const handlePointerDown = (event: React.PointerEvent) => {
     if (disabled) return;
+    const ms = msForClientX(event.clientX);
+    const edge =
+      Math.abs(ms - value.startMs) <= Math.abs(ms - value.endMs) ? 'start' : 'end';
     draggingRef.current = edge;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
@@ -182,7 +194,6 @@ export function WordAudioRangeEditor({
           strokeWidth={24}
           style={{ cursor: disabled ? 'default' : 'ew-resize' }}
           aria-label={edge === 'start' ? 'Word start' : 'Word end'}
-          onPointerDown={beginDrag(edge)}
         />
       </g>
     );
@@ -225,6 +236,7 @@ export function WordAudioRangeEditor({
           color: 'var(--text-muted)',
           touchAction: 'none',
         }}
+        onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerLeave={endDrag}
