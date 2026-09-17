@@ -66,7 +66,7 @@ import {
 } from '../lib/conjugation';
 import {
   blankPatternInSentence,
-  buildGrammarCompletionChoices,
+  isGrammarPatternAnswerCorrect,
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
@@ -511,13 +511,6 @@ const RATINGS: { value: ReviewRating; label: string }[] = [
 interface GrammarReviewCandidate {
   pattern: GrammarPattern;
   sentence: Sentence;
-  /**
-   * Includes the correct pattern; length 1 means no other pattern exists
-   * yet to contrast against (a fresh corpus with only one tracked
-   * pattern) — GrammarCompletionCard degrades to a plain reveal in that
-   * case rather than a broken one-option "choice."
-   */
-  choices: GrammarPattern[];
   /** Passage framing for the target sentence — same shape reading_in_context uses. */
   readingContext: ReadingContext;
 }
@@ -1096,41 +1089,14 @@ export function ReviewPage() {
       ).filter((item) => item.subjectType === 'grammarPattern');
       const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
       if (trackedPatternIds.length > 0) {
-        const [trackedPatterns, allPatterns, relationships] = await Promise.all([
-          db.grammarPatterns.bulkGet(trackedPatternIds),
-          db.grammarPatterns.toArray(),
-          db.grammarRelationships.toArray(),
-        ]);
-        // Rank GrammarRelationship-linked patterns first among completion
-        // distractors — a distractor the learner has actually flagged as
-        // confusable (via the detail page's "Related patterns" control) is
-        // more useful than a random one from the corpus. See
-        // buildGrammarCompletionChoices's doc comment.
-        const relatedPatternIdsByPattern = new Map<string, Set<string>>();
-        for (const relationship of relationships) {
-          const addRelation = (id: string, otherId: string) => {
-            const set = relatedPatternIdsByPattern.get(id);
-            if (set) set.add(otherId);
-            else relatedPatternIdsByPattern.set(id, new Set([otherId]));
-          };
-          addRelation(relationship.patternAId, relationship.patternBId);
-          addRelation(relationship.patternBId, relationship.patternAId);
-        }
+        const trackedPatterns = await db.grammarPatterns.bulkGet(trackedPatternIds);
         for (const pattern of trackedPatterns) {
           if (!pattern) continue;
           const context = await pickContextSentenceForGrammarPattern(pattern.id);
           if (!context) continue;
-          const otherPatterns = allPatterns.filter((item) => item.id !== pattern.id);
-          const relatedPatternIds = relatedPatternIdsByPattern.get(pattern.id);
           grammarCandidates.push({
             pattern,
             sentence: context.sentence,
-            choices: buildGrammarCompletionChoices(
-              pattern,
-              otherPatterns,
-              undefined,
-              relatedPatternIds,
-            ),
             readingContext: context.readingContext,
           });
         }
@@ -1699,8 +1665,9 @@ export function ReviewPage() {
                 key={current.studyItem.id}
                 candidate={current.grammar}
                 revealed={revealed}
-                onCheck={(value) => {
+                onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
+                  setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
               />
@@ -2606,26 +2573,38 @@ function ContrastivePairCard({
  * retired 2026-09-15 (docs/ROADMAP.md): a prior redesign collapsed all
  * four into an ambient notice strip under every review card, which in
  * real use "makes the review cards clunky and doesn't help with learning"
- * (user). Rebuilt instead around two changes to the original
- * grammar_completion shape: the target sentence's English translation is
- * now always visible — it's the input signal for picking the right
- * construct, the same idea as giving the audio in a pitch-accent card and
- * asking for the pitch shape — and the sentence is framed by its
- * reading-order passage context, same convention as ReadingInContextCard
- * (before shown untranslated always; after shown untranslated pre-reveal,
- * translated post-reveal). Multiple choice among the pattern and up to 3
- * distractors (GrammarReviewCandidate.choices, precomputed in ReviewPage's
- * scope query, ranking GrammarRelationship-linked patterns first — see
- * buildGrammarCompletionChoices). Blanks the pattern's surface form when
- * it appears verbatim in the sentence (blankPatternInSentence —
- * best-effort, no real span data exists yet); otherwise shows the full
- * sentence and asks which construction it uses. Auto-graded (the app
- * knows the right choice), but still funnels through the same
- * typed-response/self-rate flow every other typed/selected card uses.
- * Degrades to a plain reveal when fewer than two choices exist — a fresh
- * corpus with only one tracked pattern has nothing to contrast against
- * yet. Reveals the pattern's own explanation — the only place that used
- * to surface on `grammar_comprehension`, so it must not be lost here.
+ * (user). The target sentence's English translation is always visible —
+ * it's the input signal for producing the right construct, the same idea
+ * as giving the audio in a pitch-accent card and asking for the pitch
+ * shape — and the sentence is framed by its reading-order passage
+ * context, same convention as ReadingInContextCard (before shown
+ * untranslated always; after shown untranslated pre-reveal, translated
+ * post-reveal). Blanks the pattern's surface form when it appears
+ * verbatim in the sentence (blankPatternInSentence — best-effort, no real
+ * span data exists yet); otherwise shows the full sentence and asks which
+ * construction it uses.
+ *
+ * **2026-09-17 redesign** (card issue triage — "not sure if the way this
+ * card type is setup is helpful, it's just kind of a search and find"):
+ * was multiple choice among the pattern and up to 3 distractors. Given the
+ * translation is already shown, a learner can eliminate options by
+ * grammatical shape alone without ever recalling the construct from its
+ * meaning — the complaint was exactly that shortcut. Replaced with a
+ * typed answer, same shape as SentenceConjugationCard/ReadingProductionCard:
+ * the learner types the construction, graded leniently via
+ * `isGrammarPatternAnswerCorrect` (tilde/annotation/whitespace-insensitive,
+ * same normalization `blankPatternInSentence` and pattern dedup already
+ * use). This also means every tracked pattern gets the same card shape now,
+ * even a lone pattern with nothing to contrast against — there's no longer
+ * a "not enough distractors" degenerate case to special-case.
+ * `buildGrammarCompletionChoices`/`GRAMMAR_COMPLETION_CHOICE_COUNT` and the
+ * GrammarRelationship-ranked-distractor logic this replaced are gone from
+ * `grammarPatterns.ts` (git history/docs/ROADMAP.md's "grammar pattern
+ * discrimination" entry has the distractor-ranking approach if a future
+ * card wants it back). Still auto-graded, still funnels through the same
+ * typed-response/self-rate flow every other typed card uses. Reveals the
+ * pattern's own explanation — the only place that used to surface on the
+ * retired `grammar_comprehension`, so it must not be lost here.
  */
 function GrammarCompletionCard({
   candidate,
@@ -2634,10 +2613,11 @@ function GrammarCompletionCard({
 }: {
   candidate: GrammarReviewCandidate;
   revealed: boolean;
-  onCheck: (chosenCanonicalName: string) => void;
+  onCheck: (typed: string, gradedAgainst: string) => void;
 }) {
-  const { pattern, sentence, choices, readingContext } = candidate;
-  const [selected, setSelected] = useState<string | null>(null);
+  const { pattern, sentence, readingContext } = candidate;
+  const [value, setValue] = useState('');
+  const [wasCorrect, setWasCorrect] = useState(false);
   const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
   const { before, after } = readingContext;
 
@@ -2679,29 +2659,6 @@ function GrammarCompletionCard({
     </div>
   ) : null;
 
-  if (choices.length < 2) {
-    return (
-      <>
-        {passageBefore}
-        <div className="jp jp-lg">{sentence.japanese}</div>
-        <div className="muted">
-          What does <span className="jp">{pattern.canonicalName}</span> contribute here?
-        </div>
-        {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-        {!revealed ? (
-          <button type="button" onClick={() => onCheck('')}>
-            Reveal
-          </button>
-        ) : (
-          <>
-            {explanation}
-            {passageAfter}
-          </>
-        )}
-      </>
-    );
-  }
-
   return (
     <>
       {passageBefore}
@@ -2718,38 +2675,39 @@ function GrammarCompletionCard({
       </div>
       {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
       {!revealed ? (
-        <>
-          <div className="muted">
+        <form
+          className="row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setWasCorrect(isGrammarPatternAnswerCorrect(value, pattern.canonicalName));
+            onCheck(value, pattern.canonicalName);
+          }}
+        >
+          <label>
             {blank
-              ? 'Which construction fits the blank?'
+              ? 'What construction fills the blank?'
               : 'Which construction does this sentence use?'}
-          </div>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
-            {choices.map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                className="jp"
-                onClick={() => {
-                  setSelected(choice.canonicalName);
-                  onCheck(choice.canonicalName);
-                }}
-              >
-                {choice.canonicalName}
-              </button>
-            ))}
-          </div>
-        </>
+            <input
+              type="text"
+              className="jp"
+              value={value}
+              autoComplete="off"
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </label>
+          <button type="submit">Check</button>
+        </form>
       ) : (
         <>
-          <div className="muted">
-            {selected === pattern.canonicalName ? '✓ Correct' : '✗ Not quite'}
-          </div>
-          {!blank ? (
+          <div className="muted">{wasCorrect ? '✓ Correct' : '✗ Not quite'}</div>
+          {!wasCorrect ? (
             <div className="muted">
-              Correct: <span className="jp">{pattern.canonicalName}</span>
+              You typed: <span className="jp">{value.trim() || '(blank)'}</span>
             </div>
           ) : null}
+          <div className="muted">
+            Correct: <span className="jp">{pattern.canonicalName}</span>
+          </div>
           {explanation}
           {passageAfter}
         </>

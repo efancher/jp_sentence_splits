@@ -1,6 +1,5 @@
-import type { GrammarPattern, GrammarRelationshipType } from '../domain/types';
-import { hashString } from './ids';
-import { stripMarkup } from './normalize';
+import type { GrammarRelationshipType } from '../domain/types';
+import { normalizeSentenceKey, stripMarkup } from './normalize';
 
 /** Human-readable labels for GrammarRelationshipType, for the detail page's "Related patterns" section. */
 export const GRAMMAR_RELATIONSHIP_TYPE_LABELS: Record<GrammarRelationshipType, string> = {
@@ -181,48 +180,21 @@ export function explainGrammarPriority(
   return `${parts.join(', ')}.`;
 }
 
-/** Default number of options on a grammar_completion multiple-choice card, including the correct one. */
-export const GRAMMAR_COMPLETION_CHOICE_COUNT = 4;
-
 /**
- * Multiple-choice options for a grammar_completion card: the correct
- * pattern plus up to `count - 1` distractors drawn from `otherPatterns`
- * (design brief §7/§8 — "distractors from confusable pairs when
- * available" is a natural future extension here once GrammarRelationship
- * data exists; for now this draws from the whole corpus). Both the
- * distractor pick and the final option order are deterministic, seeded
- * from the pattern's own id (same hash-based approach as
- * ReviewPage.tsx's pickTransformationTarget) — the same pattern always
- * gets the same choices in the same order across reloads/re-renders,
- * rather than reshuffling on every render.
- *
- * `relatedPatternIds` (design brief §7/§8, grammar-learning system Phase
- * 8) — patterns explicitly linked to the correct one via
- * `GrammarRelationship` are ranked ahead of the rest of the corpus: a
- * distractor the learner has actually flagged as confusable (via the
- * detail page's "Related patterns" control) is a more useful contrast
- * than a random unrelated one. Falls back to the whole-corpus hash order
- * when no relationships exist yet, same as before this parameter existed.
+ * Grades a learner's typed answer on a `grammar_completion` card (recall,
+ * not multiple choice — see GrammarCompletionCard's doc comment,
+ * 2026-09-17) against the pattern's canonical name. Reuses the exact same
+ * normalization `blankPatternInSentence` and pattern-dedup
+ * (`normalizeGrammarPatternKey`) already apply — a tilde, a parenthetical
+ * sense-gloss, or incidental whitespace shouldn't fail an otherwise-right
+ * answer. Deliberately *not* kanji/kana-variant-aware (same caveat as
+ * `normalizeGrammarPatternKey`) — a pattern stored as 訳がない would reject
+ * a typed わけがない; canonical names are conventionally kana already, so
+ * this is rare in practice, not something to paper over with a guess.
  */
-export function buildGrammarCompletionChoices(
-  pattern: GrammarPattern,
-  otherPatterns: readonly GrammarPattern[],
-  count = GRAMMAR_COMPLETION_CHOICE_COUNT,
-  relatedPatternIds: ReadonlySet<string> = new Set(),
-): GrammarPattern[] {
-  const ranked = [...otherPatterns].sort((a, b) => {
-    const relatedA = relatedPatternIds.has(a.id) ? 0 : 1;
-    const relatedB = relatedPatternIds.has(b.id) ? 0 : 1;
-    if (relatedA !== relatedB) return relatedA - relatedB;
-    const ha = Number.parseInt(hashString(`${pattern.id}:pick:${a.id}`), 16);
-    const hb = Number.parseInt(hashString(`${pattern.id}:pick:${b.id}`), 16);
-    return ha - hb;
-  });
-  const distractors = ranked.slice(0, Math.max(0, count - 1));
-  const choices = [pattern, ...distractors];
-  return choices.sort((a, b) => {
-    const ha = Number.parseInt(hashString(`${pattern.id}:order:${a.id}`), 16);
-    const hb = Number.parseInt(hashString(`${pattern.id}:order:${b.id}`), 16);
-    return ha - hb;
-  });
+export function isGrammarPatternAnswerCorrect(typed: string, canonicalName: string): boolean {
+  const key = (value: string) =>
+    normalizeSentenceKey(stripPatternAnnotation(normalizeGrammarPatternKey(value)));
+  const typedKey = key(typed);
+  return typedKey.length > 0 && typedKey === key(canonicalName);
 }

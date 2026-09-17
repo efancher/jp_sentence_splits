@@ -286,6 +286,22 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     non-`grammar_completion` items across the 2 tracked patterns; both
     patterns' `grammar_completion` items kept their FSRS state untouched.
     Detail in STATUS.md.
+- [x] **`grammar_completion`: multiple choice → typed recall.** (2026-09-17,
+  card issue triage — "not sure if the way this card type is setup is
+  helpful, it's just kind of a search and find.") With the translation
+  always visible, multiple choice let a learner eliminate options by
+  grammatical shape alone without ever recalling the construct from its
+  meaning — user's own framing: "what should the card be teaching me to
+  retain?" Replaced with a typed answer (same shape as
+  SentenceConjugationCard/ReadingProductionCard), graded via the new
+  `isGrammarPatternAnswerCorrect` (`src/lib/grammarPatterns.ts` —
+  tilde/annotation/whitespace-insensitive, reusing
+  `normalizeGrammarPatternKey`). `buildGrammarCompletionChoices`/
+  `GRAMMAR_COMPLETION_CHOICE_COUNT` and the `GrammarRelationship`-ranked-
+  distractor logic are deleted, not just unused — see git history if the
+  discrimination-card idea below wants them back. Also removes the old
+  "fewer than 2 choices" degenerate case: every tracked pattern gets the
+  same card now, even a lone one with nothing to contrast against.
 
 ## In progress
 
@@ -310,6 +326,18 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Grammar pattern discrimination card.** (2026-09-17, follow-up to
+  the `grammar_completion` recall redesign above) A second retention target
+  distinct from recall: not "can you produce this construction" but "can
+  you tell it apart from the pattern you actually confuse it with" (e.g.
+  〜わけがない vs 〜はずがない). `GrammarRelationship` (`commonly_confused` in
+  particular) already models exactly this link, and the deleted
+  `buildGrammarCompletionChoices`'s relationship-ranking logic is the
+  natural starting point if this gets built — surface the two confusable
+  sentences/translations side by side (or one sentence, "which of these two
+  fits") rather than reviving free-form multiple choice. Unscheduled —
+  try recall alone first and see whether discrimination errors still show
+  up in the error-mix view before building a dedicated card for them.
 - [ ] **Podcast mining.** (2026-09-13) Extend the existing YouTube-mining
   pipeline to podcast episodes rather than building a new one — the backend
   is already more source-agnostic than it looks: `POST /jobs` takes a raw

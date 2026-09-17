@@ -7,7 +7,6 @@ import { ensureSettings, resetDbForTests } from '../src/db/database';
 import {
   confirmSentenceVocabulary,
   ensureGrammarPattern,
-  ensureGrammarRelationship,
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
   getDb,
@@ -16,7 +15,6 @@ import {
 } from '../src/db/repository';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
-import { buildGrammarCompletionChoices } from '../src/lib/grammarPatterns';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
@@ -2991,7 +2989,7 @@ describe('ReviewPage', () => {
   // GrammarPicker would).
   // ---------------------------------------------------------------------
 
-  it('renders a grammar_completion card with the translation visible before choosing, grades the chosen construction, and reveals the pattern explanation', async () => {
+  it('renders a grammar_completion card with the translation visible before typing, grades the typed construction, and reveals the pattern explanation', async () => {
     const db = getDb();
     const now = new Date().toISOString();
     await db.sentences.add({
@@ -3016,17 +3014,15 @@ describe('ReviewPage', () => {
     const correct = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",
     });
-    await ensureGrammarPattern('〜はずがない');
-    await ensureGrammarPattern('〜てしまう');
     await ensureSentenceGrammar('sent-grammar-2', correct.id, { confirmedByLearner: true });
     await ensureGrammarStudyItem(correct.id, 'grammar_completion');
 
     const user = userEvent.setup();
     renderReviewPage('/review', '/review');
 
-    await screen.findByText(/Which construction/);
+    await screen.findByText(/What construction fills the blank/);
     // The translation is the given input here, visible before the learner
-    // picks a construction — not gated behind reveal like the retired
+    // types a construction — not gated behind reveal like the retired
     // grammar_comprehension card used to require.
     expect(screen.getByText("There's no way I'd forget.")).toBeInTheDocument();
     // Blanking: 〜わけがない strips to わけがない, which appears verbatim
@@ -3034,7 +3030,8 @@ describe('ReviewPage', () => {
     expect(screen.queryByText('忘れるわけがない。')).not.toBeInTheDocument();
     expect(screen.getByText('_____')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '〜わけがない' }));
+    await user.type(screen.getByRole('textbox'), '〜わけがない');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
 
     expect(await screen.findByText('✓ Correct')).toBeInTheDocument();
     expect(screen.queryByText('_____')).not.toBeInTheDocument();
@@ -3150,59 +3147,12 @@ describe('ReviewPage', () => {
 
     renderReviewPage('/review', '/review');
 
-    await screen.findByText(/What does/);
+    await screen.findByText(/What construction fills the blank/);
     expect(screen.getByText('朝ごはんを食べました。')).toBeInTheDocument();
     expect(screen.getByText(/In context · Grammar Book/)).toBeInTheDocument();
     // Following sentence's translation only joins the reveal, same
     // convention as ReadingInContextCard.
     expect(screen.queryByText('Then I went out.')).not.toBeInTheDocument();
-  });
-
-  it('ranks a GrammarRelationship-linked pattern ahead of the rest of the corpus as a grammar_completion distractor', async () => {
-    const db = getDb();
-    const now = new Date().toISOString();
-    await db.sentences.add({
-      id: 'sent-grammar-3',
-      normalizedKey: 'sent-grammar-3',
-      japanese: '忘れるわけがない。',
-      readingOnly: '',
-      inlineReading: '',
-      translation: "There's no way I'd forget.",
-      targetVocabulary: [],
-      vocabularySuggestions: [],
-      sourceReferences: [],
-      conflicts: [],
-      firstOccurrenceIndex: 0,
-      importBatchIds: [],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await suppressUnconditionalSentenceActivityTypes('sent-grammar-3');
-    await confirmSentenceVocabulary('sent-grammar-3', []);
-
-    const correct = await ensureGrammarPattern('〜わけがない');
-    const others = await Promise.all(
-      ['〜はずがない', '〜てしまう', '〜ながら', '〜ば', '〜たら', '〜のに'].map((name) =>
-        ensureGrammarPattern(name),
-      ),
-    );
-    // Find a pattern that would NOT be among the default (no-relationship)
-    // distractor picks, so linking it is the only way it can show up —
-    // proving the relationship, not hash luck, drove the selection.
-    const unranked = buildGrammarCompletionChoices(correct, others);
-    const excluded = others.find(
-      (pattern) => !unranked.some((choice) => choice.id === pattern.id),
-    );
-    expect(excluded).toBeDefined();
-    await ensureGrammarRelationship(correct.id, excluded!.id, 'commonly_confused');
-
-    await ensureSentenceGrammar('sent-grammar-3', correct.id, { confirmedByLearner: true });
-    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
-
-    renderReviewPage('/review', '/review');
-
-    await screen.findByText(/Which construction/);
-    expect(screen.getByRole('button', { name: excluded!.canonicalName })).toBeInTheDocument();
   });
 
   it("is gated the same as vocabulary — surfaces even when the sentence's other vocabulary isn't proficient", async () => {
@@ -3234,7 +3184,7 @@ describe('ReviewPage', () => {
 
     renderReviewPage('/review', '/review');
 
-    expect(await screen.findByText(/What does/)).toBeInTheDocument();
+    expect(await screen.findByText(/What construction fills the blank/)).toBeInTheDocument();
   });
 });
 

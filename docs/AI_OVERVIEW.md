@@ -1114,8 +1114,10 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   2026-09-16 — telling two words apart on the page is a reading/meaning
   skill; pitch-drill reps on either member no longer count).
 - **GrammarPattern subject**: a single activity type, `grammar_completion`
-  — multiple choice among the tracked pattern and up to 3 distractors from
-  the corpus, blanking the sentence when the pattern's canonical name
+  — the learner types the construction (recall, not multiple choice —
+  graded leniently by `isGrammarPatternAnswerCorrect`, same
+  tilde/annotation/whitespace normalization `blankPatternInSentence`
+  already uses), blanking the sentence when the pattern's canonical name
   happens to appear in it verbatim (`blankPatternInSentence`,
   `src/lib/grammarPatterns.ts`). Was a 4-card ladder
   (`grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
@@ -1145,10 +1147,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
     `getReadingContextForSentence` (`repository.ts`, bounded per-sentence
     queries) rather than the shared scope-wide context map, since a
     tracked pattern's sentence can come from any book.
-  - Distractor pool still ranks `GrammarRelationship`-linked patterns
-    first (`buildGrammarCompletionChoices`'s `relatedPatternIds` param) —
-    a distractor the learner flagged as confusable via the detail page is
-    a more useful contrast than a random one from the corpus.
+  - **Typed recall, not multiple choice** (2026-09-17, card issue triage —
+    "just kind of a search and find"): with the translation always shown,
+    multiple choice let a learner eliminate options by grammatical shape
+    alone without ever recalling the construct from its meaning. Choices/
+    distractors (`buildGrammarCompletionChoices`, `GrammarRelationship`-
+    ranked) are gone; every tracked pattern gets the same typed-input card
+    now, including a lone pattern with nothing to contrast against — no
+    "not enough distractors" special case left. A `GrammarRelationship`-
+    based *discrimination* card (confusable-pair contrast) is parked on
+    docs/ROADMAP.md as a possible follow-up if recall alone isn't enough.
   - On reveal: correct/incorrect, the correct construct filled into the
     blank, and the pattern's own explanation — the only place that used to
     surface (the retired `grammar_comprehension` card), so it must not be

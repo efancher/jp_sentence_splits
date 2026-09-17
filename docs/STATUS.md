@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — `grammar_completion` rebuilt from multiple choice to
+  typed recall** (follow-up to the same-day card issue triage below: "not
+  sure if the way this card type is setup is helpful, it's just kind of a
+  search and find" → user: "the question should be what should the card be
+  teaching me to retain?"). With the translation always shown, multiple
+  choice let a learner eliminate options by shape rather than recalling
+  the construct from its meaning. Now a typed-input card, same shape as
+  `SentenceConjugationCard`/`ReadingProductionCard`, graded by a new
+  `isGrammarPatternAnswerCorrect` (`src/lib/grammarPatterns.ts`) reusing
+  the existing tilde/annotation-stripping normalization
+  (`normalizeGrammarPatternKey`/`blankPatternInSentence`) so a missing
+  tilde or an unstated parenthetical gloss doesn't fail an otherwise-right
+  answer. Deleted `buildGrammarCompletionChoices`/
+  `GRAMMAR_COMPLETION_CHOICE_COUNT` and the `GrammarRelationship`-ranked-
+  distractor plumbing in `ReviewPage.tsx`'s scope query — no longer
+  needed, and with it the "fewer than 2 choices" degenerate case (every
+  tracked pattern now gets the same card). `GrammarReviewCandidate` lost
+  its `choices` field. Updated 3 existing `reviewPage.test.tsx` tests,
+  removed one that only tested distractor ranking, added 6 new
+  `isGrammarPatternAnswerCorrect` unit tests. A future *discrimination*
+  card (confusable-pair contrast, using `GrammarRelationship` /
+  `commonly_confused`) is parked on docs/ROADMAP.md as a possible
+  follow-up if recall alone doesn't surface those errors.
+
 - **2026-09-17 — `WordAudioRangeEditor` drag dispatched by DOM z-order,
   not pointer proximity: the ungrabbable/collapsing handle bug (card issue
   triage).** Two same-day reports (まあ / 夏休み, both short words inside a

@@ -1,28 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GrammarPattern } from '../src/domain/types';
 import {
   blankPatternInSentence,
-  buildGrammarCompletionChoices,
   computeGrammarLearnerState,
   computeGrammarPriorityBucket,
   explainGrammarPriority,
+  isGrammarPatternAnswerCorrect,
   normalizeGrammarPatternKey,
 } from '../src/lib/grammarPatterns';
-
-function stubPattern(id: string, canonicalName: string): GrammarPattern {
-  const now = new Date().toISOString();
-  return {
-    id,
-    canonicalName,
-    normalizedKey: normalizeGrammarPatternKey(canonicalName),
-    aliases: [],
-    shortMeaning: '',
-    provenance: 'manual',
-    createdAt: now,
-    updatedAt: now,
-  };
-}
 
 describe('normalizeGrammarPatternKey', () => {
   it('strips a leading full-width wave dash', () => {
@@ -77,51 +62,31 @@ describe('blankPatternInSentence', () => {
   });
 });
 
-describe('buildGrammarCompletionChoices', () => {
-  it('includes the correct pattern plus up to 3 distractors', () => {
-    const correct = stubPattern('p-correct', '〜わけがない');
-    const others = [
-      stubPattern('p-1', '〜はずがない'),
-      stubPattern('p-2', '〜てしまう'),
-      stubPattern('p-3', '〜ながら'),
-      stubPattern('p-4', '〜ば'),
-      stubPattern('p-5', '〜たら'),
-    ];
-    const choices = buildGrammarCompletionChoices(correct, others);
-    expect(choices).toHaveLength(4);
-    expect(choices.map((c) => c.id)).toContain('p-correct');
-    // No duplicates, and every choice is either the correct one or a real distractor.
-    expect(new Set(choices.map((c) => c.id)).size).toBe(4);
+describe('isGrammarPatternAnswerCorrect', () => {
+  it('accepts an exact match', () => {
+    expect(isGrammarPatternAnswerCorrect('〜わけがない', '〜わけがない')).toBe(true);
   });
 
-  it('returns just the correct pattern when no other patterns exist', () => {
-    const correct = stubPattern('p-correct', '〜わけがない');
-    expect(buildGrammarCompletionChoices(correct, [])).toEqual([correct]);
+  it('is insensitive to a leading tilde on either side', () => {
+    expect(isGrammarPatternAnswerCorrect('わけがない', '〜わけがない')).toBe(true);
+    expect(isGrammarPatternAnswerCorrect('〜わけがない', 'わけがない')).toBe(true);
   });
 
-  it('is deterministic across calls for the same pattern id and pool', () => {
-    const correct = stubPattern('p-correct', '〜わけがない');
-    const others = [
-      stubPattern('p-1', '〜はずがない'),
-      stubPattern('p-2', '〜てしまう'),
-      stubPattern('p-3', '〜ながら'),
-    ];
-    const first = buildGrammarCompletionChoices(correct, others).map((c) => c.id);
-    const second = buildGrammarCompletionChoices(correct, others).map((c) => c.id);
-    expect(second).toEqual(first);
+  it('ignores a parenthetical sense-gloss on the canonical name', () => {
+    expect(isGrammarPatternAnswerCorrect('ている', '〜ている（動作進行）')).toBe(true);
   });
 
-  it('ranks relatedPatternIds-linked patterns ahead of the rest of the corpus', () => {
-    const correct = stubPattern('p-correct', '〜わけがない');
-    const others = [
-      stubPattern('p-1', '〜はずがない'),
-      stubPattern('p-2', '〜てしまう'),
-      stubPattern('p-3', '〜ながら'),
-      stubPattern('p-4', '〜ば'),
-      stubPattern('p-5', '〜たら'),
-    ];
-    const choices = buildGrammarCompletionChoices(correct, others, 2, new Set(['p-5']));
-    expect(choices.map((c) => c.id)).toContain('p-5');
+  it('ignores incidental whitespace', () => {
+    expect(isGrammarPatternAnswerCorrect('  わけ が ない  ', '〜わけがない')).toBe(true);
+  });
+
+  it('rejects a genuinely different construction', () => {
+    expect(isGrammarPatternAnswerCorrect('〜はずがない', '〜わけがない')).toBe(false);
+  });
+
+  it('rejects a blank answer', () => {
+    expect(isGrammarPatternAnswerCorrect('', '〜わけがない')).toBe(false);
+    expect(isGrammarPatternAnswerCorrect('   ', '〜わけがない')).toBe(false);
   });
 });
 
