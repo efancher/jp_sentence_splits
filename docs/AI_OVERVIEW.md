@@ -1040,10 +1040,17 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   diagram, `explainPitchAccent` (`src/lib/pitchAccentRules.ts`) adds a
   plain-language gloss of the contour plus, for the rule-governed cases
   only — loanwords, pre-accenting suffix compounds (〜的/〜性/〜化/〜学/〜者),
-  and the verb / i-adjective two-class system — a "why this pattern" note,
-  each cross-checked against the word's real Kanjium position and
-  suppressed on disagreement; plain native nouns get a "memorized, no
-  rule" fallback). The card renders `PitchAccentNativeAudio`
+  the verb / i-adjective two-class system, and the -masu family's fixed
+  accent (ます/ました/ません always downstep on "ma" regardless of the
+  citation form's own class, via a `conjugationFormKey` threaded from
+  `pitchAccentShift.ts`'s `resolveInflectedPitchAccent`) — a "why this
+  pattern" note, each cross-checked against the word's real Kanjium
+  position and suppressed on disagreement. Plain native nouns get a
+  length-based *tendency* note when this word's own pattern happens to
+  agree with it (short 2–3-mora nouns skew atamadaka/heiban; long 5+-mora
+  nouns skew nakadaka near the antepenultimate mora — worded as a
+  tendency, not a rule, since it has real exceptions even among matches),
+  else the "memorized, no rule" fallback. The card renders `PitchAccentNativeAudio`
   (`src/components/PitchAccentNativeAudio.tsx`) in both states — a "Loop
   native word" toggle that plays just the target word's span on repeat as a
   model of the real realization next to the dictionary contour, with a

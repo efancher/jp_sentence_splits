@@ -219,6 +219,8 @@ export interface ResolvedPitchAccent {
   /** Downstep in `reading`'s own morae, clamped into [0, morae.length]. */
   position: number;
   isCitationForm: boolean;
+  /** Which conjugation this occurrence realizes, when not the citation form — lets a caller (e.g. the reveal's rule-note copy) recognize the -masu family, whose accent rule overrides the citation form's own accent class. */
+  formKey?: ConjugationFormKey;
   /**
    * The full surface text `reading` actually covers — `vocabularyItem.expression`
    * for a citation-form occurrence, or the *whole* conjugated expression
@@ -318,6 +320,7 @@ export function resolveInflectedPitchAccent(occurrence: {
     reading: conjugated.reading,
     position: Math.max(0, Math.min(predicted, conjugatedMoraCount)),
     isCitationForm: false,
+    formKey: identified.form.key,
     surfaceForm: conjugated.expression,
   };
 }

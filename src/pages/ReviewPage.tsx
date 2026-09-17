@@ -62,6 +62,7 @@ import {
   findInflectedSurfaceInSentence,
   identifyConjugationForm,
   type ConjugationForm,
+  type ConjugationFormKey,
   type ConjugationWordClass,
 } from '../lib/conjugation';
 import {
@@ -379,6 +380,8 @@ interface PitchAccentReviewCandidate {
   correctPosition: number;
   /** Category name (平板/頭高/中高/尾高), shown on the reveal only — the buttons ask for a drop position, not this. */
   correctLabel: PitchAccentPattern;
+  /** Which conjugation this occurrence realizes, when inflected (resolveInflectedPitchAccent's own field) — lets the reveal's rule-note copy call out the -masu family's fixed accent instead of the citation form's own class. */
+  conjugationFormKey?: ConjugationFormKey;
 }
 
 /**
@@ -449,7 +452,7 @@ function buildPitchAccentCandidate(
   const { vocabularyItem, sentence, surfaceForm, link } = occurrence;
   const resolved = resolveInflectedPitchAccent({ vocabularyItem, sentence, surfaceForm });
   if (!resolved) return null;
-  const { reading, isCitationForm } = resolved;
+  const { reading, isCitationForm, formKey: conjugationFormKey } = resolved;
   // The stored occurrence surfaceForm can be a truncated stem (言い for
   // 言います) — use the resolver's own full conjugated surface for anything
   // that isolates/highlights the word in the sentence, so the native-audio
@@ -477,6 +480,7 @@ function buildPitchAccentCandidate(
       morae,
       correctPosition,
       correctLabel: pitchPatternLabel(correctPosition, morae.length),
+      conjugationFormKey,
     },
   };
 }
@@ -2179,6 +2183,7 @@ function PitchAccentCard({
               partOfSpeech: vocabularyItem.partOfSpeech,
               position: vocabularyItem.pitchAccentPositions?.[0] ?? correctPosition,
               moraCount: dictionaryMoraCount,
+              conjugationFormKey: candidate.conjugationFormKey,
             });
             return (
               <>

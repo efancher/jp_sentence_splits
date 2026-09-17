@@ -33,6 +33,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — `pitch_accent` reveal: fixed a silent noun rule-note gap,
+  added the -masu family's fixed-accent rule, and a hedged noun-length
+  tendency note** (user: noticed やま/山 got no explanatory rule note at
+  all on reveal, and separately asked about verb/noun pitch tendencies).
+  Root cause of the silence: `hasNounTag` in `pitchAccentRules.ts` only
+  recognized JMDict tags (`n`, `pn`, …), but mined nouns keep their raw
+  UniDic POS (`名詞/普通名詞`) forever — `scripts/backfill-vocabulary-jmdict-pos.ts`
+  deliberately never rewrites noun rows — so the "no reliable rule, must be
+  memorized" fallback silently never fired for any mined noun. Fixed by
+  recognizing UniDic noun POS too, mirroring how
+  `conjugationWordClassFromPartOfSpeech` already handles UniDic adjective
+  tags. Separately, confirmed the -masu family (ます/ました/ません) already
+  had its downstep position computed correctly (Wiktionary-verified, in
+  `pitchAccentShift.ts`'s `politeStemPosition`) but the reveal's
+  explanation text still described the *citation* form's own heiban/
+  accented class rather than naming the -masu override — added a
+  `conjugationFormKey` field threaded from `resolveInflectedPitchAccent`
+  through `PitchAccentReviewCandidate` to `explainPitchAccent`, which now
+  states the -masu family's fixed accent when applicable. Finally, added a
+  length-based noun tendency note (short 2–3-mora nouns skew atamadaka/
+  heiban; long 5+-mora nouns skew nakadaka near the antepenultimate mora)
+  — explicitly worded as a statistical tendency, not a rule, and only
+  shown when the specific word's own pattern happens to agree with it
+  (silent otherwise, same "stay silent rather than assert something false"
+  stance as every other rule in the file). `src/lib/pitchAccentRules.ts`,
+  `src/lib/pitchAccentShift.ts`, `src/pages/ReviewPage.tsx`; 9 new unit
+  tests in `tests/pitchAccentRules.test.ts`, 1489→1492 total.
+
 - **2026-09-17 — `grammar_completion` rebuilt from multiple choice to
   typed recall** (follow-up to the same-day card issue triage below: "not
   sure if the way this card type is setup is helpful, it's just kind of a

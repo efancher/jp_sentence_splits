@@ -9,17 +9,26 @@
  * - `ruleNote` — optional, only emitted for the handful of cases where
  *   Japanese pitch accent is actually rule-governed: recent loanwords
  *   (antepenultimate-mora tendency), pre-accenting suffix compounds
- *   (〜的/〜性/〜化/…), and the verb / i-adjective two-class system. Every
- *   heuristic note is cross-checked against the word's real Kanjium
- *   `position` before it's shown — if the rule and the dictionary disagree
- *   (an exception), we stay silent rather than assert something false.
+ *   (〜的/〜性/〜化/…), the verb / i-adjective two-class system, and the
+ *   -masu family's fixed accent. Every heuristic note is cross-checked
+ *   against the word's real Kanjium `position` before it's shown — if the
+ *   rule and the dictionary disagree (an exception), we stay silent rather
+ *   than assert something false.
  *
- * Deliberately NOT attempted: simplex native-noun accent (lexical /
- * historical, no synchronic rule — the fallback note says so), full
- * compound-accent computation, and non-Tokyo dialects.
+ * One exception to "only ever state things that are actually true": plain
+ * nouns get a length-based *tendency* note (short nouns skew atamadaka/
+ * heiban, long ones skew nakadaka near the antepenultimate mora) when this
+ * word's own pattern happens to agree with it — worded as a tendency, never
+ * a rule, since unlike everything else here it has real exceptions even
+ * among words that "match". No note (not even the tendency) is shown for a
+ * word that bucks it; the fallback ("must be memorized") still covers that
+ * case and 4-mora nouns, where the source tendency doesn't make a claim.
+ *
+ * Deliberately NOT attempted: full compound-accent computation and
+ * non-Tokyo dialects.
  */
 
-import { conjugationWordClassFromPartOfSpeech } from './conjugation';
+import { conjugationWordClassFromPartOfSpeech, type ConjugationFormKey } from './conjugation';
 import { segmentIntoMorae } from './mora';
 import { pitchPatternLabel } from './pitchAccentShape';
 
@@ -31,6 +40,14 @@ export interface PitchAccentRuleInput {
   /** Dictionary accent nucleus: 0 = heiban, N = downstep after mora N. */
   position: number;
   moraCount: number;
+  /**
+   * Set when the tested occurrence is inflected (pitchAccentShift.ts's
+   * `ResolvedPitchAccent.formKey`) — the citation form's own heiban/accented
+   * class stops being the relevant fact for the -masu family, whose accent
+   * is fixed on the "ma" mora regardless of it (see the ます/ました/ません
+   * case in `predictInflectedPitchAccentPosition`, Wiktionary-verified).
+   */
+  conjugationFormKey?: ConjugationFormKey;
 }
 
 export interface PitchAccentExplanation {
@@ -68,6 +85,18 @@ const PRE_ACCENTING_SUFFIXES: { kanji: string; suffixMorae: number }[] = [
 
 function hasNounTag(partOfSpeech: string | undefined): boolean {
   if (!partOfSpeech) return false;
+  // Mined vocabulary keeps its raw UniDic POS (e.g. "名詞/普通名詞") rather
+  // than being backfilled to JMDict tags — see
+  // scripts/backfill-vocabulary-jmdict-pos.ts's noted decision not to
+  // rewrite noun rows. Recognize both shapes, mirroring
+  // conjugationWordClassFromPartOfSpeech's UniDic handling above.
+  if (
+    partOfSpeech.startsWith('名詞') ||
+    partOfSpeech.startsWith('代名詞') ||
+    partOfSpeech.startsWith('数詞')
+  ) {
+    return true;
+  }
   return partOfSpeech
     .split(/[,;]/)
     .map((tag) => tag.trim())
@@ -115,8 +144,23 @@ function loanwordPredictedPosition(reading: string, moraCount: number): number |
   return predicted > 0 ? predicted : null;
 }
 
+const MASU_FAMILY_FORMS = new Set<ConjugationFormKey>([
+  'polite_present',
+  'polite_past',
+  'polite_negative',
+]);
+
 function ruleNoteFor(input: PitchAccentRuleInput): string | undefined {
-  const { expression, reading, partOfSpeech, position, moraCount } = input;
+  const { expression, reading, partOfSpeech, position, moraCount, conjugationFormKey } = input;
+
+  // 0. -masu family: overrides the citation form's own accent class — every
+  //    verb takes the same downstep here regardless of heiban/accented.
+  if (conjugationFormKey && MASU_FAMILY_FORMS.has(conjugationFormKey)) {
+    const wordClass = conjugationWordClassFromPartOfSpeech(partOfSpeech);
+    if (wordClass === 'godan' || wordClass === 'ichidan') {
+      return 'The polite ます/ました/ません forms fix their own downstep right on the "ma" mora, regardless of whether the dictionary form is heiban or accented.';
+    }
+  }
 
   // 1. Pre-accenting suffix compounds — only when the dictionary agrees the
   //    downstep is immediately before the suffix.
@@ -164,8 +208,17 @@ function ruleNoteFor(input: PitchAccentRuleInput): string | undefined {
     return undefined;
   }
 
-  // 4. Fallback: plain native nouns have no rule.
+  // 4. Plain nouns: no synchronic rule, but a length-based statistical
+  //    tendency exists — only voiced when this word's own pattern agrees
+  //    with it (see file doc comment for why this is worded as a tendency).
   if (hasNounTag(partOfSpeech) && !isKatakanaOnly(reading)) {
+    const pattern = pitchPatternLabel(position, moraCount);
+    if (moraCount >= 2 && moraCount <= 3 && (pattern === 'atamadaka' || pattern === 'heiban')) {
+      return 'Short nouns (2–3 morae) tend toward atamadaka or heiban, as here — a statistical tendency, not a fixed rule.';
+    }
+    if (moraCount >= 5 && pattern === 'nakadaka' && position === moraCount - 2) {
+      return 'Long nouns (5+ morae) tend toward nakadaka with the fall around the antepenultimate (third-from-last) mora, as here — a statistical tendency, not a fixed rule.';
+    }
     return 'Noun accent mostly has to be memorized — for a plain (non-compound) native word there is no reliable rule that predicts it.';
   }
 
