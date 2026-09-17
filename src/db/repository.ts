@@ -4244,6 +4244,10 @@ export async function recordReview(input: {
   const studyItem = await db.studyItems.get(input.studyItemId);
   if (!studyItem) throw new Error('Study item not found');
   const now = input.now ?? new Date();
+  const predictedRetrievability =
+    studyItem.fsrsState.state !== 'new' && studyItem.fsrsState.lastReview
+      ? predictRetrievability(studyItem.fsrsState, now)
+      : undefined;
   const { fsrsState } = scheduleReview(studyItem.fsrsState, input.rating, now);
   const updatedStudyItem: StudyItem = {
     ...studyItem,
@@ -4272,6 +4276,7 @@ export async function recordReview(input: {
     contextSentenceId: input.contextSentenceId,
     pitchExpectedShape: input.pitchExpectedShape,
     pitchChosenShape: input.pitchChosenShape,
+    predictedRetrievability,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);

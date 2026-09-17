@@ -725,6 +725,17 @@ export interface Review {
    */
   pitchExpectedShape?: string;
   pitchChosenShape?: string;
+  /**
+   * FSRS's predicted probability of recall for this study item right
+   * before this review was graded (`scheduling.ts#predictRetrievability`,
+   * same forgetting-curve formula `scheduleReview` schedules against).
+   * Undefined for `new`-state items (no stability/last-review yet to
+   * predict from) and for reviews recorded before this field existed.
+   * Exists so predicted-vs-actual FSRS calibration can be computed later
+   * without waiting on a second pass — see ROADMAP.md's "FSRS calibration
+   * surfacing" entry.
+   */
+  predictedRetrievability?: number;
 }
 
 /**

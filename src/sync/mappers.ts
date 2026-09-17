@@ -413,6 +413,7 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     context_sentence_id: review.contextSentenceId ?? null,
     pitch_expected_shape: review.pitchExpectedShape ?? null,
     pitch_chosen_shape: review.pitchChosenShape ?? null,
+    predicted_retrievability: review.predictedRetrievability ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -439,6 +440,8 @@ export function remoteToReview(row: Record<string, unknown>): Review {
     pitchExpectedShape:
       (row.pitch_expected_shape as string | null) ?? undefined,
     pitchChosenShape: (row.pitch_chosen_shape as string | null) ?? undefined,
+    predictedRetrievability:
+      (row.predicted_retrievability as number | null) ?? undefined,
   };
 }
 

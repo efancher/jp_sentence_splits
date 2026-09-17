@@ -895,6 +895,16 @@ describe('FSRS review (study_items/reviews)', () => {
     expect(persisted?.fsrsState.reps).toBe(1);
   });
 
+  it('recordReview leaves predictedRetrievability undefined for a brand-new item, then logs it on the next review', async () => {
+    const item = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    const first = await recordReview({ studyItemId: item.id, rating: 'good' });
+    expect(first.review.predictedRetrievability).toBeUndefined();
+
+    const second = await recordReview({ studyItemId: item.id, rating: 'good' });
+    expect(second.review.predictedRetrievability).toBeGreaterThan(0);
+    expect(second.review.predictedRetrievability).toBeLessThanOrEqual(1);
+  });
+
   it('recordReview rejects an unknown study item id', async () => {
     await expect(
       recordReview({ studyItemId: 'missing-id', rating: 'good' }),

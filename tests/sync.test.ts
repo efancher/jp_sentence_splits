@@ -832,6 +832,28 @@ describe('sync mappers', () => {
     expect(remoteToReview(withoutShapes).pitchExpectedShape).toBeUndefined();
   });
 
+  it('round-trips predictedRetrievability through remote shape', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const review: Review = {
+      id: 'review_2',
+      studyItemId: 'study_1',
+      timestamp: '2026-09-17T00:00:00.000Z',
+      rating: 'good',
+      predictedRetrievability: 0.83,
+    };
+    const remote = reviewToRemote(review, 'user-1', 1);
+    expect(remote.predicted_retrievability).toBe(0.83);
+    expect(remoteToReview(remote).predictedRetrievability).toBe(0.83);
+
+    const withoutPrediction = reviewToRemote(
+      { ...review, predictedRetrievability: undefined },
+      'user-1',
+      1,
+    );
+    expect(withoutPrediction.predicted_retrievability).toBeNull();
+    expect(remoteToReview(withoutPrediction).predictedRetrievability).toBeUndefined();
+  });
+
   it('round-trips a pitch drill attempt through remote shape', async () => {
     const { pitchDrillAttemptToRemote, remoteToPitchDrillAttempt } = await import(
       '../src/sync/mappers'
