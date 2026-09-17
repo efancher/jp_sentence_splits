@@ -17,7 +17,7 @@ grammar-pattern browsing/annotation) are shipped and, in almost every
 case, verified against production data by the user directly. The
 grammar-learning system's 4-card FSRS ladder was collapsed to one
 `grammar_completion` card 2026-09-15, and `BookDetailPage` gained a
-book-level progress section the same day — see Recent changes. ~1442 TS
+book-level progress section the same day — see Recent changes. ~1494 TS
 tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — per-review predicted-retrievability logging** (user asked
+  about the "FSRS calibration surfacing" ROADMAP entry, then asked to close
+  the gap it flagged). "FSRS confidence" on `/progress` only ever showed a
+  live snapshot of *current* predicted retrievability because nothing
+  persisted what FSRS predicted right before a review was actually graded
+  — true predicted-vs-actual calibration and a desired-retention knob both
+  need that per-review value. `recordReview` (`src/db/repository.ts`) now
+  calls `predictRetrievability` against the study item's FSRS state before
+  `scheduleReview` mutates it, storing the result on a new
+  `Review.predictedRetrievability` field — undefined for `new`-state items
+  and any item without a real `lastReview` (checking `state !== 'new'`
+  alone isn't enough: ts-fsrs's `get_retrievability` throws without a
+  `lastReview` to diff against, caught by the full test suite against a
+  `reviewPage.test.tsx` fixture that has `state: 'review'` but no
+  `lastReview`). Synced via a new nullable `predicted_retrievability`
+  column (`supabase/migrations/20260917000000_review_predicted_retrievability.sql`
+  — **not yet applied to prod**; this environment has no Supabase CLI/
+  service-role credentials to apply DDL directly, apply by hand via the
+  Supabase Dashboard SQL editor, same as the 2026-09-13 te-form migration)
+  and `reviewToRemote`/`remoteToReview` (`src/sync/mappers.ts`). Only
+  reviews recorded from now on carry the value; historical rows are
+  unaffected. No UI yet — that's the next step once enough logged reviews
+  accumulate to make a predicted-vs-actual view meaningful. Detail in
+  ROADMAP.md.
 - **2026-09-17 — `pitch_accent` reveal: fixed a silent noun rule-note gap,
   added the -masu family's fixed-accent rule, and a hedged noun-length
   tendency note** (user: noticed やま/山 got no explanatory rule note at

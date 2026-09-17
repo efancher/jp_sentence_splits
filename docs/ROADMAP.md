@@ -817,6 +817,22 @@ possibilities, kept here so the thinking isn't lost:
   formula). **Not** predicted-vs-actual validation or a desired-retention
   knob — both need the predicted retrievability logged on each `Review`
   row at grading time, which nothing does today; still open if wanted.
+- [x] **Per-review predicted-retrievability logging.** (2026-09-17) The gap
+  above is closed: `recordReview` (`repository.ts`) now calls
+  `predictRetrievability` against the study item's FSRS state *before*
+  scheduling and stores the result on the new `Review.predictedRetrievability`
+  field (undefined for `new`-state items and any item without a real
+  `lastReview` yet, matching the same guard the "FSRS confidence" panel
+  uses — checking `state !== 'new'` alone isn't enough, ts-fsrs throws
+  without a `lastReview` to diff against). Synced via a new nullable
+  `predicted_retrievability` column (`supabase/migrations/
+  20260917000000_review_predicted_retrievability.sql` — **not yet applied
+  to prod**, see the migration-apply-gap note in STATUS.md) and
+  `reviewToRemote`/`remoteToReview` in `src/sync/mappers.ts`. Only reviews
+  recorded from this point on carry the value — historical rows stay
+  unset, so predicted-vs-actual calibration and a desired-retention knob
+  are both still open, now blocked on accumulating data rather than on
+  missing plumbing.
 - [x] **Step usefulness** (new, 2026-09-16) — `PlannerSessionStep.status`
   already recorded completed/skipped per step, but nothing rolled it up
   across sessions by `targetKind` — no way to see "which step kinds

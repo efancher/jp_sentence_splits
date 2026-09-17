@@ -523,8 +523,11 @@ reading by ~N words" instead of a hunch. **FSRS confidence**
 item's *current* predicted retrievability (`scheduling.ts#predictRetrievability`,
 wrapping ts-fsrs's own `get_retrievability` rather than reimplementing the
 forgetting-curve formula), bucketed; a live snapshot, not a
-predicted-vs-actual validation, since that needs the prediction logged on
-each `Review` row at grading time and nothing does that yet. **Step
+predicted-vs-actual validation. `recordReview` (`repository.ts`) separately
+logs the same prediction onto each new `Review.predictedRetrievability` at
+grading time (2026-09-17, undefined for `new`-state/no-`lastReview` items),
+so that validation is now a matter of accumulating logged reviews, not
+missing plumbing — no UI reads the field yet. **Step
 usefulness** (`stepUsefulness.ts` / `getStepUsefulness`) — flattens every
 `PlannerSession.steps` in a 56-day window, grouped by `targetKind`,
 sorted by skip rate — the longitudinal companion to `sessionRecap.ts`'s
