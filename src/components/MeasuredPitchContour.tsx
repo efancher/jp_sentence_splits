@@ -33,6 +33,12 @@ const BAND_HALF = 3;
  * remapped into the voiced window; it hides while playback is in the
  * trimmed lead-in/trail.
  *
+ * `pacing`, when true, styles the playhead as a timing guide rather than a
+ * live-audio cursor (warm/danger color instead of the accent) — used when
+ * `progress` is driven by elapsed recording time instead of actual
+ * playback, e.g. ShadowPage's Record button has no reference audio
+ * sounding, so the bar is the only timing cue against memory.
+ *
  * `kana` (from `buildKanaTimeline`, needs a forced alignment) lays the
  * transcript's syllables under the same time axis — same treatment as the
  * shadowing analysis contours.
@@ -40,6 +46,7 @@ const BAND_HALF = 3;
 export function MeasuredPitchContour({
   payload,
   progress,
+  pacing = false,
   label = 'Native pitch (measured)',
   ariaLabel = 'Measured pitch of the native recording',
   kana,
@@ -47,6 +54,8 @@ export function MeasuredPitchContour({
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
+  /** Styles the playhead as a recording-timing guide rather than a live-playback cursor. */
+  pacing?: boolean;
   /** Visible caption; defaults to the native-reference wording. */
   label?: string;
   /** SVG aria-label; defaults to the native-reference wording. */
@@ -119,14 +128,14 @@ export function MeasuredPitchContour({
         {playheadX != null ? (
           <>
             <rect
-              className="pitch-contour-band"
+              className={`pitch-contour-band${pacing ? ' pitch-contour-band-pacing' : ''}`}
               x={Math.max(0, playheadX - BAND_HALF)}
               y={0}
               width={Math.min(WIDTH, playheadX + BAND_HALF) - Math.max(0, playheadX - BAND_HALF)}
               height={height}
             />
             <line
-              className="pitch-contour-playhead"
+              className={`pitch-contour-playhead${pacing ? ' pitch-contour-playhead-pacing' : ''}`}
               x1={playheadX}
               x2={playheadX}
               y1={0}

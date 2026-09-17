@@ -499,6 +499,10 @@ export function ShadowPage() {
               japanese={sentence.japanese}
               moraUnits={moraUnits}
               sentenceId={sentence.id}
+              recordingElapsedMs={
+                isRecording && !isLoopingReps ? shadowing.recordingElapsedMs : undefined
+              }
+              recordingSpeed={speed}
             />
           )}
         </div>

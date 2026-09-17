@@ -119,4 +119,19 @@ describe('MeasuredPitchContour', () => {
     );
     expect(outOfRange.querySelector('.pitch-contour-playhead')).toBeNull();
   });
+
+  it('styles the playhead as a pacing guide when `pacing` is set', () => {
+    const fr = frames([0, 1, 2, 1]);
+
+    const { container: playback } = render(
+      <MeasuredPitchContour payload={payload(fr)} progress={0.5} />,
+    );
+    expect(playback.querySelector('.pitch-contour-playhead-pacing')).toBeNull();
+
+    const { container: pacing } = render(
+      <MeasuredPitchContour payload={payload(fr)} progress={0.5} pacing />,
+    );
+    expect(pacing.querySelector('.pitch-contour-playhead-pacing')).not.toBeNull();
+    expect(pacing.querySelector('.pitch-contour-band-pacing')).not.toBeNull();
+  });
 });

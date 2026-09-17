@@ -62,12 +62,24 @@ export function SyncedShadowText({
   japanese,
   moraUnits,
   sentenceId,
+  recordingElapsedMs,
+  recordingSpeed = 1,
 }: {
   audioRef: { current: HTMLAudioElement | null };
   referenceAudio: SentenceAudio | undefined;
   japanese: string;
   moraUnits: MoraUnit[];
   sentenceId?: string;
+  /**
+   * Elapsed time (ms) of an in-progress mic recording with no reference
+   * audio sounding — the Record button lets the learner recite from memory,
+   * so this drives the pitch-contour playhead as a timing guide instead of
+   * the usual playback-driven one. Pass only while that recording is
+   * active; omit/undefined otherwise so the normal playback playhead shows.
+   */
+  recordingElapsedMs?: number;
+  /** Practice speed applied to `recordingElapsedMs` — see `pitchProgressDuringRecording` below. */
+  recordingSpeed?: number;
 }) {
   const [words, setWords] = useState<AlignedWord[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -178,6 +190,19 @@ export function SyncedShadowText({
     };
   }, [audioRef, referenceAudio]);
 
+  // While reciting from memory (no reference audio playing), drive the
+  // playhead off elapsed recording time instead: `currentTime` on a real
+  // <audio> element already advances in clip-native seconds regardless of
+  // playbackRate, so the equivalent native-clip position is elapsed
+  // real-world seconds scaled by the practice speed the learner picked.
+  const pitchProgressDuringRecording = useMemo(() => {
+    const clipDuration = pitchTrack?.durationSeconds;
+    if (recordingElapsedMs == null || !clipDuration) return null;
+    return Math.min(1, (recordingElapsedMs / 1000) * recordingSpeed / clipDuration);
+  }, [recordingElapsedMs, recordingSpeed, pitchTrack]);
+  const isPacing = pitchProgressDuringRecording != null;
+  const contourProgress = isPacing ? pitchProgressDuringRecording : pitchProgress;
+
   const range = useMemo(() => {
     const activeWord = words[activeIndex];
     if (!activeWord || activeWord.text === '<unk>') return null;
@@ -196,7 +221,7 @@ export function SyncedShadowText({
     return (
       <div className="stack" style={{ flex: 1, gap: '0.25rem' }}>
         <div className="jp jp-lg">{japanese}</div>
-        <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} height={64} />
+        <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} />
         <MoraBreakdown units={moraUnits} />
         <SentencePitchAccentRow japanese={japanese} sentenceId={sentenceId} />
       </div>
@@ -221,7 +246,7 @@ export function SyncedShadowText({
           japanese
         )}
       </div>
-      <MeasuredPitchContour payload={pitchTrack} progress={pitchProgress} height={64} />
+      <MeasuredPitchContour payload={pitchTrack} progress={contourProgress} pacing={isPacing} height={64} />
       {moraUnits.length > 0 && (
         <div className="row mora-row" aria-label="Mora breakdown">
           {moraUnits.map((unit) => (

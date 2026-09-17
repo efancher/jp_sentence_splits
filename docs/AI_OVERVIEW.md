@@ -1662,6 +1662,20 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   close-shadow loop runs. `Attempt` still carries two now-unused optional
   fields from the retired guided flow — `practiceStage?: 'final'` and
   `practiceSessionId?: string` (left in place, harmless, no Dexie bump).
+  - **Recording-timing playhead** (2026-09-17, user request — "so I can try
+    to match my overall timing better than just from memory"). Unlike Close
+    shadow, this button plays no reference audio — the learner recites from
+    memory — so the top-of-page native `MeasuredPitchContour`
+    (`SyncedShadowText`) now grows a second playhead source while
+    `shadowing.status === 'recording' && !isLoopingReps`: instead of
+    tracking the reference `<audio>` element's `currentTime` (nothing is
+    playing), it derives `progress` from `shadowing.recordingElapsedMs`
+    scaled by the chosen practice speed
+    (`elapsedSeconds * speed / clipDurationSeconds`, clamped to 1) — the
+    same unit `currentTime` would report at that speed, so it moves at the
+    pace the reference *would* if it were playing. `MeasuredPitchContour`'s
+    new `pacing` prop recolors the playhead/band (`--danger` instead of
+    `--accent`) so it reads as a timing guide, not a live-audio cursor.
 
 This whole feature area is **local-only**: `Attempt` blobs, alignment
 caches, ASR transcriptions, and analysis summaries never sync to Supabase

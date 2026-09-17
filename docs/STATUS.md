@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-17 — recording-timing playhead on the native pitch contour**
+  (user: "when I'm recording ... show a bar on the native pitch that
+  follows time ... so I can try to match my overall timing better than
+  just from memory"). `ShadowPage`'s free-form "Record" button (the
+  "Record & analyze" panel) has no reference audio sounding — the learner
+  recites the sentence from memory — so there was previously no timing cue
+  at all while recording, unlike the "Close shadow" hands-free loop where
+  the reference audio itself paces them. `MeasuredPitchContour` gained a
+  `pacing` prop that recolors its existing playhead (accent → `--danger`)
+  to distinguish "elapsed-time guide" from "live playback position."
+  `SyncedShadowText` gained optional `recordingElapsedMs`/`recordingSpeed`
+  props; when set it derives the contour's `progress` from elapsed
+  recording time scaled by the chosen practice speed
+  (`elapsedSeconds * speed / clipDurationSeconds`, clamped to 1) instead of
+  the reference `<audio>` element's `currentTime` — the same math the
+  existing playback-driven playhead already relies on (`currentTime`
+  advances in clip-native seconds regardless of `playbackRate`, so scaling
+  by speed converts real elapsed seconds into the same units). `ShadowPage`
+  passes these only while `shadowing.status === 'recording' && !isLoopingReps`
+  (the hands-free loop pins `recordingElapsedMs` at 0 per-tick already, so
+  gating isn't strictly required, but the explicit condition future-proofs
+  against relying on that quirk). Test added at the component level
+  (`tests/measuredPitchContour.test.tsx`: pacing playhead/band get the
+  `-pacing` modifier class; unstyled otherwise).
 - **2026-09-17 — sibling-spacing broadened to span descriptors** (user:
   "still see new cards that ask about the same vocabulary in the same
   sentence one right after another"). `spaceOutSiblingCards`
