@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
+import { PitchAccentMinimalPairWarmup } from '../components/PitchAccentMinimalPairWarmup';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
+  getPitchAccentMinimalPairTrials,
   logPitchDrillAttempt,
   type PitchAccentDrillWord,
 } from '../db/repository';
@@ -165,6 +167,7 @@ export function PitchAccentDrillPage() {
   const rawSentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
   const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
+  const minimalPairTrials = useLiveQuery(() => getPitchAccentMinimalPairTrials(), []);
   const [mode, setMode] = useState<DrillMode>('sentence');
   const [focusMode, setFocusMode] = useState(false);
   const [position, setPosition] = useState(0);
@@ -395,6 +398,8 @@ export function PitchAccentDrillPage() {
           nothing here blocks or reorders your practice — but each take is logged for your own
           usage/effectiveness tracking (see docs/STATUS.md).
         </p>
+
+        {!focusMode ? <PitchAccentMinimalPairWarmup trials={minimalPairTrials ?? []} /> : null}
 
         {!focusMode && focusWords && focusWords.length > 0 ? (
           <div className="panel stack" style={{ gap: '0.4rem' }}>

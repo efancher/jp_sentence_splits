@@ -72,6 +72,12 @@ import { buildBookCoverage, type BookCoverage } from '../lib/bookCoverage';
 import { buildErrorMix, classificationKey, type ErrorMix } from '../lib/errorMix';
 import { buildLeechList, type LeechListReport } from '../lib/leechList';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
+import {
+  buildMinimalPairTrials,
+  findMinimalPairContrasts,
+  type MinimalPairOccurrence,
+  type MinimalPairTrial,
+} from '../lib/pitchAccentMinimalPairs';
 import type { PitchAccentTarget } from '../lib/pitchAccentObservations';
 import {
   trailingBunsetsuParticles,
@@ -5149,6 +5155,112 @@ export async function getPitchAccentFocusWords(): Promise<PitchAccentDrillWord[]
     return bMissed.localeCompare(aMissed);
   });
   return result;
+}
+
+export interface PitchAccentMinimalPairOccurrence extends MinimalPairOccurrence {
+  expression: string;
+  meaning: string;
+  surfaceForm: string;
+  sentence: Sentence;
+  audio: SentenceAudio;
+}
+
+/**
+ * Every audio-backed occurrence eligible for the "real-audio pitch-
+ * perception bridge" same/different warm-up (docs/ROADMAP.md): a confirmed,
+ * proficient (`getProficientVocabularyItemIds`) word with dictionary
+ * `pitchAccentPositions`, restricted to a sentence that both has reference
+ * audio *and* uses the word's exact citation form (`link.surfaceForm ===
+ * expression`) — near-minimal accent pairs are almost always nouns, and
+ * skipping inflected occurrences avoids resolving `pitchAccentPositions`
+ * (a citation-form value) against a conjugated surface. `bookId` doubles as
+ * a "same speaker" proxy: a book is normally one show/narrator or one
+ * consistent cast, so two occurrences sharing a `bookId` are treated as
+ * same-speaker and two differing ones as cross-speaker (`STATUS.md`) — an
+ * approximation, not a verified per-clip speaker identity, since none
+ * exists in this corpus.
+ */
+export async function getPitchAccentMinimalPairOccurrences(): Promise<
+  PitchAccentMinimalPairOccurrence[]
+> {
+  const db = getDb();
+  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
+  if (links.length === 0) return [];
+
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  const [audioRows, vocabularyItems, sentences, bookSentences] = await Promise.all([
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
+    db.sentences.bulkGet(sentenceIds),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  if (audioRows.length === 0) return [];
+
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+
+  const bookIdBySentenceId = new Map<string, string>();
+  for (const membership of bookSentences) {
+    if (!bookIdBySentenceId.has(membership.sentenceId)) {
+      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    }
+  }
+
+  const pitchCarryingItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  if (pitchCarryingItemById.size === 0) return [];
+
+  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
+  if (proficientIds.size === 0) return [];
+
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+
+  const result: PitchAccentMinimalPairOccurrence[] = [];
+  for (const link of links) {
+    if (!link.surfaceForm || !proficientIds.has(link.vocabularyItemId)) continue;
+    const item = pitchCarryingItemById.get(link.vocabularyItemId);
+    if (!item || link.surfaceForm !== item.expression) continue;
+    const audio = audioBySentenceId.get(link.sentenceId);
+    const sentence = sentenceById.get(link.sentenceId);
+    const bookId = bookIdBySentenceId.get(link.sentenceId);
+    if (!audio || !sentence || !bookId) continue;
+    result.push({
+      vocabularyItemId: item.id,
+      expression: item.expression,
+      reading: item.reading,
+      meaning: item.meaning,
+      position: item.pitchAccentPositions![0]!,
+      surfaceForm: link.surfaceForm,
+      sentence,
+      audio,
+      bookId,
+    });
+  }
+  return result;
+}
+
+/**
+ * Up to 5 playable same/different near-minimal-pair trials
+ * (`findMinimalPairContrasts`/`buildMinimalPairTrials`) built from
+ * `getPitchAccentMinimalPairOccurrences`. Thin composition kept separate
+ * from the pure builder so the matching logic stays unit-testable without
+ * Dexie.
+ */
+export async function getPitchAccentMinimalPairTrials(): Promise<
+  MinimalPairTrial<PitchAccentMinimalPairOccurrence>[]
+> {
+  const occurrences = await getPitchAccentMinimalPairOccurrences();
+  if (occurrences.length === 0) return [];
+  const contrasts = findMinimalPairContrasts(occurrences);
+  return buildMinimalPairTrials(contrasts, occurrences);
 }
 
 /**
