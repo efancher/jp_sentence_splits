@@ -33,6 +33,32 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-18 — word-clip boundary round-trip ASR verification experiment**
+  (chat: "would some sort of iterative process... help?" re: word-clip
+  precision for pitch_accent/word_listening cards). Added
+  `scripts/experiment-word-boundary-verification.ts` (read-only, no
+  writes): for a sample of confirmed `sentence_vocabulary` occurrences, it
+  builds several candidate boundaries off the aligner's raw match
+  (`isolatedWordRangeUnpadded`, newly exported from
+  `src/lib/isolatedWordRange.ts` alongside the existing padded
+  `isolatedWordRange`) — the current fixed -60/+120ms pad, no pad, double
+  pad, and a silence-snapped variant — ffmpeg-trims each, and scores it via
+  `POST /validate-transcript` (fresh Whisper pass + hiragana-normalized
+  similarity to the target surface form). Run against 40 real occurrences:
+  no single fixed pad dominates (default wins 57% of words by best
+  similarity, no-pad 35%, double-pad only 8% and clearly worse on
+  average, mean 0.489 vs ~0.55-0.57 for the others) — a per-word
+  round-trip choice between a couple of pad candidates would beat any
+  fixed constant. Silence-snap collapsed to the default boundary almost
+  every time at the current ±200ms search window, so it isn't pulling its
+  weight yet. Also: even the best candidate's similarity is often
+  mediocre (0.3-0.7, several near 0, one clear Whisper hallucination on a
+  near-silent clip) — the "base" diagnostic Whisper model is a noisy judge
+  at word length, a real constraint on how far this approach can be
+  pushed without a bigger verification model. Not yet turned into a
+  production feature (would mean an extra ASR-call backfill pass and
+  writing `SentenceVocabulary.audioStartMs/EndMs` at scale) — next step if
+  pursued.
 - **2026-09-18 — stale "in progress" mining jobs hidden once imported**
   (user: podcast episode #1472「髪について！」showed as "in progress: step
   1 of 4" on the feed picker despite already being imported). Root cause:
