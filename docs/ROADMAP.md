@@ -302,6 +302,39 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   discrimination-card idea below wants them back. Also removes the old
   "fewer than 2 choices" degenerate case: every tracked pattern gets the
   same card now, even a lone one with nothing to contrast against.
+- [x] **Real-audio pitch-perception bridge.** Follow-on to the
+  pitch-accent drill and the synthetic `pitch-ear-trainer` /
+  `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
+  discussion: the learner passes synthetic-tone discrimination but still
+  misses lexical accent in real speech, so the gap is the Japanese-specific
+  layer (mora timing, voicing cues, per-speaker normalization, phrase-level
+  downstep), which only *real* audio trains. Two exercises, both built from
+  the existing native-clip corpus (`SentenceAudio` + per-word alignment +
+  dictionary `pitchAccentPositions`), staged as an optional warm-up **inside
+  the drill**, not a standalone module (keeps the "skill over metalabel
+  quiz" principle):
+  - [x] **Word-alone vs. word-in-phrase.** (2026-09-14) Play the isolated
+    word span, then the word + following particle span, ask "did the drop
+    land before the particle?" The odaka-vs-heiban bridge, which no
+    isolated view can teach. Shipped as `PitchWordPhraseWarmup` inside the
+    `pitch_accent` SRS card, gated to heiban/odaka candidates where forced
+    alignment locates both spans; ungraded, local state only. Detail in
+    STATUS.md.
+  - [x] **Same/different + ABX on near-minimal pairs.** (2026-09-18) Shipped
+    as `PitchAccentMinimalPairWarmup` on `PitchAccentDrillPage` —
+    same-reading, different-accent-position word pairs (true homophones,
+    e.g. 箸/橋) played from real clips via `isolatedWordRange`, guessed
+    before reveal. Up to 5 trials, same-book (same-speaker proxy) first
+    then cross-book if available — no per-clip speaker identity exists in
+    this corpus, so `Book.id` stands in for it (see STATUS.md's 2026-09-18
+    entry for the caveat). Corpus currently thin (two "Nihongo con Teppei
+    (Beginners)" episodes mined in as a known single-narrator source, after
+    confirming NHK Easy publishes no narrator metadata to check by) — pool
+    grows as more single-speaker content is mined.
+  - **Not** an F0-resynthesis pipeline (ChatGPT's centre-piece): real
+    near-minimal pairs from the corpus get most of the perceptual benefit
+    without a PSOLA/WORLD service on the memory-constrained analysis host
+    (same footprint constraint that parked PASQA).
 
 ## In progress
 
@@ -713,32 +746,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   context, or (b) keep asserting the primary/first-cited pronunciation
   but only within the existing "never assert something false" gate — i.e.
   route to (a).
-
-- [ ] **Real-audio pitch-perception bridge.** Follow-on to the
-  pitch-accent drill and the synthetic `pitch-ear-trainer` /
-  `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
-  discussion: the learner passes synthetic-tone discrimination but still
-  misses lexical accent in real speech, so the gap is the Japanese-specific
-  layer (mora timing, voicing cues, per-speaker normalization, phrase-level
-  downstep), which only *real* audio trains. Two exercises, both built from
-  the existing native-clip corpus (`SentenceAudio` + per-word alignment +
-  dictionary `pitchAccentPositions`), staged as an optional warm-up **inside
-  the drill**, not a standalone module (keeps the "skill over metalabel
-  quiz" principle):
-  - [x] **Word-alone vs. word-in-phrase.** (2026-09-14) Play the isolated
-    word span, then the word + following particle span, ask "did the drop
-    land before the particle?" The odaka-vs-heiban bridge, which no
-    isolated view can teach. Shipped as `PitchWordPhraseWarmup` inside the
-    `pitch_accent` SRS card, gated to heiban/odaka candidates where forced
-    alignment locates both spans; ungraded, local state only. Detail in
-    STATUS.md.
-  - [ ] **Same/different + ABX on near-minimal pairs** — same mora count +
-    reading shape, different accent position; same-speaker first, then
-    cross-speaker. 3–5 trials, not a scored drill.
-  - **Not** an F0-resynthesis pipeline (ChatGPT's centre-piece): real
-    near-minimal pairs from the corpus get most of the perceptual benefit
-    without a PSOLA/WORLD service on the memory-constrained analysis host
-    (same footprint constraint that parked PASQA).
 
 - [ ] **Segmental pronunciation feedback.** The missing half of Phase 9 —
   everything shipped there scores *timing* and *pitch*, nothing addresses

@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-17.
+Last updated: 2026-09-18.
 
 ## Where things stand
 
@@ -17,7 +17,7 @@ grammar-pattern browsing/annotation) are shipped and, in almost every
 case, verified against production data by the user directly. The
 grammar-learning system's 4-card FSRS ladder was collapsed to one
 `grammar_completion` card 2026-09-15, and `BookDetailPage` gained a
-book-level progress section the same day — see Recent changes. ~1509 TS
+book-level progress section the same day — see Recent changes. ~1518 TS
 tests, green.
 
 **2026-09-01 pass** (see Recent changes): planner new-card-backlog
@@ -33,6 +33,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-18 — same/different near-minimal-pair perception warm-up**
+  (real-audio pitch-perception bridge, docs/ROADMAP.md). The ABX half of
+  the bridge that shipped 2026-09-14 as `PitchWordPhraseWarmup`
+  (word-alone-vs-phrase): `src/lib/pitchAccentMinimalPairs.ts`
+  (`findMinimalPairContrasts`/`buildMinimalPairTrials`, pure, 8 tests)
+  finds confirmed, proficient vocabulary pairs sharing a reading (a true
+  homophone, e.g. 箸/橋, both はし) but a different dictionary pitch-accent
+  position, excluding heiban-vs-odaka combinations since those render an
+  *identical* in-word shape and would be an unanswerable trial from the
+  isolated word alone. `getPitchAccentMinimalPairOccurrences`/
+  `getPitchAccentMinimalPairTrials` (`repository.ts`) restrict candidates
+  to a sentence with reference audio *and* the word's exact citation-form
+  surface (`link.surfaceForm === expression`), sidestepping inflected-form
+  accent resolution — near-minimal accent pairs are almost always nouns.
+  New `PitchAccentMinimalPairWarmup` component (isolates each word's clip
+  via the same `isolatedWordRange`/forced-alignment technique as
+  `PitchWordPhraseWarmup`) sits at the top of `PitchAccentDrillPage`:
+  plays both clips in a randomized order, the learner picks which clip is
+  which before revealing the answer. Up to 5 trials, each contrast tried
+  once from the same book, then once more across two different books if
+  the corpus has one — **`Book.id` doubles as a same-speaker proxy**, since
+  no per-clip speaker identity exists in this corpus; a book is normally
+  one show/narrator (or one consistent cast), so this is an approximation,
+  not verified per-clip speaker data. Prompted by mining two episodes of
+  "Nihongo con Teppei (Beginners)" specifically as a known single-narrator
+  source, after confirming NHK Easy's own feed/site publish no narrator
+  metadata to check by. Ungraded and unpersisted, like its sibling warm-up
+  — renders nothing when the corpus has no eligible pairs yet (likely with
+  only two podcast episodes mined so far). Not browser-verified (no
+  browser libs on this host) — shipped on the full test suite + typecheck.
+  Still open: the same/different + ABX bullet's "cross-speaker" half is
+  covered; "3–5 trials" depends entirely on how many true homophone
+  accent-minimal-pairs end up mined with proficient, audio-linked
+  occurrences on both sides — likely to start near zero and grow as more
+  single-speaker podcast/NHK-Easy content is mined.
 - **2026-09-17 — recording-timing playhead on the native pitch contour**
   (user: "when I'm recording ... show a bar on the native pitch that
   follows time ... so I can try to match my overall timing better than

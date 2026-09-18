@@ -1471,6 +1471,33 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     SRS card. `scripts/report-pitch-drill-effectiveness.ts` reads all of
     this straight from Supabase: usage-vs-pass-rate over time and the most
     common shape confusions. Detail in STATUS.md.
+  - **Real-audio pitch-perception bridge** — two ungraded, unpersisted
+    perception warm-ups built from the native-clip corpus, distinct from
+    the drill's own self-recording exercises above (STATUS.md's 2026-09-14
+    and 2026-09-18 entries):
+    - **Word-alone vs. word-in-phrase** (`PitchWordPhraseWarmup`) sits
+      inside the `pitch_accent` SRS review card (`ReviewPage`), not this
+      page: loops the isolated word, then word + following particle, and
+      asks "stays high or drops?" — the only way to hear the difference
+      between heiban and odaka, which are acoustically identical within
+      the word's own span. Gated to heiban/odaka candidates where forced
+      alignment (`isolatedWordSpans`) actually locates both spans; silent
+      no-render otherwise.
+    - **Same/different near-minimal pairs** (`PitchAccentMinimalPairWarmup`,
+      top of `PitchAccentDrillPage`) plays real clips of two words that
+      share a reading but not a pitch-accent position — true homophones
+      like 箸/橋 (`src/lib/pitchAccentMinimalPairs.ts`'s
+      `findMinimalPairContrasts`, excluding heiban-vs-odaka pairs for the
+      same acoustic-identity reason above). The learner guesses which clip
+      is which before revealing the answer; up to 5 trials, each contrast
+      tried once from the same book and, corpus permitting, once more
+      across two different books. No per-clip speaker identity exists in
+      this corpus, so `Book.id` stands in as a same-speaker proxy (a book
+      is normally one narrator or one consistent cast) — an approximation,
+      documented as such, not verified per-clip speaker data. Candidates
+      require the word's exact citation-form surface (`expression`), since
+      near-minimal accent pairs are almost always nouns and this sidesteps
+      resolving `pitchAccentPositions` against an inflected surface.
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Paired pitch contours** (`PitchCanvas`, reference + dashed learner) —
