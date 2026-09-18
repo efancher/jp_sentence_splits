@@ -53,14 +53,26 @@ what's left is one deferred durability item (below).
   split with an explicit space actively regressed *already-working* cases
   (whatever this tokenizer does with a literal space, it isn't "treat it
   as a boundary"). Live sweep of all 43 day/month values against `/align`:
-  **12/12 months fixed, 19/31 days fixed** — the remaining 12 days
-  (3,13,16-19,23,26-30) split into a fragment that isn't independent
-  vocabulary regardless of what text is substituted (a tokenizer-
-  segmentation limit, not an input-text one); a day that still fails
-  behaves exactly as before, never worse. 番/年 are uncovered entirely —
-  open-ended constructions with no closed-vocabulary dictionary entry to
-  substitute in.
-  `ALIGNMENT_VERSION` bumped 1→2 (`src/lib/analysisApi.ts`) so cached
+  **12/12 months fixed, 19/31 days fixed** initially — the 12 day
+  failures (3,13,16-19,23,26-30) split into a tens-prefix plus a
+  ones-digit+にち remainder that isn't independent vocabulary on its own.
+  Same-day follow-up: queried the tokenizer directly
+  (`generate_language_tokenizer`) to get the exact failing fragment for
+  each value — six recurring remainders (さんにち/ろくにち/しちにち/
+  はちにち/くにち/じゅうにち) cover 11 of the 12. Derived each one's
+  phones from already-verified data (the whole compound's real dictionary
+  entry minus the verified prefix's phones, cross-checked via two
+  different parent compounds landing on the same remainder) rather than
+  hand-transcribing IPA, and added them to shadowing-analysis-api's
+  `app/data/supplementary_dictionary.dict`. **Day coverage 19/31 → 30/31.**
+  The one holdout, day 3 (みっか splits as み+っか, or か at least, inside
+  a sokuon gemination), was left alone — no clean phone boundary to derive
+  from, and a wrong guess there produces confidently-wrong alignment
+  instead of a safe skip. 番/年 remain uncovered entirely — open-ended
+  constructions with no closed-vocabulary dictionary entry, and no
+  verified compound to derive missing-fragment phones from either.
+  `ALIGNMENT_VERSION` bumped 1→2, then 2→3 for this follow-up
+  (`src/lib/analysisApi.ts`) so cached
   `reference_alignment` rows from before this fix get recomputed instead
   of silently reusing the stale, still-`<unk>`-poisoned result — both
   `backfill-word-audio-range.ts` and `experiment-word-boundary-
@@ -68,15 +80,20 @@ what's left is one deferred durability item (below).
   row. Re-ran the word-boundary backfill on the same 150-word scope after
   the fix: skips dropped from 18 to 11, 7 more words got a usable
   alignment (11日, 気温 ×2, なり, 10月, 15日, 地方, 降っ), and 12 more
-  links qualified for a tight-boundary write. Total applied so far: **52
-  links** (`--apply --limit 150`, in two passes) — the wider corpus hasn't
-  been swept yet. Diagnostic tools added: `scripts/diagnose-word-boundary-
-  skips.ts` (characterizes *why* a given surface form has no aligner
-  match — substring-missing vs. OOV-cascade — searches by surface form
-  since skip-log indices shift as soon as an earlier `--apply` run removes
-  rows from the eligible pool) and `scripts/verify-numeral-alignment-
-  fix.ts` (forces a fresh, uncached `/align` call against known-affected
-  sentences).
+  links qualified for a tight-boundary write. Applied to date: **52
+  links** on the 150-word scope, then **80 more** on a full-corpus sweep
+  (`--apply --limit 100000`, 493 candidates, 31 skipped, 462 scored) — 132
+  total. That full-corpus run used `ALIGNMENT_VERSION` 2 (the hiragana-
+  reading fix only); the follow-up supplementary-dictionary fix landed
+  after it started, bumping to v3 — a further re-run would pick up
+  whatever fraction of the 31 remaining skips that fix newly resolves
+  (day values 13/16-19/23/26-30), not yet done. Diagnostic tools added:
+  `scripts/diagnose-word-boundary-skips.ts` (characterizes *why* a given
+  surface form has no aligner match — substring-missing vs. OOV-cascade —
+  searches by surface form since skip-log indices shift as soon as an
+  earlier `--apply` run removes rows from the eligible pool) and
+  `scripts/verify-numeral-alignment-fix.ts` (forces a fresh, uncached
+  `/align` call against known-affected sentences).
 - **2026-09-18 — word-clip boundary backfill built and applied (40 links)**.
   Turns the round-trip-verification experiment below into a real backfill:
   `scripts/backfill-word-audio-range.ts` (+ shared `scripts/lib/
