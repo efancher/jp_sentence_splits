@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-18 — word-clip boundary backfill built (not yet applied)**.
+  Turns the round-trip-verification experiment below into a real backfill:
+  `scripts/backfill-word-audio-range.ts` (+ shared `scripts/lib/
+  audioClipHelpers.ts`, extracted from the experiment script so the two
+  don't drift) tries `default` (the fixed pad) against `tight` (the
+  aligner's raw match) per `sentence_vocabulary` link, via a
+  `large-v3-turbo` round-trip ASR pass in a subprocess
+  (`scripts/score-word-audio-candidates.py`, `mfa` conda env — loads the
+  model once, scores every clip, exits). Writes `audio_start_ms`/
+  `audio_end_ms` (the same field the "Adjust" hand-correction editor uses)
+  only when `tight` clears a similarity floor (0.5) and beats `default` by
+  a real margin (0.1) — anything under that stays on the runtime default,
+  nothing is ever written for a `default` win (that's already what happens
+  with no override stored). Never touches a link with an existing manual
+  range. Dry-run by default (`--apply` to write), `--book`/`--limit` to
+  scope. 150-word dry-run: 132 scored (18 skipped, mostly no aligner
+  match), 40 (30%) would switch to `tight`, all with a clear margin (e.g.
+  今回 0.10→1.00, 天気 0.00→0.86, 二人 0.00→0.75) — not yet run with
+  `--apply` against real data.
 - **2026-09-18 — word-clip boundary round-trip ASR verification experiment**
   (chat: "would some sort of iterative process... help?" re: word-clip
   precision for pitch_accent/word_listening cards). Added

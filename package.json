@@ -52,7 +52,8 @@
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts",
     "validate:sentence-transcripts": "tsx scripts/validate-sentence-transcripts.ts",
-    "experiment:word-boundary-verification": "tsx scripts/experiment-word-boundary-verification.ts"
+    "experiment:word-boundary-verification": "tsx scripts/experiment-word-boundary-verification.ts",
+    "backfill:word-audio-range": "tsx scripts/backfill-word-audio-range.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -48,6 +48,7 @@ import type { AlignmentResult, WordAlignment } from '../src/domain/types';
 import { isolatedWordRangeUnpadded } from '../src/lib/isolatedWordRange';
 import { detectSilences, type SilenceSpan } from '../src/lib/waveform';
 
+import { alignAudio, ffmpegTrimToM4a, ffprobeDurationMs } from './lib/audioClipHelpers';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -55,11 +56,6 @@ const execFileAsync = promisify(execFile);
 
 const AUDIO_BUCKET = 'reference-audio';
 const DEFAULT_LIMIT = 20;
-const ALIGN_API_BASE = (
-  process.env.ANALYSIS_ALIGN_API_BASE ??
-  process.env.ALIGN_API_BASE ??
-  'http://127.0.0.1:8002'
-).replace(/\/$/, '');
 const DECODE_SAMPLE_RATE = 16000;
 const SILENCE_SEARCH_WINDOW_MS = 200;
 const MIN_CLIP_MS = 80;
@@ -100,19 +96,6 @@ function parseArg(argv: string[], name: string): string | undefined {
   return idx >= 0 ? argv[idx + 1] : undefined;
 }
 
-async function alignAudio(blob: Blob, transcript: string): Promise<AlignmentResult> {
-  const form = new FormData();
-  form.append('audio', blob, 'clip');
-  form.append('transcript', transcript);
-  const resp = await fetch(`${ALIGN_API_BASE}/align`, { method: 'POST', body: form });
-  if (!resp.ok) {
-    throw new Error(`/align ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as AlignmentResult;
-  if (!Array.isArray(data.words)) throw new Error('/align returned no words[]');
-  return data;
-}
-
 async function validateTranscript(
   audioBase64: string,
   mimeType: string,
@@ -127,20 +110,6 @@ async function validateTranscript(
     throw new Error(`validate-transcript failed (${response.status}): ${await response.text()}`);
   }
   return response.json();
-}
-
-async function ffprobeDurationMs(path: string): Promise<number> {
-  const { stdout } = await execFileAsync('ffprobe', [
-    '-v',
-    'error',
-    '-show_entries',
-    'format=duration',
-    '-of',
-    'json',
-    path,
-  ]);
-  const payload = JSON.parse(stdout);
-  return Math.max(1, Math.round(parseFloat(payload.format.duration) * 1000));
 }
 
 async function decodeMonoPcm(path: string): Promise<Float32Array | null> {
@@ -166,29 +135,6 @@ async function decodeMonoPcm(path: string): Promise<Float32Array | null> {
   } finally {
     await rm(rawPath, { force: true });
   }
-}
-
-async function ffmpegTrimToM4a(
-  sourcePath: string,
-  outPath: string,
-  startMs: number,
-  endMs: number,
-): Promise<void> {
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-ss',
-    (startMs / 1000).toFixed(3),
-    '-i',
-    sourcePath,
-    '-t',
-    ((endMs - startMs) / 1000).toFixed(3),
-    '-vn',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '128k',
-    outPath,
-  ]);
 }
 
 function nearestSilenceMidMs(
