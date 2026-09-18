@@ -714,18 +714,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   but only within the existing "never assert something false" gate — i.e.
   route to (a).
 
-- [ ] **Re-mine "After Work".** (2026-09-01 re-check: First Day at Work is
-  clean now; GLIM SPANKY is a song, annotate-only — both need no action.)
-  "After Work" (`FkX4A-ZLBrc`, 116 sentences, **zero study progress**) is
-  still broken after the 2026-08-29 re-segment: garbled name ASR
-  (翔吾→"し吾"), human translations scrambled across sentences, gap
-  positions. Fix: fresh re-mine through the YouTubeMinePage wizard (ASR
-  `large-v3-turbo` → review segmentation → translate → commit into the
-  existing book, idempotent on `source_key`). Browser + human
-  translation-review — not safe to headless against production. Mac exit
-  node is up.
-
-
 - [ ] **Real-audio pitch-perception bridge.** Follow-on to the
   pitch-accent drill and the synthetic `pitch-ear-trainer` /
   `relative-pitch-trainer`. Prompted by the 2026-09-06 ChatGPT pitch-ear
