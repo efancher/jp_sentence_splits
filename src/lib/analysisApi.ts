@@ -16,8 +16,12 @@ import type { AlignmentResult } from '../domain/types';
  * (16日, 10月) to their hiragana reading before alignment — fixes the
  * `<unk>` cascade for most day/month values (see
  * ~/projects/shadowing-analysis-api's app/numerals.py and docs/STATUS.md).
+ * v3 (2026-09-18): supplementary_dictionary.dict gained entries for the
+ * six ones-digit+にち fragments the tokenizer splits tens-prefixed dates
+ * into (じゅうろくにち -> じゅう + ろくにち, etc.) — day coverage 19/31 ->
+ * 30/31.
  */
-export const ALIGNMENT_VERSION = 2;
+export const ALIGNMENT_VERSION = 3;
 /** Bump when the ASR model/prompting would meaningfully change its output. */
 export const TRANSCRIPTION_VERSION = 1;
 
