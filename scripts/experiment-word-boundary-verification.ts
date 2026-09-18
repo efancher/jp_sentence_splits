@@ -25,6 +25,12 @@
  *   npm run experiment:word-boundary-verification -- [--book <bookId>]
  *     [--limit N]
  *
+ * Set KEEP_CLIPS_DIR=<dir> to retain every candidate clip plus a
+ * `manifest.jsonl` (sentenceId, surfaceForm, candidate label, clip path,
+ * this run's asrText/similarity) instead of deleting them — lets a
+ * separate script re-transcribe the exact same clips with a different ASR
+ * model for a same-boundaries, different-model comparison.
+ *
  * Needs ffmpeg on PATH, plus youtube-mining-api (`/validate-transcript`)
  * and, for occurrences whose sentence has no cached alignment yet,
  * shadowing-analysis-api (`/align`) reachable. Run this on the box that
@@ -32,7 +38,7 @@
  * aligner URL with ANALYSIS_ALIGN_API_BASE if needed.
  */
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile, writeFile, appendFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -234,6 +240,8 @@ async function main() {
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
   const workDir = await mkdtemp(join(tmpdir(), 'word-boundary-experiment-'));
+  const keepClipsDir = process.env.KEEP_CLIPS_DIR;
+  if (keepClipsDir) await mkdir(keepClipsDir, { recursive: true });
 
   try {
     console.log('Fetching sentences, reference audio, alignments, and vocabulary...');
@@ -370,6 +378,21 @@ async function main() {
             vocab.surfaceForm,
           );
           scored.push({ label: candidate.label, similarity: result.similarity, asrText: result.asrText });
+          if (keepClipsDir) {
+            const keptName = `clip-${i}-${candidate.label.replace(/[^a-z0-9]/gi, '')}.m4a`;
+            await copyFile(outPath, join(keepClipsDir, keptName));
+            await appendFile(
+              join(keepClipsDir, 'manifest.jsonl'),
+              `${JSON.stringify({
+                sentenceId: vocab.sentenceId,
+                surfaceForm: vocab.surfaceForm,
+                candidateLabel: candidate.label,
+                clipFile: keptName,
+                baseAsrText: result.asrText,
+                baseSimilarity: result.similarity,
+              })}\n`,
+            );
+          }
         } catch {
           scored.push({ label: candidate.label, similarity: null, asrText: null });
         } finally {

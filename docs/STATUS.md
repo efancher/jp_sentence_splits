@@ -59,6 +59,24 @@ what's left is one deferred durability item (below).
   production feature (would mean an extra ASR-call backfill pass and
   writing `SentenceVocabulary.audioStartMs/EndMs` at scale) — next step if
   pursued.
+  **Follow-up same day**: re-ran the identical 37-word/147-clip sample
+  through `large-v3-turbo` instead of the diagnostic `base` model
+  (`scripts/rescan-clips-with-model.py`, one-off — loads the kept clips
+  from `KEEP_CLIPS_DIR`, not wired to any service; needs the `mfa` conda
+  env's faster-whisper + a `pip install jaconv` done there for kana-fold).
+  Restarted `shadowing-analysis-api` first to clear ~3 days of the known
+  aligner memory leak (5.2G RSS, 1.7G swapped) before loading a second
+  model — same recovery its weekly restart timer already does. Using one
+  consistent (simplified, no kanji-reading step) comparison metric for
+  both models on the exact same clips: turbo scored meaningfully higher
+  across every boundary candidate (mean similarity ~0.45-0.57 vs base's
+  ~0.33-0.40, roughly +25-40% relative) — a real accuracy gain, not noise.
+  Which boundary candidate won stayed split between `default` and `tight`
+  either way (turbo: 51%/46%, base: 57%/35%) — the bigger model makes the
+  verifier a more trustworthy judge, it doesn't remove the need to try
+  more than one boundary per word. Some clips (揺れ, 日記, 下手) scored
+  near zero on both models regardless of pad — genuinely hard/short clips,
+  not a model problem.
 - **2026-09-18 — stale "in progress" mining jobs hidden once imported**
   (user: podcast episode #1472「髪について！」showed as "in progress: step
   1 of 4" on the feed picker despite already being imported). Root cause:
