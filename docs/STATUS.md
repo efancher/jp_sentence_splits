@@ -33,7 +33,51 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
-- **2026-09-18 — word-clip boundary backfill built (not yet applied)**.
+- **2026-09-18 — numeral `<unk>` cascade fixed (partial), backfill applied
+  to 52 links**. The 18 "no aligner match" skips from the backfill below
+  traced almost entirely to one cause: mined transcripts write dates as
+  arabic digits (16日), the MFA dictionary has no entry for a bare digit
+  string, so the tokenizer emits `<unk>` for the whole token — and
+  `isolatedWordRange`'s OOV guard treats any `<unk>` as poisoning every
+  later word in the same sentence (its audio duration isn't credited to
+  the character-proportion basis, so everything after it drifts). One date
+  at the start of a weather-report sentence was enough to break isolation
+  for every word after it.
+  Fix lives in the sibling repo: `~/projects/shadowing-analysis-api`'s
+  `app/numerals.py` expands `<n>日`/`<n>月` to their hiragana reading
+  before alignment. Two things tried and ruled out first (checked directly
+  against `japanese_mfa.dict`): converting to kanji digits instead of kana
+  isn't enough (十六日 has no entry of its own; the tokenizer treats it as
+  one indivisible token it can't look up either way — only kana readings
+  turned out to have literal dictionary entries), and forcing a token
+  split with an explicit space actively regressed *already-working* cases
+  (whatever this tokenizer does with a literal space, it isn't "treat it
+  as a boundary"). Live sweep of all 43 day/month values against `/align`:
+  **12/12 months fixed, 19/31 days fixed** — the remaining 12 days
+  (3,13,16-19,23,26-30) split into a fragment that isn't independent
+  vocabulary regardless of what text is substituted (a tokenizer-
+  segmentation limit, not an input-text one); a day that still fails
+  behaves exactly as before, never worse. 番/年 are uncovered entirely —
+  open-ended constructions with no closed-vocabulary dictionary entry to
+  substitute in.
+  `ALIGNMENT_VERSION` bumped 1→2 (`src/lib/analysisApi.ts`) so cached
+  `reference_alignment` rows from before this fix get recomputed instead
+  of silently reusing the stale, still-`<unk>`-poisoned result — both
+  `backfill-word-audio-range.ts` and `experiment-word-boundary-
+  verification.ts` now check `alignment_version` before trusting a cached
+  row. Re-ran the word-boundary backfill on the same 150-word scope after
+  the fix: skips dropped from 18 to 11, 7 more words got a usable
+  alignment (11日, 気温 ×2, なり, 10月, 15日, 地方, 降っ), and 12 more
+  links qualified for a tight-boundary write. Total applied so far: **52
+  links** (`--apply --limit 150`, in two passes) — the wider corpus hasn't
+  been swept yet. Diagnostic tools added: `scripts/diagnose-word-boundary-
+  skips.ts` (characterizes *why* a given surface form has no aligner
+  match — substring-missing vs. OOV-cascade — searches by surface form
+  since skip-log indices shift as soon as an earlier `--apply` run removes
+  rows from the eligible pool) and `scripts/verify-numeral-alignment-
+  fix.ts` (forces a fresh, uncached `/align` call against known-affected
+  sentences).
+- **2026-09-18 — word-clip boundary backfill built and applied (40 links)**.
   Turns the round-trip-verification experiment below into a real backfill:
   `scripts/backfill-word-audio-range.ts` (+ shared `scripts/lib/
   audioClipHelpers.ts`, extracted from the experiment script so the two
@@ -50,8 +94,10 @@ what's left is one deferred durability item (below).
   range. Dry-run by default (`--apply` to write), `--book`/`--limit` to
   scope. 150-word dry-run: 132 scored (18 skipped, mostly no aligner
   match), 40 (30%) would switch to `tight`, all with a clear margin (e.g.
-  今回 0.10→1.00, 天気 0.00→0.86, 二人 0.00→0.75) — not yet run with
-  `--apply` against real data.
+  今回 0.10→1.00, 天気 0.00→0.86, 二人 0.00→0.75) — applied for real
+  (`--apply --limit 150`), 40 links updated. The 18 skips led directly to
+  the numeral-cascade investigation/fix above; a second pass after that
+  fix applied 12 more (52 total so far). Wider corpus not yet swept.
 - **2026-09-18 — word-clip boundary round-trip ASR verification experiment**
   (chat: "would some sort of iterative process... help?" re: word-clip
   precision for pitch_accent/word_listening cards). Added

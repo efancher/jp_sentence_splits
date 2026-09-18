@@ -10,8 +10,14 @@ import type { AlignmentResult } from '../domain/types';
  * back to whatever they'd show without it.
  */
 
-/** Bump when the alignment service's output would meaningfully change. */
-export const ALIGNMENT_VERSION = 1;
+/**
+ * Bump when the alignment service's output would meaningfully change.
+ * v2 (2026-09-18): shadowing-analysis-api now expands arabic-digit dates
+ * (16日, 10月) to their hiragana reading before alignment — fixes the
+ * `<unk>` cascade for most day/month values (see
+ * ~/projects/shadowing-analysis-api's app/numerals.py and docs/STATUS.md).
+ */
+export const ALIGNMENT_VERSION = 2;
 /** Bump when the ASR model/prompting would meaningfully change its output. */
 export const TRANSCRIPTION_VERSION = 1;
 

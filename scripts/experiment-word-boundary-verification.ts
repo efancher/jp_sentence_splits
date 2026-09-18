@@ -44,6 +44,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { YOUTUBE_MINING_API_BASE } from '../src/appConfig';
+import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import type { AlignmentResult, WordAlignment } from '../src/domain/types';
 import { isolatedWordRangeUnpadded } from '../src/lib/isolatedWordRange';
 import { detectSilences, type SilenceSpan } from '../src/lib/waveform';
@@ -213,7 +214,10 @@ async function main() {
       // reference_alignment has no deleted_at/soft-delete column (local-
       // recomputable cache, not a synced table) — fetchAll's filter doesn't
       // apply; query it directly like backfill-reference-alignment.ts does.
-      supabase.from('reference_alignment').select('id, alignment').eq('owner_id', user.id),
+      supabase
+        .from('reference_alignment')
+        .select('id, alignment, alignment_version')
+        .eq('owner_id', user.id),
       fetchAll<VocabRow>(
         supabase,
         'sentence_vocabulary',
@@ -229,10 +233,14 @@ async function main() {
     if (alignmentResult.error) {
       throw new Error(`Failed to fetch reference_alignment: ${alignmentResult.error.message}`);
     }
-    const alignmentRows = (alignmentResult.data ?? []).map((row) => ({
-      id: String(row.id),
-      alignment: row.alignment as AlignmentResult,
-    }));
+    // Only trust a cached alignment when it's current — see
+    // backfill-word-audio-range.ts's identical guard for why.
+    const alignmentRows = (alignmentResult.data ?? [])
+      .filter((row) => Number(row.alignment_version) === ALIGNMENT_VERSION)
+      .map((row) => ({
+        id: String(row.id),
+        alignment: row.alignment as AlignmentResult,
+      }));
 
     const japaneseBySentence = new Map(sentences.map((s) => [s.id, s.japanese]));
     const audioBySentence = new Map<string, AudioRow>();

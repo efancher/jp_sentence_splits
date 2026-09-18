@@ -41,6 +41,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import type { AlignmentResult, WordAlignment } from '../src/domain/types';
 import { isolatedWordRange, isolatedWordRangeUnpadded } from '../src/lib/isolatedWordRange';
 
@@ -144,7 +145,10 @@ async function main() {
       // reference_alignment has no deleted_at/soft-delete column (local-
       // recomputable cache, not a synced table) — fetchAll's filter doesn't
       // apply; query it directly like backfill-reference-alignment.ts does.
-      supabase.from('reference_alignment').select('id, alignment').eq('owner_id', user.id),
+      supabase
+        .from('reference_alignment')
+        .select('id, alignment, alignment_version')
+        .eq('owner_id', user.id),
       fetchAll<VocabRow>(
         supabase,
         'sentence_vocabulary',
@@ -161,8 +165,14 @@ async function main() {
     if (alignmentResult.error) {
       throw new Error(`Failed to fetch reference_alignment: ${alignmentResult.error.message}`);
     }
+    // Only trust a cached alignment when it's current — a stale one (from
+    // before an aligner-side fix, e.g. ALIGNMENT_VERSION 1 -> 2's numeral
+    // expansion) would silently reproduce the bug this backfill exists to
+    // fix instead of triggering a fresh /align call.
     const alignmentByAudioId = new Map(
-      (alignmentResult.data ?? []).map((row) => [String(row.id), row.alignment as AlignmentResult]),
+      (alignmentResult.data ?? [])
+        .filter((row) => Number(row.alignment_version) === ALIGNMENT_VERSION)
+        .map((row) => [String(row.id), row.alignment as AlignmentResult]),
     );
 
     const japaneseBySentence = new Map(sentences.map((s) => [s.id, s.japanese]));
