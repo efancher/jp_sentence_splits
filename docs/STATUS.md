@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-18 — stale "in progress" mining jobs hidden once imported**
+  (user: podcast episode #1472「髪について！」showed as "in progress: step
+  1 of 4" on the feed picker despite already being imported). Root cause:
+  `YouTubeMinePage`'s "resumable" job list (from the mining service's job
+  registry) and its "Imported" pill (from local Book/Chapter records via
+  `getSeriesImportedSourceIds`) are two independent, never-reconciled
+  status sources. A stalled first attempt (its job stuck at the transcript
+  stage, likely because a podcast RSS enclosure URL changed on refetch so
+  a retry's `_find_reusable_job` URL match missed it) survives up to the
+  server's 48h TTL even after a second, successful attempt gets committed
+  and the episode is fully imported. Added `visibleResumable` (filters
+  `resumable` against `importedPodcastSourceIds` and the existing
+  `minedVideos` YouTube-id index) so an already-imported episode's ghost
+  job no longer shows as resumable. Immediate unblock for the reported
+  episode: resume the stale job from the list, then "Start over" (calls
+  `deleteMiningJob`, removing it server-side). Not fixed: the underlying
+  job-matching gap in `server/youtube-mining/app/jobs.py`
+  (`_find_reusable_job`'s exact-URL match) that let the orphan job spawn
+  in the first place.
 - **2026-09-18 — same/different near-minimal-pair perception warm-up**
   (real-audio pitch-perception bridge, docs/ROADMAP.md). The ABX half of
   the bridge that shipped 2026-09-14 as `PitchWordPhraseWarmup`
