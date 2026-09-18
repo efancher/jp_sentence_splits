@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { SegmentationEditor } from '../components/SegmentationEditor';
@@ -704,6 +704,22 @@ export function YouTubeMinePage() {
     [podcastSeriesId],
     new Set<string>(),
   );
+  // A resumable job can outlive the import it belongs to: if an earlier
+  // attempt stalled (e.g. the podcast feed's enclosure URL changed on
+  // refetch so the retry couldn't reconnect to it), the server keeps the
+  // orphaned job until its TTL sweep while a separate, successful attempt
+  // already got committed. Hide anything that's already imported rather
+  // than showing it as still "in progress".
+  const visibleResumable = useMemo(
+    () =>
+      resumable.filter((job) => {
+        if (importedPodcastSourceIds?.has(job.url)) return false;
+        const videoId = extractYouTubeId(job.url);
+        return !(videoId && minedVideos.has(videoId));
+      }),
+    [resumable, importedPodcastSourceIds, minedVideos],
+  );
+
   const recentPodcastFeedUrls = useLiveQuery(
     async () => (await getDb().settings.get('settings'))?.recentPodcastFeedUrls ?? [],
     [],
@@ -915,13 +931,13 @@ export function YouTubeMinePage() {
             </div>
           </details>
         ) : null}
-        {!resuming && stage === 'idle' && resumable.length > 0 ? (
+        {!resuming && stage === 'idle' && visibleResumable.length > 0 ? (
           <div className="stack" style={{ gap: '0.4rem' }}>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
               Or pick up an import already in progress — transcription runs on
               the server, so you can start it on one device and finish here:
             </div>
-            {resumable.map((job) => (
+            {visibleResumable.map((job) => (
               <button
                 key={job.jobId}
                 type="button"
