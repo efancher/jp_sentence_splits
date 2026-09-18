@@ -51,7 +51,8 @@
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts",
-    "validate:sentence-transcripts": "tsx scripts/validate-sentence-transcripts.ts"
+    "validate:sentence-transcripts": "tsx scripts/validate-sentence-transcripts.ts",
+    "experiment:word-boundary-verification": "tsx scripts/experiment-word-boundary-verification.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

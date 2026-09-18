@@ -81,7 +81,13 @@ function pad(startMs: number, endMs: number): TimeRangeMs {
   return { startMs: Math.max(0, startMs - 60), endMs: endMs + 120 };
 }
 
-export function isolatedWordRange(
+/**
+ * Raw particle-inclusive match boundaries, before the fixed pad — exported
+ * for boundary-precision experiments (see
+ * scripts/experiment-word-boundary-verification.ts) that need to try
+ * alternative padding against the same underlying match.
+ */
+export function isolatedWordRangeUnpadded(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
@@ -94,7 +100,17 @@ export function isolatedWordRange(
   const nextWord = usable[lastIndex + 1];
   if (nextWord && nextWord.text.length <= 2) endMs = nextWord.end * 1000;
 
-  return pad(startMs, endMs);
+  return { startMs, endMs };
+}
+
+export function isolatedWordRange(
+  words: WordAlignment[],
+  japanese: string,
+  surfaceForm: string,
+): TimeRangeMs | null {
+  const raw = isolatedWordRangeUnpadded(words, japanese, surfaceForm);
+  if (!raw) return null;
+  return pad(raw.startMs, raw.endMs);
 }
 
 /**
