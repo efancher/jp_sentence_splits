@@ -75,9 +75,12 @@ export function AuthAndSyncSettings() {
               <button
                 type="button"
                 onClick={async () => {
-                  const text = await sync.copyDiagnostics();
-                  setMessage('Diagnostics copied to clipboard.');
-                  if (!text) setMessage('Diagnostics ready (clipboard unavailable).');
+                  const { copied } = await sync.copyDiagnostics();
+                  setMessage(
+                    copied
+                      ? 'Diagnostics copied to clipboard.'
+                      : 'Couldn’t copy to the clipboard — use “Report sync issue” instead, which includes the diagnostics.',
+                  );
                 }}
               >
                 Copy diagnostics
@@ -99,7 +102,7 @@ export function AuthAndSyncSettings() {
                   setSubmittingSyncIssue(true);
                   void (async () => {
                     try {
-                      const diagnostics = await sync.copyDiagnostics();
+                      const diagnostics = await sync.buildDiagnostics();
                       await reportSyncIssue({
                         note: syncIssueNote.trim(),
                         diagnosticsSnapshot: diagnostics,
@@ -107,6 +110,8 @@ export function AuthAndSyncSettings() {
                       setReportingSyncIssue(false);
                       setSyncIssueNote('');
                       setSyncIssueReported(true);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err));
                     } finally {
                       setSubmittingSyncIssue(false);
                     }

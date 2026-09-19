@@ -45,7 +45,11 @@ interface SyncContextValue {
   wifiOnlyAudioDownload: boolean;
   setSyncReferenceAudio: (value: boolean) => Promise<void>;
   setWifiOnlyAudioDownload: (value: boolean) => Promise<void>;
-  copyDiagnostics: () => Promise<string>;
+  /** Builds the diagnostics snapshot without touching the clipboard. */
+  buildDiagnostics: () => Promise<string>;
+  /** Must be called synchronously from a click handler (Safari drops the
+   *  clipboard write otherwise). `copied` is false when the write failed. */
+  copyDiagnostics: () => Promise<{ text: string; copied: boolean }>;
   migrationOpen: boolean;
   setMigrationOpen: (open: boolean) => void;
 }
@@ -223,7 +227,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     await updateSyncMeta({ wifiOnlyAudioDownload: value });
   }, []);
 
-  const copyDiagnostics = useCallback(async () => {
+  const buildDiagnostics = useCallback(async () => {
     const open = await listOpenConflicts();
     const queued = await listPendingMutations();
     const text = buildDiagnosticsSnapshot({
@@ -243,13 +247,34 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       status,
       userId: auth.user?.id,
     });
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // ignore clipboard failures
-    }
     return text;
   }, [online, pending, meta?.lastSyncAt, meta?.lastError, status, auth.user?.id]);
+
+  const copyDiagnostics = useCallback(async () => {
+    // Start the clipboard write before any await: Safari only honours it inside
+    // the click gesture, so hand it the text as a promise (ClipboardItem) rather
+    // than building the snapshot first.
+    const textPromise = buildDiagnostics();
+    let copied = false;
+    try {
+      const write =
+        typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write
+          ? navigator.clipboard.write([
+              new ClipboardItem({
+                'text/plain': textPromise.then((t) => new Blob([t], { type: 'text/plain' })),
+              }),
+            ])
+          : textPromise.then((t) => navigator.clipboard.writeText(t));
+      // Never wait on the clipboard for long; a pending write must not hang the UI.
+      copied = await Promise.race([
+        write.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+      ]);
+    } catch {
+      copied = false;
+    }
+    return { text: await textPromise, copied };
+  }, [buildDiagnostics]);
 
   const value = useMemo<SyncContextValue>(
     () => ({
@@ -265,6 +290,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       wifiOnlyAudioDownload: meta?.wifiOnlyAudioDownload ?? true,
       setSyncReferenceAudio,
       setWifiOnlyAudioDownload,
+      buildDiagnostics,
       copyDiagnostics,
       migrationOpen,
       setMigrationOpen,
@@ -282,6 +308,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       syncNow,
       setSyncReferenceAudio,
       setWifiOnlyAudioDownload,
+      buildDiagnostics,
       copyDiagnostics,
       migrationOpen,
     ],

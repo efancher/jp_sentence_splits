@@ -60,13 +60,15 @@ export function ConflictPanel() {
   const [reportingId, setReportingId] = useState<string | null>(null);
   const [reportNote, setReportNote] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportError, setReportError] = useState('');
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
 
   async function submitReport(conflict: SyncConflict): Promise<void> {
     if (!reportNote.trim() || submittingReport) return;
     setSubmittingReport(true);
+    setReportError('');
     try {
-      const diagnostics = await sync.copyDiagnostics();
+      const diagnostics = await sync.buildDiagnostics();
       await reportSyncIssue({
         note: reportNote.trim(),
         diagnosticsSnapshot: diagnostics,
@@ -76,6 +78,8 @@ export function ConflictPanel() {
       setReportingId(null);
       setReportNote('');
       setReportedIds((prev) => new Set(prev).add(conflict.id));
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : String(error));
     } finally {
       setSubmittingReport(false);
     }
@@ -216,6 +220,7 @@ export function ConflictPanel() {
                 rows={2}
                 autoFocus
               />
+              {reportError ? <p className="error" style={{ margin: 0 }}>{reportError}</p> : null}
               <div className="row">
                 <button type="submit" disabled={!reportNote.trim() || submittingReport}>
                   Submit
