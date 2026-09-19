@@ -228,7 +228,10 @@ import {
   BUILT_RECIPES,
   buildBuiltChain,
   buildVerbLegoCandidates,
+  chainMeaning,
   chooseChain,
+  functionHelp,
+  functionHint,
   recipesForVerb,
   type BuildableVerb,
 } from '../src/lib/verbLego';
@@ -374,5 +377,75 @@ describe('candidates by pattern', () => {
     expect(chooseChain(candidate!, 'x')).toEqual(chooseChain(candidate!, 'x'));
     const sources = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((s) => chooseChain(candidate!, s).source));
     expect(sources).toEqual(new Set(['sentence', 'built']));
+  });
+});
+
+describe('plain-English help', () => {
+  const built = (verb: BuildableVerb, recipeId: string) =>
+    buildBuiltChain(verb, BUILT_RECIPES.find((r) => r.id === recipeId)!)!;
+  const examples = (chain: ReturnType<typeof built>) =>
+    Object.fromEntries(functionHelp(chain).map((h) => [h.name, h.example]));
+
+  it('explains each distinct function in order and shows this verb in it', () => {
+    const chain = built({ expression: '聞く', reading: 'きく', partOfSpeech: 'v5k; vt' }, 'causative-passive-negative-past');
+    expect(functionHelp(chain).map((h) => h.name)).toEqual(['causative', 'passive', 'negative', 'past']);
+    expect(examples(chain)).toEqual({ causative: '聞かせる', passive: '聞かれる', negative: '聞かない', past: '聞いた' });
+    expect(functionHelp(chain).every((h) => h.meaning.length > 0)).toBe(true);
+  });
+
+  it('gets ichidan, want-to and kana-only verbs right', () => {
+    expect(examples(built({ expression: '食べる', reading: 'たべる', partOfSpeech: 'v1; vt' }, 'want-past'))).toEqual({
+      'want to': '食べたい',
+      past: '食べた',
+    });
+    expect(examples(built({ expression: '食べる', reading: 'たべる', partOfSpeech: 'v1; vt' }, 'causative-past')).causative).toBe('食べさせる');
+    expect(examples(built({ expression: 'たべる', reading: 'たべる', partOfSpeech: 'v1; vt' }, 'causative-past'))).toEqual({
+      causative: 'たべさせる',
+      past: 'たべた',
+    });
+    expect(examples(built({ expression: 'あそぶ', reading: 'あそぶ', partOfSpeech: 'v5b; vi' }, 'causative-past'))).toEqual({
+      causative: 'あそばせる',
+      past: 'あそんだ',
+    });
+  });
+
+  it('trusts the JMdict tag for a godan verb that looks ichidan (切る)', () => {
+    const chain = built({ expression: '思い切る', reading: 'おもいきる', partOfSpeech: 'v5r; vi' }, 'causative-past');
+    expect(examples(chain)).toEqual({ causative: '思い切らせる', past: '思い切った' });
+  });
+
+  it('shows examples for a real chain only when the sentence’s own stem confirms the verb class', () => {
+    const trusted = findVerbChains(PASSIVE_PAST)[0]!;
+    expect(Object.fromEntries(functionHelp(trusted).map((h) => [h.name, h.example]))).toEqual({
+      passive: '聞かれる',
+      past: '聞いた',
+    });
+    // 思い切ら+れ+た: shape alone says ichidan (stem 思い切), which contradicts the real stem → no examples, never wrong ones
+    const suspect = findVerbChains(
+      sentence([V('思い切ら', '思い切る', 'おもいきる'), A('れ', 'れる'), A('た', 'た')]),
+    )[0]!;
+    const help = functionHelp(suspect);
+    expect(help.map((h) => h.name)).toEqual(['passive', 'past']);
+    expect(help.every((h) => h.example === null)).toBe(true);
+    expect(help.every((h) => h.meaning.length > 0)).toBe(true); // the meaning is still shown
+  });
+
+  it('summarises what a built form means, and nothing for a real chain', () => {
+    expect(chainMeaning(built({ expression: '食べる', reading: 'たべる', partOfSpeech: 'v1; vt' }, 'causative-passive-negative-past'))).toBe(
+      'wasn’t made to X',
+    );
+    for (const recipe of BUILT_RECIPES) {
+      expect(chainMeaning({ id: `built:食べる:${recipe.id}`, source: 'built' }), recipe.id).toBeTruthy();
+    }
+    expect(chainMeaning(findVerbChains(PASSIVE_PAST)[0]!)).toBeNull();
+  });
+
+  it('has a short hint for every function the game uses', () => {
+    expect(functionHint('causative')).toBe('make/let someone');
+    expect(functionHint('passive')).toBe('be done to');
+    expect(functionHint('nonsense')).toBe('');
+    for (const name of ['causative', 'passive', 'negative', 'past', 'polite', 'want to', 'ongoing (〜ている)', 'conditional']) {
+      expect(functionHint(name), name).not.toBe('');
+    }
   });
 });

@@ -138,6 +138,8 @@ export interface VerbChain {
   lemmaReading: string;
   /** English gloss when the suggestion has one. */
   english: string;
+  /** JMdict tags for built chains — they, not word shape, decide godan vs ichidan. */
+  partOfSpeech?: string;
   /** Stem then each auxiliary, in order; `text` concatenates to the sentence span. */
   pieces: ChainPiece[];
 }
@@ -238,6 +240,20 @@ export interface VerbStemSet {
  */
 const KANA_ONLY_STAND_IN = '仮';
 
+/** A full conjugated form as text — via the stand-in for kana-only verbs (read from the conjugated reading). */
+function conjugatedText(
+  lemma: string,
+  lemmaReading: string,
+  wordClass: 'godan' | 'ichidan',
+  form: ConjugationFormKey,
+): string | null {
+  const kanaOnly = /^[ぁ-んー]+$/.test(lemma);
+  const expression = kanaOnly ? KANA_ONLY_STAND_IN + lemma.slice(-1) : lemma;
+  const conjugated = conjugate(expression, lemmaReading, wordClass, form);
+  if (!conjugated) return null;
+  return kanaOnly ? conjugated.reading : conjugated.expression;
+}
+
 function stripSuffix(text: string, suffixes: readonly string[]): string | null {
   const suffix = suffixes.find((candidate) => text.endsWith(candidate));
   return suffix ? text.slice(0, -suffix.length) : null;
@@ -258,12 +274,9 @@ export function verbStemSet(
 ): VerbStemSet | null {
   const wordClass = inferConjugationWordClass(lemma, lemmaReading, partOfSpeech || '動詞/一般');
   if (wordClass !== 'godan' && wordClass !== 'ichidan') return null;
-  const kanaOnly = /^[ぁ-んー]+$/.test(lemma);
-  const expression = kanaOnly ? KANA_ONLY_STAND_IN + lemma.slice(-1) : lemma;
   const part = (form: ConjugationFormKey, strip: readonly string[]): string | null => {
-    const conjugated = conjugate(expression, lemmaReading, wordClass, form);
-    if (!conjugated) return null;
-    return stripSuffix(kanaOnly ? conjugated.reading : conjugated.expression, strip);
+    const conjugated = conjugatedText(lemma, lemmaReading, wordClass, form);
+    return conjugated ? stripSuffix(conjugated, strip) : null;
   };
   const i = part('polite_present', ['ます']);
   const a = part('plain_negative', ['ない']);
@@ -273,8 +286,8 @@ export function verbStemSet(
 }
 
 /** Every distinct stem of the verb — the pool a stem decoy is drawn from. */
-export function verbStems(lemma: string, lemmaReading: string): string[] | null {
-  const set = verbStemSet(lemma, lemmaReading);
+export function verbStems(lemma: string, lemmaReading: string, partOfSpeech?: string): string[] | null {
+  const set = verbStemSet(lemma, lemmaReading, partOfSpeech);
   return set ? [...new Set([set.dictionary, set.a, set.i, set.te])] : null;
 }
 
@@ -333,7 +346,7 @@ export function buildVerbLegoPuzzle(chain: VerbChain, seed: string): VerbLegoPuz
   const decoyTarget = chain.pieces.length >= 4 ? 3 : 2;
 
   const candidates: string[][] = []; // one list per slot, so decoys spread across slots
-  const stems = verbStems(chain.lemma, chain.lemmaReading);
+  const stems = verbStems(chain.lemma, chain.lemmaReading, chain.partOfSpeech);
   // Only trust the stem decoys when the real stem is among the derived ones.
   candidates.push(stems && stems.includes(answers[0]!) ? stems.filter((s) => s !== answers[0]) : []);
   for (let i = 1; i < chain.pieces.length; i += 1) {
@@ -608,6 +621,7 @@ export function buildBuiltChain(verb: BuildableVerb & { english?: string }, reci
     lemma: verb.expression,
     lemmaReading: verb.reading,
     english: verb.english ?? '',
+    partOfSpeech: verb.partOfSpeech,
     pieces,
   };
 }
@@ -644,4 +658,123 @@ export function chooseChain(candidate: VerbLegoCandidate, seed: string): VerbCha
   const preferReal = real.length > 0 && (built.length === 0 || seededShuffle(['r', 'b'], (x) => x, `${seed}:src`)[0] === 'r');
   const pool = preferReal ? real : built.length > 0 ? built : real;
   return seededShuffle(pool, (chain) => chain.id, `${seed}:chain`)[0]!;
+}
+
+// ---------------------------------------------------------------------------
+// Plain-English help — so "causative" isn't a word you have to already know.
+// ---------------------------------------------------------------------------
+
+interface FunctionInfo {
+  /** A few words shown right in the "Build:" prompt. */
+  hint: string;
+  /** What it does, with an English example on a canonical verb ("eat"). */
+  meaning: string;
+}
+
+/** Keyed by `functionName`. Examples use “eat” so they read the same for every verb. */
+export const FUNCTION_INFO: Record<string, FunctionInfo> = {
+  causative: {
+    hint: 'make/let someone',
+    meaning: 'Someone makes or lets somebody else do the action — “make/let (someone) eat”.',
+  },
+  passive: {
+    hint: 'be done to',
+    meaning:
+      'The action is done to the subject — “be eaten”, “be asked”. The same -られる form can also mean “can do” (potential); context decides.',
+  },
+  negative: { hint: 'not', meaning: 'Not doing it — “doesn’t eat”.' },
+  past: { hint: 'did', meaning: 'It already happened — “ate”.' },
+  polite: { hint: 'polite', meaning: 'The polite -ます style, used with people you’re not close to.' },
+  'want to': { hint: 'want to', meaning: 'Wanting to do it — “want to eat”.' },
+  'ongoing (〜ている)': {
+    hint: 'is doing',
+    meaning: 'Doing it right now, or being in the resulting state — “is eating”, “is married”.',
+  },
+  conditional: { hint: 'if/when', meaning: '“If / when it happens” (〜たら) — “if (I) ate”.' },
+};
+
+/** The `hint` for a function name, or '' when there isn't one. */
+export function functionHint(name: string): string {
+  return FUNCTION_INFO[name]?.hint ?? '';
+}
+
+export interface FunctionHelp {
+  name: string;
+  meaning: string;
+  /** This verb in that function, e.g. 聞かせる — null when the verb's class can't be trusted. */
+  example: string | null;
+}
+
+/**
+ * Whether we know this chain's verb class well enough to show forms of it.
+ * A built chain carries its JMdict tag. A real chain only has the word's shape
+ * to go on (which mislabels godan 切る/走る/入る as ichidan), so its derived
+ * stems must include the stem the sentence actually used.
+ */
+function verbClassTrusted(chain: VerbChain): boolean {
+  if (chain.source === 'built') return true;
+  const stems = verbStems(chain.lemma, chain.lemmaReading, chain.partOfSpeech);
+  return !!stems && stems.includes(chain.pieces[0]!.text);
+}
+
+/** This verb in each function, built from its own conjugation — e.g. 聞く → 聞かせる (causative). */
+function exampleFor(chain: VerbChain, name: string): string | null {
+  const stems = verbStemSet(chain.lemma, chain.lemmaReading, chain.partOfSpeech);
+  if (!stems) return null;
+  const wordClass = stems.wordClass;
+  const conj = (form: ConjugationFormKey) => conjugatedText(chain.lemma, chain.lemmaReading, wordClass, form);
+  switch (name) {
+    case 'causative':
+      return stems.a + (wordClass === 'godan' ? 'せる' : 'させる');
+    case 'passive':
+      return stems.a + (wordClass === 'godan' ? 'れる' : 'られる');
+    case 'negative':
+      return stems.a + 'ない';
+    case 'polite':
+      return stems.i + 'ます';
+    case 'want to':
+      return stems.i + 'たい';
+    case 'past':
+      return conj('plain_past');
+    case 'conditional':
+      return conj('tara_form');
+    case 'ongoing (〜ている)': {
+      const te = conj('te_form');
+      return te ? `${te}いる` : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Plain-English help for each distinct function in the chain, with an example on this verb where trustworthy. */
+export function functionHelp(chain: VerbChain): FunctionHelp[] {
+  const trusted = verbClassTrusted(chain);
+  const names = [...new Set(chain.pieces.slice(1).map((piece) => functionName(piece)))];
+  return names
+    .filter((name) => FUNCTION_INFO[name])
+    .map((name) => ({
+      name,
+      meaning: FUNCTION_INFO[name]!.meaning,
+      example: trusted ? exampleFor(chain, name) : null,
+    }));
+}
+
+/** What a built form means overall, with X standing for the verb. Hand-written per recipe; null for real chains. */
+const RECIPE_MEANING: Record<string, string> = {
+  'causative-past': 'made / let someone X',
+  'passive-past': 'was X-ed (X was done to the subject)',
+  'want-past': 'wanted to X',
+  'causative-negative': 'doesn’t make / let someone X',
+  'passive-negative': 'isn’t X-ed',
+  'causative-passive': 'is made to X',
+  'causative-negative-past': 'didn’t make / let someone X',
+  'passive-negative-past': 'wasn’t X-ed',
+  'causative-passive-past': 'was made to X',
+  'causative-passive-negative-past': 'wasn’t made to X',
+};
+
+export function chainMeaning(chain: Pick<VerbChain, 'id' | 'source'>): string | null {
+  if (chain.source !== 'built') return null;
+  return RECIPE_MEANING[chain.id.slice(chain.id.lastIndexOf(':') + 1)] ?? null;
 }

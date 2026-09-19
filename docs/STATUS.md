@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Verb Lego: plain-English help for the grammar terms** (user:
+  both new games work great, but they don't always know forms like causative).
+  The prompt now annotates each function ("causative (make/let someone) → passive
+  (be done to) → past (did)"); a **"What do these mean?"** expander (native
+  `<details>`, iOS-safe) explains each function in plain English *during* play;
+  once a form is finished a fixed block adds **this verb** in each function
+  (聞かせる / 聞かれる / 聞いた) generated from its own conjugation, plus a
+  whole-form gloss for built forms ("wasn't made to X"). Examples are withheld
+  until the form is done because "This verb: 食べられる" would give the answer
+  away. Examples appear only when the verb's class is trusted — built chains
+  carry their JMdict tag (`VerbChain.partOfSpeech`, also now used for decoy
+  stems), real chains must have their own stem confirm the class — so a
+  shape-misclassified godan like 切る shows the meaning but no (wrong) example
+  (tested). Manual test: `/play` → Verb Lego → Start; note the hints in the
+  "Build:" line, open "What do these mean?", play a form, and confirm the
+  "This verb:" examples appear only after the last slot locks.
+
 - **2026-09-19 — `reference_alignment` refreshed to v3 (full-corpus backfill);
   Odd Ear Out playable; backfill script pagination bug fixed**. Ran
   `backfill:reference-alignment --apply` on codex-dev after review by the

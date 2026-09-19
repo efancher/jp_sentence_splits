@@ -7,7 +7,10 @@ import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../
 import {
   buildVerbLegoPuzzle,
   chooseChain,
+  chainMeaning,
   describeChainPick,
+  functionHelp,
+  functionHint,
   functionName,
   scoreVerbLego,
   VERB_LEGO_COPY,
@@ -43,8 +46,45 @@ function Prompt({ puzzle }: { puzzle: VerbLegoPuzzle }) {
         {chain.english ? <span className="muted"> — {chain.english}</span> : null}
       </div>
       <div>
-        <strong>Build:</strong> {functions.join(' → ')}
+        <strong>Build:</strong>{' '}
+        {functions.map((name, index) => (
+          <span key={`${name}-${index}`}>
+            {index > 0 ? ' → ' : ''}
+            {name}
+            {functionHint(name) ? <span className="muted"> ({functionHint(name)})</span> : null}
+          </span>
+        ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What each function means — so a term like "causative" isn't assumed known.
+ * `showExamples` adds this verb in each function (聞かせる…), which during play
+ * would hand over the answer, so it's only shown once the form is finished.
+ */
+function HelpContent({ chain, showExamples }: { chain: VerbLegoPuzzle['chain']; showExamples: boolean }) {
+  const help = functionHelp(chain);
+  const overall = chainMeaning(chain);
+  return (
+    <div className="stack" style={{ gap: '0.4rem', fontSize: '0.9rem' }}>
+      {help.map((entry) => (
+        <div key={entry.name}>
+          <strong>{entry.name}</strong> — {entry.meaning}
+          {showExamples && entry.example ? (
+            <>
+              {' '}
+              <span className="muted">This verb:</span> <span className="jp">{entry.example}</span>
+            </>
+          ) : null}
+        </div>
+      ))}
+      {overall ? (
+        <div>
+          <strong>Whole form</strong> ≈ “{overall}” <span className="muted">(X = the verb)</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -94,6 +134,14 @@ function LegoCard({
   return (
     <div className="stack">
       <Prompt puzzle={puzzle} />
+      {!done ? (
+        <details>
+          <summary style={{ cursor: 'pointer' }}>What do these mean?</summary>
+          <div style={{ marginTop: '0.4rem' }}>
+            <HelpContent chain={chain} showExamples={false} />
+          </div>
+        </details>
+      ) : null}
 
       {sentenceParts ? (
         <div className="jp jp-lg">
@@ -191,6 +239,7 @@ function LegoCard({
                 <span className="jp">{slot.wrongTries.join('・')}</span> first.
               </div>
             ))}
+          <HelpContent chain={chain} showExamples />
           {chain.source === 'sentence' && chain.translation ? (
             <div className="muted">{chain.translation}</div>
           ) : (

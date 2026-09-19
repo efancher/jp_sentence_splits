@@ -982,7 +982,16 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   from the verb's own `conjugate()` (a/i/te/dictionary — **never** the e-stem:
   聞けない/食べれない are real potentials), and た/だ, て/で twins only when the
   preceding piece rules them out. Kana-only verbs conjugate via a `仮`+last-kana
-  stand-in. Weakness is per **piece** (`れる|れ`, `stem:られる`, …) from the round
+  stand-in. **Plain-English help** (`FUNCTION_INFO`, `functionHelp`,
+  `chainMeaning`): the "Build:" prompt annotates each function ("causative (make/let
+  someone) → passive (be done to)"); a "What do these mean?" expander gives each
+  function's meaning during play; once a form is finished a fixed block adds *this
+  verb* in each function (聞かせる, 聞かれる, 聞いた — from the verb's own
+  conjugation, only when its class is trusted: built chains carry their JMdict tag,
+  real chains must have their own stem confirm the class) and, for built forms, a
+  whole-form gloss ("wasn't made to X"). Examples are deliberately withheld during
+  play — they'd hand over the answer. Weakness is per **piece** (`れる|れ`,
+  `stem:られる`, …) from the round log; offered as `weak`/`strong`. (`れる|れ`, `stem:られる`, …) from the round
   log; offered as `weak`/`strong`.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
