@@ -169,6 +169,32 @@ AppShell.tsx`) surfaces on every route whenever a session is `in_progress`
 since the deep-linked pages themselves (Analyze, Review, Shadow, ...) stay
 unaware a session exists.
 
+## Short games
+
+`/play` hosts short standalone rounds (currently Word Detective). Design
+decisions worth knowing before adding one:
+
+- **Games read FSRS, never write it.** They're cued (clues, hints, pacing), so
+  feeding results into `recordReview` would inflate the proficiency signals that
+  gate `continue_book`/shadowing/listening (`getProficientVocabularyItemIds`).
+  Results go to an append-only, **local-only** `gameRounds` Dexie table
+  (`logGameRound`; modelled on `PitchDrillAttempt` but deliberately not in the
+  sync engine, so no Supabase migration). Sync + any FSRS-adjacent write
+  ("queue misses") are later, opt-in phases — see ROADMAP "Short games".
+- **Eligibility before ranking.** Each game builds its own eligible candidate
+  set (`getWordDetectiveCandidates`); the shared pure picker
+  (`src/lib/gamePicker.ts`) then ranks by a signal (weak/stale/strong) and
+  falls back rather than returning an empty round, so an item that can never
+  be played can't starve a signal.
+- **Routes are query-free** (`/play/:gameId/:signal`) because
+  `useActiveSession` matches a session step's route by exact pathname — a
+  future `game` planner step could deep-link here without breaking the
+  SessionBar's "Mark complete". Not wired into the planner yet; adding a fifth
+  `SessionBucket` is deliberately avoided (it's a `Record` across
+  allocation/settings/recap/Home).
+- Adding a game = a pure builder + a `GameDef` in `src/games/registry.tsx`
+  whose `loadPools` applies its eligibility.
+
 ## Scheduling
 
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —

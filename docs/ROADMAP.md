@@ -359,7 +359,8 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
-- [ ] **Short games (`/play`).** (2026-09-19) A few 60–180 s, non-arcade
+- [ ] **Short games (`/play`).** (2026-09-19; **P1 shipped 2026-09-19** —
+  see the Phases bullet) A few 60–180 s, non-arcade
   rounds that break up study while still training a skill, and — longer
   term — can be aimed at weaknesses or strengths. Came out of four
   parallel read-only design passes (audio / vocab / grammar / framework
@@ -438,7 +439,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Skipped as overlapping an existing card or a sibling game: Connections,
     Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
     Ghost Run (largest build, most likely to feel like work).
-  - **Phases:** **P1** GameShell + picker (weak/stale/strong from existing
+  - **Phases:** **P1 — DONE 2026-09-19** (`GameShell`, `src/lib/gamePicker.ts`,
+    `/play` hub + Home shortcut, local `gameRounds` log, **Word Detective**; see
+    STATUS.md). Original scope: GameShell + picker (weak/stale/strong from existing
     data) + one game + `/play` + Home chip + local `game_rounds`, no sync,
     no session step. **P2** optional session interlude + recap line
     (`sessionRecap.ts`). **P3** `/progress` "Games" panel (accuracy by
@@ -447,7 +450,11 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     rounds. **P4** sync `game_rounds`; add "Queue misses". **P5** Keystone,
     then Then & Now. **P6** let game misses feed the planner's weakness
     term (riskiest, last).
-  - **Open decisions:** (1) strictly read-only vs. opt-in "Queue misses";
+  - **Decisions taken for P1 (2026-09-19, the recommended defaults):** games are
+    strictly read-only w.r.t. FSRS (no "Queue misses" yet); standalone `/play`
+    only, no session interlude; local-only data; no streak. Still open: whether
+    game time should displace review minutes or be extra (only matters at P2).
+    Original questions: (1) strictly read-only vs. opt-in "Queue misses";
     (2) standalone `/play` only vs. also a session interlude; (3) is a
     rolling "rounds this week" count enough, or any streak; (4) should
     game time displace review minutes or be extra; (5) local-only data

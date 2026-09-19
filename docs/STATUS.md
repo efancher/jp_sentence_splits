@@ -33,6 +33,32 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Short games P1 shipped: `/play` + Word Detective**. New
+  standalone `/play` hub (Home shortcut "Play a round") and
+  `/play/:gameId/:signal`. Pieces: `GameShell` (intro → play → result, no-fail
+  pace bar), pure shared picker `src/lib/gamePicker.ts` (signals weak / stale /
+  strong from FSRS lapses + `predictRetrievability`, fallback weak → stale →
+  strong → any with an honest note), game registry `src/games/registry.tsx`
+  (each game's `loadPools` applies its own eligibility; hub hides a game/signal
+  whose pool can't fill a round), and the first game **Word Detective**
+  (`src/lib/wordDetective.ts`, `WordDetectiveGame.tsx`): 3 words/round, blanked
+  in real sentences from the learner's books, typed reading, clue ladder
+  (translation → second sentence → meaning → first kana → audio), score
+  5 − clues − wrong guesses. Eligibility = ≥2 distinct sentences containing the
+  recorded surface form, opener translated, suspended-only sentences skipped.
+  **Read-only w.r.t. FSRS by design** — rounds append to a new **local-only**
+  Dexie table `gameRounds` (v19; `logGameRound`), not synced, no Supabase
+  migration. Verified in a real browser against seeded data (round played
+  end-to-end, no console errors, 0 reviews/study items written). Manual test
+  plan: Home → "Play a round" → hub shows Word Detective with per-signal
+  counts (a signal under 3 is greyed "not enough yet"); Play a round → Start →
+  wrong guess shows "Not quite", Clue button reveals translation, then a second
+  sentence…; Give up reveals the word; finish → result lists each word with its
+  "why this word" line and a Replay button; confirm `/study-items` and review
+  counts are unchanged afterwards. Next (ROADMAP "Short games"): more games
+  (Odd Ear Out, Verb Lego, Particle Puzzle), then P2 session interlude, P3
+  `/progress` panel, P4 sync.
+
 - **2026-09-19 — "Short games" planned (no code yet) + feasibility script**.
   Four parallel read-only design passes (audio / vocab / grammar /
   framework) produced a ranked game shortlist, a shared GameShell +

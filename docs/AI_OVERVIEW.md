@@ -899,6 +899,38 @@ Both are explicitly *not* SRS-scheduled — separate from the Review system
 below, framed in the README as "not a spaced-repetition system" for this
 original layer (the SRS layer was added later, additively).
 
+### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
+Short (60–180 s), non-arcade rounds built from the learner's own books and
+history, meant as a break that still trains a skill. Reachable from a Home
+shortcut ("Play a round") and the `/play` hub. Currently one game:
+- **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
+  3 mystery words per round. Each is blanked out of a real sentence from
+  the learner's books; they type its reading (typed recall, not multiple
+  choice) and may spend clues one at a time — translation → a second blanked
+  sentence → English meaning → first kana → native audio (a clue with no data
+  behind it is left out). Score is 5 minus clues and wrong guesses, min 1 for
+  a solve, 0 for giving up. Accepts the dictionary reading, the in-sentence
+  inflected reading (`surfaceReadingFromInline`), romaji, or the written word.
+  Eligible words (`buildWordDetectiveWord`): a reading, and ≥2 distinct
+  sentences that actually contain the recorded `surfaceForm`, the opening one
+  translated; occurrences that live only in suspended books are skipped.
+- **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
+  game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
+  lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
+  cards, high recall) — and gets a seeded sample of the top slice. If the
+  requested signal can't fill a round it falls back weak → stale → strong →
+  `any` and the intro says so. `/play/:gameId/auto` (the hub default) requests
+  `weak`. The hub hides a game or signal whose pool is too small, with the count.
+- **Framework**: `GameShell.tsx` (intro with signal chip + "why these items"
+  → play with a no-fail-state pace bar → result), `src/games/registry.tsx`
+  (each game supplies `loadPools` = its own eligibility, and a component).
+- **Storage stance — read FSRS, never write it.** Games are cued, so grading
+  them would inflate the proficiency signals that gate other activities. Each
+  finished round appends one `GameRound` (per-item correct/clues/points/ms) to
+  a **local-only** Dexie table (`gameRounds`, `logGameRound`) — not in the sync
+  engine, no Supabase table. Nothing reads it yet. Games do not appear as
+  planner steps; they are a standalone break, not part of the session plan.
+
 ### 4. Spaced-repetition review system — `ReviewPage.tsx`,
 `src/lib/scheduling.ts`, `src/db/repository.ts`
 The unified FSRS-based SRS, at `/review` (global) and
