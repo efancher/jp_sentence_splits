@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — `reference_alignment` refreshed to v3 (full-corpus backfill);
+  Odd Ear Out playable; backfill script pagination bug fixed**. Ran
+  `backfill:reference-alignment --apply` on codex-dev after review by the
+  alignment session (who OK'd it). A 20-recording pilot took 58 s (~2.9 s each,
+  aligner RSS +3 MB), then the full run: **1054 stored, 1 failed** (a transient
+  Storage "Gateway Timeout" on one download, recovered on retry) in ~48 min;
+  aligner RSS went 3.05 → 3.68 GB peak (~0.65 MB/alignment, far under the feared
+  leak rate), never near the watchdog limits (5.2 GB RSS / 700 MB free). Verified:
+  **1075 recordings, 1075 already aligned (v3), 0 to do**. **Script bug found and
+  fixed:** the "already aligned" read had no pagination, so PostgREST's 1000-row
+  cap made every run think ~75 rows past the cap were missing and re-align them
+  (harmless upserts — that was the "75 to do" that kept reappearing, not new
+  recordings; the `audio_remine_*` rows are from 2026-08-30). Its query now pages.
+  **Odd Ear Out after the refresh (word-only spans, overrides ignored, dated
+  sentences and suspended-only books skipped):** ~34–43 distinct playable words
+  (my two throwaway prod measurements differ slightly because of Supabase paging
+  in the scripts) but only **4 contrasts** (2-mora hl/lh both ways; 3-mora
+  lhl>hll, lhl>lhh) — one short of the 5 a round needed. Rounds now need only
+  **3 trials** (`ODD_EAR_MIN_TRIALS`), may reuse a contrast with fresh words,
+  never reuse a word within a round (`buildOddEarRound`), and the hub gates on the
+  trials a round could actually be built with. On the prod pool 40/40 simulated
+  rounds fill 5 trials, 189/200 with all four clips from one book. Manual test:
+  `/play` → Odd Ear Out → Play a round; expect a 4–5 round game (a smaller pool
+  gives a shorter one).
+
 - **2026-09-19 — Odd Ear Out skips digit+日/月 sentences (from the alignment
   session's review of the proposed backfill)**. The session that owns the
   aligner reviewed the `backfill:reference-alignment` plan and flagged that

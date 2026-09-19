@@ -30,6 +30,13 @@ import { seededShuffle } from './seededShuffle';
  */
 export const ODD_EAR_OUT_GAME_ID = 'odd-ear-out';
 export const ODD_EAR_OUT_ROUND_SIZE = 5;
+/**
+ * A round is up to `ODD_EAR_OUT_ROUND_SIZE` trials but at least this many are
+ * needed to offer the game. It may reuse a contrast with fresh words (never
+ * reusing a word within a round), so real corpora with only a handful of
+ * contrasts still play; a small word pool simply gives a shorter round.
+ */
+export const ODD_EAR_MIN_TRIALS = 3;
 
 export const ODD_EAR_COPY: SignalCopy = {
   anyPool: 'contrasts among your own words',
@@ -164,18 +171,20 @@ export interface OddEarTrial<T extends OddEarClip> {
   sameBook: boolean;
 }
 
-/** Pick `count` clips of distinct words *and* readings, in seeded order, avoiding `takenReadings`. */
+/** Pick `count` clips of distinct words *and* readings, in seeded order, avoiding `takenReadings` and `avoidWords`. */
 function pickDistinct<T extends OddEarClip>(
   pool: readonly T[],
   count: number,
   takenReadings: ReadonlySet<string>,
   seed: string,
+  avoidWords: ReadonlySet<string> = new Set(),
 ): T[] | null {
   const picked: T[] = [];
   const readings = new Set(takenReadings);
   const words = new Set<string>();
   for (const clip of seededShuffle(pool, (c) => `${c.vocabularyItemId}:${c.bookId}`, seed)) {
     if (readings.has(clip.reading) || words.has(clip.vocabularyItemId)) continue;
+    if (avoidWords.has(clip.vocabularyItemId)) continue;
     readings.add(clip.reading);
     words.add(clip.vocabularyItemId);
     picked.push(clip);
@@ -187,13 +196,15 @@ function pickDistinct<T extends OddEarClip>(
 /**
  * Build one trial for `contrast`: three majority-shape clips and one odd clip
  * of distinct words with distinct readings (two identical-sounding clips would
- * make the odd one a guess). Prefers all four from a single book; falls back to
- * any mix. Null when the pool can't supply a valid four.
+ * make the odd one a guess), none in `avoidWords`. Prefers all four from a
+ * single book; falls back to any mix. Null when the pool can't supply a valid four.
  */
 export function buildOddEarTrial<T extends OddEarClip>(
   clips: readonly T[],
   contrast: OddEarContrast,
   seed: string,
+  /** Word ids already used earlier in the round — never reused, so a repeated contrast gets fresh words. */
+  avoidWords: ReadonlySet<string> = new Set(),
 ): OddEarTrial<T> | null {
   const inGroup = (shape: string) =>
     clips.filter((clip) => clip.moraCount === contrast.moraCount && clip.shape === shape);
@@ -204,9 +215,9 @@ export function buildOddEarTrial<T extends OddEarClip>(
     majority: readonly T[],
     odd: readonly T[],
   ): { majority: T[]; odd: T } | null => {
-    const three = pickDistinct(majority, MAJORITY_SIZE, new Set(), `${seed}:maj`);
+    const three = pickDistinct(majority, MAJORITY_SIZE, new Set(), `${seed}:maj`, avoidWords);
     if (!three) return null;
-    const one = pickDistinct(odd, 1, new Set(three.map((clip) => clip.reading)), `${seed}:odd`);
+    const one = pickDistinct(odd, 1, new Set(three.map((clip) => clip.reading)), `${seed}:odd`, avoidWords);
     return one ? { majority: three, odd: one[0]! } : null;
   };
 
@@ -342,4 +353,30 @@ export function describeOddEarPick(
   }
   if (signal === 'strong') return "A contrast you've been hearing reliably.";
   return `A ${contrast.moraCount}-mora contrast.`;
+}
+
+/**
+ * Fill a round: cycle through `order` (the picker's contrasts first) building
+ * trials until `size` are made or nothing more can be built, never reusing a word
+ * within the round. With fewer contrasts than `size`, a contrast comes round
+ * again with fresh words. Seeded and deterministic.
+ */
+export function buildOddEarRound<T extends OddEarClip>(
+  clips: readonly T[],
+  order: readonly OddEarContrast[],
+  seed: string,
+  size: number = ODD_EAR_OUT_ROUND_SIZE,
+): OddEarTrial<T>[] {
+  const trials: OddEarTrial<T>[] = [];
+  if (order.length === 0) return trials;
+  const used = new Set<string>();
+  // Each contrast may be tried a few times over; a failed attempt (its words all
+  // used up) just moves on to the next contrast.
+  for (let attempt = 0; trials.length < size && attempt < order.length * size; attempt += 1) {
+    const trial = buildOddEarTrial(clips, order[attempt % order.length]!, `${seed}:${attempt}`, used);
+    if (!trial) continue;
+    trials.push(trial);
+    for (const clip of trial.clips) used.add(clip.vocabularyItemId);
+  }
+  return trials;
 }

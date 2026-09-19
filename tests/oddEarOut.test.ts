@@ -4,6 +4,7 @@ import type { GameRound } from '../src/domain/types';
 import {
   buildContrastCandidates,
   buildOddEarHistory,
+  buildOddEarRound,
   buildOddEarTrial,
   contrastStats,
   cropPitchPayload,
@@ -153,6 +154,50 @@ describe('buildOddEarTrial', () => {
 
   it('returns null when a group is too small', () => {
     expect(buildOddEarTrial([...many(2, 'lhh'), ...many(1, 'hll')], contrast, 's')).toBeNull();
+  });
+});
+
+describe('buildOddEarTrial avoidWords / buildOddEarRound', () => {
+  const contrast = { id: '3:lhh>hll', moraCount: 3, majorityShape: 'lhh', oddShape: 'hll', pairKey: '3m hll/lhh' };
+  const other = { id: '3:hll>lhh', moraCount: 3, majorityShape: 'hll', oddShape: 'lhh', pairKey: '3m hll/lhh' };
+
+  it('never picks a word in avoidWords, and returns null when that leaves too few', () => {
+    const clips = [...many(4, 'lhh'), ...many(2, 'hll')];
+    const banned = new Set([clips[0]!.vocabularyItemId, clips[1]!.vocabularyItemId]);
+    for (const seed of ['a', 'b', 'c', 'd']) {
+      const trial = buildOddEarTrial(clips, contrast, seed, banned)!;
+      // only 2 lhh words remain (< 3), so no valid trial
+      expect(trial).toBeNull();
+    }
+    const ok = buildOddEarTrial(clips, contrast, 'a', new Set([clips[0]!.vocabularyItemId]))!;
+    expect(ok.clips.map((c) => c.vocabularyItemId)).not.toContain(clips[0]!.vocabularyItemId);
+  });
+
+  it('fills a round from a single contrast by reusing it with fresh words each time', () => {
+    const clips = [...many(15, 'lhh'), ...many(5, 'hll')];
+    const trials = buildOddEarRound(clips, [contrast], 'seed', 4);
+    expect(trials).toHaveLength(4);
+    const words = trials.flatMap((t) => t.clips.map((c) => c.vocabularyItemId));
+    expect(new Set(words).size).toBe(words.length); // no word twice in a round
+    expect(trials.every((t) => t.contrast.id === contrast.id)).toBe(true);
+  });
+
+  it('cycles across contrasts, and stops early rather than reusing words when the pool runs dry', () => {
+    const clips = [...many(6, 'lhh'), ...many(6, 'hll')];
+    const trials = buildOddEarRound(clips, [contrast, other], 'seed', 5);
+    // Two trials use 3+1 and 1+3 words; each shape then has only 2 unused words, short of
+    // the 3 alike a trial needs — so the round stops at 2 rather than reuse a word.
+    expect(trials).toHaveLength(2);
+    const words = trials.flatMap((t) => t.clips.map((c) => c.vocabularyItemId));
+    expect(new Set(words).size).toBe(8);
+    expect(new Set(trials.map((t) => t.contrast.id)).size).toBe(2); // alternates rather than repeating one
+    expect(buildOddEarRound(clips, [], 'seed')).toEqual([]);
+  });
+
+  it('is deterministic per seed', () => {
+    const clips = [...many(15, 'lhh'), ...many(8, 'hll')];
+    const ids = (seed: string) => buildOddEarRound(clips, [contrast, other], seed).map((t) => t.id).join();
+    expect(ids('x')).toBe(ids('x'));
   });
 });
 

@@ -933,8 +933,10 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   picker stats are its particles' recent accuracy (the picker's FSRS-named
   fields are reused as: lapses = misses, retrievability = accuracy). Offers
   `weak` and `strong` only. With no history yet, everything falls back to `any`.
-- **Odd Ear Out** (`OddEarOutGame.tsx`, `src/lib/oddEarOut.ts`) — 5 rounds
-  of four native clips of same-length words, each cut to the **word alone**
+- **Odd Ear Out** (`OddEarOutGame.tsx`, `src/lib/oddEarOut.ts`) — up to 5 rounds
+  (at least 3 needed; a contrast may repeat with fresh words but no word is used
+  twice in a round, so a small pool gives a shorter round; the hub gates on the
+  trials a round could actually be built with) of four native clips of same-length words, each cut to the **word alone**
   (strict `wordOnly` span — never the folded-in particle): three share an
   in-word accent shape, one doesn't. Tap ▶ to loop a clip (one plays at a time)
   and "This one" under the odd one; right locks green, wrong goes red and costs

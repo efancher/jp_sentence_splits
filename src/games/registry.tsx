@@ -24,8 +24,9 @@ import {
 import {
   buildContrastCandidates,
   ODD_EAR_COPY,
+  buildOddEarRound,
+  ODD_EAR_MIN_TRIALS,
   ODD_EAR_OUT_GAME_ID,
-  ODD_EAR_OUT_ROUND_SIZE,
 } from '../lib/oddEarOut';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
 import { VERB_LEGO_COPY, VERB_LEGO_GAME_ID, VERB_LEGO_ROUND_SIZE } from '../lib/verbLego';
@@ -93,8 +94,9 @@ export const GAMES: readonly GameDef[] = [
     blurb:
       'Four real native clips of same-length words — three share an accent shape, one does not. Listen, tap the odd one, then see all four measured pitch contours side by side.',
     needs:
-      'Needs several same-length words with native audio and different accent shapes to contrast (counted in distinct contrasts).',
-    roundSize: ODD_EAR_OUT_ROUND_SIZE,
+      'Needs enough words with native audio — same-length groups sharing an accent shape plus a contrasting one — to build a few rounds (counted in rounds).',
+    // Trials needed (a round is up to 5; it may reuse a contrast with fresh words).
+    roundSize: ODD_EAR_MIN_TRIALS,
     // No `stale`, as in Particle Puzzle: recent accuracy on a shape pair is just
     // the flip side of `weak`.
     signals: ['weak', 'strong'],
@@ -102,7 +104,14 @@ export const GAMES: readonly GameDef[] = [
     loadPools: async () => {
       const { clips, history } = await getOddEarOutData();
       const candidates = buildContrastCandidates(clips, history);
-      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+      // Eligibility is how many trials a round could actually be built with, not
+      // how many contrasts exist — contrasts can share a small word pool.
+      const trials = buildOddEarRound(
+        clips,
+        candidates.map((candidate) => candidate.contrast),
+        'pool',
+      ).length;
+      return { eligible: trials, bySignal: signalPoolSizes(candidates) };
     },
     Component: OddEarOutGame,
   },

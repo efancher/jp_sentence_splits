@@ -85,14 +85,24 @@ async function main() {
   );
   const audio = bookId ? audioAll.filter((a) => a.bookId === bookId) : audioAll;
 
-  // Alignments already present at the current version — skip these.
-  const { data: existingRows, error: existingErr } = await supabase
-    .from('reference_alignment')
-    .select('id, alignment_version')
-    .eq('owner_id', user.id);
-  if (existingErr) throw new Error(`fetch reference_alignment: ${existingErr.message}`);
+  // Alignments already present at the current version — skip these. Paginated:
+  // PostgREST caps a single query at 1000 rows, and an unpaginated read here made
+  // every run believe the ~75 rows past the cap were missing and re-align them
+  // (harmless upserts, but wasted aligner time).
+  const existingRows: { id: unknown; alignment_version: unknown }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('reference_alignment')
+      .select('id, alignment_version')
+      .eq('owner_id', user.id)
+      .order('id')
+      .range(from, from + 999);
+    if (error) throw new Error(`fetch reference_alignment: ${error.message}`);
+    existingRows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
   const current = new Set(
-    (existingRows ?? [])
+    existingRows
       .filter((r) => Number(r.alignment_version) === ALIGNMENT_VERSION)
       .map((r) => String(r.id)),
   );

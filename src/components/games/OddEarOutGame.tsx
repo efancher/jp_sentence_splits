@@ -14,13 +14,13 @@ import { useSentenceAudioBlob } from '../../hooks/useSentenceAudioBlob';
 import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../lib/gamePicker';
 import {
   buildContrastCandidates,
-  buildOddEarTrial,
+  buildOddEarRound,
   cropPitchPayload,
   describeOddEarPick,
   MAJORITY_SIZE,
   ODD_EAR_COPY,
+  ODD_EAR_MIN_TRIALS,
   ODD_EAR_OUT_GAME_ID,
-  ODD_EAR_OUT_ROUND_SIZE,
   ODD_EAR_TRIAL_POINTS,
   oddEarPointsAvailable,
   shapeLabel,
@@ -274,21 +274,20 @@ export function OddEarOutGame({ signal }: { signal: GameSignal }) {
     (from: Data) => {
       const seed = `${Date.now()}:${Math.random()}`;
       const candidates = buildContrastCandidates(from.clips, from.history);
-      const pick = pickItems(candidates, { signal, n: ODD_EAR_OUT_ROUND_SIZE, seed });
-      // A contrast can occasionally fail to yield a valid four (e.g. only
-      // colliding readings); top up from the remaining contrasts so a round is
-      // still full when the pool allows.
+      // The picker fixes the signal and the first contrasts; the round then cycles
+      // through them (then the remaining contrasts) with fresh words each time, so a
+      // corpus with only a few contrasts still fills a round.
+      const pick = pickItems(candidates, { signal, n: ODD_EAR_MIN_TRIALS, seed });
       const rest = seededShuffle(
         candidates.filter((candidate) => !pick.items.some((p) => p.id === candidate.id)),
         (candidate) => candidate.id,
         `${seed}:rest`,
       );
-      const trials: Trial[] = [];
-      for (const candidate of [...pick.items, ...rest]) {
-        if (trials.length === ODD_EAR_OUT_ROUND_SIZE) break;
-        const trial = buildOddEarTrial(from.clips, candidate.contrast, `${seed}:${trials.length}`);
-        if (trial) trials.push(trial);
-      }
+      const trials = buildOddEarRound(
+        from.clips,
+        [...pick.items, ...rest].map((candidate) => candidate.contrast),
+        seed,
+      );
       setRound({ pick, trials });
       setPhase('intro');
       setIndex(0);
@@ -309,14 +308,15 @@ export function OddEarOutGame({ signal }: { signal: GameSignal }) {
   if (!data || !round) return <p className="muted">Loading…</p>;
 
   const { pick, trials } = round;
-  if (trials.length < ODD_EAR_OUT_ROUND_SIZE) {
+  if (trials.length < ODD_EAR_MIN_TRIALS) {
     return (
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Odd Ear Out</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Needs at least {ODD_EAR_OUT_ROUND_SIZE} different accent contrasts among words that have
-          native audio — groups of {MAJORITY_SIZE}+ same-length words with the same shape, plus
-          another shape to contrast. You have {data.clips.length} playable words so far.
+          Needs enough words with native audio to build at least {ODD_EAR_MIN_TRIALS} rounds — groups
+          of {MAJORITY_SIZE}+ same-length words sharing an accent shape, plus a word of another
+          shape to contrast, no word used twice. You have {data.clips.length} playable words so
+          far.
         </p>
         <Link to="/play">Back to games</Link>
       </section>
