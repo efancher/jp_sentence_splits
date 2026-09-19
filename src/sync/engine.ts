@@ -69,15 +69,14 @@ export async function runSyncCycle(): Promise<void> {
       if (swept > 0) {
         syncLog('debug', `Auto-resolved ${swept} stale no-diff conflict(s)`, 'CONFLICT_SWEEP');
       }
-      // Best-effort: pull down blobs for any metadata-only reference-audio
-      // rows the pull just created. Never fails the cycle.
-      try {
-        await hydrateMissingReferenceAudio();
-      } catch (error) {
+      // Best-effort, and deliberately NOT awaited: after a cleared cache this is
+      // hundreds of downloads, and holding the cycle open kept the status on
+      // "syncing" (and Sync now disabled) for minutes. Never fails the cycle.
+      void hydrateMissingReferenceAudio().catch((error) => {
         syncLog('warn', 'Reference-audio hydration failed', 'AUDIO_HYDRATE', {
           message: error instanceof Error ? error.message : String(error),
         });
-      }
+      });
       await updateSyncMeta({
         lastSyncAt: new Date().toISOString(),
         lastError: pushFailure,

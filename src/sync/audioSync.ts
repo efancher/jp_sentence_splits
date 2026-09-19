@@ -7,6 +7,9 @@ import { sentenceAudioToReferenceMeta } from './mappers';
 import type { SentenceAudio } from '../domain/types';
 
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+const HYDRATE_CONCURRENCY = 4;
+const HYDRATE_LOG_EVERY = 100;
 const ALLOWED_MIME = new Set([
   'audio/ogg',
   'audio/opus',
@@ -94,9 +97,17 @@ async function fetchFromStorage(storagePath: string): Promise<Blob | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const { data, error } = await supabase.storage
-    .from('reference-audio')
-    .download(storagePath);
+  // A stalled download must not wedge whoever is waiting on it (the hydrate
+  // pass) — supabase-js has no request timeout of its own.
+  const { data, error } = await Promise.race([
+    supabase.storage.from('reference-audio').download(storagePath),
+    new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(
+        () => resolve({ data: null, error: { message: `download timed out: ${storagePath}` } }),
+        DOWNLOAD_TIMEOUT_MS,
+      ),
+    ),
+  ]);
   if (error || !data) {
     syncLog('error', error?.message ?? 'download failed', 'AUDIO_DOWNLOAD');
     return null;
@@ -207,7 +218,10 @@ export async function resyncReferenceAudio(): Promise<number> {
     });
   }
 
-  await hydrateMissingReferenceAudio();
+  // Background: this can be hundreds of downloads; don't hold the caller's UI.
+  void hydrateMissingReferenceAudio().catch((error) => {
+    syncLog('warn', error instanceof Error ? error.message : String(error), 'AUDIO_HYDRATE');
+  });
   return (data ?? []).length;
 }
 
@@ -218,7 +232,17 @@ export async function resyncReferenceAudio(): Promise<number> {
  * Respects the Wi-Fi-only setting via `fetchFromStorage`; a row it can't
  * fetch now is retried on the next cycle. No-op when audio sync is off.
  */
-export async function hydrateMissingReferenceAudio(): Promise<number> {
+let hydrateInFlight: Promise<number> | null = null;
+
+/** Single-flight: overlapping callers (sync cycle, Settings re-sync) share one pass. */
+export function hydrateMissingReferenceAudio(): Promise<number> {
+  hydrateInFlight ??= hydrateOnce().finally(() => {
+    hydrateInFlight = null;
+  });
+  return hydrateInFlight;
+}
+
+async function hydrateOnce(): Promise<number> {
   const meta = await ensureSyncMeta();
   if (!meta.syncReferenceAudio) return 0;
 
@@ -231,30 +255,46 @@ export async function hydrateMissingReferenceAudio(): Promise<number> {
   );
   if (missing.length === 0) return 0;
 
-  const { data, error } = await supabase
-    .from('reference_audio')
-    .select('id, storage_path, mime_type')
-    .in('id', missing.map((row) => row.id));
-  if (error) {
-    syncLog('warn', error.message, 'AUDIO_HYDRATE');
-    return 0;
+  // Chunked: a single `.in()` over a whole cleared cache overflows the URL limit.
+  const byId = new Map<string, { storage_path?: string; mime_type?: string }>();
+  for (let i = 0; i < missing.length; i += 200) {
+    const { data, error } = await supabase
+      .from('reference_audio')
+      .select('id, storage_path, mime_type')
+      .in('id', missing.slice(i, i + 200).map((row) => row.id));
+    if (error) {
+      syncLog('warn', error.message, 'AUDIO_HYDRATE');
+      return 0;
+    }
+    for (const row of data ?? []) byId.set(String(row.id), row as { storage_path?: string; mime_type?: string });
   }
-  const byId = new Map(
-    (data ?? []).map((row) => [String(row.id), row as { storage_path?: string; mime_type?: string }]),
-  );
 
+  syncLog('info', `Hydrating ${missing.length} reference-audio blob(s)`, 'AUDIO_HYDRATE');
   let healed = 0;
-  for (const row of missing) {
-    const info = byId.get(row.id);
-    if (!info?.storage_path) continue;
-    const blob = await fetchFromStorage(info.storage_path);
-    if (!blob) continue; // offline / Wi-Fi-only / gone — retry next cycle
-    await db.sentenceAudio.update(row.id, {
-      blob,
-      mimeType: info.mime_type ?? row.mimeType,
-    });
-    healed += 1;
+  let attempted = 0;
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < missing.length) {
+      const row = missing[next++]!;
+      attempted += 1;
+      const info = byId.get(row.id);
+      if (info?.storage_path) {
+        const blob = await fetchFromStorage(info.storage_path);
+        // null: offline / Wi-Fi-only / gone — retry next cycle
+        if (blob) {
+          await db.sentenceAudio.update(row.id, {
+            blob,
+            mimeType: info.mime_type ?? row.mimeType,
+          });
+          healed += 1;
+        }
+      }
+      if (attempted % HYDRATE_LOG_EVERY === 0) {
+        syncLog('info', `Reference-audio hydrate: ${attempted}/${missing.length}`, 'AUDIO_HYDRATE');
+      }
+    }
   }
-  if (healed) syncLog('info', `Hydrated ${healed} reference-audio blob(s)`, 'AUDIO_HYDRATE');
+  await Promise.all(Array.from({ length: HYDRATE_CONCURRENCY }, worker));
+  syncLog('info', `Hydrated ${healed}/${missing.length} reference-audio blob(s)`, 'AUDIO_HYDRATE');
   return healed;
 }
