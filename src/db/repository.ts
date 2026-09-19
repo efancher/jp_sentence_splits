@@ -5558,9 +5558,9 @@ export interface OddEarOutClip extends OddEarClip {
 /**
  * Every clip playable in Odd Ear Out: a confirmed, citation-form occurrence of
  * a word with a dictionary pitch position and 2+ morae, whose *word alone*
- * can be cut out of its reference recording (the hand-corrected
- * `audioStartMs/EndMs` when set, else the forced alignment) with a plausible
- * length. One clip per word per book, skipping sentences that live only in
+ * can be cut out of its reference recording by a **current-version** forced
+ * alignment (manual/backfilled `audioStartMs/EndMs` ranges are ignored — they
+ * usually include the following particle) with a plausible length. One clip per word per book, skipping sentences that live only in
  * suspended books. Also returns this game's per-shape-pair history from
  * `gameRounds`. Read-only apart from caching alignments locally. Proficiency
  * is deliberately not required: it's a perception game about accent shape, not
@@ -5634,15 +5634,17 @@ export async function getOddEarOutData(): Promise<{
     const sentence = sentenceById.get(link.sentenceId)!;
     const shape = inWordShape(item.reading, item.pitchAccentPositions![0]!);
     if (!shape) continue;
-    let span: TimeRangeMs | null = null;
-    if (link.audioStartMs != null && link.audioEndMs != null) {
-      span = { startMs: link.audioStartMs, endMs: link.audioEndMs };
-    } else {
-      const alignment = alignments.get(audio.id);
-      span = alignment
-        ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
-        : null;
-    }
+    // Deliberately NOT `link.audioStartMs/EndMs`: those overrides are meant for
+    // the pitch/word-listening cards, and the boundary backfill
+    // (`backfill-word-audio-range.ts`) writes the aligner's raw match, which
+    // *includes a following particle* (71 of the 92 comparable overrides in
+    // prod end at word+particle). A clip with the particle in it carries the
+    // heiban/odaka cue this game groups away, so only the strict word-only span
+    // from a current-version alignment is safe here.
+    const alignment = alignments.get(audio.id);
+    const span: TimeRangeMs | null = alignment
+      ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
+      : null;
     if (!span || !isPlausibleClipSpan(span)) continue;
     clips.push({
       vocabularyItemId: item.id,

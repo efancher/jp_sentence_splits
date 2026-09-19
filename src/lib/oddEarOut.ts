@@ -43,8 +43,12 @@ export const ODD_EAR_COPY: SignalCopy = {
 export const MAJORITY_SIZE = 3;
 /** A trial starts worth this many points and loses one per wrong tap (there are only three wrong clips). */
 export const ODD_EAR_TRIAL_POINTS = 3;
-/** Sanity bounds on an isolated word clip, in ms — outside them the alignment is probably off. */
-export const MIN_CLIP_MS = 150;
+/**
+ * Sanity bounds on an isolated (padded) word clip, in ms — outside them the alignment is
+ * probably off. The aligner span carries ~180 ms of padding, so 300 ms means a word of
+ * at least ~120 ms; real 2-mora words run longer than that.
+ */
+export const MIN_CLIP_MS = 300;
 export const MAX_CLIP_MS = 3000;
 export const ODD_EAR_HISTORY_ROUNDS = 60;
 

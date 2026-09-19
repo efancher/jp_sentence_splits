@@ -54,6 +54,7 @@ describe('inWordShape / shapeLabel', () => {
 
   it('bounds an isolated clip length', () => {
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 50 })).toBe(false);
+    expect(isPlausibleClipSpan({ startMs: 0, endMs: 250 })).toBe(false);
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 500 })).toBe(true);
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 9000 })).toBe(false);
   });

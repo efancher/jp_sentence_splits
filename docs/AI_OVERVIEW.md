@@ -946,9 +946,12 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   four clips from one book (same-speaker proxy, as in the minimal-pair warm-up);
   never mixes two words that read identically. Eligible clips
   (`getOddEarOutData`): confirmed citation-form word with a dictionary pitch
-  position and 2+ morae, native audio, and an isolatable span (the hand-corrected
-  `audioStartMs/EndMs` when set, else the current-version forced alignment,
-  length 150–3000 ms); proficiency deliberately **not** required (it's
+  position and 2+ morae, native audio, and a word-only span from a
+  **current-version** forced alignment (300–3000 ms). Manual / backfilled
+  `audioStartMs/EndMs` ranges are deliberately **ignored**: they're meant for the
+  pitch cards and the boundary backfill writes the aligner's raw match, which
+  includes a following particle (71 of 92 comparable prod overrides) — that would
+  leak the heiban/odaka cue. Proficiency deliberately **not** required (it's
   perception, not knowing the word). Weakness is per **shape pair** from the
   round log (unordered, per mora count), offered as `weak`/`strong`. Alignments
   for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one

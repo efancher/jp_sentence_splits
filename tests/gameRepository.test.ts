@@ -221,14 +221,26 @@ describe('odd ear out repository', () => {
     resetDbForTests(`game-repo-${createId('db')}`);
   });
 
-  /** A confirmed, citation-form, pitch-carrying word with a clip in a book. */
+  /**
+   * A confirmed, citation-form, pitch-carrying word with a clip in a book. The
+   * sentence is 「これは語<id>です。」 and its alignment has three tokens whose
+   * lengths sum to the sentence's, so the character-proportion mapping is
+   * exact: 語<id> sits at 1.0–1.6 s, です。 at 1.6–3.0 s.
+   */
   async function addPitchWord(
     id: string,
     reading: string,
     position: number,
-    opts: { bookId?: string; withAudio?: boolean; manualSpan?: [number, number] | null; suspendedBook?: boolean } = {},
+    opts: {
+      bookId?: string;
+      withAudio?: boolean;
+      alignmentVersion?: number | null; // null = no cached alignment
+      override?: [number, number];
+      suspendedBook?: boolean;
+      wordEnd?: number;
+    } = {},
   ) {
-    const { bookId = 'b1', withAudio = true, manualSpan = [100, 600], suspendedBook = false } = opts;
+    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6 } = opts;
     const db = getDb();
     await db.vocabularyItems.put({
       id,
@@ -246,7 +258,7 @@ describe('odd ear out repository', () => {
       sentenceId: sid,
       vocabularyItemId: id,
       surfaceForm: `語${id}`,
-      ...(manualSpan ? { audioStartMs: manualSpan[0], audioEndMs: manualSpan[1] } : {}),
+      ...(override ? { audioStartMs: override[0], audioEndMs: override[1] } : {}),
       createdAt: T,
       updatedAt: T,
     } as never);
@@ -254,6 +266,21 @@ describe('odd ear out repository', () => {
       await db.books.put({ id: bookId, title: bookId, createdAt: T, updatedAt: T, ...(suspendedBook ? { suspendedAt: T } : {}) } as never);
     }
     await db.bookSentences.put({ id: `m-${id}`, bookId, sentenceId: sid, position: 0, status: 'unstarted', addedAt: T } as never);
+    if (alignmentVersion !== null) {
+      await db.referenceAlignments.put({
+        id: `a-${id}`,
+        alignmentVersion,
+        computedAt: T,
+        result: {
+          durationSeconds: 3,
+          words: [
+            { text: 'これは', start: 0, end: 1, phones: [] },
+            { text: `語${id}`, start: 1, end: wordEnd, phones: [] },
+            { text: 'です。', start: wordEnd, end: 3, phones: [] },
+          ],
+        },
+      });
+    }
     if (withAudio) {
       await db.sentenceAudio.put({
         id: `a-${id}`,
@@ -271,47 +298,41 @@ describe('odd ear out repository', () => {
     }
   }
 
-  it('returns playable clips with their in-word shape and book, one per word per book', async () => {
+  it('returns playable clips with their in-word shape, book and word-only span', async () => {
     await addPitchWord('a', 'さくら', 0);
     await addPitchWord('b', 'いのち', 1);
     const { clips } = await getOddEarOutData();
     const byId = new Map(clips.map((c) => [c.vocabularyItemId, c]));
-    expect(byId.get('a')).toMatchObject({ moraCount: 3, shape: 'lhh', bookId: 'b1', span: { startMs: 100, endMs: 600 } });
+    expect(byId.get('a')).toMatchObject({ moraCount: 3, shape: 'lhh', bookId: 'b1' });
     expect(byId.get('b')).toMatchObject({ moraCount: 3, shape: 'hll' });
+    // word-only, padded ~60/120 ms around 1.0–1.6 s — and it must not reach into です。 (from 1.6 s + pad)
+    const span = byId.get('a')!.span;
+    expect(span.startMs).toBeGreaterThanOrEqual(900);
+    expect(span.startMs).toBeLessThan(1000);
+    expect(span.endMs).toBeLessThanOrEqual(1750);
   });
 
-  it('drops words that cannot be played: no audio, one mora, no isolatable span, implausible span', async () => {
+  it('drops words that cannot be played: no audio, one mora, no/stale alignment, implausible span', async () => {
     await addPitchWord('noaudio', 'さくら', 0, { withAudio: false });
     await addPitchWord('onemora', 'き', 0);
-    await addPitchWord('nospan', 'ことば', 0, { manualSpan: null }); // no override, no alignment
-    await addPitchWord('tiny', 'ひかり', 0, { manualSpan: [100, 150] });
+    await addPitchWord('noaln', 'ことば', 0, { alignmentVersion: null });
+    await addPitchWord('stale', 'ひかり', 0, { alignmentVersion: 1 }); // pre-bump cache is ignored, like every other consumer
+    await addPitchWord('tiny', 'あした', 0, { wordEnd: 1.05 }); // 50 ms word → padded span under the minimum
+    await addPitchWord('long', 'みどり', 1, { wordEnd: 5 }); // 4 s "word" → over the maximum
     await addPitchWord('ok', 'こころ', 0);
     const { clips } = await getOddEarOutData();
     expect(clips.map((c) => c.vocabularyItemId)).toEqual(['ok']);
   });
 
-  it('uses the cached forced alignment when there is no manual span, word-only (no particle)', async () => {
-    await addPitchWord('al', 'ことば', 0, { manualSpan: null });
-    const db = getDb();
-    // 「これは語alです。」: three 3-char tokens, so the character-proportion mapping is exact.
-    await db.referenceAlignments.put({
-      id: 'a-al',
-      alignmentVersion: 3,
-      computedAt: T,
-      result: {
-        durationSeconds: 3,
-        words: [
-          { text: 'これは', start: 0, end: 1, phones: [] },
-          { text: '語al', start: 1, end: 2, phones: [] },
-          { text: 'です。', start: 2, end: 3, phones: [] },
-        ],
-      },
-    });
+  it('ignores manual/backfilled ranges — they usually include the following particle', async () => {
+    // Override runs to 2.2 s, i.e. through です。; the alignment's word-only end is 1.6 s.
+    await addPitchWord('ovr', 'さくら', 0, { override: [900, 2200] });
     const { clips } = await getOddEarOutData();
     expect(clips).toHaveLength(1);
-    // padded word-only span around 1.0–2.0s; must not extend into です
-    expect(clips[0]!.span.startMs).toBeGreaterThanOrEqual(900);
-    expect(clips[0]!.span.endMs).toBeLessThan(2400);
+    expect(clips[0]!.span.endMs).toBeLessThan(1800);
+    // …and a word with only an override (no current alignment) is not playable at all
+    await addPitchWord('ovr-only', 'いのち', 1, { override: [900, 1700], alignmentVersion: null });
+    expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['ovr']);
   });
 
   it('skips sentences that live only in suspended books', async () => {

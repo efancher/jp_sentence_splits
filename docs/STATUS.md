@@ -33,6 +33,26 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Odd Ear Out: no longer trusts manual/backfilled word ranges
+  (conflict with the earlier word-boundary backfill)**. Cross-checking the games
+  work against the earlier alignment/word-boundary sessions found a real clash:
+  `backfill-word-audio-range.ts` writes `audio_start_ms/audio_end_ms` from
+  `isolatedWordRangeUnpadded`, whose "tight" range **folds in the following short
+  word/particle** — by design, for the pitch cards. Odd Ear Out had treated any
+  override as a *word-only* clip, so a heiban and an odaka word would have sounded
+  different inside a group the game calls "the same shape". Measured on prod
+  against the (v1) alignments: of the 92 overrides with a following particle to
+  compare, **71 end at word+particle, 10 at word-only, 11 other/hand-adjusted**.
+  Fix: `getOddEarOutData` now uses only the strict `wordOnly` span from a
+  **current-version** alignment and ignores overrides entirely; `MIN_CLIP_MS`
+  raised 150→300 (the aligner pad alone is 180 ms, so the old floor could never
+  fire). Consequence: the "23 playable words" figure in the entry below is now
+  **0** until `reference_alignment` is refreshed at v3
+  (`backfill:reference-alignment --apply`, still pending a go-ahead). No other
+  overlap found: no commits from other sessions since 09-19 00:40, no
+  uncommitted work in any local repo, nothing foreign in the games commits, no
+  competing Dexie/sync schema changes (v19 `gameRounds` is the only one).
+
 - **2026-09-19 — Short games: Verb Lego shipped (hybrid real + built chains)**.
   Fourth `/play` game (`src/lib/verbLego.ts`, `VerbLegoGame.tsx`): build stacked
   verb forms piece by piece; tap-to-stack chips (the only controls) fill the next
