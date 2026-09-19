@@ -484,6 +484,55 @@ describe('deleteSentenceCascade', () => {
     expect(await db.bookSentences.where('bookId').equals(book.id).count()).toBe(1);
   });
 
+  it('drops unsettled session steps for deleted sentences, keeping settled ones', async () => {
+    const db = getDb();
+    const [a, b, c] = [0, 1, 2].map((i) => shadowingSentence(`セッション文${i}です。`, i));
+    await db.sentences.bulkPut([a, b, c]);
+    const step = (
+      id: string,
+      status: 'pending' | 'active' | 'completed',
+      extra: Record<string, unknown>,
+    ) => ({
+      id,
+      bucket: 'shadowing' as const,
+      activityType: 'shadowing_practice',
+      targetKind: 'sentence' as const,
+      label: id,
+      estimatedMinutes: 2,
+      reason: '',
+      status,
+      ...extra,
+    });
+    await db.plannerSessions.put({
+      id: 'sess1',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      date: '2026-09-19',
+      targetMinutes: 20,
+      allocation: {} as never,
+      explanation: [],
+      status: 'in_progress',
+      steps: [
+        step('gone-active', 'active', { sentenceId: a.id }),
+        step('gone-done', 'completed', { sentenceId: a.id }),
+        step('kept', 'pending', { sentenceId: c.id }),
+        step('batch', 'pending', {
+          sentenceId: a.id,
+          sentenceIds: [a.id, b.id, c.id],
+        }),
+      ],
+    } as never);
+
+    await deleteSentencesCascade([a.id]);
+
+    const session = await db.plannerSessions.get('sess1');
+    expect(session?.steps.map((s) => s.id)).toEqual(['gone-done', 'kept', 'batch']);
+    const batch = session?.steps.find((s) => s.id === 'batch');
+    expect(batch?.sentenceIds).toEqual([b.id, c.id]);
+    expect(batch?.sentenceId).toBe(b.id);
+    expect(session?.status).toBe('in_progress');
+  });
+
   it('retires per-occurrence and last-occurrence-grammar study items too', async () => {
     const db = getDb();
     const s = shadowingSentence('これはテストです。', 0);

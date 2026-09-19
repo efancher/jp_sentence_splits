@@ -699,10 +699,67 @@ export async function deleteSentenceCascade(sentenceId: string): Promise<void> {
   await deleteSentencesCascade([sentenceId]);
 }
 
+/**
+ * Drop still-unsettled steps that point at just-deleted sentences from every
+ * in-progress planner session, so a deleted ad doesn't linger in the session
+ * list as a dead "Go" link. Settled steps (completed/skipped/replaced) are
+ * history and stay. A batched step (`sentenceIds`, e.g. grammar noticing)
+ * only loses the deleted ids, and is dropped once none remain. A session left
+ * with nothing unsettled is marked completed, same as `updatePlannerSessionStep`.
+ * Returns the sessions it changed so the caller can notify sync after commit.
+ */
+async function dropSentencesFromOpenSessionsLocal(
+  db: ReturnType<typeof getDb>,
+  sentenceIds: Set<string>,
+): Promise<PlannerSession[]> {
+  const changed: PlannerSession[] = [];
+  const sessions = await db.plannerSessions.where('status').equals('in_progress').toArray();
+  for (const session of sessions) {
+    let touched = false;
+    const steps: PlannerSessionStep[] = [];
+    for (const step of session.steps) {
+      const unsettled = step.status === 'pending' || step.status === 'active';
+      const batch = step.sentenceIds?.filter((id) => !sentenceIds.has(id));
+      const batchChanged = batch !== undefined && batch.length !== step.sentenceIds!.length;
+      const singleDeleted = step.sentenceId !== undefined && sentenceIds.has(step.sentenceId);
+      if (!unsettled || (!batchChanged && !singleDeleted)) {
+        steps.push(step);
+        continue;
+      }
+      touched = true;
+      if (batch !== undefined && batch.length > 0) {
+        steps.push({
+          ...step,
+          sentenceIds: batch,
+          sentenceId: batch.includes(step.sentenceId ?? '') ? step.sentenceId : batch[0],
+        });
+      }
+      // else: nothing left for this step to act on — drop it.
+    }
+    if (!touched) continue;
+    const timestamp = nowIso();
+    const allSettled = steps.every(
+      (step) =>
+        step.status === 'completed' || step.status === 'skipped' || step.status === 'replaced',
+    );
+    const updated: PlannerSession = {
+      ...session,
+      steps,
+      status: allSettled ? 'completed' : session.status,
+      endedAt: allSettled ? timestamp : session.endedAt,
+      updatedAt: timestamp,
+    };
+    await db.plannerSessions.put(updated);
+    changed.push(updated);
+  }
+  return changed;
+}
+
 /** Batch `deleteSentenceCascade` — one transaction, one sync notification. */
 export async function deleteSentencesCascade(sentenceIds: string[]): Promise<void> {
   const db = getDb();
   const sink: PendingSyncOp[] = [];
+  let changedSessions: PlannerSession[] = [];
   await db.transaction(
     'rw',
     [
@@ -714,14 +771,17 @@ export async function deleteSentencesCascade(sentenceIds: string[]): Promise<voi
       db.studyItems,
       db.inbox,
       db.sentenceAudio,
+      db.plannerSessions,
     ],
     async () => {
       for (const sentenceId of sentenceIds) {
         await cascadeRetireSentenceLocal(db, sentenceId, sink);
       }
+      changedSessions = await dropSentencesFromOpenSessionsLocal(db, new Set(sentenceIds));
     },
   );
   notifySyncMany(sink);
+  for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
 }
 
 export interface ResegmentSourceSentence {
@@ -1398,6 +1458,7 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
   }
 
   const sink: PendingSyncOp[] = [];
+  let changedSessions: PlannerSession[] = [];
   await db.transaction(
     'rw',
     [
@@ -1410,11 +1471,13 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
       db.studyItems,
       db.inbox,
       db.sentenceAudio,
+      db.plannerSessions,
     ],
     async () => {
       for (const sentenceId of orphanSentenceIds) {
         await cascadeRetireSentenceLocal(db, sentenceId, sink);
       }
+      changedSessions = await dropSentencesFromOpenSessionsLocal(db, new Set(orphanSentenceIds));
       // Shared sentences survive — just drop this book's membership.
       for (const membershipId of sharedMembershipIds) {
         await db.bookSentences.delete(membershipId);
@@ -1435,6 +1498,7 @@ export async function deleteBookCascade(bookId: string): Promise<void> {
     },
   );
   notifySyncMany(sink);
+  for (const session of changedSessions) notifySync('planner_sessions', session.id, session);
 }
 
 export async function duplicateBookOrdering(bookId: string): Promise<Book> {

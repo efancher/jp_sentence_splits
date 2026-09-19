@@ -40,6 +40,11 @@ what's left is one deferred durability item (below).
   (ads, junk)" in `BookDetailPage`'s selection bar (distinct from "Remove selected from
   book", which only detaches membership) and "Delete (ad / junk)" on `ShadowPage`.
   Inline confirm, no `window.confirm` (PWA). No undo — soft-deleted remotely.
+  Follow-up same day: deleting sentences (`deleteSentencesCascade`, and orphans in
+  `deleteBookCascade`) also drops their still-pending/active steps from in-progress
+  planner sessions (`dropSentencesFromOpenSessionsLocal`); batched `sentenceIds` steps
+  lose only the deleted ids. Settled steps stay (history/analytics); a session left with
+  nothing unsettled is marked completed. The batched step's label count isn't rewritten.
 
 - **2026-09-19 — Daily practice panel (non-SRS practice targets beside the session)**.
   User request: a small set of "do 5 pitch drills"-style daily recommendations in the

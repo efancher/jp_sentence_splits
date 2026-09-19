@@ -792,7 +792,8 @@ Targets are constants; no settings UI.
   A single sentence is deleted from the "Danger zone" at the bottom of
   `AnalyzePage`, or from `ShadowPage`; several at once (e.g. an ad run) via
   "Delete selected" in the book list's selection bar
-  (`deleteSentenceCascade`/`deleteSentencesCascade`, two-step confirm) — all cascade
+  (`deleteSentenceCascade`/`deleteSentencesCascade`, two-step confirm; also drops the
+  sentence's unfinished steps from in-progress sessions) — all cascade
   paths soft-delete via the normal queued `delete`, never raw DELETE, and
   leave confirmed vocabulary/kanji in the library.
 - **Inbox** (`InboxPage.tsx`) — sentences land here by default until filed
