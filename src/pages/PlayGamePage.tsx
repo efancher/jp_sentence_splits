@@ -1,7 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 
 import type { GameSignal } from '../domain/types';
-import { GAME_SIGNALS } from '../lib/gamePicker';
 import { findGame } from '../games/registry';
 
 /**
@@ -24,7 +23,7 @@ export function PlayGamePage() {
       </section>
     );
   }
-  const requested: GameSignal = GAME_SIGNALS.includes(signal as GameSignal)
+  const requested: GameSignal = game.signals.includes(signal as GameSignal)
     ? (signal as GameSignal)
     : 'weak';
   return <game.Component key={`${game.id}:${requested}`} signal={requested} />;

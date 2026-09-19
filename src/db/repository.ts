@@ -126,6 +126,14 @@ import {
 import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import {
+  buildParticleHistory,
+  findBlankableParticles,
+  isParticlePuzzleEligible,
+  missFocus,
+  PARTICLE_PUZZLE_GAME_ID,
+  particleSentenceStats,
+} from '../lib/particlePuzzle';
+import {
   concatCut,
   type ResegmentPlan,
   type ResegmentPlannedSentence,
@@ -5410,6 +5418,79 @@ export async function getWordDetectiveCandidates(
     });
   }
   return candidates;
+}
+
+export interface ParticlePuzzleCandidate extends PickerCandidate {
+  sentence: Sentence;
+  /** The sentence's blankable particles (for the "why this sentence" line). */
+  particles: string[];
+}
+
+/**
+ * Sentences playable in Particle Puzzle (`isParticlePuzzleEligible`), limited
+ * to ones whose vocabulary the learner has confirmed — the puzzle should test
+ * particles, not unknown words — and skipping sentences that live only in
+ * suspended books. Each candidate's picker stats come from the recent
+ * per-particle history in the `gameRounds` log; `focus` is the particles
+ * missed most, used to bias which blanks a weak round drills. Read-only.
+ */
+export async function getParticlePuzzleData(): Promise<{
+  candidates: ParticlePuzzleCandidate[];
+  focus: Map<string, number>;
+}> {
+  const db = getDb();
+  const [sentences, analyses, rounds, suspendedIndex] = await Promise.all([
+    db.sentences.toArray(),
+    db.analyses.toArray(),
+    db.gameRounds.where('gameId').equals(PARTICLE_PUZZLE_GAME_ID).toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const confirmed = new Set(
+    analyses
+      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+      .map((analysis) => analysis.sentenceId),
+  );
+  const history = buildParticleHistory(rounds);
+
+  const candidates: ParticlePuzzleCandidate[] = [];
+  for (const sentence of sentences) {
+    if (!confirmed.has(sentence.id) || !isParticlePuzzleEligible(sentence)) continue;
+    if (suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)) continue;
+    const tokens = findBlankableParticles(sentence);
+    candidates.push({
+      id: sentence.id,
+      sentence,
+      particles: tokens.map((token) => token.surface),
+      stats: particleSentenceStats(tokens, history),
+    });
+  }
+  return { candidates, focus: missFocus(history) };
+}
+
+/**
+ * The (up to two) sentences read immediately before each of `sentenceIds`, in
+ * reading order, from each sentence's home book (`buildReadingContextMap`).
+ * Particle Puzzle shows them for the は/が context a bare sentence lacks.
+ */
+export async function getPrecedingSentences(
+  sentenceIds: string[],
+  count = 2,
+): Promise<Map<string, Sentence[]>> {
+  const db = getDb();
+  const [allSentences, bookSentences, books] = await Promise.all([
+    db.sentences.toArray(),
+    db.bookSentences.toArray(),
+    db.books.toArray(),
+  ]);
+  const contextMap = buildReadingContextMap({
+    targetSentenceIds: sentenceIds,
+    bookSentences,
+    books,
+    sentencesById: new Map(allSentences.map((sentence) => [sentence.id, sentence])),
+    before: count,
+    after: 0,
+  });
+  return new Map(sentenceIds.map((id) => [id, contextMap.get(id)?.before ?? []]));
 }
 
 export interface VocabularyOccurrenceCandidate {

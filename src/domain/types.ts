@@ -787,6 +787,13 @@ export interface GameRoundItem {
   points: number;
   /** Wall-clock ms from first showing the item to settling it. */
   ms: number;
+  /**
+   * Per-sub-item outcomes for games where one item has several answers
+   * (Particle Puzzle: one per blank). `key` is what was being tested, `note`
+   * what the learner chose instead when wrong — the raw material for a
+   * per-particle weakness signal.
+   */
+  parts?: { key: string; correct: boolean; note?: string }[];
 }
 
 /**

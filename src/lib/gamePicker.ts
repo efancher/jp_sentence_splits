@@ -142,7 +142,10 @@ export function pickItems<T extends PickerCandidate>(
   const order: GameSignal[] = [requested, ...GAME_SIGNALS.filter((s) => s !== requested)];
 
   const take = (pool: T[], signal: EffectiveGameSignal): PickResult<T> => {
-    const slice = pool.slice(0, Math.max(n, n * POOL_SLICE_FACTOR));
+    // A real signal samples its top-ranked slice; the `any` fallback has no
+    // ranking worth honouring, so it samples the whole pool (otherwise every
+    // fallback round would re-draw the same first few items).
+    const slice = signal === 'any' ? pool : pool.slice(0, Math.max(n, n * POOL_SLICE_FACTOR));
     return {
       items: seededShuffle(slice, (item) => item.id, seed).slice(0, n),
       signal,
@@ -156,11 +159,8 @@ export function pickItems<T extends PickerCandidate>(
     const pool = candidates.filter((candidate) => isInSignalPool(candidate.stats, signal));
     if (pool.length >= n) return take(rank(pool, signal), signal);
   }
-  // Last resort: any eligible candidate, most-fading first, unreviewed last.
-  const anyPool = [...candidates].sort(
-    (a, b) => (a.stats.retrievability ?? 2) - (b.stats.retrievability ?? 2),
-  );
-  return take(anyPool, 'any');
+  // Last resort: any eligible candidate.
+  return take([...candidates], 'any');
 }
 
 /** One-line "why this item" for the result screen. */
@@ -179,13 +179,31 @@ export function describePick(signal: EffectiveGameSignal, stats: PickerStats): s
   }
 }
 
+/**
+ * Wording that differs per game. The defaults describe vocabulary (Word
+ * Detective); a game whose items aren't words (Particle Puzzle) passes its own.
+ */
+export interface SignalCopy {
+  /** Completes "…this round draws from ___." when even `any` was needed. */
+  anyPool: string;
+  blurbs: Record<GameSignal, string>;
+}
+
+export const DEFAULT_SIGNAL_COPY: SignalCopy = {
+  anyPool: 'your confirmed vocabulary',
+  blurbs: SIGNAL_BLURBS,
+};
+
 /** The line above a round explaining what it's aimed at, incl. an honest note when it fell back. */
-export function describeRound(result: Pick<PickResult<PickerCandidate>, 'signal' | 'requested' | 'fellBack' | 'poolSize'>): string {
+export function describeRound(
+  result: Pick<PickResult<PickerCandidate>, 'signal' | 'requested' | 'fellBack' | 'poolSize'>,
+  copy: SignalCopy = DEFAULT_SIGNAL_COPY,
+): string {
   if (result.signal === 'any') {
-    return `Not enough words for “${SIGNAL_LABELS[result.requested]}” yet, so this round draws from your confirmed vocabulary.`;
+    return `Not enough material for “${SIGNAL_LABELS[result.requested]}” yet, so this round draws from ${copy.anyPool}.`;
   }
-  const base = SIGNAL_BLURBS[result.signal];
+  const base = copy.blurbs[result.signal];
   return result.fellBack
-    ? `Not enough words for “${SIGNAL_LABELS[result.requested]}” yet — playing “${SIGNAL_LABELS[result.signal]}” instead. ${base}`
+    ? `Not enough material for “${SIGNAL_LABELS[result.requested]}” yet — playing “${SIGNAL_LABELS[result.signal]}” instead. ${base}`
     : base;
 }

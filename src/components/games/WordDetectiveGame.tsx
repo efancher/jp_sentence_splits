@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { getWordDetectiveCandidates, logGameRound, type WordDetectiveCandidate } from '../../db/repository';
@@ -188,24 +188,27 @@ export function WordDetectiveGame({ signal }: { signal: GameSignal }) {
     };
   }, []);
 
-  function newRound(from: WordDetectiveCandidate[]) {
-    setRound({
-      pick: pickItems(from, {
-        signal,
-        n: WORD_DETECTIVE_ROUND_SIZE,
-        seed: `${Date.now()}:${Math.random()}`,
-      }),
-    });
-    setPhase('intro');
-    setIndex(0);
-    setResults([]);
-    setWordSettled(false);
-    logged.current = false;
-  }
+  const newRound = useCallback(
+    (from: WordDetectiveCandidate[]) => {
+      setRound({
+        pick: pickItems(from, {
+          signal,
+          n: WORD_DETECTIVE_ROUND_SIZE,
+          seed: `${Date.now()}:${Math.random()}`,
+        }),
+      });
+      setPhase('intro');
+      setIndex(0);
+      setResults([]);
+      setWordSettled(false);
+      logged.current = false;
+    },
+    [signal],
+  );
 
   useEffect(() => {
     if (candidates && !round) newRound(candidates);
-  }, [candidates]);
+  }, [candidates, round, newRound]);
 
   if (!candidates || !round) return <p className="muted">Loading…</p>;
 

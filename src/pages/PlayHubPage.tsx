@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { GAME_SIGNALS, SIGNAL_BLURBS, SIGNAL_LABELS } from '../lib/gamePicker';
+import { SIGNAL_LABELS } from '../lib/gamePicker';
 import { GAMES, type GameDef } from '../games/registry';
 
 function GameCard({ game }: { game: GameDef }) {
@@ -38,7 +38,7 @@ function GameCard({ game }: { game: GameDef }) {
             </button>
           </div>
           <div className="row">
-            {GAME_SIGNALS.map((signal) => {
+            {game.signals.map((signal) => {
               const count = pools.bySignal[signal];
               const enough = count >= game.roundSize;
               return enough ? (
@@ -46,7 +46,7 @@ function GameCard({ game }: { game: GameDef }) {
                   key={signal}
                   to={`/play/${game.id}/${signal}`}
                   className="chip"
-                  title={SIGNAL_BLURBS[signal]}
+                  title={game.signalCopy.blurbs[signal]}
                 >
                   {SIGNAL_LABELS[signal]} ({count})
                 </Link>

@@ -119,7 +119,7 @@ describe('pickItems', () => {
     expect(result.fellBack).toBe(true);
     expect(result.signal).toBe('stale');
     expect(result.requested).toBe('weak');
-    expect(describeRound(result)).toMatch(/Not enough words for “Weak spots” yet — playing “Fading” instead/);
+    expect(describeRound(result)).toMatch(/Not enough material for “Weak spots” yet — playing “Fading” instead/);
   });
 
   it('falls back to any eligible candidate rather than an empty round', () => {
@@ -128,6 +128,20 @@ describe('pickItems', () => {
     expect(result.signal).toBe('any');
     expect(result.items).toHaveLength(2);
     expect(result.items.map((i) => i.id)).toEqual(expect.arrayContaining(['x', 'y']));
+  });
+
+  it('the `any` fallback samples the whole pool, not the same first few items', () => {
+    // 40 candidates, none in any signal pool -> `any`
+    const big = Array.from({ length: 40 }, (_, i) =>
+      cand(`w${i}`, { hasCard: false, retrievability: null, matureCards: false }),
+    );
+    const seen = new Set<string>();
+    for (const seed of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      const result = pickItems(big, { signal: 'weak', n: 3, seed });
+      expect(result.signal).toBe('any');
+      for (const item of result.items) seen.add(item.id);
+    }
+    expect(seen.size).toBeGreaterThan(9); // > the old top-9 slice
   });
 
   it('returns an empty round only when there are no eligible candidates at all', () => {

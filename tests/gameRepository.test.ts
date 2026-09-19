@@ -4,6 +4,8 @@ import { resetDbForTests } from '../src/db/database';
 import {
   ensureStudyItem,
   getDb,
+  getParticlePuzzleData,
+  getPrecedingSentences,
   getWordDetectiveCandidates,
   logGameRound,
   recordReview,
@@ -135,5 +137,79 @@ describe('game repository', () => {
     expect(stored?.items[0]?.points).toBe(4);
     expect(await getDb().studyItems.count()).toBe(0);
     expect(await getDb().reviews.count()).toBe(0);
+  });
+});
+
+describe('particle puzzle repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  async function addParticleSentence(id: string, status: 'confirmed' | 'unreviewed') {
+    const tokens = [
+      { id: 'a', surface: 'が', start: 1, end: 2, expression: 'が', reading: 'が', pos: '助詞/格助詞', source: 'morphology', selectedByDefault: false },
+      { id: 'b', surface: 'を', start: 3, end: 4, expression: 'を', reading: 'を', pos: '助詞/格助詞', source: 'morphology', selectedByDefault: false },
+    ];
+    await addSentence(id, '猫が魚を食べた。', { vocabularySuggestions: tokens as never });
+    await getDb().analyses.put({
+      sentenceId: id,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 1,
+      vocabularyReviewStatus: status,
+      vocabularySelections: [],
+      grammarReviewStatus: 'unreviewed',
+      createdAt: T,
+      updatedAt: T,
+    } as never);
+  }
+
+  it('only offers sentences whose vocabulary is confirmed', async () => {
+    await addParticleSentence('p-ok', 'confirmed');
+    await addParticleSentence('p-no', 'unreviewed');
+    const { candidates } = await getParticlePuzzleData();
+    expect(candidates.map((c) => c.id)).toEqual(['p-ok']);
+    expect(candidates[0]!.particles).toEqual(['が', 'を']);
+    expect(candidates[0]!.stats.hasCard).toBe(false);
+  });
+
+  it('derives a miss focus and weak stats from logged rounds', async () => {
+    await addParticleSentence('p-ok', 'confirmed');
+    await logGameRound({
+      gameId: 'particle-puzzle',
+      signal: 'any',
+      poolSize: 1,
+      items: [
+        {
+          ref: 'p-ok',
+          correct: false,
+          cluesUsed: 0,
+          wrongGuesses: 1,
+          points: 1,
+          ms: 100,
+          parts: [
+            { key: 'が', correct: false, note: 'は' },
+            { key: 'を', correct: true },
+          ],
+        },
+      ],
+    });
+    const { candidates, focus } = await getParticlePuzzleData();
+    expect(focus).toEqual(new Map([['が', 1]]));
+    expect(candidates[0]!.stats.lapses).toBe(1);
+    expect(candidates[0]!.stats.hasCard).toBe(true);
+  });
+
+  it('returns preceding sentences in reading order from the home book', async () => {
+    const db = getDb();
+    await db.books.add({ id: 'b1', title: 'b', createdAt: T, updatedAt: T } as never);
+    for (const [i, id] of ['c1', 'c2', 'c3'].entries()) {
+      await addSentence(id, `文${id}`);
+      await db.bookSentences.add({ id: `m-${id}`, bookId: 'b1', sentenceId: id, position: i, status: 'unstarted', addedAt: T } as never);
+    }
+    const context = await getPrecedingSentences(['c3', 'c1']);
+    expect(context.get('c3')!.map((s) => s.id)).toEqual(['c1', 'c2']);
+    expect(context.get('c1')).toEqual([]);
   });
 });
