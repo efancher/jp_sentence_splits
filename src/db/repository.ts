@@ -126,6 +126,19 @@ import {
 import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import { isolatedWordSpans } from '../lib/isolatedWordRange';
+import {
+  BUILT_RECIPES,
+  buildBuiltChain,
+  buildVerbLegoCandidates,
+  buildVerbLegoHistory,
+  findVerbChains,
+  isVerbLegoEligible,
+  recipesForVerb,
+  VERB_LEGO_GAME_ID,
+  verbLegoMissFocus,
+  type VerbChain,
+  type VerbLegoCandidate,
+} from '../lib/verbLego';
 import type { TimeRangeMs } from '../lib/recording';
 import {
   buildOddEarHistory,
@@ -5647,6 +5660,74 @@ export async function getOddEarOutData(): Promise<{
     });
   }
   return { clips, history };
+}
+
+const BUILT_RECIPES_BY_ID = new Map(BUILT_RECIPES.map((recipe) => [recipe.id, recipe]));
+
+/** Built chains per recipe: enough verb variety for a round without composing every verb × recipe. */
+const BUILT_VERBS_PER_RECIPE = 12;
+
+/**
+ * Everything Verb Lego can offer, grouped by suffix pattern: real chains read
+ * from sentences whose vocabulary you've confirmed (translated, not
+ * suspended-only), plus chains *built* from confirmed verbs JMdict tags as
+ * godan/ichidan (`recipesForVerb`) for the "monster" forms the corpus almost
+ * never contains. Each candidate's picker stats come from per-piece history in
+ * the `gameRounds` log; `focus` is the pieces missed most. Read-only.
+ */
+export async function getVerbLegoData(): Promise<{
+  candidates: VerbLegoCandidate[];
+  focus: Map<string, number>;
+}> {
+  const db = getDb();
+  const [sentences, analyses, links, rounds, suspendedIndex] = await Promise.all([
+    db.sentences.toArray(),
+    db.analyses.toArray(),
+    db.sentenceVocabulary.toArray(),
+    db.gameRounds.where('gameId').equals(VERB_LEGO_GAME_ID).toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const confirmed = new Set(
+    analyses
+      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+      .map((analysis) => analysis.sentenceId),
+  );
+  const history = buildVerbLegoHistory(rounds);
+
+  const chains: VerbChain[] = [];
+  for (const sentence of sentences) {
+    if (!confirmed.has(sentence.id) || !isVerbLegoEligible(sentence)) continue;
+    if (suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)) continue;
+    chains.push(...findVerbChains(sentence));
+  }
+
+  // Built chains: confirmed verbs only (a link with a surface form = the learner confirmed it).
+  const confirmedItemIds = [
+    ...new Set(links.filter((link) => !!link.surfaceForm).map((link) => link.vocabularyItemId)),
+  ].sort();
+  const items = (await db.vocabularyItems.bulkGet(confirmedItemIds)).filter(
+    (row): row is VocabularyItem => Boolean(row),
+  );
+  const verbsByRecipe = new Map<string, VocabularyItem[]>();
+  for (const item of items) {
+    for (const recipe of recipesForVerb(item)) {
+      const list = verbsByRecipe.get(recipe.id) ?? [];
+      if (list.length < BUILT_VERBS_PER_RECIPE) list.push(item);
+      verbsByRecipe.set(recipe.id, list);
+    }
+  }
+  for (const [recipeId, verbs] of verbsByRecipe) {
+    const recipe = BUILT_RECIPES_BY_ID.get(recipeId)!;
+    for (const item of verbs) {
+      const built = buildBuiltChain({ ...item, english: item.meaning }, recipe);
+      if (built) chains.push(built);
+    }
+  }
+
+  return {
+    candidates: buildVerbLegoCandidates(chains, history),
+    focus: verbLegoMissFocus(history),
+  };
 }
 
 export interface VocabularyOccurrenceCandidate {

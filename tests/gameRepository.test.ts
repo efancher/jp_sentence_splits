@@ -7,6 +7,7 @@ import {
   getOddEarOutData,
   getParticlePuzzleData,
   getPrecedingSentences,
+  getVerbLegoData,
   getWordDetectiveCandidates,
   logGameRound,
   recordReview,
@@ -331,5 +332,76 @@ describe('odd ear out repository', () => {
     });
     const { history } = await getOddEarOutData();
     expect(history.get('3m hll/lhh')).toEqual({ attempts: 1, misses: 1 });
+  });
+});
+
+describe('verb lego repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  /** 「事実の後、聞かれた。」 with real-style UniDic tokens (聞か[聞く] + れ[れる] + た[た]). */
+  async function addChainSentence(id: string, status: 'confirmed' | 'unreviewed') {
+    const japanese = '対策を聞かれた。';
+    const start = japanese.indexOf('聞か');
+    const tok = (surface: string, expression: string, pos: string, at: number, reading = expression) => ({
+      id: `${id}-${at}`, surface, start: at, end: at + surface.length, expression, reading, pos, source: 'morphology', selectedByDefault: false,
+    });
+    await addSentence(id, japanese, {
+      vocabularySuggestions: [
+        tok('聞か', '聞く', '動詞/一般', start, 'きく'),
+        tok('れ', 'れる', '助動詞', start + 2),
+        tok('た', 'た', '助動詞', start + 3),
+      ] as never,
+    });
+    await getDb().analyses.put({
+      sentenceId: id, chunks: [], notes: '', status: 'empty', formatVersion: 1,
+      vocabularyReviewStatus: status, vocabularySelections: [], grammarReviewStatus: 'unreviewed',
+      createdAt: T, updatedAt: T,
+    } as never);
+  }
+
+  async function addConfirmedVerb(id: string, expression: string, reading: string, partOfSpeech: string) {
+    await getDb().vocabularyItems.put({ id, expression, reading, meaning: `to ${id}`, partOfSpeech, createdAt: T, updatedAt: T } as never);
+    await addSentence(`s-${id}`, `${expression}。`);
+    await addLink(`s-${id}`, id, expression);
+  }
+
+  it('reads real chains only from vocab-confirmed sentences', async () => {
+    await addChainSentence('c-ok', 'confirmed');
+    await addChainSentence('c-no', 'unreviewed');
+    const { candidates } = await getVerbLegoData();
+    const chains = candidates.flatMap((c) => c.chains).filter((c) => c.source === 'sentence');
+    expect(chains.map((c) => c.sentenceId)).toEqual(['c-ok']);
+    expect(chains[0]!.pieces.map((p) => p.text)).toEqual(['聞か', 'れ', 'た']);
+  });
+
+  it('builds chains only from confirmed verbs JMdict tags as godan/ichidan', async () => {
+    await addConfirmedVerb('v-taberu', '食べる', 'たべる', 'v1; vt');
+    await addConfirmedVerb('v-noun', '猫', 'ねこ', 'n');
+    await addConfirmedVerb('v-untagged', '飲む', 'のむ', '');
+    await addConfirmedVerb('v-aru', 'ある', 'ある', 'v5r-i; vi');
+    const { candidates } = await getVerbLegoData();
+    const built = candidates.flatMap((c) => c.chains).filter((c) => c.source === 'built');
+    expect(new Set(built.map((c) => c.lemma))).toEqual(new Set(['食べる']));
+    expect(built.map((c) => c.pieces.map((p) => p.text).join(''))).toContain('食べさせられなかった');
+  });
+
+  it('a verb that is not confirmed (no link with a surface form) is not built', async () => {
+    await getDb().vocabularyItems.put({ id: 'v-x', expression: '読む', reading: 'よむ', meaning: 'm', partOfSpeech: 'v5m; vt', createdAt: T, updatedAt: T } as never);
+    expect((await getVerbLegoData()).candidates).toEqual([]);
+  });
+
+  it('derives a miss focus and candidate stats from logged rounds', async () => {
+    await addConfirmedVerb('v-taberu', '食べる', 'たべる', 'v1; vt');
+    await logGameRound({
+      gameId: 'verb-lego', signal: 'any', poolSize: 5,
+      items: [{ ref: 'c', correct: false, cluesUsed: 0, wrongGuesses: 1, points: 2, ms: 1, parts: [{ key: 'させる|させ', correct: false }, { key: 'た|た', correct: true }] }],
+    });
+    const { candidates, focus } = await getVerbLegoData();
+    expect(focus).toEqual(new Map([['させる|させ', 1]]));
+    const hit = candidates.filter((c) => c.stats.lapses > 0);
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit.every((c) => c.chains[0]!.pieces.some((p) => p.key === 'させる|させ'))).toBe(true);
   });
 });

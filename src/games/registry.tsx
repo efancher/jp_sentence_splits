@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
+import { VerbLegoGame } from '../components/games/VerbLegoGame';
 import {
   ParticlePuzzleGame,
   PARTICLE_COPY,
@@ -10,6 +11,7 @@ import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/W
 import {
   getOddEarOutData,
   getParticlePuzzleData,
+  getVerbLegoData,
   getWordDetectiveCandidates,
 } from '../db/repository';
 import type { GameSignal } from '../domain/types';
@@ -26,6 +28,7 @@ import {
   ODD_EAR_OUT_ROUND_SIZE,
 } from '../lib/oddEarOut';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
+import { VERB_LEGO_COPY, VERB_LEGO_GAME_ID, VERB_LEGO_ROUND_SIZE } from '../lib/verbLego';
 import { WORD_DETECTIVE_ROUND_SIZE } from '../lib/wordDetective';
 
 export interface GamePools {
@@ -102,6 +105,24 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: OddEarOutGame,
+  },
+  {
+    id: VERB_LEGO_GAME_ID,
+    title: 'Verb Lego',
+    blurb:
+      'Build stacked verb forms piece by piece — 聞か＋れ＋た, 食べ＋させ＋られ＋なかっ＋た. Some come from your own sentences, some are composed from verbs you know. Tap the next piece; wrong picks cost points.',
+    needs:
+      'Needs several different verb-form patterns: sentences with vocabulary you have confirmed, or confirmed godan/ichidan verbs.',
+    roundSize: VERB_LEGO_ROUND_SIZE,
+    // No `stale`, as in the other history-based games: recent accuracy on a
+    // piece is just the flip side of `weak`.
+    signals: ['weak', 'strong'],
+    signalCopy: VERB_LEGO_COPY,
+    loadPools: async () => {
+      const { candidates } = await getVerbLegoData();
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: VerbLegoGame,
   },
 ];
 
