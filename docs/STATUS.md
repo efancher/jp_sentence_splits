@@ -33,6 +33,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Sync: the stuck grammar links diagnosed (duplicate queue rows +
+  orphaned links) and fixed**. The diagnostics added earlier did their job. The
+  third report showed the queue: **4 rows, only 2 distinct records — each
+  `sentence_grammar` link queued twice — retried 70 times**, all failing the insert
+  RLS policy, referencing patterns `0d35bccc…`/`b503f7b5…` that exist **neither on
+  the server nor (any longer) in the laptop's Dexie**. On the server the same
+  sentence (それで、九州で地震がありましたね。) already has links to `それで` and
+  `～ましたね` (created 09-17) — the laptop's own copies of the same two patterns.
+  Three defects, all fixed:
+  1. **Duplicate queue rows.** `enqueueMutation`'s coalescing (read existing → put)
+     wasn't atomic, so two overlapping calls for one record (a create and an
+     immediate un-awaited edit) each saw "nothing queued" and each inserted. Now one
+     `rw` transaction. `dedupeQueueRows()` (newest payload, oldest id/lock base,
+     highest retry count) runs at the start of every push to heal queues that already
+     hold twins.
+  2. **Remaps only repointed the first queue row.** `remapLinkReferences` and the
+     relationship/study-item remaps used `.first()`, so a twin kept the abandoned
+     pattern id. All three now go through `repointQueuedPayloads` (every row).
+  3. **Orphaned links retried forever.** A `sentence_grammar`/`grammar_relationships`
+     row whose pattern no longer exists *locally* can never pass the policy (the pattern
+     has no row to push). On an RLS failure (42501) `pruneOrphanedGrammarLink` now drops
+     the local row, its meta and every queue row for it (`ORPHAN_PRUNED`) — safe without
+     a tombstone because the insert failing means the record never reached the server,
+     and only fires when the pattern is *absent* locally. If the pattern *is* local but
+     missing remotely and has no queue row of its own, `requeueMissingPattern`
+     re-queues it (`PATTERN_REQUEUED`) so its insert either lands or is adopted.
+  Reproduced in `tests/syncPushIncident.test.ts` (fake server enforcing the RLS rule
+  and the unique indexes; mutation-checked — with pruning disabled the laptop's
+  scenario fails exactly as in production). **Not determined:** how the laptop's local
+  patterns/links got into that state (adoption ran for those patterns but their links
+  weren't repointed — most likely the twin-row case above). Left as-is: the 3
+  leftover conflicts (2 `analyses`, 1 `books`) look like real divergence for the
+  learner to resolve, and 2 `book_sentences` v2/v3 conflicts remain, worth a look if
+  they persist.
+
 - **2026-09-19 — Sync follow-up: laptop went 63 → 5 conflicts, 10 → 4 pending;
   remaining `sentence_grammar` RLS failure not yet diagnosed → diagnostics gap
   closed**. The second report from the laptop (after loading the fix) shows the

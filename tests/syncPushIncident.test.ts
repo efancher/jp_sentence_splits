@@ -181,3 +181,96 @@ describe('incident: laptop created grammar patterns the phone already had', () =
     });
   }
 });
+
+/**
+ * The second report from the laptop (with the queue now visible): four queue rows
+ * for two `sentence_grammar` links — each queued twice — referencing patterns that
+ * exist neither on the server nor in the local database any more, failing the
+ * insert policy 70 times over.
+ */
+describe('incident: orphaned, twice-queued grammar links', () => {
+  beforeEach(() => {
+    resetDbForTests(`sync-orphan-${createId('db')}`);
+    for (const k of Object.keys(server.tables)) delete server.tables[k];
+    server.log.length = 0;
+    server.rows('sentences').push({ id: 'sent_0b', owner_id: 'user-1' });
+    server.rows('grammar_patterns').push(remotePattern('R_sorede', 'それで', 'それで'), remotePattern('R_mashita', '～ましたね', 'ましたね'));
+    server.rows('sentence_grammar').push(remoteLink('RL_a', 'sent_0b', 'R_sorede'), remoteLink('RL_b', 'sent_0b', 'R_mashita'));
+  });
+
+  async function queueTwice(entity: 'sentence_grammar', recordId: string, payload: unknown, baseTs: number) {
+    const db = getDb();
+    for (const [i, id] of [`opq_${recordId}_1`, `opq_${recordId}_2`].entries()) {
+      await db.syncQueue.put({
+        id, entity, recordId, operation: 'upsert', expectedVersion: null, payload,
+        localTimestamp: new Date(baseTs + i).toISOString(), retryCount: 70 - i, lastError: 'new row violates row-level security policy',
+      });
+    }
+  }
+
+  it('drops links whose pattern is gone locally (both queue rows), touching nothing on the server', async () => {
+    const db = getDb();
+    const l1 = await ensureSentenceGrammar('sent_0b', 'grammar_pattern_0d35-gone', {});
+    const l2 = await ensureSentenceGrammar('sent_0b', 'grammar_pattern_b503-gone', {});
+    expect(await db.grammarPatterns.count()).toBe(0);
+    await queueTwice('sentence_grammar', l1.id, l1, 1_000);
+    await queueTwice('sentence_grammar', l2.id, l2, 2_000);
+    expect(await db.syncQueue.count()).toBe(4);
+    const serverBefore = JSON.stringify(server.tables);
+
+    const failure = await pushMutations();
+
+    expect(failure).toBeUndefined();
+    expect(await db.syncQueue.count()).toBe(0);
+    expect(await db.sentenceGrammar.get(l1.id)).toBeUndefined();
+    expect(await db.sentenceGrammar.get(l2.id)).toBeUndefined();
+    expect(JSON.stringify(server.tables)).toBe(serverBefore);
+    expect(await db.syncRecordMeta.get(`sentence_grammar:${l1.id}`)).toBeUndefined();
+  });
+
+  it('does NOT drop a link whose pattern exists locally but has not been pushed yet — it syncs once the pattern does', async () => {
+    const db = getDb();
+    const fresh = await ensureGrammarPattern('全く新しい文型', {});
+    const link = await ensureSentenceGrammar('sent_0b', fresh.id, {});
+    // link queued BEFORE its pattern: the first attempt hits RLS (pattern not on the server yet)
+    await enqueueMutation({ entity: 'sentence_grammar', recordId: link.id, operation: 'upsert', expectedVersion: null, payload: link });
+    await new Promise((r) => setTimeout(r, 3));
+    await enqueueMutation({ entity: 'grammar_patterns', recordId: fresh.id, operation: 'upsert', expectedVersion: null, payload: fresh });
+
+    await pushMutations();
+    expect(await db.sentenceGrammar.get(link.id)).toBeDefined(); // not pruned
+    await pushMutations();
+
+    expect(await db.syncQueue.count()).toBe(0);
+    expect(server.rows('sentence_grammar').some((r) => r.id === link.id)).toBe(true);
+    expect(server.rows('grammar_patterns').some((r) => r.id === fresh.id)).toBe(true);
+  });
+
+  it('re-queues a pattern that exists locally, is missing on the server, and has no queue row of its own', async () => {
+    const db = getDb();
+    const lost = await ensureGrammarPattern('キューから消えた文型', {});
+    const link = await ensureSentenceGrammar('sent_0b', lost.id, {});
+    // only the link is queued; the pattern's own queue row was lost
+    await enqueueMutation({ entity: 'sentence_grammar', recordId: link.id, operation: 'upsert', expectedVersion: null, payload: link });
+    expect(await db.syncQueue.where('[entity+recordId]').equals(['grammar_patterns', lost.id]).count()).toBe(0);
+
+    for (let cycle = 0; cycle < 4 && (await db.syncQueue.count()) > 0; cycle += 1) await pushMutations();
+
+    expect(await db.syncQueue.count()).toBe(0);
+    expect(server.rows('grammar_patterns').some((r) => r.id === lost.id)).toBe(true);
+    expect(server.rows('sentence_grammar').some((r) => r.id === link.id)).toBe(true);
+    expect(await db.sentenceGrammar.get(link.id)).toBeDefined();
+  });
+
+  it('collapses a queue that already holds twins before pushing, so a healthy record is pushed once', async () => {
+    const db = getDb();
+    const pattern = await ensureGrammarPattern('二重に積まれた', {});
+    await queueTwice('sentence_grammar', 'sg_healthy_dup', { id: 'sg_healthy_dup', sentenceId: 'sent_0b', grammarPatternId: pattern.id }, 5_000);
+    await enqueueMutation({ entity: 'grammar_patterns', recordId: pattern.id, operation: 'upsert', expectedVersion: null, payload: pattern });
+    await pushMutations();
+    await pushMutations();
+    expect(await db.syncQueue.count()).toBe(0);
+    const inserts = server.log.filter((l) => l.startsWith('sentence_grammar insert sg_healthy_dup'));
+    expect(inserts.filter((l) => l.endsWith(': ok'))).toHaveLength(1);
+  });
+});

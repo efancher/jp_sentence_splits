@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   addConflict,
+  dedupeQueueRows,
+  enqueueMutation,
   listOpenConflicts,
+  listPendingMutations,
   resolveConflictLocally,
   sweepNoopConflicts,
 } from './queue';
@@ -179,5 +182,60 @@ describe('sweepNoopConflicts', () => {
     expect(swept).toBe(0);
     const open = await listOpenConflicts();
     expect(open.find((c) => c.recordId === 'review_real')).toBeDefined();
+  });
+});
+
+describe('enqueueMutation atomic coalescing', () => {
+  it('overlapping enqueues for one record leave a single queue row (latest payload wins)', async () => {
+    // Reported 2026-09-19: every stuck sentence_grammar link was queued twice. A
+    // create and an immediate edit fire without awaiting each other; the
+    // read-then-write coalescing used to let both see "nothing queued" and both insert.
+    await Promise.all(
+      [1, 2, 3, 4, 5, 6].map((n) =>
+        enqueueMutation({
+          entity: 'sentence_grammar',
+          recordId: 'sg_race',
+          operation: 'upsert',
+          expectedVersion: null,
+          payload: { n },
+        }),
+      ),
+    );
+    const rows = (await listPendingMutations()).filter((r) => r.recordId === 'sg_race');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('still keeps separate rows for separate records', async () => {
+    await Promise.all(
+      ['a', 'b', 'c'].map((id) =>
+        enqueueMutation({ entity: 'sentence_grammar', recordId: `sg_${id}`, operation: 'upsert', expectedVersion: null, payload: {} }),
+      ),
+    );
+    const rows = (await listPendingMutations()).filter((r) => r.recordId.startsWith('sg_') && r.entity === 'sentence_grammar');
+    expect(new Set(rows.map((r) => r.recordId)).size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('dedupeQueueRows', () => {
+  it('collapses twins to the newest payload under the oldest id and lock base, keeping the highest retry count', async () => {
+    const { getDb } = await import('../db/database');
+    const db = getDb();
+    const row = (id: string, ts: string, payload: unknown, expectedVersion: number | null, retryCount: number) => ({
+      id, entity: 'sentence_grammar' as const, recordId: 'sg_twin', operation: 'upsert' as const,
+      expectedVersion, payload, localTimestamp: ts, retryCount, lastError: undefined,
+    });
+    await db.syncQueue.bulkPut([
+      row('opq_old', '2026-09-19T10:00:00.000Z', { v: 'old' }, 3, 70),
+      row('opq_new', '2026-09-19T10:00:05.000Z', { v: 'new' }, 4, 69),
+    ]);
+    await db.syncQueue.put({ ...row('opq_solo', '2026-09-19T10:00:01.000Z', { v: 'solo' }, null, 0), recordId: 'sg_solo' });
+
+    expect(await dedupeQueueRows()).toBe(1);
+
+    const twins = (await db.syncQueue.toArray()).filter((r) => r.recordId === 'sg_twin');
+    expect(twins).toHaveLength(1);
+    expect(twins[0]).toMatchObject({ id: 'opq_old', expectedVersion: 3, retryCount: 70, payload: { v: 'new' } });
+    expect((await db.syncQueue.toArray()).some((r) => r.id === 'opq_solo')).toBe(true);
+    expect(await dedupeQueueRows()).toBe(0); // idempotent
   });
 });

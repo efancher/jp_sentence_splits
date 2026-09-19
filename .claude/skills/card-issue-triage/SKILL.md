@@ -250,3 +250,11 @@ in `src/db/repository.ts`) — no resolve script.
   it means a natural-key lookup there plus repointing whatever references its id in
   `remapDuplicateEntityId`. Confirm on the data first: a remote row created *after*
   the reporting device's `lastSyncAt` with the same natural key is the signature.
+
+- **`pendingQueue` in the snapshot shows the same record twice / a retryCount in the
+  tens, all failing RLS.** (Snapshots carry `pendingQueue` and per-log `details` since
+  2026-09-19 — read those first.) Twin rows = the old non-atomic `enqueueMutation`
+  race; a link whose `refs.grammarPatternId` exists nowhere = an orphan. Both now
+  self-heal (`dedupeQueueRows`, `pruneOrphanedGrammarLink`, `requeueMissingPattern`
+  in `engine.ts`); if a report still shows one, the heal didn't fire — check whether
+  the referenced pattern is in the device's Dexie (prune only fires when it isn't).

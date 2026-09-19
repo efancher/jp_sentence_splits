@@ -3,6 +3,7 @@ import type { EntityTable } from 'dexie';
 import { getDb } from '../db/database';
 import {
   bumpQueueRetry,
+  dedupeQueueRows,
   ensureSyncMeta,
   listPendingMutations,
   putRecordMeta,
@@ -102,6 +103,10 @@ export async function pushMutations(): Promise<string | undefined> {
   const userId = session?.user?.id;
   if (!userId) return undefined;
 
+  const collapsed = await dedupeQueueRows();
+  if (collapsed > 0) {
+    syncLog('warn', `Collapsed ${collapsed} duplicate queue row(s)`, 'QUEUE_DEDUPE', { collapsed });
+  }
   const pending = await listPendingMutations();
   syncLog('debug', `Pushing ${pending.length} mutations`);
 
@@ -222,6 +227,10 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
       ) {
         return;
       }
+      if (error.code === '42501') {
+        if (await pruneOrphanedGrammarLink(item)) return;
+        await requeueMissingPattern(item);
+      }
       throw new Error(error.message);
     }
     const writtenVersion = Number(
@@ -255,6 +264,91 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   }
 
   await acknowledgeSyncedVersion(item.entity, item.recordId, nextVersion);
+}
+
+/**
+ * A `sentence_grammar` / `grammar_relationships` row whose pattern id no longer
+ * exists **locally** can never be pushed: the server's row-level security
+ * requires the referenced pattern to exist and be owned by the user, and a
+ * pattern that is gone from this device (its duplicate was adopted away, or it
+ * was deleted) has no row to push either. It retried forever — 70 times on a
+ * laptop, 2026-09-19 — behind a status stuck on "conflict". Since the insert
+ * itself failed (`!existing` above), the record never existed on the server, so
+ * dropping the local orphan and its queue rows needs no tombstone. Only fires
+ * when the pattern is *absent locally*: a merely-not-yet-pushed local pattern
+ * (present in Dexie, queued behind) is left to push normally.
+ */
+async function pruneOrphanedGrammarLink(item: SyncQueueItem): Promise<boolean> {
+  const db = getDb();
+  const payload = (item.payload ?? {}) as Record<string, unknown>;
+  let patternIds: string[];
+  if (item.entity === 'sentence_grammar') {
+    patternIds = [String(payload.grammarPatternId ?? '')];
+  } else if (item.entity === 'grammar_relationships') {
+    patternIds = [String(payload.patternAId ?? ''), String(payload.patternBId ?? '')];
+  } else {
+    return false;
+  }
+  const present = await Promise.all(
+    patternIds.map(async (id) => !!id && (await db.grammarPatterns.get(id)) != null),
+  );
+  if (present.every(Boolean)) return false;
+
+  await db.transaction(
+    'rw',
+    [db.sentenceGrammar, db.grammarRelationships, db.syncQueue, db.syncRecordMeta],
+    async () => {
+      if (item.entity === 'sentence_grammar') await db.sentenceGrammar.delete(item.recordId);
+      else await db.grammarRelationships.delete(item.recordId);
+      await db.syncRecordMeta.delete(recordMetaKey(item.entity, item.recordId));
+      // every queue row for the record, twins included
+      await db.syncQueue.where('[entity+recordId]').equals([item.entity, item.recordId]).delete();
+    },
+  );
+  syncLog('warn', 'Dropped an orphaned grammar link (its pattern no longer exists)', 'ORPHAN_PRUNED', {
+    entity: item.entity,
+    recordId: item.recordId,
+    patternIds,
+  });
+  return true;
+}
+
+/**
+ * The other half of the orphaned-link case: the pattern a queued link points at
+ * *is* still in Dexie, but it isn't on the server and nothing is queued to push
+ * it (its queue row was lost), so the link would wait forever on a push that is
+ * never attempted. Re-queue the pattern. Its insert then either succeeds or hits
+ * the natural-key index and is adopted by `adoptRemoteDuplicate`. The link still
+ * fails this cycle and goes through on a later one.
+ */
+async function requeueMissingPattern(item: SyncQueueItem): Promise<void> {
+  if (item.entity !== 'sentence_grammar') return;
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const db = getDb();
+  const patternId = String((item.payload as { grammarPatternId?: string } | undefined)?.grammarPatternId ?? '');
+  if (!patternId) return;
+  const local = await db.grammarPatterns.get(patternId);
+  if (!local) return;
+  const alreadyQueued = await db.syncQueue
+    .where('[entity+recordId]')
+    .equals(['grammar_patterns', patternId])
+    .count();
+  if (alreadyQueued > 0) return;
+  const { data: remote } = await supabase.from('grammar_patterns').select('id').eq('id', patternId).maybeSingle();
+  if (remote) return; // it's on the server, so the failure is about something else
+  const { enqueueMutation } = await import('./queue');
+  await enqueueMutation({
+    entity: 'grammar_patterns',
+    recordId: patternId,
+    operation: 'upsert',
+    expectedVersion: null,
+    payload: local,
+  });
+  syncLog('warn', 'Re-queued a grammar pattern that a queued link needs but nothing was pushing', 'PATTERN_REQUEUED', {
+    patternId,
+    linkId: item.recordId,
+  });
 }
 
 type DedupEntity =
@@ -434,13 +528,7 @@ async function remapRelationshipReferences(oldId: string, newId: string): Promis
     if (a > b) [a, b] = [b, a];
     const updated = { ...relationship, patternAId: a, patternBId: b };
     await db.grammarRelationships.put(updated);
-    const queueItem = await db.syncQueue
-      .where('[entity+recordId]')
-      .equals(['grammar_relationships', relationship.id])
-      .first();
-    if (queueItem) {
-      await db.syncQueue.put({ ...queueItem, payload: updated, lastError: undefined });
-    }
+    await repointQueuedPayloads('grammar_relationships', relationship.id, updated);
   }
 }
 
@@ -472,13 +560,25 @@ async function remapGrammarStudyItems(oldId: string, newId: string): Promise<voi
     }
     const updated = { ...item, subjectId: newId };
     await db.studyItems.put(updated);
-    const queueItem = await db.syncQueue
-      .where('[entity+recordId]')
-      .equals(['study_items', item.id])
-      .first();
-    if (queueItem) {
-      await db.syncQueue.put({ ...queueItem, payload: updated, lastError: undefined });
-    }
+    await repointQueuedPayloads('study_items', item.id, updated);
+  }
+}
+
+/**
+ * Rewrites the payload of **every** queued mutation for a record — not just the
+ * first. A record can have more than one queue row (an enqueue race, before
+ * `enqueueMutation` became atomic), and a twin left holding the old foreign key
+ * fails its push forever.
+ */
+async function repointQueuedPayloads(
+  entity: SyncEntity,
+  recordId: string,
+  payload: unknown,
+): Promise<void> {
+  const db = getDb();
+  const rows = await db.syncQueue.where('[entity+recordId]').equals([entity, recordId]).toArray();
+  for (const row of rows) {
+    await db.syncQueue.put({ ...row, payload, lastError: undefined });
   }
 }
 
@@ -490,22 +590,11 @@ async function remapLinkReferences<T extends { id: string }, F extends keyof T &
   newId: string,
   syncEntity: SyncEntity,
 ): Promise<void> {
-  const db = getDb();
   const links = await table.where(fkField).equals(oldId).toArray();
   for (const link of links) {
     const updated: T = { ...link, [fkField]: newId };
     await table.put(updated);
-    const queueItem = await db.syncQueue
-      .where('[entity+recordId]')
-      .equals([syncEntity, link.id])
-      .first();
-    if (queueItem) {
-      await db.syncQueue.put({
-        ...queueItem,
-        payload: updated,
-        lastError: undefined,
-      });
-    }
+    await repointQueuedPayloads(syncEntity, link.id, updated);
   }
 }
 

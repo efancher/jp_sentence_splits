@@ -80,28 +80,70 @@ export async function enqueueMutation(input: {
   replaceExpectedVersion?: boolean;
 }): Promise<SyncQueueItem> {
   const db = getDb();
-  // Coalesce: replace any pending item for the same entity+record.
-  const existing = await db.syncQueue
-    .where('[entity+recordId]')
-    .equals([input.entity, input.recordId])
-    .first();
-  const expectedVersion =
-    existing && !input.replaceExpectedVersion
-      ? existing.expectedVersion
-      : input.expectedVersion;
-  const item: SyncQueueItem = {
-    id: existing?.id ?? createId('opq'),
-    entity: input.entity,
-    recordId: input.recordId,
-    operation: input.operation,
-    expectedVersion,
-    payload: input.payload,
-    localTimestamp: new Date().toISOString(),
-    retryCount: existing?.retryCount ?? 0,
-    lastError: undefined,
-  };
-  await db.syncQueue.put(item);
-  return item;
+  // Coalesce: replace any pending item for the same entity+record. The read and
+  // the write run in one transaction so overlapping calls for the same record
+  // (a create and an immediate edit, both fired without awaiting) serialize
+  // instead of each seeing "nothing queued yet" and each inserting a row — which
+  // is how a laptop ended up with every stuck link queued twice (2026-09-19).
+  return db.transaction('rw', db.syncQueue, async () => {
+    const existing = await db.syncQueue
+      .where('[entity+recordId]')
+      .equals([input.entity, input.recordId])
+      .first();
+    const expectedVersion =
+      existing && !input.replaceExpectedVersion
+        ? existing.expectedVersion
+        : input.expectedVersion;
+    const item: SyncQueueItem = {
+      id: existing?.id ?? createId('opq'),
+      entity: input.entity,
+      recordId: input.recordId,
+      operation: input.operation,
+      expectedVersion,
+      payload: input.payload,
+      localTimestamp: new Date().toISOString(),
+      retryCount: existing?.retryCount ?? 0,
+      lastError: undefined,
+    };
+    await db.syncQueue.put(item);
+    return item;
+  });
+}
+
+/**
+ * Collapses queue rows that share an (entity, recordId) into one — the newest
+ * payload/operation under the oldest row's id and optimistic-lock base, the
+ * same result coalescing would have produced. Heals queues that already hold
+ * duplicates (from the enqueue race above, before it was fixed) so a remap or a
+ * retry can't leave a stale twin behind. Returns how many rows were removed.
+ */
+export async function dedupeQueueRows(): Promise<number> {
+  const db = getDb();
+  return db.transaction('rw', db.syncQueue, async () => {
+    const all = await db.syncQueue.orderBy('localTimestamp').toArray();
+    const groups = new Map<string, SyncQueueItem[]>();
+    for (const row of all) {
+      const key = `${row.entity}:${row.recordId}`;
+      const list = groups.get(key);
+      if (list) list.push(row);
+      else groups.set(key, [row]);
+    }
+    let removed = 0;
+    for (const rows of groups.values()) {
+      if (rows.length < 2) continue;
+      const oldest = rows[0]!;
+      const newest = rows[rows.length - 1]!;
+      await db.syncQueue.put({
+        ...newest,
+        id: oldest.id,
+        expectedVersion: oldest.expectedVersion,
+        retryCount: Math.max(...rows.map((row) => row.retryCount)),
+      });
+      for (const extra of rows.slice(1)) await db.syncQueue.delete(extra.id);
+      removed += rows.length - 1;
+    }
+    return removed;
+  });
 }
 
 /** Last cloud version this device acknowledged for optimistic locking. */

@@ -125,6 +125,22 @@ describe('grammar pattern duplicate adoption', () => {
     expect([rel!.patternAId, rel!.patternBId].sort()).toEqual([other.id, 'grammar_pattern_zzzz-remote'].sort());
   });
 
+  it('repoints every queued row for a record, not just the first (a twin left behind fails its push forever)', async () => {
+    const local = await ensureGrammarPattern('今、～', {});
+    const link = await ensureSentenceGrammar('sent_1', local.id, {});
+    const db = getDb();
+    const base = { entity: 'sentence_grammar' as const, recordId: link.id, operation: 'upsert' as const, expectedVersion: null, retryCount: 70, lastError: 'rls' };
+    await db.syncQueue.bulkPut([
+      { ...base, id: 'opq_a', localTimestamp: '2026-09-19T10:00:00.000Z', payload: link },
+      { ...base, id: 'opq_b', localTimestamp: '2026-09-19T10:00:01.000Z', payload: link },
+    ]);
+    await remapDuplicateEntityId('grammar_patterns', local.id, remotePatternRow());
+    for (const id of ['opq_a', 'opq_b']) {
+      const row = await db.syncQueue.get(id);
+      expect((row?.payload as { grammarPatternId: string }).grammarPatternId, id).toBe(REMOTE_PATTERN_ID);
+    }
+  });
+
   it('does not merge a study item that already exists for the adopted pattern (left as-is, no throw)', async () => {
     const local = await ensureGrammarPattern('今、～', {});
     const mine = await ensureStudyItem('grammarPattern', local.id, 'grammar_completion');
