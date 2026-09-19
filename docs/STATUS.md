@@ -85,9 +85,13 @@ what's left is one deferred durability item (below).
   (`--apply --limit 100000`, 493 candidates, 31 skipped, 462 scored) — 132
   total. That full-corpus run used `ALIGNMENT_VERSION` 2 (the hiragana-
   reading fix only); the follow-up supplementary-dictionary fix landed
-  after it started, bumping to v3 — a further re-run would pick up
-  whatever fraction of the 31 remaining skips that fix newly resolves
-  (day values 13/16-19/23/26-30), not yet done. Diagnostic tools added:
+  after it started, bumping to v3. Final re-run under v3
+  (`--apply --limit 100000`, 421 candidates — the 80 already written are
+  excluded — 29 skipped, 8 more updated): **140 links total**. The 29
+  remaining skips are the uncovered counters (8番 ×2, 20歳 ×2, 3週間,
+  100匹) plus genuine one-off OOVs (Patreon, メンバーシップ, しゃっ,
+  エクストリーム, ガラッ, ゆうじくん) and the words cascade-poisoned by them
+  in the same sentences. Diagnostic tools added:
   `scripts/diagnose-word-boundary-skips.ts` (characterizes *why* a given
   surface form has no aligner match — substring-missing vs. OOV-cascade —
   searches by surface form since skip-log indices shift as soon as an
