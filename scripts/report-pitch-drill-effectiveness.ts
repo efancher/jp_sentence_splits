@@ -9,6 +9,7 @@
  *
  * Usage: npx tsx scripts/report-pitch-drill-effectiveness.ts
  */
+import { signalDetection } from '../src/lib/nativeClipPitchAudit';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 async function fetchAll(supabase: any, table: string, columns: string, filter?: (q: any) => any) {
@@ -155,6 +156,20 @@ async function main() {
   console.log('\n=== Card accuracy by expected H/L shape (exact match) ===');
   for (const [shape, { n, ok }] of [...byShape.entries()].sort((a, b) => b[1].n - a[1].n)) {
     console.log(`${shape.padEnd(8)} n=${String(n).padEnd(4)} ${Math.round((ok / n) * 100)}%`);
+  }
+
+  // Signal detection for the basic 2-mora contrast: d' near 0 = can't tell
+  // them apart (not merely biased to one answer). See docs/ROADMAP.md.
+  console.log('\n=== Fall vs rise discrimination (2-mora hl vs lh, signal detection) ===');
+  const twoMora = shaped.map((r) => ({ expected: r.pitch_expected_shape as string, chosen: r.pitch_chosen_shape as string }));
+  const sd = signalDetection(twoMora, 'hl', 'lh');
+  if (sd.dPrime === null) {
+    console.log('(not enough trials on both sides yet)');
+  } else {
+    console.log(`hl trials ${sd.signalTrials} (answered hl ${sd.hits}), lh trials ${sd.noiseTrials} (answered hl ${sd.falseAlarms})`);
+    console.log(
+      `d' = ${sd.dPrime.toFixed(2)}  (0 = chance, ~1 = fair, 2+ = clear)   criterion c = ${sd.criterion!.toFixed(2)}  (<0 leans "hl", >0 leans "lh")`,
+    );
   }
 
   // Reveal-scaffolding usage (2026-09-19): the card logs these as review

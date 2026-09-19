@@ -1218,6 +1218,14 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   button. Usage is logged as review `assistance` values (`pitch_native_looped`,
   `pitch_contrast_shown`, `pitch_contrast_played`); read via
   `scripts/report-pitch-drill-effectiveness.ts`.
+  Pitch reviews also store `contextSentenceId` (the clip played).
+  `scripts/audit-pitch-accent-clips.ts` (read-only) measures each native word
+  clip with the drill's own scorer (`classifyLearnerMorae`, via
+  `src/lib/nativeClipPitchAudit.ts`) to report dictionary agreement, cue strength
+  in semitones, and the learner's accuracy vs cue strength vs chance; the report
+  script adds d′/criterion for 2-mora fall-vs-rise. First run: native clips agree
+  with the dictionary under that scorer only ~37% (4-mora heiban ~3%), so the
+  scorer's validity on native speech is an open question (ROADMAP).
 
   `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts` (the
   reachable-category reasoning) is now unused by the card but kept and

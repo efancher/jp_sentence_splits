@@ -1519,6 +1519,9 @@ export function ReviewPage() {
         expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
         pitchExpectedShape: pitchAccentShapes?.pitchExpectedShape,
         pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
+        // Which clip the card played (a word can have several occurrences),
+        // so the pitch audit can join a miss to that clip's measured cue.
+        contextSentenceId: current.pitchAccent?.sentence.id,
       });
       setQueue((q) => q.slice(1));
 

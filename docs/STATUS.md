@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Pitch-accent analysis tools (native-clip audit, cue-strength
+  join, d′)**. Follow-up to the card reveal work below. New pure module
+  `src/lib/nativeClipPitchAudit.ts` (`measureNativeWord`, `accuracyBySeparation`,
+  `signalDetection`) + `scripts/audit-pitch-accent-clips.ts` (read-only; downloads
+  reference audio from Supabase storage, decodes with ffmpeg **from a temp file** —
+  the m4a recordings can't be demuxed from a pipe, which silently produced empty
+  tracks at first — caches pitch tracks in `/tmp/pitch-audit-cache`).
+  `classifyLearnerMorae` (`pitchAccentObservations.ts`) is now exported and returns
+  its `bucketMeans`/`overallMean` so the audit measures native clips with the exact
+  rule that scores the learner. `report-pitch-drill-effectiveness.ts` gained d′ /
+  criterion for 2-mora `hl` vs `lh`. Pitch reviews now also store
+  `contextSentenceId` (the clip played) for exact joins going forward.
+  **Findings (first run):** d′ = 0.19 on fall-vs-rise; native clips agree with the
+  dictionary shape only 37% under the drill's scorer (4-mora heiban 3%), accuracy
+  does not rise with cue strength, voiceless-consonant hypothesis not supported —
+  i.e. the weak-clip explanation is out, and the drill scorer's validity on native
+  speech is the new open question (ROADMAP "Pitch-accent: analysis tools").
+  **Correction to the earlier note:** the card is ~50% exact-match vs ~27–31%
+  chance overall (above chance); only the 2-mora fall-vs-rise contrast is at chance.
 - **2026-09-19 — `pitch_accent` card: measured native contour + "what your pick
   sounds like" on a miss, with usage tracking**. Prompted by the user still
   struggling with the pitch card/drill despite doing well on the standalone ear

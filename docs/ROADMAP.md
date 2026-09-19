@@ -883,6 +883,75 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
 
+- [ ] **Pitch-accent: analysis tools & practice ideas.** (2026-09-19; first
+  pieces shipped) Prompted by the user doing well on the standalone pitch ear
+  trainers yet still struggling with the `pitch_accent` card and the free drill.
+  Prod data: 2-mora fall-vs-rise (`hl` vs `lh`) d′ = 0.19 (essentially no
+  discrimination, criterion ≈ 0 so not a one-answer bias; 37 `hl` + 22 `lh`
+  trials); across *all* shapes exact-match accuracy is ~50% vs ~27–31% chance, so
+  the card is above chance overall and the fall-vs-rise contrast is the hard core.
+  Recommendations, in the order proposed:
+  - [x] **Reveal bridges** — measured native contour of the word beside the
+    dictionary diagram, and a "what your pick sounds like" real same-length word
+    after a miss (`WordPitchContour`, `PitchContrastExample`, `pickContrastClip`).
+    Usage logged as review `assistance` values (no migration; a new `reviews`
+    column would have risked the migration-apply gap failing every review push);
+    pitch reviews now also record `contextSentenceId` (which clip was played).
+    See STATUS 2026-09-19.
+  - [x] **Native-clip audit + accuracy vs cue strength** —
+    `scripts/audit-pitch-accent-clips.ts` (+ `src/lib/nativeClipPitchAudit.ts`):
+    measures each native word clip with the *drill's own scoring rule*, reports
+    dictionary agreement, cue strength (semitone separation of expected-high vs
+    expected-low morae), the user's accuracy binned by cue strength vs chance, a
+    voiceless-consonant split, and a weak/contradicting-clip list; per-clip TSV
+    to `/tmp/pitch-audit-clips.tsv`. First full run (222 clips, 191 measurable):
+    native clips agree with the dictionary shape only **37%** overall (2-mora
+    `hl` 64% / `lh` 55%; 4-mora heiban `lhhh` **3%**, n=33; 3-mora `lhl` 12%),
+    median cue 0.7 st, 57% weak. The user's accuracy does **not** rise with cue
+    strength (≥3 st: 39% vs 27% chance; <0 st: 52% vs 28%), so weak clips are not
+    the main cause of the misses; the "vowel/sonorant-only words are harder" hunch
+    did not hold up (voiceless 53% vs voiced-only 48%). Caveats: reviews joined to
+    the *mean over the word's clips* until reviews since 2026-09-19 accrue exact
+    `contextSentenceId`s; the cue measure is itself noisy (equal-width buckets,
+    YIN octave errors — some cues read −5…−11 st).
+  - [x] **d′ / criterion in the report** — `signalDetection` in
+    `nativeClipPitchAudit.ts`, printed by `report-pitch-drill-effectiveness.ts`.
+  - [ ] **Calibrate the drill scorer against native clips** (*new, from the
+    audit*). The audit is also a validity test of the free drill's grader: run on
+    native speakers' own clips it disagrees with the dictionary ~63% of the time
+    (4-mora heiban almost always), so it can mark a *correct* production wrong.
+    Candidate fixes to try against this benchmark: detrend declination before
+    bucketing, use median not mean, snap buckets to alignment phone/mora
+    boundaries instead of equal widths, drop octave-error frames, and require ≥80%
+    agreement on clean native clips before trusting a category. Until then treat
+    drill "mismatch" verdicts on long/heiban words sceptically. Do this before
+    building anything that leans on the same measurement (below).
+  - [ ] **Gate/rank `pitch_accent` cards by measured cue strength** — only after
+    the scorer is calibrated (the current measure is too noisy to gate on). Same
+    principle as "gate cards missing support": don't show a card whose
+    discriminating cue isn't in the clip; also gives an easy→hard ramp.
+  - [ ] **Continuous scoring in the drill** — compare the learner's pitch line to
+    the native one for the same word (fall timing error, fall magnitude relative
+    to the native's, trend over time), normalized *per speaker* (never absolute
+    pitch — user is a quiet baritone), so progress shows even while the high/low
+    grade is still wrong. Depends on the scorer calibration above.
+  - [ ] **Hear-vs-say per-word table** (perception from card reviews vs
+    production from `pitch_drill_attempts`). Premature — only ~71 drill takes so
+    far; revisit once there is volume.
+  - [ ] **Practice ideas proposed, not built:** a high-volume binary fall-or-rise
+    drill on 2-mora native clips with instant feedback (ear-trainer-style, then 3-
+    and 4-mora) — check first whether the drill's minimal-pair ABX warm-up already
+    gets used; an optional "hear the native word first" button in Single-words
+    mode (must not reintroduce a guess gate before recording); resynthesized
+    stimuli (one native clip with its contour flipped — biggest build, needs a
+    pitch-manipulation step on the box). Off-app: say every practice word with a
+    following particle (が/は) so heiban/odaka are audible; exaggerate and hum the
+    contour; lean on the rule explanations the reveal already gives.
+  - **Decision point:** after ~2 weeks of reviews with the new tracking, re-run
+    both scripts. If contrast-played next-review pass-rate beats not-played, keep
+    and extend the contrast idea; if d′ is still ~0, prioritize the binary
+    fall/rise drill.
+
 - [ ] **Port the aligner's day/month numeral expansion to TypeScript.**
   (2026-09-19, from the alignment session's review) `shadowing-analysis-api`
   expands `<digits>日` / `<digits>月` to hiragana before aligning

@@ -73,7 +73,11 @@ function voicedSemitones(frames: PitchFrame[]): number[] {
     .map((frame) => frame.relativeSemitones);
 }
 
-interface MoraeClassification {
+export interface MoraeClassification {
+  /** Per-word-mora mean relative semitones (null = no voiced frame in that bucket). Length `moraCount`. */
+  bucketMeans: Array<number | null>;
+  /** Mean relative semitones over the whole word's voiced frames. */
+  overallMean: number;
   /** Length `moraCount`, or `moraCount + 1` when `measuredFollowing` — the last element is then the following mora. */
   classes: MoraPitchClass[];
   /** Word buckets with any voiced signal (the following mora is not counted here). */
@@ -116,7 +120,7 @@ function voicedFramesInSpan(
  * asymmetry is deliberate: it's the odaka-vs-heiban cue and we'd rather
  * miss a real odaka than invent one from declination.
  */
-function classifyLearnerMorae(
+export function classifyLearnerMorae(
   word: WordAlignment,
   moraCount: number,
   pitch: PitchAnalysisPayload,
@@ -158,7 +162,7 @@ function classifyLearnerMorae(
     }
   }
 
-  return { classes, voicedBucketCount, voicedBuckets, measuredFollowing };
+  return { bucketMeans, overallMean, classes, voicedBucketCount, voicedBuckets, measuredFollowing };
 }
 
 /**
