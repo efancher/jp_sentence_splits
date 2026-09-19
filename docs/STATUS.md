@@ -33,6 +33,19 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — "Short games" planned (no code yet) + feasibility script**.
+  Four parallel read-only design passes (audio / vocab / grammar /
+  framework) produced a ranked game shortlist, a shared GameShell +
+  item-picker design, and a phased rollout; all recorded under "Short
+  games (`/play`)" in ROADMAP.md "Planned". Added
+  `scripts/report-game-feasibility.ts` (read-only, prod via
+  `createScriptSupabaseClient`) to size each candidate's eligible pool
+  before building: Word Detective 194/490 confirmed words have 2+
+  sentences (25 lapsed words qualify — thin weakness pool); Odd Ear Out
+  113 words with aligned audio, 3+1 rounds possible at 2–5 morae
+  (proficiency unfiltered); Particle Puzzle 994/1269 sentences with 2+
+  particle tokens.
+
 - **2026-09-18 — numeral `<unk>` cascade fixed (partial), backfill applied
   to 52 links**. The 18 "no aligner match" skips from the backfill below
   traced almost entirely to one cause: mined transcripts write dates as

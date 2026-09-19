@@ -359,6 +359,103 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Short games (`/play`).** (2026-09-19) A few 60–180 s, non-arcade
+  rounds that break up study while still training a skill, and — longer
+  term — can be aimed at weaknesses or strengths. Came out of four
+  parallel read-only design passes (audio / vocab / grammar / framework
+  lenses); nothing built yet. Design rules the passes converged on:
+  - Each game is its **own short activity** on a `/play` hub + Home chip —
+    not an ambient strip on existing cards (that pattern was reverted
+    2026-09-15, see the grammar-SRS entry). Tap-only UI (no drag, no
+    `prompt`/`confirm`); any audio starts from a tap, never a timer (iOS).
+  - **Games do not write FSRS in v1.** They're cued (hints, choices,
+    pacing), so grading them would inflate the proficiency signals that
+    gate `continue_book`/shadowing/listening (`getProficientVocabularyItemIds`).
+    Results go to a **local-only append-only `game_rounds` log** modelled
+    on `pitch_drill_attempts` (no Supabase migration at first — the
+    migration-apply gap has bitten before; add sync once the games prove
+    useful, and confirm the migration is applied to prod first). Any
+    FSRS-adjacent write is opt-in and user-explicit (e.g. a result-screen
+    "Queue misses for review" toggle that only seeds cards, never grades).
+  - **Shared item picker** (`src/lib/gamePicker.ts`, pure):
+    `pickItems({signal: weak|strong|stale|new|frontier, game, n, seed})`.
+    Signals reuse `getLeechList`, `scoreReviewPriority`,
+    `predictRetrievability`, `countNewVocabularyCardBacklog`,
+    `bookCoverage.ts`. Every game ships an `eligible()` that runs
+    **before** ranking; a too-thin pool hides the game/signal with a
+    reason and falls back (weak → stale → any) rather than an empty round
+    (the per-item-gate starvation lesson, 2026-09-16).
+  - **GameShell** (`src/components/games/GameShell.tsx` + registry
+    `src/games/registry.ts`): intro (signal chip + "why these items", the
+    Start tap does the gesture-gated audio setup) → play (item-count-capped,
+    a pace bar with no fail state) → result (per-item replay + one-line
+    why, strength/weakness tag).
+  - **Session integration is later and optional:** a `game`
+    `PlannerStepTargetKind` (`types.ts`) with a query-free path
+    (`/play/:gameId/:signal`, since `useActiveSession` matches by exact
+    pathname), **no** fifth `SessionBucket` (it's a `Record` across
+    allocation/settings/recap/Home), settled only via the SessionBar's
+    "Mark complete". `game_*` activity types stay out of `recentActivity`
+    neglect scoring; `stepUsefulness` gives skip-rate for free as the kill
+    switch.
+  - **Feasibility (prod, 2026-09-19, `scripts/report-game-feasibility.ts`,
+    read-only):** *Word Detective* — 490 confirmed words, 194 with 2+
+    sentences (121 with 2+ audio sentences); 41 lapsed, only 25 of them
+    with 2+ sentences (thin weakness pool); 127 no-card backlog words have
+    2+ sentences. *Odd Ear Out* — 209 pitch-carrying citation-form words,
+    113 with aligned audio and 2+ morae; a 3+1 round is possible at 2/3/4/5
+    morae (upper bound, proficiency **not** filtered). *Particle Puzzle* —
+    994 of 1269 sentences have 2+ particle tokens (800 with 3+); all
+    tokens are UniDic `morphology` source, so imports are not token-poor.
+  - **Candidates (ranked by the design passes):**
+    1. **Word Detective** (vocab, M) — a mystery word from your books,
+       typed reading, clue ladder (blanked sentence → 2nd sentence →
+       translation → audio → first kana), fewer clues = higher score.
+       Weakness signal: leeches / lowest retrievability. Overlaps `cloze`
+       and `reading_production`; the multi-context clue ladder is the
+       differentiator.
+    2. **Odd Ear Out** (pitch, M) — 4 native clips of same-length words,
+       tap the odd accent shape, reveal the measured contours
+       (`MeasuredPitchContour`). Reuses
+       `getPitchAccentMinimalPairOccurrences` / `expectedPitchShape`; keep
+       the heiban-vs-odaka exclusion. `Book.id` as speaker proxy.
+    3. **Verb Lego** (grammar, M) — stack suffix blocks to build stacked
+       verb forms (食べさせられなかった); fills the gap the conjugation
+       card skips (`identifyConjugationForm` ignores stacked surfaces).
+       Needs an aux-lemma → label table; UniDic is inconsistent on
+       causative/passive stems.
+    4. **Particle Puzzle** (grammar, S–M) — fill 3–4 particle blanks from
+       one shared chip bank (+1–2 decoys), translation hidden until check,
+       accept curated equivalents (に/へ). Cheapest; per-particle-pair
+       miss rate is the weakness signal.
+    5. Later: **Keystone** ("which 5 words unlock the most of the next
+       chapter" — front door to the no-card backlog), **Ear Tiles**
+       (rebuild a heard sentence from chunk tiles), **Then & Now** (replay
+       an old clip with then-unknown words ducked out — needs per-word
+       alignment spans), **Draft Day** (choose which backlog words to
+       adopt), **Pair Sort** (only if the error mix shows discrimination
+       errors; unlocked by the discrimination-card item below).
+    Skipped as overlapping an existing card or a sibling game: Connections,
+    Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
+    Ghost Run (largest build, most likely to feel like work).
+  - **Phases:** **P1** GameShell + picker (weak/stale/strong from existing
+    data) + one game + `/play` + Home chip + local `game_rounds`, no sync,
+    no session step. **P2** optional session interlude + recap line
+    (`sessionRecap.ts`). **P3** `/progress` "Games" panel (accuracy by
+    skill/signal, weak-item recovery rate, a "cued vs FSRS" check in the
+    style of `selfRatingCalibration`) + adaptive difficulty from the last 3
+    rounds. **P4** sync `game_rounds`; add "Queue misses". **P5** Keystone,
+    then Then & Now. **P6** let game misses feed the planner's weakness
+    term (riskiest, last).
+  - **Open decisions:** (1) strictly read-only vs. opt-in "Queue misses";
+    (2) standalone `/play` only vs. also a session interlude; (3) is a
+    rolling "rounds this week" count enough, or any streak; (4) should
+    game time displace review minutes or be extra; (5) local-only data
+    acceptable at first (phone/desktop histories diverge until sync).
+  - Manual test plan for P1: open `/play`, run a weak round, confirm the
+    "why" line matches the leech list; confirm no `reviews`/`study_items`
+    rows changed; confirm a too-small pool hides the game with a reason.
+
 - [ ] **Grammar pattern discrimination card.** (2026-09-17, follow-up to
   the `grammar_completion` recall redesign above) A second retention target
   distinct from recall: not "can you produce this construction" but "can
