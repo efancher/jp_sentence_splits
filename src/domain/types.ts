@@ -769,6 +769,47 @@ export interface PitchDrillAttempt {
 }
 
 /**
+ * Which slice of the learner's own history a short game (`/play`) draws its
+ * items from — see `src/lib/gamePicker.ts`. `any` is only ever an *effective*
+ * signal (the picker's last-resort fallback when no real signal has enough
+ * eligible items), never something a learner requests.
+ */
+export type GameSignal = 'weak' | 'stale' | 'strong';
+export type EffectiveGameSignal = GameSignal | 'any';
+
+export interface GameRoundItem {
+  /** The game's own item reference (Word Detective: a vocabularyItem id). */
+  ref: string;
+  correct: boolean;
+  /** Hints spent before answering (or giving up). */
+  cluesUsed: number;
+  wrongGuesses: number;
+  points: number;
+  /** Wall-clock ms from first showing the item to settling it. */
+  ms: number;
+}
+
+/**
+ * One finished round of a short game (`/play`). Append-only usage log,
+ * modelled on `PitchDrillAttempt` — but **local-only** for now (not in the
+ * sync engine; no Supabase table), so it needs no migration. Deliberately
+ * never read by FSRS/the session planner: games are cued (clues, pacing), so
+ * feeding them into proficiency would inflate the signals that gate
+ * `continue_book`/shadowing/listening. Only ever written by
+ * `logGameRound`.
+ */
+export interface GameRound {
+  id: string;
+  timestamp: string;
+  gameId: string;
+  /** The signal the picker actually used (post-fallback). */
+  signal: EffectiveGameSignal;
+  /** Eligible items available for `signal` when the round was built. */
+  poolSize: number;
+  items: GameRoundItem[];
+}
+
+/**
  * A learner-observed confusion between two vocabulary items (docs brief
  * §10), e.g. 表す vs 表れる, transitive/intransitive pairs, similar kanji.
  * Undirected: itemAId/itemBId are canonicalized so a pair is never stored

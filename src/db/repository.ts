@@ -2,6 +2,9 @@ import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
+  EffectiveGameSignal,
+  GameRound,
+  GameRoundItem,
   AnalysisChunk,
   AppSettings,
   Attempt,
@@ -116,9 +119,12 @@ import { nowIso, normalizeSentenceKey } from '../lib/normalize';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import {
   isBookInStudyRotation,
+  sentenceIsSuspendedOnly,
   studyItemIsHeldBackBySuspension,
   type SuspendedBookIndex,
 } from '../lib/suspendedBooks';
+import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
+import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import {
   concatCut,
   type ResegmentPlan,
@@ -5304,6 +5310,106 @@ export async function logPitchDrillAttempt(input: {
     { entity: 'pitch_drill_attempts', recordId: attempt.id, payload: attempt },
   ]);
   return attempt;
+}
+
+/**
+ * Append one finished short-game round to the local `gameRounds` log
+ * (docs/ROADMAP.md "Short games"). Local-only — not synced, not backed up —
+ * and never read by FSRS or the session planner: games are cued, so grading
+ * them would inflate the proficiency signals that gate other activities.
+ */
+export async function logGameRound(input: {
+  gameId: string;
+  signal: EffectiveGameSignal;
+  poolSize: number;
+  items: GameRoundItem[];
+  now?: Date;
+}): Promise<GameRound> {
+  const round: GameRound = {
+    id: createId('game_round'),
+    timestamp: (input.now ?? new Date()).toISOString(),
+    gameId: input.gameId,
+    signal: input.signal,
+    poolSize: input.poolSize,
+    items: input.items,
+  };
+  await getDb().gameRounds.put(round);
+  return round;
+}
+
+export interface WordDetectiveCandidate extends PickerCandidate {
+  word: WordDetectiveWord;
+}
+
+/**
+ * Every confirmed vocabulary word that can be played in Word Detective
+ * (`buildWordDetectiveWord`'s eligibility), with the FSRS-derived stats the
+ * game picker ranks by. Eligibility is applied here, before any signal
+ * ranking. Read-only. Occurrences in a suspended book's sentences are
+ * skipped when that sentence lives *only* in suspended books (the transcripts
+ * of shelved books were often shelved for being unreliable).
+ */
+export async function getWordDetectiveCandidates(
+  options: { now?: Date } = {},
+): Promise<WordDetectiveCandidate[]> {
+  const now = options.now ?? new Date();
+  const db = getDb();
+  const [allLinks, suspendedIndex] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const links = allLinks.filter(
+    (link) =>
+      !!link.surfaceForm && !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
+  );
+  if (links.length === 0) return [];
+
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  const vocabularyItemIds = [...new Set(links.map((link) => link.vocabularyItemId))];
+  const [sentences, items, audioRows, studyItems] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.vocabularyItems.bulkGet(vocabularyItemIds),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+  ]);
+
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+  const linksByItemId = new Map<string, SentenceVocabulary[]>();
+  for (const link of links) {
+    const list = linksByItemId.get(link.vocabularyItemId);
+    if (list) list.push(link);
+    else linksByItemId.set(link.vocabularyItemId, [link]);
+  }
+  const statesByItemId = new Map<string, FsrsState[]>();
+  for (const studyItem of studyItems) {
+    const list = statesByItemId.get(studyItem.subjectId);
+    if (list) list.push(studyItem.fsrsState);
+    else statesByItemId.set(studyItem.subjectId, [studyItem.fsrsState]);
+  }
+
+  const candidates: WordDetectiveCandidate[] = [];
+  for (const item of items) {
+    if (!item) continue;
+    const word = buildWordDetectiveWord({
+      item,
+      links: linksByItemId.get(item.id) ?? [],
+      sentenceById,
+      audioBySentenceId,
+    });
+    if (!word) continue;
+    candidates.push({
+      id: item.id,
+      word,
+      stats: summarizeCardStats(statesByItemId.get(item.id) ?? [], now),
+    });
+  }
+  return candidates;
 }
 
 export interface VocabularyOccurrenceCandidate {

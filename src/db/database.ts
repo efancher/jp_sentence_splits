@@ -10,6 +10,7 @@ import type {
   Book,
   BookSentence,
   CardIssueReport,
+  GameRound,
   GrammarPattern,
   GrammarRelationship,
   ImportBatch,
@@ -129,6 +130,7 @@ export class GlossbookDatabase extends Dexie {
   // Free pitch-accent drill usage log (docs/STATUS.md), synced like reviews —
   // one row per scored target word per take on PitchAccentDrillPage.
   pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
+  gameRounds!: EntityTable<GameRound, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -656,6 +658,12 @@ export class GlossbookDatabase extends Dexie {
     // free-drill practice attempts, synced like reviews.
     this.version(18).stores({
       pitchDrillAttempts: 'id, timestamp, vocabularyItemId',
+    });
+
+    // Short-game round log (`/play`, docs/ROADMAP.md "Short games") — local-only,
+    // deliberately not synced yet, so purely additive with no Supabase migration.
+    this.version(19).stores({
+      gameRounds: 'id, timestamp, gameId',
     });
   }
 }

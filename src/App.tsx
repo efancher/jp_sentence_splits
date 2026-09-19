@@ -150,6 +150,16 @@ const ProgressPage = lazy(() =>
     default: module.ProgressPage,
   })),
 );
+const PlayHubPage = lazy(() =>
+  import('./pages/PlayHubPage').then((module) => ({
+    default: module.PlayHubPage,
+  })),
+);
+const PlayGamePage = lazy(() =>
+  import('./pages/PlayGamePage').then((module) => ({
+    default: module.PlayGamePage,
+  })),
+);
 const PitchAccentDrillPage = lazy(() =>
   import('./pages/PitchAccentDrillPage').then((module) => ({
     default: module.PitchAccentDrillPage,
@@ -187,6 +197,8 @@ export default function App() {
             <Route path="study-items" element={<StudyItemsListPage />} />
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
+            <Route path="play" element={<PlayHubPage />} />
+            <Route path="play/:gameId/:signal" element={<PlayGamePage />} />
             <Route path="pitch-accent" element={<PitchAccentDrillPage />} />
             <Route path="pitch-ear-trainer" element={<PitchEarTrainerPage />} />
             <Route path="relative-pitch-trainer" element={<RelativePitchTrainerPage />} />

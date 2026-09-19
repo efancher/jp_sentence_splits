@@ -59,6 +59,7 @@ const SHORTCUTS = [
   { to: '/grammar', label: 'Grammar' },
   { to: '/review', label: 'Review' },
   { to: '/vocabulary', label: 'Words' },
+  { to: '/play', label: 'Play a round' },
   { to: '/pronunciation', label: 'Pronunciation' },
   { to: '/pitch-accent', label: 'Pitch-accent drill' },
   { to: '/pitch-ear-trainer', label: 'Pitch ear trainer' },
