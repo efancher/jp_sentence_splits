@@ -12,11 +12,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useAuth } from './auth';
 import { runSyncCycle } from './engine';
-import { buildDiagnosticsSnapshot } from './logger';
+import { buildDiagnosticsSnapshot, summarizePendingItem } from './logger';
 import { needsMigrationPrompt } from './migration';
 import {
   ensureSyncMeta,
   listOpenConflicts,
+  listPendingMutations,
   openConflictCount,
   pendingCount,
   readSyncMeta,
@@ -224,10 +225,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const copyDiagnostics = useCallback(async () => {
     const open = await listOpenConflicts();
+    const queued = await listPendingMutations();
     const text = buildDiagnosticsSnapshot({
       online,
       pendingCount: pending,
       conflictCount: open.length,
+      pendingQueue: queued.map(summarizePendingItem),
       openConflicts: open.map((c) => ({
         entity: c.entity,
         recordId: c.recordId,

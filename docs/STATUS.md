@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Sync follow-up: laptop went 63 → 5 conflicts, 10 → 4 pending;
+  remaining `sentence_grammar` RLS failure not yet diagnosed → diagnostics gap
+  closed**. The second report from the laptop (after loading the fix) shows the
+  two fixes above worked: open conflicts **63 → 5** (2 `book_sentences`, 1 `books`,
+  2 `analyses`) and pending **10 → 4**, with the `grammar_patterns` duplicate error
+  gone. What's left is `sentence_grammar: new row violates row-level security policy
+  (+3 more)` on 4 pending pushes. That policy requires the sentence to be editable
+  and `owns_grammar_pattern(grammar_pattern_id)` — a live pattern owned by the user —
+  so those links still reference a pattern id the server doesn't have. Checked and
+  ruled out on the server side: no soft-deleted patterns, no orphaned live links, no
+  near-duplicate patterns; the two adopted patterns and the other device's 4 links
+  are all live. A push-cycle reproduction (`tests/syncPushIncident.test.ts`, a fake
+  server enforcing the same unique indexes and the RLS rule; patterns-first /
+  links-first orders) drains the queue in a few cycles, so the adoption flow itself
+  works — the laptop's real state differs from what's modelled and can't be
+  determined from the snapshot. **Root cause of the blind spot:** the diagnostics
+  snapshot listed only counts and log *messages*; `recentLogs` dropped each
+  PUSH_FAIL's `details` (the failing entity/recordId/server message) and nothing
+  described the queue. It now includes `pendingQueue` (entity, recordId, operation,
+  retryCount, lastError, and referenced ids such as `sentenceId`/`grammarPatternId`/
+  `subjectId` — ids only, never text; `summarizePendingItem`) and `details` on the
+  last 30 log events (still token-redacted). The next "Report sync issue" from the
+  laptop will show exactly which records are stuck and which ids they point at.
+  `pushMutations` is exported for tests.
+
 - **2026-09-19 — Sync: stuck grammar-pattern push + 58 phantom "createdAt"
   conflicts (Report sync issue from the Mac laptop)**. One report: status
   "conflict", 10 pending, `grammar_patterns: duplicate key … (+9 more)`, 63 open

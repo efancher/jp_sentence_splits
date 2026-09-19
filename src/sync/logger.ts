@@ -1,5 +1,5 @@
 import { APP_VERSION } from '../appConfig';
-import { SYNC_SCHEMA_VERSION } from './types';
+import { SYNC_SCHEMA_VERSION, type SyncQueueItem } from './types';
 
 const isDev = import.meta.env.DEV;
 
@@ -72,6 +72,44 @@ export interface DiagnosticsConflictSummary {
   createdAt: string;
 }
 
+/** One still-unpushed mutation, described by ids only (no content) so a report shows *which* records are stuck and why. */
+export interface DiagnosticsQueueSummary {
+  entity: string;
+  recordId: string;
+  operation: string;
+  retryCount: number;
+  lastError: string | null;
+  /**
+   * The ids/discriminators this record points at (`sentenceId`, `grammarPatternId`,
+   * `subjectId`…) — what a foreign-key or row-level-security failure is *about*.
+   * Only string fields named `…Id` plus `subjectType`/`activityType`; never text.
+   */
+  refs: Record<string, string>;
+}
+
+const QUEUE_REF_KEYS = new Set(['subjectType', 'activityType']);
+
+/** Compact, content-free description of a queued mutation for the diagnostics snapshot. */
+export function summarizePendingItem(item: SyncQueueItem): DiagnosticsQueueSummary {
+  const refs: Record<string, string> = {};
+  const payload = item.payload;
+  if (payload && typeof payload === 'object') {
+    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      if (typeof value === 'string' && (/Id$/.test(key) || QUEUE_REF_KEYS.has(key)) && key !== 'id') {
+        refs[key] = value;
+      }
+    }
+  }
+  return {
+    entity: item.entity,
+    recordId: item.recordId,
+    operation: item.operation,
+    retryCount: item.retryCount,
+    lastError: item.lastError ? item.lastError.slice(0, 200) : null,
+    refs,
+  };
+}
+
 export function buildDiagnosticsSnapshot(input: {
   online: boolean;
   pendingCount: number;
@@ -87,6 +125,13 @@ export function buildDiagnosticsSnapshot(input: {
    * entity conflicting repeatedly) from a report filed elsewhere.
    */
   openConflicts?: DiagnosticsConflictSummary[];
+  /**
+   * The unpushed queue, capped, so "N pending" says *what* is pending. Added
+   * 2026-09-19: a report of "4 pending, row-level security violation" couldn't
+   * be diagnosed because neither the failing records nor their referenced ids
+   * were in the snapshot.
+   */
+  pendingQueue?: DiagnosticsQueueSummary[];
 }): string {
   return JSON.stringify(
     {
@@ -97,14 +142,19 @@ export function buildDiagnosticsSnapshot(input: {
       pendingCount: input.pendingCount,
       conflictCount: input.conflictCount,
       openConflicts: input.openConflicts ?? [],
+      pendingQueue: (input.pendingQueue ?? []).slice(0, 30),
       lastSyncAt: input.lastSyncAt ?? null,
       lastError: input.lastError ?? null,
       status: input.status,
       signedIn: Boolean(input.userId),
-      recentLogs: recentEvents.slice(-20).map((e) => ({
+      // `details` (already token/password-redacted by sanitizeDetails) carries the
+      // failing entity, recordId and server message for each PUSH_FAIL — without it
+      // the log only said *that* a push failed.
+      recentLogs: recentEvents.slice(-30).map((e) => ({
         level: e.level,
         message: e.message,
         code: e.code,
+        details: e.details,
         at: e.at,
       })),
     },

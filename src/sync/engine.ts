@@ -92,8 +92,8 @@ export async function runSyncCycle(): Promise<void> {
   return syncInFlight;
 }
 
-/** Returns a short failure summary when any queue item could not be pushed. */
-async function pushMutations(): Promise<string | undefined> {
+/** Returns a short failure summary when any queue item could not be pushed. Exported for tests. */
+export async function pushMutations(): Promise<string | undefined> {
   const supabase = getSupabase();
   if (!supabase) return undefined;
   const {
