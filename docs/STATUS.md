@@ -33,6 +33,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Short games: Odd Ear Out shipped (pool limited by stale
+  alignments)**. Third `/play` game (`src/lib/oddEarOut.ts`,
+  `OddEarOutGame.tsx`): 5 rounds of four native word clips (same mora count,
+  cut to the word alone), three sharing an in-word accent shape, one odd; tap ▶
+  to loop, "This one" to pick; immediate green/red with a "Worth N now" countdown
+  (3 points/round, −1 per wrong pick); reveal shows each word's shape plus its
+  **measured** pitch contour cropped from the cached sentence track. Weakness is
+  per shape pair from the round log; `weak`/`strong` only. New plumbing:
+  `getOddEarOutData` + `loadAlignmentsBulk` (Dexie cache → bulk
+  `fetchRemoteAlignments`, cached locally). Verified in a real browser with
+  seeded tone audio (grid layout, red on wrong, contours drawn, per-pair misses
+  logged, 0 reviews/study items written).
+  **Prod finding:** all 782 rows in `reference_alignment` are version **1** while
+  the client is at `ALIGNMENT_VERSION` 3 (two bumps for the numeral /
+  supplementary-dictionary fixes) — `backfill:reference-alignment` dry run on
+  codex-dev reports **0 of 1075 recordings current**. So today only clips with a
+  hand-corrected `audioStartMs/EndMs` (156 links) are playable: **23 words, 2
+  contrasts** (< the 5 a round needs), and the hub correctly says "not enough to
+  play yet". Running `ANALYSIS_ALIGN_API_BASE=http://127.0.0.1:8002 npm run
+  backfill:reference-alignment -- --apply` on codex-dev (aligner is up there)
+  would refresh them — not run yet (1075 alignments on the shared 8 GB box; a
+  decision for the user). The same staleness already degrades word-audio
+  isolation off-tailnet for pitch/word-listening cards. Manual test (after the
+  backfill): `/play` → Odd Ear Out → Play a round → Start; ▶ each clip, tap
+  "This one" under the odd one; confirm red on wrong with the countdown
+  dropping, then the reveal with shapes and contours; result lists each round's
+  words; confirm review/study-item counts are unchanged.
+
 - **2026-09-19 — Particle Puzzle: immediate green/red feedback + score countdown**
   (user request after playing it: liked Word Detective's "worth N now"
   countdown). Replaced the fill-everything-then-Check flow: each placement is

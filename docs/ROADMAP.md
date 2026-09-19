@@ -415,7 +415,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        Weakness signal: leeches / lowest retrievability. Overlaps `cloze`
        and `reading_production`; the multi-context clue ladder is the
        differentiator.
-    2. **Odd Ear Out** (pitch, M) — 4 native clips of same-length words,
+    2. ~~**Odd Ear Out**~~ **[shipped 2026-09-19; see STATUS for the stale-alignment caveat that limits its pool until `backfill:reference-alignment --apply` is run]** (pitch, M) — 4 native clips of same-length words,
        tap the odd accent shape, reveal the measured contours
        (`MeasuredPitchContour`). Reuses
        `getPitchAccentMinimalPairOccurrences` / `expectedPitchShape`; keep

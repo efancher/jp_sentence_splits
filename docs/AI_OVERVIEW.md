@@ -902,7 +902,7 @@ original layer (the SRS layer was added later, additively).
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently two games:
+shortcut ("Play a round") and the `/play` hub. Currently three games:
 - **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
   3 mystery words per round. Each is blanked out of a real sentence from
   the learner's books; they type its reading (typed recall, not multiple
@@ -933,6 +933,27 @@ shortcut ("Play a round") and the `/play` hub. Currently two games:
   picker stats are its particles' recent accuracy (the picker's FSRS-named
   fields are reused as: lapses = misses, retrievability = accuracy). Offers
   `weak` and `strong` only. With no history yet, everything falls back to `any`.
+- **Odd Ear Out** (`OddEarOutGame.tsx`, `src/lib/oddEarOut.ts`) — 5 rounds
+  of four native clips of same-length words, each cut to the **word alone**
+  (strict `wordOnly` span — never the folded-in particle): three share an
+  in-word accent shape, one doesn't. Tap ▶ to loop a clip (one plays at a time)
+  and "This one" under the odd one; right locks green, wrong goes red and costs
+  a point (a round starts worth 3, live "Worth N now"). The reveal shows all
+  four words with a plain-language shape and the **measured** pitch contour
+  cropped to just that word (cached YIN track via `loadOrComputeReferencePitch`,
+  `cropPitchPayload`) — nothing symbolic is drawn. Groups by *in-word* shape, so
+  heiban and odaka (identical inside the word) count as one shape. Prefers all
+  four clips from one book (same-speaker proxy, as in the minimal-pair warm-up);
+  never mixes two words that read identically. Eligible clips
+  (`getOddEarOutData`): confirmed citation-form word with a dictionary pitch
+  position and 2+ morae, native audio, and an isolatable span (the hand-corrected
+  `audioStartMs/EndMs` when set, else the current-version forced alignment,
+  length 150–3000 ms); proficiency deliberately **not** required (it's
+  perception, not knowing the word). Weakness is per **shape pair** from the
+  round log (unordered, per mora count), offered as `weak`/`strong`. Alignments
+  for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one
+  Supabase `in()` query per 40 ids, cached locally) — it never falls through to
+  the tailnet aligner just to size a pool.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
   lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
