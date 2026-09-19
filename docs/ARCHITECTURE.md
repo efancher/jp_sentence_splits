@@ -171,7 +171,7 @@ unaware a session exists.
 
 ## Short games
 
-`/play` hosts short standalone rounds (currently Word Detective). Design
+`/play` hosts short standalone rounds (Word Detective, Particle Puzzle). Design
 decisions worth knowing before adding one:
 
 - **Games read FSRS, never write it.** They're cued (clues, hints, pacing), so
@@ -192,6 +192,13 @@ decisions worth knowing before adding one:
   SessionBar's "Mark complete". Not wired into the planner yet; adding a fifth
   `SessionBucket` is deliberately avoided (it's a `Record` across
   allocation/settings/recap/Home).
+- **The round log doubles as per-game history.** `GameRoundItem.parts` records
+  per-sub-item outcomes (Particle Puzzle: one per blank). A game can derive its
+  own weakness signal from `gameRounds` (Particle Puzzle does, per particle) and
+  map it onto the picker's `PickerStats` — the field names are FSRS-flavoured,
+  read them as "recent misses / recent accuracy / enough attempts to trust it".
+  A `GameDef` lists which `signals` it offers (a game with no meaningful `stale`
+  omits it) and its own `SignalCopy` wording.
 - Adding a game = a pure builder + a `GameDef` in `src/games/registry.tsx`
   whose `loadPools` applies its eligibility.
 

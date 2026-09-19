@@ -33,6 +33,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Short games: Particle Puzzle shipped**. Second `/play` game
+  (`src/lib/particlePuzzle.ts`, `ParticlePuzzleGame.tsx`): 5 real sentences,
+  2–4 particles pulled into one shared chip bank + 1–2 confusable decoys, tap
+  chip → tap blank → Check; translation hidden until the check; two preceding
+  sentences shown for は/が context (`getPrecedingSentences`, reuses
+  `buildReadingContextMap`). Deliberately conservative about what it blanks
+  (only 格助詞/係助詞; never の/へ/終助詞/接続助詞, never a particle touching
+  another — には/でも are ambiguous compounds); は/が/も swaps are reported as
+  "different from the original" since they're often both grammatical.
+  Eligibility = vocab-confirmed, translated, ≤60 chars, ≥2 blankable, not
+  suspended-only: **142 playable sentences in prod** (528 before the
+  confirmed-vocab gate). **First use of the `gameRounds` log as history:** each
+  blank is a `GameRoundItem.parts` entry; recent per-particle misses feed
+  `missFocus` (biases which particles a weak round blanks) and each sentence's
+  picker stats — so the hub's "Weak spots" pool starts at 0 and grows as you
+  miss things. Offers `weak` + `strong` only (`GameDef.signals`); per-game
+  `SignalCopy` wording. Also: the picker's `any` fallback now samples the whole
+  pool (it used to re-draw the same first few items), and the Word Detective
+  effect no longer trips `exhaustive-deps`. Still read-only w.r.t. FSRS.
+  Verified in a real browser (seeded data, deliberate mistake → per-blank
+  feedback, miss logged, next weak pool = 7, 0 reviews/study items written).
+  Manual test plan: `/play` → Particle Puzzle → Play a round → Start; tap a
+  chip then a blank, fill all, Check — ✓/✗ per blank, translation appears,
+  a wrong は/が/も swap carries the "often both natural" note; finish and confirm
+  the result lists each sentence with a "why this sentence" line; return to
+  `/play` — "Weak spots (n)" now counts sentences containing the particles you
+  missed; play "Weak spots" and confirm the intro/why lines mention them.
+
 - **2026-09-19 — Short games P1 shipped: `/play` + Word Detective**. New
   standalone `/play` hub (Home shortcut "Play a round") and
   `/play/:gameId/:signal`. Pieces: `GameShell` (intro → play → result, no-fail

@@ -425,7 +425,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        card skips (`identifyConjugationForm` ignores stacked surfaces).
        Needs an aux-lemma → label table; UniDic is inconsistent on
        causative/passive stems.
-    4. **Particle Puzzle** (grammar, S–M) — fill 3–4 particle blanks from
+    4. ~~**Particle Puzzle**~~ **[shipped 2026-09-19]** (grammar, S–M) — fill 3–4 particle blanks from
        one shared chip bank (+1–2 decoys), translation hidden until check,
        accept curated equivalents (に/へ). Cheapest; per-particle-pair
        miss rate is the weakness signal.
@@ -441,7 +441,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Ghost Run (largest build, most likely to feel like work).
   - **Phases:** **P1 — DONE 2026-09-19** (`GameShell`, `src/lib/gamePicker.ts`,
     `/play` hub + Home shortcut, local `gameRounds` log, **Word Detective**; see
-    STATUS.md). Original scope: GameShell + picker (weak/stale/strong from existing
+    STATUS.md). **Particle Puzzle also shipped 2026-09-19** (candidate #4 below;
+    142 confirmed playable sentences in prod after its conservative blanking
+    rules, ~28 distinct rounds). Original scope: GameShell + picker (weak/stale/strong from existing
     data) + one game + `/play` + Home chip + local `game_rounds`, no sync,
     no session step. **P2** optional session interlude + recap line
     (`sessionRecap.ts`). **P3** `/progress` "Games" panel (accuracy by

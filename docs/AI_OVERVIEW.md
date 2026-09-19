@@ -902,7 +902,7 @@ original layer (the SRS layer was added later, additively).
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently one game:
+shortcut ("Play a round") and the `/play` hub. Currently two games:
 - **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
   3 mystery words per round. Each is blanked out of a real sentence from
   the learner's books; they type its reading (typed recall, not multiple
@@ -914,12 +914,30 @@ shortcut ("Play a round") and the `/play` hub. Currently one game:
   Eligible words (`buildWordDetectiveWord`): a reading, and ≥2 distinct
   sentences that actually contain the recorded `surfaceForm`, the opening one
   translated; occurrences that live only in suspended books are skipped.
+- **Particle Puzzle** (`ParticlePuzzleGame.tsx`, `src/lib/particlePuzzle.ts`) —
+  5 real sentences per round with 2–4 particles pulled out into one shared
+  chip bank (plus 1–2 confusable decoys); tap a chip, tap a blank (tap a filled
+  blank to take it back), then Check. The translation stays hidden until the
+  check, and the two preceding sentences from the home book are shown for
+  は/が context. Blanks only 格助詞/係助詞 (が を に と で から は も まで より) —
+  never の, へ, sentence-final or conjunctive particles, and never a particle
+  touching another particle (には, でも… — ambiguous compounds). A wrong は/が/も
+  swap is worded "different from the original" (often both grammatical) rather
+  than a flat miss. Eligible sentences: vocabulary confirmed (test particles,
+  not unknown words), translation present, ≤60 chars, ≥2 blankable particles,
+  not suspended-only. Weakness is **per particle** from the round log: each
+  blank is logged as a `GameRoundItem.parts` entry, recent misses become the
+  `focus` that biases which particles a weak round blanks, and a sentence's
+  picker stats are its particles' recent accuracy (the picker's FSRS-named
+  fields are reused as: lapses = misses, retrievability = accuracy). Offers
+  `weak` and `strong` only. With no history yet, everything falls back to `any`.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
   lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
   cards, high recall) — and gets a seeded sample of the top slice. If the
   requested signal can't fill a round it falls back weak → stale → strong →
-  `any` and the intro says so. `/play/:gameId/auto` (the hub default) requests
+  `any` (which samples the whole pool for variety) and the intro says so; the
+  wording of that note is per-game (`SignalCopy`). `/play/:gameId/auto` (the hub default) requests
   `weak`. The hub hides a game or signal whose pool is too small, with the count.
 - **Framework**: `GameShell.tsx` (intro with signal chip + "why these items"
   → play with a no-fail-state pace bar → result), `src/games/registry.tsx`
