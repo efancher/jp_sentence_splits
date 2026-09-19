@@ -123,6 +123,7 @@ import {
   studyItemIsHeldBackBySuspension,
   type SuspendedBookIndex,
 } from '../lib/suspendedBooks';
+import { startOfLocalDayIso } from '../lib/dailyPractice';
 import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import { isolatedWordSpans } from '../lib/isolatedWordRange';
@@ -5367,6 +5368,27 @@ export async function logGameRound(input: {
   };
   await getDb().gameRounds.put(round);
   return round;
+}
+
+/**
+ * What today's "Daily practice" panel counts (`src/lib/dailyPractice.ts`):
+ * scored pitch-drill words and finished game rounds since local midnight.
+ * Both are logs the activities already write, so the panel needs no state of
+ * its own. `gameRounds` is local-only (not synced), so game progress is
+ * per-device; `pitchDrillAttempts` syncs.
+ */
+export async function getDailyPracticeCounts(
+  now: Date = new Date(),
+): Promise<{ pitchDrillTakes: number; roundsByGame: Record<string, number> }> {
+  const db = getDb();
+  const start = startOfLocalDayIso(now);
+  const [pitchDrillTakes, rounds] = await Promise.all([
+    db.pitchDrillAttempts.where('timestamp').aboveOrEqual(start).count(),
+    db.gameRounds.where('timestamp').aboveOrEqual(start).toArray(),
+  ]);
+  const roundsByGame: Record<string, number> = {};
+  for (const round of rounds) roundsByGame[round.gameId] = (roundsByGame[round.gameId] ?? 0) + 1;
+  return { pitchDrillTakes, roundsByGame };
 }
 
 export interface WordDetectiveCandidate extends PickerCandidate {

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { PitchAccentMinimalPairWarmup } from '../components/PitchAccentMinimalPairWarmup';
@@ -168,7 +168,11 @@ export function PitchAccentDrillPage() {
   const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
   const minimalPairTrials = useLiveQuery(() => getPitchAccentMinimalPairTrials(), []);
-  const [mode, setMode] = useState<DrillMode>('sentence');
+  // `?mode=word` deep-links straight into single words (the Daily practice panel).
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<DrillMode>(() =>
+    searchParams.get('mode') === 'word' ? 'word' : 'sentence',
+  );
   const [focusMode, setFocusMode] = useState(false);
   const [position, setPosition] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(newShuffleSeed);

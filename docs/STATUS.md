@@ -33,6 +33,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Daily practice panel (non-SRS practice targets beside the session)**.
+  User request: a small set of "do 5 pitch drills"-style daily recommendations in the
+  session, not SRS related. New `DailyPracticePanel` (Home, right under "Today", and at
+  the top of `SessionRunnerPage`) driven by the pure `src/lib/dailyPractice.ts`
+  (`buildDailyPractice`, `rotatingGameOrder`): (1) **Pitch drill — say 5 words**
+  (deep-links `/pitch-accent?mode=word`; detail line points at words missed in review
+  when the focus queue is non-empty; left out in quiet mode since it records), (2)
+  **Odd Ear Out — one round**, (3) **one rotating game** (a stable-per-day rotation over
+  the other games, first one that can fill a round). **Deliberately not session steps:**
+  steps settle only by an explicit Mark complete (2026-08-27 decision) and would need a
+  new step kind rippling through recap/skip analytics/sync, whereas these are counters —
+  progress is read live from logs the activities already write (`pitchDrillAttempts`,
+  `gameRounds` via `getDailyPracticeCounts`), so nothing to tick by hand and nothing
+  touches FSRS or the planner's bucket minutes. `gameRounds` is local-only, so game
+  progress is per-device; drill takes sync. Game eligibility is checked once on mount via
+  each game's `loadPools` (same check as the /play hub); an unplayable game is left out.
+  Targets are constants in `dailyPractice.ts` (`DAILY_PITCH_DRILL_TARGET` = 5,
+  `DAILY_GAME_ROUND_TARGET` = 1); no settings UI yet.
 - **2026-09-19 — Pitch-accent analysis tools (native-clip audit, cue-strength
   join, d′)**. Follow-up to the card reveal work below. New pure module
   `src/lib/nativeClipPitchAudit.ts` (`measureNativeWord`, `accuracyBySeparation`,

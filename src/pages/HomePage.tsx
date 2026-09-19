@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { DailyPracticePanel } from '../components/DailyPracticePanel';
 import { readSettings } from '../db/database';
 import {
   addMinutesToTodaySession,
@@ -284,6 +285,8 @@ export function HomePage() {
           ))}
         </div>
       </section>
+
+      <DailyPracticePanel />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Learning balance (last 14 days)</h3>

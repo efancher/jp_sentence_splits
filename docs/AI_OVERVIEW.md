@@ -647,6 +647,15 @@ count anchors on the step's `startedAt`, `ReviewPage` also flips a
 "Review" link or `SessionBar`'s "Resume" would leave the step unstarted
 and the counter frozen at 0.
 
+**Daily practice panel** (`DailyPracticePanel`, on Home under "Today" and atop
+`SessionRunnerPage`; pure logic in `src/lib/dailyPractice.ts`): a small set of
+non-SRS "do this today" targets — say 5 pitch-drill words (`/pitch-accent?mode=word`,
+skipped in quiet mode), one Odd Ear Out round, and one rotating game (stable per day).
+Not session steps: progress is counted live from `pitchDrillAttempts` (synced) and
+`gameRounds` (local-only) since local midnight (`getDailyPracticeCounts`), so it ticks
+itself, never touches FSRS or the planner's bucket minutes, and has no Mark complete.
+Targets are constants; no settings UI.
+
 ### 1. Content import & organization
 - **CSV import** (`src/lib/csvImport.ts`, `ImportPage.tsx`) — parses
   Satori Reader vocabulary CSV exports; dedupes/merges sentences on

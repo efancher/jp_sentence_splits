@@ -883,6 +883,17 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     against the "skill over metalabel quiz" principle. Only revisit as a
     small gate inside an existing drill if the above ships and needs one.
 
+- [x] **Daily practice panel.** (2026-09-19) A small set of non-SRS daily
+  practice targets ("say 5 pitch-drill words", one Odd Ear Out round, one rotating
+  game) as `DailyPracticePanel` on Home and the session page — counters read from
+  the activity logs, not session steps (see STATUS 2026-09-19 for why). Possible
+  follow-ups, unscheduled: a settings UI for the targets; per-device-agnostic game
+  progress (needs `gameRounds` to sync, currently local-only by design); adaptive
+  targets (e.g. more drill words while d′ on fall-vs-rise is ~0); adding the
+  fall-or-rise binary drill and the calibrated continuous drill scoring
+  (see "Pitch-accent: analysis tools") as panel items once built; a recap line
+  ("practised 5 words, 1 round") in `SessionRecapPanel`.
+
 - [ ] **Pitch-accent: analysis tools & practice ideas.** (2026-09-19; first
   pieces shipped) Prompted by the user doing well on the standalone pitch ear
   trainers yet still struggling with the `pitch_accent` card and the free drill.

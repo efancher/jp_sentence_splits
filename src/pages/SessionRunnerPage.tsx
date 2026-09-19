@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { DailyPracticePanel } from '../components/DailyPracticePanel';
 import {
   countAttemptsForSentences,
   endPlannerSessionEarly,
@@ -159,6 +160,8 @@ export function SessionRunnerPage() {
           </button>
         )}
       </section>
+
+      <DailyPracticePanel />
 
       <ol className="stack" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {session.steps.map((step) => {
