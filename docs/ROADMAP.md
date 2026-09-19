@@ -420,7 +420,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        (`MeasuredPitchContour`). Reuses
        `getPitchAccentMinimalPairOccurrences` / `expectedPitchShape`; keep
        the heiban-vs-odaka exclusion. `Book.id` as speaker proxy.
-    3. **Verb Lego** (grammar, M) — stack suffix blocks to build stacked
+    3. ~~**Verb Lego**~~ **[shipped 2026-09-19 — hybrid: real sentence chains + composed "monster" forms; follow-ups: 〜たくなかった / 〜でした pieces, a reverse "which piece is the passive?" mode]** (grammar, M) — stack suffix blocks to build stacked
        verb forms (食べさせられなかった); fills the gap the conjugation
        card skips (`identifyConjugationForm` ignores stacked surfaces).
        Needs an aux-lemma → label table; UniDic is inconsistent on

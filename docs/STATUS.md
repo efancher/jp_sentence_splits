@@ -33,6 +33,37 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Short games: Verb Lego shipped (hybrid real + built chains)**.
+  Fourth `/play` game (`src/lib/verbLego.ts`, `VerbLegoGame.tsx`): build stacked
+  verb forms piece by piece; tap-to-stack chips (the only controls) fill the next
+  slot and are judged at once (green/red, −1 point, live "Worth N now");
+  6 forms/round. **Prod-data finding that shaped the design:** the corpus has
+  905 verb+aux runs but only 287 stacked, and 98 of 115 chains in
+  vocab-confirmed sentences are the same polite-past 〜ました (7 distinct
+  patterns) — a real-only game would repeat itself. So the pool is *hybrid*:
+  real chains (from UniDic tokens, whitelisted auxiliaries only, validated
+  against the text span) **plus built chains** composed from the 97 confirmed
+  godan/ichidan verbs JMdict tags (570 built chains, 10 recipes up to 食べさせ
+  られなかった) → 26 patterns; the picker's unit is the *pattern*, so a round never
+  repeats one. Correctness safeguards (a wrong built form would teach wrong
+  Japanese): class comes from the JMdict tag not word shape — **a prod check
+  caught 思い切る (godan) composing as 思い切させない** when shape was used — plus
+  skips for statives/irregulars/honorifics/potential-of-another-verb/particle+verb
+  phrases, transitive tag required for passives, and decoys that are certainly
+  wrong only (never れ for られ, never the e-stem 聞け/食べれ, た/だ & て/で twins only
+  when the preceding piece rules them out). Verified: 570 built chains
+  structurally validated against prod verbs with zero wrong forms (only safe
+  declines where the conjugator can't split a verb, e.g. 羽ばたく/近づく), plus a
+  known-forms table in the tests; browser-checked with seeded data (0
+  reviews/study items written). Kana-only verbs work via a `仮`+last-kana
+  stand-in. Manual test: `/play` → Verb Lego → Play a round → Start; tap the
+  piece for the next slot — right turns the slot green, wrong turns it red and
+  drops "Worth N now"; on the last slot the form, and (for real chains) the
+  sentence and translation, appear; results list each form with source ("from
+  your sentence" / "built from your vocabulary") and the pieces you missed.
+  Follow-ups on ROADMAP: 〜たくなかった / 〜でした pieces, a reverse "which piece is
+  the passive?" mode.
+
 - **2026-09-19 — Short games: Odd Ear Out shipped (pool limited by stale
   alignments)**. Third `/play` game (`src/lib/oddEarOut.ts`,
   `OddEarOutGame.tsx`): 5 rounds of four native word clips (same mora count,

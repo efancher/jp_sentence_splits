@@ -171,7 +171,8 @@ unaware a session exists.
 
 ## Short games
 
-`/play` hosts short standalone rounds (Word Detective, Particle Puzzle). Design
+`/play` hosts short standalone rounds (Word Detective, Particle Puzzle, Odd Ear
+Out, Verb Lego). Design
 decisions worth knowing before adding one:
 
 - **Games read FSRS, never write it.** They're cued (clues, hints, pacing), so
@@ -199,6 +200,12 @@ decisions worth knowing before adding one:
   read them as "recent misses / recent accuracy / enough attempts to trust it".
   A `GameDef` lists which `signals` it offers (a game with no meaningful `stale`
   omits it) and its own `SignalCopy` wording.
+- **The picker's unit is whatever a round should vary over**, not necessarily an
+  item: Odd Ear Out picks *contrasts* (shape pairs), Verb Lego picks *patterns*
+  (suffix signatures, each backed by several concrete chains), so a round can't
+  repeat one. Games whose correct answers are *generated* (Verb Lego's built
+  chains) must generate only what is certainly right and offer only decoys that
+  are certainly wrong — see the module doc and its test tables.
 - Adding a game = a pure builder + a `GameDef` in `src/games/registry.tsx`
   whose `loadPools` applies its eligibility.
 

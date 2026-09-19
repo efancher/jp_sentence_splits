@@ -902,7 +902,7 @@ original layer (the SRS layer was added later, additively).
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently three games:
+shortcut ("Play a round") and the `/play` hub. Currently four games:
 - **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
   3 mystery words per round. Each is blanked out of a real sentence from
   the learner's books; they type its reading (typed recall, not multiple
@@ -954,6 +954,29 @@ shortcut ("Play a round") and the `/play` hub. Currently three games:
   for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one
   Supabase `in()` query per 40 ids, cached locally) — it never falls through to
   the tailnet aligner just to size a pool.
+- **Verb Lego** (`VerbLegoGame.tsx`, `src/lib/verbLego.ts`) — 6 stacked verb
+  forms per round, built piece by piece: 聞か+れ+た, 食べ+させ+られ+なかっ+た. The
+  prompt shows the dictionary form, gloss and the ordered functions ("Build:
+  passive → past"); slots carry plain-language labels; the **only controls are
+  the piece chips** — each tap fills the next slot and is judged immediately
+  (green ✓ / red ✗, −1 point, live "Worth N now"). Two chain sources, grouped by
+  suffix *pattern* so a round never repeats one: **real** chains read from
+  vocab-confirmed sentences' UniDic tokens (a verb + the contiguous whitelisted
+  auxiliaries after it, ≥2 of them, validated against the text span) and
+  **built** chains composed by fixed rules from confirmed verbs JMdict tags as
+  godan/ichidan (`recipesForVerb`, `buildBuiltChain`, 10 recipes from
+  causative-past up to causative-passive-negative-past) — needed because the real
+  corpus is ~85% 〜ました (115 confirmed-sentence chains, only 7 patterns). Built
+  forms trust the JMdict tag over shape (godan 切る/走る/入る look ichidan), skip
+  statives/irregulars/honorifics/potential-of-another-verb/particle+verb phrases,
+  and passives need an explicit transitive tag. Decoys are *certainly wrong*
+  only: same-lemma forms with a different label, the wrong allomorph after a
+  godan a-stem (られ for れ — **never** れ for られ: ら抜き is real), other stems
+  from the verb's own `conjugate()` (a/i/te/dictionary — **never** the e-stem:
+  聞けない/食べれない are real potentials), and た/だ, て/で twins only when the
+  preceding piece rules them out. Kana-only verbs conjugate via a `仮`+last-kana
+  stand-in. Weakness is per **piece** (`れる|れ`, `stem:られる`, …) from the round
+  log; offered as `weak`/`strong`.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
   lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
