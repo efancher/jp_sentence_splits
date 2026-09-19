@@ -92,10 +92,12 @@ export function ConflictPanel() {
     setBusyId(conflict.id);
     try {
       await applyConflictResolution(conflict, resolution);
-      await sync.syncNow();
     } finally {
       setBusyId(null);
     }
+    // Sync in the background: a full push/pull/audio cycle can take a while (or
+    // stall offline) and must not keep every other conflict's buttons disabled.
+    void sync.syncNow();
   }
 
   async function resolveAll(
@@ -113,10 +115,10 @@ export function ConflictPanel() {
     setBusyId('bulk');
     try {
       await applyBulkConflictResolution(conflicts, resolution);
-      await sync.syncNow();
     } finally {
       setBusyId(null);
     }
+    void sync.syncNow();
   }
 
   return (
