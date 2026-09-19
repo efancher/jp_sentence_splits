@@ -125,6 +125,16 @@ import {
 } from '../lib/suspendedBooks';
 import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
+import { isolatedWordSpans } from '../lib/isolatedWordRange';
+import type { TimeRangeMs } from '../lib/recording';
+import {
+  buildOddEarHistory,
+  inWordShape,
+  isPlausibleClipSpan,
+  ODD_EAR_OUT_GAME_ID,
+  type OddEarClip,
+  type OddEarHistoryEntry,
+} from '../lib/oddEarOut';
 import {
   buildParticleHistory,
   findBlankableParticles,
@@ -5491,6 +5501,152 @@ export async function getPrecedingSentences(
     after: 0,
   });
   return new Map(sentenceIds.map((id) => [id, contextMap.get(id)?.before ?? []]));
+}
+
+/**
+ * Alignments for many recordings at once: the local Dexie cache first, then
+ * one bulk Supabase query for whatever's missing (written back locally, so
+ * this is a one-off cost per device). Never throws; ids with no usable
+ * alignment are simply absent from the result. Unlike `loadOrComputeAlignment`
+ * this never falls through to the tailnet MFA service — that needs the audio
+ * blob and would mean aligning dozens of clips just to size a game's pool.
+ */
+async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string, AlignmentResult>> {
+  const db = getDb();
+  const found = new Map<string, AlignmentResult>();
+  if (audioIds.length === 0) return found;
+  const rows = await db.referenceAlignments.bulkGet(audioIds);
+  const missing: string[] = [];
+  audioIds.forEach((id, index) => {
+    const row = rows[index];
+    if (row && row.alignmentVersion === ALIGNMENT_VERSION) found.set(id, row.result);
+    else missing.push(id);
+  });
+  if (missing.length === 0) return found;
+  try {
+    const { fetchRemoteAlignments } = await import('../sync/alignmentRemote');
+    const remote = await fetchRemoteAlignments(missing);
+    for (const [id, result] of remote) {
+      found.set(id, result);
+      await saveReferenceAlignment(id, result);
+    }
+  } catch {
+    // Offline / Supabase not configured — play with what's cached.
+  }
+  return found;
+}
+
+export interface OddEarOutClip extends OddEarClip {
+  audio: SentenceAudio;
+  sentence: Sentence;
+  surfaceForm: string;
+}
+
+/**
+ * Every clip playable in Odd Ear Out: a confirmed, citation-form occurrence of
+ * a word with a dictionary pitch position and 2+ morae, whose *word alone*
+ * can be cut out of its reference recording (the hand-corrected
+ * `audioStartMs/EndMs` when set, else the forced alignment) with a plausible
+ * length. One clip per word per book, skipping sentences that live only in
+ * suspended books. Also returns this game's per-shape-pair history from
+ * `gameRounds`. Read-only apart from caching alignments locally. Proficiency
+ * is deliberately not required: it's a perception game about accent shape, not
+ * a test of knowing the word.
+ */
+export async function getOddEarOutData(): Promise<{
+  clips: OddEarOutClip[];
+  history: Map<string, OddEarHistoryEntry>;
+}> {
+  const db = getDb();
+  const [allLinks, rounds, suspendedIndex] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    db.gameRounds.where('gameId').equals(ODD_EAR_OUT_GAME_ID).toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const history = buildOddEarHistory(rounds);
+  const links = allLinks.filter(
+    (link) =>
+      !!link.surfaceForm &&
+      !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
+  );
+  if (links.length === 0) return { clips: [], history };
+
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  const [items, sentences, audioRows, memberships] = await Promise.all([
+    db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
+    db.sentences.bulkGet(sentenceIds),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const itemById = new Map(
+    items
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+  const bookIdBySentenceId = new Map<string, string>();
+  for (const membership of memberships) {
+    const current = bookIdBySentenceId.get(membership.sentenceId);
+    const shelved = suspendedIndex?.suspendedBookIds.has(membership.bookId) ?? false;
+    if (!current || (!shelved && suspendedIndex?.suspendedBookIds.has(current))) {
+      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    }
+  }
+
+  // One occurrence per (word, book), citation form only, with audio.
+  const chosen = new Map<string, { link: SentenceVocabulary; item: VocabularyItem }>();
+  for (const link of links) {
+    const item = itemById.get(link.vocabularyItemId);
+    const bookId = bookIdBySentenceId.get(link.sentenceId);
+    if (!item || !bookId || link.surfaceForm !== item.expression) continue;
+    if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
+    const key = `${item.id}:${bookId}`;
+    if (!chosen.has(key)) chosen.set(key, { link, item });
+  }
+
+  const alignments = await loadAlignmentsBulk(
+    [...chosen.values()].map(({ link }) => audioBySentenceId.get(link.sentenceId)!.id),
+  );
+
+  const clips: OddEarOutClip[] = [];
+  for (const [key, { link, item }] of chosen) {
+    const audio = audioBySentenceId.get(link.sentenceId)!;
+    const sentence = sentenceById.get(link.sentenceId)!;
+    const shape = inWordShape(item.reading, item.pitchAccentPositions![0]!);
+    if (!shape) continue;
+    let span: TimeRangeMs | null = null;
+    if (link.audioStartMs != null && link.audioEndMs != null) {
+      span = { startMs: link.audioStartMs, endMs: link.audioEndMs };
+    } else {
+      const alignment = alignments.get(audio.id);
+      span = alignment
+        ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
+        : null;
+    }
+    if (!span || !isPlausibleClipSpan(span)) continue;
+    clips.push({
+      vocabularyItemId: item.id,
+      expression: item.expression,
+      reading: item.reading,
+      meaning: item.meaning ?? '',
+      position: item.pitchAccentPositions![0]!,
+      moraCount: shape.moraCount,
+      shape: shape.shape,
+      bookId: key.slice(item.id.length + 1),
+      span,
+      audio,
+      sentence,
+      surfaceForm: link.surfaceForm!,
+    });
+  }
+  return { clips, history };
 }
 
 export interface VocabularyOccurrenceCandidate {

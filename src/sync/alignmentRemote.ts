@@ -39,6 +39,39 @@ export async function fetchRemoteAlignment(
   }
 }
 
+/**
+ * Bulk variant of `fetchRemoteAlignment` — one `in()` query per chunk instead
+ * of a round-trip per recording. For callers that need to know up front which
+ * of many clips have a usable alignment (the Odd Ear Out game). Never throws;
+ * ids that are missing, stale, or unreachable simply aren't in the result.
+ */
+export async function fetchRemoteAlignments(
+  sentenceAudioIds: readonly string[],
+  chunkSize = 40,
+): Promise<Map<string, AlignmentResult>> {
+  const found = new Map<string, AlignmentResult>();
+  const supabase = getSupabase();
+  if (!supabase || sentenceAudioIds.length === 0) return found;
+  for (let i = 0; i < sentenceAudioIds.length; i += chunkSize) {
+    const chunk = sentenceAudioIds.slice(i, i + chunkSize);
+    try {
+      const { data, error } = await supabase
+        .from('reference_alignment')
+        .select('id, alignment, alignment_version')
+        .in('id', chunk);
+      if (error || !data) continue;
+      for (const row of data) {
+        if (Number(row.alignment_version) !== ALIGNMENT_VERSION) continue;
+        const result = row.alignment as AlignmentResult;
+        if (result && Array.isArray(result.words)) found.set(row.id as string, result);
+      }
+    } catch {
+      // Best effort — a failed chunk just leaves those clips unresolved.
+    }
+  }
+  return found;
+}
+
 export async function uploadRemoteAlignment(
   sentenceAudioId: string,
   result: AlignmentResult,

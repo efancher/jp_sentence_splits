@@ -1,12 +1,17 @@
 import type { ComponentType } from 'react';
 
+import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import {
   ParticlePuzzleGame,
   PARTICLE_COPY,
   PARTICLE_PUZZLE_GAME_ID,
 } from '../components/games/ParticlePuzzleGame';
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
-import { getParticlePuzzleData, getWordDetectiveCandidates } from '../db/repository';
+import {
+  getOddEarOutData,
+  getParticlePuzzleData,
+  getWordDetectiveCandidates,
+} from '../db/repository';
 import type { GameSignal } from '../domain/types';
 import {
   DEFAULT_SIGNAL_COPY,
@@ -14,6 +19,12 @@ import {
   signalPoolSizes,
   type SignalCopy,
 } from '../lib/gamePicker';
+import {
+  buildContrastCandidates,
+  ODD_EAR_COPY,
+  ODD_EAR_OUT_GAME_ID,
+  ODD_EAR_OUT_ROUND_SIZE,
+} from '../lib/oddEarOut';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
 import { WORD_DETECTIVE_ROUND_SIZE } from '../lib/wordDetective';
 
@@ -72,6 +83,25 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: ParticlePuzzleGame,
+  },
+  {
+    id: ODD_EAR_OUT_GAME_ID,
+    title: 'Odd Ear Out',
+    blurb:
+      'Four real native clips of same-length words — three share an accent shape, one does not. Listen, tap the odd one, then see all four measured pitch contours side by side.',
+    needs:
+      'Needs several same-length words with native audio and different accent shapes to contrast (counted in distinct contrasts).',
+    roundSize: ODD_EAR_OUT_ROUND_SIZE,
+    // No `stale`, as in Particle Puzzle: recent accuracy on a shape pair is just
+    // the flip side of `weak`.
+    signals: ['weak', 'strong'],
+    signalCopy: ODD_EAR_COPY,
+    loadPools: async () => {
+      const { clips, history } = await getOddEarOutData();
+      const candidates = buildContrastCandidates(clips, history);
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: OddEarOutGame,
   },
 ];
 
