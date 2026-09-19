@@ -696,6 +696,11 @@ async function cascadeRetireSentenceLocal(
  * soft delete never fires the server-side `on delete set null`).
  */
 export async function deleteSentenceCascade(sentenceId: string): Promise<void> {
+  await deleteSentencesCascade([sentenceId]);
+}
+
+/** Batch `deleteSentenceCascade` — one transaction, one sync notification. */
+export async function deleteSentencesCascade(sentenceIds: string[]): Promise<void> {
   const db = getDb();
   const sink: PendingSyncOp[] = [];
   await db.transaction(
@@ -711,7 +716,9 @@ export async function deleteSentenceCascade(sentenceId: string): Promise<void> {
       db.sentenceAudio,
     ],
     async () => {
-      await cascadeRetireSentenceLocal(db, sentenceId, sink);
+      for (const sentenceId of sentenceIds) {
+        await cascadeRetireSentenceLocal(db, sentenceId, sink);
+      }
     },
   );
   notifySyncMany(sink);

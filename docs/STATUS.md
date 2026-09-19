@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-18.
+Last updated: 2026-09-19.
 
 ## Where things stand
 
@@ -32,6 +32,14 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-19 — Delete ads/junk sentences from the book list and Shadow page.**
+  User request (recordings contain advertisements). `deleteSentenceCascade` already
+  existed (AnalyzePage "Danger zone"); added batch `deleteSentencesCascade` (one
+  transaction, one sync notify) and two-step-confirm delete buttons: "Delete selected
+  (ads, junk)" in `BookDetailPage`'s selection bar (distinct from "Remove selected from
+  book", which only detaches membership) and "Delete (ad / junk)" on `ShadowPage`.
+  Inline confirm, no `window.confirm` (PWA). No undo — soft-deleted remotely.
 
 - **2026-09-19 — Daily practice panel (non-SRS practice targets beside the session)**.
   User request: a small set of "do 5 pitch drills"-style daily recommendations in the

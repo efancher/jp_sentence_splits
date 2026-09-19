@@ -6,6 +6,7 @@ import {
   createBook,
   deleteBookCascade,
   deleteSentenceCascade,
+  deleteSentencesCascade,
   ensureStudyItem,
   getDb,
 } from '../src/db/repository';
@@ -457,6 +458,30 @@ describe('deleteSentenceCascade', () => {
     // Reference recordings are retired too — otherwise the row is orphaned
     // pointing at a deleted sentence.
     expect(await db.sentenceAudio.where('sentenceId').equals(s.id).count()).toBe(0);
+  });
+
+  it('deleteSentencesCascade retires several sentences and leaves the rest', async () => {
+    const db = getDb();
+    const book = await createBook({ title: 'B' });
+    const sentences = [0, 1, 2].map((i) => shadowingSentence(`テスト文${i}です。`, i));
+    await db.sentences.bulkPut(sentences);
+    await db.bookSentences.bulkPut(
+      sentences.map((s, position) => ({
+        id: createId('bs'),
+        bookId: book.id,
+        sentenceId: s.id,
+        position,
+        status: 'unstarted' as const,
+        addedAt: nowIso(),
+      })),
+    );
+
+    await deleteSentencesCascade([sentences[0].id, sentences[1].id]);
+
+    expect(await db.sentences.get(sentences[0].id)).toBeUndefined();
+    expect(await db.sentences.get(sentences[1].id)).toBeUndefined();
+    expect(await db.sentences.get(sentences[2].id)).toBeDefined();
+    expect(await db.bookSentences.where('bookId').equals(book.id).count()).toBe(1);
   });
 
   it('retires per-occurrence and last-occurrence-grammar study items too', async () => {

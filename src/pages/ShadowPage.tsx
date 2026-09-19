@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
@@ -8,6 +8,7 @@ import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SyncedShadowText } from '../components/SyncedShadowText';
 import {
   deleteAttempt,
+  deleteSentenceCascade,
   getDb,
   listAttemptAnalysisSummariesForSentence,
   listAttemptsForSentence,
@@ -66,6 +67,8 @@ function SpeedControl({
 
 export function ShadowPage() {
   const { bookId = '', sentenceId = '' } = useParams();
+  const navigate = useNavigate();
+  const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
   const shadowing = useShadowing();
   const { stopComparison, cancelRecording, updateShadowLoop } = shadowing;
 
@@ -482,6 +485,31 @@ export function ShadowPage() {
             <Link to={`/books/${bookId}/practice/${sentenceId}`}>
               <button type="button">Back to Practice</button>
             </Link>
+            {confirmDeleteSentence ? (
+              <>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={async () => {
+                    await deleteSentenceCascade(sentenceId);
+                    navigate(`/books/${bookId}`);
+                  }}
+                >
+                  Confirm delete
+                </button>
+                <button type="button" onClick={() => setConfirmDeleteSentence(false)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setConfirmDeleteSentence(true)}
+              >
+                Delete (ad / junk)
+              </button>
+            )}
           </div>
         </div>
 

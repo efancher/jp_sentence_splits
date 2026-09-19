@@ -790,7 +790,9 @@ Targets are constants; no settings UI.
   (`deleteBookCascade`, two-step inline confirm) also retires every
   sentence the book would orphan, keeping any shared with another book.
   A single sentence is deleted from the "Danger zone" at the bottom of
-  `AnalyzePage` (`deleteSentenceCascade`, two-step confirm) — both cascade
+  `AnalyzePage`, or from `ShadowPage`; several at once (e.g. an ad run) via
+  "Delete selected" in the book list's selection bar
+  (`deleteSentenceCascade`/`deleteSentencesCascade`, two-step confirm) — all cascade
   paths soft-delete via the normal queued `delete`, never raw DELETE, and
   leave confirmed vocabulary/kanji in the library.
 - **Inbox** (`InboxPage.tsx`) — sentences land here by default until filed

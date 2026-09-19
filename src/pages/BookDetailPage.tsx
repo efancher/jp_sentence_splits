@@ -27,6 +27,7 @@ import {
   deleteBookChapter,
   deleteBook,
   deleteBookCascade,
+  deleteSentencesCascade,
   duplicateBookOrdering,
   exportBookBackup,
   exportBookMiningPackage,
@@ -268,6 +269,7 @@ export function BookDetailPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmCascadeDelete, setConfirmCascadeDelete] = useState(false);
   const [cascadeDeleting, setCascadeDeleting] = useState(false);
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [destinationBookId, setDestinationBookId] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
@@ -877,6 +879,34 @@ export function BookDetailPage() {
             >
               Remove selected from book
             </button>
+            {confirmDeleteSelected ? (
+              <>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={async () => {
+                    const ids = [...selected];
+                    await deleteSentencesCascade(ids);
+                    setConfirmDeleteSelected(false);
+                    setSelected(new Set());
+                    setSnack({ message: `Deleted ${ids.length} sentence(s)` });
+                  }}
+                >
+                  Confirm: delete {selected.size} everywhere
+                </button>
+                <button type="button" onClick={() => setConfirmDeleteSelected(false)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setConfirmDeleteSelected(true)}
+              >
+                Delete selected (ads, junk)
+              </button>
+            )}
             </div>
           </div>
         ) : null}
