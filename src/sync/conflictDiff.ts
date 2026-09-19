@@ -81,9 +81,24 @@ const SYNC_BOOKKEEPING_KEYS = new Set([
  * (e.g. a harmless CAS race from two devices syncing the same review) could
  * never auto-settle and always landed as a manual conflict (reported via
  * Report sync issue, 2026-09-14 — "missing a remote createdAt date").
+ *
+ * The same shape applies to every entity whose mapper fills the `created_at`
+ * column from a differently-named local field — `book_sentences` (`addedAt`),
+ * `import_batches` and `reference_audio` (`importedAt`), `inbox` (`addedAt`) and
+ * `pitch_drill_attempts` (`timestamp`) — none has a local `createdAt`.
+ * `book_sentences` is the one that bit (reported 2026-09-19: 58 open
+ * "createdAt" conflicts on one laptop, nothing else differing). The audit is
+ * mechanical: any `created_at: x.<field>` in mappers.ts where `<field>` isn't
+ * `createdAt` belongs here.
  */
+const NO_LOCAL_CREATED_AT = new Set(['createdAt']);
 const ENTITY_EXTRA_KEYS: Partial<Record<SyncEntity, Set<string>>> = {
-  reviews: new Set(['createdAt']),
+  reviews: NO_LOCAL_CREATED_AT,
+  book_sentences: NO_LOCAL_CREATED_AT,
+  import_batches: NO_LOCAL_CREATED_AT,
+  inbox: NO_LOCAL_CREATED_AT,
+  reference_audio: NO_LOCAL_CREATED_AT,
+  pitch_drill_attempts: NO_LOCAL_CREATED_AT,
 };
 
 const ISO_TIMESTAMP_RE =

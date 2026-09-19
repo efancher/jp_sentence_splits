@@ -232,3 +232,21 @@ payload-shape bug before assuming it's routine multi-device editing. A high
 `lastError`) rather than a true edit collision. Resolution is client-side
 here too (`CardIssuesPage`'s "Sync issues" section → `resolveSyncIssueReport`
 in `src/db/repository.ts`) — no resolve script.
+
+### Two recurring sync-report patterns (both fixed 2026-09-19)
+
+- **"Lots of createdAt conflicts, nothing else differs."** A conflict diff that
+  shows only a remote-only `createdAt` means the entity's mapper fills the remote
+  `created_at` from a differently-named local field (`addedAt`, `importedAt`,
+  `timestamp`), so the local payload never has one and `conflictContentsMatch` can
+  never settle it. Fix is one entry in `ENTITY_EXTRA_KEYS` (`conflictDiff.ts`);
+  `sweepNoopConflicts` then clears already-open ones next sync. Audit: any
+  `created_at: x.<field>` in `mappers.ts` where `<field>` isn't `createdAt`.
+- **`X: duplicate key value violates unique constraint "…_uidx" (+N more)`, status
+  stuck on conflict, N pending.** A get-or-create entity was minted twice on two
+  devices (different ids, same natural key), and the insert can never succeed, so it
+  blocks the queue. `adoptRemoteDuplicate` in `engine.ts` recovers by adopting the
+  remote row — check that the failing entity is in `DEDUP_ENTITIES`; if not, adding
+  it means a natural-key lookup there plus repointing whatever references its id in
+  `remapDuplicateEntityId`. Confirm on the data first: a remote row created *after*
+  the reporting device's `lastSyncAt` with the same natural key is the signature.

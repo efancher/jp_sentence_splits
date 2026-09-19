@@ -33,6 +33,49 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Sync: stuck grammar-pattern push + 58 phantom "createdAt"
+  conflicts (Report sync issue from the Mac laptop)**. One report: status
+  "conflict", 10 pending, `grammar_patterns: duplicate key … (+9 more)`, 63 open
+  conflicts (58 `book_sentences` local v3/remote v4, 2 `book_sentences` v2/v3, 1
+  `books`, 2 `analyses`), "a large number of createdAt conflicts … can't see anything
+  else that conflicts". Two independent causes, both fixed:
+  1. **Phantom `createdAt` conflicts.** `BookSentence` has `addedAt`, not
+     `createdAt`; `bookSentenceToRemote` copies `addedAt` into the remote
+     `created_at`, so every `book_sentences` conflict diff showed a remote-only
+     `createdAt` and `conflictContentsMatch` could never say "identical" — harmless
+     CAS races (remote rows were bumped by scripts: `client_id` null, chapter/position
+     assignments on 09-18) surfaced as manual conflicts. Same bug class as the
+     `reviews` fix of 2026-09-14. `ENTITY_EXTRA_KEYS` (conflictDiff.ts) now strips
+     `createdAt` for every entity whose mapper fills `created_at` from a
+     differently-named local field: `book_sentences`, `import_batches`, `inbox`,
+     `reference_audio`, `pitch_drill_attempts` (+ `reviews`). The existing
+     `sweepNoopConflicts` re-checks open conflicts each sync cycle, so the 58 stuck
+     ones clear on the next sync after the laptop loads the new build; a real
+     difference (e.g. differing `status`) stays open (tested).
+  2. **`grammar_patterns` duplicate insert blocked the queue.** Another device
+     created `～ています（現在進行）` and `今、～` at 2026-09-18 20:42 UTC — after the
+     laptop's last sync (14:30 UTC) — while the laptop created the same patterns
+     locally with different ids; every push hit the natural-key unique index (23505)
+     and failed forever. `adoptRemoteDuplicate` (engine.ts), which already handled
+     `kanji`/`vocabulary_items`, now also covers `grammar_patterns` (by
+     `normalized_key`) and the link tables `sentence_grammar` (sentence+pattern) and
+     `grammar_relationships` (pair+type). Adopting a pattern repoints, locally and in
+     their queued pushes, its `sentence_grammar` links, its `grammar_relationships`
+     (re-canonicalizing the a<b order), and its grammar `study_items`; a study item
+     that already exists for the adopted pattern is left unmerged and logged
+     (`DEDUP_STUDY_ITEM_CLASH` — can't arise in the stale-cache case, since the item
+     would have been pulled with the pattern). The adopted **remote** wording wins for
+     the pattern itself; the laptop's local wording for those two patterns is dropped.
+  Tests: `tests/syncAdoptDuplicate.test.ts` (13, incl. a faked Supabase client that
+  pins the lookup columns per entity), `conflictDiff.test.ts`, `queue.test.ts`.
+  **To take effect:** the laptop must load the new build (deploy runs on push to
+  `main`, ~2.5 min; PWA update banner / reload), then one or two sync cycles.
+  Left for the learner: the 2 `analyses` and 1 `books` conflicts, which look like real
+  divergence (analyses remote v8→10 from backfill scripts) — resolve in the app.
+  Not fixed / worth knowing: adoption only fires on the *insert* path; a queued
+  *update* to a record whose remote counterpart was replaced would still surface as a
+  normal version conflict.
+
 - **2026-09-19 — Verb Lego: plain-English help for the grammar terms** (user:
   both new games work great, but they don't always know forms like causative).
   The prompt now annotates each function ("causative (make/let someone) → passive

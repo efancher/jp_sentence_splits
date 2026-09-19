@@ -1,3 +1,4 @@
+import type { SyncEntity } from './types';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -180,5 +181,41 @@ describe('conflictContentsMatch', () => {
     expect(conflictContentsMatch(local, remote, 'reviews')).toBe(true);
     // Without the entity hint, other entities' real createdAt still diffs.
     expect(conflictContentsMatch(local, remote)).toBe(false);
+  });
+
+  it('drops createdAt for every entity whose local object has no createdAt', () => {
+    // book_sentences (addedAt), import_batches/reference_audio (importedAt),
+    // inbox (addedAt) and pitch_drill_attempts (timestamp) all have their
+    // mapper copy a differently-named local field into the `created_at`
+    // column, so the remote row always carries a createdAt the local payload
+    // lacks. 58 book_sentences conflicts sat open on one laptop for that
+    // reason alone (reported 2026-09-19).
+    const cases: [SyncEntity, Record<string, unknown>][] = [
+      ['book_sentences', { id: 'bs_1', status: 'unstarted', addedAt: '2026-09-18T04:18:06.660Z', position: 111 }],
+      ['import_batches', { id: 'ib_1', importedAt: '2026-09-18T04:18:06.660Z' }],
+      ['inbox', { id: 'in_1', addedAt: '2026-09-18T04:18:06.660Z' }],
+      ['reference_audio', { id: 'ra_1', importedAt: '2026-09-18T04:18:06.660Z' }],
+      ['pitch_drill_attempts', { id: 'pd_1', timestamp: '2026-09-18T04:18:06.660Z' }],
+    ];
+    for (const [entity, local] of cases) {
+      const remote = {
+        ...local,
+        created_at: '2026-09-18T04:18:06.660+00:00',
+        updated_at: '2026-09-18T05:04:42.577948+00:00',
+        version: 5,
+        owner_id: 'user-1',
+        client_id: null,
+      };
+      expect(conflictContentsMatch(local, remote, entity), entity).toBe(true);
+      // a real difference is still a conflict
+      expect(conflictContentsMatch({ ...local, marker: 'edited' }, remote, entity), `${entity} real diff`).toBe(false);
+    }
+  });
+
+  it('keeps createdAt significant for entities that do have a local createdAt', () => {
+    const local = { id: 'gp_1', createdAt: '2026-09-18T04:18:06.660Z', canonicalName: 'x' };
+    const remote = { ...local, created_at: undefined, createdAt: '2026-09-19T00:00:00.000Z' };
+    expect(conflictContentsMatch(local, remote, 'grammar_patterns')).toBe(false);
+    expect(conflictContentsMatch(local, remote, 'books')).toBe(false);
   });
 });

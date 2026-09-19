@@ -116,6 +116,54 @@ describe('sweepNoopConflicts', () => {
     expect(open.find((c) => c.id === conflict.id)).toBeUndefined();
   });
 
+  it('clears a stuck book_sentences conflict that differed only by the remote createdAt', async () => {
+    // Reported 2026-09-19: 58 book_sentences conflicts (local v3 vs remote v4)
+    // open on one laptop; the diff showed nothing but a remote-only createdAt.
+    // BookSentence has addedAt, not createdAt, but the mapper fills created_at.
+    const stuck = await addConflict({
+      entity: 'book_sentences',
+      recordId: 'bs_stuck',
+      localPayload: {
+        id: 'bs_stuck',
+        bookId: 'book_1',
+        sentenceId: 'sent_1',
+        position: 111,
+        status: 'unstarted',
+        addedAt: '2026-09-18T04:18:06.660Z',
+        chapterId: 'chapter_1',
+      },
+      remotePayload: {
+        id: 'bs_stuck',
+        book_id: 'book_1',
+        sentence_id: 'sent_1',
+        position: 111,
+        status: 'unstarted',
+        added_at: '2026-09-18T04:18:06.66+00:00',
+        created_at: '2026-09-18T04:18:06.66+00:00',
+        chapter_id: 'chapter_1',
+        last_studied_at: null,
+        note: null,
+        version: 4,
+        owner_id: 'user-1',
+      },
+      localVersion: 3,
+      remoteVersion: 4,
+    });
+    const real = await addConflict({
+      entity: 'book_sentences',
+      recordId: 'bs_real',
+      localPayload: { id: 'bs_real', status: 'completed', addedAt: '2026-09-18T04:18:06.660Z' },
+      remotePayload: { id: 'bs_real', status: 'unstarted', added_at: '2026-09-18T04:18:06.66+00:00', created_at: '2026-09-18T04:18:06.66+00:00', version: 4 },
+      localVersion: 3,
+      remoteVersion: 4,
+    });
+
+    expect(await sweepNoopConflicts()).toBe(1);
+    const open = await listOpenConflicts();
+    expect(open.find((c) => c.id === stuck.id)).toBeUndefined();
+    expect(open.find((c) => c.id === real.id)).toBeDefined(); // a real status difference stays for the learner to decide
+  });
+
   it('leaves a conflict with a real content difference open', async () => {
     await addConflict({
       entity: 'reviews',

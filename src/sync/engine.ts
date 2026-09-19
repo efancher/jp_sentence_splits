@@ -217,7 +217,7 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     if (error) {
       if (
         error.code === '23505' &&
-        (item.entity === 'kanji' || item.entity === 'vocabulary_items') &&
+        isDedupEntity(item.entity) &&
         (await adoptRemoteDuplicate(item.entity, item.recordId, row))
       ) {
         return;
@@ -257,19 +257,42 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
   await acknowledgeSyncedVersion(item.entity, item.recordId, nextVersion);
 }
 
-type DedupEntity = 'kanji' | 'vocabulary_items';
+type DedupEntity =
+  | 'kanji'
+  | 'vocabulary_items'
+  | 'grammar_patterns'
+  | 'sentence_grammar'
+  | 'grammar_relationships';
+
+const DEDUP_ENTITIES = new Set<SyncEntity>([
+  'kanji',
+  'vocabulary_items',
+  'grammar_patterns',
+  'sentence_grammar',
+  'grammar_relationships',
+]);
+
+function isDedupEntity(entity: SyncEntity): entity is DedupEntity {
+  return DEDUP_ENTITIES.has(entity);
+}
 
 /**
- * `kanji`/`vocabulary_items` are get-or-create, deduped locally by natural
- * key (character / expression+reading — see repository.ts's ensureKanji/
- * ensureVocabularyItem). If a device's local cache missed a row that
- * already exists remotely (e.g. a stale cursor from before a bulk import,
- * docs/STATUS.md), get-or-create mints a duplicate with a fresh local id,
- * and its insert hits the remote natural-key unique index (23505) instead
- * of the id-based version_conflict path. Recover by adopting the existing
- * remote row's id in place of retrying an insert that can never succeed.
+ * These entities are get-or-create, deduped locally by a natural key —
+ * `kanji` (character), `vocabulary_items` (expression+reading; repository.ts's
+ * ensureKanji/ensureVocabularyItem), `grammar_patterns` (normalized_key;
+ * ensureGrammarPattern), and the two grammar link tables (`sentence_grammar`
+ * by sentence+pattern, `grammar_relationships` by pair+type). If a device's
+ * local cache missed a row that already exists remotely (a stale cursor, or —
+ * the 2026-09-19 case — a laptop that hadn't synced since the previous day
+ * while another device created the same grammar patterns), get-or-create
+ * mints a duplicate with a fresh local id, and its insert hits the remote
+ * natural-key unique index (23505) instead of the id-based version_conflict
+ * path. That failure is permanent (the insert can never succeed) and it blocked
+ * the whole queue behind it ("10 pending", status stuck on "conflict").
+ * Recover by adopting the existing remote row's id in place of retrying.
+ * Exported for unit tests (with a faked Supabase client) to pin the lookup columns.
  */
-async function adoptRemoteDuplicate(
+export async function adoptRemoteDuplicate(
   entity: DedupEntity,
   localId: string,
   row: Record<string, unknown>,
@@ -277,14 +300,32 @@ async function adoptRemoteDuplicate(
   const supabase = getSupabase();
   if (!supabase) return false;
   const query = supabase.from(entity).select('*').is('deleted_at', null);
-  const { data: remote, error } =
-    entity === 'kanji'
-      ? await query.eq('character', row.character as string).maybeSingle()
-      : await query
-          .eq('expression', row.expression as string)
-          .eq('reading', row.reading as string)
-          .maybeSingle();
-  if (error || !remote) return false;
+  let lookup;
+  switch (entity) {
+    case 'kanji':
+      lookup = query.eq('character', row.character as string);
+      break;
+    case 'vocabulary_items':
+      lookup = query.eq('expression', row.expression as string).eq('reading', row.reading as string);
+      break;
+    case 'grammar_patterns':
+      lookup = query.eq('normalized_key', row.normalized_key as string);
+      break;
+    case 'sentence_grammar':
+      lookup = query
+        .eq('sentence_id', row.sentence_id as string)
+        .eq('grammar_pattern_id', row.grammar_pattern_id as string);
+      break;
+    case 'grammar_relationships':
+      lookup = query
+        .eq('pattern_a_id', row.pattern_a_id as string)
+        .eq('pattern_b_id', row.pattern_b_id as string)
+        .eq('relationship_type', row.relationship_type as string);
+      break;
+  }
+  const { data: remote, error } = await lookup.maybeSingle();
+  // A remote row with our own id would have taken the update path, not this one.
+  if (error || !remote || String(remote.id) === localId) return false;
 
   await remapDuplicateEntityId(entity, localId, remote as Record<string, unknown>);
   syncLog('warn', 'Adopted remote row for duplicate get-or-create insert', 'DEDUP_ADOPT', {
@@ -314,14 +355,40 @@ export async function remapDuplicateEntityId(
 
   await db.transaction(
     'rw',
-    [db.kanji, db.vocabularyItems, db.vocabularyKanji, db.sentenceVocabulary, db.syncQueue, db.syncRecordMeta],
+    [
+      db.kanji,
+      db.vocabularyItems,
+      db.vocabularyKanji,
+      db.sentenceVocabulary,
+      db.grammarPatterns,
+      db.sentenceGrammar,
+      db.grammarRelationships,
+      db.studyItems,
+      db.syncQueue,
+      db.syncRecordMeta,
+    ],
     async () => {
-      if (entity === 'kanji') {
-        await db.kanji.delete(oldId);
-        await db.kanji.put(remoteToKanji(remoteRow));
-      } else {
-        await db.vocabularyItems.delete(oldId);
-        await db.vocabularyItems.put(remoteToVocabularyItem(remoteRow));
+      switch (entity) {
+        case 'kanji':
+          await db.kanji.delete(oldId);
+          await db.kanji.put(remoteToKanji(remoteRow));
+          break;
+        case 'vocabulary_items':
+          await db.vocabularyItems.delete(oldId);
+          await db.vocabularyItems.put(remoteToVocabularyItem(remoteRow));
+          break;
+        case 'grammar_patterns':
+          await db.grammarPatterns.delete(oldId);
+          await db.grammarPatterns.put(remoteToGrammarPattern(remoteRow));
+          break;
+        case 'sentence_grammar':
+          await db.sentenceGrammar.delete(oldId);
+          await db.sentenceGrammar.put(remoteToSentenceGrammar(remoteRow));
+          break;
+        case 'grammar_relationships':
+          await db.grammarRelationships.delete(oldId);
+          await db.grammarRelationships.put(remoteToGrammarRelationship(remoteRow));
+          break;
       }
 
       await db.syncRecordMeta.delete(recordMetaKey(entity, oldId));
@@ -335,12 +402,84 @@ export async function remapDuplicateEntityId(
 
       if (entity === 'kanji') {
         await remapLinkReferences(db.vocabularyKanji, 'kanjiId', oldId, newId, 'vocabulary_kanji');
-      } else {
+      } else if (entity === 'vocabulary_items') {
         await remapLinkReferences(db.vocabularyKanji, 'vocabularyItemId', oldId, newId, 'vocabulary_kanji');
         await remapLinkReferences(db.sentenceVocabulary, 'vocabularyItemId', oldId, newId, 'sentence_vocabulary');
+      } else if (entity === 'grammar_patterns') {
+        // Everything that points at the abandoned local pattern id must follow
+        // the adopted remote one, or it pushes as an orphan.
+        await remapLinkReferences(db.sentenceGrammar, 'grammarPatternId', oldId, newId, 'sentence_grammar');
+        await remapRelationshipReferences(oldId, newId);
+        await remapGrammarStudyItems(oldId, newId);
       }
     },
   );
+}
+
+/**
+ * Repoints local grammar_relationships from `oldId` to `newId`. A relationship
+ * stores its two pattern ids in canonical order (a < b), so swapping one id can
+ * flip the order — re-canonicalize, and update any queued push to match.
+ */
+async function remapRelationshipReferences(oldId: string, newId: string): Promise<void> {
+  const db = getDb();
+  const asA = await db.grammarRelationships.where('patternAId').equals(oldId).toArray();
+  const asB = await db.grammarRelationships.where('patternBId').equals(oldId).toArray();
+  const seen = new Set<string>();
+  for (const relationship of [...asA, ...asB]) {
+    if (seen.has(relationship.id)) continue;
+    seen.add(relationship.id);
+    let a = relationship.patternAId === oldId ? newId : relationship.patternAId;
+    let b = relationship.patternBId === oldId ? newId : relationship.patternBId;
+    if (a > b) [a, b] = [b, a];
+    const updated = { ...relationship, patternAId: a, patternBId: b };
+    await db.grammarRelationships.put(updated);
+    const queueItem = await db.syncQueue
+      .where('[entity+recordId]')
+      .equals(['grammar_relationships', relationship.id])
+      .first();
+    if (queueItem) {
+      await db.syncQueue.put({ ...queueItem, payload: updated, lastError: undefined });
+    }
+  }
+}
+
+/**
+ * Repoints the local study items (one per activity) that are about the
+ * abandoned pattern id. If an item for the same (subject, activity) already
+ * exists under `newId` — which can't happen in the stale-cache scenario this
+ * exists for, since the device would have pulled that item along with the
+ * pattern — it is left alone and logged, rather than merged blind (its reviews
+ * would need repointing too).
+ */
+async function remapGrammarStudyItems(oldId: string, newId: string): Promise<void> {
+  const db = getDb();
+  const items = await db.studyItems
+    .where('[subjectType+subjectId+activityType]')
+    .between(['grammarPattern', oldId, ''], ['grammarPattern', oldId, '\uffff'])
+    .toArray();
+  for (const item of items) {
+    const clash = await db.studyItems
+      .where('[subjectType+subjectId+activityType]')
+      .equals(['grammarPattern', newId, item.activityType])
+      .first();
+    if (clash) {
+      syncLog('warn', 'Grammar study item already exists for adopted pattern; left unmerged', 'DEDUP_STUDY_ITEM_CLASH', {
+        studyItemId: item.id,
+        existingId: clash.id,
+      });
+      continue;
+    }
+    const updated = { ...item, subjectId: newId };
+    await db.studyItems.put(updated);
+    const queueItem = await db.syncQueue
+      .where('[entity+recordId]')
+      .equals(['study_items', item.id])
+      .first();
+    if (queueItem) {
+      await db.syncQueue.put({ ...queueItem, payload: updated, lastError: undefined });
+    }
+  }
 }
 
 /** Repoints every local link row's foreign key (and any queued push for it) from `oldId` to `newId`. */
