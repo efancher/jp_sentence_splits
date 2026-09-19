@@ -6,10 +6,11 @@ import {
   buildParticlePuzzle,
   describeParticlePick,
   findBlankableParticles,
-  gradePuzzle,
   isParticlePuzzleEligible,
   missFocus,
   particleSentenceStats,
+  puzzlePointsAvailable,
+  scorePuzzle,
 } from '../src/lib/particlePuzzle';
 
 /** Build a sentence + particle tokens by finding each given particle after `from`. */
@@ -147,15 +148,29 @@ describe('buildParticlePuzzle', () => {
   });
 });
 
-describe('gradePuzzle', () => {
-  it('grades each blank and flags は/が/も swaps as plausible alternatives', () => {
-    const graded = gradePuzzle({ answers: ['は', 'を', 'に'] }, ['が', 'を', 'で']);
-    expect(graded.correctCount).toBe(1);
-    expect(graded.allCorrect).toBe(false);
-    expect(graded.blanks[0]).toMatchObject({ correct: false, plausibleAlternative: true });
-    expect(graded.blanks[1]).toMatchObject({ correct: true, plausibleAlternative: false });
-    expect(graded.blanks[2]).toMatchObject({ correct: false, plausibleAlternative: false });
-    expect(gradePuzzle({ answers: ['が'] }, ['が']).allCorrect).toBe(true);
+describe('scoring', () => {
+  it('worth one point per blank, each wrong placement costs one, never below 0', () => {
+    expect(puzzlePointsAvailable(3, 0)).toBe(3);
+    expect(puzzlePointsAvailable(3, 2)).toBe(1);
+    expect(puzzlePointsAvailable(3, 9)).toBe(0);
+  });
+
+  it('scores a finished puzzle from the wrong tries per blank', () => {
+    const scored = scorePuzzle({ answers: ['は', 'を', 'に'] }, [['が', 'も'], [], ['で']]);
+    expect(scored.wrongCount).toBe(3);
+    expect(scored.points).toBe(0);
+    expect(scored.maxPoints).toBe(3);
+    expect(scored.allCorrect).toBe(false);
+    expect(scored.blanks[0]).toMatchObject({ correct: false, plausibleAlternative: true });
+    expect(scored.blanks[1]).toMatchObject({ correct: true, wrongTries: [], plausibleAlternative: false });
+    expect(scored.blanks[2]).toMatchObject({ correct: false, plausibleAlternative: false });
+  });
+
+  it('a clean puzzle scores full marks', () => {
+    const scored = scorePuzzle({ answers: ['が', 'を'] }, [[], []]);
+    expect(scored).toMatchObject({ points: 2, maxPoints: 2, wrongCount: 0, allCorrect: true });
+    // missing entries are treated as no wrong tries
+    expect(scorePuzzle({ answers: ['が'] }, []).allCorrect).toBe(true);
   });
 });
 

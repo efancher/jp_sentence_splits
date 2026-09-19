@@ -916,14 +916,16 @@ shortcut ("Play a round") and the `/play` hub. Currently two games:
   translated; occurrences that live only in suspended books are skipped.
 - **Particle Puzzle** (`ParticlePuzzleGame.tsx`, `src/lib/particlePuzzle.ts`) —
   5 real sentences per round with 2–4 particles pulled out into one shared
-  chip bank (plus 1–2 confusable decoys); tap a chip, tap a blank (tap a filled
-  blank to take it back), then Check. The translation stays hidden until the
-  check, and the two preceding sentences from the home book are shown for
-  は/が context. Blanks only 格助詞/係助詞 (が を に と で から は も まで より) —
+  chip bank (plus 1–2 confusable decoys); tap a chip, tap a blank. **Each
+  placement is judged immediately** — right locks in green, wrong flashes red
+  and returns to the bank — and a sentence starts worth one point per blank,
+  losing one per wrong pick (a live "Worth N now" countdown, floor 0), so the
+  cost, not a hidden answer, deters brute-forcing the bank. The translation
+  stays hidden until the sentence is complete, and the two preceding sentences
+  from the home book are shown for は/が context. Blanks only 格助詞/係助詞 (が を に と で から は も まで より) —
   never の, へ, sentence-final or conjunctive particles, and never a particle
   touching another particle (には, でも… — ambiguous compounds). A wrong は/が/も
-  swap is worded "different from the original" (often both grammatical) rather
-  than a flat miss. Eligible sentences: vocabulary confirmed (test particles,
+  swap carries an "often both natural" note (it still costs the point). Eligible sentences: vocabulary confirmed (test particles,
   not unknown words), translation present, ≤60 chars, ≥2 blankable particles,
   not suspended-only. Weakness is **per particle** from the round log: each
   blank is logged as a `GameRoundItem.parts` entry, recent misses become the

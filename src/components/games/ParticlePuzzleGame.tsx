@@ -12,16 +12,17 @@ import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../
 import {
   buildParticlePuzzle,
   describeParticlePick,
-  gradePuzzle,
   PARTICLE_PUZZLE_GAME_ID,
   PARTICLE_PUZZLE_ROUND_SIZE,
+  puzzlePointsAvailable,
+  scorePuzzle,
   type ParticlePuzzle,
 } from '../../lib/particlePuzzle';
 import { GameShell, type GamePhase } from './GameShell';
 
 export { PARTICLE_PUZZLE_GAME_ID };
 
-type Grade = ReturnType<typeof gradePuzzle>;
+type Score = ReturnType<typeof scorePuzzle>;
 type ParticlePuzzleData = Awaited<ReturnType<typeof getParticlePuzzleData>>;
 
 interface Entry {
@@ -32,7 +33,7 @@ interface Entry {
 
 interface Settled extends GameRoundItem {
   entry: Entry;
-  grade: Grade;
+  score: Score;
   why: string;
 }
 
@@ -44,37 +45,49 @@ function filledSentence(puzzle: ParticlePuzzle): string {
 
 function PuzzleCard({
   entry,
-  checked,
-  onCheck,
+  done,
+  onComplete,
 }: {
   entry: Entry;
-  checked: Grade | null;
-  onCheck: (placements: string[]) => void;
+  /** Set once every blank is locked in — the sentence's final score. */
+  done: Score | null;
+  onComplete: (wrongTries: string[][]) => void;
 }) {
   const { puzzle, context, candidate } = entry;
-  // chip id placed in each blank (null = empty)
-  const [placements, setPlacements] = useState<(string | null)[]>(() =>
-    puzzle.answers.map(() => null),
-  );
+  const blankCount = puzzle.answers.length;
+  // chip id locked into each blank once judged correct (null = still open)
+  const [locked, setLocked] = useState<(string | null)[]>(() => puzzle.answers.map(() => null));
+  // what was tried and rejected in each blank, in order
+  const [wrongTries, setWrongTries] = useState<string[][]>(() => puzzle.answers.map(() => []));
   const [selected, setSelected] = useState<string | null>(null);
+  // the most recent wrong placement, shown red until the next tap
+  const [flash, setFlash] = useState<{ blank: number; text: string } | null>(null);
   const chipText = (id: string | null) => puzzle.bank.find((chip) => chip.id === id)?.text ?? '';
-  const placedIds = new Set(placements.filter((id): id is string => id !== null));
-  const allFilled = placements.every((id) => id !== null);
-
-  function tapBlank(blank: number) {
-    if (checked) return;
-    if (selected) {
-      setPlacements((prev) => prev.map((id, i) => (i === blank ? selected : id)));
-      setSelected(null);
-    } else if (placements[blank]) {
-      // Tap a filled blank with nothing selected: send its chip back to the bank.
-      setPlacements((prev) => prev.map((id, i) => (i === blank ? null : id)));
-    }
-  }
+  const lockedIds = new Set(locked.filter((id): id is string => id !== null));
+  const wrongCount = wrongTries.reduce((sum, tries) => sum + tries.length, 0);
 
   function tapChip(id: string) {
-    if (checked || placedIds.has(id)) return;
+    if (done || lockedIds.has(id)) return;
+    setFlash(null);
     setSelected((current) => (current === id ? null : id));
+  }
+
+  // Each placement is judged immediately: right locks green, wrong flashes red,
+  // returns to the bank, and costs a point.
+  function tapBlank(blank: number) {
+    if (done || locked[blank] || !selected) return;
+    const text = chipText(selected);
+    if (text === puzzle.answers[blank]) {
+      const nextLocked = locked.map((id, i) => (i === blank ? selected : id));
+      setLocked(nextLocked);
+      setFlash(null);
+      setSelected(null);
+      if (nextLocked.every((id) => id !== null)) onComplete(wrongTries);
+    } else {
+      setWrongTries((prev) => prev.map((tries, i) => (i === blank ? [...tries, text] : tries)));
+      setFlash({ blank, text });
+      setSelected(null);
+    }
   }
 
   return (
@@ -92,44 +105,44 @@ function PuzzleCard({
       <div className="jp jp-lg" style={{ lineHeight: 2.2 }}>
         {puzzle.segments.map((segment, index) => {
           if (segment.kind === 'text') return <span key={index}>{segment.text}</span>;
-          const id = placements[segment.blank] ?? null;
-          const result = checked?.blanks[segment.blank];
+          const lockedId = locked[segment.blank] ?? null;
+          const flashed = flash?.blank === segment.blank ? flash : null;
+          const label = lockedId
+            ? `Blank ${segment.blank + 1}: ${chipText(lockedId)}, correct`
+            : flashed
+              ? `Blank ${segment.blank + 1}: tried ${flashed.text}, incorrect`
+              : `Blank ${segment.blank + 1}, empty`;
           return (
             <button
               key={index}
               type="button"
               className="ghost"
               onClick={() => tapBlank(segment.blank)}
-              aria-label={
-                id
-                  ? `Blank ${segment.blank + 1}: ${chipText(id)}${
-                      result ? (result.correct ? ', correct' : ', incorrect') : ''
-                    }`
-                  : `Blank ${segment.blank + 1}, empty`
-              }
+              aria-label={label}
               style={{
                 minWidth: '2.6rem',
                 margin: '0 0.15rem',
                 padding: '0.1rem 0.4rem',
                 fontSize: 'inherit',
-                borderStyle: id ? 'solid' : 'dashed',
-                borderColor: result
-                  ? result.correct
-                    ? 'var(--success)'
-                    : 'var(--danger)'
-                  : selected
-                    ? 'var(--accent)'
-                    : undefined,
+                borderStyle: lockedId || flashed ? 'solid' : 'dashed',
+                borderWidth: lockedId || flashed ? 2 : undefined,
+                borderColor: lockedId
+                  ? 'var(--success)'
+                  : flashed
+                    ? 'var(--danger)'
+                    : selected
+                      ? 'var(--accent)'
+                      : undefined,
+                color: lockedId ? 'var(--success)' : flashed ? 'var(--danger)' : undefined,
               }}
             >
-              {id ? chipText(id) : '＿'}
-              {result ? (result.correct ? ' ✓' : ' ✗') : ''}
+              {lockedId ? `${chipText(lockedId)} ✓` : flashed ? `${flashed.text} ✗` : '＿'}
             </button>
           );
         })}
       </div>
 
-      {!checked ? (
+      {!done ? (
         <>
           <div className="row" aria-label="Particle bank">
             {puzzle.bank.map((chip) => (
@@ -138,7 +151,7 @@ function PuzzleCard({
                 type="button"
                 className={selected === chip.id ? 'primary' : 'ghost'}
                 aria-pressed={selected === chip.id}
-                disabled={placedIds.has(chip.id)}
+                disabled={lockedIds.has(chip.id)}
                 onClick={() => tapChip(chip.id)}
                 style={{ minWidth: '2.6rem', fontSize: '1.15rem' }}
               >
@@ -146,30 +159,29 @@ function PuzzleCard({
               </button>
             ))}
           </div>
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              disabled={!allFilled}
-              onClick={() => onCheck(placements.map((id) => chipText(id)))}
-            >
-              Check
-            </button>
+          <div className="row" role="status">
+            <strong>Worth {puzzlePointsAvailable(blankCount, wrongCount)} now</strong>
             <span className="muted" style={{ fontSize: '0.8rem' }}>
-              {allFilled
-                ? 'Tap a filled blank to take its particle back.'
-                : 'Tap a particle, then the blank it belongs in.'}
+              {flash
+                ? `✗ Not ${flash.text} there — that cost a point.`
+                : 'Tap a particle, then the blank it belongs in. Each wrong pick costs a point.'}
             </span>
           </div>
         </>
       ) : (
         <div className="stack" style={{ gap: '0.3rem' }} role="status">
-          {checked.blanks
+          <div>
+            <strong>
+              {done.allCorrect ? '✓ Clean — ' : ''}
+              {done.points} / {done.maxPoints} points
+            </strong>
+          </div>
+          {done.blanks
             .filter((blank) => !blank.correct)
             .map((blank, index) => (
               <div key={index}>
-                ✗ You put <span className="jp">{blank.chosen}</span> — the original used{' '}
-                <span className="jp">{blank.expected}</span>.
+                ✗ For <span className="jp">{blank.expected}</span> you tried{' '}
+                <span className="jp">{blank.wrongTries.join('・')}</span> first.
                 {blank.plausibleAlternative ? (
                   <span className="muted">
                     {' '}
@@ -179,7 +191,6 @@ function PuzzleCard({
                 ) : null}
               </div>
             ))}
-          {checked.allCorrect ? <div>✓ All {checked.blanks.length} correct.</div> : null}
           <div className="muted">{candidate.sentence.translation}</div>
         </div>
       )}
@@ -207,7 +218,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
   const [round, setRound] = useState<Round | null>(null);
   const [phase, setPhase] = useState<GamePhase>('intro');
   const [index, setIndex] = useState(0);
-  const [grade, setGrade] = useState<Grade | null>(null);
+  const [score, setScore] = useState<Score | null>(null);
   const [results, setResults] = useState<Settled[]>([]);
   const shownAt = useRef(Date.now());
   const logged = useRef(false);
@@ -242,7 +253,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
       });
       setPhase('intro');
       setIndex(0);
-      setGrade(null);
+      setScore(null);
       setResults([]);
       logged.current = false;
     },
@@ -276,28 +287,28 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
   const focus = data.focus;
   const entry = entries[index]!;
   const total = entries.length;
-  const totalBlanks = entries.reduce((sum, e) => sum + e.puzzle.answers.length, 0);
-  const totalCorrect = results.reduce((sum, r) => sum + r.points, 0);
+  const maxPoints = entries.reduce((sum, e) => sum + e.puzzle.answers.length, 0);
+  const totalPoints = results.reduce((sum, r) => sum + r.points, 0);
 
-  function handleCheck(placements: string[]) {
-    const graded = gradePuzzle(entry.puzzle, placements);
-    setGrade(graded);
+  function handleComplete(wrongTries: string[][]) {
+    const scored = scorePuzzle(entry.puzzle, wrongTries);
+    setScore(scored);
     setResults((prev) => [
       ...prev,
       {
         ref: entry.candidate.id,
-        correct: graded.allCorrect,
+        correct: scored.allCorrect,
         cluesUsed: 0,
-        wrongGuesses: graded.blanks.length - graded.correctCount,
-        points: graded.correctCount,
+        wrongGuesses: scored.wrongCount,
+        points: scored.points,
         ms: Date.now() - shownAt.current,
-        parts: graded.blanks.map((blank) => ({
+        parts: scored.blanks.map((blank) => ({
           key: blank.expected,
           correct: blank.correct,
-          ...(blank.correct ? {} : { note: blank.chosen }),
+          ...(blank.correct ? {} : { note: blank.wrongTries[0] }),
         })),
         entry,
-        grade: graded,
+        score: scored,
         why: describeParticlePick(pick.signal, entry.candidate.particles, focus),
       },
     ]);
@@ -306,7 +317,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
   function next() {
     if (index + 1 < total) {
       setIndex(index + 1);
-      setGrade(null);
+      setScore(null);
       shownAt.current = Date.now();
       return;
     }
@@ -316,7 +327,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
         gameId: PARTICLE_PUZZLE_GAME_ID,
         signal: pick.signal,
         poolSize: pick.poolSize,
-        items: results.map(({ entry: _entry, grade: _grade, why: _why, ...item }) => item),
+        items: results.map(({ entry: _entry, score: _score, why: _why, ...item }) => item),
       });
     }
     setPhase('result');
@@ -326,11 +337,11 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
     <GameShell
       title="Particle Puzzle"
       phase={phase}
-      progress={{ current: index + (grade ? 1 : 0), total }}
+      progress={{ current: index + (score ? 1 : 0), total }}
       intro={{
         signalLabel: pick.signal === 'any' ? 'Your sentences' : SIGNAL_LABELS[pick.signal],
         whyLine: describeRound(pick, PARTICLE_COPY),
-        roundDescription: `${total} real sentences from your books with their particles removed, about 2 minutes. The translation stays hidden until you check.`,
+        roundDescription: `${total} real sentences from your books with their particles removed, about 2 minutes. Each sentence starts worth one point per blank and loses one for every wrong pick. The translation stays hidden until it's done.`,
         onStart: () => {
           shownAt.current = Date.now();
           setPhase('play');
@@ -339,8 +350,8 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
     >
       {phase === 'play' ? (
         <>
-          <PuzzleCard key={entry.candidate.id} entry={entry} checked={grade} onCheck={handleCheck} />
-          {grade ? (
+          <PuzzleCard key={entry.candidate.id} entry={entry} done={score} onComplete={handleComplete} />
+          {score ? (
             <div>
               <button type="button" className="primary" onClick={next}>
                 {index + 1 < total ? 'Next sentence' : 'See results'}
@@ -354,24 +365,27 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
         <div className="stack">
           <div>
             <strong>
-              {totalCorrect} / {totalBlanks} particles
+              {totalPoints} / {maxPoints} points
             </strong>{' '}
             <span className="muted">
-              — {results.filter((r) => r.correct).length} of {total} sentences perfect
+              — {results.filter((r) => r.correct).length} of {total} sentences with no wrong picks
             </span>
           </div>
           {results.map((r) => (
             <div key={r.ref} className="stack" style={{ gap: '0.25rem' }}>
               <div className="jp jp-lg">
-                {r.correct ? '✓ ' : '✗ '}
-                {filledSentence(r.entry.puzzle)}
+                {r.correct ? '✓ ' : ''}
+                {filledSentence(r.entry.puzzle)}{' '}
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  {r.points} / {r.score.maxPoints}
+                </span>
               </div>
               <div className="muted">{r.entry.candidate.sentence.translation}</div>
-              {r.grade.blanks
+              {r.score.blanks
                 .filter((blank) => !blank.correct)
                 .map((blank, i) => (
                   <div key={i} className="muted" style={{ fontSize: '0.85rem' }}>
-                    You put {blank.chosen} where the original used {blank.expected}.
+                    For {blank.expected} you tried {blank.wrongTries.join('・')} first.
                   </div>
                 ))}
               <div className="muted" style={{ fontSize: '0.85rem' }}>

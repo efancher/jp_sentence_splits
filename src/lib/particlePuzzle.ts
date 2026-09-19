@@ -7,10 +7,14 @@ import { seededShuffle } from './seededShuffle';
  * learner's books with 2–4 of its case/binding particles pulled out into a
  * shared chip bank (plus 1–2 confusable decoys). Tap a chip, tap a blank.
  *
- * Why it isn't trivially gameable: the bank is *shared*, so every placement
- * constrains the others; the translation stays hidden until the check (it
- * would let meaning eliminate options); and preceding sentences supply the
- * は/が context a bare sentence lacks.
+ * Each placement is judged the moment it's made: a right particle locks in
+ * green, a wrong one flashes red and goes back to the bank, and every wrong
+ * placement costs one point from that sentence's total (`puzzlePointsAvailable`
+ * counts it down live, like Word Detective's "worth N now"). The cost — not a
+ * hidden answer — is what deters brute-forcing the bank. The translation stays
+ * hidden until the sentence is complete (it would let meaning eliminate
+ * options), and preceding sentences supply the は/が context a bare sentence
+ * lacks.
  *
  * Deliberately conservative about what it blanks, because a "wrong" that is
  * really a different-but-grammatical sentence is worse than no puzzle:
@@ -162,32 +166,45 @@ export function buildParticlePuzzle(
   return { sentenceId: sentence.id, segments, answers, bank };
 }
 
-export interface BlankGrade {
+export interface BlankScore {
   expected: string;
-  chosen: string;
+  /** Wrong particles tried in this blank before the right one, in order. */
+  wrongTries: string[];
+  /** Right on the first try. */
   correct: boolean;
-  /** A wrong answer that may well be a grammatical alternative (は/が/も). */
+  /** Some wrong try may well have been a grammatical alternative (は/が/も). */
   plausibleAlternative: boolean;
 }
 
-/** Grade a filled puzzle. `placements[i]` is the particle text placed in blank `i`. */
-export function gradePuzzle(
+/** A sentence is worth one point per blank; each wrong placement costs one, never below 0. */
+export function puzzlePointsAvailable(blankCount: number, wrongCount: number): number {
+  return Math.max(0, blankCount - wrongCount);
+}
+
+/** Score a finished puzzle. `wrongTries[i]` is what was tried (and rejected) in blank `i`. */
+export function scorePuzzle(
   puzzle: Pick<ParticlePuzzle, 'answers'>,
-  placements: readonly string[],
-): { blanks: BlankGrade[]; correctCount: number; allCorrect: boolean } {
+  wrongTries: readonly (readonly string[])[],
+): { blanks: BlankScore[]; wrongCount: number; points: number; maxPoints: number; allCorrect: boolean } {
   const blanks = puzzle.answers.map((expected, index) => {
-    const chosen = placements[index] ?? '';
-    const correct = chosen === expected;
+    const tries = [...(wrongTries[index] ?? [])];
     return {
       expected,
-      chosen,
-      correct,
+      wrongTries: tries,
+      correct: tries.length === 0,
       plausibleAlternative:
-        !correct && OFTEN_INTERCHANGEABLE.has(expected) && OFTEN_INTERCHANGEABLE.has(chosen),
+        OFTEN_INTERCHANGEABLE.has(expected) &&
+        tries.some((chosen) => OFTEN_INTERCHANGEABLE.has(chosen)),
     };
   });
-  const correctCount = blanks.filter((blank) => blank.correct).length;
-  return { blanks, correctCount, allCorrect: correctCount === blanks.length };
+  const wrongCount = blanks.reduce((sum, blank) => sum + blank.wrongTries.length, 0);
+  return {
+    blanks,
+    wrongCount,
+    points: puzzlePointsAvailable(blanks.length, wrongCount),
+    maxPoints: blanks.length,
+    allCorrect: wrongCount === 0,
+  };
 }
 
 export interface ParticleHistoryEntry {

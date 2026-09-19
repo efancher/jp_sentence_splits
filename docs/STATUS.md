@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Particle Puzzle: immediate green/red feedback + score countdown**
+  (user request after playing it: liked Word Detective's "worth N now"
+  countdown). Replaced the fill-everything-then-Check flow: each placement is
+  judged as it's made — right locks the blank green (✓), wrong flashes it red
+  (✗) until the next tap and returns the chip to the bank. A sentence is worth
+  one point per blank and loses one per wrong placement (`puzzlePointsAvailable`,
+  floor 0 — a heavily-missed sentence can finish at 0/N; easy to raise to 1 like
+  Word Detective's solve floor if that feels harsh), shown live as "Worth N now".
+  `gradePuzzle` → `scorePuzzle` (per-blank `wrongTries`); the round log's
+  per-blank `parts` still records first-try hit/miss (`note` = first wrong pick),
+  so the weak-spot history is unchanged. Trade-off accepted: with per-pick
+  feedback the shared bank no longer forces a consistent parse — the point cost
+  is what discourages guessing now. Verified in a real browser (wrong pick →
+  red + "Worth 1 now" → "Worth 0 now"; clean sentences 2/2; round 8/10; miss
+  logged; 0 reviews/study items written). Manual test: Particle Puzzle → pick a
+  chip → tap a blank; confirm green lock on right, red on wrong with the
+  countdown dropping, translation + "N / M points" appearing when all blanks
+  lock, and result totals matching.
+
 - **2026-09-19 — Short games: Particle Puzzle shipped**. Second `/play` game
   (`src/lib/particlePuzzle.ts`, `ParticlePuzzleGame.tsx`): 5 real sentences,
   2–4 particles pulled into one shared chip bank + 1–2 confusable decoys, tap
