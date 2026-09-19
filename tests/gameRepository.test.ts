@@ -238,9 +238,11 @@ describe('odd ear out repository', () => {
       override?: [number, number];
       suspendedBook?: boolean;
       wordEnd?: number;
+      /** Text before 語<id> — lets a test put a date in the sentence. */
+      lead?: string;
     } = {},
   ) {
-    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6 } = opts;
+    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6, lead = 'これは' } = opts;
     const db = getDb();
     await db.vocabularyItems.put({
       id,
@@ -252,7 +254,7 @@ describe('odd ear out repository', () => {
       updatedAt: T,
     } as never);
     const sid = `s-${id}`;
-    await addSentence(sid, `これは語${id}です。`);
+    await addSentence(sid, `${lead}語${id}です。`);
     await db.sentenceVocabulary.put({
       id: `l-${id}`,
       sentenceId: sid,
@@ -274,7 +276,7 @@ describe('odd ear out repository', () => {
         result: {
           durationSeconds: 3,
           words: [
-            { text: 'これは', start: 0, end: 1, phones: [] },
+            { text: lead, start: 0, end: 1, phones: [] },
             { text: `語${id}`, start: 1, end: wordEnd, phones: [] },
             { text: 'です。', start: wordEnd, end: 3, phones: [] },
           ],
@@ -333,6 +335,13 @@ describe('odd ear out repository', () => {
     // …and a word with only an override (no current alignment) is not playable at all
     await addPitchWord('ovr-only', 'いのち', 1, { override: [900, 1700], alignmentVersion: null });
     expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['ovr']);
+  });
+
+  it('skips sentences containing a digit+日/月 date — the aligner expands them, skewing every word span', async () => {
+    await addPitchWord('dated', 'さくら', 0, { lead: '16日は' });
+    await addPitchWord('fullwidth', 'いのち', 1, { lead: '１０月に' });
+    await addPitchWord('plain', 'こころ', 0);
+    expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['plain']);
   });
 
   it('skips sentences that live only in suspended books', async () => {

@@ -142,6 +142,7 @@ import {
 import type { TimeRangeMs } from '../lib/recording';
 import {
   buildOddEarHistory,
+  hasAlignerNumeralExpansion,
   inWordShape,
   isPlausibleClipSpan,
   ODD_EAR_OUT_GAME_ID,
@@ -5560,8 +5561,10 @@ export interface OddEarOutClip extends OddEarClip {
  * a word with a dictionary pitch position and 2+ morae, whose *word alone*
  * can be cut out of its reference recording by a **current-version** forced
  * alignment (manual/backfilled `audioStartMs/EndMs` ranges are ignored — they
- * usually include the following particle) with a plausible length. One clip per word per book, skipping sentences that live only in
- * suspended books. Also returns this game's per-shape-pair history from
+ * usually include the following particle) with a plausible length. One clip per
+ * word per book, skipping sentences that live only in suspended books and
+ * sentences containing a digit+日/月 date (the aligner expands those to hiragana
+ * before aligning, which skews every word's span in the sentence). Also returns this game's per-shape-pair history from
  * `gameRounds`. Read-only apart from caching alignments locally. Proficiency
  * is deliberately not required: it's a perception game about accent shape, not
  * a test of knowing the word.
@@ -5620,6 +5623,9 @@ export async function getOddEarOutData(): Promise<{
     const bookId = bookIdBySentenceId.get(link.sentenceId);
     if (!item || !bookId || link.surfaceForm !== item.expression) continue;
     if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
+    // The aligner expands digit+日/月 before aligning, which skews every word's
+    // span in that sentence (see `hasAlignerNumeralExpansion`).
+    if (hasAlignerNumeralExpansion(sentenceById.get(link.sentenceId)!.japanese)) continue;
     const key = `${item.id}:${bookId}`;
     if (!chosen.has(key)) chosen.set(key, { link, item });
   }

@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — Odd Ear Out skips digit+日/月 sentences (from the alignment
+  session's review of the proposed backfill)**. The session that owns the
+  aligner reviewed the `backfill:reference-alignment` plan and flagged that
+  `shadowing-analysis-api`'s `app/numerals.py` rewrites `(\d+)(日|月)` to hiragana
+  readings *before* aligning, so the cached alignment's word texts are longer than
+  the sentence `matchWord` measures against — every word's span in such a sentence
+  is skewed, not just the date's. Odd Ear Out now skips any sentence matching
+  `[0-9０-９]+[日月]` (`hasAlignerNumeralExpansion`; fullwidth included because
+  Python's `\d` matches it). The proper, shared fix — porting the 43-entry
+  day/month table to TypeScript so `matchWord` measures against the same expanded
+  text the aligner saw — would help every word-audio consumer (pitch cards, karaoke
+  text) but means maintaining the table in two languages; on ROADMAP as a
+  possibility, not started. The same review OK'd running the backfill, pending
+  the user's go-ahead: suggested first pass `--limit 20` while watching aligner RSS
+  and timing, with the aligner's weekly restart (Sun 04:08 UTC) as a natural
+  chunk boundary.
+
 - **2026-09-19 — Odd Ear Out: no longer trusts manual/backfilled word ranges
   (conflict with the earlier word-boundary backfill)**. Cross-checking the games
   work against the earlier alignment/word-boundary sessions found a real clash:

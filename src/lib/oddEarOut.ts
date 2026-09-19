@@ -77,6 +77,23 @@ export function inWordShape(
   return { moraCount, shape: expectedPitchShape(moraCount, position).join('') };
 }
 
+/**
+ * The aligner (`shadowing-analysis-api` `app/numerals.py`) rewrites `<digits>日`
+ * / `<digits>月` into hiragana readings (16日 → じゅうろくにち) *before* aligning,
+ * so its word texts are longer than the sentence we hold. `matchWord`
+ * (`isolatedWordRange.ts`) locates a word by character-proportion against that
+ * text, so a sentence with such a date gets every word's span skewed — not just
+ * the date's. Python's `\d` also matches fullwidth digits, hence `０-９`.
+ * Until the day/month table is ported to TypeScript (a shared fix for every
+ * word-audio consumer, on ROADMAP), such sentences are skipped here.
+ */
+const ALIGNER_NUMERAL_EXPANSION = /[0-9０-９]+[日月]/;
+
+/** True when the aligner would have expanded part of this sentence, making word spans unreliable. */
+export function hasAlignerNumeralExpansion(japanese: string): boolean {
+  return ALIGNER_NUMERAL_EXPANSION.test(japanese);
+}
+
 export function isPlausibleClipSpan(span: TimeRangeMs): boolean {
   const length = span.endMs - span.startMs;
   return length >= MIN_CLIP_MS && length <= MAX_CLIP_MS;
