@@ -7,6 +7,8 @@ import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
 import { PitchAccentNativeAudio } from '../components/PitchAccentNativeAudio';
+import { PitchContrastExample } from '../components/PitchContrastExample';
+import { WordPitchContour } from '../components/WordPitchContour';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
@@ -43,6 +45,7 @@ import {
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { useNativeAudio } from '../hooks/useNativeAudio';
+import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
@@ -83,7 +86,7 @@ import {
   type PitchAccentPattern,
 } from '../lib/pitchAccentShape';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
-import { PLAYBACK_SPEEDS } from '../lib/recording';
+import { PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
 /**
@@ -1740,6 +1743,7 @@ export function ReviewPage() {
             ) : current.pitchAccent ? (
               <PitchAccentCard
                 key={current.studyItem.id}
+                onAssist={markAssistance}
                 candidate={current.pitchAccent}
                 revealed={revealed}
                 onCheck={(value, gradedAgainst) => {
@@ -2162,14 +2166,22 @@ function PitchAccentCard({
   candidate,
   revealed,
   onCheck,
+  onAssist,
 }: {
   candidate: PitchAccentReviewCandidate;
   revealed: boolean;
   onCheck: (chosenPosition: string, correctPosition: string) => void;
+  /** Usage tracking — lands in the review's `assistance` log. */
+  onAssist: (kind: ReviewAssistance) => void;
 }) {
   const { vocabularyItem, sentence, surfaceForm, audio, reading, morae, correctPosition, correctLabel } =
     candidate;
   const [selected, setSelected] = useState<number | null>(null);
+  // The span the native-word loop plays (alignment or hand-adjusted), so the
+  // reveal can draw that same span's *measured* pitch beside the dictionary
+  // diagram — the bridge from "what I heard" to "what the contour is".
+  const [wordSpan, setWordSpan] = useState<TimeRangeMs | null>(null);
+  const audioBlob = useSentenceAudioBlob(audio);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
 
   // Drop positions 0..N. 0 = no downstep; N (= morae.length) is odaka —
@@ -2196,6 +2208,8 @@ function PitchAccentCard({
         japanese={sentence.japanese}
         surfaceForm={surfaceForm}
         link={candidate.link}
+        onRangeChange={setWordSpan}
+        onLoopStart={() => onAssist('pitch_native_looped')}
       />
 
       {correctPosition === 0 || correctPosition === morae.length ? (
@@ -2251,6 +2265,25 @@ function PitchAccentCard({
             {correctPosition === 0 ? 'no downstep' : `downstep after mora ${correctPosition}`}
           </div>
           <PitchAccentDiagram reading={reading} position={correctPosition} />
+          <WordPitchContour
+            audioId={audio.id}
+            blob={audioBlob}
+            span={wordSpan}
+            label="Native pitch of this word (measured)"
+            ariaLabel={`Measured native pitch of ${surfaceForm}`}
+          />
+          {selected !== null && selected !== correctPosition ? (
+            <PitchContrastExample
+              moraCount={morae.length}
+              chosenPosition={selected}
+              correctPosition={correctPosition}
+              vocabularyItemId={vocabularyItem.id}
+              reading={reading}
+              sentenceId={sentence.id}
+              onShown={() => onAssist('pitch_contrast_shown')}
+              onPlayed={() => onAssist('pitch_contrast_played')}
+            />
+          ) : null}
           <SentencePitchAccentRow
             japanese={sentence.japanese}
             sentenceId={sentence.id}

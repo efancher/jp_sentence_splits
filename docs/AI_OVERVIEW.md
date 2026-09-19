@@ -1209,6 +1209,16 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   also shows `SentencePitchAccentRow` (see below) for the whole sentence,
   with the card's target word highlighted.
 
+  On the reveal it also draws the **measured** pitch of the native word's span
+  (`WordPitchContour`, cropped from the cached clip track to the loop's span)
+  under the diagram, and — after a wrong pick whose in-word shape differs from
+  the correct one (not heiban↔odaka) — `PitchContrastExample`: a real
+  same-mora-count word with the *picked* shape (`pickContrastClip`, from Odd Ear
+  Out's word-only clips, same book preferred) with its own contour and a play
+  button. Usage is logged as review `assistance` values (`pitch_native_looped`,
+  `pitch_contrast_shown`, `pitch_contrast_played`); read via
+  `scripts/report-pitch-drill-effectiveness.ts`.
+
   `possiblePitchPatternsForMoraCount` in `src/lib/pitchAccentShape.ts` (the
   reachable-category reasoning) is now unused by the card but kept and
   unit-tested.

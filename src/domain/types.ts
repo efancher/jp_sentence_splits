@@ -687,7 +687,13 @@ export type ReviewAssistance =
   | 'audio_replayed'
   | 'chunks_shown'
   | 'hint_shown'
-  | 'multiple_choice';
+  | 'multiple_choice'
+  /** `pitch_accent` only: the learner started the native-word loop at least once before answering. */
+  | 'pitch_native_looped'
+  /** `pitch_accent` only: after a miss, a real word with the picked pattern was offered for comparison. */
+  | 'pitch_contrast_shown'
+  /** `pitch_accent` only: the learner played that comparison word. */
+  | 'pitch_contrast_played';
 
 /**
  * Where this evidence came from (brief §9/§16). Absent/undefined means

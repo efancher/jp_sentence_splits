@@ -282,6 +282,9 @@ export const reviewAssistanceSchema = z.enum([
   'chunks_shown',
   'hint_shown',
   'multiple_choice',
+  'pitch_native_looped',
+  'pitch_contrast_shown',
+  'pitch_contrast_played',
 ]);
 
 export const reviewSourceSchema = z.enum(['scheduled_review', 'natural_encounter']);

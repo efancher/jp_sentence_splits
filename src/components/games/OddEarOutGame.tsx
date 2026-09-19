@@ -3,9 +3,7 @@ import { Link } from 'react-router-dom';
 
 import {
   getOddEarOutData,
-  getReferencePitchTrack,
   logGameRound,
-  saveReferencePitchTrack,
   type OddEarOutClip,
 } from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
@@ -15,7 +13,6 @@ import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../
 import {
   buildContrastCandidates,
   buildOddEarRound,
-  cropPitchPayload,
   describeOddEarPick,
   MAJORITY_SIZE,
   ODD_EAR_COPY,
@@ -27,10 +24,8 @@ import {
   type OddEarCandidate,
   type OddEarTrial,
 } from '../../lib/oddEarOut';
-import type { PitchAnalysisPayload } from '../../lib/pitch';
-import { loadOrComputeReferencePitch } from '../../lib/referencePitchCache';
 import { seededShuffle } from '../../lib/seededShuffle';
-import { MeasuredPitchContour } from '../MeasuredPitchContour';
+import { WordPitchContour } from '../WordPitchContour';
 import { GameShell, type GamePhase } from './GameShell';
 
 type Data = Awaited<ReturnType<typeof getOddEarOutData>>;
@@ -43,28 +38,12 @@ interface Settled extends GameRoundItem {
 
 /** The measured pitch of just this word, cropped from its sentence clip's cached track. Renders nothing if unavailable. */
 function WordContour({ clip, blob }: { clip: OddEarOutClip; blob: Blob | null }) {
-  const [payload, setPayload] = useState<PitchAnalysisPayload | undefined>(undefined);
-  const audioId = clip.audio.id;
-  const { startMs, endMs } = clip.span;
-  useEffect(() => {
-    if (!blob) return;
-    let cancelled = false;
-    void loadOrComputeReferencePitch(audioId, blob, getReferencePitchTrack, saveReferencePitchTrack).then(
-      (track) => {
-        if (!cancelled && track) setPayload(cropPitchPayload(track, { startMs, endMs }));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [audioId, blob, startMs, endMs]);
-  if (!payload) return null;
   return (
-    <MeasuredPitchContour
-      payload={payload}
-      label="Measured pitch"
+    <WordPitchContour
+      audioId={clip.audio.id}
+      blob={blob}
+      span={clip.span}
       ariaLabel={`Measured pitch of ${clip.expression}`}
-      height={40}
     />
   );
 }

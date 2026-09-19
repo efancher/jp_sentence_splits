@@ -73,7 +73,7 @@ async function main() {
 
   const studyItemIds = studyItems.map((s) => s.id);
   const reviews = studyItemIds.length
-    ? await fetchAll(supabase, 'reviews', 'timestamp, rating, pitch_expected_shape, pitch_chosen_shape', (q) =>
+    ? await fetchAll(supabase, 'reviews', 'study_item_id, timestamp, rating, assistance, pitch_expected_shape, pitch_chosen_shape', (q) =>
         q.in('study_item_id', studyItemIds),
       )
     : [];
@@ -141,6 +141,60 @@ async function main() {
       console.log(`${expected} -> ${chosen}  (${count}x)`);
     }
   }
+
+  // Baseline: exact-shape accuracy per expected shape (chance for 2-mora
+  // words is 50%; watch 'hl'/'lh' first — the basic fall-vs-rise contrast).
+  const shaped = reviews.filter((r) => r.pitch_expected_shape && r.pitch_chosen_shape);
+  const byShape = new Map<string, { n: number; ok: number }>();
+  for (const r of shaped) {
+    const row = byShape.get(r.pitch_expected_shape) ?? { n: 0, ok: 0 };
+    row.n += 1;
+    if (r.pitch_expected_shape === r.pitch_chosen_shape) row.ok += 1;
+    byShape.set(r.pitch_expected_shape, row);
+  }
+  console.log('\n=== Card accuracy by expected H/L shape (exact match) ===');
+  for (const [shape, { n, ok }] of [...byShape.entries()].sort((a, b) => b[1].n - a[1].n)) {
+    console.log(`${shape.padEnd(8)} n=${String(n).padEnd(4)} ${Math.round((ok / n) * 100)}%`);
+  }
+
+  // Reveal-scaffolding usage (2026-09-19): the card logs these as review
+  // `assistance` values — no schema of their own. Reviews before that date
+  // simply lack them, so "looped" below is only meaningful going forward.
+  const has = (r: any, kind: string) => Array.isArray(r.assistance) && r.assistance.includes(kind);
+  const pct = (ok: number, n: number) => (n ? `${Math.round((ok / n) * 100)}%` : '—');
+  const passed = (r: any) => r.rating === 'good' || r.rating === 'easy';
+  const since = reviews.filter((r) => r.timestamp >= '2026-09-19');
+  console.log('\n=== Native-word loop before answering (reviews since 2026-09-19) ===');
+  for (const [label, group] of [
+    ['looped', since.filter((r) => has(r, 'pitch_native_looped'))],
+    ['did not loop', since.filter((r) => !has(r, 'pitch_native_looped'))],
+  ] as const) {
+    console.log(`${label.padEnd(13)} n=${String(group.length).padEnd(4)} pass ${pct(group.filter(passed).length, group.length)}`);
+  }
+
+  const misses = since.filter((r) => r.pitch_chosen_shape && r.pitch_chosen_shape !== r.pitch_expected_shape);
+  const shown = misses.filter((r) => has(r, 'pitch_contrast_shown'));
+  const played = shown.filter((r) => has(r, 'pitch_contrast_played'));
+  console.log('\n=== Miss contrast ("what your pick sounds like") ===');
+  console.log(`misses since 2026-09-19: ${misses.length}; contrast offered: ${shown.length}; played: ${played.length}`);
+  // Next review of the same card after a miss — did seeing/playing the contrast help?
+  const nextPass = (group: any[]) => {
+    let n = 0;
+    let ok = 0;
+    for (const miss of group) {
+      const next = reviews
+        .filter((r) => r.study_item_id === miss.study_item_id && r.timestamp > miss.timestamp)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp))[0];
+      if (!next) continue;
+      n += 1;
+      if (passed(next)) ok += 1;
+    }
+    return `${pct(ok, n)} (n=${n})`;
+  };
+  console.log(`next review pass — contrast played:        ${nextPass(played)}`);
+  console.log(`next review pass — offered, not played:    ${nextPass(shown.filter((r) => !has(r, 'pitch_contrast_played')))}`);
+  console.log(`next review pass — no contrast offered:    ${nextPass(misses.filter((r) => !has(r, 'pitch_contrast_shown')))}`);
+  console.log('(correlational — playing the contrast is self-selected.)');
 }
 
 main().catch((error) => {

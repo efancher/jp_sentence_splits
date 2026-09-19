@@ -50,6 +50,8 @@ export function SegmentLoopPlayer({
   loopingLabel = 'Looping word…',
   fallbackHint = 'Couldn’t isolate just the word — play the whole sentence instead.',
   wordOnly = false,
+  onRangeChange,
+  onLoopStart,
 }: {
   audio: SentenceAudio;
   japanese: string;
@@ -61,6 +63,10 @@ export function SegmentLoopPlayer({
   loopingLabel?: string;
   fallbackHint?: string;
   wordOnly?: boolean;
+  /** Reports the span the loop plays (hand override, else the alignment's), or null while unknown — lets a caller draw that same span's measured pitch. */
+  onRangeChange?: (range: TimeRangeMs | null) => void;
+  /** Fires each time the learner starts (not stops) the loop — usage tracking. */
+  onLoopStart?: () => void;
 }) {
   const blob = useSentenceAudioBlob(audio);
   const {
@@ -93,6 +99,16 @@ export function SegmentLoopPlayer({
   }, [link?.id, link?.audioStartMs, link?.audioEndMs]);
 
   const range = override ?? autoRange;
+  const rangeStartMs = range?.startMs;
+  const rangeEndMs = range?.endMs;
+  useEffect(() => {
+    onRangeChange?.(
+      rangeStartMs != null && rangeEndMs != null ? { startMs: rangeStartMs, endMs: rangeEndMs } : null,
+    );
+    // Deliberately keyed on the values, not the callback: an inline arrow
+    // from the parent would otherwise re-fire this every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeStartMs, rangeEndMs]);
 
   // When forced alignment can't place the word (off-tailnet, OOV contraction,
   // degenerate span) there's no `range` at all — and without one the "Adjust"
@@ -143,6 +159,7 @@ export function SegmentLoopPlayer({
 
   async function toggleLoop() {
     if (!editRange) return;
+    if (!isLooping) onLoopStart?.();
     await toggleRangeLoop(editRange);
   }
 

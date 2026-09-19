@@ -33,6 +33,33 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-19 — `pitch_accent` card: measured native contour + "what your pick
+  sounds like" on a miss, with usage tracking**. Prompted by the user still
+  struggling with the pitch card/drill despite doing well on the standalone ear
+  trainers. Prod data (`report-pitch-drill-effectiveness.ts`, 110 shape-tagged
+  reviews) showed the card near chance on the simplest contrast: 2-mora `hl`
+  (atamadaka) answered `lh` 19× vs correct 18×, `lh` 59% — spread across 8 words,
+  not one bad clip; a voiceless-first-mora hypothesis did *not* hold (きょう/さき
+  5/5), misses cluster on all-sonorant words (山, いえ, はい, なか). Two additions on
+  the reveal, both audio→picture bridges, neither touching FSRS grading:
+  1. **Measured contour of the native word** (`WordPitchContour`, shared with Odd
+     Ear Out) beside the dictionary diagram, cropped to the same span the loop
+     plays (`SegmentLoopPlayer` gained `onRangeChange`/`onLoopStart`).
+  2. **Miss contrast** (`PitchContrastExample`, `pickContrastClip` in
+     `src/lib/pitchContrastClip.ts`): after a wrong pick, a real same-mora-count word
+     with the *picked* in-word shape (Odd Ear Out's word-only clips, same book as the
+     card's clip preferred as a same-speaker proxy) with its own measured contour and
+     a play button. Skipped for heiban↔odaka (identical word-only shape) or when no
+     clip fits.
+  **Tracking, no migration:** reviews' existing synced `assistance` jsonb gained
+  `pitch_native_looped` / `pitch_contrast_shown` / `pitch_contrast_played` (a new
+  `reviews` column would have risked the migration-apply gap failing every review
+  push). `report-pitch-drill-effectiveness.ts` now prints accuracy by expected shape,
+  pass-rate looped vs not, and next-review pass-rate after a miss by contrast
+  played / offered / not offered (empty until reviews accrue from 2026-09-19).
+  Considered next, not built (see chat 2026-09-19): binary fall/rise high-volume
+  drill on 2-mora native clips, "hear native first" in Single-words mode,
+  resynthesized contour-flip stimuli.
 - **2026-09-19 — Sync: the stuck grammar links diagnosed (duplicate queue rows +
   orphaned links) and fixed**. The diagnostics added earlier did their job. The
   third report showed the queue: **4 rows, only 2 distinct records — each
