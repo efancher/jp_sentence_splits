@@ -33,6 +33,17 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labels file: a plain "Download file" button; second file analysed (62 labels).** On iPhone
+  the share sheet handed the user an awkward Apple attachment (save to Notes → share → hunt for the real
+  filename). New **Download file** beside **Save labels** skips the share sheet (`saveLabelsFile(...,
+  { download: true })`): Safari puts a real `.json` in Files → Downloads. *Second file (62 labels, 10 new,
+  all from the old worst-first "Needs review" batch; backed up in `~/data/word-boundary-labels/`):* on
+  those 9 scored items (chosen because token and mora cut disagreed) the mora cut was **exactly right in
+  8 and within 50 ms in 1**; the whole-token cut overshot by 320–720 ms every time. A biased sample —
+  kept out of the fair numbers (default analysis = random only) — but strong support that when the two
+  methods disagree the mora cut is the right one. 1 skip (`reduced`: 行っ). The 52 random-sample results
+  are unchanged.
+
 - **2026-09-20 — CI flake: `getStudyItemDebugInfo` "most-recent-first" test.** Two `recordReview` calls in the
   same millisecond tie on `timestamp`, so the newest-first sort returned them in random-id order and CI
   went red (the deploy was skipped) — the same ms-resolution-timestamp class as the sync-queue flake

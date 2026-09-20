@@ -488,7 +488,7 @@ describe('LabelWordAudioPage', () => {
     await user.click(screen.getByRole('button', { name: /save labels/i }));
     await waitFor(() => expect(saveLabelsFile).toHaveBeenCalledTimes(1));
     expect((saveLabelsFile.mock.calls[0]![0] as { id: string }[]).map((l) => l.id)).toEqual(['p1']);
-    expect(await screen.findByText(/labels downloaded as a file/i)).toBeInTheDocument();
+    expect(await screen.findByText(/labels downloaded — look in files/i)).toBeInTheDocument();
   });
 
   it('has a plain "Download file" button that skips the share sheet', async () => {
