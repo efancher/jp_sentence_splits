@@ -125,6 +125,11 @@ const GrammarNoticingFlowPage = lazy(() =>
     default: module.GrammarNoticingFlowPage,
   })),
 );
+const LabelWordAudioPage = lazy(() =>
+  import('./pages/LabelWordAudioPage').then((module) => ({
+    default: module.LabelWordAudioPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({
     default: module.SettingsPage,
@@ -213,6 +218,7 @@ export default function App() {
               element={<ImportBatchPage />}
             />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="label-word-audio" element={<LabelWordAudioPage />} />
             <Route path="help" element={<HelpPage />} />
             <Route path="books/:bookId" element={<BookDetailPage />} />
             <Route

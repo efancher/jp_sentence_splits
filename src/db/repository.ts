@@ -5637,7 +5637,7 @@ export async function getPrecedingSentences(
  * this never falls through to the tailnet MFA service — that needs the audio
  * blob and would mean aligning dozens of clips just to size a game's pool.
  */
-async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string, AlignmentResult>> {
+export async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string, AlignmentResult>> {
   const db = getDb();
   const found = new Map<string, AlignmentResult>();
   if (audioIds.length === 0) return found;

@@ -1109,3 +1109,59 @@ export interface PlannerSession {
   status: 'in_progress' | 'completed' | 'ended_early';
   endedAt?: string;
 }
+
+/** Why a word-boundary labelling item was skipped instead of labelled. */
+export type WordBoundarySkipReason =
+  | 'wrong-word' // the clip doesn't contain the target word
+  | 'audio-mismatch' // the audio doesn't match the sentence text
+  | 'overlap' // overlapping speech / music makes the edges unplaceable
+  | 'noisy'
+  | 'unsure';
+
+export interface WordBoundarySpan {
+  startMs: number;
+  endMs: number;
+}
+
+/** Each estimator's span for the target word, unpadded, at the time of labelling. */
+export interface WordBoundaryEstimates {
+  /** MFA token edges (no reading passed). */
+  token: WordBoundarySpan | null;
+  /** MFA token edges refined to the target's mora boundaries (`inlineReading` passed). */
+  mora: WordBoundarySpan | null;
+  /** What non-pitch loops play: `mora` plus the gap-aware pad. */
+  shipped: WordBoundarySpan | null;
+}
+
+/**
+ * One hand-labelled (or skipped) word-boundary check of the automatic span
+ * (docs/ROADMAP.md "Word-audio ground truth"). Kept local first — written even
+ * offline — and uploaded best-effort to the `word_boundary_labels` table
+ * (`uploadedAt` set once it lands). Deliberately separate from
+ * `SentenceVocabulary.audioStartMs/EndMs`: those are a pitch card's whole loop
+ * range (word + its ending/particle), while a label is the strict word alone.
+ */
+export interface WordBoundaryLabel {
+  id: string;
+  sentenceVocabularyId: string;
+  sentenceId: string;
+  sentenceAudioId: string;
+  bookId?: string;
+  surfaceForm: string;
+  /** `clean` = the shown edges were accepted as right; `corrected` = at least one moved. */
+  verdict: 'clean' | 'corrected' | 'skipped';
+  skipReason?: WordBoundarySkipReason;
+  /** The span the edges started at. */
+  shown: WordBoundarySpan;
+  /** The labelled span (equals `shown` for `clean`); absent when skipped. */
+  label?: WordBoundarySpan;
+  estimates: WordBoundaryEstimates;
+  /** `random` = unbiased stratified sample (use for measurement); `targeted` = chosen for disagreement (use for calibration only). */
+  sampleKind: 'random' | 'targeted';
+  /** Code version of the span logic (`WORD_SPAN_VERSION`) the estimates came from. */
+  spanVersion: string;
+  elapsedMs: number;
+  createdAt: string;
+  /** Set once the label reached Supabase. */
+  uploadedAt?: string;
+}

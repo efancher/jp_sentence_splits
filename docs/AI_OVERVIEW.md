@@ -2196,3 +2196,21 @@ gap — new UI work should default to a real-browser check per CLAUDE.md.
   `vocabulary_confusions`.
 - **PASQA** — investigated (see Gaps section), not integrated, no live
   dependency.
+
+
+## Word-boundary labelling (`/label-word-audio`)
+
+A ground-truth tool for the automatic word clipping (`isolatedWordRange`). Reached from Settings →
+"Label word audio". One item = one confirmed word in a sentence recording; the handles start at the
+automatic word span (mora cut, else whole aligner token) and you accept it, or drag/nudge the start and
+end edges in zoomed ±400 ms waveform views (buttons ±1/±10 ms, arrow keys, "Hear before / Hear after"
+audition per edge, a Play/Stop toggle for the span), or skip with a reason. Two sample kinds: *random*
+(book-stratified; the only fair measurement) and *needs review* (largest token-vs-mora disagreements /
+short mora cuts; calibration only). Labels are the strict word — deliberately **not** written to a
+link's `audioStartMs/EndMs` (a pitch card's loop range includes the ending/particle). Stored local-first
+in Dexie `wordBoundaryLabels` (each with the estimates that were shown and `WORD_SPAN_VERSION`) and
+uploaded best-effort to Supabase `word_boundary_labels` (migration applied by hand). Scored by
+`npm run analyze:word-boundary-labels`. Code: `src/pages/LabelWordAudioPage.tsx`,
+`src/components/BoundaryEdgeEditor.tsx`, `src/lib/wordBoundaryLabels.ts` (estimators, queue selection,
+error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wordBoundaryLabels.ts`,
+`src/sync/wordBoundaryLabelsRemote.ts`.

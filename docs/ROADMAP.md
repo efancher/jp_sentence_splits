@@ -974,15 +974,17 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     and extend the contrast idea; if d′ is still ~0, prioritize the binary
     fall/rise drill.
 
-- [ ] **Word-audio ground truth: a hand-labelling workflow.** (2026-09-20, from the
+- [~] **Word-audio ground truth: a hand-labelling workflow.** *Screen built 2026-09-20 (`/label-word-audio`,
+  STATUS); remaining: run the migration by hand, label ~40 random items, then read
+  `npm run analyze:word-boundary-labels`.* (2026-09-20, from the
   word-audio precision pass.) Everything measured so far is agreement between methods (two
   ASR judges that disagree with each other); ~60 hand-labelled edges would give real error
   numbers and decide the open questions: pad size, whether mora cuts under ~250 ms are good,
   whether pitch cards should keep whole tokens, whether accuracy varies by speaker. Design:
   - **Reuse what exists.** `WordAudioRangeEditor` already has waveform, draggable edges and
     snap-to-pauses; `SegmentLoopPlayer` has the loop + pitch-preserving speed; a saved edit is
-    already the synced override (`audioStartMs/EndMs`), so **every label also fixes that card
-    for real**. Gaps: its waveform covers the whole sentence (100 ms ≈ 10 px), so add a zoomed
+    already the synced override (`audioStartMs/EndMs`) — but **labels are not written there**: an
+    override is a pitch card's whole loop range (word + ending), a label is the strict word. Gaps: its waveform covers the whole sentence (100 ms ≈ 10 px), so add a zoomed
     ±400 ms view per edge, ± nudge buttons (10 ms / 1 ms; arrow keys on desktop), an energy /
     spectrogram strip, and per-edge *audition* buttons (play 300 ms **outside** the edge — should
     contain none of the word — and 300 ms **inside** — should begin with its first sound).
@@ -1020,6 +1022,19 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     verdict on short mora cuts and on token-vs-mora for pitch cards, and a **gold set** so a
     future change (kalpy `fine_tune_alignments`, `tokenizer=None` re-alignment, a new model)
     can be benchmarked in one command.
+  - **Next: test estimator ideas against the gold set (2026-09-20 idea).** Give the models *context* —
+    the words around the target — and let them place the boundary, instead of judging a bare clip
+    (the CTC judge only worked once padded with silence, i.e. it wants context):
+    (a) *CTC context alignment:* run the kana CTC model on the whole sentence (its comfort zone), force-align
+    the known reading (`inlineReading`) to its frame posteriors, and read the target's per-mora times — an
+    independent, mora-level estimator to compare/combine with MFA; (b) *CTC likelihood search:* a window =
+    target + neighbouring words, score candidate [start, end] by the CTC log-likelihood of the expected
+    kana, shifting each edge by mora/word steps and taking the best — a tight window that still contains
+    every mora of the target should win; (c) the same with Whisper (cross-attention word timestamps /
+    round-trip on shifted windows) as a second opinion. None of these can be judged by the ASR judges
+    alone (they disagree on 30 of 68 pairs); with ~40 gold labels each becomes a one-command comparison
+    against `token` / `mora` in `analyze-word-boundary-labels.ts`. Build them as extra estimators only
+    if they beat the mora cut on the gold set.
   - **UI rules (from your preferences).** One Play/Stop toggle (not paired buttons); controls
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.

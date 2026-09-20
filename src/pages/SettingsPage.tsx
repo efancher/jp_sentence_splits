@@ -360,6 +360,17 @@ export function SettingsPage() {
       </section>
 
       <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Word audio labelling</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          Mark where words start and end in their recordings. These hand labels are how we measure — and improve — the
+          automatic word clipping.
+        </p>
+        <Link to="/label-word-audio">
+          <button type="button">Label word audio</button>
+        </Link>
+      </section>
+
+      <section className="panel stack">
         <h3 style={{ margin: 0 }}>Help</h3>
         <p className="muted" style={{ margin: 0 }}>
           Read the workflow guide for importing, organizing, analyzing,

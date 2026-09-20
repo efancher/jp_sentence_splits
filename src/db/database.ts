@@ -11,6 +11,7 @@ import type {
   BookSentence,
   CardIssueReport,
   GameRound,
+  WordBoundaryLabel,
   GrammarPattern,
   GrammarRelationship,
   ImportBatch,
@@ -131,6 +132,9 @@ export class GlossbookDatabase extends Dexie {
   // one row per scored target word per take on PitchAccentDrillPage.
   pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
   gameRounds!: EntityTable<GameRound, 'id'>;
+  // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
+  // local-first; uploaded best-effort to the `word_boundary_labels` table, never via the sync engine.
+  wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -664,6 +668,11 @@ export class GlossbookDatabase extends Dexie {
     // deliberately not synced yet, so purely additive with no Supabase migration.
     this.version(19).stores({
       gameRounds: 'id, timestamp, gameId',
+    });
+
+    // Word-boundary hand labels — local-first (see `WordBoundaryLabel`); no sync wiring.
+    this.version(20).stores({
+      wordBoundaryLabels: 'id, sentenceVocabularyId, createdAt',
     });
   }
 }

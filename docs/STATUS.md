@@ -33,6 +33,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Word-boundary labelling screen built (`/label-word-audio`).** The ground-truth tool
+  from the ROADMAP: shows one target word's automatic span; drag/nudge the two edges onto where the word
+  really starts/ends, or accept it in one tap. Settings → "Label word audio".
+  *Screen:* `LabelWordAudioPage` — setup (Random sample = unbiased, book-stratified round-robin;
+  Needs review = biggest token-vs-mora disagreements / short mora cuts), 25-item sessions, "why this
+  item" chip, collapsible rules ("How to place the edges"; open until first dismissed), Undo last,
+  session summary with a live scoreboard of the estimators against your random-sample labels.
+  Per item: two `BoundaryEdgeEditor`s (±400 ms of waveform around each edge — 10 ms ≈ 7 px vs ~1 px in
+  the whole-sentence Adjust editor; drag, ±1/±10 ms buttons, arrow keys ±1 / Shift ±10), audition buttons
+  per edge ("Hear before/after" — for a start edge the audio before should contain none of the word and
+  after should begin with it; reversed for the end edge), a single Play/Stop toggle for the word span
+  (optional 0.5 s context, half speed — lower pitch), Skip reasons (word isn't in the clip / audio ≠
+  text / overlapping speech / noisy / can't tell). Playback is Web Audio from the decoded buffer
+  (`src/lib/rangePlayer.ts`, sample-accurate; the `<audio>` loop players' ~4 Hz `timeupdate` is far too
+  coarse for a 300 ms slice). Geometry is pure and tested (`src/lib/boundaryEditor.ts`).
+  *Design decisions:* (1) the handles start at the **mora cut** (else token) — the best guess at the word
+  itself; that anchoring is a known bias, so `shown` is stored with every label. (2) Labels are the
+  **strict word** and are **not** written to `SentenceVocabulary.audioStartMs/EndMs` — those are a pitch
+  card's whole loop range including the ending/particle, so writing a strict label there would strip
+  the cue (this corrects the ROADMAP's earlier "every label also fixes the card"). (3) Local-first:
+  labels go to a Dexie table (`wordBoundaryLabels`, v20, no sync engine) and upload best-effort to
+  Supabase `word_boundary_labels` (`src/sync/wordBoundaryLabelsRemote.ts`), so the screen works before
+  the table exists. **To do by hand:** run `supabase/migrations/20260920000000_word_boundary_labels.sql`
+  in the Supabase SQL editor (this environment has no DDL access); until then the Settings/labelling
+  screen shows the pending count and says so, and labels upload automatically afterwards.
+  *Analysis:* `npm run analyze:word-boundary-labels [-- --all]` (reads the table; random sample only by
+  default) prints each estimator's signed error / typical miss / within-25/50 ms per edge, mora vs token
+  split by mora-cut length (<250 ms), per-book bias (speaker proxy), and a pad calibration (p75/p90 of
+  the misses vs the 30/60 ms ceilings). Every label stores the estimates that were shown plus
+  `spanVersion` (`WORD_SPAN_VERSION`, bump when `isolatedWordRange` output changes); estimators can
+  also be recomputed later from the stored audio/alignment, so only the gold `label` is irreplaceable.
+  Tests: `wordBoundaryLabels` (estimators, queue selection, error stats), `boundaryEditor`,
+  and `labelWordAudioPage` (accept / nudge-and-correct / skip / undo / empty / table-missing, with audio
+  decoding mocked). Not built: spectrogram strip, mora-boundary labels, "due soon" queue ordering.
+
 - **2026-09-20 — CTC kana judge tried; mora cut gets a 200 ms floor.** Replacing Whisper as the
   clip judge (it hallucinates stock phrases on sub-second audio): installed
   `sakasegawa/japanese-wav2vec2-large-hiragana-ctc` (Apache-2.0; code
