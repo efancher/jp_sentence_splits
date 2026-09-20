@@ -8,7 +8,7 @@ import {
 } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
-import { alignerCharCount, alignerRangeToRawIndices } from '../lib/isolatedWordRange';
+import { alignerCharCount, alignerRangeToRawIndices, verifiedTokenCharRange } from '../lib/isolatedWordRange';
 import type { MoraUnit } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
@@ -204,9 +204,18 @@ export function SyncedShadowText({
   const isPacing = pitchProgressDuringRecording != null;
   const contourProgress = isPacing ? pitchProgressDuringRecording : pitchProgress;
 
+  // Highlight range as a fraction of the punctuation-free sentence. Exact
+  // token offsets when the tokens verifiably spell the sentence up to the
+  // active one (later <unk> blobs then can't stretch it); otherwise the
+  // proportional approximation over the non-<unk> total.
   const range = useMemo(() => {
     const activeWord = words[activeIndex];
     if (!activeWord || activeWord.text === '<unk>') return null;
+    const sentenceLength = alignerCharCount(japanese);
+    const exact = verifiedTokenCharRange(words, japanese, activeIndex);
+    if (exact && sentenceLength > 0) {
+      return { startFrac: exact.start / sentenceLength, endFrac: exact.end / sentenceLength };
+    }
     let before = 0;
     let total = 0;
     words.forEach((word, index) => {
@@ -216,7 +225,7 @@ export function SyncedShadowText({
     });
     if (total === 0) return null;
     return { startFrac: before / total, endFrac: (before + activeWord.text.length) / total };
-  }, [words, activeIndex]);
+  }, [words, activeIndex, japanese]);
 
   if (words.length === 0) {
     return (

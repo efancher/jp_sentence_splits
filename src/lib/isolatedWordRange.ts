@@ -81,6 +81,41 @@ export function alignerRangeToRawIndices(
   return { start: keptRawIndices[first]!, end: keptRawIndices[last]! + String.fromCodePoint(lastChar).length };
 }
 
+/**
+ * How many leading tokens verifiably spell the sentence (punctuation aside),
+ * counted from the start. Those tokens sit at exact character offsets; the
+ * first mismatch (an <unk> blob, a numeral expansion, a normalized spelling)
+ * means offsets from there on can't be trusted.
+ */
+function verifiedPrefixTokenCount(tokens: { text: string }[], japanese: string): number {
+  const stripped = alignerChars(japanese).join('').toLowerCase();
+  let count = 0;
+  for (let offset = 0; count < tokens.length; count++) {
+    const text = tokens[count]!.text.toLowerCase();
+    if (stripped.slice(offset, offset + text.length) !== text) break;
+    offset += text.length;
+  }
+  return count;
+}
+
+/**
+ * Exact aligner-character range of `tokens[index]` within the sentence, or
+ * null when the tokens up to and including it don't verifiably spell the
+ * sentence's start — callers then fall back to a proportional approximation.
+ * `tokens` must already exclude `<eps>`.
+ */
+export function verifiedTokenCharRange(
+  tokens: { text: string }[],
+  japanese: string,
+  index: number,
+): { start: number; end: number } | null {
+  if (index < 0 || index >= tokens.length) return null;
+  if (verifiedPrefixTokenCount(tokens, japanese) <= index) return null;
+  let start = 0;
+  for (let i = 0; i < index; i++) start += tokens[i]!.text.length;
+  return { start, end: start + tokens[index]!.text.length };
+}
+
 function matchWord(
   words: WordAlignment[],
   japanese: string,
@@ -99,23 +134,51 @@ function matchWord(
   const total = usable.reduce((sum, word) => sum + word.text.length, 0);
   if (total === 0) return null;
 
-  const startFrac = charIndex / sentenceLength;
-  const endFrac = (charIndex + surfaceLength) / sentenceLength;
+  // Tokens that verifiably spell the sentence (punctuation aside), counted
+  // from the start, sit at exact character offsets — nothing after the target
+  // (an <unk> blob, a numeral expansion) can move them. That's the common case
+  // and the only trustworthy one: scaling by the token total instead let two
+  // <unk> tokens *after* the target stretch every position and land 自分 on
+  // the preceding そして.
+  const verifiedTokens = verifiedPrefixTokenCount(usable, japanese);
 
-  let acc = 0;
-  let startMs: number | null = null;
-  let endMs: number | null = null;
-  let lastIndex = -1;
-  usable.forEach((word, index) => {
-    const wordStartFrac = acc / total;
-    acc += word.text.length;
-    const wordEndFrac = acc / total;
-    if (wordEndFrac > startFrac && wordStartFrac < endFrac) {
-      if (startMs === null) startMs = word.start * 1000;
-      endMs = word.end * 1000;
-      lastIndex = index;
-    }
-  });
+  const locate = (
+    startOf: (accBefore: number) => number,
+    endOf: (accAfter: number) => number,
+    rangeStart: number,
+    rangeEnd: number,
+  ) => {
+    let acc = 0;
+    let first: number | null = null;
+    let last = -1;
+    usable.forEach((word, index) => {
+      const wordStart = startOf(acc);
+      acc += word.text.length;
+      const wordEnd = endOf(acc);
+      if (wordEnd > rangeStart && wordStart < rangeEnd) {
+        if (first === null) first = index;
+        last = index;
+      }
+    });
+    return first === null ? null : { first, last };
+  };
+
+  let found = locate((n) => n, (n) => n, charIndex, charIndex + surfaceLength);
+  if (!found || found.last >= verifiedTokens) {
+    // Unverifiable prefix (numeral expansion, normalized spelling): fall back
+    // to the character-proportion approximation.
+    found = locate(
+      (n) => n / total,
+      (n) => n / total,
+      charIndex / sentenceLength,
+      (charIndex + surfaceLength) / sentenceLength,
+    );
+  }
+  if (!found) return null;
+  const startMs: number | null = usable[found.first]!.start * 1000;
+  const endMs: number | null = usable[found.last]!.end * 1000;
+  const lastIndex = found.last;
+
   if (startMs === null || endMs === null || endMs <= startMs) return null;
   // The aligner sometimes crushes a word into a few frames (何 → 30 ms in
   // "え、何あやまってるの？") — no real word is that short, so the span is

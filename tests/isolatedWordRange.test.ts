@@ -4,6 +4,7 @@ import type { WordAlignment } from '../src/domain/types';
 import {
   alignerCharCount,
   alignerRangeToRawIndices,
+  verifiedTokenCharRange,
   isolatedWordRange,
   isolatedWordSpans,
 } from '../src/lib/isolatedWordRange';
@@ -149,6 +150,29 @@ describe('isolatedWordRange padding and degenerate spans', () => {
   });
 });
 
+describe('isolatedWordRange with <unk> tokens after the target', () => {
+  // 無心とは、怒りや恐れ、そして自分がよく… (real alignment shape): two <unk>
+  // blobs later in the sentence used to rescale every position so 自分 mapped
+  // onto the preceding そして.
+  const japanese = 'そして自分がよくポッドキャストなど';
+  const words: WordAlignment[] = [
+    word('そして', 5.75, 6.62),
+    word('<eps>', 6.62, 7.35),
+    word('自分', 7.35, 7.96),
+    word('が', 7.96, 8.15),
+    word('よく', 8.15, 8.51),
+    word('<unk>', 8.51, 9.54),
+    word('など', 9.54, 10.0),
+  ];
+
+  it('locates the word by exact offset, unaffected by later <unk> tokens', () => {
+    expect(isolatedWordSpans(words, japanese, '自分')?.wordOnly).toEqual({
+      startMs: 7290, // 60ms onset pad: 0.73s of silence before 自分
+      endMs: 7990, // が follows immediately → 30ms slack
+    });
+  });
+});
+
 describe('isolatedWordRange particle folding', () => {
   // 生まれた時から、この小さい場所、山の中 — real alignment shape (sent_17d1bdde).
   const japanese = '生まれた時から、この小さい場所、山の中';
@@ -242,5 +266,20 @@ describe('alignerRangeToRawIndices', () => {
 
   it('does not extend the end over trailing punctuation', () => {
     expect(alignerRangeToRawIndices(japanese, 5, 6)).toEqual({ start: 6, end: 7 });
+  });
+});
+
+describe('verifiedTokenCharRange', () => {
+  const japanese = 'そして、自分がよくポッド';
+  const tokens = [{ text: 'そして' }, { text: '自分' }, { text: 'が' }, { text: 'よく' }, { text: '<unk>' }];
+
+  it('gives exact aligner-character offsets, ignoring punctuation and later <unk>', () => {
+    expect(verifiedTokenCharRange(tokens, japanese, 1)).toEqual({ start: 3, end: 5 });
+    expect(verifiedTokenCharRange(tokens, japanese, 3)).toEqual({ start: 6, end: 8 });
+  });
+
+  it('returns null past a token that does not spell the sentence', () => {
+    expect(verifiedTokenCharRange(tokens, japanese, 4)).toBeNull();
+    expect(verifiedTokenCharRange(tokens, 'ぜんぜん違う文', 0)).toBeNull();
   });
 });

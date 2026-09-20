@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Word span landed on the *previous* word when the sentence had `<unk>`
+  tokens later on (study item for 自分 in 無心とは、怒りや恐れ、そして自分が…: loop played そして).**
+  Third `matchWord` cause. It located the word by *fraction* of the token total, and
+  `<unk>` tokens are excluded from that total — so two `<unk>` blobs *after* the target
+  shrank the denominator and stretched every position earlier (the existing `<unk>`
+  guard only covered tokens before the match). Now, whenever the leading tokens
+  verifiably spell the sentence (`verifiedPrefixTokenCount`, punctuation aside), the
+  match uses exact character offsets; the proportional mapping stays only as the
+  fallback for unverifiable prefixes (numeral expansion, normalized spellings). Against
+  870 real links the exact mapping changes 34 (4%), all spot-checked ones onto the
+  correct word (e.g. 恐れ [2650,5060] → [4090,5060]). `SyncedShadowText`'s karaoke
+  highlight had the same stretch and uses the same `verifiedTokenCharRange` helper.
+  Audit re-run cleared 2 more stale backfilled overrides (たくさん [1590,4060] →
+  [3220,4060]); 0 stale left. 3 new tests.
+
 - **2026-09-20 — Word-clip pad is computed from the gap to neighbouring tokens; degenerate
   matches fall back.** Follow-up to the particle-fold fix (both left open there).
   *Pad:* the fixed −60/+120 ms became ceilings (`ONSET_PAD_MS`/`TAIL_PAD_MS` in
