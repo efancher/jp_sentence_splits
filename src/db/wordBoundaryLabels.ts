@@ -5,6 +5,7 @@ import type {
   WordAlignment,
   WordBoundaryEstimates,
   WordBoundaryLabel,
+  WordBoundarySkipReason,
 } from '../domain/types';
 import { createId } from '../lib/ids';
 import { estimateWordSpans, startingSpan } from '../lib/wordBoundaryLabels';
@@ -27,6 +28,13 @@ export async function saveWordBoundaryLabel(label: WordBoundaryLabel): Promise<v
 
 export async function listWordBoundaryLabels(): Promise<WordBoundaryLabel[]> {
   return getDb().wordBoundaryLabels.orderBy('createdAt').toArray();
+}
+
+/** Changes the reason on an already-skipped label (a mis-tap). Other verdicts are edited by deleting and re-labelling. */
+export async function updateSkipReason(id: string, skipReason: WordBoundarySkipReason): Promise<void> {
+  const db = getDb();
+  const label = await db.wordBoundaryLabels.get(id);
+  if (label?.verdict === 'skipped') await db.wordBoundaryLabels.update(id, { skipReason });
 }
 
 export async function deleteWordBoundaryLabel(id: string): Promise<void> {

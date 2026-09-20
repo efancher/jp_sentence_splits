@@ -9,6 +9,7 @@ import {
   loadWordBoundaryCandidatesForLinks,
   newWordBoundaryLabelId,
   saveWordBoundaryLabel,
+  updateSkipReason,
   type WordBoundaryCandidate,
 } from '../db/wordBoundaryLabels';
 import type { WordBoundaryLabel, WordBoundarySkipReason, WordBoundarySpan } from '../domain/types';
@@ -219,6 +220,18 @@ export function LabelWordAudioPage() {
     setPhase('setup');
   }
 
+  /** Fix a mis-tapped skip reason on any past label — works across reloads, unlike "Undo last". */
+  async function changeSkipReason(id: string, reason: WordBoundarySkipReason) {
+    await updateSkipReason(id, reason);
+    await refresh();
+  }
+
+  /** Take a past label back; the item can then come up again in a later batch. */
+  async function removeLabel(id: string) {
+    await deleteWordBoundaryLabel(id);
+    await refresh();
+  }
+
   function discardSession() {
     clearStoredSession();
     setStored(null);
@@ -251,6 +264,9 @@ export function LabelWordAudioPage() {
           resumeInfo={stored && leftInStored > 0 ? { left: leftInStored, planned: stored.linkIds.length } : null}
           onResume={() => stored && void resume(stored, allLabels)}
           onDiscard={discardSession}
+          recentLabels={[...allLabels].reverse().slice(0, 15)}
+          onChangeSkipReason={(id, reason) => void changeSkipReason(id, reason)}
+          onDeleteLabel={(id) => void removeLabel(id)}
         />
       )}
 
@@ -308,6 +324,9 @@ function SetupPanel({
   resumeInfo,
   onResume,
   onDiscard,
+  recentLabels,
+  onChangeSkipReason,
+  onDeleteLabel,
 }: {
   mode: Mode;
   onMode: (m: Mode) => void;
@@ -323,6 +342,9 @@ function SetupPanel({
   resumeInfo: { left: number; planned: number } | null;
   onResume: () => void;
   onDiscard: () => void;
+  recentLabels: WordBoundaryLabel[];
+  onChangeSkipReason: (id: string, reason: WordBoundarySkipReason) => void;
+  onDeleteLabel: (id: string) => void;
 }) {
   return (
     <section className="panel stack">
@@ -388,6 +410,7 @@ function SetupPanel({
         {total} labelled so far ({randomCount} from random samples — about 40 is enough for a first look).
       </p>
       <SaveLabels total={total} unsaved={unsaved} note={saveNote} onSave={onSaveFile} />
+      <RecentLabels labels={recentLabels} onChangeReason={onChangeSkipReason} onDelete={onDeleteLabel} />
       <RulesPanel defaultOpen={!hasSeenRules()} />
       <p className="muted" style={{ margin: 0 }}>
         <Link to="/settings">Back to settings</Link>
@@ -421,6 +444,78 @@ function SaveLabels({
         {note ? <span className="muted">{note}</span> : null}
       </div>
     </div>
+  );
+}
+
+const VERDICT_TEXT: Record<WordBoundaryLabel['verdict'], string> = {
+  clean: 'accepted as detected',
+  corrected: 'corrected',
+  skipped: 'skipped',
+};
+
+/**
+ * The latest labels, with the two fixes a slip needs: change a skip's reason (the
+ * "clicked too quick" case) or delete the label so the item can be labelled again.
+ * Deleting takes a second tap. Works across reloads — unlike "Undo last", which
+ * only reaches labels made in the current page load.
+ */
+function RecentLabels({
+  labels,
+  onChangeReason,
+  onDelete,
+}: {
+  labels: WordBoundaryLabel[];
+  onChangeReason: (id: string, reason: WordBoundarySkipReason) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [confirming, setConfirming] = useState<string | null>(null);
+  if (labels.length === 0) return null;
+  return (
+    <details>
+      <summary>Your recent labels ({labels.length}) — fix a slip</summary>
+      <div className="stack" style={{ gap: '0.4rem', marginTop: '0.5rem' }}>
+        {labels.map((label) => (
+          <div key={label.id} className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <strong className="jp">{label.surfaceForm}</strong>
+            <span className="muted">{VERDICT_TEXT[label.verdict]}</span>
+            {label.verdict === 'skipped' &&
+              (SKIP_REASONS.some((r) => r.reason === label.skipReason) ? (
+                <select
+                  aria-label={`Reason for skipping ${label.surfaceForm}`}
+                  value={label.skipReason}
+                  onChange={(e) => onChangeReason(label.id, e.target.value as WordBoundarySkipReason)}
+                >
+                  {SKIP_REASONS.map(({ reason, label: text }) => (
+                    <option key={reason} value={reason}>
+                      {text}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="muted">({label.skipReason})</span>
+              ))}
+            <button
+              type="button"
+              className="secondary"
+              aria-label={`Delete label for ${label.surfaceForm}`}
+              onClick={() => {
+                if (confirming === label.id) {
+                  setConfirming(null);
+                  onDelete(label.id);
+                } else {
+                  setConfirming(label.id);
+                }
+              }}
+            >
+              {confirming === label.id ? 'Really delete?' : 'Delete'}
+            </button>
+          </div>
+        ))}
+        <span className="muted" style={{ fontSize: '0.85rem' }}>
+          Deleting a label puts that word back in the pool, so it can come up again in a later batch.
+        </span>
+      </div>
+    </details>
   );
 }
 

@@ -33,6 +33,14 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labeller: "Your recent labels" — fix a mis-tapped skip after a reload.** User tapped
+  "Word isn't in this clip" too quickly on a slurred word and "Undo last" was greyed out (it only knows the
+  current page load's labels). The start screen now has a collapsible **Your recent labels** list (latest
+  15, survives reloads): a skipped label has a reason dropdown (change it in place), any label has
+  **Delete** (second tap confirms) which puts the word back in the pool. `updateSkipReason` only touches
+  skipped labels. Deleting then re-labelling is how a corrected/clean label is redone. Tests: three page
+  tests (change reason, two-step delete, non-skips have no reason).
+
 - **2026-09-20 — Labeller: "Word is slurred / merged into its neighbour" skip reason.** User hit
   「羽田空港に行って」: the speaker says "nitte" (the い of 行って merges into the に's vowel), so the target
   word has no separable start. Not a speaker error — ordinary casual-speech vowel merger — and not "word

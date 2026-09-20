@@ -10,6 +10,7 @@ import {
   loadWordBoundaryCandidates,
   loadWordBoundaryCandidatesForLinks,
   saveWordBoundaryLabel,
+  updateSkipReason,
 } from '../src/db/wordBoundaryLabels';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { createId } from '../src/lib/ids';
@@ -285,6 +286,45 @@ describe('LabelWordAudioPage', () => {
     await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
     const [label] = await listWordBoundaryLabels();
     expect(label).toMatchObject({ verdict: 'skipped', skipReason: 'undecodable' });
+  });
+
+  describe('fixing a slip after a reload', () => {
+    const past = (id: string, over: Record<string, unknown> = {}) => ({
+      id, sentenceVocabularyId: `v-${id}`, sentenceId: 's', sentenceAudioId: 'a', surfaceForm: `語${id}`, verdict: 'skipped' as const,
+      skipReason: 'wrong-word' as const, shown: { startMs: 1, endMs: 2 }, estimates: { token: null, mora: null, shipped: null },
+      sampleKind: 'random' as const, spanVersion: 'v', elapsedMs: 1, createdAt: T, ...over,
+    });
+
+    it('changes the reason on a skipped label you tapped too quickly', async () => {
+      await saveWordBoundaryLabel(past('a'));
+      const user = userEvent.setup();
+      renderPage(); // a fresh page load: "Undo last" knows nothing about it
+      await user.click(await screen.findByText(/your recent labels/i));
+      await user.selectOptions(screen.getByRole('combobox', { name: /reason for skipping 語a/i }), 'reduced');
+      await waitFor(async () => expect((await listWordBoundaryLabels())[0]!.skipReason).toBe('reduced'));
+    });
+
+    it('deletes a label (after a confirming second tap) so the word can come up again', async () => {
+      await saveWordBoundaryLabel(past('a'));
+      await saveWordBoundaryLabel(past('b', { verdict: 'clean', skipReason: undefined, label: { startMs: 1, endMs: 2 } }));
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByText(/your recent labels/i));
+      await user.click(screen.getByRole('button', { name: /delete label for 語a/i }));
+      expect(await listWordBoundaryLabels()).toHaveLength(2); // first tap only asks
+      await user.click(screen.getByRole('button', { name: /delete label for 語a/i }));
+      await waitFor(async () => expect((await listWordBoundaryLabels()).map((l) => l.id)).toEqual(['b']));
+    });
+
+    it('only skipped labels have a reason to change', async () => {
+      await saveWordBoundaryLabel(past('b', { verdict: 'clean', skipReason: undefined, label: { startMs: 1, endMs: 2 } }));
+      await updateSkipReason('b', 'noisy'); // ignored: not a skip
+      expect((await listWordBoundaryLabels())[0]!.skipReason).toBeUndefined();
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByText(/your recent labels/i));
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    });
   });
 
   describe('sampling situations', () => {
