@@ -7,6 +7,7 @@ import {
   estimateWordSpans,
   estimatorDisagreementMs,
   labelReason,
+  occurrenceCount,
   percentile,
   pickLabelQueue,
   startingSpan,
@@ -124,6 +125,16 @@ describe('pickLabelQueue', () => {
 
   it('targeted: nothing to draw when everything is plain', () => {
     expect(pickLabelQueue([cand('a', 'b', [0, 800], [0, 800])], 'targeted', 5, seeded(1))).toEqual([]);
+  });
+});
+
+describe('occurrenceCount', () => {
+  it('counts non-overlapping occurrences', () => {
+    expect(occurrenceCount('虫の声、鳥の声。', '声')).toBe(2);
+    expect(occurrenceCount('人間の声', '声')).toBe(1);
+    expect(occurrenceCount('ああああ', 'ああ')).toBe(2);
+    expect(occurrenceCount('猫', '犬')).toBe(0);
+    expect(occurrenceCount('猫', '')).toBe(0);
   });
 });
 

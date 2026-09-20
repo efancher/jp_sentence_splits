@@ -35,6 +35,7 @@ import {
   edgeErrors,
   edgesMoved,
   labelReason,
+  occurrenceCount,
   pickLabelQueue,
   startingSpan,
   stratumCounts,
@@ -560,7 +561,8 @@ function RulesPanel({ defaultOpen }: { defaultOpen: boolean }) {
         </p>
         <p style={{ margin: 0 }}>
           The target is the highlighted <em>word only</em> — not the particle or ending after it, even if that’s what a
-          card plays. If the clip doesn’t contain the word, or you can’t tell, use “Can’t label this”. If the speaker
+          card plays. If the word appears more than once in the sentence, label the highlighted (first) one. If the clip
+          doesn’t contain the word, or you can’t tell, use “Can’t label this”. If the speaker
           slurs it so a sound merges into the word next to it (に行って sounding like “nitte”), pick “slurred / merged”
           — there is no clean edge to mark, and it is worth counting. A whispered (devoiced) vowel is <em>not</em> that:
           聞こえ often sounds like “tsukoe” because the き is breathy — the burst is still the start of the word, so label
@@ -692,6 +694,12 @@ function LabelItem({
         <div className="muted">
           Target: <strong className="jp">{candidate.surfaceForm}</strong> — just this word.
         </div>
+        {occurrenceCount(candidate.japanese, candidate.surfaceForm) > 1 ? (
+          <div className="muted">
+            This word appears {occurrenceCount(candidate.japanese, candidate.surfaceForm)} times in the sentence — label the
+            highlighted (first) one.
+          </div>
+        ) : null}
         <RulesPanel defaultOpen={false} />
       </section>
 

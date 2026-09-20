@@ -103,6 +103,14 @@ export interface QueueCandidate {
   estimates: WordBoundaryEstimates;
 }
 
+/** How many times `surfaceForm` occurs in `japanese` (non-overlapping). The app's links don't record *which* occurrence — every one is a valid native example of the word. */
+export function occurrenceCount(japanese: string, surfaceForm: string): number {
+  if (!surfaceForm) return 0;
+  let count = 0;
+  for (let i = japanese.indexOf(surfaceForm); i >= 0; i = japanese.indexOf(surfaceForm, i + surfaceForm.length)) count += 1;
+  return count;
+}
+
 const DIGITS_OR_LATIN = /[0-9０-９A-Za-zＡ-Ｚａ-ｚ]/;
 
 export function stratumOf(c: QueueCandidate): LabelStratum {

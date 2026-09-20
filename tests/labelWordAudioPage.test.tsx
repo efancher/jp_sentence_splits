@@ -62,13 +62,13 @@ function phones(spec: string, startMs: number) {
 }
 
 /** 生まれた時 — target 生まれ (ends inside the token 生まれた, at 1420 ms). */
-async function seed(options: { withAlignment?: boolean; suspended?: boolean; sentenceId?: string; surfaceForm?: string } = {}) {
-  const { withAlignment = true, suspended = false, sentenceId = createId('sent'), surfaceForm = '生まれ' } = options;
+async function seed(options: { withAlignment?: boolean; suspended?: boolean; sentenceId?: string; surfaceForm?: string; japanese?: string; inlineReading?: string } = {}) {
+  const { withAlignment = true, suspended = false, sentenceId = createId('sent'), surfaceForm = '生まれ', japanese = '生まれた時', inlineReading = '生まれ[うまれ]た時[とき]' } = options;
   const db = getDb();
   const bookId = createId('book');
   await db.books.put({ id: bookId, title: 'b', createdAt: T, updatedAt: T, ...(suspended ? { suspendedAt: T } : {}) } as never);
   await db.sentences.put({
-    id: sentenceId, normalizedKey: sentenceId, japanese: '生まれた時', readingOnly: '', inlineReading: '生まれ[うまれ]た時[とき]',
+    id: sentenceId, normalizedKey: sentenceId, japanese, readingOnly: '', inlineReading,
     translation: '', targetVocabulary: [], vocabularySuggestions: [], sourceReferences: [], conflicts: [],
     firstOccurrenceIndex: 0, importBatchIds: [], createdAt: T, updatedAt: T,
   } as never);
@@ -324,6 +324,26 @@ describe('LabelWordAudioPage', () => {
       renderPage();
       await user.click(await screen.findByText(/your recent labels/i));
       expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('a word that appears twice in the sentence', () => {
+    it('tells you to label the highlighted first one', async () => {
+      // 生まれ occurs twice; the links don't record which, so the screen always means the first.
+      await seed({ japanese: '生まれた時、生まれた', inlineReading: '生まれ[うまれ]た時[とき]、生まれた' });
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+      expect(await screen.findByText(/appears 2 times in the sentence — label the highlighted \(first\) one/i)).toBeInTheDocument();
+    });
+
+    it('says nothing when the word occurs once', async () => {
+      await seed();
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+      await screen.findByRole('button', { name: /both edges are right/i });
+      expect(screen.queryByText(/times in the sentence/i)).not.toBeInTheDocument();
     });
   });
 

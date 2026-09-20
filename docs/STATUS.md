@@ -33,6 +33,20 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Repeated words: not a playback bug — a labelling hint; override audit.** Investigated the
+  "`matchWord` takes the first occurrence" item (33 of 1334 links, 2.5%): **the data can't say which
+  occurrence a link means** — there is exactly one `sentence_vocabulary` row per word per sentence,
+  `sentence.targetVocabulary` was empty for 30 of the 33 sentences, and `vocabularySuggestions` lists *every*
+  occurrence. So each occurrence is an equally valid native example and playing the first is correct; the 声
+  "miss" (1.7 s) was the labeller highlighting the first occurrence while the user labelled the second
+  (the aligner's timing there is also questionable). Fix is in the labeller: a line "This word appears N
+  times in the sentence — label the highlighted (first) one" + the same sentence in the rules panel;
+  `occurrenceCount` (tested). Treat that one label as ambiguous, not as a matching bug. *Override audit
+  (read-only, dry run):* 40 backfilled ranges still correct, 21 manual untouched, **2 stale — 簡単
+  [1120,1540] and 8月 [340,950]** — for both the current logic returns no span (the squashed-alignment
+  guard now flags the timing there) yet the stored override would still win; not cleared, awaiting the
+  user's go-ahead (`audit-backfilled-word-ranges.ts --apply`).
+
 - **2026-09-20 — Labels file: a plain "Download file" button; second file analysed (62 labels).** On iPhone
   the share sheet handed the user an awkward Apple attachment (save to Notes → share → hunt for the real
   filename). New **Download file** beside **Save labels** skips the share sheet (`saveLabelsFile(...,
