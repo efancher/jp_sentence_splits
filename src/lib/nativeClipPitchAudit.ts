@@ -2,6 +2,7 @@ import type { WordAlignment } from '../domain/types';
 import type { PitchAnalysisPayload } from './pitch';
 import { classifyLearnerMorae } from './pitchAccentObservations';
 import { expectedPitchShape } from './pitchAccentShape';
+import { fitAccentShape } from './pitchShapeFit';
 
 /**
  * Audits whether a *native* clip actually realizes the dictionary accent it's
@@ -23,6 +24,12 @@ export interface NativeWordMeasurement {
   agrees: boolean | null;
   /** How many of the word's mora buckets had any voiced frame. */
   voicedBuckets: number;
+  /** The best-fitting *valid* accent shape (`fitAccentShape`) — more robust than the per-mora rule on native audio; null when there is no clear contrast. */
+  fitShape: string | null;
+  /** Whether `fitShape === expectedShape`; null when the fit is unavailable. */
+  fitAgrees: boolean | null;
+  /** High − low contrast of the fitted shape, semitones. */
+  fitContrastSemitones: number | null;
   /**
    * Mean(expected-high buckets) − mean(expected-low buckets), in semitones,
    * using only voiced buckets — how far apart the clip's highs and lows
@@ -58,7 +65,7 @@ export function measureNativeWord({
   const word: WordAlignment = { text: surfaceForm, start: startMs / 1000, end: endMs / 1000, phones: [] };
   const result = classifyLearnerMorae(word, moraCount, pitch, undefined, moraIntervals);
   if (!result) {
-    return { moraCount, expectedShape, measuredShape: null, agrees: null, voicedBuckets: 0, separationSemitones: null };
+    return { moraCount, expectedShape, measuredShape: null, agrees: null, voicedBuckets: 0, fitShape: null, fitAgrees: null, fitContrastSemitones: null, separationSemitones: null };
   }
 
   const highs: number[] = [];
@@ -69,7 +76,12 @@ export function measureNativeWord({
   });
   const avg = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   const measuredShape = result.classes.slice(0, moraCount).join('');
+  const fit = fitAccentShape(result.bucketMeans);
+  const fitShape = fit ? fit.shape.join('') : null;
   return {
+    fitShape,
+    fitAgrees: fitShape === null ? null : fitShape === expectedShape,
+    fitContrastSemitones: fit ? fit.contrastSemitones : null,
     moraCount,
     expectedShape,
     measuredShape,

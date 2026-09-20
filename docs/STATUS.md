@@ -33,6 +33,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Native pitch shape: fit a valid accent shape instead of judging each mora against the mean
+  (40% → 56% agreement with the dictionary).** Step 1 of the phrase-level pitch plan. The per-mora rule
+  (`classifyLearnerMorae`: high if ≥ the word's mean) fails on plateaus: the audit's per-shape breakdown showed
+  long heiban words at **10%** (4-mora `lhhh`) and 38% (`lhh`) — the later morae drift a little below the mean and
+  are called low. New `src/lib/pitchShapeFit.ts` (`fitAccentShape`, `validAccentShapes`): least-squares fit of
+  the app's own valid in-word shapes (`expectedPitchShape` positions 0..n) to per-mora mean pitch, free level per
+  class, **high ≥ low enforced** (without it every plateau "fits" by flipping polarity: 30% and 0% on heiban),
+  unvoiced morae abstain, returns the contrast (semitones) and the margin to the runner-up. *Experiment
+  (`scripts/experiment-pitch-classifier.py`, 219 native clips, exact mora intervals; agreement = measured
+  shape equals dictionary shape):* baseline **71/178 = 40%**; valid-shape fit **93–94/169 = 55–56%**; with a
+  contrast ≥1 st floor 58% of 137 (fewer measurable); median 53%; middle-60%-of-mora frames 52%; second-half
+  57% of 142; outlier trimming 44–51%; a linear drift term 43% — **the plain fit on all frames wins**
+  (correct-count and simplicity). Per group: `lhhh` 10→43%, `lhh` 38→63%, `hlll` 25→75%, `hll` 36→55%,
+  `lhl` 29→42%; `lhll` 33→22% and `lh` 53% unchanged (small n). **Native audio only, deliberately:** a learner
+  can produce a contour that is not valid Japanese (flat; high start with no drop) and forcing it into a valid
+  shape would hide the mistake, so the learner classifier stays descriptive — the fit's `contrastSemitones`
+  is how a flat production shows up (≈0). Wired into `measureNativeWord` (`fitShape` / `fitAgrees` /
+  `fitContrastSemitones`) and printed by the audit next to the old rule. Absolute agreement is still only ~56%:
+  natives don't always realise the *citation* accent audibly in connected speech (which is itself the argument
+  for teaching from the native recording rather than a rule-predicted target). Tests: `pitchShapeFit` (8),
+  two in `nativeClipPitchAudit` (a drifting heiban plateau: old rule `lhhl`, fit `lhhh`).
+  **Next:** the phrase view (group tokens into accentual phrases; show the native contour per mora, marked H/L
+  by this fit, with your recording overlaid and a plain-language reason for a mismatch).
+
 - **2026-09-20 — Flaky test (mine): labelling page batch test.** The multi-item "goes straight back into the same
   batch after a refresh" test waited for "Session done" with the default 1 s find-timeout and timed out on a
   CPU-starved CI runner (3.4 s), failing the deploy. `labelWordAudioPage.test.tsx` now sets

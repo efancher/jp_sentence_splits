@@ -102,6 +102,20 @@ function targetMoraIntervals(words: AlignmentResult['words'], span: { startMs: n
   return all.length === moraCount ? all : null;
 }
 
+/** Per-mora voiced F0 (relative semitones) inside `intervals`, or equal-width slices of the span — for offline classifier experiments (DUMP_CLIPS=path). */
+function moraFrames(pitch: PitchAnalysisPayload, span: { startMs: number; endMs: number }, moraCount: number, intervals: MoraInterval[] | null): Array<Array<[number, number]>> {
+  const a = span.startMs / 1000;
+  const width = (span.endMs - span.startMs) / 1000 / moraCount;
+  return Array.from({ length: moraCount }, (_, i) => {
+    const from = intervals ? intervals[i]!.start : a + i * width;
+    const to = intervals ? intervals[i]!.end : from + width;
+    // [position within the mora 0..1, semitones] so an experiment can weight the middle of a mora more than its edges
+    return pitch.frames
+      .filter((f) => f.voiced && f.relativeSemitones !== null && f.timeSeconds >= from && f.timeSeconds < to)
+      .map((f) => [Math.round(((f.timeSeconds - from) / Math.max(1e-6, to - from)) * 100) / 100, Math.round((f.relativeSemitones as number) * 100) / 100] as [number, number]);
+  });
+}
+
 const pct = (ok: number, n: number) => (n ? `${Math.round((ok / n) * 100)}%` : '—');
 const median = (values: number[]) => {
   if (values.length === 0) return NaN;
@@ -197,6 +211,7 @@ async function main() {
   const clips: Clip[] = [];
   let unmeasurableSpan = 0;
   let exactUsed = 0;
+  const dump: Array<{ expression: string; reading: string; moraCount: number; position: number; exact: boolean; frames: Array<Array<[number, number]>> }> = [];
   let noPitch = 0;
   let done = 0;
   for (const { link, audio, item, japanese } of candidates.slice(0, limit === Infinity ? undefined : limit)) {
@@ -216,6 +231,7 @@ async function main() {
     const position = (item.pitch_accent_positions as number[])[0]!;
     const moraIntervals = process.env.EXACT_MORAE ? targetMoraIntervals(alignment.words, matched, moraCount) : null;
     if (moraIntervals) exactUsed += 1;
+    if (process.env.DUMP_CLIPS) dump.push({ expression: String(item.expression), reading, moraCount, position, exact: !!moraIntervals, frames: moraFrames(pitch, matched, moraCount, moraIntervals) });
     const measurement = measureNativeWord({ pitch, span: matched, surfaceForm: String(link.surface_form), moraCount, position, moraIntervals });
     if (!measurement) continue;
     clips.push({
@@ -228,6 +244,7 @@ async function main() {
       measurement,
     });
   }
+  if (process.env.DUMP_CLIPS) writeFileSync(process.env.DUMP_CLIPS, JSON.stringify(dump));
   console.log(`\nMeasured ${clips.length} clips (span unusable: ${unmeasurableSpan}, no audio/pitch: ${noPitch}).${process.env.EXACT_MORAE ? `  Exact mora intervals used for ${exactUsed}.` : ''}`);
 
   // ---- 1 & 2: agreement + cue strength ----
@@ -235,6 +252,9 @@ async function main() {
   const agreeing = measured.filter((c) => c.measurement.agrees);
   console.log('\n=== 1. Do native clips realize the dictionary shape? (word-internal, learner-scoring rule) ===');
   console.log(`measurable: ${measured.length}/${clips.length}   agree with dictionary: ${agreeing.length} (${pct(agreeing.length, measured.length)})`);
+  const fitted = clips.filter((c) => c.measurement.fitAgrees !== null);
+  const fitAgreeing = fitted.filter((c) => c.measurement.fitAgrees);
+  console.log(`valid-shape fit:  measurable: ${fitted.length}/${clips.length}   agree with dictionary: ${fitAgreeing.length} (${pct(fitAgreeing.length, fitted.length)})   <- fitAccentShape, native audio only`);
   const groups = new Map<string, Clip[]>();
   for (const c of measured) {
     const key = `${c.measurement.moraCount}-mora ${c.measurement.expectedShape}`;

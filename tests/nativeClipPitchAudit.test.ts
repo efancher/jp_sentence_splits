@@ -39,6 +39,23 @@ describe('measureNativeWord', () => {
     expect(result.separationSemitones).toBeCloseTo(5);
   });
 
+  it('also reports the valid-shape fit, which keeps a drifting heiban plateau heiban', () => {
+    // A heiban 4-mora word whose plateau drifts down: [0, 4, 3, 2] (mean 2.25).
+    const result = measureNativeWord({ surfaceForm: '語', span: span(4), moraCount: 4, pitch: track([0, 4, 3, 2]), position: 0 })!;
+    expect(result.expectedShape).toBe('lhhh');
+    expect(result.measuredShape).toBe('lhhl'); // the per-mora "≥ the word's mean" rule reads an accent-3 word
+    expect(result.agrees).toBe(false);
+    expect(result.fitShape).toBe('lhhh'); // fitting a valid shape does not
+    expect(result.fitAgrees).toBe(true);
+    expect(result.fitContrastSemitones).toBeCloseTo(3);
+  });
+
+  it('reports no fit when there is no clear contrast to fit', () => {
+    const result = measureNativeWord({ surfaceForm: '語', span: span(2), moraCount: 2, pitch: track([null, null]), position: 1 })!;
+    expect(result.fitShape).toBeNull();
+    expect(result.fitAgrees).toBeNull();
+  });
+
   it('flags a clip whose native realization contradicts the dictionary shape', () => {
     const result = measureNativeWord({ ...base, pitch: track([-2, 3]), position: 1 })!;
     expect(result.agrees).toBe(false);
