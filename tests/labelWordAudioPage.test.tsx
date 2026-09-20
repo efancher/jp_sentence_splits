@@ -8,6 +8,7 @@ import {
   deleteWordBoundaryLabel,
   listWordBoundaryLabels,
   loadWordBoundaryCandidates,
+  loadWordBoundaryCandidatesForLinks,
   saveWordBoundaryLabel,
 } from '../src/db/wordBoundaryLabels';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
@@ -125,6 +126,19 @@ describe('loadWordBoundaryCandidates', () => {
       estimates: { token: null, mora: null, shipped: null }, sampleKind: 'random', spanVersion: 'v', elapsedMs: 1, createdAt: T,
     });
     expect(await loadWordBoundaryCandidates(10)).toEqual([]);
+  });
+
+  it('rebuilds specific links in the given order, skipping any already labelled', async () => {
+    const a = await seed();
+    const b = await seed();
+    const c = await seed();
+    await saveWordBoundaryLabel({
+      id: 'l', sentenceVocabularyId: b.link.id, sentenceId: b.sentenceId, sentenceAudioId: b.audioId, surfaceForm: '生まれ',
+      verdict: 'clean', shown: { startMs: 1, endMs: 2 }, label: { startMs: 1, endMs: 2 }, estimates: { token: null, mora: null, shipped: null },
+      sampleKind: 'random', spanVersion: 'v', elapsedMs: 1, createdAt: T,
+    });
+    const rebuilt = await loadWordBoundaryCandidatesForLinks([c.link.id, b.link.id, a.link.id, 'gone']);
+    expect(rebuilt.map((x) => x.linkId)).toEqual([c.link.id, a.link.id]);
   });
 
   it('persists, lists and deletes labels', async () => {
@@ -245,6 +259,96 @@ describe('LabelWordAudioPage', () => {
     await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
     const [label] = await listWordBoundaryLabels();
     expect(label).toMatchObject({ verdict: 'skipped', skipReason: 'undecodable' });
+  });
+
+  describe('batches', () => {
+    const start = async (user: ReturnType<typeof userEvent.setup>) =>
+      user.click(await screen.findByRole('button', { name: /start (labelling|a new batch)/i }));
+    const accept = async (user: ReturnType<typeof userEvent.setup>) =>
+      user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+
+    it('lets you label one at a time, and remembers the batch size', async () => {
+      await seed();
+      await seed();
+      await seed();
+      const user = userEvent.setup();
+      const first = renderPage();
+      await user.click(await screen.findByRole('button', { name: /1 at a time/i }));
+      await start(user);
+      await accept(user);
+      expect(await screen.findByText(/session done/i)).toBeInTheDocument();
+      expect(await listWordBoundaryLabels()).toHaveLength(1); // one item, then it stops
+      expect(screen.getByRole('button', { name: /label another one/i })).toBeInTheDocument();
+
+      first.unmount();
+      renderPage();
+      expect(await screen.findByRole('button', { name: /1 at a time/i })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('goes straight back into the same batch after a refresh, at the next item', async () => {
+      await seed();
+      await seed();
+      await seed();
+      const user = userEvent.setup();
+      const first = renderPage();
+      await user.click(await screen.findByRole('button', { name: /^5$/ }));
+      await start(user);
+      expect(await screen.findByText('1 / 3')).toBeInTheDocument();
+      const planned = JSON.parse(window.localStorage.getItem('wordBoundaryLabelSession')!).linkIds as string[];
+      await accept(user);
+      expect(await screen.findByText('2 / 3')).toBeInTheDocument();
+
+      first.unmount(); // a refresh
+      renderPage();
+      expect(await screen.findByText('2 / 3')).toBeInTheDocument(); // not a fresh random batch
+      expect(await screen.findByRole('button', { name: /both edges are right/i })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem('wordBoundaryLabelSession')!).linkIds).toEqual(planned);
+
+      await accept(user);
+      await accept(user);
+      expect(await screen.findByText(/session done/i)).toBeInTheDocument();
+      expect(window.localStorage.getItem('wordBoundaryLabelSession')).toBeNull(); // finished batch is forgotten
+      expect(await listWordBoundaryLabels()).toHaveLength(3);
+    });
+
+    it('stops for now, offers to resume, and can discard the batch', async () => {
+      await seed();
+      await seed();
+      const user = userEvent.setup();
+      const first = renderPage();
+      await start(user);
+      await accept(user);
+      await user.click(await screen.findByRole('button', { name: /stop for now/i }));
+      expect(await screen.findByText(/1 of 2 left/i)).toBeInTheDocument();
+
+      first.unmount(); // paused: a refresh does NOT jump back in
+      renderPage();
+      expect(await screen.findByText(/you have a batch in progress/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /both edges are right/i })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^resume$/i }));
+      expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /stop for now/i }));
+      await user.click(await screen.findByRole('button', { name: /discard this batch/i }));
+      expect(screen.queryByText(/you have a batch in progress/i)).not.toBeInTheDocument();
+      expect(window.localStorage.getItem('wordBoundaryLabelSession')).toBeNull();
+    });
+
+    it('drops a stale plan whose items were labelled elsewhere', async () => {
+      const { link } = await seed();
+      window.localStorage.setItem(
+        'wordBoundaryLabelSession',
+        JSON.stringify({ mode: 'random', linkIds: [link.id], paused: false, startedAt: T }),
+      );
+      await saveWordBoundaryLabel({
+        id: 'done', sentenceVocabularyId: link.id, sentenceId: 's', sentenceAudioId: 'a', surfaceForm: '生まれ', verdict: 'clean',
+        shown: { startMs: 1, endMs: 2 }, label: { startMs: 1, endMs: 2 }, estimates: { token: null, mora: null, shipped: null },
+        sampleKind: 'random', spanVersion: 'v', elapsedMs: 1, createdAt: T,
+      });
+      renderPage();
+      expect(await screen.findByRole('button', { name: /start labelling/i })).toBeInTheDocument();
+      expect(window.localStorage.getItem('wordBoundaryLabelSession')).toBeNull();
+    });
   });
 
   it('saves every label on the device to a file with one button, and counts what is new', async () => {

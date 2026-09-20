@@ -6,6 +6,7 @@ import {
   deleteWordBoundaryLabel,
   listWordBoundaryLabels,
   loadWordBoundaryCandidates,
+  loadWordBoundaryCandidatesForLinks,
   newWordBoundaryLabelId,
   saveWordBoundaryLabel,
   type WordBoundaryCandidate,
@@ -13,6 +14,18 @@ import {
 import type { WordBoundaryLabel, WordBoundarySkipReason, WordBoundarySpan } from '../domain/types';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { auditionRanges, clampEnd, clampStart } from '../lib/boundaryEditor';
+import {
+  clearStoredSession,
+  getSessionSize,
+  type LabelMode,
+  loadStoredSession,
+  remainingLinkIds,
+  saveStoredSession,
+  SESSION_SIZES,
+  setSessionSize,
+  type SessionSize,
+  type StoredLabelSession,
+} from '../lib/labelSession';
 import { RangePlayer } from '../lib/rangePlayer';
 import { getLastSaveTime, saveLabelsFile, unsavedLabelCount } from '../lib/wordBoundaryLabelExport';
 import { decodeWithRepair } from '../lib/decodeWithRepair';
@@ -20,7 +33,6 @@ import {
   edgeErrors,
   edgesMoved,
   labelReason,
-  LABEL_SESSION_SIZE,
   pickLabelQueue,
   startingSpan,
   summarizeErrors,
@@ -28,7 +40,7 @@ import {
   type ErrorSummary,
 } from '../lib/wordBoundaryLabels';
 
-type Mode = 'random' | 'targeted';
+type Mode = LabelMode;
 
 const SKIP_REASONS: { reason: WordBoundarySkipReason; label: string }[] = [
   { reason: 'wrong-word', label: 'Word isn’t in this clip' },
@@ -50,19 +62,72 @@ const RULES_SEEN_KEY = 'wordBoundaryRulesSeen';
  * pitch card's range deliberately includes its ending/particle.
  */
 export function LabelWordAudioPage() {
-  const [phase, setPhase] = useState<'setup' | 'loading' | 'labelling' | 'done'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'loading' | 'labelling' | 'done'>(() => {
+    // A refresh mid-batch goes straight back in (see the mount effect) — don't flash the setup screen.
+    const session = loadStoredSession();
+    return session && !session.paused ? 'loading' : 'setup';
+  });
   const [mode, setMode] = useState<Mode>('random');
+  const [size, setSize] = useState<SessionSize>(() => getSessionSize());
+  /** The items still to do this run, in order. After a resume this is only what was left. */
   const [queue, setQueue] = useState<WordBoundaryCandidate[]>([]);
   const [index, setIndex] = useState(0);
-  const [sessionLabels, setSessionLabels] = useState<WordBoundaryLabel[]>([]);
+  /** The whole planned batch (ids) and how many of it were already done before this run — for "3 / 10". */
+  const [plannedIds, setPlannedIds] = useState<string[]>([]);
+  const [doneBefore, setDoneBefore] = useState(0);
+  /** Labels made in this page load — what "Undo last" can take back. */
+  const [runLabels, setRunLabels] = useState<WordBoundaryLabel[]>([]);
   const [allLabels, setAllLabels] = useState<WordBoundaryLabel[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(() => getLastSaveTime());
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [stored, setStored] = useState<StoredLabelSession | null>(() => loadStoredSession());
 
-  const refresh = async () => setAllLabels(await listWordBoundaryLabels());
+  const refresh = async () => {
+    const labels = await listWordBoundaryLabels();
+    setAllLabels(labels);
+    return labels;
+  };
+
+  /** Enters labelling for the still-unlabelled items of a stored session. Returns false when none can be shown. */
+  async function resume(session: StoredLabelSession, labels: WordBoundaryLabel[]): Promise<boolean> {
+    const labelled = new Set(labels.map((l) => l.sentenceVocabularyId));
+    const remaining = remainingLinkIds(session, labelled);
+    if (remaining.length === 0) {
+      clearStoredSession();
+      setStored(null);
+      setPhase('setup');
+      return false;
+    }
+    setPhase('loading');
+    const candidates = await loadWordBoundaryCandidatesForLinks(remaining);
+    if (candidates.length === 0) {
+      // Everything left has since become unlabellable (no alignment, deleted) — drop the stale plan.
+      clearStoredSession();
+      setStored(null);
+      setPhase('setup');
+      return false;
+    }
+    saveStoredSession({ ...session, paused: false });
+    setStored({ ...session, paused: false });
+    setMode(session.mode);
+    setQueue(candidates);
+    setIndex(0);
+    setPlannedIds(session.linkIds);
+    setDoneBefore(session.linkIds.length - remaining.length);
+    setRunLabels([]);
+    setPhase('labelling');
+    return true;
+  }
+
+  // First load: read the labels, and pick up a session that a refresh interrupted.
   useEffect(() => {
-    void refresh();
+    void (async () => {
+      const labels = await refresh();
+      const session = loadStoredSession();
+      if (session && !session.paused) await resume(session, labels);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Hands every label on this device to the user as a file (share sheet or download). */
@@ -77,8 +142,9 @@ export function LabelWordAudioPage() {
   async function start() {
     setPhase('loading');
     setMessage(null);
+    setSessionSize(size);
     const pool = await loadWordBoundaryCandidates();
-    const picked = pickLabelQueue(pool, mode);
+    const picked = pickLabelQueue(pool, mode, size);
     if (picked.length === 0) {
       setPhase('setup');
       setMessage(
@@ -88,17 +154,29 @@ export function LabelWordAudioPage() {
       );
       return;
     }
+    const session: StoredLabelSession = {
+      mode,
+      linkIds: picked.map((c) => c.linkId),
+      paused: false,
+      startedAt: new Date().toISOString(),
+    };
+    saveStoredSession(session);
+    setStored(session);
     setQueue(picked);
     setIndex(0);
-    setSessionLabels([]);
+    setPlannedIds(session.linkIds);
+    setDoneBefore(0);
+    setRunLabels([]);
     setPhase('labelling');
   }
 
   async function record(label: WordBoundaryLabel) {
     await saveWordBoundaryLabel(label);
-    setSessionLabels((prev) => [...prev, label]);
+    setRunLabels((prev) => [...prev, label]);
     await refresh();
     if (index + 1 >= queue.length) {
+      clearStoredSession();
+      setStored(null);
       setPhase('done');
     } else {
       setIndex(index + 1);
@@ -106,17 +184,36 @@ export function LabelWordAudioPage() {
   }
 
   async function undoLast() {
-    const last = sessionLabels[sessionLabels.length - 1];
+    const last = runLabels[runLabels.length - 1];
     if (!last) return;
     await deleteWordBoundaryLabel(last.id);
-    setSessionLabels((prev) => prev.slice(0, -1));
+    setRunLabels((prev) => prev.slice(0, -1));
     setIndex((i) => Math.max(0, i - 1));
     setPhase('labelling');
     await refresh();
   }
 
+  /** Leave mid-batch. The plan stays stored, so "Resume" picks up exactly where you were. */
+  function stopForNow() {
+    if (stored) {
+      const paused = { ...stored, paused: true };
+      saveStoredSession(paused);
+      setStored(paused);
+    }
+    setPhase('setup');
+  }
+
+  function discardSession() {
+    clearStoredSession();
+    setStored(null);
+  }
+
   const random = allLabels.filter((l) => l.sampleKind === 'random');
   const unsaved = unsavedLabelCount(allLabels, lastSaved);
+  const labelledIds = useMemo(() => new Set(allLabels.map((l) => l.sentenceVocabularyId)), [allLabels]);
+  const leftInStored = stored ? remainingLinkIds(stored, labelledIds).length : 0;
+  const plannedSet = new Set(plannedIds);
+  const summaryLabels = allLabels.filter((l) => plannedSet.has(l.sentenceVocabularyId));
 
   return (
     <div className="stack" style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -126,6 +223,8 @@ export function LabelWordAudioPage() {
         <SetupPanel
           mode={mode}
           onMode={setMode}
+          size={size}
+          onSize={setSize}
           onStart={() => void start()}
           message={message}
           total={allLabels.length}
@@ -133,6 +232,9 @@ export function LabelWordAudioPage() {
           unsaved={unsaved}
           saveNote={saveNote}
           onSaveFile={() => void saveFile()}
+          resumeInfo={stored && leftInStored > 0 ? { left: leftInStored, planned: stored.linkIds.length } : null}
+          onResume={() => stored && void resume(stored, allLabels)}
+          onDiscard={discardSession}
         />
       )}
 
@@ -140,14 +242,19 @@ export function LabelWordAudioPage() {
 
       {phase === 'labelling' && queue[index] && (
         <>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <span className="muted">
-              {index + 1} / {queue.length}
+              {doneBefore + index + 1} / {plannedIds.length}
             </span>
             <span className="chip">{labelReason(queue[index]!.estimates, mode)}</span>
-            <button type="button" className="secondary" disabled={sessionLabels.length === 0} onClick={() => void undoLast()}>
-              Undo last
-            </button>
+            <span className="row" style={{ gap: '0.4rem' }}>
+              <button type="button" className="secondary" disabled={runLabels.length === 0} onClick={() => void undoLast()}>
+                Undo last
+              </button>
+              <button type="button" className="secondary" onClick={stopForNow}>
+                Stop for now
+              </button>
+            </span>
           </div>
           <LabelItem key={queue[index]!.linkId} candidate={queue[index]!} mode={mode} onSave={record} />
         </>
@@ -155,13 +262,15 @@ export function LabelWordAudioPage() {
 
       {phase === 'done' && (
         <DonePanel
-          session={sessionLabels}
+          session={summaryLabels}
           randomLabels={random}
           unsaved={unsaved}
           saveNote={saveNote}
           onSaveFile={() => void saveFile()}
           onAgain={() => setPhase('setup')}
           onUndo={() => void undoLast()}
+          canUndo={runLabels.length > 0}
+          size={size}
         />
       )}
     </div>
@@ -171,6 +280,8 @@ export function LabelWordAudioPage() {
 function SetupPanel({
   mode,
   onMode,
+  size,
+  onSize,
   onStart,
   message,
   total,
@@ -178,9 +289,14 @@ function SetupPanel({
   unsaved,
   saveNote,
   onSaveFile,
+  resumeInfo,
+  onResume,
+  onDiscard,
 }: {
   mode: Mode;
   onMode: (m: Mode) => void;
+  size: SessionSize;
+  onSize: (s: SessionSize) => void;
   onStart: () => void;
   message: string | null;
   total: number;
@@ -188,14 +304,47 @@ function SetupPanel({
   unsaved: number;
   saveNote: string | null;
   onSaveFile: () => void;
+  resumeInfo: { left: number; planned: number } | null;
+  onResume: () => void;
+  onDiscard: () => void;
 }) {
   return (
     <section className="panel stack">
+      {resumeInfo && (
+        <div className="panel stack" style={{ boxShadow: 'none', gap: '0.4rem' }}>
+          <strong>You have a batch in progress</strong>
+          <span className="muted">
+            {resumeInfo.left} of {resumeInfo.planned} left — it picks up exactly where you stopped.
+          </span>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <button type="button" className="primary" onClick={onResume}>
+              Resume
+            </button>
+            <button type="button" className="secondary" onClick={onDiscard}>
+              Discard this batch
+            </button>
+          </div>
+        </div>
+      )}
       <p className="muted" style={{ margin: 0 }}>
         Mark where a word really starts and ends in its recording. These labels are the ground truth for improving how the
-        app cuts word audio. A session is {LABEL_SESSION_SIZE} items (about 10 minutes); accepting a correct span is one
-        tap.
+        app cuts word audio. Every label is saved the moment you finish it, so you can stop any time; accepting a correct
+        span is one tap.
       </p>
+      <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }} role="group" aria-label="Batch size">
+        <span>Batch size:</span>
+        {SESSION_SIZES.map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={size === n ? 'primary' : 'secondary'}
+            aria-pressed={size === n}
+            onClick={() => onSize(n)}
+          >
+            {n === 1 ? '1 at a time' : n}
+          </button>
+        ))}
+      </div>
       <div className="stack" style={{ gap: '0.4rem' }}>
         <label className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
           <input type="radio" name="mode" checked={mode === 'random'} onChange={() => onMode('random')} />
@@ -213,7 +362,7 @@ function SetupPanel({
       </div>
       <div>
         <button type="button" className="primary" onClick={onStart}>
-          Start labelling
+          {resumeInfo ? 'Start a new batch' : 'Start labelling'}
         </button>
       </div>
       {message ? <p className="muted" style={{ margin: 0 }}>{message}</p> : null}
@@ -537,7 +686,11 @@ function DonePanel({
   onSaveFile,
   onAgain,
   onUndo,
+  canUndo,
+  size,
 }: {
+  size: SessionSize;
+  canUndo: boolean;
   session: WordBoundaryLabel[];
   randomLabels: WordBoundaryLabel[];
   unsaved: number;
@@ -581,9 +734,9 @@ function DonePanel({
       <SaveLabels total={session.length} unsaved={unsaved} note={saveNote} onSave={onSaveFile} />
       <div className="row" style={{ gap: '0.5rem' }}>
         <button type="button" className="primary" onClick={onAgain}>
-          Label another {LABEL_SESSION_SIZE}
+          {size === 1 ? 'Label another one' : `Label another ${size}`}
         </button>
-        <button type="button" className="secondary" onClick={onUndo}>
+        <button type="button" className="secondary" disabled={!canUndo} onClick={onUndo}>
           Undo last
         </button>
       </div>

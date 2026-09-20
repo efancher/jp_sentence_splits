@@ -1,4 +1,11 @@
-import type { SentenceAudio, WordAlignment, WordBoundaryEstimates, WordBoundaryLabel } from '../domain/types';
+import type {
+  Sentence,
+  SentenceAudio,
+  SentenceVocabulary,
+  WordAlignment,
+  WordBoundaryEstimates,
+  WordBoundaryLabel,
+} from '../domain/types';
 import { createId } from '../lib/ids';
 import { estimateWordSpans, startingSpan } from '../lib/wordBoundaryLabels';
 
@@ -46,6 +53,70 @@ export interface WordBoundaryCandidate {
 /** Default number of links examined per session build (alignments are fetched for these). */
 export const CANDIDATE_POOL_SIZE = 160;
 
+interface LinkContext {
+  sentenceById: Map<string, Sentence>;
+  audioBySentence: Map<string, SentenceAudio>;
+  bookBySentence: Map<string, string>;
+}
+
+async function loadLinkContext(links: readonly SentenceVocabulary[]): Promise<LinkContext> {
+  const db = getDb();
+  const sentenceIds = [...new Set(links.map((l) => l.sentenceId))];
+  const [sentences, audioRows, memberships] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const sentenceById = new Map(sentences.filter(Boolean).map((s) => [s!.id, s!]));
+  const audioBySentence = new Map<string, SentenceAudio>();
+  for (const a of audioRows) if (!audioBySentence.has(a.sentenceId)) audioBySentence.set(a.sentenceId, a);
+  const bookBySentence = new Map<string, string>();
+  for (const m of memberships) if (!bookBySentence.has(m.sentenceId)) bookBySentence.set(m.sentenceId, m.bookId);
+  return { sentenceById, audioBySentence, bookBySentence };
+}
+
+/** Attaches each link's cached alignment and estimators; links with no alignment or no resolvable span are dropped. Keeps the given order. */
+async function toCandidates(links: readonly SentenceVocabulary[], ctx: LinkContext): Promise<WordBoundaryCandidate[]> {
+  const usable = links.filter((l) => ctx.sentenceById.has(l.sentenceId) && ctx.audioBySentence.has(l.sentenceId));
+  const alignments = await loadAlignmentsBulk([...new Set(usable.map((l) => ctx.audioBySentence.get(l.sentenceId)!.id))]);
+  const out: WordBoundaryCandidate[] = [];
+  for (const link of usable) {
+    const audio = ctx.audioBySentence.get(link.sentenceId)!;
+    const alignment = alignments.get(audio.id);
+    const sentence = ctx.sentenceById.get(link.sentenceId)!;
+    if (!alignment) continue;
+    const estimates = estimateWordSpans(alignment.words, sentence.japanese, sentence.inlineReading, link.surfaceForm!);
+    if (!startingSpan(estimates)) continue;
+    out.push({
+      linkId: link.id,
+      sentenceId: link.sentenceId,
+      bookId: ctx.bookBySentence.get(link.sentenceId),
+      surfaceForm: link.surfaceForm!,
+      japanese: sentence.japanese,
+      inlineReading: sentence.inlineReading,
+      audio,
+      words: alignment.words,
+      estimates,
+    });
+  }
+  return out;
+}
+
+/**
+ * Rebuilds candidates for specific links, in the order given — used to resume
+ * a labelling session after a refresh. Links that were labelled in the
+ * meantime, or that no longer resolve, are left out.
+ */
+export async function loadWordBoundaryCandidatesForLinks(linkIds: readonly string[]): Promise<WordBoundaryCandidate[]> {
+  const db = getDb();
+  const [rows, labelled] = await Promise.all([db.sentenceVocabulary.bulkGet([...linkIds]), db.wordBoundaryLabels.toArray()]);
+  const done = new Set(labelled.map((l) => l.sentenceVocabularyId));
+  const links = rows.filter((l): l is SentenceVocabulary => !!l && !!l.surfaceForm && !done.has(l.id));
+  if (links.length === 0) return [];
+  const byId = new Map((await toCandidates(links, await loadLinkContext(links))).map((c) => [c.linkId, c]));
+  return linkIds.map((id) => byId.get(id)).filter((c): c is WordBoundaryCandidate => !!c);
+}
+
 /**
  * Loads a stratified-by-book pool of labellable links: a confirmed link with a
  * surface form, a reference recording, a current-version alignment (cached
@@ -72,17 +143,8 @@ export async function loadWordBoundaryCandidates(
   );
   if (links.length === 0) return [];
 
-  const sentenceIds = [...new Set(links.map((l) => l.sentenceId))];
-  const [sentences, audioRows, memberships] = await Promise.all([
-    db.sentences.bulkGet(sentenceIds),
-    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
-    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
-  ]);
-  const sentenceById = new Map(sentences.filter(Boolean).map((s) => [s!.id, s!]));
-  const audioBySentence = new Map<string, SentenceAudio>();
-  for (const a of audioRows) if (!audioBySentence.has(a.sentenceId)) audioBySentence.set(a.sentenceId, a);
-  const bookBySentence = new Map<string, string>();
-  for (const m of memberships) if (!bookBySentence.has(m.sentenceId)) bookBySentence.set(m.sentenceId, m.bookId);
+  const ctx = await loadLinkContext(links);
+  const { sentenceById, audioBySentence, bookBySentence } = ctx;
 
   // Stratify by book: shuffle within each, then take round-robin up to the pool size.
   const lanes = new Map<string, typeof links>();
@@ -114,26 +176,5 @@ export async function loadWordBoundaryCandidates(
     if (!took) break;
   }
 
-  const alignments = await loadAlignmentsBulk([...new Set(pool.map((l) => audioBySentence.get(l.sentenceId)!.id))]);
-  const out: WordBoundaryCandidate[] = [];
-  for (const link of pool) {
-    const audio = audioBySentence.get(link.sentenceId)!;
-    const alignment = alignments.get(audio.id);
-    const sentence = sentenceById.get(link.sentenceId)!;
-    if (!alignment) continue;
-    const estimates = estimateWordSpans(alignment.words, sentence.japanese, sentence.inlineReading, link.surfaceForm!);
-    if (!startingSpan(estimates)) continue;
-    out.push({
-      linkId: link.id,
-      sentenceId: link.sentenceId,
-      bookId: bookBySentence.get(link.sentenceId),
-      surfaceForm: link.surfaceForm!,
-      japanese: sentence.japanese,
-      inlineReading: sentence.inlineReading,
-      audio,
-      words: alignment.words,
-      estimates,
-    });
-  }
-  return out;
+  return toCandidates(pool, ctx);
 }

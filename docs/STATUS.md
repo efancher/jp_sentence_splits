@@ -33,6 +33,19 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labeller: batch sizes, stop/resume, survives a refresh.** User: the session reset on
+  refresh and a 25-item batch is a lot. Labels were always written per item; what was lost was the
+  *batch* (React state only), so a refresh drew a fresh random set. Now: **batch size 1 / 5 / 10 / 25**
+  ("1 at a time"; default 10, remembered), a **"Stop for now"** button, and the batch plan is kept in
+  localStorage (`src/lib/labelSession.ts`: the ordered item ids + sample kind + `paused`; **progress is
+  never stored** — what's left is always "planned items with no label", so undo, another device's labels
+  and crashes stay consistent). A refresh mid-batch goes straight back to the next unlabelled item
+  ("2 / 10"); after "Stop for now" a refresh instead shows "You have a batch in progress — N of M left"
+  with Resume / Discard this batch. A finished batch, or a plan whose items were all labelled or became
+  unlabellable, is forgotten. Unsaved edits to the *current* item are still lost on refresh (only that one
+  item). `loadWordBoundaryCandidatesForLinks` rebuilds a saved plan in its original order. Tests:
+  `labelSession` (4), five batch tests in `labelWordAudioPage`, one loader test.
+
 - **2026-09-20 — Labeller: "Couldn't decode this recording on this device".** The labelling page decoded
   the locally stored recording once and gave up. Known Safari behaviour (see the `useRangeLoop` /
   `repairSentenceAudio` notes): IndexedDB sometimes returns a Blob that looks intact but won't decode;
