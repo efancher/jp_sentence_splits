@@ -31,6 +31,20 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-20 — Phrase pitch view on the shadowing screen (native vs you, per phrase).** Step 2 of the
+  phrase-level pitch plan. `src/lib/phrasePitch.ts` (`groupIntoPhrases`, `buildPhrasePitch`, `phraseFeedback`)
+  groups the aligned tokens into phrases (content word + trailing particles/endings from a small closed
+  `FUNCTION_TOKENS` list, split on pauses ≥ 150 ms), reads each mora's mean pitch over its *exact* mora interval
+  (`phonesToMoraIntervals`), and fits a valid accent shape to each speaker (`fitAccentShape`). The native recording is
+  the answer key — no dictionary target. Statuses: `match | different | flat | weak-native | no-learner`. Needs every
+  token's phones to parse and sum to the sentence's mora count (~73% of sentences); otherwise that side reports
+  "unavailable" rather than guess. `PhrasePitchView` (in `AnalysisPanel`, after "Word timing") shows kana with native
+  H/L, your H/L beneath with mismatches flagged, a mini bar per mora for the raw contour, and one plain sentence per
+  phrase. Deliberately compact; a fuller written explanation waits until the measurement is shown to be reliable.
+  Tests: `tests/phrasePitch.test.ts`, `tests/phrasePitchView.test.tsx`. Also from the 97 hand labels: the
+  squash guard flags 3/4 truly-wrong words and unflagged words are 95–97% within 50 ms, so no more word-boundary
+  labelling is needed.
+
 ## Recent changes
 
 - **2026-09-20 — Native pitch shape: fit a valid accent shape instead of judging each mora against the mean

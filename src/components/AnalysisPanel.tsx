@@ -39,6 +39,8 @@ import { categorizeObservations } from '../lib/pronunciationHistory';
 import { computeSpectrogram, type Spectrogram } from '../lib/spectrogram';
 import { KanaTimelineRow } from './KanaTimelineRow';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
+import { PhrasePitchView } from './PhrasePitchView';
+import { buildPhrasePitch } from '../lib/phrasePitch';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import {
   analyzeAlignment,
@@ -569,6 +571,22 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, learnerPitch, learnerPitchWindow, moraUnits]);
 
+  const phrasePitch = useMemo(() => {
+    if (!serverAlignment?.reference || !referencePitch) return undefined;
+    return buildPhrasePitch({
+      moraUnits,
+      reference: {
+        words: serverAlignment.reference.words,
+        pitch: referencePitch,
+        pitchOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
+      },
+      learner:
+        serverAlignment.learner && learnerPitch
+          ? { words: serverAlignment.learner.words, pitch: learnerPitch }
+          : undefined,
+    });
+  }, [serverAlignment, referencePitch, learnerPitch, moraUnits, targetRange]);
+
   const asrObservations = useMemo(() => {
     if (!serverAlignment?.reference || !transcribedText) return [];
     return buildAsrObservations({
@@ -878,6 +896,11 @@ export function AnalysisPanel({
           {serverAlignment.learner ? (
             <WordTimingRow words={serverAlignment.learner.words} label="Learner word timing" />
           ) : null}
+        </div>
+      ) : null}
+      {phrasePitch ? (
+        <div className="panel">
+          <PhrasePitchView result={phrasePitch} hasLearner={Boolean(serverAlignment?.learner && learnerPitch)} />
         </div>
       ) : null}
       {segmentObservations.length > 0 ? (

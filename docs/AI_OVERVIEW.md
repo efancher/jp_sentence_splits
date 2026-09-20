@@ -1485,6 +1485,15 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   manual `better`/`same` A/B rating on `ShadowPage` is the fallback for when
   the alignment service is off the tailnet. A muted line confirms when it
   fired.
+- **Phrase pitch (2026-09-20)** — after Analyze, `AnalysisPanel` shows
+  `PhrasePitchView`: per phrase (content word + its particles/endings), the
+  kana with the native recording's H/L and yours beneath, mismatches flagged,
+  a mini bar per mora for the raw contour, and a one-line "what to change".
+  Both speakers' shapes are fitted to valid Japanese accent shapes
+  (`pitchShapeFit.ts`) from per-mora pitch over exact phone-derived mora
+  intervals; the native audio is the answer key (natives don't always match
+  the dictionary). Withheld (with a message) when the alignment doesn't give
+  exact mora timing (~1 sentence in 4). Logic: `lib/phrasePitch.ts`.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point

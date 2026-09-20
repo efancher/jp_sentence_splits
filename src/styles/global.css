@@ -381,6 +381,51 @@ strong.jp {
   font-weight: 800;
 }
 
+/* PhrasePitchView — per-phrase native vs learner contour (AnalysisPanel). */
+.pp-block {
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.pp-block[data-status='different'],
+.pp-block[data-status='flat'] {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.pp-block[data-status='match'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.pp-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pp-feedback {
+  font-size: 0.85rem;
+}
+
+.pp-bar-slot {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 22px;
+  width: 0.9rem;
+}
+
+.pp-bar {
+  display: block;
+  width: 0.35rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.pp-bar-none {
+  height: 2px;
+  background: var(--border);
+}
+
 .pa-particle .pa-kana {
   color: var(--text-muted);
 }
