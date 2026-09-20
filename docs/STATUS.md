@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Pitch scoring uses exact mora intervals (measured improvement on the native-clip audit).**
+  `classifyLearnerMorae` — the per-word high/low classifier behind production feedback — split a word's time into
+  **equal-width buckets, one per mora**; morae aren't equal (a long vowel is two, a geminate is silence, a
+  devoiced vowel is short), so a high/low call could land on the wrong slice of the F0 track. It now derives the
+  word's mora intervals from its own aligner `phones` (`phonesToMoraIntervals`) whenever they parse into exactly
+  the expected number of morae, and is unchanged otherwise (an explicit `moraIntervals` argument overrides;
+  `null` opts out). Applies wherever the word alignment carries phones — reference and learner alike. *Evidence,
+  from `audit-pitch-accent-clips.ts` (new `EXACT_MORAE=1` mode; 219 native clips of citation-form words):*
+  agreement of the measured shape with the dictionary shape **35% → 40%** (63/179 → 71/178), median cue strength
+  **1.1 → 1.7 semitones**, weak-cue share **53% → 48%**; exact intervals applied to 202 of 219 clips. Absolute
+  agreement is still low (native clips often don't realise the citation accent audibly, and the per-bucket-mean
+  H/L rule is crude) — so this is a step, not a solution; better H/L rules (slope, peak vs mean, relative to
+  neighbouring morae) are the next lever for the phrase-level feedback. Tests: 4 in
+  `pitchAccentObservations.test.ts` (a long vowel where equal thirds and exact intervals disagree: `lhh` vs `llh`).
+
 - **2026-09-20 — Flaky test: `VocabularyListPage` "edit meaning inline".** Timed out at 5.06 s in full-suite runs
   (fast alone: ~1 s for the file). Cause: its inner `findByText('Saved', { timeout: 5_000 })` equalled vitest's
   default per-test limit, so the *test* timed out whenever CPU was starved, before the wait could. Given an

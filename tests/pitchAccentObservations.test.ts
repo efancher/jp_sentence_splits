@@ -5,6 +5,7 @@ import type { PitchAnalysisPayload, PitchFrame } from '../src/lib/pitch';
 import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
+  classifyLearnerMorae,
   type PitchAccentTarget,
 } from '../src/lib/pitchAccentObservations';
 
@@ -342,5 +343,41 @@ describe('buildLearnerPitchAccentShapes', () => {
         targets,
       }),
     ).toEqual([]);
+  });
+});
+
+describe('classifyLearnerMorae with exact mora intervals', () => {
+  // おーき: a long first vowel, so the morae are 0–150, 150–300 and 300–400 ms — not equal thirds.
+  // Pitch is low until 210 ms and high after it. The middle mora (150–300) is mostly high, but
+  // the equal-width middle bucket (133–267) is mostly low, so equal slices misread it.
+  const pitch = payload(Array.from({ length: 40 }, (_, i) => frame(i * 0.01 + 0.005, i * 0.01 + 0.005 < 0.21 ? 0 : 4)));
+  const phones = [
+    { text: 'oː', start: 0, end: 0.3 },
+    { text: 'k', start: 0.3, end: 0.35 },
+    { text: 'i', start: 0.35, end: 0.4 },
+  ];
+  const withPhones: WordAlignment = { start: 0, end: 0.4, text: 'おおき', phones };
+  const withoutPhones: WordAlignment = { ...withPhones, phones: [] };
+
+  it('uses the word’s own phones to find the morae, so a long vowel does not skew the buckets', () => {
+    expect(classifyLearnerMorae(withPhones, 3, pitch)?.classes.join('')).toBe('lhh');
+  });
+
+  it('falls back to equal-width buckets without phones (the old behaviour)', () => {
+    expect(classifyLearnerMorae(withoutPhones, 3, pitch)?.classes.join('')).toBe('llh');
+  });
+
+  it('honours an explicit interval list, and null opts out of the phone-derived one', () => {
+    expect(classifyLearnerMorae(withoutPhones, 3, pitch, null, [
+      { start: 0, end: 0.15 }, { start: 0.15, end: 0.3 }, { start: 0.3, end: 0.4 },
+    ])?.classes.join('')).toBe('lhh');
+    expect(classifyLearnerMorae(withPhones, 3, pitch, null, null)?.classes.join('')).toBe('llh');
+  });
+
+  it('ignores phones whose mora count does not match the expected reading', () => {
+    // Expected 4 morae but the phones give 3 → equal-width buckets, exactly as before.
+    expect(classifyLearnerMorae(withPhones, 4, pitch)?.classes).toHaveLength(4);
+    const equal = classifyLearnerMorae(withoutPhones, 4, pitch);
+    expect(classifyLearnerMorae(withPhones, 4, pitch)?.bucketMeans).toEqual(equal?.bucketMeans);
   });
 });

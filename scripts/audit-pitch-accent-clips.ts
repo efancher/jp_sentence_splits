@@ -29,6 +29,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AlignmentResult } from '../src/domain/types';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
 import { isolatedWordMatchRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
+import { phonesToMoraIntervals, type MoraInterval } from '../src/lib/moraTiming';
 import { segmentIntoMorae } from '../src/lib/mora';
 import {
   accuracyBySeparation,
@@ -81,6 +82,24 @@ interface Clip {
   reading: string;
   position: number;
   measurement: NativeWordMeasurement;
+}
+
+/**
+ * The target word's measured mora intervals from the aligner tokens inside its span — only when every
+ * token's phones parse and they add up to exactly `moraCount` (else null → equal-width buckets).
+ * Used when EXACT_MORAE=1, to compare the two bucketings against the dictionary.
+ */
+function targetMoraIntervals(words: AlignmentResult['words'], span: { startMs: number; endMs: number }, moraCount: number): MoraInterval[] | null {
+  const from = span.startMs / 1000 - 0.005;
+  const to = span.endMs / 1000 + 0.005;
+  const inside = words.filter((w) => w.text && !w.text.startsWith('<') && w.start >= from && w.end <= to);
+  const all: MoraInterval[] = [];
+  for (const w of inside) {
+    const intervals = phonesToMoraIntervals(w.phones);
+    if (!intervals) return null;
+    all.push(...intervals);
+  }
+  return all.length === moraCount ? all : null;
 }
 
 const pct = (ok: number, n: number) => (n ? `${Math.round((ok / n) * 100)}%` : '—');
@@ -177,6 +196,7 @@ async function main() {
 
   const clips: Clip[] = [];
   let unmeasurableSpan = 0;
+  let exactUsed = 0;
   let noPitch = 0;
   let done = 0;
   for (const { link, audio, item, japanese } of candidates.slice(0, limit === Infinity ? undefined : limit)) {
@@ -194,7 +214,9 @@ async function main() {
     const pitch = await pitchFor(audio);
     if (!pitch) { noPitch += 1; continue; }
     const position = (item.pitch_accent_positions as number[])[0]!;
-    const measurement = measureNativeWord({ pitch, span: matched, surfaceForm: String(link.surface_form), moraCount, position });
+    const moraIntervals = process.env.EXACT_MORAE ? targetMoraIntervals(alignment.words, matched, moraCount) : null;
+    if (moraIntervals) exactUsed += 1;
+    const measurement = measureNativeWord({ pitch, span: matched, surfaceForm: String(link.surface_form), moraCount, position, moraIntervals });
     if (!measurement) continue;
     clips.push({
       audioId: audio.id,
@@ -206,7 +228,7 @@ async function main() {
       measurement,
     });
   }
-  console.log(`\nMeasured ${clips.length} clips (span unusable: ${unmeasurableSpan}, no audio/pitch: ${noPitch}).`);
+  console.log(`\nMeasured ${clips.length} clips (span unusable: ${unmeasurableSpan}, no audio/pitch: ${noPitch}).${process.env.EXACT_MORAE ? `  Exact mora intervals used for ${exactUsed}.` : ''}`);
 
   // ---- 1 & 2: agreement + cue strength ----
   const measured = clips.filter((c) => c.measurement.agrees !== null);

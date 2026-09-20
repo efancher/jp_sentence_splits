@@ -38,7 +38,10 @@ export function measureNativeWord({
   surfaceForm,
   moraCount,
   position,
+  moraIntervals,
 }: {
+  /** The word's measured mora intervals in seconds, when known — see `classifyLearnerMorae`. */
+  moraIntervals?: readonly { start: number; end: number }[] | null;
   pitch: PitchAnalysisPayload;
   /** The word's own aligner boundaries (`isolatedWordMatchRange`) — unpadded, so the measurement stays inside the word. */
   span: { startMs: number; endMs: number };
@@ -53,7 +56,7 @@ export function measureNativeWord({
   const expected = expectedPitchShape(moraCount, position);
   const expectedShape = expected.join('');
   const word: WordAlignment = { text: surfaceForm, start: startMs / 1000, end: endMs / 1000, phones: [] };
-  const result = classifyLearnerMorae(word, moraCount, pitch);
+  const result = classifyLearnerMorae(word, moraCount, pitch, undefined, moraIntervals);
   if (!result) {
     return { moraCount, expectedShape, measuredShape: null, agrees: null, voicedBuckets: 0, separationSemitones: null };
   }

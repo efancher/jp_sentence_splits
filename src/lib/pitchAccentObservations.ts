@@ -1,5 +1,6 @@
 import type { WordAlignment } from '../domain/types';
 import { segmentIntoMorae } from './mora';
+import { phonesToMoraIntervals } from './moraTiming';
 import type { PitchAnalysisPayload, PitchFrame } from './pitch';
 import { diagnosePitchAccentDeviation } from './pitchAccentCorrections';
 import {
@@ -125,17 +126,30 @@ export function classifyLearnerMorae(
   moraCount: number,
   pitch: PitchAnalysisPayload,
   followingSpan?: { start: number; end: number } | null,
+  /**
+   * The word's own measured mora intervals (`phonesToMoraIntervals`, seconds). When
+   * given and exactly `moraCount` long they replace the equal-width buckets. When omitted,
+   * the word's own `phones` are tried (`phonesToMoraIntervals`) — every aligned word from
+   * the reference or learner alignment carries them — so scoring is exact wherever the
+   * aligner's phones and the expected reading agree, and unchanged where they don't. Morae
+   * are not equal in length (a long vowel is two, a geminate is silent closure, a
+   * devoiced vowel is short), so equal slices can put a high/low judgement on the
+   * wrong part of the F0 track.
+   */
+  moraIntervals?: readonly { start: number; end: number }[] | null,
 ): MoraeClassification | null {
   if (moraCount <= 0) return null;
   const wordFrames = voicedFramesInSpan(pitch, word.start, word.end);
   const overallMean = average(voicedSemitones(wordFrames));
   if (overallMean === null) return null;
 
+  const derived = moraIntervals === undefined && word.phones.length > 0 ? phonesToMoraIntervals(word.phones) : moraIntervals;
+  const exact = derived && derived.length === moraCount ? derived : null;
   const bucketWidth = (word.end - word.start) / moraCount;
   const bucketMeans: Array<number | null> = [];
   for (let index = 0; index < moraCount; index += 1) {
-    const bucketStart = word.start + index * bucketWidth;
-    const bucketEnd = bucketStart + bucketWidth;
+    const bucketStart = exact ? exact[index]!.start : word.start + index * bucketWidth;
+    const bucketEnd = exact ? exact[index]!.end : bucketStart + bucketWidth;
     const bucketFrames = wordFrames.filter(
       (frame) => frame.timeSeconds >= bucketStart && frame.timeSeconds < bucketEnd,
     );
