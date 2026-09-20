@@ -33,6 +33,12 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Flaky test (mine): labelling page batch test.** The multi-item "goes straight back into the same
+  batch after a refresh" test waited for "Session done" with the default 1 s find-timeout and timed out on a
+  CPU-starved CI runner (3.4 s), failing the deploy. `labelWordAudioPage.test.tsx` now sets
+  `asyncUtilTimeout: 5000` and a 20 s test timeout for the whole file (it decodes audio and writes to
+  IndexedDB repeatedly per test).
+
 - **2026-09-20 — Pitch scoring uses exact mora intervals (measured improvement on the native-clip audit).**
   `classifyLearnerMorae` — the per-word high/low classifier behind production feedback — split a word's time into
   **equal-width buckets, one per mora**; morae aren't equal (a long vowel is two, a geminate is silence, a

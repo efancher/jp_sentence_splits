@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { configure, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +48,11 @@ vi.mock('../src/lib/wordBoundaryLabelExport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/wordBoundaryLabelExport')>()),
   saveLabelsFile: (labels: unknown, now?: unknown, options?: unknown) => saveLabelsFile(labels, now, options),
 }));
+
+// These tests decode audio and write to IndexedDB several times per test; on a CPU-starved CI runner the default
+// 1 s find-timeout / 5 s test limit flaked (2026-09-20), so give the whole file more room.
+configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 20_000 });
 
 const T = '2026-09-20T00:00:00Z';
 
