@@ -49,6 +49,37 @@ function alignerChars(text: string): string[] {
   return [...text].filter((ch) => !ALIGNER_DROPPED.test(ch));
 }
 
+/** Length of `text` in aligner characters (punctuation/whitespace excluded). */
+export function alignerCharCount(text: string): number {
+  return alignerChars(text).length;
+}
+
+/**
+ * Maps a [start, end) range counted in aligner characters (punctuation
+ * excluded) back to indices into the raw `japanese` string — for callers that
+ * slice the displayed sentence by an aligner-token fraction. The end lands
+ * just after the last kept character, so trailing punctuation isn't
+ * highlighted; an empty range collapses to a single point.
+ */
+export function alignerRangeToRawIndices(
+  japanese: string,
+  start: number,
+  end: number,
+): { start: number; end: number } {
+  const chars = [...japanese];
+  const keptRawIndices: number[] = [];
+  let rawIndex = 0;
+  for (const ch of chars) {
+    if (!ALIGNER_DROPPED.test(ch)) keptRawIndices.push(rawIndex);
+    rawIndex += ch.length;
+  }
+  if (keptRawIndices.length === 0) return { start: 0, end: 0 };
+  const first = Math.min(Math.max(start, 0), keptRawIndices.length - 1);
+  const last = Math.min(Math.max(end - 1, first), keptRawIndices.length - 1);
+  const lastChar = japanese.codePointAt(keptRawIndices[last]!)!;
+  return { start: keptRawIndices[first]!, end: keptRawIndices[last]! + String.fromCodePoint(lastChar).length };
+}
+
 function matchWord(
   words: WordAlignment[],
   japanese: string,

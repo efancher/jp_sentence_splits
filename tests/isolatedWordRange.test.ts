@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WordAlignment } from '../src/domain/types';
-import { isolatedWordRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
+import {
+  alignerCharCount,
+  alignerRangeToRawIndices,
+  isolatedWordRange,
+  isolatedWordSpans,
+} from '../src/lib/isolatedWordRange';
 
 const word = (text: string, start: number, end: number): WordAlignment => ({
   text,
@@ -141,5 +146,24 @@ describe('isolatedWordSpans', () => {
 
   it('returns null when the word can’t be located', () => {
     expect(isolatedWordSpans(words, japanese, '猫')).toBeNull();
+  });
+});
+
+describe('alignerRangeToRawIndices', () => {
+  const japanese = 'はい、この本は。';
+
+  it('counts only the characters the aligner keeps', () => {
+    expect(alignerCharCount(japanese)).toBe(6);
+  });
+
+  it('maps a punctuation-free range back to raw indices, skipping punctuation', () => {
+    // kept chars: は0 い1 こ3 の4 本5 は6 (raw indices) — 本 is kept #4.
+    expect(alignerRangeToRawIndices(japanese, 4, 5)).toEqual({ start: 5, end: 6 });
+    // A range spanning the comma includes it inside the highlight.
+    expect(alignerRangeToRawIndices(japanese, 1, 3)).toEqual({ start: 1, end: 4 });
+  });
+
+  it('does not extend the end over trailing punctuation', () => {
+    expect(alignerRangeToRawIndices(japanese, 5, 6)).toEqual({ start: 6, end: 7 });
   });
 });

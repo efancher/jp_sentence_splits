@@ -8,6 +8,7 @@ import {
 } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
+import { alignerCharCount, alignerRangeToRawIndices } from '../lib/isolatedWordRange';
 import type { MoraUnit } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
@@ -228,8 +229,18 @@ export function SyncedShadowText({
     );
   }
 
-  const textStart = range ? Math.round(range.startFrac * japanese.length) : -1;
-  const textEnd = range ? Math.round(range.endFrac * japanese.length) : -1;
+  // The aligner's tokens exclude punctuation, so the fraction is of the
+  // punctuation-free sentence — convert back to raw indices for the slice.
+  const alignerLength = alignerCharCount(japanese);
+  const textRange = range
+    ? alignerRangeToRawIndices(
+        japanese,
+        Math.round(range.startFrac * alignerLength),
+        Math.round(range.endFrac * alignerLength),
+      )
+    : null;
+  const textStart = textRange ? textRange.start : -1;
+  const textEnd = textRange ? textRange.end : -1;
   const moraStart = range ? Math.round(range.startFrac * moraUnits.length) : -1;
   const moraEnd = range ? Math.round(range.endFrac * moraUnits.length) : -1;
 

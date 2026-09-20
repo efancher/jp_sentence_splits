@@ -48,13 +48,16 @@ what's left is one deferred durability item (below).
   no clipping change — nothing is cut, the client loops a range of the whole-sentence
   audio. 2 regression tests (comma-heavy sentence, quoted word) fail on the old code;
   `tests/gameRepository.test.ts`'s fixture had `です。` as one aligner token (never
-  real) — corrected. **Not yet done:** `scripts/audit-backfilled-word-ranges.ts`
-  (dry-run) classes stored overrides by whether they equal the legacy matcher's
-  output: **70 stale backfill, 58 still correct, 21 manual/other (never touched), 9
-  without alignment**; `--apply` clears the 70 so the corrected runtime default
-  applies (then `backfill:word-audio-range` can redo them). `SyncedShadowText`
-  (karaoke highlight) has the same fraction-times-`japanese.length` drift — not
-  fixed here; on ROADMAP.
+  real) — corrected. `scripts/audit-backfilled-word-ranges.ts` classes stored
+  overrides by whether they equal the legacy matcher's output: **70 stale backfill,
+  58 still correct, 21 manual/other (never touched), 9 without alignment**; ran
+  `--apply` the same day, **clearing the 70** (re-audit: 0 stale) so the corrected
+  runtime default applies; devices pick the change up via the normal sync trigger.
+  `backfill:word-audio-range` can now be re-run to re-tighten on correct spans.
+  Same follow-up: `SyncedShadowText`'s karaoke highlight had the same drift
+  (token fraction × raw `japanese.length`) and now converts the fraction back
+  through `alignerRangeToRawIndices` (`isolatedWordRange.ts`, 3 tests); the mora
+  row was unaffected (mora units already skip punctuation).
 
 - **2026-09-20 — Deterministic ids for get-or-create sync rows; real-Postgres push tests.**
   Follow-up to the sync reliability pass below (the two items it left on the ROADMAP).
