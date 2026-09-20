@@ -59,6 +59,14 @@ what's left is one deferred durability item (below).
   voiced-frame counts per token, because the learner's alignment and pitch exist only in the browser. Reuses the
   existing `sync_issue_reports` table, so **no migration**; it lists on `/issues` (heading now "Sync & analysis
   issues") and via `npm run issues:list-sync`.
+  Fourth follow-up (regression fix): refusing any native alignment with an `<unk>` (second follow-up) removed the view
+  from sentences that had it. Root fix: the phrase view no longer uses the sentence's reading at all. Kana and mora
+  timing now come from each token's own phones (`phonesToSoundedMorae` in `moraTiming.ts`, which
+  `phonesToMoraIntervals` now wraps), so it shows what was *said* (今日は → こんにちは) and an `<unk>`/reading mismatch
+  can't shift labels; `buildPhrasePitch` lost its `moraUnits` argument and the `no-reading` state. A phrase with an
+  unparseable token is skipped, not the whole sentence. Known weakness: when the learner says a word differently
+  (きょう vs こんにち) their token has a different mora count than the native's and is laid out by an even split,
+  flagged as approximate.
 
 ## Recent changes
 
