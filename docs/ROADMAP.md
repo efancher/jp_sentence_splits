@@ -985,6 +985,14 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   cost is keeping the table in two languages. Odd Ear Out currently just skips
   those sentences (`hasAlignerNumeralExpansion`). Unscheduled.
 
+- [ ] **Apply the punctuation fix to `SyncedShadowText`, and clear stale word
+  ranges.** (2026-09-20) `matchWord` now measures against the punctuation-stripped
+  sentence (the aligner drops 、。); `SyncedShadowText`'s karaoke highlight still
+  multiplies a token-fraction by the raw `japanese.length`/mora count, so its
+  highlight drifts the same way after commas. Also pending the user's go-ahead:
+  `npx tsx scripts/audit-backfilled-word-ranges.ts --apply` to clear the 70 stale
+  backfilled overrides (dry-run output in STATUS 2026-09-20).
+
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to

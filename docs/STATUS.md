@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-19.
+Last updated: 2026-09-20.
 
 ## Where things stand
 
@@ -32,6 +32,29 @@ remaining planned work: re-mine "After Work" (browser + human review).
 what's left is one deferred durability item (below).
 
 ## Recent changes
+
+- **2026-09-20 — Word-audio spans landed on the wrong token: `matchWord` counted
+  punctuation the aligner drops.** User: word-level audio extraction quality "isn't
+  very good". Probed the cached alignments: the aligner's token texts concatenate to
+  the sentence *without* 、。「」 (847 of 986 match once stripped, 0 with punctuation;
+  129 have `<unk>`; 10 are numeral expansions), but `matchWord`
+  (`src/lib/isolatedWordRange.ts`) measured position/length against the raw
+  `japanese`, so every word after a comma drifted earlier by ~1 char per mark. On 700
+  real links **72% picked a different span than the exact mapping (median 380 ms,
+  p90 ~1 s)**, typically starting on the *previous* token (ござい in ありがとうござい
+  ます picking up と). The earlier pad/round-trip-ASR/backfill work tuned boundaries
+  around that span, which is why no fixed pad won. Fix: positions and lengths now
+  count only the characters the aligner keeps (`ALIGNER_DROPPED`, `\p{P}\p{S}\p{Z}`);
+  no clipping change — nothing is cut, the client loops a range of the whole-sentence
+  audio. 2 regression tests (comma-heavy sentence, quoted word) fail on the old code;
+  `tests/gameRepository.test.ts`'s fixture had `です。` as one aligner token (never
+  real) — corrected. **Not yet done:** `scripts/audit-backfilled-word-ranges.ts`
+  (dry-run) classes stored overrides by whether they equal the legacy matcher's
+  output: **70 stale backfill, 58 still correct, 21 manual/other (never touched), 9
+  without alignment**; `--apply` clears the 70 so the corrected runtime default
+  applies (then `backfill:word-audio-range` can redo them). `SyncedShadowText`
+  (karaoke highlight) has the same fraction-times-`japanese.length` drift — not
+  fixed here; on ROADMAP.
 
 - **2026-09-20 — Deterministic ids for get-or-create sync rows; real-Postgres push tests.**
   Follow-up to the sync reliability pass below (the two items it left on the ROADMAP).

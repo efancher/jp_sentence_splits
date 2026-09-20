@@ -77,6 +77,43 @@ describe('isolatedWordRange', () => {
   });
 });
 
+describe('isolatedWordRange with punctuation in the sentence', () => {
+  // The aligner's tokens carry no 、。 — their text concatenates to the
+  // punctuation-stripped sentence. Measuring against the raw string used to
+  // shift the window onto the previous token.
+  it('lands on the target token, not the one before it, after several commas', () => {
+    const japanese = 'はい、はい、はい、はい、本は、ね。';
+    const words: WordAlignment[] = [
+      word('はい', 0, 0.3),
+      word('はい', 0.3, 0.6),
+      word('はい', 0.6, 0.9),
+      word('はい', 0.9, 1.2),
+      word('本', 1.2, 1.7),
+      word('は', 1.7, 1.9),
+      word('ね', 1.9, 2.2),
+    ];
+    // 本 = 1.2–1.7s; trailing は (≤2 chars) folded in → 1.9s. Pad -60/+120.
+    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 1140, endMs: 2020 });
+    expect(isolatedWordSpans(words, japanese, '本')?.wordOnly).toEqual({
+      startMs: 1140,
+      endMs: 1820,
+    });
+  });
+
+  it('handles a word inside quotes and a trailing full stop', () => {
+    const japanese = '「ありがとうございます。」';
+    const words: WordAlignment[] = [
+      word('ありがとう', 0, 0.8),
+      word('ござい', 0.8, 1.3),
+      word('ます', 1.3, 1.7),
+    ];
+    expect(isolatedWordSpans(words, japanese, 'ござい')?.wordOnly).toEqual({
+      startMs: 740,
+      endMs: 1420,
+    });
+  });
+});
+
 describe('isolatedWordSpans', () => {
   const japanese = '私は本を読む';
   const words: WordAlignment[] = [

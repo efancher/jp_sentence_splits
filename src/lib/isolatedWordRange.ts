@@ -10,6 +10,7 @@ import type { TimeRangeMs } from './recording';
  * `SyncedShadowText` uses for karaoke highlighting: the target's
  * [charIndex, charIndex+len) fraction of `japanese` is intersected with
  * each aligned word's own cumulative fraction of the (usable) transcript.
+ * (Punctuation is excluded from both sides — see `ALIGNER_DROPPED`.)
  *
  * The immediately-following aligned word is folded in when it's short
  * (≤2 chars — a case particle) so the learner hears whether the pitch stays
@@ -34,13 +35,31 @@ interface WordMatch {
   usable: WordAlignment[];
 }
 
+/**
+ * The aligner's tokenizer drops punctuation and whitespace, so its token
+ * texts concatenate to the sentence *without* 、。「」 etc. — measuring a
+ * word's position against the raw `japanese` (punctuation included) shifts
+ * every word after a comma earlier by one char per mark, landing the span on
+ * the previous token (ござい in ありがとうございます picking up と). Positions
+ * and lengths here therefore count only the characters the aligner kept.
+ */
+const ALIGNER_DROPPED = /[\p{P}\p{S}\p{Z}\p{Cc}]/u;
+
+function alignerChars(text: string): string[] {
+  return [...text].filter((ch) => !ALIGNER_DROPPED.test(ch));
+}
+
 function matchWord(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
 ): WordMatch | null {
-  const charIndex = japanese.indexOf(surfaceForm);
-  if (charIndex === -1 || surfaceForm.length === 0) return null;
+  const rawIndex = japanese.indexOf(surfaceForm);
+  if (rawIndex === -1 || surfaceForm.length === 0) return null;
+  const charIndex = alignerChars(japanese.slice(0, rawIndex)).length;
+  const surfaceLength = alignerChars(surfaceForm).length;
+  const sentenceLength = alignerChars(japanese).length;
+  if (surfaceLength === 0 || sentenceLength === 0) return null;
 
   const usable = words.filter(
     (word) => word.text && word.text !== '<eps>' && word.text !== '<unk>',
@@ -48,8 +67,8 @@ function matchWord(
   const total = usable.reduce((sum, word) => sum + word.text.length, 0);
   if (total === 0) return null;
 
-  const startFrac = charIndex / japanese.length;
-  const endFrac = (charIndex + surfaceForm.length) / japanese.length;
+  const startFrac = charIndex / sentenceLength;
+  const endFrac = (charIndex + surfaceLength) / sentenceLength;
 
   let acc = 0;
   let startMs: number | null = null;

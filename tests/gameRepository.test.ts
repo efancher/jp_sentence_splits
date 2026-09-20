@@ -224,8 +224,9 @@ describe('odd ear out repository', () => {
   /**
    * A confirmed, citation-form, pitch-carrying word with a clip in a book. The
    * sentence is 「これは語<id>です。」 and its alignment has three tokens whose
-   * lengths sum to the sentence's, so the character-proportion mapping is
-   * exact: 語<id> sits at 1.0–1.6 s, です。 at 1.6–3.0 s.
+   * lengths sum to the sentence's *without* the 。 (the real aligner drops
+   * punctuation), so the character-proportion mapping is exact: 語<id> sits at
+   * 1.0–1.6 s, です at 1.6–3.0 s.
    */
   async function addPitchWord(
     id: string,
@@ -278,7 +279,7 @@ describe('odd ear out repository', () => {
           words: [
             { text: lead, start: 0, end: 1, phones: [] },
             { text: `語${id}`, start: 1, end: wordEnd, phones: [] },
-            { text: 'です。', start: wordEnd, end: 3, phones: [] },
+            { text: 'です', start: wordEnd, end: 3, phones: [] },
           ],
         },
       });
