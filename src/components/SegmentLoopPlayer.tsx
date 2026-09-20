@@ -44,6 +44,7 @@ import { WordAudioRangeEditor } from './WordAudioRangeEditor';
 export function SegmentLoopPlayer({
   audio,
   japanese,
+  inlineReading,
   surfaceForm,
   link,
   loopLabel = 'Loop native word',
@@ -55,6 +56,8 @@ export function SegmentLoopPlayer({
 }: {
   audio: SentenceAudio;
   japanese: string;
+  /** The sentence's ruby reading — lets the word span be cut at a mora boundary when the target ends inside an aligner token. */
+  inlineReading?: string;
   surfaceForm: string;
   /** The occurrence's link — its `audioStartMs`/`audioEndMs`, when set,
    * override the alignment guess, and the "Adjust" editor writes back to it. */
@@ -149,13 +152,13 @@ export function SegmentLoopPlayer({
       saveReferenceAlignment,
     ).then((result) => {
       if (cancelled) return;
-      setAutoRange(result ? isolatedWordRange(result.words, japanese, surfaceForm) : null);
+      setAutoRange(result ? isolatedWordRange(result.words, japanese, surfaceForm, { inlineReading }) : null);
       setAlignmentResolved(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [audio.id, blob, japanese, surfaceForm]);
+  }, [audio.id, blob, japanese, inlineReading, surfaceForm]);
 
   async function toggleLoop() {
     if (!editRange) return;

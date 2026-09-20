@@ -5,8 +5,6 @@ import {
   accuracyBySeparation,
   measureNativeWord,
   signalDetection,
-  SPAN_PAD_END_MS,
-  SPAN_PAD_START_MS,
 } from '../src/lib/nativeClipPitchAudit';
 
 /** A track with one relative-semitone level per equal 100 ms mora starting at `startS`; null = unvoiced. */
@@ -25,15 +23,12 @@ function track(levels: Array<number | null>, startS = 0.5): PitchAnalysisPayload
   return { frames, medianHz: 120, voicedRatio: 1, durationSeconds: 3 };
 }
 
-/** Padded span for a word of `moraCount` 100 ms morae starting at 0.5 s. */
+/** The word's own span for `moraCount` 100 ms morae starting at 0.5 s. */
 function span(moraCount: number) {
-  return {
-    startMs: 500 - SPAN_PAD_START_MS,
-    endMs: 500 + moraCount * 100 + SPAN_PAD_END_MS,
-  };
+  return { startMs: 500, endMs: 500 + moraCount * 100 };
 }
 
-const base = { surfaceForm: '語', paddedSpan: span(2), moraCount: 2 };
+const base = { surfaceForm: '語', span: span(2), moraCount: 2 };
 
 describe('measureNativeWord', () => {
   it('agrees and reports the separation for a clear atamadaka (hl) clip', () => {
@@ -60,7 +55,7 @@ describe('measureNativeWord', () => {
     const result = measureNativeWord({
       ...base,
       moraCount: 4,
-      paddedSpan: span(4),
+      span: span(4),
       pitch: track([-3, 2, 2, -3]),
       position: 3,
     })!;

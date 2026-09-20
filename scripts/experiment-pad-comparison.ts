@@ -1,15 +1,15 @@
 /**
- * Read-only experiment: does the computed word-clip pad (gap-aware, see
- * `pad` in src/lib/isolatedWordRange.ts) beat the old fixed -60/+120ms pad, or
- * no pad, by round-trip ASR? (docs/STATUS.md 2026-09-20.)
+ * Read-only experiment: which word-clip padding is best by round-trip ASR?
+ * (docs/STATUS.md 2026-09-20.) Varies the ceilings/slack of the gap-aware pad
+ * (`padSpan` in src/lib/isolatedWordRange.ts) against the shipped default.
  *
  * For a seeded random sample of confirmed word occurrences (current-version
- * alignment, word span found) it cuts the same underlying word-only match three
- * ways — `fixed` (-60/+120), `computed` (the shipped pad), `none` — transcribes
- * each clip with large-v3-turbo (`score-pad-variants.py`, `mfa` conda env) and
- * scores it against the surface form. `differs` marks words where computed !=
- * fixed: only those can separate the two, so results are reported on that
- * subset as well as overall. Writes nothing to Supabase.
+ * alignment, word span found) it cuts the same underlying word-only match once
+ * per variant in VARIANTS, transcribes each clip with large-v3-turbo
+ * (`score-pad-variants.py`, `mfa` conda env) and scores it against the surface
+ * form. `differs` marks words where any variant's range differs from the
+ * default's — only those can separate the variants, so results are reported on
+ * that subset as well as overall. Writes nothing to Supabase.
  *
  * Usage: npx tsx scripts/experiment-pad-comparison.ts [--n 100] [--seed 1] [--keep DIR]
  */
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { AlignmentResult } from '../src/domain/types';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
-import { isolatedWordMatchRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
+import { isolatedWordMatchRange, padSpan, type PadConfig } from '../src/lib/isolatedWordRange';
 
 import { ffmpegTrimToM4a, ffprobeDurationMs } from './lib/audioClipHelpers';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
@@ -29,13 +29,21 @@ import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const MFA_PYTHON = process.env.MFA_PYTHON ?? '/home/ed/miniforge3/envs/mfa/bin/python3.14';
 const SCORER = join(dirname(fileURLToPath(import.meta.url)), 'score-pad-variants.py');
-const LABELS = ['fixed', 'computed', 'none'] as const;
+/** `current` is the shipped default; the rest are candidates. `none` is the raw match. */
+const VARIANTS: Record<string, PadConfig> = {
+  current: { onsetMs: 60, tailMs: 120, slackMs: 30 },
+  'c30-60-s30': { onsetMs: 30, tailMs: 60, slackMs: 30 },
+  'c30-60-s0': { onsetMs: 30, tailMs: 60, slackMs: 0 },
+  none: { onsetMs: 0, tailMs: 0, slackMs: 0 },
+};
+const LABELS = Object.keys(VARIANTS);
+const BASELINE = 'current';
 
 interface Scored {
   id: string;
   surfaceForm: string;
   differs: boolean;
-  sims: Record<(typeof LABELS)[number], number>;
+  sims: Record<string, number>;
   texts: Record<string, string>;
 }
 
@@ -74,15 +82,12 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 function report(title: string, rows: Scored[]) {
   console.log(`\n${title} (n=${rows.length})`);
   if (rows.length === 0) return;
-  for (const label of LABELS) console.log(`  mean similarity  ${label.padEnd(9)} ${mean(rows.map((r) => r.sims[label])).toFixed(3)}`);
-  const cmp = (a: (typeof LABELS)[number], b: (typeof LABELS)[number]) => {
-    const wins = rows.filter((r) => r.sims[a] - r.sims[b] > 0.05).length;
-    const losses = rows.filter((r) => r.sims[b] - r.sims[a] > 0.05).length;
-    console.log(`  ${a} vs ${b}: ${wins} better, ${losses} worse, ${rows.length - wins - losses} within 0.05`);
-  };
-  cmp('computed', 'fixed');
-  cmp('computed', 'none');
-  cmp('fixed', 'none');
+  for (const label of LABELS) console.log(`  mean similarity  ${label.padEnd(11)} ${mean(rows.map((r) => r.sims[label]!)).toFixed(3)}`);
+  for (const label of LABELS.filter((l) => l !== BASELINE)) {
+    const better = rows.filter((r) => r.sims[label]! - r.sims[BASELINE]! > 0.05).length;
+    const worse = rows.filter((r) => r.sims[BASELINE]! - r.sims[label]! > 0.05).length;
+    console.log(`  ${label.padEnd(11)} vs ${BASELINE}: ${better} better, ${worse} worse, ${rows.length - better - worse} within 0.05`);
+  }
 }
 
 async function main() {
@@ -123,8 +128,7 @@ async function main() {
       const text = japanese.get(link.sentenceId);
       if (!audio || !alignment || !text || !link.surfaceForm) return null;
       const match = isolatedWordMatchRange(alignment.words, text, link.surfaceForm);
-      const computed = isolatedWordSpans(alignment.words, text, link.surfaceForm)?.wordOnly;
-      return match && computed ? { link, audio, match, computed, text } : null;
+      return match ? { link, audio, match, text, words: alignment.words } : null;
     })
     .filter((c): c is NonNullable<typeof c> => c !== null)
     .map((c) => ({ c, k: rand() }))
@@ -146,16 +150,20 @@ async function main() {
       audioCache.set(c.audio.id, cached);
     }
     const clamp = (s: number, e: number) => ({ startMs: Math.max(0, s), endMs: Math.min(cached!.durationMs, e) });
-    const ranges = {
-      fixed: clamp(c.match.startMs - 60, c.match.endMs + 120),
-      computed: clamp(c.computed.startMs, c.computed.endMs),
-      none: clamp(c.match.startMs, c.match.endMs),
-    };
-    const differs = Math.abs(ranges.fixed.startMs - ranges.computed.startMs) > 1 || Math.abs(ranges.fixed.endMs - ranges.computed.endMs) > 1;
-    if (LABELS.some((l) => ranges[l].endMs - ranges[l].startMs < 60)) continue;
+    const ranges = Object.fromEntries(
+      Object.entries(VARIANTS).map(([label, config]) => {
+        const padded = padSpan(c.words, c.match.startMs, c.match.endMs, config);
+        return [label, clamp(padded.startMs, padded.endMs)];
+      }),
+    ) as Record<string, { startMs: number; endMs: number }>;
+    const base = ranges[BASELINE]!;
+    const differs = LABELS.some(
+      (l) => Math.abs(ranges[l]!.startMs - base.startMs) > 1 || Math.abs(ranges[l]!.endMs - base.endMs) > 1,
+    );
+    if (LABELS.some((l) => ranges[l]!.endMs - ranges[l]!.startMs < 60)) continue;
     for (const label of LABELS) {
       const clipFile = `clip-${i}-${label}.m4a`;
-      await ffmpegTrimToM4a(cached.path, join(workDir, clipFile), ranges[label].startMs, ranges[label].endMs);
+      await ffmpegTrimToM4a(cached.path, join(workDir, clipFile), ranges[label]!.startMs, ranges[label]!.endMs);
       await appendFile(join(workDir, 'manifest.jsonl'), `${JSON.stringify({ id: c.link.id, surfaceForm: c.link.surfaceForm, label, clipFile, differs })}\n`);
     }
     prepared += 1;
@@ -164,12 +172,14 @@ async function main() {
   const scored = await runScorer(workDir);
 
   report('All sampled words', scored);
-  report('Only words where the computed pad differs from the fixed pad', scored.filter((r) => r.differs));
-  const worse = scored.filter((r) => r.differs && r.sims.fixed - r.sims.computed > 0.2).slice(0, 8);
-  const better = scored.filter((r) => r.differs && r.sims.computed - r.sims.fixed > 0.2).slice(0, 8);
-  const show = (r: Scored) => `  ${r.surfaceForm}: fixed=${r.sims.fixed.toFixed(2)} "${r.texts.fixed}" | computed=${r.sims.computed.toFixed(2)} "${r.texts.computed}"`;
-  console.log('\nComputed clearly better:\n' + better.map(show).join('\n'));
-  console.log('\nComputed clearly worse:\n' + worse.map(show).join('\n'));
+  report('Only words where some variant differs from the default', scored.filter((r) => r.differs));
+  const show = (r: Scored, label: string) =>
+    `  ${r.surfaceForm}: current=${r.sims[BASELINE]!.toFixed(2)} "${r.texts[BASELINE]}" | ${label}=${r.sims[label]!.toFixed(2)} "${r.texts[label]}"`;
+  for (const label of LABELS.filter((l) => l !== BASELINE && l !== 'none')) {
+    const rows = scored.filter((r) => r.differs);
+    console.log(`\n${label} clearly better than current:\n` + rows.filter((r) => r.sims[label]! - r.sims[BASELINE]! > 0.25).slice(0, 5).map((r) => show(r, label)).join('\n'));
+    console.log(`\n${label} clearly worse than current:\n` + rows.filter((r) => r.sims[BASELINE]! - r.sims[label]! > 0.25).slice(0, 5).map((r) => show(r, label)).join('\n'));
+  }
   if (!arg('keep', '')) await rm(workDir, { recursive: true, force: true });
 }
 

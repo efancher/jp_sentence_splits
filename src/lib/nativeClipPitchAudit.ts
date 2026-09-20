@@ -32,27 +32,22 @@ export interface NativeWordMeasurement {
   separationSemitones: number | null;
 }
 
-/** The word-only alignment span carries this much pad each side (`isolatedWordRange.ts` `pad`); measure inside it. */
-export const SPAN_PAD_START_MS = 60;
-export const SPAN_PAD_END_MS = 120;
-
 export function measureNativeWord({
   pitch,
-  paddedSpan,
+  span,
   surfaceForm,
   moraCount,
   position,
 }: {
   pitch: PitchAnalysisPayload;
-  /** `isolatedWordSpans(...).wordOnly` — padded; the pad is stripped before measuring. */
-  paddedSpan: { startMs: number; endMs: number };
+  /** The word's own aligner boundaries (`isolatedWordMatchRange`) — unpadded, so the measurement stays inside the word. */
+  span: { startMs: number; endMs: number };
   surfaceForm: string;
   moraCount: number;
   position: number;
 }): NativeWordMeasurement | null {
   if (moraCount < 2) return null;
-  const startMs = paddedSpan.startMs + SPAN_PAD_START_MS;
-  const endMs = paddedSpan.endMs - SPAN_PAD_END_MS;
+  const { startMs, endMs } = span;
   if (endMs <= startMs) return null;
 
   const expected = expectedPitchShape(moraCount, position);

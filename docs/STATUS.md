@@ -33,6 +33,49 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Word-audio precision pass: pad experiment #2, sub-token mora cut, research.**
+  *Pad:* re-ran the round-trip ASR comparison (120 words, 4 variants). Mean similarity:
+  current 60/120 ms ceilings + 30 ms slack 0.647; 30/60 + slack 30 0.666; **30/60 + slack 0
+  0.675**; no pad 0.667. 30/60/0 beat current 27–12 (sign test p≈0.02; 30/60/30 only 12–9);
+  many extreme cases were Whisper hallucinations, so treat as directional. Adopted
+  `DEFAULT_PAD = { onsetMs: 30, tailMs: 60, slackMs: 0 }` (`isolatedWordRange.ts`); adjacent
+  tokens now get no pad, a pause gets up to 30/60 ms. Revert = three constants. Tests
+  re-derived by hand from the rule. `nativeClipPitchAudit.measureNativeWord` no longer strips a
+  hard-coded pad (it was already wrong once the pad became gap-aware): it takes the raw span
+  (`isolatedWordMatchRange`). Experiment: `scripts/experiment-pad-comparison.ts`.
+  *Mora cut:* 19% of links have an aligner token longer than the target (生まれ in 生まれた).
+  New `src/lib/moraTiming.ts`: `phonesToMoraIntervals` derives mora boundaries from a token's
+  MFA phones (vowel = 1 mora, `Vː` = 2, geminate `Cː` = っ + onset, ɴ/ɰ̃ = ん, dropped devoiced
+  vowels between/after voiceless consonants recovered, final `ʔ` = っ; any unparseable pattern →
+  null); `buildMoraMap`/`resolveMoraRange` give each raw character its mora range from the
+  ruby `inlineReading` and refuse targets that cut through a reading unit.
+  `isolatedWordRange`/`Spans(..., { inlineReading })` cut at the target's last mora when the
+  phones and the reading agree on the token's mora count, else keep the token edge; a cut inside
+  a token disables particle folding and treats the remainder as a butted neighbour for padding.
+  Coverage on prod: 136 of 153 token-longer-than-target links refined (89%); fallbacks are
+  reading≠pronunciation (日本 = にっぽん vs にほん) and geminates the aligner leaves unlabelled
+  (言って = `i t(340) e`). **ASR check (100 links, large-v3-turbo):** overall mora 0.516 vs
+  token 0.577 — but 30 mora clips vs 4 token clips were Whisper hallucinations on very short
+  audio; excluding hallucinated pairs (n=69) mora **0.709 vs 0.639, better 40 / worse 15**;
+  by mora-clip length ≥400 ms 17 better / 5 worse, <250 ms 10 / 19 (the judge is unreliable
+  there, which is what the planned CTC judge is for). **Wiring decision:** pitch-accent
+  consumers deliberately keep whole-token spans (a verb/adjective ending shows whether the
+  pitch stays high or falls — the same role a particle plays for a noun); non-pitch loops
+  (`SegmentLoopPlayer` in the Analyze page's word audio and the ReviewPage word-only cloze) pass
+  `inlineReading`. Experiment: `scripts/experiment-mora-cut.ts`.
+  *Research (subagent, 2026-09-20):* MFA `japanese_mfa` is the right aligner (CSJ mean phone
+  boundary error 10.8 ms vs MAUS 13.5, SPPAS 17.8, Julius 19.3 — arXiv 2606.18466; WhisperX/MMS
+  worse than MFA on English word boundaries — arXiv 2406.19363; both citations spot-checked);
+  our remaining errors are mapping errors, not boundary error. MFA's tokenizer joins a literal
+  space into `_`; the supported bypass is `align_utterance_online(..., tokenizer=None)` with
+  pre-split text/custom lexicon entries (ran it; forced splits inside a merged vowel give
+  degenerate durations, so cross-check use only). kalpy `fine_tune_alignments` refines
+  boundaries to 1 ms (benefit unbenchmarked). Suggested judge: a CTC kana recogniser
+  (`sakasegawa/japanese-wav2vec2-large-hiragana-ctc`, no hallucination); suggested ground
+  truth: ~40 hand-labelled edges. Poor fits: TTS/Forvo isolated audio. Not done:
+  `kanaTimeline.ts` still maps morae to tokens by character proportion (same drift class
+  as the old `matchWord`).
+
 - **2026-09-20 — Pad comparison by round-trip ASR (the check the computed-pad entry left
   open).** `scripts/experiment-pad-comparison.ts` (+ `score-pad-variants.py`, reuses the
   backfill scorer's similarity; read-only, seeded sample) cuts the same word-only match

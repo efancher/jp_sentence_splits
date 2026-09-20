@@ -310,11 +310,10 @@ describe('odd ear out repository', () => {
     const byId = new Map(clips.map((c) => [c.vocabularyItemId, c]));
     expect(byId.get('a')).toMatchObject({ moraCount: 3, shape: 'lhh', bookId: 'b1' });
     expect(byId.get('b')).toMatchObject({ moraCount: 3, shape: 'hll' });
-    // word-only, padded ~60/120 ms around 1.0–1.6 s — and it must not reach into です。 (from 1.6 s + pad)
+    // word-only around 1.0–1.6 s. Both edges butt against a neighbouring token, so no pad —
+    // the span must not reach into です (from 1.6 s).
     const span = byId.get('a')!.span;
-    expect(span.startMs).toBeGreaterThanOrEqual(900);
-    expect(span.startMs).toBeLessThan(1000);
-    expect(span.endMs).toBeLessThanOrEqual(1750);
+    expect(span).toEqual({ startMs: 1000, endMs: 1600 });
   });
 
   it('drops words that cannot be played: no audio, one mora, no/stale alignment, implausible span', async () => {
@@ -347,8 +346,7 @@ describe('odd ear out repository', () => {
     const { clips } = await getOddEarOutData();
     expect(clips.map((c) => c.vocabularyItemId).sort()).toEqual(['dated', 'fullwidth', 'plain']);
     // 語<id> sits at 1.0–1.6 s in every fixture; a mis-mapped date would shift the span.
-    for (const clip of clips) expect(clip.span.startMs).toBeGreaterThanOrEqual(940);
-    for (const clip of clips) expect(clip.span.startMs).toBeLessThanOrEqual(1000);
+    for (const clip of clips) expect(clip.span).toEqual({ startMs: 1000, endMs: 1600 });
   });
 
   it('skips sentences that live only in suspended books', async () => {

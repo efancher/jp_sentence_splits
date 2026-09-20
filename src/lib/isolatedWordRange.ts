@@ -1,5 +1,11 @@
 import type { WordAlignment } from '../domain/types';
 import { alignerView } from './alignerText';
+import {
+  buildMoraMap,
+  phonesToMoraIntervals,
+  resolveMoraRange,
+  type SentenceReading,
+} from './moraTiming';
 import type { TimeRangeMs } from './recording';
 
 /**
@@ -35,6 +41,9 @@ interface WordMatch {
   matchEndMs: number;
   lastIndex: number;
   usable: WordAlignment[];
+  /** The span starts/ends inside a token (cut at a mora boundary), not at a token edge. */
+  innerStart: boolean;
+  innerEnd: boolean;
 }
 
 /** Length of `text` in aligner characters (see `alignerView`). */
@@ -96,10 +105,63 @@ export function verifiedTokenCharRange(
   return { start, end: start + tokens[index]!.text.length };
 }
 
+/**
+ * Cuts the matched span at mora boundaries where the target starts/ends inside
+ * its first/last token. Each side is refined independently and only when
+ * everything lines up: the reading covers the sentence, the target's edge falls
+ * on a reading unit, and the token's phones parse into exactly as many morae as
+ * its reading has. Any doubt leaves that side at the token edge.
+ */
+function refineToMorae(input: {
+  usable: WordAlignment[];
+  view: ReturnType<typeof alignerView>;
+  japanese: string;
+  reading: SentenceReading;
+  first: number;
+  last: number;
+  rawStart: number;
+  rawEnd: number;
+}): { startMs?: number; endMs?: number } | null {
+  const { usable, view, japanese, reading, first, last, rawStart, rawEnd } = input;
+  const map = buildMoraMap(japanese, reading);
+  if (!map) return null;
+  const target = resolveMoraRange(map, rawStart, rawEnd);
+  if (!target) return null;
+
+  const charStart = (token: number) => usable.slice(0, token).reduce((n, w) => n + w.text.length, 0);
+  const tokenMorae = (token: number) => {
+    const from = charStart(token);
+    const to = from + usable[token]!.text.length;
+    if (to <= from || to > view.chars.length) return null;
+    const range = resolveMoraRange(map, view.rawStart[from]!, view.rawEnd[to - 1]!);
+    const intervals = phonesToMoraIntervals(usable[token]!.phones);
+    if (!range || !intervals || intervals.length !== range.end - range.start) return null;
+    return { range, intervals, rawStart: view.rawStart[from]!, rawEnd: view.rawEnd[to - 1]! };
+  };
+
+  const out: { startMs?: number; endMs?: number } = {};
+  const firstToken = tokenMorae(first);
+  if (firstToken && rawStart > firstToken.rawStart) {
+    const interval = firstToken.intervals[target.start - firstToken.range.start];
+    if (interval) out.startMs = interval.start * 1000;
+  }
+  const lastToken = tokenMorae(last);
+  if (lastToken && rawEnd < lastToken.rawEnd) {
+    const interval = lastToken.intervals[target.end - 1 - lastToken.range.start];
+    if (interval) out.endMs = interval.end * 1000;
+  }
+  if (out.startMs === undefined && out.endMs === undefined) return null;
+
+  const startMs = out.startMs ?? usable[first]!.start * 1000;
+  const endMs = out.endMs ?? usable[last]!.end * 1000;
+  return endMs - startMs >= MIN_MATCH_MS ? out : null;
+}
+
 function matchWord(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
+  reading?: SentenceReading,
 ): WordMatch | null {
   const rawIndex = japanese.indexOf(surfaceForm);
   if (rawIndex === -1 || surfaceForm.length === 0) return null;
@@ -155,6 +217,7 @@ function matchWord(
   };
 
   let found = locate((n) => n, (n) => n, charIndex, charIndex + surfaceLength);
+  let exact = found !== null && found.last < verifiedTokens;
   if (!found || found.last >= verifiedTokens) {
     // Unverifiable prefix (numeral expansion, normalized spelling): fall back
     // to the character-proportion approximation.
@@ -166,9 +229,35 @@ function matchWord(
     );
   }
   if (!found) return null;
-  const startMs: number | null = usable[found.first]!.start * 1000;
-  const endMs: number | null = usable[found.last]!.end * 1000;
+  let startMs: number | null = usable[found.first]!.start * 1000;
+  let endMs: number | null = usable[found.last]!.end * 1000;
   const lastIndex = found.last;
+
+  // The target can end (or start) inside a token — 生まれ in 生まれた — in which
+  // case the token's own edge would play the extra morae. Cut at the mora
+  // boundary instead when the phones and the reading agree on where it is.
+  let innerStart = false;
+  let innerEnd = false;
+  if (reading && exact) {
+    const refined = refineToMorae({
+      usable,
+      view,
+      japanese,
+      reading,
+      first: found.first,
+      last: found.last,
+      rawStart: rawIndex,
+      rawEnd,
+    });
+    if (refined?.startMs !== undefined) {
+      startMs = refined.startMs;
+      innerStart = true;
+    }
+    if (refined?.endMs !== undefined) {
+      endMs = refined.endMs;
+      innerEnd = true;
+    }
+  }
 
   if (startMs === null || endMs === null || endMs <= startMs) return null;
   // The aligner sometimes crushes a word into a few frames (何 → 30 ms in
@@ -183,7 +272,7 @@ function matchWord(
     return null;
   }
 
-  return { startMs, matchEndMs, lastIndex, usable };
+  return { startMs, matchEndMs, lastIndex, usable, innerStart, innerEnd };
 }
 
 /**
@@ -201,6 +290,7 @@ const FOLDABLE_PARTICLES = new Set([
 const MAX_PARTICLE_GAP_MS = 150;
 
 function foldableParticle(match: WordMatch): WordAlignment | null {
+  if (match.innerEnd) return null; // what follows is the rest of the same token, not a particle
   const next = match.usable[match.lastIndex + 1];
   if (!next || !FOLDABLE_PARTICLES.has(next.text)) return null;
   if (next.start * 1000 - match.matchEndMs > MAX_PARTICLE_GAP_MS) return null;
@@ -213,19 +303,34 @@ function foldableParticle(match: WordMatch): WordAlignment | null {
  * pad never runs into a neighbouring word, since that plays the neighbour's
  * first mora ("chiisai-ba" for 小さい|場所). Room to grow is the silence
  * (`<eps>`) between this span and the nearest real token on that side, plus
- * `BOUNDARY_SLACK_MS` for the aligner's own boundary error — so a word next to
+ * `slackMs` for the aligner's own boundary error — so a word next to
  * a pause gets the full pad and a word butted against another gets almost none.
  */
-const ONSET_PAD_MS = 60;
-const TAIL_PAD_MS = 120;
-const BOUNDARY_SLACK_MS = 30;
+export interface PadConfig {
+  /** Ceiling on the pad before the span. */
+  onsetMs: number;
+  /** Ceiling on the pad after the span. */
+  tailMs: number;
+  /** Extra room past the silence to the neighbouring token, for boundary error. */
+  slackMs: number;
+}
+
+const DEFAULT_PAD: PadConfig = { onsetMs: 30, tailMs: 60, slackMs: 0 };
 const MIN_MATCH_MS = 60;
 /** Timing tolerance when deciding which tokens sit before/after a span. */
 const EDGE_EPS_MS = 1;
 
-function pad(words: WordAlignment[], startMs: number, endMs: number): TimeRangeMs {
-  let gapBefore = Infinity;
-  let gapAfter = Infinity;
+/** Exported so padding strategies can be compared (scripts/experiment-pad-comparison.ts). */
+export function padSpan(
+  words: WordAlignment[],
+  startMs: number,
+  endMs: number,
+  config: PadConfig = DEFAULT_PAD,
+  /** The edge cuts inside a token (a mora boundary): the rest of that token is the neighbour, butted right up. */
+  inner: { start?: boolean; end?: boolean } = {},
+): TimeRangeMs {
+  let gapBefore = inner.start ? 0 : Infinity;
+  let gapAfter = inner.end ? 0 : Infinity;
   for (const w of words) {
     if (!w.text || w.text === '<eps>') continue;
     const wordStart = w.start * 1000;
@@ -234,9 +339,18 @@ function pad(words: WordAlignment[], startMs: number, endMs: number): TimeRangeM
     if (wordStart >= endMs - EDGE_EPS_MS) gapAfter = Math.min(gapAfter, Math.max(0, wordStart - endMs));
   }
   return {
-    startMs: Math.max(0, startMs - Math.min(ONSET_PAD_MS, gapBefore + BOUNDARY_SLACK_MS)),
-    endMs: endMs + Math.min(TAIL_PAD_MS, gapAfter + BOUNDARY_SLACK_MS),
+    startMs: Math.max(0, startMs - Math.min(config.onsetMs, gapBefore + config.slackMs)),
+    endMs: endMs + Math.min(config.tailMs, gapAfter + config.slackMs),
   };
+}
+
+function pad(
+  words: WordAlignment[],
+  startMs: number,
+  endMs: number,
+  match: Pick<WordMatch, 'innerStart' | 'innerEnd'>,
+): TimeRangeMs {
+  return padSpan(words, startMs, endMs, DEFAULT_PAD, { start: match.innerStart, end: match.innerEnd });
 }
 
 /**
@@ -247,9 +361,16 @@ export function isolatedWordMatchRange(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
+  reading?: SentenceReading,
 ): TimeRangeMs | null {
-  const match = matchWord(words, japanese, surfaceForm);
+  const match = matchWord(words, japanese, surfaceForm, reading);
   return match ? { startMs: match.startMs, endMs: match.matchEndMs } : null;
+}
+
+/** The particle-inclusive end for a match, or the match's own end. */
+function rangeEnd(match: WordMatch): number {
+  const particle = foldableParticle(match);
+  return particle ? particle.end * 1000 : match.matchEndMs;
 }
 
 /**
@@ -262,21 +383,31 @@ export function isolatedWordRangeUnpadded(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
+  reading?: SentenceReading,
 ): TimeRangeMs | null {
-  const match = matchWord(words, japanese, surfaceForm);
-  if (!match) return null;
-  const particle = foldableParticle(match);
-  return { startMs: match.startMs, endMs: particle ? particle.end * 1000 : match.matchEndMs };
+  const match = matchWord(words, japanese, surfaceForm, reading);
+  return match ? { startMs: match.startMs, endMs: rangeEnd(match) } : null;
 }
 
+/**
+ * Pass the sentence's `inlineReading` as `reading` to cut a target that ends
+ * inside a token (生まれ within 生まれた) at its last mora rather than at the
+ * token edge — see `refineToMorae`. Without it, spans are token-aligned.
+ *
+ * Pitch-accent consumers deliberately do NOT pass it: for a verb or adjective
+ * the ending (た, る, ます) is what shows whether the pitch stays high or falls
+ * — the same role a particle plays after a noun — so the whole token keeps the
+ * cue the card teaches. Cards that need exactly the target's morae (listening
+ * to "just the word", karaoke highlighting) do pass it.
+ */
 export function isolatedWordRange(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
+  reading?: SentenceReading,
 ): TimeRangeMs | null {
-  const raw = isolatedWordRangeUnpadded(words, japanese, surfaceForm);
-  if (!raw) return null;
-  return pad(words, raw.startMs, raw.endMs);
+  const match = matchWord(words, japanese, surfaceForm, reading);
+  return match ? pad(words, match.startMs, rangeEnd(match), match) : null;
 }
 
 /**
@@ -296,13 +427,13 @@ export function isolatedWordSpans(
   words: WordAlignment[],
   japanese: string,
   surfaceForm: string,
+  reading?: SentenceReading,
 ): IsolatedWordSpans | null {
-  const match = matchWord(words, japanese, surfaceForm);
+  const match = matchWord(words, japanese, surfaceForm, reading);
   if (!match) return null;
-  const { startMs, matchEndMs } = match;
   const particle = foldableParticle(match);
   return {
-    wordOnly: pad(words, startMs, matchEndMs),
-    withParticle: particle ? pad(words, startMs, particle.end * 1000) : null,
+    wordOnly: pad(words, match.startMs, match.matchEndMs, match),
+    withParticle: particle ? pad(words, match.startMs, particle.end * 1000, match) : null,
   };
 }

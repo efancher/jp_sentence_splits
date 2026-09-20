@@ -457,6 +457,7 @@ export function AnalyzePage() {
         <VocabChips items={sentence.targetVocabulary} />
         <WordAudioSection
           japanese={sentence.japanese}
+          inlineReading={sentence.inlineReading}
           audio={orderedAudio[0]}
           links={data.sentenceVocabulary ?? []}
         />
@@ -1199,10 +1200,12 @@ export function AnalyzePage() {
  */
 function WordAudioSection({
   japanese,
+  inlineReading,
   audio,
   links,
 }: {
   japanese: string;
+  inlineReading?: string;
   audio: SentenceAudio | undefined;
   links: SentenceVocabulary[];
 }) {
@@ -1229,6 +1232,7 @@ function WordAudioSection({
           <SegmentLoopPlayer
             audio={audio}
             japanese={japanese}
+            inlineReading={inlineReading}
             surfaceForm={link.surfaceForm ?? ''}
             link={link}
           />

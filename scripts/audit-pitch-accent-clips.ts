@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 import type { AlignmentResult } from '../src/domain/types';
 import { ALIGNMENT_VERSION } from '../src/lib/analysisApi';
-import { isolatedWordSpans } from '../src/lib/isolatedWordRange';
+import { isolatedWordMatchRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
 import { segmentIntoMorae } from '../src/lib/mora';
 import {
   accuracyBySeparation,
@@ -189,10 +189,12 @@ async function main() {
     if (!alignment) { unmeasurableSpan += 1; continue; }
     const span = isolatedWordSpans(alignment.words, japanese, String(link.surface_form))?.wordOnly ?? null;
     if (!span || !isPlausibleClipSpan(span)) { unmeasurableSpan += 1; continue; }
+    const matched = isolatedWordMatchRange(alignment.words, japanese, String(link.surface_form));
+    if (!matched) { unmeasurableSpan += 1; continue; }
     const pitch = await pitchFor(audio);
     if (!pitch) { noPitch += 1; continue; }
     const position = (item.pitch_accent_positions as number[])[0]!;
-    const measurement = measureNativeWord({ pitch, paddedSpan: span, surfaceForm: String(link.surface_form), moraCount, position });
+    const measurement = measureNativeWord({ pitch, span: matched, surfaceForm: String(link.surface_form), moraCount, position });
     if (!measurement) continue;
     clips.push({
       audioId: audio.id,

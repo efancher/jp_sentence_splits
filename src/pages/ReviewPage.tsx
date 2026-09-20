@@ -2602,6 +2602,7 @@ function WordListeningCard({
           <SegmentLoopPlayer
             audio={audio}
             japanese={sentence.japanese}
+            inlineReading={sentence.inlineReading}
             surfaceForm={surfaceForm}
             link={link}
             loopLabel="Hear just the word"

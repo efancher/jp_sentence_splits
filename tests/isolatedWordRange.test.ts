@@ -29,8 +29,8 @@ describe('isolatedWordRange', () => {
 
   it('locates the target word, pads each side, and folds in a short following particle', () => {
     // 本: 0.8s start; trailing を folded in, ending 1.6s. Both sides butt against
-    // another token (は before, 読む after), so each gets only the 30ms boundary slack.
-    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 770, endMs: 1630 });
+    // another token (は before, 読む after), so neither gets any pad.
+    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 800, endMs: 1600 });
   });
 
   it('returns null when the surface form is absent from the sentence', () => {
@@ -65,7 +65,7 @@ describe('isolatedWordRange', () => {
       word('を', 1.4, 1.6),
       word('読む', 1.6, 2.4),
     ];
-    expect(isolatedWordRange(withEmptyUnk, japanese, '本')).toEqual({ startMs: 770, endMs: 1630 });
+    expect(isolatedWordRange(withEmptyUnk, japanese, '本')).toEqual({ startMs: 800, endMs: 1600 });
   });
 
   it('ignores an <unk> that falls entirely after the target', () => {
@@ -74,13 +74,13 @@ describe('isolatedWordRange', () => {
       word('を', 0.6, 0.8),
       word('<unk>', 0.8, 1.6),
     ];
-    expect(isolatedWordRange(trailingUnk, '本を読む', '本')).toEqual({ startMs: 0, endMs: 830 });
+    expect(isolatedWordRange(trailingUnk, '本を読む', '本')).toEqual({ startMs: 0, endMs: 800 });
   });
 
   it('does not fold in a following word longer than a case particle', () => {
     const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
-    // について (4 chars) is left out; range ends at 本's own end + 30ms slack (no gap before it).
-    expect(isolatedWordRange(trailing, '本について', '本')).toEqual({ startMs: 0, endMs: 630 });
+    // について (4 chars) is left out; range ends at 本's own end (no gap before it, so no pad).
+    expect(isolatedWordRange(trailing, '本について', '本')).toEqual({ startMs: 0, endMs: 600 });
   });
 });
 
@@ -99,11 +99,11 @@ describe('isolatedWordRange with punctuation in the sentence', () => {
       word('は', 1.7, 1.9),
       word('ね', 1.9, 2.2),
     ];
-    // 本 = 1.2–1.7s; trailing は folded in → 1.9s. Tokens are adjacent both sides → 30ms slack.
-    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 1170, endMs: 1930 });
+    // 本 = 1.2–1.7s; trailing は folded in → 1.9s. Tokens are adjacent both sides → no pad.
+    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 1200, endMs: 1900 });
     expect(isolatedWordSpans(words, japanese, '本')?.wordOnly).toEqual({
-      startMs: 1170,
-      endMs: 1730,
+      startMs: 1200,
+      endMs: 1700,
     });
   });
 
@@ -115,8 +115,8 @@ describe('isolatedWordRange with punctuation in the sentence', () => {
       word('ます', 1.3, 1.7),
     ];
     expect(isolatedWordSpans(words, japanese, 'ござい')?.wordOnly).toEqual({
-      startMs: 770,
-      endMs: 1330,
+      startMs: 800,
+      endMs: 1300,
     });
   });
 });
@@ -129,13 +129,13 @@ describe('isolatedWordRange padding and degenerate spans', () => {
       word('<eps>', 1.5, 2.0), // 500ms of silence after
       word('山', 2.0, 2.3),
     ];
-    // 小さい: nothing before → full 60ms onset; 場所 follows immediately → 30ms slack only.
-    expect(isolatedWordSpans(words, '小さい場所山', '小さい')?.wordOnly).toEqual({ startMs: 440, endMs: 1030 });
-    // 場所: onset limited by 小さい; tail gets the full 120ms (silence after).
-    expect(isolatedWordSpans(words, '小さい場所山', '場所')?.wordOnly).toEqual({ startMs: 970, endMs: 1620 });
-    // A short pause gives only as much pad as the pause allows plus slack.
+    // 小さい: nothing before → full 30ms onset; 場所 follows immediately → no tail pad.
+    expect(isolatedWordSpans(words, '小さい場所山', '小さい')?.wordOnly).toEqual({ startMs: 470, endMs: 1000 });
+    // 場所: onset butted against 小さい → none; tail gets the full 60ms (silence after).
+    expect(isolatedWordSpans(words, '小さい場所山', '場所')?.wordOnly).toEqual({ startMs: 1000, endMs: 1560 });
+    // A short pause gives only as much pad as the pause allows (40ms < the 60ms ceiling).
     const shortPause: WordAlignment[] = [word('本', 0.5, 1.0), word('<eps>', 1.0, 1.04), word('山', 1.04, 1.4)];
-    expect(isolatedWordSpans(shortPause, '本山', '本')?.wordOnly).toEqual({ startMs: 440, endMs: 1070 });
+    expect(isolatedWordSpans(shortPause, '本山', '本')?.wordOnly).toEqual({ startMs: 470, endMs: 1040 });
   });
 
   it('returns null when the aligner crushed the word to a few frames', () => {
@@ -167,8 +167,8 @@ describe('isolatedWordRange with <unk> tokens after the target', () => {
 
   it('locates the word by exact offset, unaffected by later <unk> tokens', () => {
     expect(isolatedWordSpans(words, japanese, '自分')?.wordOnly).toEqual({
-      startMs: 7290, // 60ms onset pad: 0.73s of silence before 自分
-      endMs: 7990, // が follows immediately → 30ms slack
+      startMs: 7320, // 30ms onset pad: 0.73s of silence before 自分
+      endMs: 7960, // が follows immediately → no tail pad
     });
   });
 });
@@ -186,12 +186,12 @@ describe('isolatedWordRange with an aligner-expanded date', () => {
   ];
 
   it('finds words after the date by exact offset in the expanded text', () => {
-    expect(isolatedWordSpans(words, japanese, '雨')?.wordOnly).toEqual({ startMs: 970, endMs: 1430 });
-    expect(isolatedWordSpans(words, japanese, '降り')?.wordOnly).toEqual({ startMs: 1470, endMs: 2420 });
+    expect(isolatedWordSpans(words, japanese, '雨')?.wordOnly).toEqual({ startMs: 1000, endMs: 1400 });
+    expect(isolatedWordSpans(words, japanese, '降り')?.wordOnly).toEqual({ startMs: 1500, endMs: 2360 });
   });
 
   it('covers the whole expanded date when the surface form is the date or its 日', () => {
-    expect(isolatedWordSpans(words, japanese, '16日')?.wordOnly.endMs).toBe(930);
+    expect(isolatedWordSpans(words, japanese, '16日')?.wordOnly.endMs).toBe(900);
     expect(isolatedWordSpans(words, japanese, '日')?.wordOnly.startMs).toBe(0);
   });
 });
@@ -217,7 +217,7 @@ describe('isolatedWordRange particle folding', () => {
   it('does not fold a following noun in as if it were a particle', () => {
     // 生まれ → token 生まれた only; 時 is a noun.
     expect(isolatedWordSpans(words, japanese, '生まれ')).toEqual({
-      wordOnly: { startMs: 920, endMs: 1620 },
+      wordOnly: { startMs: 950, endMs: 1590 },
       withParticle: null,
     });
     // 小さい followed by the noun 場所.
@@ -227,18 +227,18 @@ describe('isolatedWordRange particle folding', () => {
   it('does not fold a token that follows a pause (phrase boundary)', () => {
     // 場所 is followed by 0.47s of silence, then 山.
     expect(isolatedWordSpans(words, japanese, '場所')?.withParticle).toBeNull();
-    // Full tail pad: 470ms of silence follows. Onset is butted against 小さい → 30ms.
-    expect(isolatedWordRange(words, japanese, '場所')).toEqual({ startMs: 3430, endMs: 4120 });
+    // Full 60ms tail pad: 470ms of silence follows. Onset is butted against 小さい → none.
+    expect(isolatedWordRange(words, japanese, '場所')).toEqual({ startMs: 3460, endMs: 4060 });
   });
 
   it('still folds a real particle, including the two-char から', () => {
     expect(isolatedWordSpans(words, japanese, '時')?.withParticle).toEqual({
-      startMs: 1560,
-      endMs: 2580,
+      startMs: 1590,
+      endMs: 2520,
     });
     expect(isolatedWordSpans(words, japanese, '山')?.withParticle).toEqual({
-      startMs: 4410,
-      endMs: 4990,
+      startMs: 4440,
+      endMs: 4960,
     });
   });
 });
@@ -255,15 +255,15 @@ describe('isolatedWordSpans', () => {
 
   it('returns both the word-alone span and the particle-inclusive span', () => {
     expect(isolatedWordSpans(words, japanese, '本')).toEqual({
-      wordOnly: { startMs: 770, endMs: 1430 },
-      withParticle: { startMs: 770, endMs: 1630 },
+      wordOnly: { startMs: 800, endMs: 1400 },
+      withParticle: { startMs: 800, endMs: 1600 },
     });
   });
 
   it('leaves withParticle null when nothing short follows', () => {
     const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
     expect(isolatedWordSpans(trailing, '本について', '本')).toEqual({
-      wordOnly: { startMs: 0, endMs: 630 },
+      wordOnly: { startMs: 0, endMs: 600 },
       withParticle: null,
     });
   });
