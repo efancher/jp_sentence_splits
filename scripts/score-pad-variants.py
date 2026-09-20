@@ -7,7 +7,10 @@ labelled variants per word. Writes a JSON list of
 {id, surfaceForm, differs, sims: {label: similarity}} to stdout; progress to
 stderr.
 
-  /home/ed/miniforge3/envs/mfa/bin/python3.14 scripts/score-pad-variants.py <clips_dir>
+  /home/ed/miniforge3/envs/mfa/bin/python3.14 scripts/score-pad-variants.py <clips_dir> [--texts ctc-kana.json]
+
+With `--texts`, uses those transcripts ({clipFile: text}, e.g. from
+`ctc-transcribe-clips.py`) instead of running Whisper.
 """
 import importlib.util
 import json
@@ -29,16 +32,25 @@ def main() -> None:
         entry = by_id.setdefault(row["id"], {"surfaceForm": row["surfaceForm"], "differs": row["differs"], "clips": {}})
         entry["clips"][row["label"]] = row["clipFile"]
 
-    print(f"{len(by_id)} words, {len(rows)} clips. Loading {base.MODEL_NAME}...", file=sys.stderr)
-    model = base.WhisperModel(base.MODEL_NAME, device="cpu", compute_type="int8")
+    supplied = None
+    if "--texts" in sys.argv:
+        supplied = json.loads(Path(sys.argv[sys.argv.index("--texts") + 1]).read_text())
+        model = None
+        print(f"{len(by_id)} words, {len(rows)} clips. Using supplied transcripts.", file=sys.stderr)
+    else:
+        print(f"{len(by_id)} words, {len(rows)} clips. Loading {base.MODEL_NAME}...", file=sys.stderr)
+        model = base.WhisperModel(base.MODEL_NAME, device="cpu", compute_type="int8")
 
     out = []
     for i, (vid, entry) in enumerate(by_id.items()):
         sims = {}
         texts = {}
         for label, clip in entry["clips"].items():
-            segments, _ = model.transcribe(str(clips_dir / clip), language="ja")
-            text = "".join(seg.text for seg in segments).strip()
+            if supplied is not None:
+                text = supplied.get(clip, "")
+            else:
+                segments, _ = model.transcribe(str(clips_dir / clip), language="ja")
+                text = "".join(seg.text for seg in segments).strip()
             texts[label] = text
             sims[label] = base.similarity(text, entry["surfaceForm"])
         print(f"[{i + 1}/{len(by_id)}] {entry['surfaceForm']}: " + " ".join(f"{k}={v:.2f}" for k, v in sims.items()), file=sys.stderr)

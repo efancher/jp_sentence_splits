@@ -163,6 +163,13 @@ describe('isolatedWordSpans with a reading (sub-token cut)', () => {
     expect(isolatedWordSpans(words, '生まれた', '生まれ', reading)?.wordOnly.endMs).toBe(420 + 60); // token end + full tail pad
   });
 
+  it('keeps the token edge when the mora cut would be under 200 ms (too short to trust)', () => {
+    // つけ ends at 180 ms — shorter than MIN_MORA_CUT_MS — inside the token つけて (250 ms).
+    const words = [word('つけて', 0, 't(40) ɯ(50) k(40) e(50) t(40) e(30)')];
+    const reading = { inlineReading: '付け[つけ]て' };
+    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly.endMs).toBe(250 + 60);
+  });
+
   it('leaves a target that is a whole token alone', () => {
     const words = [word('場所', 0, 'b(60) a(70) ɕ(100) o(110)')];
     const reading = { inlineReading: '場所[ばしょ]' };

@@ -974,6 +974,56 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     and extend the contrast idea; if d′ is still ~0, prioritize the binary
     fall/rise drill.
 
+- [ ] **Word-audio ground truth: a hand-labelling workflow.** (2026-09-20, from the
+  word-audio precision pass.) Everything measured so far is agreement between methods (two
+  ASR judges that disagree with each other); ~60 hand-labelled edges would give real error
+  numbers and decide the open questions: pad size, whether mora cuts under ~250 ms are good,
+  whether pitch cards should keep whole tokens, whether accuracy varies by speaker. Design:
+  - **Reuse what exists.** `WordAudioRangeEditor` already has waveform, draggable edges and
+    snap-to-pauses; `SegmentLoopPlayer` has the loop + pitch-preserving speed; a saved edit is
+    already the synced override (`audioStartMs/EndMs`), so **every label also fixes that card
+    for real**. Gaps: its waveform covers the whole sentence (100 ms ≈ 10 px), so add a zoomed
+    ±400 ms view per edge, ± nudge buttons (10 ms / 1 ms; arrow keys on desktop), an energy /
+    spectrogram strip, and per-edge *audition* buttons (play 300 ms **outside** the edge — should
+    contain none of the word — and 300 ms **inside** — should begin with its first sound).
+    Decode a trimmed ±1.5 s window, not the whole span (iOS `decodeAudioData` limit).
+  - **What to label, per item:** target *start* and *end* (each: clean / early / late, nudge if
+    not clean); item flags — wrong word, audio doesn't match text, overlapping speech, too noisy
+    (skip, and record as data-quality signal). Optionally the *mora boundary* between the
+    target's last mora and the rest of its token, only where a consonant onset makes it well
+    defined (never inside long vowels/geminates).
+  - **Instructions (one line + tap-to-expand audio examples, per label type).** START: "the
+    earliest moment you hear the first sound of the word, with nothing of the previous word
+    before it" (stop consonants: the burst counts). END: "the moment the last sound has died
+    away, before the next word begins; a whispered/devoiced final vowel counts." MORA: "between
+    the last sound of the target and the first sound of what follows."
+  - **Candidate selection.** (a) an unbiased random sample stratified by book (≥10/book), never
+    used for tuning; (b) a targeted queue ranked by disagreement — variants (current / token /
+    mora / no-pad) more than ~60 ms apart, judge disagreements, token-longer-than-target,
+    mora cuts <250 ms, `<unk>`/numeral fallbacks; (c) value-first ordering — words due soon on
+    pitch_accent / word_listening cards, so labelling fixes what you'll hear next. The 21
+    existing hand-adjusted overrides are free gold (check whether they include the particle).
+  - **Storage.** New synced table `word_boundary_labels` (link id, audio id, the auto span *shown*
+    and the code version — needed because auto spans drift as code changes — final start/end,
+    per-edge verdicts, flags, seconds spent, device). Needs a Supabase migration (remember the
+    apply gap). The override is written too.
+  - **Per speaker?** There is no per-clip speaker identity; `Book.id` is the proxy (already used
+    by the perception games). Test before building: label ≥10 per book, check whether per-book
+    median signed error differs from the global one (bootstrap). If not, one global pad is
+    enough; if so, store per-book offsets. Speech rate (phones/sec from the alignment itself)
+    may predict error better than speaker and needs no per-speaker labels.
+  - **Effort.** Target ≤15 s per item when the auto span is right (one tap), ~40 s to correct;
+    sessions of 25 (~10 min). First analysis: 60 items (40 random + 20 targeted). Re-present ~8
+    items later, blind, to measure your own labelling noise — it bounds any accuracy claim.
+  - **Outputs.** Error percentiles per edge type (start/end; adjacent vs pause; token vs mora),
+    per-book bias, pad calibration (p90 of signed error, capped at the neighbour gap), the
+    verdict on short mora cuts and on token-vs-mora for pitch cards, and a **gold set** so a
+    future change (kalpy `fine_tune_alignments`, `tokenizer=None` re-alignment, a new model)
+    can be benchmarked in one command.
+  - **UI rules (from your preferences).** One Play/Stop toggle (not paired buttons); controls
+    beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
+    gesture-gated audio; progress + undo-last; a "why this item" chip.
+
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to

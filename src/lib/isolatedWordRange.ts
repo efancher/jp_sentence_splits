@@ -154,7 +154,7 @@ function refineToMorae(input: {
 
   const startMs = out.startMs ?? usable[first]!.start * 1000;
   const endMs = out.endMs ?? usable[last]!.end * 1000;
-  return endMs - startMs >= MIN_MATCH_MS ? out : null;
+  return endMs - startMs >= MIN_MORA_CUT_MS ? out : null;
 }
 
 function matchWord(
@@ -317,6 +317,14 @@ export interface PadConfig {
 
 const DEFAULT_PAD: PadConfig = { onsetMs: 30, tailMs: 60, slackMs: 0 };
 const MIN_MATCH_MS = 60;
+/**
+ * A mora cut shorter than this keeps the token edge instead. Neither ASR judge
+ * can verify sub-~250 ms clips, and the one that hears them (the padded CTC
+ * kana judge, scripts/ctc-transcribe-clips.py) scored the mora cut worse than
+ * the token span in that bucket (10 better / 16 worse of 34) while it was
+ * clearly better above it (docs/STATUS.md 2026-09-20).
+ */
+const MIN_MORA_CUT_MS = 200;
 /** Timing tolerance when deciding which tokens sit before/after a span. */
 const EDGE_EPS_MS = 1;
 

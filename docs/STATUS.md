@@ -33,6 +33,26 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — CTC kana judge tried; mora cut gets a 200 ms floor.** Replacing Whisper as the
+  clip judge (it hallucinates stock phrases on sub-second audio): installed
+  `sakasegawa/japanese-wav2vec2-large-hiragana-ctc` (Apache-2.0; code
+  github.com/nyosegawa/hiragana-asr) on the box under `~/tools/hiragana-asr` in its own venv
+  (torch 2.14 CPU + transformers; NOT the `mfa` env; checkpoint loads `weights_only=True`).
+  `scripts/ctc-transcribe-clips.py` transcribes a manifest's clips to hiragana; score with
+  `score-pad-variants.py <dir> --texts <file>`; summarize with `summarize-clip-judge.py`.
+  Cost: 631 MB checkpoint, **2.8 GB peak RSS** (fp32; the card's 630 MB is fp16), RTF 0.3–0.6
+  on this CPU (200 clips ≈ 1.5–4 min, vs ~20 min for Whisper large-v3-turbo), ~9 s load.
+  **Bare sub-second clips mostly transcribe to nothing** (76% of mora clips, 36% of token clips
+  empty) — it was trained on whole utterances; **surrounding each clip with 800 ms of digital
+  silence fixes that** (empty 10/0 of 100; 1500 ms no better; 300 ms not enough). Padded, it
+  hears sensible kana with no stock-phrase hallucinations (食べ: token "たべました" vs mora
+  "たべ"). On the same 100 mora-vs-token clip pairs: overall mora better 52 / worse 34; by mora-
+  clip length **≥400 ms 21/6, 250–400 ms 21/12, <250 ms 10/16** — the latter is new information
+  (Whisper couldn't judge those) and leans against the mora cut. Agreement with Whisper's
+  verdict on its 68 non-hallucinated pairs only 38/68, so neither judge is ground truth.
+  Consequence: `MIN_MORA_CUT_MS = 200` in `isolatedWordRange.ts` — a mora cut whose raw span
+  is shorter than that keeps the token edge. Hand labels (ROADMAP) are what would settle it.
+
 - **2026-09-20 — Sync queue ordering flake (CI red on the word-audio push).**
   `pushBatching.test.ts` failed in CI (`k_a,k_c,k_b,k_d` vs queued order): `enqueueMutation`
   stamped rows with `new Date().toISOString()` (ms resolution) and `listPendingMutations`

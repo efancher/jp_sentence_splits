@@ -12,10 +12,12 @@
  * form* therefore rewards the mora cut when it is right and punishes it when it
  * chops the word — exactly what we want to know. Writes nothing to Supabase.
  *
- * Usage: npx tsx scripts/experiment-mora-cut.ts [--n 100] [--seed 1]
+ * Usage: npx tsx scripts/experiment-mora-cut.ts [--n 100] [--seed 1] [--keep DIR] [--prepare-only]
+ *   --keep DIR       cut clips into DIR and leave them there (so another judge can score the same clips)
+ *   --prepare-only   stop after cutting clips (score later with score-pad-variants.py / ctc-transcribe-clips.py)
  */
 import { spawn } from 'node:child_process';
-import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,7 +76,9 @@ async function main() {
   const rand = rng(Number(arg('seed', '1')));
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
-  const workDir = await mkdtemp(join(tmpdir(), 'mora-cut-'));
+  const keepDir = arg('keep', '');
+  const workDir = keepDir || (await mkdtemp(join(tmpdir(), 'mora-cut-')));
+  if (keepDir) await mkdir(keepDir, { recursive: true });
 
   const [sentences, audioRows, links, alignments] = await Promise.all([
     fetchAll(supabase, 'sentences', 'id, japanese, inline_reading', user.id, (r) => ({
@@ -146,7 +150,13 @@ async function main() {
     }
     prepared += 1;
   }
-  console.log(`${prepared} words prepared. Scoring with large-v3-turbo...`);
+  console.log(`${prepared} words prepared.`);
+  if (process.argv.includes('--prepare-only')) {
+    await writeFile(join(workDir, 'mora-ms.json'), JSON.stringify(Object.fromEntries(moraDurationMs)));
+    console.log(`Clips left in ${workDir}.`);
+    return;
+  }
+  console.log('Scoring with large-v3-turbo...');
   const scored = await runScorer(workDir);
 
   await writeFile('/tmp/mora-cut-scored.json', JSON.stringify(scored.map((r) => ({ ...r, moraMs: moraDurationMs.get(r.id) })), null, 1));
@@ -170,7 +180,7 @@ async function main() {
   const real = scored.filter((r) => !isHallucination(r));
   console.log('\nMora cut clearly better (no hallucination):\n' + real.filter((r) => r.sims.mora - r.sims.token > 0.25).slice(0, 8).map(show).join('\n'));
   console.log('\nMora cut clearly worse (no hallucination):\n' + real.filter((r) => r.sims.token - r.sims.mora > 0.25).slice(0, 10).map(show).join('\n'));
-  await rm(workDir, { recursive: true, force: true });
+  if (!keepDir) await rm(workDir, { recursive: true, force: true });
 }
 
 main();
