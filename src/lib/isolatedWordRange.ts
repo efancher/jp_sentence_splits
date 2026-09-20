@@ -318,13 +318,14 @@ export interface PadConfig {
 const DEFAULT_PAD: PadConfig = { onsetMs: 30, tailMs: 60, slackMs: 0 };
 const MIN_MATCH_MS = 60;
 /**
- * A mora cut shorter than this keeps the token edge instead. Neither ASR judge
- * can verify sub-~250 ms clips, and the one that hears them (the padded CTC
- * kana judge, scripts/ctc-transcribe-clips.py) scored the mora cut worse than
- * the token span in that bucket (10 better / 16 worse of 34) while it was
- * clearly better above it (docs/STATUS.md 2026-09-20).
+ * A mora cut shorter than this keeps the token edge instead — only a sanity
+ * limit. A 200 ms floor was tried (the CTC judge leaned against sub-250 ms
+ * mora cuts) and **removed against the hand labels**: with 52 random labels, no
+ * floor gave a 90th-percentile end miss of 99 ms vs 364 ms with it, because
+ * genuinely short words (見, あり — one or two morae) were being given their whole
+ * token (docs/STATUS.md 2026-09-20).
  */
-const MIN_MORA_CUT_MS = 200;
+const MIN_MORA_CUT_MS = MIN_MATCH_MS;
 /** Timing tolerance when deciding which tokens sit before/after a span. */
 const EDGE_EPS_MS = 1;
 

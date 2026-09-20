@@ -163,11 +163,17 @@ describe('isolatedWordSpans with a reading (sub-token cut)', () => {
     expect(isolatedWordSpans(words, '生まれた', '生まれ', reading)?.wordOnly.endMs).toBe(420 + 60); // token end + full tail pad
   });
 
-  it('keeps the token edge when the mora cut would be under 200 ms (too short to trust)', () => {
-    // つけ ends at 180 ms — shorter than MIN_MORA_CUT_MS — inside the token つけて (250 ms).
-    const words = [word('つけて', 0, 't(40) ɯ(50) k(40) e(50) t(40) e(30)')];
+  it('cuts genuinely short words too — a 180 ms cut is honoured (hand labels: 見, あり)', () => {
+    // つけ ends at 180 ms inside the token つけて (250 ms); a 200 ms floor used to hand back the whole token.
+    const words = [word('付けて', 0, 't(40) ɯ(50) k(40) e(50) t(40) e(30)')];
     const reading = { inlineReading: '付け[つけ]て' };
-    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly.endMs).toBe(250 + 60);
+    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly).toEqual({ startMs: 0, endMs: 180 });
+  });
+
+  it('still refuses an implausibly short mora cut (under 60 ms) and keeps the token edge', () => {
+    const words = [word('付けて', 0, 't(10) ɯ(10) k(10) e(10) t(40) e(30)')];
+    const reading = { inlineReading: '付け[つけ]て' };
+    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly.endMs).toBe(110 + 60);
   });
 
   it('leaves a target that is a whole token alone', () => {

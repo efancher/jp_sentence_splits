@@ -974,8 +974,8 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     and extend the contrast idea; if d′ is still ~0, prioritize the binary
     fall/rise drill.
 
-- [~] **Word-audio ground truth: a hand-labelling workflow.** *Screen built 2026-09-20 (`/label-word-audio`,
-  STATUS); remaining: label ~40 random items, press "Save labels", then read
+- [~] **Word-audio ground truth: a hand-labelling workflow.** *Screen built 2026-09-20 (`/label-word-audio`); first 52 random labels analysed the same day (STATUS) —
+  more labels would firm up the tails. To read a new file:
   `npm run analyze:word-boundary-labels -- <saved file>`.* (2026-09-20, from the
   word-audio precision pass.) Everything measured so far is agreement between methods (two
   ASR judges that disagree with each other); ~60 hand-labelled edges would give real error
@@ -1034,6 +1034,14 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     alone (they disagree on 30 of 68 pairs); with ~40 gold labels each becomes a one-command comparison
     against `token` / `mora` in `analyze-word-boundary-labels.ts`. Build them as extra estimators only
     if they beat the mora cut on the gold set.
+  - **Follow-ups from the first 52 labels (2026-09-20).** (1) *Squashed-alignment detector:* the worst
+    misses (~1–1.7 s) are the aligner mis-timing a stretch of speech (drawled 「ちょっとねー」, Latin `VIP`),
+    which shifts every later word — a gate on implausibly fast tokens (~40 ms/mora vs ≥80 normal) or
+    long `<eps>` next to very short tokens could send those to the whole-sentence fallback instead of a
+    confident wrong span; needs more labels to set thresholds. (2) *Repeated surface form:*
+    `matchWord` takes the first occurrence; 2.5% of links (33/1334) have the word twice — needs which
+    occurrence (e.g. from `vocabularySuggestions` spans). (3) *Early starts:* leading breath/noise absorbed
+    into a word start (今日 +510 ms, いろいろ +270 ms) — a trailing-energy trim on onset is the candidate.
   - **UI rules (from your preferences).** One Play/Stop toggle (not paired buttons); controls
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.

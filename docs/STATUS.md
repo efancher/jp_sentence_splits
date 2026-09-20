@@ -33,6 +33,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — First hand-label results (52 random labels) → the 200 ms mora-cut floor removed.**
+  User's first saved file (52 labels, all `random`, 7 books; backed up at
+  `~/data/word-boundary-labels/`; 35 accepted as detected, 8 small corrections <100 ms, 5 large, 4
+  relocations; median 21 s per item, ~6–10 s when accepting). Both the whole-token and the mora cut have
+  **median error 0 ms** at both edges; the tail is what matters. Within 50 ms: token 88% start / 65% end,
+  mora cut 88% / 81% — the mora cut's advantage is the *end* edge (token overshoots when the target ends
+  mid-token). Per-book bias: none visible (n=6–9 per book; one book -12 ms start). Pad calibration on the
+  mora cut: onset p90 0 ms, tail p90 97 ms (ceilings 30/60 — tail is the only side that ever needs more).
+  **The floor decision, settled by labels not judges:** the CTC judge had leaned against mora cuts under
+  ~250 ms, so a 200 ms floor (keep the token edge) was added. Against the labels it *hurts*: with the floor
+  the 90th-percentile end miss is 364 ms, without it 99 ms (ends within 50 ms 81% → 85%) because real
+  short words (見 = 130 ms, あり = 180 ms) were being handed their whole token. `MIN_MORA_CUT_MS` is now
+  just the 60 ms sanity limit. (The floor test that shipped with it passed vacuously — its token text
+  was kana while the sentence was kanji, so no cut ever ran; fixed, and the new pair of tests
+  genuinely exercises both sides.) **What the other misses are** (9 of 52): 2 were the floor (fixed);
+  ~6 are **aligner failures, not matching bugs** — 「ちょっとねー」 drawls (×2 sentences, ×3 labels)
+  where MFA marks ~0.8 s of speech as `<eps>`/squashes ちょっと to 120 ms, and "またVIPメンバーに
+  なると" where the Latin `VIP` collapses the following words ~1.6 s early (`私` gets 1.5 s); a couple of
+  starts 270–510 ms early (今日, いろいろ — leading breath/noise absorbed into the word); and 1 is the
+  **repeated-word bug**: `matchWord` uses the *first* occurrence of the surface form (声 appears twice in
+  its sentence; the link is the second). That affects 33 of 1334 links (2.5%). Not fixed here: needs
+  occurrence info the link doesn't store (candidates: `vocabularySuggestions` spans). Ideas noted on the
+  ROADMAP (squashed-alignment detector; occurrence disambiguation). 52 labels is a first look —
+  ~40 random was the target, so the picture is usable but the tails are only 9 items.
+
 - **2026-09-20 — Labeller: batch sizes, stop/resume, survives a refresh.** User: the session reset on
   refresh and a 25-item batch is a lot. Labels were always written per item; what was lost was the
   *batch* (React state only), so a refresh drew a fresh random set. Now: **batch size 1 / 5 / 10 / 25**
@@ -113,8 +138,8 @@ what's left is one deferred durability item (below).
   clip length **≥400 ms 21/6, 250–400 ms 21/12, <250 ms 10/16** — the latter is new information
   (Whisper couldn't judge those) and leans against the mora cut. Agreement with Whisper's
   verdict on its 68 non-hallucinated pairs only 38/68, so neither judge is ground truth.
-  Consequence: `MIN_MORA_CUT_MS = 200` in `isolatedWordRange.ts` — a mora cut whose raw span
-  is shorter than that keeps the token edge. Hand labels (ROADMAP) are what would settle it.
+  Consequence at the time: a 200 ms floor on mora cuts — **later removed** (see the 52-label
+  entry above: the hand labels showed it hurt).
 
 - **2026-09-20 — Sync queue ordering flake (CI red on the word-audio push).**
   `pushBatching.test.ts` failed in CI (`k_a,k_c,k_b,k_d` vs queued order): `enqueueMutation`
