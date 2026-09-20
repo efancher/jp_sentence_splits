@@ -240,6 +240,19 @@ function pad(words: WordAlignment[], startMs: number, endMs: number): TimeRangeM
 }
 
 /**
+ * The matched word's own boundaries — no particle, no pad. For experiments that
+ * compare padding strategies against the same underlying match.
+ */
+export function isolatedWordMatchRange(
+  words: WordAlignment[],
+  japanese: string,
+  surfaceForm: string,
+): TimeRangeMs | null {
+  const match = matchWord(words, japanese, surfaceForm);
+  return match ? { startMs: match.startMs, endMs: match.matchEndMs } : null;
+}
+
+/**
  * Raw particle-inclusive match boundaries, before padding — exported
  * for boundary-precision experiments (see
  * scripts/experiment-word-boundary-verification.ts) that need to try

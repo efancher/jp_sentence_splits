@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Pad comparison by round-trip ASR (the check the computed-pad entry left
+  open).** `scripts/experiment-pad-comparison.ts` (+ `score-pad-variants.py`, reuses the
+  backfill scorer's similarity; read-only, seeded sample) cuts the same word-only match
+  three ways — old fixed −60/+120, the shipped computed pad, no pad — and transcribes each
+  with `large-v3-turbo`. 120 random occurrences, 102 where computed ≠ fixed. Mean
+  similarity: fixed 0.703, computed 0.721, none 0.728 (on the differing 102). Head-to-head
+  (>0.05 apart): **computed beat fixed 41–19** (sign test p≈0.006, so the pad change is a
+  real improvement — e.g. 時間 "時間です" → "時間", セット "おせっとに" → "セット", お勤め
+  "お勤めになって" → "お勤めの"), but **no pad beat computed 24–14** and beat fixed 49–20.
+  So by this judge, *any* padding is roughly neutral-to-harmful and the old fixed pad was
+  the worst. Caveats: the judge is noisy on very short clips (the "worse" list has
+  Whisper hallucinations — する → "次の動画でお会いしましょう", 宮本 → "Miyamoto" scores 0
+  for being romaji — and 30 ms flips like たくさん 1.00 → 0.50), and ASR rewards a
+  clean cut while a human listener may want a little lead-in/decay, so the data
+  doesn't say to remove the pad — only that the ceilings (60/120) and slack (30) are
+  probably generous. Cheap next experiment if wanted: computed pad with smaller
+  ceilings (e.g. 30/60) and slack 0 vs the current one. Aligner restarted first to
+  free its leaked memory (5.0 GB → 1.5 GB used).
+
 - **2026-09-20 — Aligner numeral expansion ported to TypeScript (closes the ROADMAP item);
   Odd Ear Out no longer skips dated sentences.** `src/lib/alignerText.ts` holds the
   43-entry day/month table (generated from `shadowing-analysis-api`'s `app/numerals.py`,
