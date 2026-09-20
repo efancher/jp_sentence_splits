@@ -2565,8 +2565,10 @@ describe('getStudyItemDebugInfo (Phase 7.10)', () => {
   it('returns a sentence subject with its reviews, most-recent-first, and no maturity block', async () => {
     const studyItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
     await getDb().sentences.add(stubSentence('sent-1'));
-    await recordReview({ studyItemId: studyItem.id, rating: 'good' });
-    await recordReview({ studyItemId: studyItem.id, rating: 'again' });
+    // Distinct times: two reviews created in the same millisecond tie on `timestamp` and come back in
+    // random-id order, which flaked this test in CI (2026-09-20).
+    await recordReview({ studyItemId: studyItem.id, rating: 'good', now: new Date('2026-09-20T10:00:00.000Z') });
+    await recordReview({ studyItemId: studyItem.id, rating: 'again', now: new Date('2026-09-20T10:05:00.000Z') });
 
     const info = await getStudyItemDebugInfo(studyItem.id);
     expect(info?.subject).toEqual({ kind: 'sentence', sentence: expect.objectContaining({ id: 'sent-1' }) });

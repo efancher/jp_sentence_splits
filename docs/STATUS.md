@@ -33,6 +33,12 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — CI flake: `getStudyItemDebugInfo` "most-recent-first" test.** Two `recordReview` calls in the
+  same millisecond tie on `timestamp`, so the newest-first sort returned them in random-id order and CI
+  went red (the deploy was skipped) — the same ms-resolution-timestamp class as the sync-queue flake
+  earlier today. Test now passes distinct `now` values. Not a production bug: real reviews are seconds
+  apart.
+
 - **2026-09-20 — Labeller rules: devoiced vowels count (聞こえ heard as "tsukoe").** User couldn't hear
   "kikoe" in 「あまり聞こえません」. It is the き **devoiced** (a high vowel between voiceless sounds is
   whispered; what's left is the k-release burst, which sounds like tsu/shi/chi) — the same effect that makes
