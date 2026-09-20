@@ -78,7 +78,9 @@ describe('VocabularyListPage', () => {
     const { getDb } = await import('../src/db/repository');
     const updated = await getDb().vocabularyItems.get(item.id);
     expect(updated?.meaning).toBe('cat');
-  });
+    // The per-test limit must exceed the 5 s findBy window above — at the default 5 s the two were equal, so
+    // the test timed out (not the wait) whenever the suite was CPU-starved (flaked in CI/local 2026-09-20).
+  }, 20_000);
 
   it('renders each kanji character as a link to its detail page', async () => {
     await ensureVocabularyItem('大学', 'だいがく');

@@ -1,4 +1,5 @@
 import type { MoraUnit } from './mora';
+import { phonesToMoraIntervals, type MoraInterval } from './moraTiming';
 import type { WordAlignment } from '../domain/types';
 
 export interface KanaTimelineEntry {
@@ -36,10 +37,36 @@ const INAUDIBLE = new Set(['', '<eps>', '<unk>', '<sil>', '<pad>']);
  * unlike an even split, real per-phone durations still show through, which
  * is the point: a mora a learner drags out shows up as a wider label.
  *
+ * **Exact path** (`exactMoraIntervals`): when every audible token's phones parse
+ * into morae (`phonesToMoraIntervals`) and the counts add up to the reading's
+ * mora list, each mora gets its own measured interval — no character-proportion
+ * guess about which morae belong to which word, no even spread over phones. Any
+ * mismatch (an `<unk>` token, a dropped vowel, a reading that differs from the
+ * pronunciation, a learner who elongated or skipped a sound) falls back to the
+ * approximation above for the whole sentence.
+ *
  * `timeOffsetSeconds` handles the practice-target case: the reference pitch
  * contour is sliced to `[targetRange]`, but the reference alignment is keyed
  * to the full clip, so times need the range's start subtracted.
  */
+/**
+ * One measured interval per mora of `moraUnits`, or null when the aligned tokens'
+ * own phones don't yield exactly that many morae in order.
+ */
+export function exactMoraIntervals(
+  audible: readonly WordAlignment[],
+  moraUnits: readonly MoraUnit[],
+): MoraInterval[] | null {
+  if (moraUnits.length === 0 || audible.length === 0) return null;
+  const all: MoraInterval[] = [];
+  for (const word of audible) {
+    const intervals = phonesToMoraIntervals(word.phones);
+    if (!intervals || intervals.length === 0) return null;
+    all.push(...intervals);
+  }
+  return all.length === moraUnits.length ? all : null;
+}
+
 export function buildKanaTimeline({
   words,
   moraUnits,
@@ -66,6 +93,12 @@ export function buildKanaTimeline({
     const rightPct = Math.max(0, Math.min(100, (end / durationSeconds) * 100));
     entries.push({ text, start, end, leftPct, widthPct: Math.max(0, rightPct - leftPct) });
   };
+
+  const exact = exactMoraIntervals(audible, moraUnits);
+  if (exact) {
+    moraUnits.forEach((unit, index) => pushEntry(unit.text, exact[index]!.start, exact[index]!.end));
+    return entries;
+  }
 
   let charsBefore = 0;
   for (const word of audible) {

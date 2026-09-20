@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Flaky test: `VocabularyListPage` "edit meaning inline".** Timed out at 5.06 s in full-suite runs
+  (fast alone: ~1 s for the file). Cause: its inner `findByText('Saved', { timeout: 5_000 })` equalled vitest's
+  default per-test limit, so the *test* timed out whenever CPU was starved, before the wait could. Given an
+  explicit 20 s test timeout.
+
+- **2026-09-20 — Kana timeline: exact per-mora timing (item B).** `buildKanaTimeline` (the mora labels under the
+  pitch contours in `AnalysisPanel` / `PitchAccentDrillPage`) had two guesses: *which morae belong to which
+  word* (character proportion) and *where each mora sits inside a word* (spread evenly over its phones).
+  Now, when every audible token's phones parse into morae (`phonesToMoraIntervals`) and the counts add up to
+  the sentence's mora list, each mora gets its own measured interval (`exactMoraIntervals`) — long vowels split
+  at the phone's midpoint, geminates into っ + onset, dropped devoiced vowels recovered. Any mismatch (`<unk>`,
+  a reading that differs from the speech such as にっぽん/にほん, a learner who elongated or skipped a sound)
+  falls back to the old approximation for the whole sentence, so nothing regresses. **Coverage on prod:
+  637 of 868 sentences (73%); 84% of those with no `<unk>` token** (124 sentences contain one; 118 have no
+  reading). Applies to reference *and* learner alignments. This is the foundation for phrase-level
+  pitch work (per-mora F0 slices need mora boundaries). Tests: 4 new in `kanaTimeline.test.ts` (exact
+  intervals from real phone shapes, long-vowel split, fallback on count mismatch, fallback on `<unk>`,
+  refuses without phones).
+
 - **2026-09-20 — Repeated words: not a playback bug — a labelling hint; override audit.** Investigated the
   "`matchWord` takes the first occurrence" item (33 of 1334 links, 2.5%): **the data can't say which
   occurrence a link means** — there is exactly one `sentence_vocabulary` row per word per sentence,
