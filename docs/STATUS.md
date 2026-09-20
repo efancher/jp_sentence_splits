@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Word clip folded in the next *noun*, not just particles (user
+  report on sent_17d1bdde: 生まれ → "umareta toki kara", 小さい → "chiisai basho",
+  場所 looping into 山の中).** Second cause behind the same "word audio is too
+  long" complaint. The aligner's timings were right (生まれた 0.98–1.59 s, 場所
+  3.46–4.00 s); `isolatedWordRange` folded in *any* following token of ≤2 chars,
+  meant to catch case particles, so it also swallowed 時, 場所 and 山 — the last
+  across a 0.47 s pause. Now only tokens in `FOLDABLE_PARTICLES` (は が を に へ と で
+  の も や か ね よ から まで より) fold in, and only when the gap to the word is
+  ≤150 ms (`MAX_PARTICLE_GAP_MS`); otherwise `withParticle` is null and the range is
+  the word alone. 3 tests using that sentence's real alignment. The audit script
+  re-run after the fix found 14 more backfilled overrides that had folded a noun
+  (e.g. 店長 [410,1760] → [410,790]); `--apply` cleared them (0 stale left, 44
+  still-correct, 21 manual untouched). **Known, not fixed:** the +120 ms tail pad can
+  still overlap the next word's first mora when two words are adjacent (小さい end
+  3.46 s + pad reaches into 場所's onset); and a degenerate aligner match (何 =
+  30 ms in "え、何あやまってるの？") yields a near-empty clip.
+
 - **2026-09-20 — Word-audio spans landed on the wrong token: `matchWord` counted
   punctuation the aligner drops.** User: word-level audio extraction quality "isn't
   very good". Probed the cached alignments: the aligner's token texts concatenate to

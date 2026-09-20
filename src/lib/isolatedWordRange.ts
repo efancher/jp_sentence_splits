@@ -12,10 +12,10 @@ import type { TimeRangeMs } from './recording';
  * each aligned word's own cumulative fraction of the (usable) transcript.
  * (Punctuation is excluded from both sides — see `ALIGNER_DROPPED`.)
  *
- * The immediately-following aligned word is folded in when it's short
- * (≤2 chars — a case particle) so the learner hears whether the pitch stays
- * up after the word, which is the only audible heiban/odaka cue. A small
- * pad is added each side. Returns null when the word can't be located (no
+ * The immediately-following aligned word is folded in when it's a particle
+ * (`FOLDABLE_PARTICLES`, with no pause before it) so the learner hears
+ * whether the pitch stays up after the word, which is the only audible
+ * heiban/odaka cue. A small pad is added each side. Returns null when the word can't be located (no
  * alignment, surface form absent, degenerate range) — callers fall back to
  * whole-sentence playback.
  *
@@ -127,6 +127,27 @@ function matchWord(
   return { startMs, matchEndMs, lastIndex, usable };
 }
 
+/**
+ * Tokens worth folding in after the target: case/binding/sentence-final
+ * particles whose pitch (staying up vs dropping) is the audible heiban/odaka
+ * cue. A bare length test (≤2 chars) is not enough — it also matched nouns
+ * like 時, 場所 and 山, so the "word" clip for 小さい played 小さい場所.
+ */
+const FOLDABLE_PARTICLES = new Set([
+  'は', 'が', 'を', 'に', 'へ', 'と', 'で', 'の', 'も', 'や', 'か', 'ね', 'よ',
+  'から', 'まで', 'より',
+]);
+
+/** A particle with no audible pause between it and the word (a pause means a phrase boundary, not the word's particle). */
+const MAX_PARTICLE_GAP_MS = 150;
+
+function foldableParticle(match: WordMatch): WordAlignment | null {
+  const next = match.usable[match.lastIndex + 1];
+  if (!next || !FOLDABLE_PARTICLES.has(next.text)) return null;
+  if (next.start * 1000 - match.matchEndMs > MAX_PARTICLE_GAP_MS) return null;
+  return next;
+}
+
 function pad(startMs: number, endMs: number): TimeRangeMs {
   return { startMs: Math.max(0, startMs - 60), endMs: endMs + 120 };
 }
@@ -144,13 +165,8 @@ export function isolatedWordRangeUnpadded(
 ): TimeRangeMs | null {
   const match = matchWord(words, japanese, surfaceForm);
   if (!match) return null;
-  const { startMs, matchEndMs, lastIndex, usable } = match;
-
-  let endMs = matchEndMs;
-  const nextWord = usable[lastIndex + 1];
-  if (nextWord && nextWord.text.length <= 2) endMs = nextWord.end * 1000;
-
-  return { startMs, endMs };
+  const particle = foldableParticle(match);
+  return { startMs: match.startMs, endMs: particle ? particle.end * 1000 : match.matchEndMs };
 }
 
 export function isolatedWordRange(
@@ -168,7 +184,7 @@ export function isolatedWordRange(
  * the particle-inclusive one instead of picking one — for callers that need
  * to play both and let the learner compare them (the heiban/odaka warm-up:
  * the word alone sounds identical either way, only the particle's pitch
- * differs). `withParticle` is null when there's no short following word to
+ * differs). `withParticle` is null when there's no particle right after the word to
  * fold in, i.e. nothing to contrast against `wordOnly`.
  */
 export interface IsolatedWordSpans {
@@ -183,11 +199,10 @@ export function isolatedWordSpans(
 ): IsolatedWordSpans | null {
   const match = matchWord(words, japanese, surfaceForm);
   if (!match) return null;
-  const { startMs, matchEndMs, lastIndex, usable } = match;
-
-  const nextWord = usable[lastIndex + 1];
-  const withParticle =
-    nextWord && nextWord.text.length <= 2 ? pad(startMs, nextWord.end * 1000) : null;
-
-  return { wordOnly: pad(startMs, matchEndMs), withParticle };
+  const { startMs, matchEndMs } = match;
+  const particle = foldableParticle(match);
+  return {
+    wordOnly: pad(startMs, matchEndMs),
+    withParticle: particle ? pad(startMs, particle.end * 1000) : null,
+  };
 }

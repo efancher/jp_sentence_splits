@@ -119,6 +119,52 @@ describe('isolatedWordRange with punctuation in the sentence', () => {
   });
 });
 
+describe('isolatedWordRange particle folding', () => {
+  // 生まれた時から、この小さい場所、山の中 — real alignment shape (sent_17d1bdde).
+  const japanese = '生まれた時から、この小さい場所、山の中';
+  const words: WordAlignment[] = [
+    word('<eps>', 0, 0.98),
+    word('生まれた', 0.98, 1.59),
+    word('時', 1.59, 1.88),
+    word('から', 1.88, 2.46),
+    word('<eps>', 2.46, 2.61),
+    word('この', 2.61, 2.84),
+    word('小さい', 2.84, 3.46),
+    word('場所', 3.46, 4.0),
+    word('<eps>', 4.0, 4.47),
+    word('山', 4.47, 4.79),
+    word('の', 4.79, 4.96),
+    word('中', 4.96, 5.38),
+  ];
+
+  it('does not fold a following noun in as if it were a particle', () => {
+    // 生まれ → token 生まれた only; 時 is a noun.
+    expect(isolatedWordSpans(words, japanese, '生まれ')).toEqual({
+      wordOnly: { startMs: 920, endMs: 1710 },
+      withParticle: null,
+    });
+    // 小さい followed by the noun 場所.
+    expect(isolatedWordSpans(words, japanese, '小さい')?.withParticle).toBeNull();
+  });
+
+  it('does not fold a token that follows a pause (phrase boundary)', () => {
+    // 場所 is followed by 0.47s of silence, then 山.
+    expect(isolatedWordSpans(words, japanese, '場所')?.withParticle).toBeNull();
+    expect(isolatedWordRange(words, japanese, '場所')).toEqual({ startMs: 3400, endMs: 4120 });
+  });
+
+  it('still folds a real particle, including the two-char から', () => {
+    expect(isolatedWordSpans(words, japanese, '時')?.withParticle).toEqual({
+      startMs: 1530,
+      endMs: 2580,
+    });
+    expect(isolatedWordSpans(words, japanese, '山')?.withParticle).toEqual({
+      startMs: 4410,
+      endMs: 5080,
+    });
+  });
+});
+
 describe('isolatedWordSpans', () => {
   const japanese = '私は本を読む';
   const words: WordAlignment[] = [
