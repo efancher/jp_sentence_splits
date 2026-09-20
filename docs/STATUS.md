@@ -48,6 +48,11 @@ what's left is one deferred durability item (below).
   the reading, which is common for a learner. Now a token that doesn't parse is split evenly across its aligned
   span (`learnerTokenTimings`, counted in `learnerApproximateTokens` and noted in the view); only a different
   token count or a token with no span withholds it, and the message says which.
+  Second follow-up: sent_0208b0fe (しゃっ！今日は田舎日記。) showed the native alignment can total the reading's mora
+  count *by coincidence* (an `<unk>` on しゃっ hides 2 morae; the speaker says こんにちは for 今日は, adding 2), which
+  laid the kana on the wrong sounds. A native alignment containing `<unk>` is now refused (`no-reference-timing`),
+  and a `no-learner` phrase says how many of its sounds had a clear pitch. Open: the same coincidence can
+  affect `buildKanaTimeline`'s exact path; not yet guarded.
 
 ## Recent changes
 

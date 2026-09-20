@@ -164,6 +164,14 @@ describe('buildPhrasePitch', () => {
     expect(result.rows[0]!.native.join('')).toBe('lhh'); // the native side still shows
   });
 
+  it('refuses when the native alignment has an <unk>: its hidden morae make the mora total meaningless', () => {
+    const withUnk = [{ text: '<unk>', start: 0, end: 0.2, phones: [{ text: 'spn', start: 0, end: 0.2 }] }, ...words()];
+    expect(buildPhrasePitch({ moraUnits, reference: { words: withUnk, pitch: NATIVE } })).toMatchObject({
+      rows: [],
+      unavailable: 'no-reference-timing',
+    });
+  });
+
   it('shows nothing when the reference cannot be lined up mora by mora', () => {
     const noPhones = words().map((w) => ({ ...w, phones: [] }));
     expect(buildPhrasePitch({ moraUnits, reference: { words: noPhones, pitch: NATIVE } })).toMatchObject({

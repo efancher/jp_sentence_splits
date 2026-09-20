@@ -11,7 +11,7 @@ const STATUS_LABEL: Record<PhraseStatus, string> = {
 const UNAVAILABLE_TEXT: Record<NonNullable<PhrasePitchResult['unavailable']>, string> = {
   'no-reading': 'Phrase pitch needs this sentence’s kana reading.',
   'no-reference-timing':
-    'Phrase pitch needs the native audio lined up sound-by-sound; this sentence’s alignment doesn’t line up (roughly one sentence in four).',
+    'Phrase pitch needs the native audio lined up sound-by-sound; this sentence’s alignment doesn’t line up with its reading (roughly one sentence in four — e.g. a sound effect the aligner couldn’t place, or 今日は said こんにちは).',
   'no-pitch': 'Not enough voiced native pitch here to show phrases.',
 };
 

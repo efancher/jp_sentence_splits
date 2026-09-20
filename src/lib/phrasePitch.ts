@@ -100,6 +100,8 @@ export interface PhraseRow {
   /** One plain sentence about how the native phrase moves, e.g. "starts low, rises, then falls after ま". */
   nativeSummary: string;
   learnerSummary: string | null;
+  /** How many of this phrase's morae had voiced pitch in your recording (null = not lined up). */
+  learnerVoicedMorae: number | null;
 }
 
 export interface PhrasePitchResult {
@@ -210,6 +212,12 @@ export function buildPhrasePitch({
 }): PhrasePitchResult {
   if (moraUnits.length === 0) return { rows: [], unavailable: 'no-reading', learnerUnavailable: true, learnerApproximateTokens: 0 };
 
+  // An `<unk>` the aligner couldn't place (often a sound effect or a word it doesn't know) hides an
+  // unknown number of morae, so a token/mora total that happens to equal the reading proves nothing —
+  // the kana would be laid on the wrong sounds. Refuse rather than mislabel.
+  if (reference.words.some((w) => w.text === '<unk>')) {
+    return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true, learnerApproximateTokens: 0 };
+  }
   const refTokens = reference.words.filter((w) => !INAUDIBLE.has(w.text));
   const refTimings = tokenTimings(refTokens, moraUnits.length);
   if (!refTimings) return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true, learnerApproximateTokens: 0 };
@@ -271,6 +279,7 @@ export function buildPhrasePitch({
       status,
       nativeSummary: describeShape(nativeFit.shape, kana),
       learnerSummary: learnerFit ? describeShape(learnerFit.shape, kana) : null,
+      learnerVoicedMorae: learnerMeans ? learnerMeans.filter((m) => m !== null).length : null,
     });
   }
 
@@ -295,6 +304,8 @@ export function phraseFeedback(row: PhraseRow): string {
     case 'weak-native':
       return 'The native pitch is not clearly high/low here, so there is nothing firm to match.';
     case 'no-learner':
-      return 'Could not measure your pitch on this phrase.';
+      return row.learnerVoicedMorae === null
+        ? 'Could not line your recording up with this phrase.'
+        : `Could not measure your pitch on this phrase — only ${row.learnerVoicedMorae} of ${row.kana.length} sounds had a clear pitch.`;
   }
 }

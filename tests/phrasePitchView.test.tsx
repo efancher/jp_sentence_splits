@@ -16,6 +16,7 @@ const row = (overrides: Partial<PhraseRow> = {}): PhraseRow => ({
   status: 'different',
   nativeSummary: 'starts low, rises, then falls after し',
   learnerSummary: 'starts high, then falls after し',
+  learnerVoicedMorae: 3,
   ...overrides,
 });
 
@@ -67,9 +68,14 @@ describe('PhrasePitchView', () => {
     expect(screen.getByText(/2 words of your recording could only be timed roughly/)).toBeInTheDocument();
   });
 
+  it('says how many sounds had a clear pitch when yours could not be measured', () => {
+    render(<PhrasePitchView result={result([row({ learner: null, learnerLevels: null, status: 'no-learner', learnerVoicedMorae: 1 })])} hasLearner />);
+    expect(screen.getByText(/only 1 of 3 sounds had a clear pitch/)).toBeInTheDocument();
+  });
+
   it('says why nothing is shown when the native timing is unavailable', () => {
     render(<PhrasePitchView result={result([], { unavailable: 'no-reference-timing' })} hasLearner />);
-    expect(screen.getByText(/alignment doesn’t line up/)).toBeInTheDocument();
+    expect(screen.getByText(/alignment doesn’t line up with its reading/)).toBeInTheDocument();
   });
 
   it('gives a plain line for a flat learner phrase', () => {
