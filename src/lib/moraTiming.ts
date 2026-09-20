@@ -49,21 +49,84 @@ const isNasal = (label: string) => NASAL_BASE.test(label) || label.startsWith('�
 /** ɴ and ɰ̃ occur only as ん. */
 const isAlwaysMoraicNasal = (label: string) => label.startsWith('ɴ') || label.startsWith('ɰ̃');
 
+/** A mora with the kana it sounds like, read off the phones (not the written reading). */
+export interface SoundedMora extends MoraInterval {
+  kana: string;
+}
+
+const PLAIN_ROWS: Record<string, string> = {
+  '': 'あいうえお',
+  k: 'かきくけこ',
+  ɡ: 'がぎぐげご',
+  g: 'がぎぐげご',
+  ŋ: 'がぎぐげご',
+  s: 'さしすせそ',
+  z: 'ざじずぜぞ',
+  dz: 'ざじずぜぞ',
+  d: 'だぢづでど',
+  t: 'たちつてと',
+  ts: 'つぁつぃつつぇつぉ',
+  n: 'なにぬねの',
+  h: 'はひふへほ',
+  ɸ: 'ふぁふぃふふぇふぉ',
+  b: 'ばびぶべぼ',
+  p: 'ぱぴぷぺぽ',
+  m: 'まみむめも',
+  ɾ: 'らりるれろ',
+};
+const VOWEL_INDEX: Record<string, number> = { a: 0, i: 1, u: 2, e: 3, o: 4 };
+/** Consonants whose kana row is the i-kana plus a small ゃ/ゅ/ょ (きゃ, しゃ, ちゃ …). */
+const YOON_BASE: Record<string, string> = {
+  k: 'き', c: 'き', ɡ: 'ぎ', g: 'ぎ', ɟ: 'ぎ', s: 'し', ɕ: 'し', z: 'じ', dz: 'じ', dʑ: 'じ', ʑ: 'じ', t: 'ち', tɕ: 'ち',
+  d: 'ぢ', n: 'に', ɲ: 'に', h: 'ひ', ç: 'ひ', b: 'び', p: 'ぴ', m: 'み', ɾ: 'り', ɸ: 'ひ',
+};
+const INTRINSIC_PALATAL = new Set(['ɕ', 'tɕ', 'dʑ', 'ʑ', 'ɲ', 'c', 'ɟ', 'ç']);
+const YOON_SMALL = ['ゃ', '', 'ゅ', 'ぇ', 'ょ'];
+
+/** The kana for an onset (0+ phones) and a vowel label; `'?'` for anything outside the inventory. */
+function kanaFor(onset: readonly string[], vowel: string): string {
+  const v = VOWEL_INDEX[vowel.replace(/[̥ː]/gu, '').replace(/^[ɯɨ]$/u, 'u')];
+  if (v === undefined) return '?';
+  const glide = onset.find((phone) => phone === 'j' || phone === 'w');
+  const consonants = onset.filter((phone) => phone !== 'j' && phone !== 'w');
+  if (consonants.length === 0) {
+    if (glide === 'j') return ['や', 'い', 'ゆ', 'いぇ', 'よ'][v]!;
+    if (glide === 'w') return ['わ', 'うぃ', 'う', 'うぇ', 'うぉ'][v]!;
+    return PLAIN_ROWS['']![v]!;
+  }
+  const raw = consonants[consonants.length - 1]!;
+  const palatalised = raw.endsWith('ʲ') || glide === 'j' || INTRINSIC_PALATAL.has(raw);
+  const base = raw.replace('ʲ', '');
+  if (palatalised && YOON_BASE[base]) return YOON_BASE[base]! + YOON_SMALL[v]!;
+  const row = PLAIN_ROWS[base];
+  if (!row) return '?';
+  // Rows that carry a two-kana entry (ふぁ, つぁ …) are split by codepoint pairs below.
+  const cells = row.match(/[^ぁぃぅぇぉゃゅょ][ぁぃぅぇぉゃゅょ]?/gu)!;
+  return cells[v]!;
+}
+
+/** Palatal / non-back onsets whose dropped devoiced vowel is い; everything else is う. */
+const DEVOICED_I_ONSET = new Set(['ɕ', 'tɕ', 'c', 'ç', 'k', 'ʔ']);
+
 /**
- * Mora intervals for one token's phones, in order, or null when the phones
- * don't parse cleanly (spoken-noise label, a nasal directly after an onset, a
- * voiced consonant left without a vowel).
+ * Mora intervals for one token's phones, with the kana each sounds like, or null
+ * when the phones don't parse cleanly (spoken-noise label, a nasal directly after
+ * an onset, a voiced consonant left without a vowel).
  *
  * A devoiced vowel that the aligner dropped altogether (して → `ɕ t e`, ます →
  * `m a s`) is recovered: a voiceless consonant followed by another voiceless
  * consonant, or ending the token, stands as its own mora (its span is just the
  * consonant's — the vowel itself left no phone to time).
  */
-export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] | null {
-  const morae: MoraInterval[] = [];
+export function phonesToSoundedMorae(phones: PhoneAlignment[]): SoundedMora[] | null {
+  const morae: SoundedMora[] = [];
   let pendingStart: number | null = null;
   /** The last onset phone since the previous mora, to spot a deleted devoiced vowel. */
   let pendingLast: PhoneAlignment | null = null;
+  /** Onset phones since the previous mora (for the kana). */
+  let onset: string[] = [];
+  /** A dropped devoiced vowel's kana: the vowel is implied, so pick i after a palatal/velar onset, else u. */
+  const droppedVowelKana = (): string => kanaFor(onset, onset.some((p) => DEVOICED_I_ONSET.has(p) && p !== 'k') ? 'i' : 'u');
 
   for (let i = 0; i < phones.length; i += 1) {
     const phone = phones[i]!;
@@ -75,11 +138,13 @@ export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] 
       const start = pendingStart ?? phone.start;
       pendingStart = null;
       pendingLast = null;
+      const kana = kanaFor(onset, label);
+      onset = [];
       if (isLong(label)) {
         const mid = phone.start + (phone.end - phone.start) / 2;
-        morae.push({ start, end: mid }, { start: mid, end: phone.end });
+        morae.push({ start, end: mid, kana }, { start: mid, end: phone.end, kana: 'ー' });
       } else {
-        morae.push({ start, end: phone.end });
+        morae.push({ start, end: phone.end, kana });
       }
       continue;
     }
@@ -95,15 +160,17 @@ export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] 
         if (geminate) {
           // ん + the onset of the next mora share one long nasal.
           const mid = phone.start + (phone.end - phone.start) / 2;
-          morae.push({ start: phone.start, end: mid });
+          morae.push({ start: phone.start, end: mid, kana: 'ん' });
           pendingStart = mid;
+          onset = [label.replace(LONG, '')];
         } else {
-          morae.push({ start: phone.start, end: phone.end });
+          morae.push({ start: phone.start, end: phone.end, kana: 'ん' });
         }
         continue;
       }
       pendingStart ??= phone.start; // an ordinary nasal onset (な, ま, にゃ …)
       pendingLast = phone;
+      onset.push(label);
       continue;
     }
 
@@ -111,9 +178,10 @@ export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] 
       // Geminate obstruent: っ, then the onset of the following mora.
       if (pendingStart !== null) return null;
       const mid = phone.start + (phone.end - phone.start) / 2;
-      morae.push({ start: phone.start, end: mid });
+      morae.push({ start: phone.start, end: mid, kana: 'っ' });
       pendingStart = mid;
       pendingLast = null;
+      onset = [label.replace(LONG, '')];
       continue;
     }
 
@@ -121,23 +189,31 @@ export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] 
     // vowel between them was devoiced and dropped: close the first as a mora.
     if (pendingStart !== null && pendingLast) {
       if (isVoiceless(pendingLast.text) && isVoiceless(label)) {
-        morae.push({ start: pendingStart, end: pendingLast.end });
+        morae.push({ start: pendingStart, end: pendingLast.end, kana: droppedVowelKana() });
         pendingStart = null;
+        onset = [];
       } else if (!GLIDE.test(label)) {
         return null; // any other consonant cluster isn't Japanese phonotactics — don't guess
       }
     }
     pendingStart ??= phone.start;
     pendingLast = phone;
+    onset.push(label);
   }
 
   if (pendingStart === null) return morae;
   // A token-final voiceless consonant is a dropped devoiced vowel (…ます → m a s).
   if (pendingLast && isVoiceless(pendingLast.text)) {
-    morae.push({ start: pendingStart, end: pendingLast.end });
+    morae.push({ start: pendingStart, end: pendingLast.end, kana: droppedVowelKana() });
     return morae;
   }
   return null;
+}
+
+/** `phonesToSoundedMorae` without the kana: just each mora's interval. */
+export function phonesToMoraIntervals(phones: PhoneAlignment[]): MoraInterval[] | null {
+  const morae = phonesToSoundedMorae(phones);
+  return morae ? morae.map(({ start, end }) => ({ start, end })) : null;
 }
 
 export interface MoraMapEntry {

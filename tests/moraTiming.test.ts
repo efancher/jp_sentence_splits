@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhoneAlignment, WordAlignment } from '../src/domain/types';
 import { isolatedWordRange, isolatedWordSpans } from '../src/lib/isolatedWordRange';
-import { buildMoraMap, phonesToMoraIntervals, resolveMoraRange } from '../src/lib/moraTiming';
+import { buildMoraMap, phonesToMoraIntervals, phonesToSoundedMorae, resolveMoraRange } from '../src/lib/moraTiming';
 
 /** Phones from "label(durationMs)" pairs laid end to end from `startMs`. */
 function phones(spec: string, startMs = 0): PhoneAlignment[] {
@@ -181,5 +181,35 @@ describe('isolatedWordSpans with a reading (sub-token cut)', () => {
     const words = [word('場所', 0, 'b(60) a(70) ɕ(100) o(110)')];
     const reading = { inlineReading: '場所[ばしょ]' };
     expect(isolatedWordSpans(words, '場所', '場所', reading)).toEqual(isolatedWordSpans(words, '場所', '場所'));
+  });
+});
+
+describe('phonesToSoundedMorae — kana read off the phones', () => {
+  const kana = (spec: string) => phonesToSoundedMorae(phones(spec))?.map((m) => m.kana).join('');
+
+  it('spells what was said, not what was written: 今日 sounding as こんにち', () => {
+    expect(kana('k(50) o(60) ɲː(120) i(60) tɕ(50) i(60)')).toBe('こんにち');
+  });
+
+  it('handles long vowels, geminates, moraic nasals and yōon', () => {
+    expect(kana('k(50) o(60) ɴ(80) ɲ(40) i(60) tɕ(50) i(60) h(40) a(60)')).toBe('こんにちは');
+    expect(kana('ɲ(60) i(60) cː(120) i(60)')).toBe('にっき');
+    expect(kana('ɕ(60) oː(160)')).toBe('しょー');
+    expect(kana('c(60) o(60) ɯ(60)')).toBe('きょう');
+    expect(kana('ɕ(60) a(60) tː(120) a(60)')).toBe('しゃった');
+  });
+
+  it('recovers a dropped devoiced vowel with the vowel the onset implies', () => {
+    expect(kana('ɕ(60) t(40) e(60)')).toBe('して');
+    expect(kana('m(50) a(60) s(60)')).toBe('ます');
+  });
+
+  it('reads the rows: ら, ふ, ぎゃ, りょ, やゆ, わ', () => {
+    expect(kana('ɾ(40) a(60) ɸ(50) ɯ(60) ɟ(40) a(60) ɾʲ(40) o(60) j(30) a(60) w(30) a(60)')).toBe('らふぎゃりょやわ');
+  });
+
+  it('agrees with phonesToMoraIntervals on the number of morae', () => {
+    const p = phones('k(50) o(60) ɲː(120) i(60) tɕ(50) i(60)');
+    expect(phonesToSoundedMorae(p)!.length).toBe(phonesToMoraIntervals(p)!.length);
   });
 });

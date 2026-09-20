@@ -1,7 +1,6 @@
 import type { WordAlignment } from '../domain/types';
 
-import type { MoraUnit } from './mora';
-import { phonesToMoraIntervals } from './moraTiming';
+import { phonesToMoraIntervals, phonesToSoundedMorae } from './moraTiming';
 import type { PitchAnalysisPayload } from './pitch';
 import type { MoraPitchClass } from './pitchAccentShape';
 import { fitAccentShape } from './pitchShapeFit';
@@ -21,9 +20,13 @@ import { fitAccentShape } from './pitchShapeFit';
  * mistake worth showing, and `levels` (each mora's height within the phrase) is
  * returned so the view can draw the raw contour beside the fitted H/L.
  *
- * Needs exact mora timing (every token's phones parse and add up to the
- * sentence's morae — `exactMoraIntervals`; ~73% of sentences). Anything less and
- * that speaker's side is reported unavailable, never guessed.
+ * Morae and their kana come from the native token's own phones
+ * (`phonesToSoundedMorae`), not from the written reading, so what is shown is what
+ * was actually said (今日は → こんにちは) and an unplaced `<unk>` token or a
+ * reading/speech mismatch cannot shift the kana onto the wrong sounds. A phrase
+ * with a token whose phones don't parse is skipped, never guessed. The learner is
+ * laid on the native's per-token mora counts (exact phones when they agree, an even
+ * split of the token's span otherwise).
  */
 
 const INAUDIBLE = new Set(['', '<eps>', '<unk>', '<sil>', '<pad>']);
@@ -107,7 +110,7 @@ export interface PhraseRow {
 export interface PhrasePitchResult {
   rows: PhraseRow[];
   /** Set when nothing could be shown, and why (for a one-line explanation). */
-  unavailable?: 'no-reference-timing' | 'no-reading' | 'no-pitch';
+  unavailable?: 'no-reference-timing' | 'no-pitch';
   /** True when the learner side could not be lined up mora by mora at all. */
   learnerUnavailable: boolean;
   /** How many of your tokens were timed by an even split rather than from their sounds (0 = all exact). */
@@ -118,23 +121,39 @@ export interface PhrasePitchResult {
 
 interface TokenTiming {
   intervals: { start: number; end: number }[];
+  /** The kana each interval sounds like, read off the phones. */
+  kana: string[];
+}
+
+/** Per-token mora timing and kana for the native side; null for a token whose phones don't parse (its phrase is skipped). */
+function referenceTimings(tokens: readonly WordAlignment[]): (TokenTiming | null)[] {
+  return tokens.map((token) => {
+    const morae = phonesToSoundedMorae(token.phones);
+    if (!morae || morae.length === 0) return null;
+    return { intervals: morae.map(({ start, end }) => ({ start, end })), kana: morae.map((m) => m.kana) };
+  });
 }
 
 /**
  * The learner's per-token mora intervals, laid out on the *reference's* per-token mora counts.
- * A learner's phones are messier than a native's (dropped or extra vowels, `spn`), so a token whose
- * phones don't give exactly the expected morae is split evenly across its aligned span instead —
- * the token boundaries from the aligner are still trustworthy. Null only when a token has no
- * usable span at all. `approximate` counts the tokens that needed the even split.
+ * A learner's phones are messier than a native's (dropped or extra vowels, `spn`, a different word
+ * pronounced), so a token whose phones don't give exactly the expected morae is split evenly across
+ * its aligned span instead — the token boundaries from the aligner are still trustworthy. Null only
+ * when a token has no usable span at all. `approximate` counts the tokens that needed the even split.
  */
 function learnerTokenTimings(
   tokens: readonly WordAlignment[],
-  expected: readonly TokenTiming[],
-): { timings: TokenTiming[]; approximate: number } | null {
-  const timings: TokenTiming[] = [];
+  expected: readonly (TokenTiming | null)[],
+): { timings: ({ intervals: { start: number; end: number }[] } | null)[]; approximate: number } | null {
+  const timings: ({ intervals: { start: number; end: number }[] } | null)[] = [];
   let approximate = 0;
   for (let t = 0; t < tokens.length; t += 1) {
-    const want = expected[t]!.intervals.length;
+    const reference = expected[t];
+    if (!reference) {
+      timings.push(null);
+      continue;
+    }
+    const want = reference.intervals.length;
     const exact = phonesToMoraIntervals(tokens[t]!.phones);
     if (exact && exact.length === want) {
       timings.push({ intervals: exact });
@@ -147,19 +166,6 @@ function learnerTokenTimings(
     approximate += 1;
   }
   return { timings, approximate };
-}
-
-/** Per-token mora intervals when every token parses and they sum to `moraCount`; else null. */
-function tokenTimings(tokens: readonly WordAlignment[], moraCount: number): TokenTiming[] | null {
-  const out: TokenTiming[] = [];
-  let total = 0;
-  for (const token of tokens) {
-    const intervals = phonesToMoraIntervals(token.phones);
-    if (!intervals || intervals.length === 0) return null;
-    out.push({ intervals });
-    total += intervals.length;
-  }
-  return total === moraCount ? out : null;
 }
 
 function meanSemitones(pitch: PitchAnalysisPayload, from: number, to: number): number | null {
@@ -202,25 +208,22 @@ export function describeShape(shape: readonly MoraPitchClass[], kana: readonly s
  * its reading); `reference` is the native recording, `learner` optional.
  */
 export function buildPhrasePitch({
-  moraUnits,
   reference,
   learner,
 }: {
-  moraUnits: readonly MoraUnit[];
   reference: SpeakerInput;
   learner?: SpeakerInput;
 }): PhrasePitchResult {
-  if (moraUnits.length === 0) return { rows: [], unavailable: 'no-reading', learnerUnavailable: true, learnerApproximateTokens: 0 };
+  const unavailable = (reason: NonNullable<PhrasePitchResult['unavailable']>): PhrasePitchResult => ({
+    rows: [],
+    unavailable: reason,
+    learnerUnavailable: true,
+    learnerApproximateTokens: 0,
+  });
 
-  // An `<unk>` the aligner couldn't place (often a sound effect or a word it doesn't know) hides an
-  // unknown number of morae, so a token/mora total that happens to equal the reading proves nothing —
-  // the kana would be laid on the wrong sounds. Refuse rather than mislabel.
-  if (reference.words.some((w) => w.text === '<unk>')) {
-    return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true, learnerApproximateTokens: 0 };
-  }
   const refTokens = reference.words.filter((w) => !INAUDIBLE.has(w.text));
-  const refTimings = tokenTimings(refTokens, moraUnits.length);
-  if (!refTimings) return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true, learnerApproximateTokens: 0 };
+  const refTimings = referenceTimings(refTokens);
+  if (refTimings.every((timing) => timing === null)) return unavailable('no-reference-timing');
 
   const learnerTokens = learner ? learner.words.filter((w) => !INAUDIBLE.has(w.text)) : [];
   // The learner aligns to the same transcript, so the token lists should match; if they don't, don't compare.
@@ -229,32 +232,25 @@ export function buildPhrasePitch({
   const learnerTimings = learnerLayout?.timings ?? null;
 
   const groups = groupIntoPhrases(refTokens);
-  // First mora index of each token in the sentence's mora list (same for both speakers' phrase spans by token index).
-  const firstMora: number[] = [];
-  let running = 0;
-  for (const timing of refTimings) {
-    firstMora.push(running);
-    running += timing.intervals.length;
-  }
-
   const refOffset = reference.pitchOffsetSeconds ?? 0;
   const learnerOffset = learner?.pitchOffsetSeconds ?? 0;
   const rows: PhraseRow[] = [];
 
   for (const group of groups) {
-    const startMora = firstMora[group[0]!]!;
-    const endMora = firstMora[group[group.length - 1]!]! + refTimings[group[group.length - 1]!]!.intervals.length;
-    const kana = moraUnits.slice(startMora, endMora).map((unit) => unit.text);
+    // A token whose phones don't parse hides its morae, so the whole phrase is skipped rather than guessed.
+    const timings = group.map((t) => refTimings[t]);
+    if (timings.some((timing) => timing === null)) continue;
+    const kana = timings.flatMap((timing) => timing!.kana);
     if (kana.length < 2) continue; // one mora carries no shape
 
-    const nativeMeans = group.flatMap((t) => refTimings[t]!.intervals).map((iv) => meanSemitones(reference.pitch, iv.start - refOffset, iv.end - refOffset));
+    const nativeMeans = timings.flatMap((timing) => timing!.intervals).map((iv) => meanSemitones(reference.pitch, iv.start - refOffset, iv.end - refOffset));
     const nativeFit = fitAccentShape(nativeMeans);
     if (!nativeFit) continue; // not enough voiced native pitch to say anything
 
     let learnerFit: ReturnType<typeof fitAccentShape> = null;
     let learnerMeans: (number | null)[] | null = null;
     if (learner && learnerTimings) {
-      const intervals = group.flatMap((t) => learnerTimings[t]!.intervals);
+      const intervals = group.flatMap((t) => learnerTimings[t]?.intervals ?? []);
       if (intervals.length === kana.length) {
         learnerMeans = intervals.map((iv) => meanSemitones(learner.pitch, iv.start - learnerOffset, iv.end - learnerOffset));
         learnerFit = fitAccentShape(learnerMeans);

@@ -576,7 +576,6 @@ export function AnalysisPanel({
   const phrasePitch = useMemo(() => {
     if (!serverAlignment?.reference || !referencePitch) return undefined;
     return buildPhrasePitch({
-      moraUnits,
       reference: {
         words: serverAlignment.reference.words,
         pitch: referencePitch,
@@ -587,7 +586,7 @@ export function AnalysisPanel({
           ? { words: serverAlignment.learner.words, pitch: learnerPitch }
           : undefined,
     });
-  }, [serverAlignment, referencePitch, learnerPitch, moraUnits, targetRange]);
+  }, [serverAlignment, referencePitch, learnerPitch, targetRange]);
 
   const asrObservations = useMemo(() => {
     if (!serverAlignment?.reference || !transcribedText) return [];

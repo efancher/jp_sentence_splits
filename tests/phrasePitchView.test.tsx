@@ -76,7 +76,7 @@ describe('PhrasePitchView', () => {
 
   it('says why nothing is shown when the native timing is unavailable', () => {
     render(<PhrasePitchView result={result([], { unavailable: 'no-reference-timing' })} hasLearner />);
-    expect(screen.getByText(/alignment doesn’t line up with its reading/)).toBeInTheDocument();
+    expect(screen.getByText(/none of this sentence’s words could be/)).toBeInTheDocument();
   });
 
   it('gives a plain line for a flat learner phrase', () => {

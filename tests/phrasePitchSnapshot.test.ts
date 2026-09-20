@@ -30,7 +30,7 @@ const pitch: PitchAnalysisPayload = {
 describe('buildPhrasePitchSnapshot', () => {
   it('captures the rows, both speakers’ compact timings and voiced frame counts as JSON', () => {
     const moraUnits = segmentIntoMorae('はし');
-    const result = buildPhrasePitch({ moraUnits, reference: { words, pitch }, learner: { words, pitch } });
+    const result = buildPhrasePitch({ reference: { words, pitch }, learner: { words, pitch } });
     const snapshot = JSON.parse(
       buildPhrasePitchSnapshot({
         sentenceId: 's1',
@@ -50,7 +50,7 @@ describe('buildPhrasePitchSnapshot', () => {
 
   it('records a missing learner as null', () => {
     const moraUnits = segmentIntoMorae('はし');
-    const result = buildPhrasePitch({ moraUnits, reference: { words, pitch } });
+    const result = buildPhrasePitch({ reference: { words, pitch } });
     const snapshot = JSON.parse(
       buildPhrasePitchSnapshot({ sentenceId: 's', attemptId: 'a', japanese: '橋', moraUnits, result, reference: { words, pitch, pitchOffsetSeconds: 0 } }),
     );
