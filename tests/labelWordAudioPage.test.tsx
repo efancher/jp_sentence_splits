@@ -15,16 +15,20 @@ import { createId } from '../src/lib/ids';
 import { LabelWordAudioPage } from '../src/pages/LabelWordAudioPage';
 
 // jsdom has no AudioContext: hand the page a fake decoded clip instead.
+const fakeBuffer = {
+  duration: 3,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  length: 48000,
+  getChannelData: () => new Float32Array(48000),
+};
+const decodeAudioBuffer = vi.fn(async (_blob: Blob): Promise<unknown> => fakeBuffer);
 vi.mock('../src/lib/waveform', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/waveform')>()),
-  decodeAudioBuffer: async () => ({
-    duration: 3,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    length: 48000,
-    getChannelData: () => new Float32Array(48000),
-  }),
+  decodeAudioBuffer: (blob: Blob) => decodeAudioBuffer(blob),
 }));
+const repairSentenceAudio = vi.fn(async (_id: string): Promise<Blob | null> => null);
+vi.mock('../src/sync/audioSync', () => ({ repairSentenceAudio: (id: string) => repairSentenceAudio(id) }));
 // fake-indexeddb hands Blobs back as plain objects, which the real hook would then try to re-download.
 vi.mock('../src/hooks/useSentenceAudioBlob', () => {
   const clip = new Blob(['clip'], { type: 'audio/mp4' }); // stable identity: the page decodes on blob change
@@ -93,6 +97,10 @@ async function seed(options: { withAlignment?: boolean; suspended?: boolean; sen
 
 beforeEach(() => {
   saveLabelsFile.mockClear();
+  decodeAudioBuffer.mockReset();
+  decodeAudioBuffer.mockImplementation(async () => fakeBuffer);
+  repairSentenceAudio.mockReset();
+  repairSentenceAudio.mockResolvedValue(null);
   resetDbForTests(`label-${createId('db')}`);
   window.localStorage.clear();
 });
@@ -211,6 +219,32 @@ describe('LabelWordAudioPage', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: /start labelling/i }));
     expect(await screen.findByText(/nothing to label/i)).toBeInTheDocument();
+  });
+
+  it('re-downloads a recording that will not decode locally and carries on', async () => {
+    await seed();
+    decodeAudioBuffer.mockRejectedValueOnce(Object.assign(new Error('Unable to decode audio data'), { name: 'EncodingError' }));
+    repairSentenceAudio.mockResolvedValue(new Blob(['fresh']));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+    expect(await screen.findByRole('button', { name: /both edges are right/i })).toBeInTheDocument();
+    expect(repairSentenceAudio).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/couldn.t decode/i)).not.toBeInTheDocument();
+  });
+
+  it('shows why decoding failed and lets you skip an unplayable recording', async () => {
+    await seed();
+    decodeAudioBuffer.mockRejectedValue(Object.assign(new Error('Unable to decode audio data'), { name: 'EncodingError' }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+    expect(await screen.findByText(/EncodingError: Unable to decode audio data \(no cloud copy to repair from\)/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /skip this one/i }));
+
+    await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
+    const [label] = await listWordBoundaryLabels();
+    expect(label).toMatchObject({ verdict: 'skipped', skipReason: 'undecodable' });
   });
 
   it('saves every label on the device to a file with one button, and counts what is new', async () => {

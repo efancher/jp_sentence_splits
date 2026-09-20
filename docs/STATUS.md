@@ -33,6 +33,18 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labeller: "Couldn't decode this recording on this device".** The labelling page decoded
+  the locally stored recording once and gave up. Known Safari behaviour (see the `useRangeLoop` /
+  `repairSentenceAudio` notes): IndexedDB sometimes returns a Blob that looks intact but won't decode;
+  the cloud original is fine. Now `decodeWithRepair` (`src/lib/decodeWithRepair.ts`) retries off a
+  re-downloaded copy (which also heals the local cache), the error text names the underlying failure
+  (e.g. `EncodingError: Unable to decode audio data (no cloud copy to repair from)`), and an
+  unplayable item can be skipped (`skipReason: 'undecodable'`) instead of stranding the session.
+  `RangePlayer` also shares one `AudioContext` for the page instead of making one per item (iOS
+  allows only a handful of live contexts and closes them asynchronously). Not confirmed which of the two
+  causes hit the reporter (no device details) — the new message will say if it recurs. Tests:
+  `decodeWithRepair` (5) and two page tests (repair-and-carry-on; failure message + skip).
+
 - **2026-09-20 — Word-boundary labelling screen built (`/label-word-audio`).** The ground-truth tool
   from the ROADMAP: shows one target word's automatic span; drag/nudge the two edges onto where the word
   really starts/ends, or accept it in one tap. Settings → "Label word audio".

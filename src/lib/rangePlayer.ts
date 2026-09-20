@@ -1,4 +1,21 @@
 /**
+ * One AudioContext for the whole page, created lazily on the first play. iOS
+ * Safari allows only a handful of live contexts, and closing one is
+ * asynchronous — making a fresh context per labelling item could hit that cap
+ * partway through a session. Sharing it also keeps it "unlocked" once a tap has
+ * resumed it.
+ */
+let sharedContext: AudioContext | null = null;
+
+function getContext(): AudioContext {
+  if (!sharedContext || sharedContext.state === 'closed') {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedContext = new Ctor();
+  }
+  return sharedContext;
+}
+
+/**
  * Sample-accurate playback of one range of a decoded `AudioBuffer` via Web
  * Audio — for auditioning short slices around a boundary, where the
  * `<audio>` element's ~4 Hz `timeupdate` (what the loop players use) is far
@@ -8,7 +25,6 @@
  * word starts, not for judging pitch.
  */
 export class RangePlayer {
-  private context: AudioContext | null = null;
   private source: AudioBufferSourceNode | null = null;
 
   async play(
@@ -23,13 +39,12 @@ export class RangePlayer {
       options.onEnded?.();
       return;
     }
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.context ??= new Ctor();
-    if (this.context.state === 'suspended') await this.context.resume();
-    const source = this.context.createBufferSource();
+    const context = getContext();
+    if (context.state === 'suspended') await context.resume();
+    const source = context.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = options.rate ?? 1;
-    source.connect(this.context.destination);
+    source.connect(context.destination);
     source.onended = () => {
       if (this.source === source) {
         this.source = null;
@@ -53,9 +68,8 @@ export class RangePlayer {
     }
   }
 
+  /** Stops playback. The shared context stays open for the next item. */
   dispose(): void {
     this.stop();
-    void this.context?.close().catch(() => undefined);
-    this.context = null;
   }
 }

@@ -1116,7 +1116,8 @@ export type WordBoundarySkipReason =
   | 'audio-mismatch' // the audio doesn't match the sentence text
   | 'overlap' // overlapping speech / music makes the edges unplaceable
   | 'noisy'
-  | 'unsure';
+  | 'unsure'
+  | 'undecodable'; // the recording wouldn't decode on this device
 
 export interface WordBoundarySpan {
   startMs: number;

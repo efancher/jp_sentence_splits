@@ -15,7 +15,7 @@ import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { auditionRanges, clampEnd, clampStart } from '../lib/boundaryEditor';
 import { RangePlayer } from '../lib/rangePlayer';
 import { getLastSaveTime, saveLabelsFile, unsavedLabelCount } from '../lib/wordBoundaryLabelExport';
-import { decodeAudioBuffer } from '../lib/waveform';
+import { decodeWithRepair } from '../lib/decodeWithRepair';
 import {
   edgeErrors,
   edgesMoved,
@@ -332,17 +332,19 @@ function LabelItem({
   useEffect(() => {
     if (!blob) return;
     let cancelled = false;
-    decodeAudioBuffer(blob)
-      .then((b) => {
-        if (!cancelled) setBuffer(b);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Couldn’t decode this recording on this device.');
-      });
+    void (async () => {
+      try {
+        const { repairSentenceAudio } = await import('../sync/audioSync');
+        const decoded = await decodeWithRepair(blob, candidate.audio.id, repairSentenceAudio);
+        if (!cancelled) setBuffer(decoded);
+      } catch (err) {
+        if (!cancelled) setError(`Couldn’t decode this recording on this device (${err instanceof Error ? err.message : String(err)}).`);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [blob]);
+  }, [blob, candidate.audio.id]);
 
   const durationMs = buffer ? buffer.duration * 1000 : 0;
   const moved = edgesMoved(shown, edges);
@@ -419,7 +421,16 @@ function LabelItem({
         <RulesPanel defaultOpen={false} />
       </section>
 
-      {error ? <p className="muted">{error}</p> : null}
+      {error ? (
+        <section className="panel stack">
+          <p className="muted" style={{ margin: 0 }}>{error}</p>
+          <div>
+            <button type="button" className="secondary" disabled={saving} onClick={() => void finish('skipped', 'undecodable')}>
+              Skip this one
+            </button>
+          </div>
+        </section>
+      ) : null}
       {!buffer && !error ? <p className="muted">Loading audio…</p> : null}
 
       {buffer && (
