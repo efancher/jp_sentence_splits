@@ -965,9 +965,9 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   `audioStartMs/EndMs` ranges are deliberately **ignored**: they're meant for the
   pitch cards and the boundary backfill writes the aligner's raw match, which
   includes a following particle (71 of 92 comparable prod overrides) — that would
-  leak the heiban/odaka cue. Sentences containing a digit+日/月 date (ASCII or
-  fullwidth) are skipped: the aligner expands those to hiragana before aligning,
-  so `matchWord`'s character-proportion mapping skews every word in the sentence.
+  leak the heiban/odaka cue. (Dated sentences are fine: `alignerView` in
+  `src/lib/alignerText.ts` reproduces the aligner's digit+日/月 → hiragana expansion
+  and punctuation dropping, so spans map by exact offset.)
   Proficiency deliberately **not** required (it's perception, not knowing the word). Weakness is per **shape pair** from the
   round log (unordered, per mora count), offered as `weak`/`strong`. Alignments
   for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one

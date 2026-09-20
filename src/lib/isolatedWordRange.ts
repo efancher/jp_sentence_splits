@@ -1,4 +1,5 @@
 import type { WordAlignment } from '../domain/types';
+import { alignerView } from './alignerText';
 import type { TimeRangeMs } from './recording';
 
 /**
@@ -10,7 +11,7 @@ import type { TimeRangeMs } from './recording';
  * `SyncedShadowText` uses for karaoke highlighting: the target's
  * [charIndex, charIndex+len) fraction of `japanese` is intersected with
  * each aligned word's own cumulative fraction of the (usable) transcript.
- * (Punctuation is excluded from both sides — see `ALIGNER_DROPPED`.)
+ * (The comparison is made on the aligner's view of the sentence — see `alignerView`: dates expanded, punctuation dropped.)
  *
  * The immediately-following aligned word is folded in when it's a particle
  * (`FOLDABLE_PARTICLES`, with no pause before it) so the learner hears
@@ -36,49 +37,28 @@ interface WordMatch {
   usable: WordAlignment[];
 }
 
-/**
- * The aligner's tokenizer drops punctuation and whitespace, so its token
- * texts concatenate to the sentence *without* 、。「」 etc. — measuring a
- * word's position against the raw `japanese` (punctuation included) shifts
- * every word after a comma earlier by one char per mark, landing the span on
- * the previous token (ござい in ありがとうございます picking up と). Positions
- * and lengths here therefore count only the characters the aligner kept.
- */
-const ALIGNER_DROPPED = /[\p{P}\p{S}\p{Z}\p{Cc}]/u;
-
-function alignerChars(text: string): string[] {
-  return [...text].filter((ch) => !ALIGNER_DROPPED.test(ch));
-}
-
-/** Length of `text` in aligner characters (punctuation/whitespace excluded). */
+/** Length of `text` in aligner characters (see `alignerView`). */
 export function alignerCharCount(text: string): number {
-  return alignerChars(text).length;
+  return alignerView(text).chars.length;
 }
 
 /**
- * Maps a [start, end) range counted in aligner characters (punctuation
- * excluded) back to indices into the raw `japanese` string — for callers that
- * slice the displayed sentence by an aligner-token fraction. The end lands
- * just after the last kept character, so trailing punctuation isn't
- * highlighted; an empty range collapses to a single point.
+ * Maps a [start, end) range counted in aligner characters back to indices into
+ * the raw `japanese` string — for callers that slice the displayed sentence by
+ * an aligner-token position. The end lands just after the last kept
+ * character, so trailing punctuation isn't highlighted, and an expanded date
+ * (じゅうろくにち) maps back to its whole raw form (16日).
  */
 export function alignerRangeToRawIndices(
   japanese: string,
   start: number,
   end: number,
 ): { start: number; end: number } {
-  const chars = [...japanese];
-  const keptRawIndices: number[] = [];
-  let rawIndex = 0;
-  for (const ch of chars) {
-    if (!ALIGNER_DROPPED.test(ch)) keptRawIndices.push(rawIndex);
-    rawIndex += ch.length;
-  }
-  if (keptRawIndices.length === 0) return { start: 0, end: 0 };
-  const first = Math.min(Math.max(start, 0), keptRawIndices.length - 1);
-  const last = Math.min(Math.max(end - 1, first), keptRawIndices.length - 1);
-  const lastChar = japanese.codePointAt(keptRawIndices[last]!)!;
-  return { start: keptRawIndices[first]!, end: keptRawIndices[last]! + String.fromCodePoint(lastChar).length };
+  const view = alignerView(japanese);
+  if (view.chars.length === 0) return { start: 0, end: 0 };
+  const first = Math.min(Math.max(start, 0), view.chars.length - 1);
+  const last = Math.min(Math.max(end - 1, first), view.chars.length - 1);
+  return { start: view.rawStart[first]!, end: view.rawEnd[last]! };
 }
 
 /**
@@ -88,7 +68,7 @@ export function alignerRangeToRawIndices(
  * means offsets from there on can't be trusted.
  */
 function verifiedPrefixTokenCount(tokens: { text: string }[], japanese: string): number {
-  const stripped = alignerChars(japanese).join('').toLowerCase();
+  const stripped = alignerView(japanese).chars.join('').toLowerCase();
   let count = 0;
   for (let offset = 0; count < tokens.length; count++) {
     const text = tokens[count]!.text.toLowerCase();
@@ -123,10 +103,21 @@ function matchWord(
 ): WordMatch | null {
   const rawIndex = japanese.indexOf(surfaceForm);
   if (rawIndex === -1 || surfaceForm.length === 0) return null;
-  const charIndex = alignerChars(japanese.slice(0, rawIndex)).length;
-  const surfaceLength = alignerChars(surfaceForm).length;
-  const sentenceLength = alignerChars(japanese).length;
-  if (surfaceLength === 0 || sentenceLength === 0) return null;
+  const view = alignerView(japanese);
+  const rawEnd = rawIndex + surfaceForm.length;
+  // The aligner characters the surface form covers (an expanded date counts
+  // whole, even when the surface form is only its 日/月).
+  let charIndex = -1;
+  let charEnd = -1;
+  view.chars.forEach((_, i) => {
+    if (view.rawEnd[i]! > rawIndex && view.rawStart[i]! < rawEnd) {
+      if (charIndex === -1) charIndex = i;
+      charEnd = i + 1;
+    }
+  });
+  if (charIndex === -1) return null;
+  const surfaceLength = charEnd - charIndex;
+  const sentenceLength = view.chars.length;
 
   const usable = words.filter(
     (word) => word.text && word.text !== '<eps>' && word.text !== '<unk>',

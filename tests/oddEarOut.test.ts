@@ -9,7 +9,6 @@ import {
   contrastStats,
   cropPitchPayload,
   findContrasts,
-  hasAlignerNumeralExpansion,
   inWordShape,
   isPlausibleClipSpan,
   oddEarPointsAvailable,
@@ -59,20 +58,6 @@ describe('inWordShape / shapeLabel', () => {
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 250 })).toBe(false);
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 500 })).toBe(true);
     expect(isPlausibleClipSpan({ startMs: 0, endMs: 9000 })).toBe(false);
-  });
-});
-
-describe('hasAlignerNumeralExpansion', () => {
-  it('flags digit+日/月 dates — ASCII and fullwidth — that the aligner expands to hiragana', () => {
-    for (const text of ['16日は雨でした。', '10月に会う。', '１５日の午後', '3月3日', '今日は31日です']) {
-      expect(hasAlignerNumeralExpansion(text), text).toBe(true);
-    }
-  });
-
-  it('leaves everything else alone (kanji numerals, other counters, bare 日/月, digits elsewhere)', () => {
-    for (const text of ['今日は月曜日です。', '十六日に行く。', '8番の人', '2024年の話', '100匹いた', '日本語の月', '猫が3匹']) {
-      expect(hasAlignerNumeralExpansion(text), text).toBe(false);
-    }
   });
 });
 

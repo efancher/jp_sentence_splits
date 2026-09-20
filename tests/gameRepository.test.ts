@@ -241,9 +241,11 @@ describe('odd ear out repository', () => {
       wordEnd?: number;
       /** Text before 語<id> — lets a test put a date in the sentence. */
       lead?: string;
+      /** How the aligner spells `lead` (dates come back expanded to hiragana); defaults to `lead`. */
+      leadToken?: string;
     } = {},
   ) {
-    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6, lead = 'これは' } = opts;
+    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6, lead = 'これは', leadToken = lead } = opts;
     const db = getDb();
     await db.vocabularyItems.put({
       id,
@@ -277,7 +279,7 @@ describe('odd ear out repository', () => {
         result: {
           durationSeconds: 3,
           words: [
-            { text: lead, start: 0, end: 1, phones: [] },
+            { text: leadToken, start: 0, end: 1, phones: [] },
             { text: `語${id}`, start: 1, end: wordEnd, phones: [] },
             { text: 'です', start: wordEnd, end: 3, phones: [] },
           ],
@@ -338,11 +340,15 @@ describe('odd ear out repository', () => {
     expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['ovr']);
   });
 
-  it('skips sentences containing a digit+日/月 date — the aligner expands them, skewing every word span', async () => {
-    await addPitchWord('dated', 'さくら', 0, { lead: '16日は' });
-    await addPitchWord('fullwidth', 'いのち', 1, { lead: '１０月に' });
+  it('plays words in sentences with a digit+日/月 date — the aligner expands it, and the span mapping accounts for that', async () => {
+    await addPitchWord('dated', 'さくら', 0, { lead: '16日は', leadToken: 'じゅうろくにちは' });
+    await addPitchWord('fullwidth', 'いのち', 1, { lead: '１０月に', leadToken: 'じゅうがつに' });
     await addPitchWord('plain', 'こころ', 0);
-    expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['plain']);
+    const { clips } = await getOddEarOutData();
+    expect(clips.map((c) => c.vocabularyItemId).sort()).toEqual(['dated', 'fullwidth', 'plain']);
+    // 語<id> sits at 1.0–1.6 s in every fixture; a mis-mapped date would shift the span.
+    for (const clip of clips) expect(clip.span.startMs).toBeGreaterThanOrEqual(940);
+    for (const clip of clips) expect(clip.span.startMs).toBeLessThanOrEqual(1000);
   });
 
   it('skips sentences that live only in suspended books', async () => {

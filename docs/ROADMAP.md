@@ -974,17 +974,6 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     and extend the contrast idea; if d′ is still ~0, prioritize the binary
     fall/rise drill.
 
-- [ ] **Port the aligner's day/month numeral expansion to TypeScript.**
-  (2026-09-19, from the alignment session's review) `shadowing-analysis-api`
-  expands `<digits>日` / `<digits>月` to hiragana before aligning
-  (`app/numerals.py`, 43-entry table), so cached alignments' word texts differ
-  from the sentence text `isolatedWordRange`'s `matchWord` measures against —
-  every word's span in a sentence containing such a date is skewed. Porting the
-  table so `matchWord` measures against the same expanded text would fix it for
-  every word-audio consumer (pitch_accent / word_listening cards, karaoke text);
-  cost is keeping the table in two languages. Odd Ear Out currently just skips
-  those sentences (`hasAlignerNumeralExpansion`). Unscheduled.
-
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to

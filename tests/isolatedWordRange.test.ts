@@ -173,6 +173,29 @@ describe('isolatedWordRange with <unk> tokens after the target', () => {
   });
 });
 
+describe('isolatedWordRange with an aligner-expanded date', () => {
+  // 16日は雨が降りました — the aligner rewrote 16日 to じゅうろくにち before aligning.
+  const japanese = '16日は雨が降りました';
+  const words: WordAlignment[] = [
+    word('じゅう', 0.0, 0.3),
+    word('ろくにち', 0.3, 0.9),
+    word('は', 0.9, 1.0),
+    word('雨', 1.0, 1.4),
+    word('が', 1.4, 1.5),
+    word('降りました', 1.5, 2.3),
+  ];
+
+  it('finds words after the date by exact offset in the expanded text', () => {
+    expect(isolatedWordSpans(words, japanese, '雨')?.wordOnly).toEqual({ startMs: 970, endMs: 1430 });
+    expect(isolatedWordSpans(words, japanese, '降り')?.wordOnly).toEqual({ startMs: 1470, endMs: 2420 });
+  });
+
+  it('covers the whole expanded date when the surface form is the date or its 日', () => {
+    expect(isolatedWordSpans(words, japanese, '16日')?.wordOnly.endMs).toBe(930);
+    expect(isolatedWordSpans(words, japanese, '日')?.wordOnly.startMs).toBe(0);
+  });
+});
+
 describe('isolatedWordRange particle folding', () => {
   // 生まれた時から、この小さい場所、山の中 — real alignment shape (sent_17d1bdde).
   const japanese = '生まれた時から、この小さい場所、山の中';

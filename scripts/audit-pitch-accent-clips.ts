@@ -35,7 +35,7 @@ import {
   measureNativeWord,
   type NativeWordMeasurement,
 } from '../src/lib/nativeClipPitchAudit';
-import { hasAlignerNumeralExpansion, isPlausibleClipSpan } from '../src/lib/oddEarOut';
+import { isPlausibleClipSpan } from '../src/lib/oddEarOut';
 import { extractPitch, type PitchAnalysisPayload } from '../src/lib/pitch';
 import { fetchAll, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
@@ -142,7 +142,7 @@ async function main() {
     seen.add(key);
     const audio = audioBySentence.get(String(link.sentence_id));
     const japanese = japaneseBySentence.get(String(link.sentence_id));
-    if (!audio || !japanese || hasAlignerNumeralExpansion(japanese)) {
+    if (!audio || !japanese) {
       skippedNoAudioOrAlign += 1;
       continue;
     }

@@ -148,7 +148,6 @@ import {
 import type { TimeRangeMs } from '../lib/recording';
 import {
   buildOddEarHistory,
-  hasAlignerNumeralExpansion,
   inWordShape,
   isPlausibleClipSpan,
   ODD_EAR_OUT_GAME_ID,
@@ -5736,9 +5735,6 @@ export async function getOddEarOutData(): Promise<{
     const bookId = bookIdBySentenceId.get(link.sentenceId);
     if (!item || !bookId || link.surfaceForm !== item.expression) continue;
     if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
-    // The aligner expands digit+日/月 before aligning, which skews every word's
-    // span in that sentence (see `hasAlignerNumeralExpansion`).
-    if (hasAlignerNumeralExpansion(sentenceById.get(link.sentenceId)!.japanese)) continue;
     const key = `${item.id}:${bookId}`;
     if (!chosen.has(key)) chosen.set(key, { link, item });
   }

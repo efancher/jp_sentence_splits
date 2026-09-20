@@ -33,6 +33,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Aligner numeral expansion ported to TypeScript (closes the ROADMAP item);
+  Odd Ear Out no longer skips dated sentences.** `src/lib/alignerText.ts` holds the
+  43-entry day/month table (generated from `shadowing-analysis-api`'s `app/numerals.py`,
+  not retyped) and `alignerView(japanese)`: the characters the aligner actually kept —
+  dates expanded to hiragana, punctuation dropped — each remembering its raw source range
+  (an expanded date's characters all map to the whole `16日`). `matchWord`,
+  `alignerCharCount`, `alignerRangeToRawIndices` and the karaoke highlight all work in that
+  view, so tokens spell the sentence and the exact-offset mapping applies to dated
+  sentences too. Against real data: 53 links sit in dated sentences and **43 change**
+  (e.g. 地方 in 11日は、関東地方… [3060,4410] → [4350,4830]); 0 links in undated sentences
+  changed. `hasAlignerNumeralExpansion` and both skips (Odd Ear Out,
+  `audit-pitch-accent-clips.ts`) are gone. **Drift guard:** `tests/alignerText.test.ts`
+  parses the sibling repo's `numerals.py` and asserts the tables are identical
+  (skipped when the repo isn't checked out at `~/projects/shadowing-analysis-api`) — if
+  the aligner's table changes, update `alignerText.ts` and bump `ALIGNMENT_VERSION`.
+  Still uncovered on the aligner side: 番/年 counters and day 3 (みっか) → `<unk>`, which
+  the existing `<unk>` guard turns into a whole-sentence fallback. Audit script re-run:
+  0 stale overrides.
+
 - **2026-09-20 — Word span landed on the *previous* word when the sentence had `<unk>`
   tokens later on (study item for 自分 in 無心とは、怒りや恐れ、そして自分が…: loop played そして).**
   Third `matchWord` cause. It located the word by *fraction* of the token total, and
