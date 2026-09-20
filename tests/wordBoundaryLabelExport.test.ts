@@ -100,6 +100,18 @@ describe('saveLabelsFile', () => {
     expect(getLastSaveTime()).not.toBeNull();
   });
 
+  it('downloads even where the share sheet is available when asked to (iPhone: a real file in Files)', async () => {
+    const share = vi.fn(async () => undefined);
+    Object.assign(window.navigator, { canShare: () => true, share });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push(this.download);
+    });
+    expect(await saveLabelsFile([label('a', '2026-09-20T00:00:00Z')], new Date('2026-09-20T12:00:00Z'), { download: true })).toBe('downloaded');
+    expect(share).not.toHaveBeenCalled();
+    expect(clicked).toEqual(['word-boundary-labels-2026-09-20T12-00-00.json']);
+  });
+
   it('treats a dismissed share sheet as cancelled — nothing is recorded as saved', async () => {
     const abort = Object.assign(new Error('x'), { name: 'AbortError' });
     Object.assign(window.navigator, { canShare: () => true, share: vi.fn(async () => { throw abort; }) });

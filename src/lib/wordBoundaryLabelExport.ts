@@ -76,9 +76,16 @@ export type SaveLabelsResult = 'shared' | 'downloaded' | 'cancelled';
 /**
  * Hands the file to the user: the share sheet where the browser can share files
  * (iOS/Android — lets you save to Files or send it on), otherwise a normal
- * download. Records the save time so the page can show how many labels are new.
+ * download. `download: true` skips the share sheet — on iPhone the sheet can hand
+ * you an awkward attachment, whereas a plain download lands in Files → Downloads
+ * under its real name. Records the save time so the page can show how many labels
+ * are new.
  */
-export async function saveLabelsFile(labels: readonly WordBoundaryLabel[], now = new Date()): Promise<SaveLabelsResult> {
+export async function saveLabelsFile(
+  labels: readonly WordBoundaryLabel[],
+  now = new Date(),
+  options: { download?: boolean } = {},
+): Promise<SaveLabelsResult> {
   const name = labelExportFilename(now);
   const file = new File([JSON.stringify(buildLabelExport(labels, now), null, 1)], name, { type: 'application/json' });
   const remember = () => {
@@ -90,7 +97,7 @@ export async function saveLabelsFile(labels: readonly WordBoundaryLabel[], now =
   };
 
   const nav = window.navigator as Navigator & { canShare?: (data: ShareData) => boolean };
-  if (nav.canShare?.({ files: [file] }) && typeof nav.share === 'function') {
+  if (!options.download && nav.canShare?.({ files: [file] }) && typeof nav.share === 'function') {
     try {
       await nav.share({ files: [file], title: 'Word boundary labels' });
       remember();

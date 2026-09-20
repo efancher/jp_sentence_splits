@@ -139,12 +139,12 @@ export function LabelWordAudioPage() {
   }, []);
 
   /** Hands every label on this device to the user as a file (share sheet or download). */
-  async function saveFile() {
+  async function saveFile(download = false) {
     const labels = await listWordBoundaryLabels();
-    const result = await saveLabelsFile(labels);
+    const result = await saveLabelsFile(labels, new Date(), { download });
     if (result === 'cancelled') return;
     setLastSaved(getLastSaveTime());
-    setSaveNote(result === 'shared' ? 'Labels shared.' : 'Labels downloaded as a file.');
+    setSaveNote(result === 'shared' ? 'Labels shared.' : 'Labels downloaded — look in Files → Downloads.');
   }
 
   async function start() {
@@ -260,7 +260,7 @@ export function LabelWordAudioPage() {
           randomCount={random.length}
           unsaved={unsaved}
           saveNote={saveNote}
-          onSaveFile={() => void saveFile()}
+          onSaveFile={(download) => void saveFile(download)}
           resumeInfo={stored && leftInStored > 0 ? { left: leftInStored, planned: stored.linkIds.length } : null}
           onResume={() => stored && void resume(stored, allLabels)}
           onDiscard={discardSession}
@@ -298,7 +298,7 @@ export function LabelWordAudioPage() {
           randomLabels={random}
           unsaved={unsaved}
           saveNote={saveNote}
-          onSaveFile={() => void saveFile()}
+          onSaveFile={(download) => void saveFile(download)}
           onAgain={() => setPhase('setup')}
           onUndo={() => void undoLast()}
           canUndo={runLabels.length > 0}
@@ -338,7 +338,7 @@ function SetupPanel({
   randomCount: number;
   unsaved: number;
   saveNote: string | null;
-  onSaveFile: () => void;
+  onSaveFile: (download?: boolean) => void;
   resumeInfo: { left: number; planned: number } | null;
   onResume: () => void;
   onDiscard: () => void;
@@ -428,7 +428,7 @@ function SaveLabels({
   total: number;
   unsaved: number;
   note: string | null;
-  onSave: () => void;
+  onSave: (download?: boolean) => void;
 }) {
   if (total === 0) return null;
   return (
@@ -438,8 +438,11 @@ function SaveLabels({
         {unsaved > 0 ? ` — ${unsaved} not in a saved file yet.` : ' — all of them are in a saved file.'}
       </p>
       <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
-        <button type="button" className={unsaved > 0 ? 'primary' : 'secondary'} onClick={onSave}>
+        <button type="button" className={unsaved > 0 ? 'primary' : 'secondary'} onClick={() => onSave()}>
           Save labels
+        </button>
+        <button type="button" className="secondary" onClick={() => onSave(true)}>
+          Download file
         </button>
         {note ? <span className="muted">{note}</span> : null}
       </div>
@@ -817,7 +820,7 @@ function DonePanel({
   randomLabels: WordBoundaryLabel[];
   unsaved: number;
   saveNote: string | null;
-  onSaveFile: () => void;
+  onSaveFile: (download?: boolean) => void;
   onAgain: () => void;
   onUndo: () => void;
 }) {

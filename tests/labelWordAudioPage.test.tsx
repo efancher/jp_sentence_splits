@@ -43,10 +43,10 @@ vi.mock('../src/lib/rangePlayer', () => ({
     dispose = vi.fn();
   },
 }));
-const saveLabelsFile = vi.fn(async (_labels: unknown) => 'downloaded' as const);
+const saveLabelsFile = vi.fn(async (_labels: unknown, _now?: unknown, _options?: unknown) => 'downloaded' as const);
 vi.mock('../src/lib/wordBoundaryLabelExport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/wordBoundaryLabelExport')>()),
-  saveLabelsFile: (labels: unknown) => saveLabelsFile(labels),
+  saveLabelsFile: (labels: unknown, now?: unknown, options?: unknown) => saveLabelsFile(labels, now, options),
 }));
 
 const T = '2026-09-20T00:00:00Z';
@@ -489,6 +489,23 @@ describe('LabelWordAudioPage', () => {
     await waitFor(() => expect(saveLabelsFile).toHaveBeenCalledTimes(1));
     expect((saveLabelsFile.mock.calls[0]![0] as { id: string }[]).map((l) => l.id)).toEqual(['p1']);
     expect(await screen.findByText(/labels downloaded as a file/i)).toBeInTheDocument();
+  });
+
+  it('has a plain "Download file" button that skips the share sheet', async () => {
+    const { link, audioId, sentenceId } = await seed();
+    await saveWordBoundaryLabel({
+      id: 'p1', sentenceVocabularyId: link.id, sentenceId, sentenceAudioId: audioId, surfaceForm: '生まれ', verdict: 'clean',
+      shown: { startMs: 1, endMs: 2 }, label: { startMs: 1, endMs: 2 }, estimates: { token: null, mora: null, shipped: null },
+      sampleKind: 'random', spanVersion: 'v', elapsedMs: 1, createdAt: T,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /download file/i }));
+    await waitFor(() => expect(saveLabelsFile).toHaveBeenCalledTimes(1));
+    expect(saveLabelsFile.mock.calls[0]![2]).toEqual({ download: true });
+    await user.click(screen.getByRole('button', { name: /^save labels$/i }));
+    await waitFor(() => expect(saveLabelsFile).toHaveBeenCalledTimes(2));
+    expect(saveLabelsFile.mock.calls[1]![2]).toEqual({ download: false });
   });
 
   it('offers no save button before there is anything to save', async () => {
