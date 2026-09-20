@@ -559,7 +559,9 @@ function RulesPanel({ defaultOpen }: { defaultOpen: boolean }) {
           The target is the highlighted <em>word only</em> — not the particle or ending after it, even if that’s what a
           card plays. If the clip doesn’t contain the word, or you can’t tell, use “Can’t label this”. If the speaker
           slurs it so a sound merges into the word next to it (に行って sounding like “nitte”), pick “slurred / merged”
-          — there is no clean edge to mark, and it is worth counting.
+          — there is no clean edge to mark, and it is worth counting. A whispered (devoiced) vowel is <em>not</em> that:
+          聞こえ often sounds like “tsukoe” because the き is breathy — the burst is still the start of the word, so label
+          from it.
         </p>
       </div>
     </details>

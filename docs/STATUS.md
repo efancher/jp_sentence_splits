@@ -33,6 +33,12 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labeller rules: devoiced vowels count (聞こえ heard as "tsukoe").** User couldn't hear
+  "kikoe" in 「あまり聞こえません」. It is the き **devoiced** (a high vowel between voiceless sounds is
+  whispered; what's left is the k-release burst, which sounds like tsu/shi/chi) — the same effect that makes
+  the aligner drop such vowels from its phone list. Guidance: label it, starting at the burst; "slurred /
+  merged" is only for words with no separable start (行って after に). Added to the rules panel.
+
 - **2026-09-20 — Labeller: "Your recent labels" — fix a mis-tapped skip after a reload.** User tapped
   "Word isn't in this clip" too quickly on a slurred word and "Undo last" was greyed out (it only knows the
   current page load's labels). The start screen now has a collapsible **Your recent labels** list (latest
