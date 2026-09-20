@@ -1203,7 +1203,7 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   pitch-preserving speed control and a whole-sentence button for context.
   The word's span is located by forced alignment (`isolatedWordRange` in
   `src/lib/isolatedWordRange.ts` — character-proportion mapping over the
-  punctuation-stripped sentence (the aligner's tokens carry no 、。), folding in a following ≤2-char case particle so the
+  punctuation-stripped sentence (the aligner's tokens carry no 、。), folding in a following particle (explicit set, no pause before it) so the
   post-word pitch is audible; also bails to whole-sentence when an `<unk>`
   OOV token — a casual contraction the aligner's lexicon lacked — precedes
   the target, since that breaks the proportional map downstream); it falls
