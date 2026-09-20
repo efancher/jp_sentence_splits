@@ -105,7 +105,12 @@ import {
   type GrammarLearnerState,
   type GrammarPriorityBucket,
 } from '../lib/grammarPatterns';
-import { createId, hashString, sentenceIdFromNormalizedKey } from '../lib/ids';
+import {
+  createId,
+  deterministicId,
+  hashString,
+  sentenceIdFromNormalizedKey,
+} from '../lib/ids';
 import { isHanCharacter } from '../lib/kanji';
 import {
   computeContextDiversity,
@@ -4479,13 +4484,28 @@ export async function recordReview(input: {
 // incremental diff.
 // ---------------------------------------------------------------------------
 
+/**
+ * Id for a get-or-create row (kanji, vocabulary item, grammar pattern and their
+ * links): derived from the signed-in owner + natural key so two devices that
+ * mint the same word produce the *same* row and the insert converges, instead of
+ * two rows with different ids that the server's unique index rejects (the
+ * duplicate-key / orphaned-link incidents of 2026-09-19). Signed out there is no
+ * owner to scope by (ids are global keys server-side), so it stays random and any
+ * duplicate is adopted at push time as before.
+ */
+async function mintGetOrCreateId(prefix: string, ...naturalKey: string[]): Promise<string> {
+  const { ensureSyncMeta } = await import('../sync/queue');
+  const ownerId = (await ensureSyncMeta()).userId;
+  return ownerId ? deterministicId(prefix, ownerId, ...naturalKey) : createId(prefix);
+}
+
 export async function ensureKanji(character: string): Promise<Kanji> {
   const db = getDb();
   const existing = await db.kanji.where('character').equals(character).first();
   if (existing) return existing;
   const timestamp = nowIso();
   const kanji: Kanji = {
-    id: createId('kanji'),
+    id: await mintGetOrCreateId('kanji', character),
     character,
     meanings: [],
     onyomi: [],
@@ -4518,7 +4538,7 @@ export async function ensureVocabularyItem(
 
   const timestamp = nowIso();
   const item: VocabularyItem = {
-    id: createId('vocab_item'),
+    id: await mintGetOrCreateId('vocab_item', expression, reading),
     expression,
     reading,
     meaning: fields.meaning ?? '',
@@ -4540,7 +4560,7 @@ export async function ensureVocabularyItem(
     if (!isHanCharacter(character)) continue;
     const kanji = await ensureKanji(character);
     kanjiLinks.push({
-      id: createId('vocab_kanji'),
+      id: await mintGetOrCreateId('vocab_kanji', item.id, String(position)),
       vocabularyItemId: item.id,
       kanjiId: kanji.id,
       positionInWord: position,
@@ -6528,7 +6548,7 @@ export async function ensureGrammarPattern(
 
   const timestamp = nowIso();
   const pattern: GrammarPattern = {
-    id: createId('grammar_pattern'),
+    id: await mintGetOrCreateId('grammar_pattern', normalizedKey),
     canonicalName: canonicalName.trim(),
     normalizedKey,
     aliases: fields.aliases ?? [],
@@ -6619,7 +6639,7 @@ export async function ensureSentenceGrammar(
   }
 
   const created: SentenceGrammar = {
-    id: createId('sentence_grammar'),
+    id: await mintGetOrCreateId('sentence_grammar', sentenceId, grammarPatternId),
     sentenceId,
     grammarPatternId,
     chunkId: fields.chunkId,
@@ -7044,7 +7064,7 @@ export async function ensureGrammarRelationship(
 
   const timestamp = nowIso();
   const relationship: GrammarRelationship = {
-    id: createId('grammar_relationship'),
+    id: await mintGetOrCreateId('grammar_relationship', a, b, relationshipType),
     patternAId: a,
     patternBId: b,
     relationshipType,
@@ -7080,7 +7100,7 @@ export async function recordGrammarRelationshipObservation(
         updatedAt: timestamp,
       }
     : {
-        id: createId('grammar_relationship'),
+        id: await mintGetOrCreateId('grammar_relationship', a, b, relationshipType),
         patternAId: a,
         patternBId: b,
         relationshipType,

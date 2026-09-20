@@ -138,6 +138,7 @@ const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
   study_items: 2,
   reviews: 3,
   pitch_drill_attempts: 3,
+  card_issue_reports: 3,
 };
 
 /** Rows per bulk request — keeps each URL/body comfortably small. */
@@ -147,9 +148,18 @@ function pushTier(entity: SyncEntity): number {
   return PUSH_TIER[entity] ?? 1;
 }
 
-/** Stable: rows keep their queued order within a tier. Exported for tests. */
+/**
+ * Tier first, then grouped by entity (a tier's entities don't depend on each
+ * other, and grouping is what lets same-table rows go out as one bulk request —
+ * a queue interleaving items and kanji would otherwise never batch). Rows keep
+ * their queued order within an entity. Exported for tests.
+ */
 export function sortForPush(items: readonly SyncQueueItem[]): SyncQueueItem[] {
-  return [...items].sort((a, b) => pushTier(a.entity) - pushTier(b.entity));
+  return [...items].sort(
+    (a, b) =>
+      pushTier(a.entity) - pushTier(b.entity) ||
+      (a.entity < b.entity ? -1 : a.entity > b.entity ? 1 : 0),
+  );
 }
 
 interface PushCtx {
@@ -397,9 +407,10 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
     ?.version ?? 1;
   const row = toRemoteRow(item.entity, item.payload, userId, localVersion);
 
+  const getOrCreate = isGetOrCreateEntity(item.entity) ? item.entity : null;
   const { data: existing, error: readError } = await supabase
     .from(table)
-    .select('version')
+    .select((getOrCreate ? 'version,deleted_at' : 'version') as 'version')
     .eq(idCol, item.recordId)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
@@ -429,6 +440,19 @@ async function pushOne(item: SyncQueueItem, userId: string): Promise<void> {
       writtenVersion,
     );
     return;
+  }
+
+  // Same id, first push: another device minted the identical get-or-create row
+  // (ids are derived from the natural key). It is never-overwritten content, so
+  // take the server's copy rather than clobbering it with this device's initial
+  // payload. A soft-deleted remote row is a tombstone for a re-created word:
+  // fall through and resurrect it with the update below.
+  if (
+    getOrCreate &&
+    item.expectedVersion == null &&
+    (existing as { deleted_at?: string | null }).deleted_at == null
+  ) {
+    if (await adoptSameIdRemote(getOrCreate, item.recordId)) return;
   }
 
   if (
@@ -555,6 +579,72 @@ const DEDUP_ENTITIES = new Set<SyncEntity>([
 
 function isDedupEntity(entity: SyncEntity): entity is DedupEntity {
   return DEDUP_ENTITIES.has(entity);
+}
+
+/**
+ * Entities whose ids are derived from their natural key (`mintGetOrCreateId`
+ * in repository.ts): the dedup entities plus `vocabulary_kanji`, whose id comes
+ * from its (deterministic) vocabulary item + position.
+ */
+type GetOrCreateEntity = DedupEntity | 'vocabulary_kanji';
+
+function isGetOrCreateEntity(entity: SyncEntity): entity is GetOrCreateEntity {
+  return DEDUP_ENTITIES.has(entity) || entity === 'vocabulary_kanji';
+}
+
+/**
+ * Replaces the local copy of a get-or-create row with the server's, for a row
+ * both devices minted with the same (deterministic) id. Returns false when the
+ * server row can't be read, leaving the normal push path to run.
+ */
+async function adoptSameIdRemote(entity: GetOrCreateEntity, recordId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const { data: remote, error } = await supabase
+    .from(entity)
+    .select('*')
+    .eq('id', recordId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error || !remote) return false;
+
+  const db = getDb();
+  const version = Number((remote as { version?: number }).version ?? 1);
+  await db.transaction('rw', [db.kanji, db.vocabularyItems, db.vocabularyKanji, db.grammarPatterns, db.sentenceGrammar, db.grammarRelationships, db.syncRecordMeta], async () => {
+    const row = remote as Record<string, unknown>;
+    switch (entity) {
+      case 'kanji':
+        await db.kanji.put(remoteToKanji(row));
+        break;
+      case 'vocabulary_items':
+        await db.vocabularyItems.put(remoteToVocabularyItem(row));
+        break;
+      case 'vocabulary_kanji':
+        await db.vocabularyKanji.put(remoteToVocabularyKanji(row));
+        break;
+      case 'grammar_patterns':
+        await db.grammarPatterns.put(remoteToGrammarPattern(row));
+        break;
+      case 'sentence_grammar':
+        await db.sentenceGrammar.put(remoteToSentenceGrammar(row));
+        break;
+      case 'grammar_relationships':
+        await db.grammarRelationships.put(remoteToGrammarRelationship(row));
+        break;
+    }
+    await putRecordMeta({
+      entity,
+      recordId,
+      version,
+      syncedVersion: version,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  syncLog('info', 'Adopted the remote copy of a row both devices created', 'SAME_ID_ADOPT', {
+    entity,
+    recordId,
+  });
+  return true;
 }
 
 /**

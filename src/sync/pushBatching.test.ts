@@ -102,7 +102,7 @@ describe('sortForPush', () => {
     retryCount: 0,
   });
 
-  it('puts parents before the links that reference them, keeping queued order within a tier', () => {
+  it('puts parents before the links that reference them, grouped by entity within a tier', () => {
     const sorted = sortForPush([
       item('vocabulary_kanji', 'link_1'),
       item('vocabulary_items', 'vi_1'),
@@ -110,15 +110,22 @@ describe('sortForPush', () => {
       item('sentence_vocabulary', 'sv_1'),
       item('kanji', 'k_1'),
       item('vocabulary_items', 'vi_2'),
+      item('kanji', 'k_2'),
     ]);
     expect(sorted.map((i) => i.recordId)).toEqual([
-      'vi_1',
       'k_1',
+      'k_2',
+      'vi_1',
       'vi_2',
-      'link_1',
       'sv_1',
+      'link_1',
       'rev_1',
     ]);
+  });
+
+  it('keeps queued order within one entity', () => {
+    const sorted = sortForPush([item('kanji', 'k_b'), item('vocabulary_items', 'vi'), item('kanji', 'k_a')]);
+    expect(sorted.map((i) => i.recordId)).toEqual(['k_b', 'k_a', 'vi']);
   });
 });
 
