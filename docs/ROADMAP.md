@@ -1042,6 +1042,12 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     `matchWord` takes the first occurrence; 2.5% of links (33/1334) have the word twice — needs which
     occurrence (e.g. from `vocabularySuggestions` spans). (3) *Early starts:* leading breath/noise absorbed
     into a word start (今日 +510 ms, いろいろ +270 ms) — a trailing-energy trim on onset is the candidate.
+  - **Proactive "needs fixing" list (2026-09-20 idea).** The squashed-alignment guard is a pure function
+    of a cached alignment + a link, so it can run for every link when an alignment is stored (mining
+    commit, backfill, re-alignment) — a count on the book page / Analyze ("12 words have unreliable
+    timing") opening the zoomed editor one word at a time (the labelling screen's "Needs review" queue is
+    already that, minus the card-loop override semantics). Open question: whether a hand fix should write
+    the synced override (card range) *and* a strict-word label in one pass.
   - **UI rules (from your preferences).** One Play/Stop toggle (not paired buttons); controls
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.

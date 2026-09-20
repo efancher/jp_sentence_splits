@@ -33,6 +33,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Adjust now uses the zoomed edge editor; ±100 ms bump; flagged words say so.** User: liked
+  the labelling UI, asked whether it could replace the old "Adjust", and for a 100 ms bump for big
+  misses. `WordAudioRangeEditor` (whole-sentence drag, ~1 px per 10 ms) is **removed**; `SegmentLoopPlayer`'s
+  Adjust opens `ZoomedRangeEditor` (new; two `BoundaryEdgeEditor`s + Play toggle + Save / Cancel / Reset
+  to automatic). **Same data, same meaning as before:** the saved span is the link's synced
+  `audioStartMs/EndMs` — what the *card loops*, so pitch cards should keep the ending/particle in it —
+  which is deliberately **not** the strict-word labels (those stay in the device-local label table).
+  Behaviour changes: nothing is written until Save (was: on every drag end), Save is disabled until an
+  edge moved (so an untouched span isn't frozen as an override), and the toggle reads "Close". Both
+  editors gained **±100 ms** buttons (`BoundaryEdgeEditor`). When the squashed-alignment guard withheld the
+  span, the hint reads "The timing here looks unreliable — tap Adjust to set it by ear" instead of the
+  generic "couldn't isolate". Tests: `segmentLoopPlayer` (+4: guard message, Save persists, Cancel /
+  Save-disabled, Reset), one ±100 test on the labelling page; `wordAudioRangeEditor.test` deleted with
+  the component. *Not built (proposed):* a proactive "N words need fixing" list (flag at import /
+  re-alignment) — the guard already runs wherever a word is used, and the labelling screen's "Needs
+  review" ranks flagged items first.
+
 - **2026-09-20 — Squashed-alignment guard: a target near an over-compressed token falls back to the
   whole sentence instead of playing a confidently wrong span.** Built from the 52 labels + the corpus.
   *Signal:* the aligner mis-times a stretch of speech (drawled 「ちょっとねー」, Latin `VIP`) by crushing

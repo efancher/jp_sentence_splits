@@ -202,6 +202,20 @@ describe('LabelWordAudioPage', () => {
     });
   });
 
+  it('has ±100 ms buttons for a big miss', async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+    await user.click(await screen.findByRole('button', { name: /move start edge -100 ms/i }));
+    await user.click(await screen.findByRole('button', { name: /move end edge 100 ms/i }));
+    await user.click(await screen.findByRole('button', { name: /save my edits/i }));
+
+    await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
+    const [label] = await listWordBoundaryLabels();
+    expect(label).toMatchObject({ verdict: 'corrected', label: { startMs: 900, endMs: 1520 } });
+  });
+
   it('records a skip with its reason and no span', async () => {
     await seed();
     const user = userEvent.setup();

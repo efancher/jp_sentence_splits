@@ -11,7 +11,8 @@ const BUCKETS = 300;
  * One zoomed edge of the word span, for hand-labelling
  * (`LabelWordAudioPage`). Shows ±400 ms of waveform around the edge so 10 ms is
  * ~7 px (the whole-sentence `WordAudioRangeEditor` gives ~1 px). Drag the
- * handle, or nudge it with the buttons / arrow keys (1 ms; Shift 10 ms). The
+ * handle, or nudge it with the buttons (±1, ±10, and ±100 ms for a big miss) or
+ * the arrow keys (1 ms; Shift 10 ms). The
  * view re-centres on the edge when a drag ends so a long correction is never
  * stuck at the window's border. Auditioning is owned by the parent.
  */
@@ -137,7 +138,7 @@ export function BoundaryEdgeEditor({
         <line x1={xAtMs(edgeMs, VIEW_WIDTH, win)} x2={xAtMs(edgeMs, VIEW_WIDTH, win)} y1={0} y2={WAVE_HEIGHT} stroke="var(--accent)" strokeWidth={2} />
       </svg>
       <div className="row" style={{ flexWrap: 'wrap', gap: '0.25rem' }}>
-        {[-10, -1, 1, 10].map((d) => (
+        {[-100, -10, -1, 1, 10, 100].map((d) => (
           <button key={d} type="button" className="secondary" disabled={disabled} onClick={() => nudge(d)} aria-label={`Move ${kind} edge ${d} ms`}>
             {d > 0 ? `+${d}` : d}
           </button>

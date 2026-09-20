@@ -5,11 +5,11 @@ import type { SentenceAudio, SentenceVocabulary } from '../domain/types';
 import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
-import { isolatedWordRange } from '../lib/isolatedWordRange';
+import { isolatedWordRange, wordTimingUnreliable } from '../lib/isolatedWordRange';
 import { PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 
 import { NativeAudioButton } from './NativeAudioButton';
-import { WordAudioRangeEditor } from './WordAudioRangeEditor';
+import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
 /**
  * Loops just one word's span of a sentence's reference recording — a model
@@ -84,6 +84,8 @@ export function SegmentLoopPlayer({
   } = useRangeLoop(audio.id, blob);
   const [autoRange, setAutoRange] = useState<TimeRangeMs | null>(null);
   const [alignmentResolved, setAlignmentResolved] = useState(false);
+  /** The guard withheld the automatic span because a squashed token sits next to the word. */
+  const [timingUnreliable, setTimingUnreliable] = useState(false);
   const [editing, setEditing] = useState(false);
 
   // Manual override — seeded from the link, then owned locally so a drag
@@ -143,6 +145,7 @@ export function SegmentLoopPlayer({
     let cancelled = false;
     setAutoRange(null);
     setAlignmentResolved(false);
+    setTimingUnreliable(false);
     if (!blob) return;
     void loadOrComputeAlignment(
       audio.id,
@@ -153,6 +156,7 @@ export function SegmentLoopPlayer({
     ).then((result) => {
       if (cancelled) return;
       setAutoRange(result ? isolatedWordRange(result.words, japanese, surfaceForm, { inlineReading }) : null);
+      setTimingUnreliable(result ? wordTimingUnreliable(result.words, japanese, surfaceForm) : false);
       setAlignmentResolved(true);
     });
     return () => {
@@ -171,10 +175,6 @@ export function SegmentLoopPlayer({
     cancelLoop();
     if (link) void setSentenceVocabularyAudioRange(link.id, next);
   };
-
-  // Live drag: update the range the loop button uses, without a DB write per
-  // pointer move — `persistOverride` runs on drag end / snap / reset.
-  const previewOverride = (next: TimeRangeMs) => setOverride(next);
 
   const canEdit = !!link && !!blob && (!!range || !!proportionalSeed);
 
@@ -230,26 +230,35 @@ export function SegmentLoopPlayer({
             aria-expanded={editing}
             onClick={() => setEditing((open) => !open)}
           >
-            {editing ? 'Done' : override ? 'Adjusted' : 'Adjust'}
+            {editing ? 'Close' : override ? 'Adjusted' : 'Adjust'}
           </button>
         ) : null}
       </div>
       {canEdit && editing && editRange ? (
-        <WordAudioRangeEditor
+        <ZoomedRangeEditor
           blob={blob}
+          audioId={audio.id}
           value={editRange}
           hasOverride={!!override}
-          onChange={previewOverride}
-          onCommit={persistOverride}
-          onReset={() => persistOverride(null)}
+          onSave={(next) => {
+            persistOverride(next);
+            setEditing(false);
+          }}
+          onReset={() => {
+            persistOverride(null);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
         />
       ) : null}
       {!range && alignmentResolved ? (
         <div className="muted">
           {proportionalSeed && !editing
-            ? 'Couldn’t isolate just the word — tap Adjust to set it by ear.'
+            ? timingUnreliable
+              ? 'The timing here looks unreliable — tap Adjust to set it by ear.'
+              : 'Couldn’t isolate just the word — tap Adjust to set it by ear.'
             : proportionalSeed
-              ? 'Drag the edges onto the word, then Done.'
+              ? 'Set the edges on the word, then Save.'
               : fallbackHint}
         </div>
       ) : null}

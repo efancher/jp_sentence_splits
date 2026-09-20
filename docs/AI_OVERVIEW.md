@@ -1209,14 +1209,15 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   the target, since that breaks the proportional map downstream); it falls
   back to whole-sentence-only playback when alignment is unavailable or the
   word can't be located. An **"Adjust"** toggle opens
-  `<WordAudioRangeEditor>` — the clip decoded in the browser, draggable
-  start/end handles over the waveform with `detectSilences` pause lines +
-  "Snap to pauses" — and the hand-corrected span is stored on the
-  `SentenceVocabulary` link (`audioStartMs`/`audioEndMs`, synced) and
-  overrides the alignment guess from then on. "Adjust" stays reachable even
-  when alignment produced no span at all (off-tailnet, OOV, degenerate):
-  it's seeded with a rough duration-proportional guess to drag from,
-  neither looped nor persisted until the learner commits a drag. Plays through a local `<audio>` + `PlaybackCoordinator`,
+  `<ZoomedRangeEditor>` — the zoomed edge views from the labelling screen: ±400 ms of decoded
+  waveform around each edge (10 ms ≈ 7 px), ±1/±10/±100 ms nudges and arrow keys, "Hear before /
+  after" for each edge, a Play toggle for the span; nothing is written until **Save** (Cancel /
+  "Reset to automatic" alongside). The saved span is stored on the `SentenceVocabulary` link
+  (`audioStartMs`/`audioEndMs`, synced) and overrides the alignment guess from then on — it is
+  what the card *loops*, so for pitch cards it should keep the word's ending/particle. "Adjust" stays
+  reachable even when alignment produced no span at all (off-tailnet, OOV, degenerate, or the
+  **squashed-alignment guard** withheld it — the hint then says "The timing here looks unreliable"):
+  it's seeded with a rough duration-proportional guess to place by ear. Plays through a local `<audio>` + `PlaybackCoordinator`,
   not the `nativeAudioController` singleton (no range support there). The reveal
   also shows `SentencePitchAccentRow` (see below) for the whole sentence,
   with the card's target word highlighted.
