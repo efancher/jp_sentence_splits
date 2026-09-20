@@ -108,24 +108,29 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setNextRetryAt(null);
   }, []);
 
-  const syncNow = useCallback(async () => {
-    if (!auth.user || !online) return;
-    clearAutoRetry();
-    setSyncing(true);
-    try {
-      await runSyncCycle();
-    } finally {
-      setSyncing(false);
-    }
-  }, [auth.user, online, clearAutoRetry]);
+  const runSync = useCallback(
+    async (throttlePull: boolean) => {
+      if (!auth.user || !online) return;
+      clearAutoRetry();
+      setSyncing(true);
+      try {
+        await runSyncCycle({ throttlePull });
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [auth.user, online, clearAutoRetry],
+  );
+
+  const syncNow = useCallback(() => runSync(false), [runSync]);
 
   const scheduleSync = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     clearAutoRetry();
     debounceRef.current = setTimeout(() => {
-      void syncNow();
+      void runSync(true);
     }, SYNC_DEBOUNCE_MS);
-  }, [syncNow, clearAutoRetry]);
+  }, [runSync, clearAutoRetry]);
 
   useEffect(() => {
     setSyncRequestHandler(scheduleSync);

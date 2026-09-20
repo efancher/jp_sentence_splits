@@ -69,8 +69,28 @@ const server = vi.hoisted(() => {
       },
       is: (c: string) => (nulls.push(c), q),
       eq: (c: string, v: unknown) => (filters.push([c, v]), q),
+      in: async (c: string, vs: unknown[]) => ({
+        data: rows(table).filter((r) => vs.includes(r[c])).map((r) => ({ ...r })),
+        error: null,
+      }),
       maybeSingle: async () => ({ data: matching()[0] ?? null, error: null }),
-      insert: async (row: Row) => insertRow(table, row),
+      // Bulk inserts are atomic, like Postgres: one bad row rejects (and rolls back) all.
+      insert: async (row: Row | Row[]) => {
+        if (!Array.isArray(row)) return insertRow(table, row);
+        const inserted: Row[] = [];
+        for (const r of row) {
+          const result = insertRow(table, r);
+          if (result.error) {
+            for (const done of inserted) {
+              const at = rows(table).findIndex((x) => x.id === done.id);
+              if (at >= 0) rows(table).splice(at, 1);
+            }
+            return result;
+          }
+          inserted.push(r);
+        }
+        return { error: null };
+      },
       update: (p: Row) => ((patch = p), q),
     };
     return q;

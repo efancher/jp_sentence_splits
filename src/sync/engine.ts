@@ -59,8 +59,11 @@ let syncInFlight: Promise<void> | null = null;
 /** Where the running cycle is, for the stall watchdog and the diagnostics log. */
 let syncStage = 'idle';
 const SYNC_STALL_LOG_MS = 60_000;
+/** A save-triggered cycle skips the pull if one finished this recently. */
+const PULL_THROTTLE_MS = 20_000;
+let lastPullAt = 0;
 
-export async function runSyncCycle(): Promise<void> {
+export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Promise<void> {
   if (syncInFlight) return syncInFlight;
   syncInFlight = (async () => {
     // Log-only watchdog: says where a cycle is stuck without releasing the
@@ -76,8 +79,16 @@ export async function runSyncCycle(): Promise<void> {
       // stayed on "Pending N" forever (e.g. after a missing SQL migration).
       syncStage = 'push';
       const pushFailure = await pushMutations();
-      syncStage = 'pull';
-      await pullChanges();
+      // Local edits only need their push; conflicts are caught by the version
+      // check there. During a burst of edits a pull per save is pure overhead.
+      // Explicit syncs (button, reconnect, app load) always pull.
+      if (options.throttlePull && Date.now() - lastPullAt < PULL_THROTTLE_MS) {
+        syncStage = 'pull-skipped';
+      } else {
+        syncStage = 'pull';
+        await pullChanges();
+        lastPullAt = Date.now();
+      }
       syncStage = 'sweep';
       const swept = await sweepNoopConflicts();
       if (swept > 0) {
@@ -109,6 +120,52 @@ export async function runSyncCycle(): Promise<void> {
   return syncInFlight;
 }
 
+/**
+ * Push order: parents before the rows that reference them. Link-table RLS
+ * (`vocabulary_kanji`, `sentence_vocabulary`, `sentence_grammar`, …) requires the
+ * referenced rows to already exist server-side, and the queue is ordered by when
+ * a row was *queued*, not by what depends on what — so a link queued before its
+ * (re-queued) parent failed RLS and waited a whole cycle. Unlisted entities are
+ * tier 1 (links, attachments).
+ */
+const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
+  books: 0,
+  sentences: 0,
+  kanji: 0,
+  vocabulary_items: 0,
+  grammar_patterns: 0,
+  import_batches: 0,
+  study_items: 2,
+  reviews: 3,
+  pitch_drill_attempts: 3,
+};
+
+/** Rows per bulk request — keeps each URL/body comfortably small. */
+const PUSH_BATCH_SIZE = 50;
+
+function pushTier(entity: SyncEntity): number {
+  return PUSH_TIER[entity] ?? 1;
+}
+
+/** Stable: rows keep their queued order within a tier. Exported for tests. */
+export function sortForPush(items: readonly SyncQueueItem[]): SyncQueueItem[] {
+  return [...items].sort((a, b) => pushTier(a.entity) - pushTier(b.entity));
+}
+
+interface PushCtx {
+  userId: string;
+  failures: { count: number; first?: string };
+  /** Set on a transport failure (timeout / offline): stop, leave the rest queued. */
+  aborted?: string;
+}
+
+/** Network-level failures — the request never got a database verdict. */
+function isTransportError(message: string): boolean {
+  return /timed out|failed to fetch|networkerror|network request failed|load failed|aborted|fetch failed/i.test(
+    message,
+  );
+}
+
 /** Returns a short failure summary when any queue item could not be pushed. Exported for tests. */
 export async function pushMutations(): Promise<string | undefined> {
   const supabase = getSupabase();
@@ -123,41 +180,155 @@ export async function pushMutations(): Promise<string | undefined> {
   if (collapsed > 0) {
     syncLog('warn', `Collapsed ${collapsed} duplicate queue row(s)`, 'QUEUE_DEDUPE', { collapsed });
   }
-  const pending = await listPendingMutations();
+  const pending = sortForPush(await listPendingMutations());
   syncLog('debug', `Pushing ${pending.length} mutations`);
 
-  let failureCount = 0;
-  let firstFailure: string | undefined;
+  const ctx: PushCtx = { userId, failures: { count: 0 } };
 
-  for (const item of pending) {
-    try {
-      await pushOne(item, userId);
-      await removeQueueItem(item.id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message === 'version_conflict') {
-        if (LAST_WRITE_WINS_ENTITIES.has(item.entity)) {
-          await forcePushOverwrite(item, userId);
-        } else {
-          await handlePushConflict(item, userId);
-        }
-        await removeQueueItem(item.id);
-        continue;
-      }
-      syncLog('warn', 'Push failed', 'PUSH_FAIL', {
-        entity: item.entity,
-        recordId: item.recordId,
-        message,
-      });
-      await bumpQueueRetry(item.id, message);
-      failureCount += 1;
-      firstFailure ??= `${item.entity}: ${message}`;
+  // Walk the (tier-sorted) queue in runs of consecutive same-entity upserts;
+  // each run goes out as bulk requests, everything else one row at a time.
+  let i = 0;
+  while (i < pending.length) {
+    const item = pending[i]!;
+    if (item.operation !== 'upsert') {
+      await pushSingle(item, ctx);
+      i += 1;
+      continue;
     }
+    let j = i;
+    while (
+      j < pending.length &&
+      pending[j]!.operation === 'upsert' &&
+      pending[j]!.entity === item.entity
+    ) {
+      j += 1;
+    }
+    const run = pending.slice(i, j);
+    for (let k = 0; k < run.length; k += PUSH_BATCH_SIZE) {
+      await pushUpsertBatch(run.slice(k, k + PUSH_BATCH_SIZE), ctx);
+    }
+    i = j;
   }
 
-  if (!failureCount || !firstFailure) return undefined;
-  if (failureCount === 1) return firstFailure;
-  return `${firstFailure} (+${failureCount - 1} more)`;
+  const { count, first } = ctx.failures;
+  if (!count || !first) return undefined;
+  if (count === 1) return first;
+  return `${first} (+${count - 1} more)`;
+}
+
+/** The original one-row path: full conflict / retry handling. */
+async function pushSingle(item: SyncQueueItem, ctx: PushCtx): Promise<void> {
+  if (ctx.aborted) return;
+  try {
+    await pushOne(item, ctx.userId);
+    await removeQueueItem(item.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'version_conflict') {
+      if (LAST_WRITE_WINS_ENTITIES.has(item.entity)) {
+        await forcePushOverwrite(item, ctx.userId);
+      } else {
+        await handlePushConflict(item, ctx.userId);
+      }
+      await removeQueueItem(item.id);
+      return;
+    }
+    syncLog('warn', 'Push failed', 'PUSH_FAIL', {
+      entity: item.entity,
+      recordId: item.recordId,
+      message,
+    });
+    await bumpQueueRetry(item.id, message);
+    ctx.failures.count += 1;
+    ctx.failures.first ??= `${item.entity}: ${message}`;
+    // Don't burn a full timeout on every remaining row of a dead connection.
+    if (isTransportError(message)) ctx.aborted = message;
+  }
+}
+
+/**
+ * Pushes same-entity upserts with two bulk requests instead of two per row: one
+ * `select … in (ids)` to find which already exist, and one multi-row `insert`
+ * for the ones that don't. Rows that already exist (real version checks) and any
+ * insert the server rejects go through `pushSingle`, so conflict handling, dedupe
+ * adoption and RLS self-heal are unchanged. A rejected bulk insert is atomic, so
+ * it is bisected to isolate the offending row rather than retried row by row.
+ */
+async function pushUpsertBatch(items: SyncQueueItem[], ctx: PushCtx): Promise<void> {
+  if (ctx.aborted) return;
+  if (items.length === 1) return pushSingle(items[0]!, ctx);
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const entity = items[0]!.entity;
+  const idCol = idColumnForEntity(entity);
+
+  const { data: existingRows, error: readError } = await supabase
+    .from(entity)
+    .select(idCol)
+    .in(idCol, items.map((item) => item.recordId));
+  if (readError) {
+    if (isTransportError(readError.message)) {
+      ctx.aborted = readError.message;
+      await failBatch(items, readError.message, ctx);
+      return;
+    }
+    for (const item of items) await pushSingle(item, ctx);
+    return;
+  }
+  const existingIds = new Set(
+    ((existingRows ?? []) as unknown as Record<string, unknown>[]).map((row) => String(row[idCol])),
+  );
+  const fresh: SyncQueueItem[] = [];
+  for (const item of items) {
+    if (existingIds.has(item.recordId)) await pushSingle(item, ctx);
+    else fresh.push(item);
+  }
+  await insertBisecting(fresh, ctx);
+}
+
+async function failBatch(items: SyncQueueItem[], message: string, ctx: PushCtx): Promise<void> {
+  for (const item of items) {
+    syncLog('warn', 'Push failed', 'PUSH_FAIL', { entity: item.entity, recordId: item.recordId, message });
+    await bumpQueueRetry(item.id, message);
+  }
+  ctx.failures.count += items.length;
+  ctx.failures.first ??= `${items[0]!.entity}: ${message}`;
+}
+
+async function insertBisecting(items: SyncQueueItem[], ctx: PushCtx): Promise<void> {
+  if (items.length === 0 || ctx.aborted) return;
+  if (items.length === 1) return pushSingle(items[0]!, ctx);
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const rows: Record<string, unknown>[] = [];
+  const versions: number[] = [];
+  for (const item of items) {
+    const localVersion = (await getRecordMeta(item.entity, item.recordId))?.version ?? 1;
+    versions.push(localVersion);
+    rows.push(toRemoteRow(item.entity, item.payload, ctx.userId, localVersion));
+  }
+
+  const { error } = await supabase.from(items[0]!.entity).insert(rows);
+  if (error) {
+    // Only a database verdict (it has a Postgres/PostgREST code) says a row is
+    // bad; a transport failure would just time out again on every half.
+    if (!error.code || isTransportError(error.message)) {
+      ctx.aborted = error.message;
+      await failBatch(items, error.message, ctx);
+      return;
+    }
+    const mid = Math.ceil(items.length / 2);
+    await insertBisecting(items.slice(0, mid), ctx);
+    await insertBisecting(items.slice(mid), ctx);
+    return;
+  }
+  for (let k = 0; k < items.length; k += 1) {
+    const item = items[k]!;
+    const written = Number((rows[k] as { version?: number }).version ?? versions[k]);
+    await acknowledgeSyncedVersion(item.entity, item.recordId, written);
+    await removeQueueItem(item.id);
+  }
 }
 
 async function acknowledgeSyncedVersion(
