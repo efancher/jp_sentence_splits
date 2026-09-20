@@ -53,6 +53,12 @@ what's left is one deferred durability item (below).
   laid the kana on the wrong sounds. A native alignment containing `<unk>` is now refused (`no-reference-timing`),
   and a `no-learner` phrase says how many of its sounds had a clear pitch. Open: the same coincidence can
   affect `buildKanaTimeline`'s exact path; not yet guarded.
+  Third follow-up: a **"Report a problem with this"** button on the phrase pitch panel (also when nothing could be
+  shown). It saves a `SyncIssueReport` (`conflictEntity: 'phrase_pitch'`, `conflictRecordId` = attempt id) whose
+  `diagnosticsSnapshot` is `buildPhrasePitchSnapshot` — the rows, both speakers' word/phone timings (ms) and
+  voiced-frame counts per token, because the learner's alignment and pitch exist only in the browser. Reuses the
+  existing `sync_issue_reports` table, so **no migration**; it lists on `/issues` (heading now "Sync & analysis
+  issues") and via `npm run issues:list-sync`.
 
 ## Recent changes
 

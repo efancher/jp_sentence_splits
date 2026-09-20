@@ -1494,6 +1494,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   intervals; the native audio is the answer key (natives don't always match
   the dictionary). Withheld (with a message) when the alignment doesn't give
   exact mora timing (~1 sentence in 4). Logic: `lib/phrasePitch.ts`.
+  A "Report a problem with this" button saves a sync-issue report
+  (`conflictEntity: 'phrase_pitch'`) carrying a diagnostics snapshot
+  (`lib/phrasePitchSnapshot.ts`) so a bad phrase can be triaged later.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point

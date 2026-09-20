@@ -33,7 +33,7 @@ export function CardIssuesPage() {
     <div className="stack">
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Sync issues</h2>
+          <h2 style={{ margin: 0 }}>Sync &amp; analysis issues</h2>
           <label className="row muted" style={{ gap: '0.25rem' }}>
             <input
               type="checkbox"

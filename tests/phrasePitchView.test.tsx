@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PhrasePitchView } from '../src/components/PhrasePitchView';
 import type { PhrasePitchResult, PhraseRow } from '../src/lib/phrasePitch';
@@ -81,5 +82,29 @@ describe('PhrasePitchView', () => {
   it('gives a plain line for a flat learner phrase', () => {
     render(<PhrasePitchView result={result([row({ status: 'flat' })])} hasLearner />);
     expect(screen.getByText(/Your pitch is flat here\. The native phrase starts low/)).toBeInTheDocument();
+  });
+
+  it('sends a report with the note and confirms', async () => {
+    const onReport = vi.fn().mockResolvedValue(undefined);
+    render(<PhrasePitchView result={result([row()])} hasLearner onReport={onReport} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Report a problem with this' }));
+    await userEvent.type(screen.getByLabelText('What looks wrong?'), 'kana are on the wrong sounds');
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
+    await waitFor(() => expect(screen.getByText(/Reported — it will show up/)).toBeInTheDocument());
+    expect(onReport).toHaveBeenCalledWith('kana are on the wrong sounds');
+  });
+
+  it('lets you report even when nothing could be shown, and shows a failure', async () => {
+    const onReport = vi.fn().mockRejectedValue(new Error('disk full'));
+    render(<PhrasePitchView result={result([], { unavailable: 'no-reference-timing' })} hasLearner onReport={onReport} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Report a problem with this' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
+    await waitFor(() => expect(screen.getByText('disk full')).toBeInTheDocument());
+    expect(onReport).toHaveBeenCalledWith('');
+  });
+
+  it('has no report button unless a handler is given', () => {
+    render(<PhrasePitchView result={result([row()])} hasLearner />);
+    expect(screen.queryByRole('button', { name: 'Report a problem with this' })).toBeNull();
   });
 });

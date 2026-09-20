@@ -7,6 +7,7 @@ import {
   getVocabularyOccurrenceCandidates,
   listAttemptAnalysisSummariesForSentence,
   recordShadowingEncounter,
+  reportSyncIssue,
   saveAttemptAlignment,
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
@@ -41,6 +42,7 @@ import { KanaTimelineRow } from './KanaTimelineRow';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import { PhrasePitchView } from './PhrasePitchView';
 import { buildPhrasePitch } from '../lib/phrasePitch';
+import { buildPhrasePitchSnapshot } from '../lib/phrasePitchSnapshot';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import {
   analyzeAlignment,
@@ -900,7 +902,34 @@ export function AnalysisPanel({
       ) : null}
       {phrasePitch ? (
         <div className="panel">
-          <PhrasePitchView result={phrasePitch} hasLearner={Boolean(serverAlignment?.learner && learnerPitch)} />
+          <PhrasePitchView
+            result={phrasePitch}
+            hasLearner={Boolean(serverAlignment?.learner && learnerPitch)}
+            onReport={async (note) => {
+              if (!serverAlignment?.reference || !referencePitch) return;
+              await reportSyncIssue({
+                note: note || 'Phrase pitch looks wrong',
+                diagnosticsSnapshot: buildPhrasePitchSnapshot({
+                  sentenceId,
+                  attemptId,
+                  japanese: transcript,
+                  moraUnits,
+                  result: phrasePitch,
+                  reference: {
+                    words: serverAlignment.reference.words,
+                    pitch: referencePitch,
+                    pitchOffsetSeconds: targetRange ? targetRange.startMs / 1000 : 0,
+                  },
+                  learner:
+                    serverAlignment.learner && learnerPitch
+                      ? { words: serverAlignment.learner.words, pitch: learnerPitch }
+                      : undefined,
+                }),
+                conflictEntity: 'phrase_pitch',
+                conflictRecordId: attemptId,
+              });
+            }}
+          />
         </div>
       ) : null}
       {segmentObservations.length > 0 ? (

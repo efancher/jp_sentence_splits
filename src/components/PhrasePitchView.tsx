@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { phraseFeedback, type PhrasePitchResult, type PhraseRow, type PhraseStatus } from '../lib/phrasePitch';
 
 const STATUS_LABEL: Record<PhraseStatus, string> = {
@@ -76,6 +78,59 @@ function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolea
   );
 }
 
+/** One button that opens a small note box; sending saves the report (with diagnostics) for later triage. */
+function ReportProblem({ onReport }: { onReport: (note: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  if (sent) return <p className="muted" style={{ margin: 0 }}>Reported — it will show up under Reported issues.</p>;
+  if (!open) {
+    return (
+      <div>
+        <button type="button" onClick={() => setOpen(true)}>
+          Report a problem with this
+        </button>
+      </div>
+    );
+  }
+  async function send() {
+    if (sending) return;
+    setSending(true);
+    setError('');
+    try {
+      await onReport(note.trim());
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  }
+  return (
+    <div className="stack" style={{ gap: '0.35rem' }}>
+      <textarea
+        aria-label="What looks wrong?"
+        placeholder="What looks wrong? (optional)"
+        rows={2}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+      />
+      <div className="row" style={{ gap: '0.5rem' }}>
+        <button type="button" className="primary" disabled={sending} onClick={() => void send()}>
+          {sending ? 'Sending…' : 'Send report'}
+        </button>
+        <button type="button" disabled={sending} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {error ? <p className="muted" style={{ margin: 0 }}>{error}</p> : null}
+    </div>
+  );
+}
+
 /**
  * Phrase-level pitch, native vs you (`buildPhrasePitch`). Each phrase — a content
  * word plus its particles/endings — shows the kana with the native H/L, and under
@@ -83,9 +138,23 @@ function PhraseBlock({ row, showLearner }: { row: PhraseRow; showLearner: boolea
  * (the fitted H/L snaps to a valid Japanese shape; the bars show what you actually
  * did). One plain line says how each phrase moves and what to change.
  */
-export function PhrasePitchView({ result, hasLearner }: { result: PhrasePitchResult; hasLearner: boolean }) {
+export function PhrasePitchView({
+  result,
+  hasLearner,
+  onReport,
+}: {
+  result: PhrasePitchResult;
+  hasLearner: boolean;
+  /** Saves a "this looks wrong" report with the panel's diagnostics; omit to hide the button. */
+  onReport?: (note: string) => Promise<void>;
+}) {
   if (result.unavailable) {
-    return <p className="muted" style={{ margin: 0 }}>{UNAVAILABLE_TEXT[result.unavailable]}</p>;
+    return (
+      <div className="stack" style={{ gap: '0.4rem' }}>
+        <p className="muted" style={{ margin: 0 }}>{UNAVAILABLE_TEXT[result.unavailable]}</p>
+        {onReport ? <ReportProblem onReport={onReport} /> : null}
+      </div>
+    );
   }
   const showLearner = hasLearner && !result.learnerUnavailable;
   const judged = result.rows.filter((r) => r.status === 'match' || r.status === 'different' || r.status === 'flat');
@@ -120,6 +189,7 @@ export function PhrasePitchView({ result, hasLearner }: { result: PhrasePitchRes
       {result.rows.map((row, index) => (
         <PhraseBlock key={index} row={row} showLearner={showLearner} />
       ))}
+      {onReport ? <ReportProblem onReport={onReport} /> : null}
       <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
         H/L is fitted from each recording’s measured pitch, per phrase (a word plus its particles); the bars show the raw
         height of each sound. The native recording is the answer key — natives don’t always use the dictionary accent.
