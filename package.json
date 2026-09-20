@@ -12,6 +12,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pg": "bash scripts/pg-test.sh",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run test",
     "ci": "npm run check && npm run build:pages",

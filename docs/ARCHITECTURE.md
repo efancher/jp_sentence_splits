@@ -140,6 +140,15 @@ system's Phase 1 (schema-only — no UI writer yet), `planner_sessions`
 since 2026-08-25 (last-write-wins, see above). The one exception left is
 `sources`: still no writer anywhere, so nothing to sync yet.
 
+
+**Push ordering, batching, ids (2026-09-20).** The queue is pushed parents-first
+(`PUSH_TIER`), same-entity upserts as bulk inserts, every request under a timeout.
+Get-or-create rows (kanji, vocabulary items, grammar patterns and their link tables)
+use ids derived from owner + natural key (`deterministicId`) so concurrent creation on
+two devices converges instead of colliding on the server's unique indexes; legacy random
+ids are still healed by `adoptRemoteDuplicate`. The push path is tested against the real
+migrations/RLS in Docker (`npm run test:pg`, `tests/pgIntegration/README.md`).
+
 ## Learning Orchestrator
 
 A scheduling/recommendation layer on top of the existing SRS, not a parallel

@@ -1,0 +1,31 @@
+name: Sync tests (real Postgres)
+
+# Runs tests/pgIntegration against the project's real migrations + RLS. Separate
+# from Deploy on purpose: it pulls ~1 GB of images, so it only runs when sync or
+# schema code changes (or on demand) and never gates a deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/sync/**'
+      - 'src/db/repository.ts'
+      - 'supabase/migrations/**'
+      - 'tests/pgIntegration/**'
+      - 'scripts/pg-test.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:pg

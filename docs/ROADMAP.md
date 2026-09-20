@@ -359,15 +359,16 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
-- [ ] **Deterministic ids for get-or-create sync entities.** (2026-09-20) `kanji`,
-  `vocabulary_items`, `grammar_patterns` (+ their link tables) get random client-minted
-  ids, so two devices that mint the same word make two rows — the root of the
-  duplicate-key errors, orphaned grammar links and the adopt/remap machinery
-  (`DEDUP_ENTITIES`, `adoptRemoteDuplicate`, `remapDuplicateEntityId`). Derive the id from
-  the natural key instead (UUIDv5 of owner + key) so the insert converges. Needs a
-  migration story for existing rows (keep adoption for old ids). Also: a test that runs
-  the push path against real Postgres + the RLS policies — nearly every sync bug so far
-  only showed up server-side, which mocked tests can't reproduce.
+- [x] **Deterministic ids for get-or-create sync entities + real-Postgres sync tests.**
+  (2026-09-20, shipped) `kanji`, `vocabulary_items`, `grammar_patterns`,
+  `sentence_grammar`, `grammar_relationships` and `vocabulary_kanji` ids are now derived
+  from owner + natural key (`deterministicId`, `mintGetOrCreateId`), so two devices minting
+  the same word make the same row. Signed-out devices and existing rows keep their ids;
+  the adopt/remap machinery stays for those. `npm run test:pg` runs the push path against
+  the real migrations + RLS (Docker). Follow-ups if wanted: `study_items` (FSRS state;
+  natural-key duplicates still rely on the unique index) and `sentence_vocabulary` ids
+  are still random; run `test:pg` in the Deploy gate if the ~1 GB image pull becomes
+  acceptable (it has its own non-gating workflow today).
 
 - [ ] **Short games (`/play`).** (2026-09-19; **P1 shipped 2026-09-19** —
   see the Phases bullet) A few 60–180 s, non-arcade

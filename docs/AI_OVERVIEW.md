@@ -1924,7 +1924,21 @@ not just mid-review.
   to hit a remote unique-key violation and retry forever.
   `adoptRemoteDuplicate`/`remapDuplicateEntityId` now detect this, adopt
   the remote row's id, and repoint every local FK (including already-
-  queued pending pushes) to the correct id.
+  queued pending pushes) to the correct id. Since 2026-09-20 new get-or-create
+  rows (`kanji`, `vocabulary_items`, `grammar_patterns`, `sentence_grammar`,
+  `grammar_relationships`, `vocabulary_kanji`) get ids *derived from the signed-in
+  owner + natural key* (`deterministicId`), so two devices minting the same word
+  converge on one row; a first push that finds the same id already live remotely
+  adopts the server copy (`adoptSameIdRemote`). Signed-out devices and pre-existing
+  rows keep random ids and rely on the adopt/remap path above.
+- **Push path** (`engine.ts` `pushMutations`): rows go out parents-first
+  (`PUSH_TIER`/`sortForPush`, grouped by entity within a tier), same-entity upserts as
+  one existence check + one bulk insert (`pushUpsertBatch`, bisecting a rejected batch
+  to the bad row, which falls back to the per-row `pushSingle` conflict/dedupe/RLS-heal
+  path); a transport failure aborts the pass. Every Supabase request has a timeout
+  (`fetchWithTimeout`), reference-audio hydration runs detached from the cycle, and
+  save-triggered cycles skip the pull if one ran <20s ago. `npm run test:pg` exercises
+  this against real Postgres + RLS in Docker.
 - **Reference-audio self-heal**: a known Safari IndexedDB bug can corrupt
   a locally-stored Blob on one device only (metadata intact, bytes
   unresolvable); `repairSentenceAudio` re-downloads the original from

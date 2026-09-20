@@ -33,6 +33,28 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Deterministic ids for get-or-create sync rows; real-Postgres push tests.**
+  Follow-up to the sync reliability pass below (the two items it left on the ROADMAP).
+  *Ids:* `kanji`, `vocabulary_items`, `grammar_patterns`, `sentence_grammar`,
+  `grammar_relationships` and `vocabulary_kanji` now get ids derived from the signed-in
+  owner + natural key (`deterministicId` in `lib/ids.ts`, `mintGetOrCreateId` in
+  `repository.ts`) instead of `randomUUID`, so two devices minting the same word produce
+  the same row. Owner is part of the key because ids are global primary keys server-side;
+  signed out there is no owner, so ids stay random and duplicates are still adopted at
+  push time (`adoptRemoteDuplicate`, unchanged, also covers rows minted before this).
+  Push side (`engine.ts` `pushOne`): a first push (`expectedVersion == null`) that finds a
+  *live* remote row with the same id adopts the server's copy (`adoptSameIdRemote`)
+  instead of overwriting it with the initial payload; a soft-deleted remote row is a
+  tombstone for a re-created word and is resurrected by the normal update. *Tests:*
+  `npm run test:pg` (`scripts/pg-test.sh`, `tests/pgIntegration/`) starts
+  `supabase/postgres` + PostgREST in Docker, applies the real migrations, and runs
+  `pushMutations` with a real supabase-js client and JWTs (skipped unless
+  `SYNC_PG_TEST`; own non-gating workflow `sync-pg-tests.yml`). It immediately found a
+  real flaw in the batching from earlier today: sorting by tier alone left entities
+  interleaved in queue order, so almost nothing batched (230 requests for 60 words) —
+  `sortForPush` now also groups by entity (14 requests). Unit tests:
+  `tests/deterministicIds.test.ts`.
+
 - **2026-09-20 — Sync reliability pass (a day of `Report sync issue` triage).** Reports
   on 2026-09-19/20 turned up a run of separate bugs, all fixed:
   hung Supabase requests (no timeout anywhere → status stuck on "syncing", reports never
