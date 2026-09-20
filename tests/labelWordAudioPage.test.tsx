@@ -51,8 +51,8 @@ vi.mock('../src/lib/wordBoundaryLabelExport', async (importOriginal) => ({
 
 // These tests decode audio and write to IndexedDB several times per test; on a CPU-starved CI runner the default
 // 1 s find-timeout / 5 s test limit flaked (2026-09-20), so give the whole file more room.
-configure({ asyncUtilTimeout: 5000 });
-vi.setConfig({ testTimeout: 20_000 });
+configure({ asyncUtilTimeout: 15_000 });
+vi.setConfig({ testTimeout: 40_000 });
 
 const T = '2026-09-20T00:00:00Z';
 
