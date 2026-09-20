@@ -1034,7 +1034,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     alone (they disagree on 30 of 68 pairs); with ~40 gold labels each becomes a one-command comparison
     against `token` / `mora` in `analyze-word-boundary-labels.ts`. Build them as extra estimators only
     if they beat the mora cut on the gold set.
-  - **Follow-ups from the first 52 labels (2026-09-20).** (1) *Squashed-alignment detector:* the worst
+  - **Follow-ups from the first 52 labels (2026-09-20).** (1) *Squashed-alignment detector — BUILT 2026-09-20 (STATUS); to verify with new labels:* the worst
     misses (~1–1.7 s) are the aligner mis-timing a stretch of speech (drawled 「ちょっとねー」, Latin `VIP`),
     which shifts every later word — a gate on implausibly fast tokens (~40 ms/mora vs ≥80 normal) or
     long `<eps>` next to very short tokens could send those to the whole-sentence fallback instead of a

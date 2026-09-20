@@ -33,6 +33,27 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Squashed-alignment guard: a target near an over-compressed token falls back to the
+  whole sentence instead of playing a confidently wrong span.** Built from the 52 labels + the corpus.
+  *Signal:* the aligner mis-times a stretch of speech (drawled 「ちょっとねー」, Latin `VIP`) by crushing
+  tokens to a few frames (3 morae in 90 ms) and shifting the words around them 0.6–1.7 s. A token of ≥2
+  morae under **45 ms/mora** (`SQUASHED_MS_PER_MORA`; mora count from its phones) **within 2 tokens**
+  (`SQUASH_NEIGHBOURHOOD`) of the target marks its timing unreliable. **On the labels: 4 of the 7 misses
+  ≥250 ms flagged (every squash-caused one) and 0 of 45 good items** — threshold sweep 40/45/50/55/60:
+  40 lost one catch, ≥50 added a false alarm without a catch. Local, not sentence-wide: `セッション`
+  (err 0) shares a sentence with the squash but sits 8 tokens on, so "any squash before the target"
+  would have been a false alarm — the radius matters. *Tried and dropped:* long trailing `<eps>` (good
+  alignments have as much: median 1.4 s, max 3.5 s = the same as the bad 声 case). *Not caught:* early
+  starts (今日 +510 ms, いろいろ +270 ms) and the repeated-word bug (声). *Cost:* 4.6% of the corpus's
+  words (38 of 826 resolvable links; 3.6% at 40, 5.8% at 50) lose isolation; the flagged examples I
+  eyeballed are real squashes (今日 = 70 ms after a 1 s ジャパニーズ; 上手い = 3 morae in 120 ms). Flagged
+  targets return null from `isolatedWordRange/Spans/MatchRange` (all consumers' existing whole-sentence
+  fallback; the games skip them). `matchWord(..., { includeUnreliable })` lets the **labelling tool still
+  see them**: `estimateWordSpans` returns the raw token/mora spans plus `unreliable`, `shipped: null`;
+  "Needs review" ranks flagged items first (that is how the guard gets checked) and the chip says why.
+  `npm run analyze:word-boundary-labels` now prints error / misses-≥250 ms for flagged vs not (for labels
+  made after this shipped). Tests: `squashedAlignment` (11) using the real VIP-sentence shape.
+
 - **2026-09-20 — First hand-label results (52 random labels) → the 200 ms mora-cut floor removed.**
   User's first saved file (52 labels, all `random`, 7 books; backed up at
   `~/data/word-boundary-labels/`; 35 accepted as detected, 8 small corrections <100 ms, 5 large, 4

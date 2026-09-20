@@ -76,6 +76,18 @@ async function main() {
     console.log(row(`${name} (token)`, part, 'token'));
   }
 
+  // The squashed-alignment guard (docs/STATUS.md 2026-09-20): does the flag actually mark the bad ones?
+  const flagged = sample.filter((l) => l.estimates.unreliable === true);
+  const unflagged = sample.filter((l) => l.estimates.unreliable === false);
+  const unknown = sample.length - flagged.length - unflagged.length;
+  if (flagged.length + unflagged.length > 0) {
+    console.log(`\nSquashed-alignment guard (labels made since it shipped; ${unknown} older labels have no flag):`);
+    console.log(row('flagged (app falls back)', flagged, 'mora'));
+    console.log(row('not flagged', unflagged, 'mora'));
+    const bigMiss = (l: WordBoundaryLabel) => !!l.label && !!l.estimates.mora && Math.max(Math.abs(l.estimates.mora.startMs - l.label.startMs), Math.abs(l.estimates.mora.endMs - l.label.endMs)) >= 250;
+    console.log(`  misses of 250 ms or more: ${flagged.filter(bigMiss).length} of ${flagged.length} flagged, ${unflagged.filter(bigMiss).length} of ${unflagged.length} not flagged`);
+  }
+
   console.log('\nPer book (mora cut) — does the bias depend on the source?');
   const byBook = new Map<string, WordBoundaryLabel[]>();
   for (const l of sample) byBook.set(l.bookId ?? '(none)', [...(byBook.get(l.bookId ?? '(none)') ?? []), l]);

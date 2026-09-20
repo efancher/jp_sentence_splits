@@ -1130,8 +1130,10 @@ export interface WordBoundaryEstimates {
   token: WordBoundarySpan | null;
   /** MFA token edges refined to the target's mora boundaries (`inlineReading` passed). */
   mora: WordBoundarySpan | null;
-  /** What non-pitch loops play: `mora` plus the gap-aware pad. */
+  /** What non-pitch loops play: `mora` plus the gap-aware pad. Null when the timing is flagged unreliable (the app then plays the whole sentence). */
   shipped: WordBoundarySpan | null;
+  /** A squashed token sits next to the target (`wordTimingUnreliable`) — the detector's flag, recorded so it can be scored against the label. */
+  unreliable?: boolean;
 }
 
 /**

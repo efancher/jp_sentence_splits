@@ -44,6 +44,8 @@ interface WordMatch {
   /** The span starts/ends inside a token (cut at a mora boundary), not at a token edge. */
   innerStart: boolean;
   innerEnd: boolean;
+  /** A squashed token sits next to the target — the aligner's timing here can't be trusted (`SQUASHED_MS_PER_MORA`). */
+  unreliable: boolean;
 }
 
 /** Length of `text` in aligner characters (see `alignerView`). */
@@ -76,6 +78,11 @@ export function alignerRangeToRawIndices(
  * first mismatch (an <unk> blob, a numeral expansion, a normalized spelling)
  * means offsets from there on can't be trusted.
  */
+export interface MatchOptions {
+  /** Return the span even when a squashed token is nearby (the labelling tool needs to see those). */
+  includeUnreliable?: boolean;
+}
+
 function verifiedPrefixTokenCount(tokens: { text: string }[], japanese: string): number {
   const stripped = alignerView(japanese).chars.join('').toLowerCase();
   let count = 0;
@@ -103,6 +110,40 @@ export function verifiedTokenCharRange(
   let start = 0;
   for (let i = 0; i < index; i++) start += tokens[i]!.text.length;
   return { start, end: start + tokens[index]!.text.length };
+}
+
+/**
+ * Squashed-alignment guard. When the aligner mis-times a stretch of speech (a
+ * drawled 「ちょっとねー」, a Latin `VIP` it can't pronounce) it crushes the
+ * affected tokens into a few frames — 3 morae in 90 ms — and pushes every word
+ * around them ~1–1.7 s off. From 52 hand labels (docs/STATUS.md 2026-09-20): a
+ * target with such a token within two tokens of it was badly wrong in 4 of 4
+ * cases, with **0 false alarms among the 45 good items**; 45 ms/mora was the
+ * best threshold (40 missed one, ≥50 added a false alarm). A flagged target
+ * returns null — the callers' whole-sentence fallback — rather than a
+ * confidently wrong span. Tokens of one mora never count (です at 30 ms is
+ * ordinary devoicing).
+ */
+export const SQUASHED_MS_PER_MORA = 45;
+export const SQUASH_NEIGHBOURHOOD = 2;
+
+/** Mora count of an aligned token: from its phones when they parse, else half its non-silent phones. */
+function tokenMoraCount(word: WordAlignment): number {
+  const parsed = phonesToMoraIntervals(word.phones);
+  if (parsed) return parsed.length;
+  return Math.max(1, Math.round(word.phones.filter((p) => !/^(sil|sp|spn)$/.test(p.text)).length / 2));
+}
+
+/** True when a squashed token lies within `SQUASH_NEIGHBOURHOOD` tokens of usable[first..last] (or is one of them). */
+function hasSquashedNeighbour(usable: WordAlignment[], first: number, last: number): boolean {
+  const from = Math.max(0, first - SQUASH_NEIGHBOURHOOD);
+  const to = Math.min(usable.length - 1, last + SQUASH_NEIGHBOURHOOD);
+  for (let k = from; k <= to; k += 1) {
+    const token = usable[k]!;
+    const morae = tokenMoraCount(token);
+    if (morae >= 2 && ((token.end - token.start) * 1000) / morae < SQUASHED_MS_PER_MORA) return true;
+  }
+  return false;
 }
 
 /**
@@ -162,6 +203,7 @@ function matchWord(
   japanese: string,
   surfaceForm: string,
   reading?: SentenceReading,
+  options: MatchOptions = {},
 ): WordMatch | null {
   const rawIndex = japanese.indexOf(surfaceForm);
   if (rawIndex === -1 || surfaceForm.length === 0) return null;
@@ -272,7 +314,10 @@ function matchWord(
     return null;
   }
 
-  return { startMs, matchEndMs, lastIndex, usable, innerStart, innerEnd };
+  const unreliable = hasSquashedNeighbour(usable, found.first, found.last);
+  if (unreliable && !options.includeUnreliable) return null;
+
+  return { startMs, matchEndMs, lastIndex, usable, innerStart, innerEnd, unreliable };
 }
 
 /**
@@ -371,9 +416,23 @@ export function isolatedWordMatchRange(
   japanese: string,
   surfaceForm: string,
   reading?: SentenceReading,
+  options?: MatchOptions,
 ): TimeRangeMs | null {
-  const match = matchWord(words, japanese, surfaceForm, reading);
+  const match = matchWord(words, japanese, surfaceForm, reading, options);
   return match ? { startMs: match.startMs, endMs: match.matchEndMs } : null;
+}
+
+/**
+ * Whether the aligner's timing around the target looks unreliable (a squashed
+ * token within two tokens — see `SQUASHED_MS_PER_MORA`). False when the word
+ * can't be located at all.
+ */
+export function wordTimingUnreliable(
+  words: WordAlignment[],
+  japanese: string,
+  surfaceForm: string,
+): boolean {
+  return matchWord(words, japanese, surfaceForm, undefined, { includeUnreliable: true })?.unreliable ?? false;
 }
 
 /** The particle-inclusive end for a match, or the match's own end. */

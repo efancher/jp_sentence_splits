@@ -5,7 +5,7 @@ import type {
   WordBoundarySpan,
 } from '../domain/types';
 
-import { isolatedWordMatchRange, isolatedWordSpans } from './isolatedWordRange';
+import { isolatedWordMatchRange, isolatedWordSpans, wordTimingUnreliable } from './isolatedWordRange';
 
 /**
  * Pure logic for the word-boundary labelling tool (`/label-word-audio`,
@@ -36,10 +36,15 @@ export function estimateWordSpans(
   surfaceForm: string,
 ): WordBoundaryEstimates {
   const reading = { inlineReading };
+  // The labelling tool must still see items the squashed-alignment guard rejects —
+  // they are exactly the ones needed to check the guard — so the raw estimators
+  // ask for them; `shipped` stays what the app really plays (null when flagged).
+  const keep = { includeUnreliable: true };
   return {
-    token: toSpan(isolatedWordMatchRange(words, japanese, surfaceForm)),
-    mora: toSpan(isolatedWordMatchRange(words, japanese, surfaceForm, reading)),
+    token: toSpan(isolatedWordMatchRange(words, japanese, surfaceForm, undefined, keep)),
+    mora: toSpan(isolatedWordMatchRange(words, japanese, surfaceForm, reading, keep)),
     shipped: toSpan(isolatedWordSpans(words, japanese, surfaceForm, reading)?.wordOnly ?? null),
+    unreliable: wordTimingUnreliable(words, japanese, surfaceForm),
   };
 }
 
@@ -60,7 +65,8 @@ export function labelReason(
   estimates: WordBoundaryEstimates,
   sampleKind: 'random' | 'targeted',
 ): string {
-  if (sampleKind === 'random') return 'Random sample';
+  if (sampleKind === 'random') return estimates.unreliable ? 'Random sample — timing flagged unreliable here' : 'Random sample';
+  if (estimates.unreliable) return 'Timing looks unreliable here (squashed speech nearby)';
   const gap = Math.round(estimatorDisagreementMs(estimates));
   const mora = estimates.mora;
   if (mora && mora.endMs - mora.startMs < 250) return `Very short mora cut (${Math.round(mora.endMs - mora.startMs)} ms)`;
@@ -103,7 +109,9 @@ export function pickLabelQueue<T extends QueueCandidate>(
     const score = (c: T) => {
       const mora = c.estimates.mora;
       const short = mora && mora.endMs - mora.startMs < 250 ? 150 : 0;
-      return estimatorDisagreementMs(c.estimates) + short;
+      // Guard-flagged items first: labelling them is how the guard gets checked.
+      const flagged = c.estimates.unreliable ? 5000 : 0;
+      return estimatorDisagreementMs(c.estimates) + short + flagged;
     };
     return [...usable]
       .filter((c) => score(c) > 0)

@@ -171,9 +171,10 @@ describe('isolatedWordSpans with a reading (sub-token cut)', () => {
   });
 
   it('still refuses an implausibly short mora cut (under 60 ms) and keeps the token edge', () => {
-    const words = [word('付けて', 0, 't(10) ɯ(10) k(10) e(10) t(40) e(30)')];
+    // つけ = 40 ms (under the 60 ms limit) but the whole token (220 ms, ~73 ms/mora) is not squashed.
+    const words = [word('付けて', 0, 't(10) ɯ(10) k(10) e(10) t(90) e(90)')];
     const reading = { inlineReading: '付け[つけ]て' };
-    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly.endMs).toBe(110 + 60);
+    expect(isolatedWordSpans(words, '付けて', '付け', reading)?.wordOnly.endMs).toBe(220 + 60);
   });
 
   it('leaves a target that is a whole token alone', () => {
