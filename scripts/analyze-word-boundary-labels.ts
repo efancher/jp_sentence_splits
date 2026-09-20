@@ -2,8 +2,10 @@
  * Scores the automatic word-boundary estimators against the hand labels made in
  * `/label-word-audio` (docs/ROADMAP.md "Word-audio ground truth"). Read-only.
  *
- * Reads `word_boundary_labels` (uploaded from the app), then prints, for the
- * unbiased RANDOM sample only unless --all is given:
+ * Reads the file(s) saved by the labelling page's "Save labels" button (several
+ * files — e.g. from a phone and a laptop — are merged; a label present in more
+ * than one keeps its newest copy), then prints, for the unbiased RANDOM sample
+ * only unless --all is given:
  *   - each estimator's signed error (+ = late) and typical miss per edge, and the
  *     share of edges within 25 / 50 ms;
  *   - the same per book (the speaker proxy) — is the bias consistent across
@@ -12,18 +14,18 @@
  *     the mora cut's misses, next to the current defaults;
  *   - token vs mora, split by whether the mora cut was short (<250 ms).
  *
- * Usage: npx tsx scripts/analyze-word-boundary-labels.ts [--all]
+ * Usage: npx tsx scripts/analyze-word-boundary-labels.ts <labels.json> [more.json ...] [--all]
  */
+import { readFileSync } from 'node:fs';
+
 import type { WordBoundaryLabel } from '../src/domain/types';
+import { parseLabelExports } from '../src/lib/wordBoundaryLabelExport';
 import {
   edgeErrors,
   percentile,
   summarizeErrors,
   type EstimatorName,
 } from '../src/lib/wordBoundaryLabels';
-
-import { requireAuthedUser } from './lib/scriptHelpers';
-import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const CURRENT_PAD = { onsetMs: 30, tailMs: 60 };
 
@@ -44,15 +46,13 @@ function row(name: string, labels: WordBoundaryLabel[], estimator: EstimatorName
 
 async function main() {
   const all = process.argv.includes('--all');
-  const supabase = await createScriptSupabaseClient();
-  const user = await requireAuthedUser(supabase);
-  const { data, error } = await supabase.from('word_boundary_labels').select('payload').eq('owner_id', user.id);
-  if (error) {
-    console.error(`Couldn't read word_boundary_labels: ${error.message}`);
-    console.error('If the table is missing, run supabase/migrations/20260920000000_word_boundary_labels.sql in the SQL editor.');
+  const files = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+  if (files.length === 0) {
+    console.error('Usage: npx tsx scripts/analyze-word-boundary-labels.ts <labels.json> [more.json ...] [--all]');
+    console.error('(Save the file from the labelling page: Settings → Label word audio → Save labels.)');
     process.exit(1);
   }
-  const labels = (data ?? []).map((r) => r.payload as WordBoundaryLabel);
+  const labels = parseLabelExports(files.map((file) => readFileSync(file, 'utf8')));
   const scored = labels.filter((l) => l.verdict !== 'skipped');
   const sample = all ? scored : scored.filter((l) => l.sampleKind === 'random');
 

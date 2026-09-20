@@ -14,6 +14,7 @@ import type { WordBoundaryLabel, WordBoundarySkipReason, WordBoundarySpan } from
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { auditionRanges, clampEnd, clampStart } from '../lib/boundaryEditor';
 import { RangePlayer } from '../lib/rangePlayer';
+import { getLastSaveTime, saveLabelsFile, unsavedLabelCount } from '../lib/wordBoundaryLabelExport';
 import { decodeAudioBuffer } from '../lib/waveform';
 import {
   edgeErrors,
@@ -26,7 +27,6 @@ import {
   WORD_SPAN_VERSION,
   type ErrorSummary,
 } from '../lib/wordBoundaryLabels';
-import { uploadPendingWordBoundaryLabels, type LabelUploadResult } from '../sync/wordBoundaryLabelsRemote';
 
 type Mode = 'random' | 'targeted';
 
@@ -57,13 +57,22 @@ export function LabelWordAudioPage() {
   const [sessionLabels, setSessionLabels] = useState<WordBoundaryLabel[]>([]);
   const [allLabels, setAllLabels] = useState<WordBoundaryLabel[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const [upload, setUpload] = useState<LabelUploadResult | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(() => getLastSaveTime());
+  const [saveNote, setSaveNote] = useState<string | null>(null);
 
   const refresh = async () => setAllLabels(await listWordBoundaryLabels());
   useEffect(() => {
     void refresh();
-    void uploadPendingWordBoundaryLabels().then(setUpload);
   }, []);
+
+  /** Hands every label on this device to the user as a file (share sheet or download). */
+  async function saveFile() {
+    const labels = await listWordBoundaryLabels();
+    const result = await saveLabelsFile(labels);
+    if (result === 'cancelled') return;
+    setLastSaved(getLastSaveTime());
+    setSaveNote(result === 'shared' ? 'Labels shared.' : 'Labels downloaded as a file.');
+  }
 
   async function start() {
     setPhase('loading');
@@ -91,7 +100,6 @@ export function LabelWordAudioPage() {
     await refresh();
     if (index + 1 >= queue.length) {
       setPhase('done');
-      void uploadPendingWordBoundaryLabels().then(setUpload);
     } else {
       setIndex(index + 1);
     }
@@ -108,7 +116,7 @@ export function LabelWordAudioPage() {
   }
 
   const random = allLabels.filter((l) => l.sampleKind === 'random');
-  const pending = allLabels.filter((l) => !l.uploadedAt).length;
+  const unsaved = unsavedLabelCount(allLabels, lastSaved);
 
   return (
     <div className="stack" style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -122,9 +130,9 @@ export function LabelWordAudioPage() {
           message={message}
           total={allLabels.length}
           randomCount={random.length}
-          pending={pending}
-          upload={upload}
-          onUpload={() => void uploadPendingWordBoundaryLabels().then((r) => { setUpload(r); void refresh(); })}
+          unsaved={unsaved}
+          saveNote={saveNote}
+          onSaveFile={() => void saveFile()}
         />
       )}
 
@@ -149,7 +157,9 @@ export function LabelWordAudioPage() {
         <DonePanel
           session={sessionLabels}
           randomLabels={random}
-          upload={upload}
+          unsaved={unsaved}
+          saveNote={saveNote}
+          onSaveFile={() => void saveFile()}
           onAgain={() => setPhase('setup')}
           onUndo={() => void undoLast()}
         />
@@ -165,9 +175,9 @@ function SetupPanel({
   message,
   total,
   randomCount,
-  pending,
-  upload,
-  onUpload,
+  unsaved,
+  saveNote,
+  onSaveFile,
 }: {
   mode: Mode;
   onMode: (m: Mode) => void;
@@ -175,9 +185,9 @@ function SetupPanel({
   message: string | null;
   total: number;
   randomCount: number;
-  pending: number;
-  upload: LabelUploadResult | null;
-  onUpload: () => void;
+  unsaved: number;
+  saveNote: string | null;
+  onSaveFile: () => void;
 }) {
   return (
     <section className="panel stack">
@@ -210,16 +220,7 @@ function SetupPanel({
       <p className="muted" style={{ margin: 0 }}>
         {total} labelled so far ({randomCount} from random samples — about 40 is enough for a first look).
       </p>
-      {pending > 0 && (
-        <div className="stack" style={{ gap: '0.25rem' }}>
-          <UploadStatus upload={upload} pending={pending} />
-          <div>
-            <button type="button" className="secondary" onClick={onUpload}>
-              Upload {pending} pending label{pending === 1 ? '' : 's'}
-            </button>
-          </div>
-        </div>
-      )}
+      <SaveLabels total={total} unsaved={unsaved} note={saveNote} onSave={onSaveFile} />
       <RulesPanel defaultOpen={!hasSeenRules()} />
       <p className="muted" style={{ margin: 0 }}>
         <Link to="/settings">Back to settings</Link>
@@ -228,27 +229,31 @@ function SetupPanel({
   );
 }
 
-function UploadStatus({ upload, pending }: { upload: LabelUploadResult | null; pending: number }) {
-  if (upload?.status === 'table-missing') {
-    return (
-      <p className="muted" style={{ margin: 0 }}>
-        {pending} label{pending === 1 ? ' is' : 's are'} saved on this device but the cloud table doesn’t exist yet. Run{' '}
-        <code>supabase/migrations/20260920000000_word_boundary_labels.sql</code> in the Supabase SQL editor once; they’ll
-        upload automatically after that.
-      </p>
-    );
-  }
-  if (upload?.status === 'unavailable') {
-    return (
-      <p className="muted" style={{ margin: 0 }}>
-        {pending} label{pending === 1 ? ' is' : 's are'} waiting to upload{upload.message ? ` (${upload.message})` : ''}.
-      </p>
-    );
-  }
+function SaveLabels({
+  total,
+  unsaved,
+  note,
+  onSave,
+}: {
+  total: number;
+  unsaved: number;
+  note: string | null;
+  onSave: () => void;
+}) {
+  if (total === 0) return null;
   return (
-    <p className="muted" style={{ margin: 0 }}>
-      {pending} label{pending === 1 ? ' is' : 's are'} waiting to upload.
-    </p>
+    <div className="stack" style={{ gap: '0.25rem' }}>
+      <p className="muted" style={{ margin: 0 }}>
+        Labels are kept on this device only. Save them to a file to keep a copy and to analyse them
+        {unsaved > 0 ? ` — ${unsaved} not in a saved file yet.` : ' — all of them are in a saved file.'}
+      </p>
+      <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+        <button type="button" className={unsaved > 0 ? 'primary' : 'secondary'} onClick={onSave}>
+          Save labels
+        </button>
+        {note ? <span className="muted">{note}</span> : null}
+      </div>
+    </div>
   );
 }
 
@@ -516,20 +521,23 @@ function EstimatorRow({ name, labels, estimator }: { name: string; labels: WordB
 function DonePanel({
   session,
   randomLabels,
-  upload,
+  unsaved,
+  saveNote,
+  onSaveFile,
   onAgain,
   onUndo,
 }: {
   session: WordBoundaryLabel[];
   randomLabels: WordBoundaryLabel[];
-  upload: LabelUploadResult | null;
+  unsaved: number;
+  saveNote: string | null;
+  onSaveFile: () => void;
   onAgain: () => void;
   onUndo: () => void;
 }) {
   const clean = session.filter((l) => l.verdict === 'clean').length;
   const corrected = session.filter((l) => l.verdict === 'corrected').length;
   const skipped = session.filter((l) => l.verdict === 'skipped').length;
-  const pending = session.filter((l) => !l.uploadedAt).length;
   return (
     <section className="panel stack">
       <h3 style={{ margin: 0 }}>Session done</h3>
@@ -559,7 +567,7 @@ function DonePanel({
           </span>
         </div>
       )}
-      {upload && pending > 0 && <UploadStatus upload={upload} pending={pending} />}
+      <SaveLabels total={session.length} unsaved={unsaved} note={saveNote} onSave={onSaveFile} />
       <div className="row" style={{ gap: '0.5rem' }}>
         <button type="button" className="primary" onClick={onAgain}>
           Label another {LABEL_SESSION_SIZE}

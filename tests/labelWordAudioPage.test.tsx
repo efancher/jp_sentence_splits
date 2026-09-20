@@ -37,8 +37,10 @@ vi.mock('../src/lib/rangePlayer', () => ({
     dispose = vi.fn();
   },
 }));
-vi.mock('../src/sync/wordBoundaryLabelsRemote', () => ({
-  uploadPendingWordBoundaryLabels: async () => ({ status: 'table-missing', pending: 1 }),
+const saveLabelsFile = vi.fn(async (_labels: unknown) => 'downloaded' as const);
+vi.mock('../src/lib/wordBoundaryLabelExport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/wordBoundaryLabelExport')>()),
+  saveLabelsFile: (labels: unknown) => saveLabelsFile(labels),
 }));
 
 const T = '2026-09-20T00:00:00Z';
@@ -90,6 +92,7 @@ async function seed(options: { withAlignment?: boolean; suspended?: boolean; sen
 }
 
 beforeEach(() => {
+  saveLabelsFile.mockClear();
   resetDbForTests(`label-${createId('db')}`);
   window.localStorage.clear();
 });
@@ -210,14 +213,25 @@ describe('LabelWordAudioPage', () => {
     expect(await screen.findByText(/nothing to label/i)).toBeInTheDocument();
   });
 
-  it('shows how to create the cloud table when uploads have nowhere to go', async () => {
+  it('saves every label on the device to a file with one button, and counts what is new', async () => {
     const { link, audioId, sentenceId } = await seed();
     await saveWordBoundaryLabel({
       id: 'p1', sentenceVocabularyId: link.id, sentenceId, sentenceAudioId: audioId, surfaceForm: '生まれ', verdict: 'clean',
       shown: { startMs: 1, endMs: 2 }, label: { startMs: 1, endMs: 2 }, estimates: { token: null, mora: null, shipped: null },
       sampleKind: 'random', spanVersion: 'v', elapsedMs: 1, createdAt: T,
     });
+    const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByText(/word_boundary_labels\.sql/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1 not in a saved file yet/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /save labels/i }));
+    await waitFor(() => expect(saveLabelsFile).toHaveBeenCalledTimes(1));
+    expect((saveLabelsFile.mock.calls[0]![0] as { id: string }[]).map((l) => l.id)).toEqual(['p1']);
+    expect(await screen.findByText(/labels downloaded as a file/i)).toBeInTheDocument();
+  });
+
+  it('offers no save button before there is anything to save', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: /start labelling/i });
+    expect(screen.queryByRole('button', { name: /save labels/i })).not.toBeInTheDocument();
   });
 });

@@ -975,8 +975,8 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     fall/rise drill.
 
 - [~] **Word-audio ground truth: a hand-labelling workflow.** *Screen built 2026-09-20 (`/label-word-audio`,
-  STATUS); remaining: run the migration by hand, label ~40 random items, then read
-  `npm run analyze:word-boundary-labels`.* (2026-09-20, from the
+  STATUS); remaining: label ~40 random items, press "Save labels", then read
+  `npm run analyze:word-boundary-labels -- <saved file>`.* (2026-09-20, from the
   word-audio precision pass.) Everything measured so far is agreement between methods (two
   ASR judges that disagree with each other); ~60 hand-labelled edges would give real error
   numbers and decide the open questions: pad size, whether mora cuts under ~250 ms are good,
@@ -1005,10 +1005,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     mora cuts <250 ms, `<unk>`/numeral fallbacks; (c) value-first ordering — words due soon on
     pitch_accent / word_listening cards, so labelling fixes what you'll hear next. The 21
     existing hand-adjusted overrides are free gold (check whether they include the particle).
-  - **Storage.** New synced table `word_boundary_labels` (link id, audio id, the auto span *shown*
-    and the code version — needed because auto spans drift as code changes — final start/end,
-    per-edge verdicts, flags, seconds spent, device). Needs a Supabase migration (remember the
-    apply gap). The override is written too.
+  - **Storage (as built).** Device-local Dexie table + a "Save labels" file export (no cloud sync, no
+    migration — the user's call). Each label stores the auto span *shown* and `spanVersion`, because auto
+    spans drift as code changes. The saved files are the only copy that leaves the device: keep them.
   - **Per speaker?** There is no per-clip speaker identity; `Book.id` is the proxy (already used
     by the perception games). Test before building: label ≥10 per book, check whether per-book
     median signed error differs from the global one (bootstrap). If not, one global pad is

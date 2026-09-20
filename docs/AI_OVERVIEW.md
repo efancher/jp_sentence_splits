@@ -2208,9 +2208,9 @@ audition per edge, a Play/Stop toggle for the span), or skip with a reason. Two 
 (book-stratified; the only fair measurement) and *needs review* (largest token-vs-mora disagreements /
 short mora cuts; calibration only). Labels are the strict word — deliberately **not** written to a
 link's `audioStartMs/EndMs` (a pitch card's loop range includes the ending/particle). Stored local-first
-in Dexie `wordBoundaryLabels` (each with the estimates that were shown and `WORD_SPAN_VERSION`) and
-uploaded best-effort to Supabase `word_boundary_labels` (migration applied by hand). Scored by
-`npm run analyze:word-boundary-labels`. Code: `src/pages/LabelWordAudioPage.tsx`,
+device-locally in Dexie `wordBoundaryLabels` (each with the estimates that were shown and
+`WORD_SPAN_VERSION`); a "Save labels" button exports them as one JSON file (share sheet or download) —
+no cloud sync. Scored by `npm run analyze:word-boundary-labels -- <file>`. Code: `src/pages/LabelWordAudioPage.tsx`,
 `src/components/BoundaryEdgeEditor.tsx`, `src/lib/wordBoundaryLabels.ts` (estimators, queue selection,
 error stats), `src/lib/boundaryEditor.ts`, `src/lib/rangePlayer.ts`, `src/db/wordBoundaryLabels.ts`,
-`src/sync/wordBoundaryLabelsRemote.ts`.
+`src/lib/wordBoundaryLabelExport.ts`.

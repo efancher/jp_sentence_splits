@@ -1135,9 +1135,8 @@ export interface WordBoundaryEstimates {
 
 /**
  * One hand-labelled (or skipped) word-boundary check of the automatic span
- * (docs/ROADMAP.md "Word-audio ground truth"). Kept local first — written even
- * offline — and uploaded best-effort to the `word_boundary_labels` table
- * (`uploadedAt` set once it lands). Deliberately separate from
+ * (docs/ROADMAP.md "Word-audio ground truth"). Kept on the device (Dexie) and
+ * exported to a file with the "Save labels" button — no cloud sync. Deliberately separate from
  * `SentenceVocabulary.audioStartMs/EndMs`: those are a pitch card's whole loop
  * range (word + its ending/particle), while a label is the strict word alone.
  */
@@ -1162,6 +1161,4 @@ export interface WordBoundaryLabel {
   spanVersion: string;
   elapsedMs: number;
   createdAt: string;
-  /** Set once the label reached Supabase. */
-  uploadedAt?: string;
 }

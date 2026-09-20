@@ -133,7 +133,7 @@ export class GlossbookDatabase extends Dexie {
   pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
   gameRounds!: EntityTable<GameRound, 'id'>;
   // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
-  // local-first; uploaded best-effort to the `word_boundary_labels` table, never via the sync engine.
+  // device-local; exported to a file with the labelling page's "Save labels" button, never synced.
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
 
   constructor(name = DB_NAME) {
@@ -670,7 +670,7 @@ export class GlossbookDatabase extends Dexie {
       gameRounds: 'id, timestamp, gameId',
     });
 
-    // Word-boundary hand labels — local-first (see `WordBoundaryLabel`); no sync wiring.
+    // Word-boundary hand labels — device-local, exported to a file (see `WordBoundaryLabel`); no sync wiring.
     this.version(20).stores({
       wordBoundaryLabels: 'id, sentenceVocabularyId, createdAt',
     });

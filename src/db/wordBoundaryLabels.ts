@@ -9,9 +9,9 @@ import { loadAlignmentsBulk, loadSuspendedBookIndex } from './repository';
 
 /**
  * Persistence + candidate loading for the word-boundary labelling tool
- * (`/label-word-audio`, docs/ROADMAP.md "Word-audio ground truth"). Labels are
- * local-first — written even offline — and uploaded best-effort by
- * `src/sync/wordBoundaryLabelsRemote.ts`.
+ * (`/label-word-audio`, docs/ROADMAP.md "Word-audio ground truth"). Labels live
+ * on the device and leave it only through the page's "Save labels" file export
+ * (`src/lib/wordBoundaryLabelExport.ts`) — there is no cloud sync.
  */
 
 export async function saveWordBoundaryLabel(label: WordBoundaryLabel): Promise<void> {
@@ -24,14 +24,6 @@ export async function listWordBoundaryLabels(): Promise<WordBoundaryLabel[]> {
 
 export async function deleteWordBoundaryLabel(id: string): Promise<void> {
   await getDb().wordBoundaryLabels.delete(id);
-}
-
-export async function markWordBoundaryLabelsUploaded(ids: string[], at = new Date()): Promise<void> {
-  const db = getDb();
-  const iso = at.toISOString();
-  await db.transaction('rw', db.wordBoundaryLabels, async () => {
-    for (const id of ids) await db.wordBoundaryLabels.update(id, { uploadedAt: iso });
-  });
 }
 
 export function newWordBoundaryLabelId(): string {

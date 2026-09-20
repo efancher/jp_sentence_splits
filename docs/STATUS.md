@@ -52,21 +52,24 @@ what's left is one deferred durability item (below).
   itself; that anchoring is a known bias, so `shown` is stored with every label. (2) Labels are the
   **strict word** and are **not** written to `SentenceVocabulary.audioStartMs/EndMs` — those are a pitch
   card's whole loop range including the ending/particle, so writing a strict label there would strip
-  the cue (this corrects the ROADMAP's earlier "every label also fixes the card"). (3) Local-first:
-  labels go to a Dexie table (`wordBoundaryLabels`, v20, no sync engine) and upload best-effort to
-  Supabase `word_boundary_labels` (`src/sync/wordBoundaryLabelsRemote.ts`), so the screen works before
-  the table exists. **To do by hand:** run `supabase/migrations/20260920000000_word_boundary_labels.sql`
-  in the Supabase SQL editor (this environment has no DDL access); until then the Settings/labelling
-  screen shows the pending count and says so, and labels upload automatically afterwards.
-  *Analysis:* `npm run analyze:word-boundary-labels [-- --all]` (reads the table; random sample only by
-  default) prints each estimator's signed error / typical miss / within-25/50 ms per edge, mora vs token
-  split by mora-cut length (<250 ms), per-book bias (speaker proxy), and a pad calibration (p75/p90 of
-  the misses vs the 30/60 ms ceilings). Every label stores the estimates that were shown plus
-  `spanVersion` (`WORD_SPAN_VERSION`, bump when `isolatedWordRange` output changes); estimators can
-  also be recomputed later from the stored audio/alignment, so only the gold `label` is irreplaceable.
+  the cue (this corrects the ROADMAP's earlier "every label also fixes the card"). (3) **Device-local,
+  no cloud sync** (user's call): labels live in a Dexie table (`wordBoundaryLabels`, v20) and leave the
+  device through a **"Save labels" button** — one JSON file (`src/lib/wordBoundaryLabelExport.ts`),
+  handed to the OS share sheet where the browser can share files (iOS/Android → Files/AirDrop), else a
+  normal download; the page shows how many labels are newer than the last saved file. No Supabase table,
+  no migration to run. (An earlier version of this entry described a best-effort upload to a
+  `word_boundary_labels` table; it was replaced the same day.)
+  *Analysis:* `npm run analyze:word-boundary-labels -- <labels.json> [more.json…] [--all]` reads the saved
+  file(s) (several — phone and laptop — are merged, newest copy of a label wins) and prints each
+  estimator's signed error / typical miss / within-25/50 ms per edge, mora vs token split by mora-cut
+  length (<250 ms), per-book bias (speaker proxy), and a pad calibration (p75/p90 of the misses vs the
+  30/60 ms ceilings). Every label stores the estimates that were shown plus `spanVersion`
+  (`WORD_SPAN_VERSION`, bump when `isolatedWordRange` output changes); estimators can also be
+  recomputed later from the stored audio/alignment, so only the gold `label` is irreplaceable — keep the
+  saved files.
   Tests: `wordBoundaryLabels` (estimators, queue selection, error stats), `boundaryEditor`,
-  and `labelWordAudioPage` (accept / nudge-and-correct / skip / undo / empty / table-missing, with audio
-  decoding mocked). Not built: spectrogram strip, mora-boundary labels, "due soon" queue ordering.
+  `wordBoundaryLabelExport` (file format, merge, share/download/cancel) and `labelWordAudioPage`
+  (accept / nudge-and-correct / skip / undo / empty / save button, with audio decoding mocked). Not built: spectrogram strip, mora-boundary labels, "due soon" queue ordering.
 
 - **2026-09-20 — CTC kana judge tried; mora cut gets a 200 ms floor.** Replacing Whisper as the
   clip judge (it hallucinates stock phrases on sub-second audio): installed
