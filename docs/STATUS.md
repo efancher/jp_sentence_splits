@@ -33,6 +33,28 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Sync reliability pass (a day of `Report sync issue` triage).** Reports
+  on 2026-09-19/20 turned up a run of separate bugs, all fixed:
+  hung Supabase requests (no timeout anywhere → status stuck on "syncing", reports never
+  uploaded; `fetchWithTimeout` 30s REST / 120s storage in `supabaseClient.ts`, stage
+  tracking + a log-only `SYNC_STALL` watchdog in `runSyncCycle`); reference-audio
+  hydration running *inside* the cycle (now detached, single-flight, 4-way parallel,
+  per-download timeout, progress logs); the report forms + Copy diagnostics awaiting
+  `navigator.clipboard.writeText` after the click gesture (Safari left it pending —
+  `buildDiagnostics` vs `copyDiagnostics`, the latter now a synchronous `ClipboardItem`
+  promise write with an honest result); Keep local/remote buttons disabled for a whole
+  sync cycle; "Loading sentence…" shown forever for a deleted sentence
+  (VocabularyReviewPage/AnalyzePage now say it's missing). Push path rewritten
+  (`engine.ts`): rows are pushed parents-first (`PUSH_TIER`/`sortForPush` — link-table
+  RLS needs the referenced rows to exist), same-entity upserts go out as one
+  existence-check + one bulk insert (`pushUpsertBatch`/`insertBisecting`; a rejected
+  bulk insert is bisected to the bad row, which falls back to the unchanged
+  `pushSingle` conflict/dedupe/RLS-heal path; transport errors abort the pass instead of
+  timing out per batch), and save-triggered cycles skip the pull if one ran <20s ago.
+  Tests: `src/sync/pushBatching.test.ts`; `tests/syncPushIncident.test.ts`'s fake server
+  now models atomic bulk inserts and `.in()`. Not done (ROADMAP): deterministic ids for
+  get-or-create entities, a real-Postgres RLS test.
+
 - **2026-09-19 — Delete ads/junk sentences from the book list and Shadow page.**
   User request (recordings contain advertisements). `deleteSentenceCascade` already
   existed (AnalyzePage "Danger zone"); added batch `deleteSentencesCascade` (one
