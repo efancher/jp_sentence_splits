@@ -33,6 +33,15 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Labeller: "Word is slurred / merged into its neighbour" skip reason.** User hit
+  「羽田空港に行って」: the speaker says "nitte" (the い of 行って merges into the に's vowel), so the target
+  word has no separable start. Not a speaker error — ordinary casual-speech vowel merger — and not "word
+  isn't in the clip" either. New `WordBoundarySkipReason` `'reduced'`: the item is skipped (kept out of
+  the accuracy numbers — marking an edge would record a guess) but counted, and the rules panel says when
+  to use it. Also a useful data point for the aligner side: the reading says 3 morae (いって) where the
+  speech has fewer, which is exactly the phones-vs-reading mismatch that makes the mora cut fall back to
+  the token edge. Test added.
+
 - **2026-09-20 — Gold set is randomised, never hand-picked: "Needs review" became "Tricky cases"
   (random within situations); Adjust fixes stay separate from labels.** User's principle: the gold set
   should be *randomised selections of the things we want to target*, and fixing a card (Adjust) must not

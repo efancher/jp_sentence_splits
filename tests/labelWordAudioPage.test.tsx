@@ -230,6 +230,18 @@ describe('LabelWordAudioPage', () => {
     expect(label!.label).toBeUndefined();
   });
 
+  it('lets you skip a word the speaker slurs into its neighbour, and records why', async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+    await user.click(await screen.findByRole('button', { name: /can.t label this/i }));
+    await user.click(await screen.findByRole('button', { name: /slurred \/ merged into its neighbour/i }));
+
+    await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
+    expect((await listWordBoundaryLabels())[0]).toMatchObject({ verdict: 'skipped', skipReason: 'reduced' });
+  });
+
   it('undoes the last label and brings the item back', async () => {
     await seed();
     const user = userEvent.setup();

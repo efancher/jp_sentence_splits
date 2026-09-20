@@ -49,6 +49,7 @@ type Mode = LabelMode;
 const SKIP_REASONS: { reason: WordBoundarySkipReason; label: string }[] = [
   { reason: 'wrong-word', label: 'Word isn’t in this clip' },
   { reason: 'audio-mismatch', label: 'Audio ≠ sentence text' },
+  { reason: 'reduced', label: 'Word is slurred / merged into its neighbour' },
   { reason: 'overlap', label: 'Overlapping speech / music' },
   { reason: 'noisy', label: 'Too noisy' },
   { reason: 'unsure', label: 'Can’t tell' },
@@ -461,7 +462,9 @@ function RulesPanel({ defaultOpen }: { defaultOpen: boolean }) {
         </p>
         <p style={{ margin: 0 }}>
           The target is the highlighted <em>word only</em> — not the particle or ending after it, even if that’s what a
-          card plays. If the clip doesn’t contain the word, or you can’t tell, use “Can’t label this”.
+          card plays. If the clip doesn’t contain the word, or you can’t tell, use “Can’t label this”. If the speaker
+          slurs it so a sound merges into the word next to it (に行って sounding like “nitte”), pick “slurred / merged”
+          — there is no clean edge to mark, and it is worth counting.
         </p>
       </div>
     </details>

@@ -1115,6 +1115,7 @@ export type WordBoundarySkipReason =
   | 'wrong-word' // the clip doesn't contain the target word
   | 'audio-mismatch' // the audio doesn't match the sentence text
   | 'overlap' // overlapping speech / music makes the edges unplaceable
+  | 'reduced' // the speaker slurs it so a sound is missing or merged into its neighbour (に行って → "nitte")
   | 'noisy'
   | 'unsure'
   | 'undecodable'; // the recording wouldn't decode on this device
