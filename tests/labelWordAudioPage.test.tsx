@@ -359,7 +359,12 @@ describe('LabelWordAudioPage', () => {
       const user = userEvent.setup();
       renderPage();
       await user.click(await screen.findByRole('button', { name: /start labelling/i }));
-      for (let i = 0; i < 2; i += 1) await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      for (let i = 0; i < 2; i += 1) {
+        await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+        // Wait for the save before clicking again: otherwise a slow runner finds the *same* button (the next item
+        // hasn't rendered yet), clicks it twice, and the session never finishes.
+        await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(i + 1));
+      }
       await screen.findByText(/session done/i);
       const labels = await listWordBoundaryLabels();
       expect(labels).toHaveLength(2);
