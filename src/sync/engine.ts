@@ -56,19 +56,34 @@ const DEFERRED_FETCH_CHUNK = 200;
 
 let syncInFlight: Promise<void> | null = null;
 
+/** Where the running cycle is, for the stall watchdog and the diagnostics log. */
+let syncStage = 'idle';
+const SYNC_STALL_LOG_MS = 60_000;
+
 export async function runSyncCycle(): Promise<void> {
   if (syncInFlight) return syncInFlight;
   syncInFlight = (async () => {
+    // Log-only watchdog: says where a cycle is stuck without releasing the
+    // in-flight guard (which would let two cycles push the same rows).
+    const watchdog = setTimeout(() => {
+      syncLog('warn', `Sync cycle still running after ${SYNC_STALL_LOG_MS / 1000}s`, 'SYNC_STALL', {
+        stage: syncStage,
+      });
+    }, SYNC_STALL_LOG_MS);
     try {
       // Per-item push failures must surface as lastError. Previously they were
       // retried quietly while the cycle still cleared lastError, so the badge
       // stayed on "Pending N" forever (e.g. after a missing SQL migration).
+      syncStage = 'push';
       const pushFailure = await pushMutations();
+      syncStage = 'pull';
       await pullChanges();
+      syncStage = 'sweep';
       const swept = await sweepNoopConflicts();
       if (swept > 0) {
         syncLog('debug', `Auto-resolved ${swept} stale no-diff conflict(s)`, 'CONFLICT_SWEEP');
       }
+      syncStage = 'finish';
       // Best-effort, and deliberately NOT awaited: after a cleared cache this is
       // hundreds of downloads, and holding the cycle open kept the status on
       // "syncing" (and Sync now disabled) for minutes. Never fails the cycle.
@@ -83,9 +98,11 @@ export async function runSyncCycle(): Promise<void> {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      syncLog('error', 'Sync cycle failed', 'SYNC_CYCLE', { message });
+      syncLog('error', 'Sync cycle failed', 'SYNC_CYCLE', { message, stage: syncStage });
       await updateSyncMeta({ lastError: message });
     } finally {
+      clearTimeout(watchdog);
+      syncStage = 'idle';
       syncInFlight = null;
     }
   })();
