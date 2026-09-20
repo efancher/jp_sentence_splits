@@ -18,6 +18,7 @@ import type { TimeRangeMs } from './recording';
  * heiban/odaka cue. A small pad is added each side. Returns null when the word can't be located (no
  * alignment, surface form absent, degenerate range) — callers fall back to
  * whole-sentence playback.
+ * Also null when the matched span is implausibly short (`MIN_MATCH_MS`).
  *
  * Also returns null when an out-of-vocabulary token (`<unk>` — a word the
  * aligner's lexicon didn't have, chiefly casual contractions like
@@ -116,6 +117,10 @@ function matchWord(
     }
   });
   if (startMs === null || endMs === null || endMs <= startMs) return null;
+  // The aligner sometimes crushes a word into a few frames (何 → 30 ms in
+  // "え、何あやまってるの？") — no real word is that short, so the span is
+  // garbage; whole-sentence playback beats an empty-sounding clip.
+  if (endMs - startMs < MIN_MATCH_MS) return null;
 
   // An OOV token at/before the match makes the proportional map downstream
   // unreliable (see doc comment) — bail to whole-sentence playback.
@@ -148,12 +153,40 @@ function foldableParticle(match: WordMatch): WordAlignment | null {
   return next;
 }
 
-function pad(startMs: number, endMs: number): TimeRangeMs {
-  return { startMs: Math.max(0, startMs - 60), endMs: endMs + 120 };
+/**
+ * Padding around the aligner's boundaries, which tend to clip a word's onset
+ * and its decaying final vowel. The nominal amounts are only a ceiling: the
+ * pad never runs into a neighbouring word, since that plays the neighbour's
+ * first mora ("chiisai-ba" for 小さい|場所). Room to grow is the silence
+ * (`<eps>`) between this span and the nearest real token on that side, plus
+ * `BOUNDARY_SLACK_MS` for the aligner's own boundary error — so a word next to
+ * a pause gets the full pad and a word butted against another gets almost none.
+ */
+const ONSET_PAD_MS = 60;
+const TAIL_PAD_MS = 120;
+const BOUNDARY_SLACK_MS = 30;
+const MIN_MATCH_MS = 60;
+/** Timing tolerance when deciding which tokens sit before/after a span. */
+const EDGE_EPS_MS = 1;
+
+function pad(words: WordAlignment[], startMs: number, endMs: number): TimeRangeMs {
+  let gapBefore = Infinity;
+  let gapAfter = Infinity;
+  for (const w of words) {
+    if (!w.text || w.text === '<eps>') continue;
+    const wordStart = w.start * 1000;
+    const wordEnd = w.end * 1000;
+    if (wordEnd <= startMs + EDGE_EPS_MS) gapBefore = Math.min(gapBefore, Math.max(0, startMs - wordEnd));
+    if (wordStart >= endMs - EDGE_EPS_MS) gapAfter = Math.min(gapAfter, Math.max(0, wordStart - endMs));
+  }
+  return {
+    startMs: Math.max(0, startMs - Math.min(ONSET_PAD_MS, gapBefore + BOUNDARY_SLACK_MS)),
+    endMs: endMs + Math.min(TAIL_PAD_MS, gapAfter + BOUNDARY_SLACK_MS),
+  };
 }
 
 /**
- * Raw particle-inclusive match boundaries, before the fixed pad — exported
+ * Raw particle-inclusive match boundaries, before padding — exported
  * for boundary-precision experiments (see
  * scripts/experiment-word-boundary-verification.ts) that need to try
  * alternative padding against the same underlying match.
@@ -176,7 +209,7 @@ export function isolatedWordRange(
 ): TimeRangeMs | null {
   const raw = isolatedWordRangeUnpadded(words, japanese, surfaceForm);
   if (!raw) return null;
-  return pad(raw.startMs, raw.endMs);
+  return pad(words, raw.startMs, raw.endMs);
 }
 
 /**
@@ -202,7 +235,7 @@ export function isolatedWordSpans(
   const { startMs, matchEndMs } = match;
   const particle = foldableParticle(match);
   return {
-    wordOnly: pad(startMs, matchEndMs),
-    withParticle: particle ? pad(startMs, particle.end * 1000) : null,
+    wordOnly: pad(words, startMs, matchEndMs),
+    withParticle: particle ? pad(words, startMs, particle.end * 1000) : null,
   };
 }

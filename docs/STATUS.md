@@ -33,6 +33,21 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Word-clip pad is computed from the gap to neighbouring tokens; degenerate
+  matches fall back.** Follow-up to the particle-fold fix (both left open there).
+  *Pad:* the fixed −60/+120 ms became ceilings (`ONSET_PAD_MS`/`TAIL_PAD_MS` in
+  `isolatedWordRange.ts`): each side gets `min(ceiling, silence to the nearest real token
+  + 30 ms boundary slack)`, so a word next to a pause keeps the full pad and one butted
+  against another gets ~30 ms — no more "chiisai-ba" from a tail reaching into the next
+  word's onset. `<eps>` is treated as silence; `<unk>` as a neighbour. **Not validated
+  by the round-trip ASR scorer** — the earlier "default pad wins 57%" numbers were
+  measured on the pre-fix (drifting) spans; re-run `backfill:word-audio-range` /
+  the experiment script if pad quality needs numbers. *Guard:* a matched span under 60 ms
+  (`MIN_MATCH_MS`) returns null → whole-sentence fallback. Picked from the corpus: of
+  815 links only 何 (30 ms) is below 60 ms; the next shortest are 60–90 ms real words.
+  Existing tests' expected pads updated (each value derived from the rule, not copied)
+  + 2 new tests.
+
 - **2026-09-20 — Word clip folded in the next *noun*, not just particles (user
   report on sent_17d1bdde: 生まれ → "umareta toki kara", 小さい → "chiisai basho",
   場所 looping into 山の中).** Second cause behind the same "word audio is too

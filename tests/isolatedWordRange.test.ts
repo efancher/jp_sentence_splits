@@ -27,8 +27,9 @@ describe('isolatedWordRange', () => {
   ];
 
   it('locates the target word, pads each side, and folds in a short following particle', () => {
-    // 本: 0.8s−60ms start; trailing を (≤2 chars) folded in, 1.6s+120ms end.
-    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 740, endMs: 1720 });
+    // 本: 0.8s start; trailing を folded in, ending 1.6s. Both sides butt against
+    // another token (は before, 読む after), so each gets only the 30ms boundary slack.
+    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 770, endMs: 1630 });
   });
 
   it('returns null when the surface form is absent from the sentence', () => {
@@ -63,7 +64,7 @@ describe('isolatedWordRange', () => {
       word('を', 1.4, 1.6),
       word('読む', 1.6, 2.4),
     ];
-    expect(isolatedWordRange(withEmptyUnk, japanese, '本')).toEqual({ startMs: 740, endMs: 1720 });
+    expect(isolatedWordRange(withEmptyUnk, japanese, '本')).toEqual({ startMs: 770, endMs: 1630 });
   });
 
   it('ignores an <unk> that falls entirely after the target', () => {
@@ -72,13 +73,13 @@ describe('isolatedWordRange', () => {
       word('を', 0.6, 0.8),
       word('<unk>', 0.8, 1.6),
     ];
-    expect(isolatedWordRange(trailingUnk, '本を読む', '本')).toEqual({ startMs: 0, endMs: 920 });
+    expect(isolatedWordRange(trailingUnk, '本を読む', '本')).toEqual({ startMs: 0, endMs: 830 });
   });
 
   it('does not fold in a following word longer than a case particle', () => {
     const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
-    // について (4 chars) is left out; range ends at 本's own end + 120ms.
-    expect(isolatedWordRange(trailing, '本について', '本')).toEqual({ startMs: 0, endMs: 720 });
+    // について (4 chars) is left out; range ends at 本's own end + 30ms slack (no gap before it).
+    expect(isolatedWordRange(trailing, '本について', '本')).toEqual({ startMs: 0, endMs: 630 });
   });
 });
 
@@ -97,11 +98,11 @@ describe('isolatedWordRange with punctuation in the sentence', () => {
       word('は', 1.7, 1.9),
       word('ね', 1.9, 2.2),
     ];
-    // 本 = 1.2–1.7s; trailing は (≤2 chars) folded in → 1.9s. Pad -60/+120.
-    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 1140, endMs: 2020 });
+    // 本 = 1.2–1.7s; trailing は folded in → 1.9s. Tokens are adjacent both sides → 30ms slack.
+    expect(isolatedWordRange(words, japanese, '本')).toEqual({ startMs: 1170, endMs: 1930 });
     expect(isolatedWordSpans(words, japanese, '本')?.wordOnly).toEqual({
-      startMs: 1140,
-      endMs: 1820,
+      startMs: 1170,
+      endMs: 1730,
     });
   });
 
@@ -113,9 +114,38 @@ describe('isolatedWordRange with punctuation in the sentence', () => {
       word('ます', 1.3, 1.7),
     ];
     expect(isolatedWordSpans(words, japanese, 'ござい')?.wordOnly).toEqual({
-      startMs: 740,
-      endMs: 1420,
+      startMs: 770,
+      endMs: 1330,
     });
+  });
+});
+
+describe('isolatedWordRange padding and degenerate spans', () => {
+  it('pads a word only into the silence around it, never into a neighbouring token', () => {
+    const words: WordAlignment[] = [
+      word('小さい', 0.5, 1.0),
+      word('場所', 1.0, 1.5), // butted against 小さい
+      word('<eps>', 1.5, 2.0), // 500ms of silence after
+      word('山', 2.0, 2.3),
+    ];
+    // 小さい: nothing before → full 60ms onset; 場所 follows immediately → 30ms slack only.
+    expect(isolatedWordSpans(words, '小さい場所山', '小さい')?.wordOnly).toEqual({ startMs: 440, endMs: 1030 });
+    // 場所: onset limited by 小さい; tail gets the full 120ms (silence after).
+    expect(isolatedWordSpans(words, '小さい場所山', '場所')?.wordOnly).toEqual({ startMs: 970, endMs: 1620 });
+    // A short pause gives only as much pad as the pause allows plus slack.
+    const shortPause: WordAlignment[] = [word('本', 0.5, 1.0), word('<eps>', 1.0, 1.04), word('山', 1.04, 1.4)];
+    expect(isolatedWordSpans(shortPause, '本山', '本')?.wordOnly).toEqual({ startMs: 440, endMs: 1070 });
+  });
+
+  it('returns null when the aligner crushed the word to a few frames', () => {
+    // 何 = 30ms in a real sentence (え、何あやまってるの？).
+    const words: WordAlignment[] = [
+      word('え', 0, 0.4),
+      word('何', 0.51, 0.54),
+      word('あやまって', 0.54, 1.3),
+    ];
+    expect(isolatedWordRange(words, 'え、何あやまって', '何')).toBeNull();
+    expect(isolatedWordSpans(words, 'え、何あやまって', '何')).toBeNull();
   });
 });
 
@@ -140,7 +170,7 @@ describe('isolatedWordRange particle folding', () => {
   it('does not fold a following noun in as if it were a particle', () => {
     // 生まれ → token 生まれた only; 時 is a noun.
     expect(isolatedWordSpans(words, japanese, '生まれ')).toEqual({
-      wordOnly: { startMs: 920, endMs: 1710 },
+      wordOnly: { startMs: 920, endMs: 1620 },
       withParticle: null,
     });
     // 小さい followed by the noun 場所.
@@ -150,17 +180,18 @@ describe('isolatedWordRange particle folding', () => {
   it('does not fold a token that follows a pause (phrase boundary)', () => {
     // 場所 is followed by 0.47s of silence, then 山.
     expect(isolatedWordSpans(words, japanese, '場所')?.withParticle).toBeNull();
-    expect(isolatedWordRange(words, japanese, '場所')).toEqual({ startMs: 3400, endMs: 4120 });
+    // Full tail pad: 470ms of silence follows. Onset is butted against 小さい → 30ms.
+    expect(isolatedWordRange(words, japanese, '場所')).toEqual({ startMs: 3430, endMs: 4120 });
   });
 
   it('still folds a real particle, including the two-char から', () => {
     expect(isolatedWordSpans(words, japanese, '時')?.withParticle).toEqual({
-      startMs: 1530,
+      startMs: 1560,
       endMs: 2580,
     });
     expect(isolatedWordSpans(words, japanese, '山')?.withParticle).toEqual({
       startMs: 4410,
-      endMs: 5080,
+      endMs: 4990,
     });
   });
 });
@@ -177,15 +208,15 @@ describe('isolatedWordSpans', () => {
 
   it('returns both the word-alone span and the particle-inclusive span', () => {
     expect(isolatedWordSpans(words, japanese, '本')).toEqual({
-      wordOnly: { startMs: 740, endMs: 1520 },
-      withParticle: { startMs: 740, endMs: 1720 },
+      wordOnly: { startMs: 770, endMs: 1430 },
+      withParticle: { startMs: 770, endMs: 1630 },
     });
   });
 
   it('leaves withParticle null when nothing short follows', () => {
     const trailing: WordAlignment[] = [word('本', 0, 0.6), word('について', 0.6, 1.4)];
     expect(isolatedWordSpans(trailing, '本について', '本')).toEqual({
-      wordOnly: { startMs: 0, endMs: 720 },
+      wordOnly: { startMs: 0, endMs: 630 },
       withParticle: null,
     });
   });
