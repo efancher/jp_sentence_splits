@@ -175,8 +175,18 @@ export function VocabularyReviewPage() {
     [japanese],
   );
 
-  if (!data?.sentence || !data.book) {
-    return <p className="muted">Loading sentence…</p>;
+  if (!data) return <p className="muted">Loading sentence…</p>;
+  if (!data.sentence || !data.book) {
+    // Loaded, but the row isn't on this device — e.g. a stale link to a
+    // sentence that was deleted (ad/junk removal) here or on another device.
+    return (
+      <p className="muted">
+        This sentence isn’t on this device — it may have been deleted.{' '}
+        <Link to={data.book ? `/books/${bookId}` : '/books'}>
+          Back to {data.book ? 'the book' : 'books'}
+        </Link>
+      </p>
+    );
   }
 
   const { sentence, memberships, index, book } = data;
