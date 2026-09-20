@@ -2,7 +2,8 @@
  * Scores the automatic word-boundary estimators against the hand labels made in
  * `/label-word-audio` (docs/ROADMAP.md "Word-audio ground truth"). Read-only.
  *
- * Reads the file(s) saved by the labelling page's "Save labels" button (several
+ * Both label samples are randomised (book-stratified random; random within the tricky
+ * situations), so per-situation rates are valid from either. Reads the file(s) saved by the labelling page's "Save labels" button (several
  * files — e.g. from a phone and a laptop — are merged; a label present in more
  * than one keeps its newest copy), then prints, for the unbiased RANDOM sample
  * only unless --all is given:
@@ -86,6 +87,22 @@ async function main() {
     console.log(row('not flagged', unflagged, 'mora'));
     const bigMiss = (l: WordBoundaryLabel) => !!l.label && !!l.estimates.mora && Math.max(Math.abs(l.estimates.mora.startMs - l.label.startMs), Math.abs(l.estimates.mora.endMs - l.label.endMs)) >= 250;
     console.log(`  misses of 250 ms or more: ${flagged.filter(bigMiss).length} of ${flagged.length} flagged, ${unflagged.filter(bigMiss).length} of ${unflagged.length} not flagged`);
+  }
+
+  // Per situation (docs/STATUS.md 2026-09-20): every label records which situation it fell in. Both the
+  // random and the "tricky cases" samples are randomised within a situation, so a per-situation error rate
+  // is valid whichever sample the labels came from (the bad-miss rate is what to compare).
+  const withStratum = scored.filter((l) => l.stratum);
+  if (withStratum.length > 0) {
+    console.log('\nBy situation (all labels that recorded one; n is small until you have ~10+ per row):');
+    const byStratum = new Map<string, WordBoundaryLabel[]>();
+    for (const l of withStratum) byStratum.set(l.stratum!, [...(byStratum.get(l.stratum!) ?? []), l]);
+    const bad = (l: WordBoundaryLabel) => !!l.label && !!l.estimates.mora && Math.max(Math.abs(l.estimates.mora.startMs - l.label.startMs), Math.abs(l.estimates.mora.endMs - l.label.endMs)) >= 250;
+    for (const [name, ls] of [...byStratum].sort((a, b) => b[1].length - a[1].length)) {
+      const shares = ls.filter((l) => l.stratumCount != null && l.poolSize).map((l) => l.stratumCount! / l.poolSize!);
+      const share = shares.length ? `${Math.round((shares.reduce((a, b) => a + b, 0) / shares.length) * 100)}% of the pool` : 'share unknown';
+      console.log(row(name.slice(0, 18), ls, 'mora') + `   misses>=250ms: ${ls.filter(bad).length}/${ls.length}   (${share})`);
+    }
   }
 
   console.log('\nPer book (mora cut) — does the bias depend on the source?');

@@ -12,8 +12,17 @@ export const SESSION_SIZES = [1, 5, 10, 25] as const;
 export type SessionSize = (typeof SESSION_SIZES)[number];
 export const DEFAULT_SESSION_SIZE: SessionSize = 10;
 
+/** What the sampling knew about an item when it was drawn — copied onto its label. */
+export interface ItemSampling {
+  stratum: string;
+  stratumCount: number;
+  poolSize: number;
+}
+
 export interface StoredLabelSession {
   mode: LabelMode;
+  /** Per planned item, so a resumed batch keeps recording its situation. */
+  sampling?: Record<string, ItemSampling>;
   /** The full planned batch, in order. */
   linkIds: string[];
   /** True once the user chose "Stop for now" — resume is offered, not automatic. */
@@ -42,6 +51,7 @@ export function loadStoredSession(): StoredLabelSession | null {
       mode: parsed.mode,
       linkIds: parsed.linkIds.filter((id): id is string => typeof id === 'string'),
       paused: !!parsed.paused,
+      sampling: parsed.sampling && typeof parsed.sampling === 'object' ? parsed.sampling : undefined,
       startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : '',
     };
   } catch {

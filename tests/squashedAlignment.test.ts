@@ -8,7 +8,7 @@ import {
   SQUASHED_MS_PER_MORA,
   wordTimingUnreliable,
 } from '../src/lib/isolatedWordRange';
-import { estimateWordSpans, labelReason, pickLabelQueue } from '../src/lib/wordBoundaryLabels';
+import { estimateWordSpans, labelReason, pickLabelQueue, stratumOf } from '../src/lib/wordBoundaryLabels';
 
 /** A token of `morae` CV morae ("k a" pairs) spread evenly over [startMs, endMs]. */
 function token(text: string, startMs: number, endMs: number, morae: number): WordAlignment {
@@ -92,21 +92,15 @@ describe('labelling tool with the guard', () => {
   });
 
   it('explains it in the "why this item" chip', () => {
-    expect(labelReason(flagged, 'targeted')).toMatch(/squashed speech/);
+    expect(labelReason(flagged, 'targeted', 'unreliable-timing')).toMatch(/squashed speech/);
     expect(labelReason(flagged, 'random')).toMatch(/flagged unreliable/);
     expect(labelReason(fine, 'random')).toBe('Random sample');
   });
 
-  it('puts flagged items first in the needs-review queue so the guard gets checked', () => {
+  it('makes flagged timing its own situation, so the tricky-cases sample draws from it', () => {
+    expect(stratumOf({ linkId: 'f', estimates: flagged })).toBe('unreliable-timing');
     const mk = (linkId: string, estimates: typeof flagged) => ({ linkId, bookId: 'b', estimates });
-    const picked = pickLabelQueue(
-      [
-        mk('disagree', { token: { startMs: 0, endMs: 900 }, mora: { startMs: 0, endMs: 300 }, shipped: null }),
-        mk('flagged', flagged),
-      ],
-      'targeted',
-      5,
-    );
-    expect(picked.map((c) => c.linkId)).toEqual(['flagged', 'disagree']);
+    const picked = pickLabelQueue([mk('flagged', flagged), mk('fine', fine)], 'targeted', 5, () => 0.5);
+    expect(picked.map((c) => c.linkId)).toEqual(['flagged']); // 'fine' is plain, so it's left to the random sample
   });
 });

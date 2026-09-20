@@ -1158,8 +1158,16 @@ export interface WordBoundaryLabel {
   /** The labelled span (equals `shown` for `clean`); absent when skipped. */
   label?: WordBoundarySpan;
   estimates: WordBoundaryEstimates;
-  /** `random` = unbiased stratified sample (use for measurement); `targeted` = chosen for disagreement (use for calibration only). */
+  /**
+   * `random` = book-stratified random sample (overall accuracy); `targeted` = random within the tricky
+   * situations (per-situation accuracy). Both are randomised — nothing is picked because it looked wrong.
+   */
   sampleKind: 'random' | 'targeted';
+  /** Which situation the item fell in (`LabelStratum`) — every label records it, random or targeted. */
+  stratum?: string;
+  /** How many items of that situation the sampling pool held, and the pool's size — to re-weight a stratified sample. */
+  stratumCount?: number;
+  poolSize?: number;
   /** Code version of the span logic (`WORD_SPAN_VERSION`) the estimates came from. */
   spanVersion: string;
   elapsedMs: number;

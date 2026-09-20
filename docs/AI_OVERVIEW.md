@@ -2205,9 +2205,11 @@ A ground-truth tool for the automatic word clipping (`isolatedWordRange`). Reach
 "Label word audio". One item = one confirmed word in a sentence recording; the handles start at the
 automatic word span (mora cut, else whole aligner token) and you accept it, or drag/nudge the start and
 end edges in zoomed ±400 ms waveform views (buttons ±1/±10 ms, arrow keys, "Hear before / Hear after"
-audition per edge, a Play/Stop toggle for the span), or skip with a reason. Two sample kinds: *random*
-(book-stratified; the only fair measurement) and *needs review* (largest token-vs-mora disagreements /
-short mora cuts; calibration only). Labels are the strict word — deliberately **not** written to a
+audition per edge, a Play/Stop toggle for the span), or skip with a reason. Two sample kinds, **both
+randomised**: *random* (book-stratified over everything — overall accuracy) and *tricky cases* (random
+within the situations to check: flagged timing, target ends mid-token, very short word, repeated word,
+digits/Latin — per-situation accuracy). Every label records its `stratum` and pool share. A fix made in
+Adjust is never also a label (a selected-because-bad sample isn't gold). Labels are the strict word — deliberately **not** written to a
 link's `audioStartMs/EndMs` (a pitch card's loop range includes the ending/particle). Stored local-first
 device-locally in Dexie `wordBoundaryLabels` (each with the estimates that were shown and
 `WORD_SPAN_VERSION`); a "Save labels" button exports them as one JSON file (share sheet or download) —

@@ -23,6 +23,7 @@ import {
   saveStoredSession,
   SESSION_SIZES,
   setSessionSize,
+  type ItemSampling,
   type SessionSize,
   type StoredLabelSession,
 } from '../lib/labelSession';
@@ -35,9 +36,12 @@ import {
   labelReason,
   pickLabelQueue,
   startingSpan,
+  stratumCounts,
+  stratumOf,
   summarizeErrors,
   WORD_SPAN_VERSION,
   type ErrorSummary,
+  type LabelStratum,
 } from '../lib/wordBoundaryLabels';
 
 type Mode = LabelMode;
@@ -74,6 +78,7 @@ export function LabelWordAudioPage() {
   const [index, setIndex] = useState(0);
   /** The whole planned batch (ids) and how many of it were already done before this run — for "3 / 10". */
   const [plannedIds, setPlannedIds] = useState<string[]>([]);
+  const [sampling, setSampling] = useState<Record<string, ItemSampling>>({});
   const [doneBefore, setDoneBefore] = useState(0);
   /** Labels made in this page load — what "Undo last" can take back. */
   const [runLabels, setRunLabels] = useState<WordBoundaryLabel[]>([]);
@@ -111,6 +116,7 @@ export function LabelWordAudioPage() {
     saveStoredSession({ ...session, paused: false });
     setStored({ ...session, paused: false });
     setMode(session.mode);
+    setSampling(session.sampling ?? {});
     setQueue(candidates);
     setIndex(0);
     setPlannedIds(session.linkIds);
@@ -149,19 +155,28 @@ export function LabelWordAudioPage() {
       setPhase('setup');
       setMessage(
         mode === 'targeted'
-          ? 'No items to review right now — the estimators agree on everything left in the pool. Try a random sample.'
+          ? 'No items in the tricky situations right now (none flagged, mid-word, very short, repeated or with digits/Latin in this pool). Try a random sample.'
           : 'Nothing to label: no confirmed word has both a recording and a cached alignment yet.',
       );
       return;
     }
+    // What each drawn item's situation was, and how common it is in the pool — recorded on its label.
+    const counts = stratumCounts(pool);
+    const drawn: Record<string, ItemSampling> = {};
+    for (const c of picked) {
+      const stratum = stratumOf(c);
+      drawn[c.linkId] = { stratum, stratumCount: counts[stratum], poolSize: pool.length };
+    }
     const session: StoredLabelSession = {
       mode,
       linkIds: picked.map((c) => c.linkId),
+      sampling: drawn,
       paused: false,
       startedAt: new Date().toISOString(),
     };
     saveStoredSession(session);
     setStored(session);
+    setSampling(drawn);
     setQueue(picked);
     setIndex(0);
     setPlannedIds(session.linkIds);
@@ -246,7 +261,7 @@ export function LabelWordAudioPage() {
             <span className="muted">
               {doneBefore + index + 1} / {plannedIds.length}
             </span>
-            <span className="chip">{labelReason(queue[index]!.estimates, mode)}</span>
+            <span className="chip">{labelReason(queue[index]!.estimates, mode, sampling[queue[index]!.linkId]?.stratum as LabelStratum | undefined)}</span>
             <span className="row" style={{ gap: '0.4rem' }}>
               <button type="button" className="secondary" disabled={runLabels.length === 0} onClick={() => void undoLast()}>
                 Undo last
@@ -256,7 +271,7 @@ export function LabelWordAudioPage() {
               </button>
             </span>
           </div>
-          <LabelItem key={queue[index]!.linkId} candidate={queue[index]!} mode={mode} onSave={record} />
+          <LabelItem key={queue[index]!.linkId} candidate={queue[index]!} mode={mode} sampling={sampling[queue[index]!.linkId]} onSave={record} />
         </>
       )}
 
@@ -349,14 +364,16 @@ function SetupPanel({
         <label className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
           <input type="radio" name="mode" checked={mode === 'random'} onChange={() => onMode('random')} />
           <span>
-            <strong>Random sample</strong> — spread across your books. Use these for an honest measurement.
+            <strong>Random sample</strong> — picked at random, spread across your books. Measures overall accuracy.
           </span>
         </label>
         <label className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
           <input type="radio" name="mode" checked={mode === 'targeted'} onChange={() => onMode('targeted')} />
           <span>
-            <strong>Needs review</strong> — where the two cutting methods disagree most. Best for fixing problems; not a
-            fair sample.
+            <strong>Tricky cases</strong> — picked at random from the situations we want to check (timing flagged
+            unreliable, a word ending mid-token, very short words, a word repeated in the sentence, digits or Latin
+            letters). Measures accuracy per situation. Both kinds are random — nothing is chosen because it looked
+            wrong.
           </span>
         </label>
       </div>
@@ -454,10 +471,12 @@ function RulesPanel({ defaultOpen }: { defaultOpen: boolean }) {
 function LabelItem({
   candidate,
   mode,
+  sampling,
   onSave,
 }: {
   candidate: WordBoundaryCandidate;
   mode: Mode;
+  sampling?: ItemSampling;
   onSave: (label: WordBoundaryLabel) => Promise<void>;
 }) {
   const blob = useSentenceAudioBlob(candidate.audio);
@@ -537,6 +556,9 @@ function LabelItem({
       label: verdict === 'skipped' ? undefined : { ...edges },
       estimates: candidate.estimates,
       sampleKind: mode,
+      stratum: sampling?.stratum,
+      stratumCount: sampling?.stratumCount,
+      poolSize: sampling?.poolSize,
       spanVersion: WORD_SPAN_VERSION,
       elapsedMs: Date.now() - startedAt.current,
       createdAt: new Date().toISOString(),

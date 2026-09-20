@@ -999,12 +999,13 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     before it" (stop consonants: the burst counts). END: "the moment the last sound has died
     away, before the next word begins; a whispered/devoiced final vowel counts." MORA: "between
     the last sound of the target and the first sound of what follows."
-  - **Candidate selection.** (a) an unbiased random sample stratified by book (≥10/book), never
-    used for tuning; (b) a targeted queue ranked by disagreement — variants (current / token /
-    mora / no-pad) more than ~60 ms apart, judge disagreements, token-longer-than-target,
-    mora cuts <250 ms, `<unk>`/numeral fallbacks; (c) value-first ordering — words due soon on
-    pitch_accent / word_listening cards, so labelling fixes what you'll hear next. The 21
-    existing hand-adjusted overrides are free gold (check whether they include the particle).
+  - **Candidate selection (as built — randomised, never hand-picked).** Two samples, both random: (a) *random* —
+    book-stratified over everything (overall accuracy); (b) *tricky cases* — random within each situation we
+    want to check (flagged timing, target ends mid-token, very short word, repeated word, digits/Latin),
+    equal allocation across situations. Each label records its `stratum` + how common it was, so
+    per-situation rates are valid from either and can be re-weighted. A worst-first list, or a fix made
+    because a clip looked wrong (Adjust), is deliberately **not** gold — a selected-because-bad sample can't
+    be generalised from. The 21 existing hand-adjusted overrides are therefore *not* free gold either.
   - **Storage (as built).** Device-local Dexie table + a "Save labels" file export (no cloud sync, no
     migration — the user's call). Each label stores the auto span *shown* and `spanVersion`, because auto
     spans drift as code changes. The saved files are the only copy that leaves the device: keep them.
@@ -1046,8 +1047,8 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     of a cached alignment + a link, so it can run for every link when an alignment is stored (mining
     commit, backfill, re-alignment) — a count on the book page / Analyze ("12 words have unreliable
     timing") opening the zoomed editor one word at a time (the labelling screen's "Needs review" queue is
-    already that, minus the card-loop override semantics). Open question: whether a hand fix should write
-    the synced override (card range) *and* a strict-word label in one pass.
+    already that, minus the card-loop override semantics). Resolved: a hand fix does **not** also count as a
+    strict-word label — the gold set stays randomised (see Candidate selection).
   - **UI rules (from your preferences).** One Play/Stop toggle (not paired buttons); controls
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.

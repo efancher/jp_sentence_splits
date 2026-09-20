@@ -61,8 +61,8 @@ function phones(spec: string, startMs: number) {
 }
 
 /** 生まれた時 — target 生まれ (ends inside the token 生まれた, at 1420 ms). */
-async function seed(options: { withAlignment?: boolean; suspended?: boolean; sentenceId?: string } = {}) {
-  const { withAlignment = true, suspended = false, sentenceId = createId('sent') } = options;
+async function seed(options: { withAlignment?: boolean; suspended?: boolean; sentenceId?: string; surfaceForm?: string } = {}) {
+  const { withAlignment = true, suspended = false, sentenceId = createId('sent'), surfaceForm = '生まれ' } = options;
   const db = getDb();
   const bookId = createId('book');
   await db.books.put({ id: bookId, title: 'b', createdAt: T, updatedAt: T, ...(suspended ? { suspendedAt: T } : {}) } as never);
@@ -72,7 +72,7 @@ async function seed(options: { withAlignment?: boolean; suspended?: boolean; sen
     firstOccurrenceIndex: 0, importBatchIds: [], createdAt: T, updatedAt: T,
   } as never);
   await db.bookSentences.put({ id: createId('bs'), bookId, sentenceId, position: 0, status: 'unstarted', addedAt: T } as never);
-  const link = { id: createId('sv'), sentenceId, vocabularyItemId: 'vi', surfaceForm: '生まれ', createdAt: T, updatedAt: T };
+  const link = { id: createId('sv'), sentenceId, vocabularyItemId: 'vi', surfaceForm, createdAt: T, updatedAt: T };
   await db.sentenceVocabulary.put(link as never);
   const audioId = createId('audio');
   await db.sentenceAudio.put({
@@ -273,6 +273,64 @@ describe('LabelWordAudioPage', () => {
     await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(1));
     const [label] = await listWordBoundaryLabels();
     expect(label).toMatchObject({ verdict: 'skipped', skipReason: 'undecodable' });
+  });
+
+  describe('sampling situations', () => {
+    it('records which situation each item fell in, and how common it was in the pool', async () => {
+      await seed(); // 生まれ inside 生まれた → the target ends mid-token
+      await seed({ surfaceForm: '生まれた' }); // the whole token → nothing special
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+      for (let i = 0; i < 2; i += 1) await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      await screen.findByText(/session done/i);
+      const labels = await listWordBoundaryLabels();
+      expect(labels).toHaveLength(2);
+      const mid = labels.find((l) => l.surfaceForm === '生まれ')!;
+      const plain = labels.find((l) => l.surfaceForm === '生まれた')!;
+      expect(mid).toMatchObject({ sampleKind: 'random', stratum: 'mid-token', stratumCount: 1, poolSize: 2 });
+      expect(plain).toMatchObject({ stratum: 'plain', stratumCount: 1, poolSize: 2 });
+    });
+
+    it('"Tricky cases" draws only from the special situations and says which one', async () => {
+      await seed({ surfaceForm: '生まれた' }); // plain — must not be drawn
+      const tricky = await seed(); // mid-token
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole('radio', { name: /tricky cases/i }));
+      await user.click(screen.getByRole('button', { name: /start labelling/i }));
+      expect(await screen.findByText(/sampled from: target ends inside a longer aligner token/i)).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      await screen.findByText(/session done/i);
+      const labels = await listWordBoundaryLabels();
+      expect(labels).toHaveLength(1); // the plain item was left alone
+      expect(labels[0]).toMatchObject({ sentenceVocabularyId: tricky.link.id, sampleKind: 'targeted', stratum: 'mid-token' });
+    });
+
+    it('says so when nothing in the pool is tricky', async () => {
+      await seed({ surfaceForm: '生まれた' });
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByRole('radio', { name: /tricky cases/i }));
+      await user.click(screen.getByRole('button', { name: /start labelling/i }));
+      expect(await screen.findByText(/no items in the tricky situations/i)).toBeInTheDocument();
+    });
+
+    it('a batch resumed after a refresh still records its situations', async () => {
+      await seed();
+      await seed();
+      const user = userEvent.setup();
+      const first = renderPage();
+      await user.click(await screen.findByRole('button', { name: /start labelling/i }));
+      await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      first.unmount();
+      renderPage();
+      await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      await screen.findByText(/session done/i);
+      const labels = await listWordBoundaryLabels();
+      expect(labels).toHaveLength(2);
+      expect(labels.every((l) => l.stratum === 'mid-token' && l.poolSize === 2)).toBe(true);
+    });
   });
 
   describe('batches', () => {

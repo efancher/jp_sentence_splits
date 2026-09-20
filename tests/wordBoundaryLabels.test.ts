@@ -10,6 +10,8 @@ import {
   percentile,
   pickLabelQueue,
   startingSpan,
+  stratumCounts,
+  stratumOf,
   summarizeErrors,
 } from '../src/lib/wordBoundaryLabels';
 
@@ -53,9 +55,8 @@ describe('estimateWordSpans', () => {
 
   it('explains why an item was picked', () => {
     expect(labelReason(est, 'random')).toBe('Random sample');
-    expect(labelReason(est, 'targeted')).toBe('Token vs mora cut differ by 190 ms');
-    const short = { ...est, mora: { startMs: 0, endMs: 120 } };
-    expect(labelReason(short, 'targeted')).toBe('Very short mora cut (120 ms)');
+    expect(labelReason(est, 'targeted', 'mid-token')).toBe('Sampled from: target ends inside a longer aligner token');
+    expect(labelReason({ ...est, unreliable: true }, 'random')).toMatch(/flagged unreliable/);
   });
 });
 
@@ -97,18 +98,56 @@ describe('pickLabelQueue', () => {
     expect(picked.map((c) => c.linkId)).toEqual(['a']);
   });
 
-  it('targeted: only disagreements, biggest first, short mora cuts boosted', () => {
-    const picked = pickLabelQueue(
-      [
-        cand('agree', 'b', [0, 800], [0, 800]),
-        cand('small', 'b', [0, 800], [0, 760]), // 40 ms
-        cand('big', 'b', [0, 800], [0, 400]), // 400 ms
-        cand('shortmora', 'b', [0, 300], [0, 150]), // 150 ms diff + short-mora boost
-      ],
-      'targeted',
-      10,
-    );
-    expect(picked.map((c) => c.linkId)).toEqual(['big', 'shortmora', 'small']);
+  it('targeted: random within the tricky situations, equal allocation across them, never the plain ones', () => {
+    const mid = (id: string) => cand(id, 'b', [0, 800], [0, 500]); // ends mid-token
+    const short = (id: string) => cand(id, 'b', [0, 200], [0, 200]); // 200 ms, token == mora
+    const plain = (id: string) => cand(id, 'b', [0, 800], [0, 800]);
+    const pool = [
+      ...Array.from({ length: 20 }, (_, i) => mid(`mid${i}`)),
+      ...Array.from({ length: 3 }, (_, i) => short(`short${i}`)),
+      ...Array.from({ length: 20 }, (_, i) => plain(`plain${i}`)),
+    ];
+    const picked = pickLabelQueue(pool, 'targeted', 6, seeded(3));
+    expect(picked).toHaveLength(6);
+    expect(picked.filter((c) => c.linkId.startsWith('plain'))).toHaveLength(0);
+    expect(picked.filter((c) => c.linkId.startsWith('short'))).toHaveLength(3); // the rare situation is not crowded out
+    expect(picked.filter((c) => c.linkId.startsWith('mid'))).toHaveLength(3);
+  });
+
+  it('targeted: which items are drawn is random, not worst-first', () => {
+    const pool = Array.from({ length: 30 }, (_, i) => cand(`m${i}`, 'b', [0, 800 + i * 10], [0, 500])); // ever-larger disagreement
+    const a = pickLabelQueue(pool, 'targeted', 5, seeded(1)).map((c) => c.linkId);
+    const b = pickLabelQueue(pool, 'targeted', 5, seeded(2)).map((c) => c.linkId);
+    expect(a).not.toEqual(b);
+    expect(a).not.toEqual(['m29', 'm28', 'm27', 'm26', 'm25']); // a worst-first list would be exactly this
+  });
+
+  it('targeted: nothing to draw when everything is plain', () => {
+    expect(pickLabelQueue([cand('a', 'b', [0, 800], [0, 800])], 'targeted', 5, seeded(1))).toEqual([]);
+  });
+});
+
+describe('situations (strata)', () => {
+  const base = { linkId: 'x', bookId: 'b' };
+  const ok = { token: span(0, 800), mora: span(0, 800), shipped: null };
+
+  it('assigns each item to one situation, first match wins', () => {
+    expect(stratumOf({ ...base, estimates: { ...ok, unreliable: true, mora: span(0, 200) } })).toBe('unreliable-timing');
+    expect(stratumOf({ ...base, estimates: { ...ok, mora: span(0, 500) } })).toBe('mid-token');
+    expect(stratumOf({ ...base, estimates: { ...ok, token: span(0, 200), mora: span(0, 200) } })).toBe('very-short');
+    expect(stratumOf({ ...base, estimates: ok, japanese: '声と声', surfaceForm: '声' })).toBe('repeated-word');
+    expect(stratumOf({ ...base, estimates: ok, japanese: 'またVIPです', surfaceForm: 'です' })).toBe('digits-or-latin');
+    expect(stratumOf({ ...base, estimates: ok, japanese: '今日は雨', surfaceForm: '雨' })).toBe('plain');
+  });
+
+  it('counts a pool by situation, for re-weighting a stratified sample', () => {
+    const counts = stratumCounts([
+      { ...base, estimates: { ...ok, mora: span(0, 500) } },
+      { ...base, estimates: { ...ok, mora: span(0, 500) } },
+      { ...base, estimates: ok },
+    ]);
+    expect(counts['mid-token']).toBe(2);
+    expect(counts.plain).toBe(1);
   });
 });
 

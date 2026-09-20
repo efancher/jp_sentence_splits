@@ -33,6 +33,26 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Gold set is randomised, never hand-picked: "Needs review" became "Tricky cases"
+  (random within situations); Adjust fixes stay separate from labels.** User's principle: the gold set
+  should be *randomised selections of the things we want to target*, and fixing a card (Adjust) must not
+  double as labelling. Adjust and labels were already separate (Adjust = the synced card loop range;
+  labels = device-local strict word), and stay so — a fix made because a clip *looked wrong* is a
+  selected-because-bad sample. The flaw it exposed was mine: "Needs review" took the **worst-first**
+  items (largest token-vs-mora disagreement, flagged first) — a hand-picked, biased list you can't
+  generalise from. Now: `LabelStratum` (`unreliable-timing` (guard flagged), `mid-token`, `very-short`
+  (<250 ms mora cut), `repeated-word`, `digits-or-latin`, else `plain`; first match wins; `stratumOf`).
+  **Random** = book-stratified random over everything (overall accuracy). **Tricky cases** = random *within*
+  each situation except `plain`, equal allocation across the situations present so a rare one (flagged
+  timing, ~5%) still gets sampled (`pickLabelQueue`, seeded-PRNG tested; a test asserts it is *not* the
+  worst-first order). **Every label — from either mode — records `stratum`, `stratumCount` and `poolSize`**
+  (kept in the stored session so a refresh keeps recording them), so a per-situation error rate is valid from
+  either sample and a stratified result can be re-weighted to the corpus share. The chip reads "Sampled
+  from: target ends inside a longer aligner token". `npm run analyze:word-boundary-labels` prints
+  a **By situation** table (typical miss, within-50, misses ≥250 ms, pool share). Tests: `stratumOf` /
+  `stratumCounts` / equal-allocation / not-worst-first, and page tests for the recorded fields, the mode
+  and a resumed batch. Existing labels (52, all `random`, no stratum) stay valid for the overall numbers.
+
 - **2026-09-20 — Adjust now uses the zoomed edge editor; ±100 ms bump; flagged words say so.** User: liked
   the labelling UI, asked whether it could replace the old "Adjust", and for a 100 ms bump for big
   misses. `WordAudioRangeEditor` (whole-sentence drag, ~1 px per 10 ms) is **removed**; `SegmentLoopPlayer`'s

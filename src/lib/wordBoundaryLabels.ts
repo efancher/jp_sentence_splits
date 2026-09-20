@@ -60,23 +60,71 @@ export function estimatorDisagreementMs(estimates: WordBoundaryEstimates): numbe
   return Math.max(Math.abs(token.startMs - mora.startMs), Math.abs(token.endMs - mora.endMs));
 }
 
-/** Why an item is interesting to label, for the "why this item" chip. */
+/** Why an item is in the batch, for the "why this item" chip. */
 export function labelReason(
   estimates: WordBoundaryEstimates,
   sampleKind: 'random' | 'targeted',
+  stratum?: LabelStratum,
 ): string {
-  if (sampleKind === 'random') return estimates.unreliable ? 'Random sample — timing flagged unreliable here' : 'Random sample';
-  if (estimates.unreliable) return 'Timing looks unreliable here (squashed speech nearby)';
-  const gap = Math.round(estimatorDisagreementMs(estimates));
-  const mora = estimates.mora;
-  if (mora && mora.endMs - mora.startMs < 250) return `Very short mora cut (${Math.round(mora.endMs - mora.startMs)} ms)`;
-  return gap > 0 ? `Token vs mora cut differ by ${gap} ms` : 'Selected for review';
+  if (sampleKind === 'targeted' && stratum && stratum !== 'plain') return `Sampled from: ${STRATUM_LABELS[stratum]}`;
+  if (estimates.unreliable) return 'Random sample — timing flagged unreliable here';
+  return 'Random sample';
 }
+
+/**
+ * The situations the targeted sample draws from. Each is a way the automatic cut
+ * is known or suspected to go wrong; every item falls in exactly one (first
+ * match wins, in this order), and everything else is `plain` — covered by the
+ * plain random sample instead.
+ */
+export type LabelStratum =
+  | 'unreliable-timing' // the squashed-alignment guard flagged it
+  | 'mid-token' // the target ends inside an aligner token (token and mora cut differ)
+  | 'very-short' // the mora cut is under 250 ms
+  | 'repeated-word' // the surface form occurs more than once in the sentence
+  | 'digits-or-latin' // digits or Latin letters in the sentence (numeral expansion, `VIP`)
+  | 'plain';
+
+export const STRATUM_LABELS: Record<LabelStratum, string> = {
+  'unreliable-timing': 'timing flagged unreliable (squashed speech nearby)',
+  'mid-token': 'target ends inside a longer aligner token',
+  'very-short': 'very short word (under 250 ms)',
+  'repeated-word': 'word appears twice in the sentence',
+  'digits-or-latin': 'digits or Latin letters in the sentence',
+  plain: 'no special situation',
+};
 
 export interface QueueCandidate {
   linkId: string;
   bookId?: string;
+  /** For the text-based strata (repeated word, digits/Latin); optional so bare candidates still work. */
+  japanese?: string;
+  surfaceForm?: string;
   estimates: WordBoundaryEstimates;
+}
+
+const DIGITS_OR_LATIN = /[0-9０-９A-Za-zＡ-Ｚａ-ｚ]/;
+
+export function stratumOf(c: QueueCandidate): LabelStratum {
+  const { token, mora } = c.estimates;
+  if (c.estimates.unreliable) return 'unreliable-timing';
+  if (token && mora && Math.abs(token.endMs - mora.endMs) + Math.abs(token.startMs - mora.startMs) >= 30) return 'mid-token';
+  if (mora && mora.endMs - mora.startMs < 250) return 'very-short';
+  if (c.japanese && c.surfaceForm) {
+    const first = c.japanese.indexOf(c.surfaceForm);
+    if (first >= 0 && c.japanese.indexOf(c.surfaceForm, first + 1) >= 0) return 'repeated-word';
+  }
+  if (c.japanese && DIGITS_OR_LATIN.test(c.japanese)) return 'digits-or-latin';
+  return 'plain';
+}
+
+/** Items per stratum in a pool, for weighting a stratified sample back to the whole. */
+export function stratumCounts(candidates: readonly QueueCandidate[]): Record<LabelStratum, number> {
+  const counts: Record<LabelStratum, number> = {
+    'unreliable-timing': 0, 'mid-token': 0, 'very-short': 0, 'repeated-word': 0, 'digits-or-latin': 0, plain: 0,
+  };
+  for (const c of candidates) counts[stratumOf(c)] += 1;
+  return counts;
 }
 
 /** Fisher–Yates with an injectable PRNG (tests pass a seeded one). */
@@ -89,41 +137,8 @@ function shuffled<T>(items: readonly T[], rand: () => number): T[] {
   return out;
 }
 
-/**
- * Picks which candidates to label.
- *  - `random`: an unbiased sample spread across books — shuffle within each
- *    book, then take round-robin, so a big book can't crowd out the rest (the
- *    book is the speaker proxy). Use these for measuring error.
- *  - `targeted`: the items where the estimators disagree most, plus very short
- *    mora cuts — the cases most likely to be wrong. Use these for calibration
- *    only; they are a biased sample.
- */
-export function pickLabelQueue<T extends QueueCandidate>(
-  candidates: readonly T[],
-  mode: 'random' | 'targeted',
-  size = LABEL_SESSION_SIZE,
-  rand: () => number = Math.random,
-): T[] {
-  const usable = candidates.filter((c) => startingSpan(c.estimates));
-  if (mode === 'targeted') {
-    const score = (c: T) => {
-      const mora = c.estimates.mora;
-      const short = mora && mora.endMs - mora.startMs < 250 ? 150 : 0;
-      // Guard-flagged items first: labelling them is how the guard gets checked.
-      const flagged = c.estimates.unreliable ? 5000 : 0;
-      return estimatorDisagreementMs(c.estimates) + short + flagged;
-    };
-    return [...usable]
-      .filter((c) => score(c) > 0)
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, size);
-  }
-  const byBook = new Map<string, T[]>();
-  for (const c of shuffled(usable, rand)) {
-    const key = c.bookId ?? '(none)';
-    byBook.set(key, [...(byBook.get(key) ?? []), c]);
-  }
-  const lanes = shuffled([...byBook.values()], rand);
+/** Takes items round-robin from shuffled lanes until `size` are chosen or the lanes run dry. */
+function roundRobin<T>(lanes: readonly (readonly T[])[], size: number): T[] {
   const out: T[] = [];
   for (let round = 0; out.length < size; round += 1) {
     let took = false;
@@ -138,6 +153,43 @@ export function pickLabelQueue<T extends QueueCandidate>(
     if (!took) break;
   }
   return out;
+}
+
+/**
+ * Picks which candidates to label. Both modes are *randomised* — nothing is
+ * chosen because it looked wrong (a hand-picked worst-first list is a biased
+ * sample that can't be generalised from):
+ *  - `random`: spread across books — shuffle within each book, then round-robin,
+ *    so a big book can't crowd out the rest (the book is the speaker proxy).
+ *    Measures overall accuracy.
+ *  - `targeted`: random within the situations we want to check
+ *    (`LabelStratum`, everything but `plain`), equal allocation across the
+ *    situations present so a rare one (flagged timing) still gets sampled.
+ *    Measures accuracy *per situation*; each label records its situation and
+ *    how common that situation was in the pool so results can be re-weighted.
+ */
+export function pickLabelQueue<T extends QueueCandidate>(
+  candidates: readonly T[],
+  mode: 'random' | 'targeted',
+  size = LABEL_SESSION_SIZE,
+  rand: () => number = Math.random,
+): T[] {
+  const usable = candidates.filter((c) => startingSpan(c.estimates));
+  if (mode === 'targeted') {
+    const byStratum = new Map<LabelStratum, T[]>();
+    for (const c of usable) {
+      const stratum = stratumOf(c);
+      if (stratum === 'plain') continue;
+      byStratum.set(stratum, [...(byStratum.get(stratum) ?? []), c]);
+    }
+    return roundRobin(shuffled([...byStratum.values()].map((lane) => shuffled(lane, rand)), rand), size);
+  }
+  const byBook = new Map<string, T[]>();
+  for (const c of shuffled(usable, rand)) {
+    const key = c.bookId ?? '(none)';
+    byBook.set(key, [...(byBook.get(key) ?? []), c]);
+  }
+  return roundRobin(shuffled([...byBook.values()], rand), size);
 }
 
 export type EstimatorName = 'shown' | 'token' | 'mora' | 'shipped';
