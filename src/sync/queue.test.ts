@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   addConflict,
@@ -237,5 +237,23 @@ describe('dedupeQueueRows', () => {
     expect(twins[0]).toMatchObject({ id: 'opq_old', expectedVersion: 3, retryCount: 70, payload: { v: 'new' } });
     expect((await db.syncQueue.toArray()).some((r) => r.id === 'opq_solo')).toBe(true);
     expect(await dedupeQueueRows()).toBe(0); // idempotent
+  });
+});
+
+describe('enqueueMutation ordering', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps enqueue order for rows queued in the same millisecond', async () => {
+    // Regression: the queue orders by localTimestamp (ms resolution); ties came
+    // back in random-id order, flaking the push-batching tests in CI.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-20T12:00:00.000Z') });
+    const ids = ['k_a', 'k_b', 'k_c', 'k_d', 'k_e', 'k_f'];
+    for (const id of ids) {
+      await enqueueMutation({ entity: 'kanji', recordId: id, operation: 'upsert', expectedVersion: null, payload: {} });
+    }
+    const pending = await listPendingMutations();
+    expect(pending.map((p) => p.recordId)).toEqual(ids);
+    const stamps = pending.map((p) => p.localTimestamp);
+    expect(new Set(stamps).size).toBe(ids.length);
   });
 });

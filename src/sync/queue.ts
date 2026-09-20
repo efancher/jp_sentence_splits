@@ -66,6 +66,22 @@ export async function putRecordMeta(
   await getDb().syncRecordMeta.put({ ...meta, key });
 }
 
+let lastLocalTimestampMs = 0;
+
+/**
+ * ISO timestamp for a queue row, strictly increasing within this session.
+ * `listPendingMutations` orders by it, and `toISOString()` only has
+ * millisecond resolution: rows queued in the same millisecond tied and came
+ * back in random-id order, so "keeps queued order" was only true when the
+ * clock happened to tick between enqueues (a flaky push-batching test in CI,
+ * 2026-09-20). Bumping past the previous value costs at most a few ms of drift
+ * during a burst.
+ */
+function nextLocalTimestamp(): string {
+  lastLocalTimestampMs = Math.max(Date.now(), lastLocalTimestampMs + 1);
+  return new Date(lastLocalTimestampMs).toISOString();
+}
+
 export async function enqueueMutation(input: {
   entity: SyncEntity;
   recordId: string;
@@ -101,7 +117,7 @@ export async function enqueueMutation(input: {
       operation: input.operation,
       expectedVersion,
       payload: input.payload,
-      localTimestamp: new Date().toISOString(),
+      localTimestamp: nextLocalTimestamp(),
       retryCount: existing?.retryCount ?? 0,
       lastError: undefined,
     };

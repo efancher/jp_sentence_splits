@@ -33,6 +33,16 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-20 — Sync queue ordering flake (CI red on the word-audio push).**
+  `pushBatching.test.ts` failed in CI (`k_a,k_c,k_b,k_d` vs queued order): `enqueueMutation`
+  stamped rows with `new Date().toISOString()` (ms resolution) and `listPendingMutations`
+  orders by that stamp, so rows queued in the same millisecond tied and came back in random
+  queue-id order — "keeps queued order within one entity" only held when the clock ticked
+  between enqueues. Pre-existing (from the 2026-09-20 push-batching work), not caused by the
+  word-audio changes. Fix: `nextLocalTimestamp()` in `src/sync/queue.ts` is strictly
+  increasing within a session (costs a few ms of drift during a burst); regression test pins
+  the clock and asserts order + unique stamps (fails on the old code).
+
 - **2026-09-20 — Word-audio precision pass: pad experiment #2, sub-token mora cut, research.**
   *Pad:* re-ran the round-trip ASR comparison (120 words, 4 variants). Mean similarity:
   current 60/120 ms ceilings + 30 ms slack 0.647; 30/60 + slack 30 0.666; **30/60 + slack 0
