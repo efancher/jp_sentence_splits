@@ -44,6 +44,10 @@ what's left is one deferred durability item (below).
   Tests: `tests/phrasePitch.test.ts`, `tests/phrasePitchView.test.tsx`. Also from the 97 hand labels: the
   squash guard flags 3/4 truly-wrong words and unflagged words are 95–97% within 50 ms, so no more word-boundary
   labelling is needed.
+  Follow-up same day: the learner side was withheld whenever *any* of their tokens' phones didn't sum exactly to
+  the reading, which is common for a learner. Now a token that doesn't parse is split evenly across its aligned
+  span (`learnerTokenTimings`, counted in `learnerApproximateTokens` and noted in the view); only a different
+  token count or a token with no span withholds it, and the message says which.
 
 ## Recent changes
 

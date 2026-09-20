@@ -22,6 +22,7 @@ const row = (overrides: Partial<PhraseRow> = {}): PhraseRow => ({
 const result = (rows: PhraseRow[], extra: Partial<PhrasePitchResult> = {}): PhrasePitchResult => ({
   rows,
   learnerUnavailable: false,
+  learnerApproximateTokens: 0,
   ...extra,
 });
 
@@ -57,8 +58,13 @@ describe('PhrasePitchView', () => {
 
   it('explains when the learner recording could not be lined up', () => {
     render(<PhrasePitchView result={result([row({ learner: null, learnerLevels: null, status: 'no-learner' })], { learnerUnavailable: true })} hasLearner />);
-    expect(screen.getByText(/couldn’t be lined up sound-by-sound/)).toBeInTheDocument();
+    expect(screen.getByText(/couldn’t be lined up with the native words/)).toBeInTheDocument();
     expect(screen.queryByTitle('Your recording differs here')).toBeNull();
+  });
+
+  it('notes when some of your words were only timed roughly', () => {
+    render(<PhrasePitchView result={result([row()], { learnerApproximateTokens: 2 })} hasLearner />);
+    expect(screen.getByText(/2 words of your recording could only be timed roughly/)).toBeInTheDocument();
   });
 
   it('says why nothing is shown when the native timing is unavailable', () => {

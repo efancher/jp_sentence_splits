@@ -140,13 +140,24 @@ describe('buildPhrasePitch', () => {
     expect(result.rows.every((r) => r.status === 'weak-native')).toBe(true);
   });
 
-  it('reports the learner side unavailable — never guessed — when their phones do not add up to the reading', () => {
+  it('times a learner token whose phones do not add up by an even split across its span, and says so', () => {
     const learnerWords = words();
-    learnerWords[3] = token('です', 600, [['d', 'e']]); // one mora short: 7 vs 8
+    learnerWords[3] = token('です', 600, [['d', 'e']], 200); // one mora of phones where two are expected
     const result = buildPhrasePitch({
       moraUnits,
       reference: { words: words(), pitch: NATIVE },
       learner: { words: learnerWords, pitch: NATIVE },
+    });
+    expect(result.learnerUnavailable).toBe(false);
+    expect(result.learnerApproximateTokens).toBe(1);
+    expect(result.rows[1]!.learner).not.toBeNull();
+  });
+
+  it('reports the learner side unavailable when their tokens do not match the reference', () => {
+    const result = buildPhrasePitch({
+      moraUnits,
+      reference: { words: words(), pitch: NATIVE },
+      learner: { words: words().slice(0, 3), pitch: NATIVE },
     });
     expect(result.learnerUnavailable).toBe(true);
     expect(result.rows.every((r) => r.status === 'no-learner')).toBe(true);

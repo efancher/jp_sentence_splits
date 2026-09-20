@@ -102,7 +102,19 @@ export function PhrasePitchView({ result, hasLearner }: { result: PhrasePitchRes
       </div>
       {hasLearner && result.learnerUnavailable ? (
         <p className="muted" style={{ margin: 0 }}>
-          Your recording couldn’t be lined up sound-by-sound, so only the native phrases are shown.
+          Your recording couldn’t be lined up with the native words
+          {result.learnerUnavailableReason === 'token-count'
+            ? ' (the aligner found a different number of words)'
+            : result.learnerUnavailableReason === 'no-span'
+              ? ' (a word had no measurable timing)'
+              : ''}
+          , so only the native phrases are shown.
+        </p>
+      ) : null}
+      {showLearner && result.learnerApproximateTokens > 0 ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>
+          {result.learnerApproximateTokens} word{result.learnerApproximateTokens === 1 ? '' : 's'} of your recording could
+          only be timed roughly, so those H/L marks are less certain.
         </p>
       ) : null}
       {result.rows.map((row, index) => (

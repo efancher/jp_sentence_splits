@@ -108,10 +108,43 @@ export interface PhrasePitchResult {
   unavailable?: 'no-reference-timing' | 'no-reading' | 'no-pitch';
   /** True when the learner side could not be lined up mora by mora at all. */
   learnerUnavailable: boolean;
+  /** How many of your tokens were timed by an even split rather than from their sounds (0 = all exact). */
+  learnerApproximateTokens: number;
+  /** Why the learner side is unavailable (for the message): a different word count than the native, or a word with no timing. */
+  learnerUnavailableReason?: 'token-count' | 'no-span';
 }
 
 interface TokenTiming {
   intervals: { start: number; end: number }[];
+}
+
+/**
+ * The learner's per-token mora intervals, laid out on the *reference's* per-token mora counts.
+ * A learner's phones are messier than a native's (dropped or extra vowels, `spn`), so a token whose
+ * phones don't give exactly the expected morae is split evenly across its aligned span instead —
+ * the token boundaries from the aligner are still trustworthy. Null only when a token has no
+ * usable span at all. `approximate` counts the tokens that needed the even split.
+ */
+function learnerTokenTimings(
+  tokens: readonly WordAlignment[],
+  expected: readonly TokenTiming[],
+): { timings: TokenTiming[]; approximate: number } | null {
+  const timings: TokenTiming[] = [];
+  let approximate = 0;
+  for (let t = 0; t < tokens.length; t += 1) {
+    const want = expected[t]!.intervals.length;
+    const exact = phonesToMoraIntervals(tokens[t]!.phones);
+    if (exact && exact.length === want) {
+      timings.push({ intervals: exact });
+      continue;
+    }
+    const { start, end } = tokens[t]!;
+    if (!(end > start)) return null;
+    const step = (end - start) / want;
+    timings.push({ intervals: Array.from({ length: want }, (_, i) => ({ start: start + i * step, end: start + (i + 1) * step })) });
+    approximate += 1;
+  }
+  return { timings, approximate };
 }
 
 /** Per-token mora intervals when every token parses and they sum to `moraCount`; else null. */
@@ -175,16 +208,17 @@ export function buildPhrasePitch({
   reference: SpeakerInput;
   learner?: SpeakerInput;
 }): PhrasePitchResult {
-  if (moraUnits.length === 0) return { rows: [], unavailable: 'no-reading', learnerUnavailable: true };
+  if (moraUnits.length === 0) return { rows: [], unavailable: 'no-reading', learnerUnavailable: true, learnerApproximateTokens: 0 };
 
   const refTokens = reference.words.filter((w) => !INAUDIBLE.has(w.text));
   const refTimings = tokenTimings(refTokens, moraUnits.length);
-  if (!refTimings) return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true };
+  if (!refTimings) return { rows: [], unavailable: 'no-reference-timing', learnerUnavailable: true, learnerApproximateTokens: 0 };
 
   const learnerTokens = learner ? learner.words.filter((w) => !INAUDIBLE.has(w.text)) : [];
   // The learner aligns to the same transcript, so the token lists should match; if they don't, don't compare.
-  const learnerTimings =
-    learner && learnerTokens.length === refTokens.length ? tokenTimings(learnerTokens, moraUnits.length) : null;
+  const learnerLayout =
+    learner && learnerTokens.length === refTokens.length ? learnerTokenTimings(learnerTokens, refTimings) : null;
+  const learnerTimings = learnerLayout?.timings ?? null;
 
   const groups = groupIntoPhrases(refTokens);
   // First mora index of each token in the sentence's mora list (same for both speakers' phrase spans by token index).
@@ -244,6 +278,8 @@ export function buildPhrasePitch({
     rows,
     unavailable: rows.length === 0 ? 'no-pitch' : undefined,
     learnerUnavailable: !learnerTimings,
+    learnerApproximateTokens: learnerLayout?.approximate ?? 0,
+    learnerUnavailableReason: !learner || learnerTimings ? undefined : learnerTokens.length !== refTokens.length ? 'token-count' : 'no-span',
   };
 }
 
