@@ -938,7 +938,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     YIN octave errors — some cues read −5…−11 st).
   - [x] **d′ / criterion in the report** — `signalDetection` in
     `nativeClipPitchAudit.ts`, printed by `report-pitch-drill-effectiveness.ts`.
-  - [~] **Calibrate the drill scorer against native clips** (*new, from the
+  - [x] **Calibrate the drill scorer against native clips** (**done 2026-09-21** — learner grader now uses `gradeLearnerMorae`: fit rescues false mismatches, flat takes flagged; see STATUS; remaining text below is history) (*new, from the
     audit*; **partly done 2026-09-20** — exact mora intervals from the aligner's phones took native-clip
     agreement 35% → 40%, and a valid-shape least-squares fit (`fitAccentShape`, native audio only) 56%;
     still open: the *learner* grader (`classifyLearnerMorae` → `buildPitchAccentShapeObservations`) still

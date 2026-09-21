@@ -1558,7 +1558,12 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     (dictionary)" section in `AnalysisPanel.tsx` and feeds the same ranking
     as every other observation kind. That section also shows a second H/L
     line directly under the dictionary one — the learner's own measured
-    per-mora shape (`buildLearnerPitchAccentShapes`, passed to
+    per-mora shape (`buildLearnerPitchAccentShapes`, graded through
+    `gradeLearnerMorae`: the per-mora-vs-mean rule reads a heiban plateau as
+    accented, so a valid-shape fit (`fitAccentShape`) is allowed to *rescue* a
+    take that fits the dictionary shape and agrees on the opening mora — it
+    never rewrites a real mismatch — and a take whose pitch barely moves
+    (<0.5 st) is reported as "flat" (low confidence), not graded; passed to
     `SentencePitchAccentRow` as `learnerClassesBySurface`, with the
     measured particle level in `learnerFollowingBySurface`) — so a
     correctly-produced accent is visible as a match, not just silence;

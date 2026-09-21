@@ -70,6 +70,22 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Learner pitch grader: fit can rescue a false mismatch; flat takes flagged.** The drill /
+  shadowing grader (`buildPitchAccentShapeObservations`, `buildLearnerPitchAccentShapes`) still used the
+  per-mora-vs-mean rule that agrees with the dictionary on **native** clips only 40% of the time (4-mora heiban
+  10%) — so a correct plateau could be marked wrong. New `gradeLearnerMorae` (`pitchAccentObservations.ts`):
+  (1) the valid-shape fit (`fitAccentShape`) is used only when it *equals the dictionary shape and agrees with the
+  raw reading on the opening mora* — a rescue, never a rewrite (first attempt snapped every take to a valid shape
+  and turned "you started 「たまご」 high" into "sounds like atamadaka"; an existing test caught it); (2) a take
+  whose fitted high−low contrast is under `FLAT_CONTRAST_SEMITONES` = 0.5 gets a low-confidence "barely moved"
+  observation instead of a verdict, so a level take can't pass by fitting heiban. **Floor from data** (audit,
+  169 fitted native clips, `--tsv` now carries `fitShape`/`fitContrastSt`): floor 0.5 flags 11% of natives and
+  agreement among the rest is 57%; 1.0 flags 19% (58%); 2.0 flags 40% (63%) — higher floors barely help, so 0.5.
+  **Not measured:** how many of *your* takes flip — drill takes aren't stored (only shapes), so no replay was
+  possible; the native-clip benchmark is the only evidence, and it tests the fit, not the grader's extra
+  opening-mora guard end to end. Watch `pitch_drill_attempts` mismatch rate on long heiban words after this.
+  Tests: 5 new in `pitchAccentObservations.test.ts`.
+
 - **2026-09-21 — Prod-schema check (`check:migrations-applied`); matchWord items closed.** Migrations
   only reach prod if someone applies them, and a miss fails quietly (2026-09-11/12 `books.suspended_at`).
   New read-only `npm run check:migrations-applied` (`scripts/check-migrations-applied.ts`; manual

@@ -6,6 +6,8 @@ import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
   classifyLearnerMorae,
+  FLAT_CONTRAST_SEMITONES,
+  gradeLearnerMorae,
   type PitchAccentTarget,
 } from '../src/lib/pitchAccentObservations';
 
@@ -379,5 +381,63 @@ describe('classifyLearnerMorae with exact mora intervals', () => {
     expect(classifyLearnerMorae(withPhones, 4, pitch)?.classes).toHaveLength(4);
     const equal = classifyLearnerMorae(withoutPhones, 4, pitch);
     expect(classifyLearnerMorae(withPhones, 4, pitch)?.bucketMeans).toEqual(equal?.bucketMeans);
+  });
+});
+
+describe('gradeLearnerMorae', () => {
+  /** Four buckets of 0.5 s over a 2 s word, two voiced frames per bucket at the given semitones. */
+  const fourMoraPitch = (levels: number[]) =>
+    payload(levels.flatMap((level, i) => [frame(i * 0.5 + 0.1, level), frame(i * 0.5 + 0.3, level)]));
+  const tomodachi = word(0, 2, 'ともだち');
+  const heiban: PitchAccentTarget = { surfaceForm: 'ともだち', reading: 'ともだち', pitchAccentPositions: [0] };
+
+  // A correctly-produced heiban plateau whose last mora drifts a hair below the word's mean.
+  const plateau = fourMoraPitch([-3, 3, 2, 0]);
+
+  it('rescues a plateau the per-mora rule mis-reads: the raw rule says accented, the grader agrees with the dictionary', () => {
+    expect(classifyLearnerMorae(tomodachi, 4, plateau)?.classes.join('')).toBe('lhhl');
+    const graded = gradeLearnerMorae(tomodachi, 4, plateau, null, 0);
+    expect(graded?.classes.join('')).toBe('lhhh');
+    expect(graded?.flat).toBe(false);
+    expect(
+      buildPitchAccentShapeObservations({ learnerWords: [tomodachi], learnerPitch: plateau, targets: [heiban] }),
+    ).toEqual([]);
+  });
+
+  it('does not rescue a take that really drops on the last mora', () => {
+    const drop = fourMoraPitch([-3, 3, 3, -4]);
+    expect(gradeLearnerMorae(tomodachi, 4, drop, null, 0)?.classes.join('')).toBe('lhhl');
+    const observations = buildPitchAccentShapeObservations({ learnerWords: [tomodachi], learnerPitch: drop, targets: [heiban] });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.message).not.toContain('barely moved');
+  });
+
+  it('never rewrites a raised opening mora: the raw reading (and its diagnosis) stands', () => {
+    const raised = fourMoraPitch([3, 3, 3, -4]);
+    expect(gradeLearnerMorae(tomodachi, 4, raised, null, 0)?.classes.join('')).toBe(
+      classifyLearnerMorae(tomodachi, 4, raised)?.classes.join(''),
+    );
+  });
+
+  it('flags a level take as flat instead of letting it fit heiban', () => {
+    const level = fourMoraPitch([0.1, 0, 0.1, 0]);
+    const graded = gradeLearnerMorae(tomodachi, 4, level, null, 0);
+    expect(graded?.flat).toBe(true);
+    expect(graded?.contrastSemitones).toBeLessThan(FLAT_CONTRAST_SEMITONES);
+
+    const observations = buildPitchAccentShapeObservations({ learnerWords: [tomodachi], learnerPitch: level, targets: [heiban] });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({ kind: 'pitch_accent_shape', confidence: 'low', subject: 'ともだち' });
+    expect(observations[0]?.message).toContain('barely moved');
+    expect(observations[0]?.hint).toContain('start 「と」 low and step clearly up onto 「も」');
+
+    const shapes = buildLearnerPitchAccentShapes({ learnerWords: [tomodachi], learnerPitch: level, targets: [heiban] });
+    expect(shapes[0]?.flat).toBe(true);
+  });
+
+  it('leaves one-mora words and unfittable takes on the descriptive reading', () => {
+    const graded = gradeLearnerMorae(word(0, 0.4, 'め'), 1, payload([frame(0.1, 3), frame(0.2, 3)]), null, 1);
+    expect(graded?.flat).toBe(false);
+    expect(graded?.contrastSemitones).toBeNull();
   });
 });

@@ -361,8 +361,8 @@ async function main() {
   }
   if (rows.length === 0) console.log('(none — every reviewed word has a clear, agreeing clip)');
 
-  const header = 'expression\treading\tposition\tmoraCount\texpectedShape\tmeasuredShape\tagrees\tvoicedBuckets\tseparationSt\tsentenceId\taudioId';
-  const body = clips.map((c) => [c.expression, c.reading, c.position, c.measurement.moraCount, c.measurement.expectedShape, c.measurement.measuredShape ?? '', c.measurement.agrees ?? '', c.measurement.voicedBuckets, c.measurement.separationSemitones?.toFixed(2) ?? '', c.sentenceId, c.audioId].join('\t'));
+  const header = 'expression\treading\tposition\tmoraCount\texpectedShape\tmeasuredShape\tagrees\tvoicedBuckets\tseparationSt\tsentenceId\taudioId\tfitShape\tfitContrastSt';
+  const body = clips.map((c) => [c.expression, c.reading, c.position, c.measurement.moraCount, c.measurement.expectedShape, c.measurement.measuredShape ?? '', c.measurement.agrees ?? '', c.measurement.voicedBuckets, c.measurement.separationSemitones?.toFixed(2) ?? '', c.sentenceId, c.audioId, c.measurement.fitShape ?? '', c.measurement.fitContrastSemitones?.toFixed(2) ?? ''].join('\t'));
   writeFileSync(tsvPath, [header, ...body].join('\n'));
   console.log(`\nPer-clip data written to ${tsvPath}`);
 }

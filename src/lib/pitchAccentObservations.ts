@@ -3,6 +3,7 @@ import { segmentIntoMorae } from './mora';
 import { phonesToMoraIntervals } from './moraTiming';
 import type { PitchAnalysisPayload, PitchFrame } from './pitch';
 import { diagnosePitchAccentDeviation } from './pitchAccentCorrections';
+import { fitAccentShape } from './pitchShapeFit';
 import {
   detectedDropPosition,
   expectedPitchShape,
@@ -180,6 +181,73 @@ export function classifyLearnerMorae(
 }
 
 /**
+ * Below this high−low contrast (semitones) a take is "flat": its pitch barely
+ * moved, so no accent can be read from it. Chosen from the native-clip audit
+ * (`audit-pitch-accent-clips.ts`, 169 fitted clips): 0.5 st flags 11% of native
+ * clips as flat and leaves agreement with the dictionary at 57%; raising it to
+ * 2 st flags 40% for only 63%. Kept low on purpose — a flat verdict is soft
+ * feedback, and a real accent should never be called flat.
+ */
+export const FLAT_CONTRAST_SEMITONES = 0.5;
+
+export interface GradedMorae extends MoraeClassification {
+  /** True when the take's high/low contrast is under `FLAT_CONTRAST_SEMITONES`; `classes` are then the descriptive per-mora reading. */
+  flat: boolean;
+  /** High − low contrast of the fitted shape, semitones; null when no shape could be fitted. */
+  contrastSemitones: number | null;
+}
+
+/**
+ * The classification production feedback grades against the dictionary.
+ * `classifyLearnerMorae` judges each mora against the word's mean, which reads a
+ * long plateau (heiban `lhhh`) as accented — native speakers agreed with the
+ * dictionary only 40% of the time under it, 4-mora heiban 10% — so a correct
+ * production could be marked wrong. Two changes, both from the native-clip audit
+ * (`audit-pitch-accent-clips.ts`; fitting valid shapes alone reached 57%, 4-mora
+ * heiban 43%):
+ *
+ * - **The fit can rescue a false mismatch, never rewrite a real one.** The
+ *   per-mora pitches are fitted to the shapes Japanese allows (`fitAccentShape`);
+ *   only when that fit equals the dictionary shape *and* agrees with the raw
+ *   reading on the opening mora are the fitted classes used. In every other case
+ *   the raw descriptive reading stands, so a take that raises the first mora or
+ *   drops in the wrong place keeps its specific diagnosis instead of being
+ *   snapped to some other valid shape.
+ * - **Flat takes are flagged, not graded.** A contour whose high/low difference
+ *   is under `FLAT_CONTRAST_SEMITONES` sets `flat` — otherwise a level take could
+ *   pass by fitting heiban.
+ *
+ * Without `expectedPosition` (or for one-mora words / too little voiced signal)
+ * this is just `classifyLearnerMorae`.
+ */
+export function gradeLearnerMorae(
+  word: WordAlignment,
+  moraCount: number,
+  pitch: PitchAnalysisPayload,
+  followingSpan?: { start: number; end: number } | null,
+  expectedPosition?: number,
+): GradedMorae | null {
+  const raw = classifyLearnerMorae(word, moraCount, pitch, followingSpan);
+  if (!raw) return null;
+  const fit = moraCount >= 2 ? fitAccentShape(raw.bucketMeans) : null;
+  if (!fit) return { ...raw, flat: false, contrastSemitones: null };
+  if (fit.contrastSemitones < FLAT_CONTRAST_SEMITONES) {
+    return { ...raw, flat: true, contrastSemitones: fit.contrastSemitones };
+  }
+  const expected = expectedPosition === undefined ? null : expectedPitchShape(moraCount, expectedPosition);
+  const rescued =
+    expected !== null &&
+    fit.shape.join('') === expected.join('') &&
+    raw.classes[0] === fit.shape[0];
+  return {
+    ...raw,
+    classes: rescued ? [...fit.shape, ...raw.classes.slice(moraCount)] : raw.classes,
+    flat: false,
+    contrastSemitones: fit.contrastSemitones,
+  };
+}
+
+/**
  * The time span of the aligned particle run right after `audibleWords[wordIndex]`,
  * matched against the expected `followingMora` kana so we never mistake the
  * next content word for the particle. `null` when there's no following mora
@@ -221,6 +289,8 @@ export interface LearnerPitchAccentShape {
   /** How many mora buckets carried any voiced signal; the rest are carried-forward guesses. */
   voicedBucketCount: number;
   moraCount: number;
+  /** The take's pitch barely moved (`FLAT_CONTRAST_SEMITONES`): `classes` is then the raw per-mora reading. */
+  flat?: boolean;
 }
 
 /**
@@ -253,10 +323,11 @@ export function buildLearnerPitchAccentShapes({
     if (morae.length === 0) continue;
 
     const followingSpan = followingMoraSpan(audibleWords, wordIndex, target.followingMora);
-    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch, followingSpan);
+    const learnerResult = gradeLearnerMorae(word, morae.length, learnerPitch, followingSpan, target.pitchAccentPositions[0]);
     if (!learnerResult) continue;
 
     shapes.push({
+      flat: learnerResult.flat || undefined,
       surfaceForm: target.surfaceForm,
       classes: learnerResult.classes.slice(0, morae.length),
       followingClass: learnerResult.measuredFollowing
@@ -295,14 +366,38 @@ export function buildPitchAccentShapeObservations({
     if (morae.length === 0) return;
 
     const followingSpan = followingMoraSpan(audibleWords, wordIndex, target.followingMora);
-    const learnerResult = classifyLearnerMorae(word, morae.length, learnerPitch, followingSpan);
+    const learnerResult = gradeLearnerMorae(word, morae.length, learnerPitch, followingSpan, target.pitchAccentPositions[0]);
     if (!learnerResult) return;
-    const { classes: learnerClasses, voicedBucketCount, voicedBuckets, measuredFollowing } =
+    const { classes: learnerClasses, voicedBucketCount, voicedBuckets, measuredFollowing, flat } =
       learnerResult;
 
-    const detected = detectedDropPosition(learnerClasses);
     const expectedPosition = target.pitchAccentPositions[0]!;
     const moraeText = morae.map((unit) => unit.text);
+    if (flat) {
+      // Nothing to grade: a level contour has no accent to compare, and fitting
+      // one to it would let a flat take pass as heiban. Say so, softly.
+      const raise = expectedPosition > 1 ? moraeText[Math.min(expectedPosition, morae.length) - 1] : undefined;
+      observations.push({
+        id: `pitch-accent-shape-${targetIndex}`,
+        kind: 'pitch_accent_shape',
+        subject: target.surfaceForm,
+        confidence: 'low',
+        severity: 0.3,
+        segment: { startMs: word.start * 1000, endMs: word.end * 1000 },
+        message: `Your pitch barely moved across 「${target.surfaceForm}」 (under ${FLAT_CONTRAST_SEMITONES} semitone between its highest and lowest morae), so no accent could be read from it.`,
+        hint: `Japanese lexical accent is carried almost entirely by pitch height — English marks a word with stress and vowel length instead, so a flat contour is a common transfer. Push the movement past what feels natural: ${
+          expectedPosition === 1
+            ? `start 「${moraeText[0]}」 high and drop hard right after it`
+            : expectedPosition === 0 || expectedPosition >= morae.length
+              ? `start 「${moraeText[0]}」 low and step clearly up onto 「${moraeText[1] ?? moraeText[0]}」`
+              : `start low, lift up by 「${moraeText[1] ?? moraeText[0]}」 and drop hard after 「${raise}」`
+        }.`,
+        detail:
+          'Based on a rough per-mora pitch estimate from your recording — a very quiet or creaky take can also read as flat.',
+      });
+      return;
+    }
+    const detected = detectedDropPosition(learnerClasses);
     const expectedShape = expectedPitchShape(morae.length, expectedPosition, measuredFollowing);
     const perMoraMatch =
       learnerClasses.length === expectedShape.length &&
