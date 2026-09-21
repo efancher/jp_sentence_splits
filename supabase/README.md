@@ -17,6 +17,6 @@
 | `functions/vocab-assist/` | Edge Function: AI-assisted vocabulary meaning glossing in sentence context (Claude Haiku; same `ANTHROPIC_API_KEY` secret) |
 | `tests/rls_expectations.md` | Multi-user RLS verification outline |
 
-Migrations are meant to apply on push to `main` via the Supabase GitHub integration ("Deploy to production"; history baselined 2026-09-21), but the **first test (20260921000000_pitch_drill_takes) did not auto-apply** — treat that as unconfirmed and apply by hand: Dashboard SQL Editor (or `supabase db push`), then also insert the version into `supabase_migrations.schema_migrations` so the integration doesn't re-run it. `npm run check:migrations-applied` (read-only) reports any table/column the migrations create that prod lacks.
+Migrations apply automatically when they land on `main`: `.github/workflows/apply-migrations.yml` runs `supabase db push` (needs repo secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`), then verifies with `check:migrations-applied`. (The Supabase GitHub integration's "Deploy to production" is not enabled on this plan.) The history table was baselined with the 24 earlier migrations on 2026-09-21; a migration applied by hand must also be inserted into `supabase_migrations.schema_migrations`, or the workflow will try to re-run it. Manual fallback: Dashboard SQL Editor or `supabase db push`. `npm run check:migrations-applied` (read-only) reports any table/column the migrations create that prod lacks.
 
 Setup guide: [`docs/supabase-setup.md`](../docs/supabase-setup.md).
