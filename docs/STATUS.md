@@ -82,8 +82,11 @@ what's left is one deferred durability item (below).
   workflow, which already triggers on `supabase/migrations/**`) — a migration in a shape it can't parse
   fails there. First prod run: **27 tables / 375 columns from 24 migrations, all present.** The Supabase
   GitHub integration is connected with "Deploy to production" on for `main` (Pro is only needed for
-  preview branches); unverified whether its migration-history table lists the 24 older
-  (SQL-editor-applied) migrations — check Database → Migrations before the next migration push.
+  preview branches). Its history table was empty (the 24 older migrations were SQL-editor-applied), so
+  the first push would have re-run them; **baselined 2026-09-21** by inserting the 24 versions into
+  `supabase_migrations.schema_migrations` from the SQL editor (Database → Migrations now lists exactly
+  24). From here a new file in `supabase/migrations/` applies itself on push to `main`; run
+  `check:migrations-applied` after the first one to confirm it landed.
   Also: the two `matchWord` follow-ups turned out already closed (numeral drift fixed by `36a6195`;
   repeated surface form is not a bug, see 2026-09-20) — ROADMAP/notes corrected.
 
