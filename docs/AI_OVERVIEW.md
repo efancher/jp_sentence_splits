@@ -1569,8 +1569,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     per-mora shape (`buildLearnerPitchAccentShapes`, graded through
     `gradeLearnerMorae`: the per-mora-vs-mean rule reads a heiban plateau as
     accented, so a valid-shape fit (`fitAccentShape`) is allowed to *rescue* a
-    take that fits the dictionary shape and agrees on the opening mora — it
-    never rewrites a real mismatch — and a take whose pitch barely moves
+    take that fits the dictionary shape, agrees on the opening mora and differs
+    from it only by trailing morae sagging below the mean (plateau drift) — it
+    never rewrites a real deviation such as a drop a mora late — and a take whose pitch barely moves
     (<0.5 st) is reported as "flat" (low confidence), not graded; passed to
     `SentencePitchAccentRow` as `learnerClassesBySurface`, with the
     measured particle level in `learnerFollowingBySurface`) — so a

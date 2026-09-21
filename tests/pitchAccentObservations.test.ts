@@ -412,6 +412,18 @@ describe('gradeLearnerMorae', () => {
     expect(observations[0]?.message).not.toContain('barely moved');
   });
 
+  it('does not rescue a drop that lands a mora late, even though a valid shape fits it (a real stored take)', () => {
+    // 元気 (atamadaka): measured 1.3 / 0.7 / -4.2 st — the second mora barely fell; the drop came a mora late.
+    const genki = word(0, 1.5, 'げんき');
+    const lateDrop = payload(
+      [1.3, 0.7, -4.2].flatMap((level, i) => [frame(i * 0.5 + 0.1, level), frame(i * 0.5 + 0.3, level)]),
+    );
+    const graded = gradeLearnerMorae(genki, 3, lateDrop, null, 1);
+    expect(graded?.classes.join('')).toBe('hhl');
+    const target: PitchAccentTarget = { surfaceForm: 'げんき', reading: 'げんき', pitchAccentPositions: [1] };
+    expect(buildPitchAccentShapeObservations({ learnerWords: [genki], learnerPitch: lateDrop, targets: [target] })).toHaveLength(1);
+  });
+
   it('never rewrites a raised opening mora: the raw reading (and its diagnosis) stands', () => {
     const raised = fourMoraPitch([3, 3, 3, -4]);
     expect(gradeLearnerMorae(tomodachi, 4, raised, null, 0)?.classes.join('')).toBe(

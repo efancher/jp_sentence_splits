@@ -198,6 +198,21 @@ export interface GradedMorae extends MoraeClassification {
 }
 
 /**
+ * True when `raw` differs from `expected` only by a *sag at the end of the word*:
+ * one or more trailing morae the raw rule calls low where the dictionary says
+ * high (a flat-high word whose last morae drift a little under the word's mean).
+ * That drift is the failure the shape fit exists to correct. Any other kind of
+ * difference — a drop landing a mora early or late, a rise where the dictionary
+ * has a fall — is a real deviation and is never rescued.
+ */
+function onlyTrailingSag(raw: readonly MoraPitchClass[], expected: readonly MoraPitchClass[]): boolean {
+  let end = raw.length;
+  while (end > 0 && raw[end - 1] === 'l' && expected[end - 1] === 'h') end -= 1;
+  for (let i = 0; i < end; i += 1) if (raw[i] !== expected[i]) return false;
+  return true;
+}
+
+/**
  * The classification production feedback grades against the dictionary.
  * `classifyLearnerMorae` judges each mora against the word's mean, which reads a
  * long plateau (heiban `lhhh`) as accented — native speakers agreed with the
@@ -206,13 +221,15 @@ export interface GradedMorae extends MoraeClassification {
  * (`audit-pitch-accent-clips.ts`; fitting valid shapes alone reached 57%, 4-mora
  * heiban 43%):
  *
- * - **The fit can rescue a false mismatch, never rewrite a real one.** The
+ * - **The fit can rescue plateau sag, never rewrite a real deviation.** The
  *   per-mora pitches are fitted to the shapes Japanese allows (`fitAccentShape`);
- *   only when that fit equals the dictionary shape *and* agrees with the raw
- *   reading on the opening mora are the fitted classes used. In every other case
- *   the raw descriptive reading stands, so a take that raises the first mora or
- *   drops in the wrong place keeps its specific diagnosis instead of being
- *   snapped to some other valid shape.
+ *   the fitted classes are used only when that fit equals the dictionary shape,
+ *   agrees with the raw reading on the opening mora, *and* the raw reading
+ *   differs from the dictionary only by trailing morae sagging below the mean
+ *   (`onlyTrailingSag`). Anything else — a raised first mora, a drop a mora early
+ *   or late — keeps the raw descriptive reading and its specific diagnosis.
+ *   (A first version rescued on the opening-mora check alone and passed a real
+ *   late drop: 元気 measured 1.3 / 0.7 / −4.2 st fit "hll" and read as correct.)
  * - **Flat takes are flagged, not graded.** A contour whose high/low difference
  *   is under `FLAT_CONTRAST_SEMITONES` sets `flat` — otherwise a level take could
  *   pass by fitting heiban.
@@ -238,7 +255,8 @@ export function gradeLearnerMorae(
   const rescued =
     expected !== null &&
     fit.shape.join('') === expected.join('') &&
-    raw.classes[0] === fit.shape[0];
+    raw.classes[0] === fit.shape[0] &&
+    onlyTrailingSag(raw.classes.slice(0, moraCount), expected);
   return {
     ...raw,
     classes: rescued ? [...fit.shape, ...raw.classes.slice(moraCount)] : raw.classes,
@@ -253,7 +271,7 @@ export function gradeLearnerMorae(
  * next content word for the particle. `null` when there's no following mora
  * to look for or the alignment doesn't have it.
  */
-function followingMoraSpan(
+export function followingMoraSpan(
   audibleWords: WordAlignment[],
   wordIndex: number,
   followingMora: string | undefined,

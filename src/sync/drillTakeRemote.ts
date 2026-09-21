@@ -18,7 +18,7 @@ import { getSupabase } from './supabaseClient';
  */
 
 /** Which grading logic produced a take's stored `results`; bump when it changes materially. */
-export const DRILL_GRADER_VERSION = 'fit-rescue-flat-v1';
+export const DRILL_GRADER_VERSION = 'fit-rescue-flat-v2';
 
 export type DrillTakeLabel = 'right' | 'off';
 export type DrillTakeLabels = Record<string, DrillTakeLabel>;

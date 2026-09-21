@@ -50,6 +50,7 @@
     "issues:list-sync": "tsx scripts/list-sync-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts",
     "check:migrations-applied": "tsx scripts/check-migrations-applied.ts",
+    "replay:pitch-drill-takes": "tsx scripts/replay-pitch-drill-takes.ts",
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",
     "diagnose:conjugation-cards": "tsx scripts/diagnose-conjugation-cards.ts",
     "remine:silent-shadowing-audio": "tsx scripts/remine-silent-shadowing-audio.ts",

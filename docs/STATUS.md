@@ -70,6 +70,20 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — First real drill takes replayed; the fit rescue was too lenient (fixed, grader v2).** You recorded 5
+  takes; all landed in `pitch_drill_takes` (audio 30–65 KB, ~13–17 KB row, alignment + pitch + results + labels; storage
+  verified end to end). New read-only `npm run replay:pitch-drill-takes` re-grades every stored take and lines it up
+  against your labels (raw per-mora rule / current grader / fitted contrast per word). Result: 4 labelled words —
+  すごい "right"; 言う, 夏休み, 元気 "off". The grader (v1) flagged none. For 言う (4.2 st) and 夏休み (6.2 st) the
+  measured shape equals the dictionary's under every rule with strong contrast — so "off" there is about something the
+  H/L check doesn't see (vowel quality, mora timing, a small contour detail), not a shape error it missed. **元気 was a
+  real miss by the rescue:** mora means 1.3 / 0.7 / −4.2 st (the second mora barely fell; the drop came a mora late) —
+  the raw rule said `hhll`, the fit "rescued" it to the dictionary `hlll`. Fix: the rescue now applies only when the
+  raw reading differs from the dictionary by *trailing morae sagging below the mean* (`onlyTrailingSag`) — the
+  plateau-drift case it exists for — never a drop landing early/late; regression test uses the 元気 numbers.
+  `DRILL_GRADER_VERSION` → `fit-rescue-flat-v2` (the 5 stored takes carry v1 results). n = 4 labels: enough to catch
+  this bug, not enough to say how good the grader is. Keep recording and labelling; re-run the replay after a few dozen.
+
 - **2026-09-21 — Daily new-word top-up; 6 stuck links backfilled ("最初 has no study items").** Asked why a
   confirmed word (最初 in sent_2a106f9e) had no study items. Prod (read-only): 642 words with a live link, 103 with
   a card, **539 none** = 532 seedable + 7 never-seedable. Nothing was lost — cards are created lazily, and only
