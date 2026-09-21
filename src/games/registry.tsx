@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 
+import { EarTilesGame, EAR_TILES_COPY } from '../components/games/EarTilesGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
 import {
@@ -9,6 +10,7 @@ import {
 } from '../components/games/ParticlePuzzleGame';
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
 import {
+  getEarTilesCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
   getVerbLegoData,
@@ -21,6 +23,7 @@ import {
   signalPoolSizes,
   type SignalCopy,
 } from '../lib/gamePicker';
+import { EAR_TILES_GAME_ID, EAR_TILES_ROUND_SIZE } from '../lib/earTiles';
 import {
   buildContrastCandidates,
   ODD_EAR_COPY,
@@ -138,6 +141,24 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: VerbLegoGame,
+  },
+  {
+    id: EAR_TILES_GAME_ID,
+    title: 'Ear Tiles',
+    blurb:
+      'Hear a real sentence from your books, then rebuild it from shuffled phrase tiles in the order you heard them. The audio decides — no translation unless you peek.',
+    needs:
+      'Needs sentences with native audio, confirmed vocabulary and a translation that split into 4–7 phrases.',
+    skill: 'whole-sentence listening',
+    roundSize: EAR_TILES_ROUND_SIZE,
+    // All three signals: they come from the FSRS state of the sentence's own words.
+    signals: GAME_SIGNALS,
+    signalCopy: EAR_TILES_COPY,
+    loadPools: async () => {
+      const candidates = await getEarTilesCandidates();
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: EarTilesGame,
   },
 ];
 

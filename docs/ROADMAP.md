@@ -443,8 +443,11 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        accept curated equivalents (に/へ). Cheapest; per-particle-pair
        miss rate is the weakness signal.
     5. Later: **Keystone** ("which 5 words unlock the most of the next
-       chapter" — front door to the no-card backlog), **Ear Tiles**
-       (rebuild a heard sentence from chunk tiles), **Then & Now** (replay
+       chapter" — front door to the no-card backlog), ~~**Ear Tiles**~~
+       **[shipped 2026-09-21 — see STATUS; follow-ups: a slower-replay button, per-phrase
+       "hear this phrase" once alignment spans are loaded for sentence audio, more tiles
+       from the 91 sentences rejected as too few — ~half of eligible-audio sentences are
+       under 4 phrases]**, **Then & Now** (replay
        an old clip with then-unknown words ducked out — needs per-word
        alignment spans), **Draft Day** (choose which backlog words to
        adopt), **Pair Sort** (only if the error mix shows discrimination

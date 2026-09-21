@@ -922,7 +922,7 @@ original layer (the SRS layer was added later, additively).
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently four games:
+shortcut ("Play a round") and the `/play` hub. Currently five games:
 - **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
   3 mystery words per round. Each is blanked out of a real sentence from
   the learner's books; they type its reading (typed recall, not multiple
@@ -1011,8 +1011,22 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   real chains must have their own stem confirm the class) and, for built forms, a
   whole-form gloss ("wasn't made to X"). Examples are deliberately withheld during
   play — they'd hand over the answer. Weakness is per **piece** (`れる|れ`,
-  `stem:られる`, …) from the round log; offered as `weak`/`strong`. (`れる|れ`, `stem:られる`, …) from the round
-  log; offered as `weak`/`strong`.
+  `stem:られる`, …) from the round log; offered as `weak`/`strong`.
+- **Ear Tiles** (`EarTilesGame.tsx`, `src/lib/earTiles.ts`) — 4 real sentences
+  per round: tap ▶ to hear the native clip, then tap its shuffled phrase tiles in
+  the order you heard them. Each tap is judged at once (green lock / red flash,
+  −1 point, live "Worth N now"); the translation is hidden behind a "Peek (−1)"
+  button. **The audio is the answer key** — an order that would also be
+  grammatical still counts as wrong (that is what a listening game tests), and
+  the intro says so. Tiles are approximate bunsetsu from the stored UniDic tokens
+  (`chunkSentenceIntoTiles`): a content word plus the particles / auxiliaries /
+  suffixes after it; punctuation is a boundary (揺れた。だけど must not fuse);
+  UniDic's 非自立可能 tag (見る/来る/いる/なる, also *main* verbs) only glues on
+  straight after て/で; noun+する and adjacent nouns merge; sentences whose
+  tokens don't tile the text are refused rather than guessed. Eligible: vocab
+  confirmed, native audio ≤10 s, translation, ≤45 chars, 4–7 tiles, not
+  suspended-only. Weakness comes from the FSRS state of the sentence's own words
+  (`getEarTilesCandidates`: lapsed words → `weak`), so all three signals apply.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
   lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature

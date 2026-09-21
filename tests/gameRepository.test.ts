@@ -4,6 +4,7 @@ import { resetDbForTests } from '../src/db/database';
 import {
   ensureStudyItem,
   getDb,
+  getEarTilesCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
   getPrecedingSentences,
@@ -438,5 +439,127 @@ describe('verb lego repository', () => {
     const hit = candidates.filter((c) => c.stats.lapses > 0);
     expect(hit.length).toBeGreaterThan(0);
     expect(hit.every((c) => c.chains[0]!.pieces.some((p) => p.key === 'させる|させ'))).toBe(true);
+  });
+});
+
+describe('ear tiles repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  const pieces: [string, string][] = [
+    ['今日', '名詞/普通名詞/一般'],
+    ['は', '助詞/係助詞'],
+    ['友達', '名詞/普通名詞/一般'],
+    ['と', '助詞/格助詞'],
+    ['公園', '名詞/普通名詞/一般'],
+    ['で', '助詞/格助詞'],
+    ['遊び', '動詞/一般'],
+    ['まし', '助動詞'],
+    ['た', '助動詞'],
+  ];
+
+  async function addTilesSentence(
+    id: string,
+    status: 'confirmed' | 'unreviewed',
+    options: { audio?: boolean; durationMs?: number } = {},
+  ) {
+    let cursor = 0;
+    const tokens = pieces.map(([surface, pos], i) => {
+      const token = {
+        id: `${id}-t${i}`,
+        surface,
+        start: cursor,
+        end: cursor + surface.length,
+        expression: surface,
+        reading: surface,
+        pos,
+        source: 'morphology',
+        selectedByDefault: false,
+      };
+      cursor += surface.length;
+      return token;
+    });
+    await addSentence(id, pieces.map(([surface]) => surface).join(''), {
+      vocabularySuggestions: tokens as never,
+    });
+    await getDb().analyses.put({
+      sentenceId: id,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 1,
+      vocabularyReviewStatus: status,
+      vocabularySelections: [],
+      grammarReviewStatus: 'unreviewed',
+      createdAt: T,
+      updatedAt: T,
+    } as never);
+    if (options.audio !== false) {
+      await getDb().sentenceAudio.add({
+        id: `${id}-audio`,
+        sentenceId: id,
+        sourceId: 'src',
+        sourceSentenceId: id,
+        sourceTitle: 'Source',
+        mimeType: 'audio/mpeg',
+        durationMs: options.durationMs ?? 3000,
+        startMs: 0,
+        endMs: options.durationMs ?? 3000,
+        blob: new Blob(['x']),
+        importedAt: T,
+      });
+    }
+  }
+
+  it('offers only confirmed sentences that have native audio and a playable clip length', async () => {
+    await addTilesSentence('ok', 'confirmed');
+    await addTilesSentence('unconfirmed', 'unreviewed');
+    await addTilesSentence('no-audio', 'confirmed', { audio: false });
+    await addTilesSentence('long-clip', 'confirmed', { durationMs: 20_000 });
+    const candidates = await getEarTilesCandidates();
+    expect(candidates.map((c) => c.id)).toEqual(['ok']);
+    expect(candidates[0]!.audio.id).toBe('ok-audio');
+    expect(candidates[0]!.stats.hasCard).toBe(false);
+  });
+
+  it('takes its stats from the sentence\'s own words and names the lapsed ones, writing nothing', async () => {
+    await addTilesSentence('ok', 'confirmed');
+    await addWord('vi-park', '公園', 'こうえん');
+    await addLink('ok', 'vi-park', '公園');
+    const card = await ensureStudyItem('vocabularyItem', 'vi-park', 'reading_production');
+    for (let i = 0; i < 3; i += 1) {
+      await recordReview({
+        studyItemId: card.id,
+        rating: 'good',
+        now: new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    await recordReview({
+      studyItemId: card.id,
+      rating: 'again',
+      now: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    });
+
+    const reviewsBefore = await getDb().reviews.count();
+    const [candidate] = await getEarTilesCandidates();
+    expect(candidate!.stats.lapses).toBe(1);
+    expect(candidate!.weakWords).toEqual(['公園']);
+    expect(await getDb().reviews.count()).toBe(reviewsBefore);
+  });
+
+  it('skips sentences that live only in suspended books', async () => {
+    await addTilesSentence('susp', 'confirmed');
+    const db = getDb();
+    await db.books.add({ id: 'b-susp', title: 's', createdAt: T, updatedAt: T, suspendedAt: T } as never);
+    await db.bookSentences.add({
+      id: 'm1',
+      bookId: 'b-susp',
+      sentenceId: 'susp',
+      position: 0,
+      status: 'unstarted',
+      addedAt: T,
+    } as never);
+    expect(await getEarTilesCandidates()).toEqual([]);
   });
 });

@@ -70,6 +70,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Short games: Ear Tiles shipped (fifth `/play` game).** Hear a real sentence's native clip, then rebuild
+  it from shuffled phrase tiles in the order heard. New `src/lib/earTiles.ts` (pure: chunker, eligibility, puzzle,
+  scoring), `EarTilesGame.tsx`, `getEarTilesCandidates` (repository, read-only), registry entry (all three signals;
+  weakness = lapsed words in the sentence's FSRS state), `skill` for session breaks, so it also turns up as a game break.
+  Tap-only: each tile is judged at once (−1 per wrong tile, −1 for the translation peek). **Checked against prod first**
+  (`npx tsx scripts/report-ear-tiles-feasibility.ts [n]`, read-only, prints reject reasons and a sample of
+  real splits): of 230 confirmed-vocab sentences with audio, **79 are playable** (30×4, 22×5, 15×6, 12×7 tiles; rejected:
+  91 too few tiles, 23 clip >10 s, 22 >45 chars, 14 too many, 1 bad tokens). Eyeballing the splits found and fixed three
+  chunker bugs before any UI: UniDic tags 見る/来る *main* verbs 非自立可能 (so `ニュースを見ると` fused into one tile — a
+  bound auxiliary now glues only after て/で); dropped punctuation fused clauses (`揺れた。だけど` → `揺れただけど` — now a
+  boundary); and noun+する split into a trivially-deducible tile (`心配 | しないで` — now merged). Tests: chunker cases,
+  rejections, shuffle never in spoken order, scoring, repository eligibility/stats/suspended, and a component test that
+  plays a round (wrong tile costs a point, peek costs a point, round logged, 0 reviews/study items). Not tried in a real
+  browser or with real audio playback (the `NativeAudioButton` is the shared one Word Detective uses).
+  **Manual test:** `/play` → Ear Tiles → Start; tap ▶ (must be a tap — iOS), tap tiles in the order you hear; a wrong
+  tile flashes red and drops "Worth N now"; "Peek at the translation" costs one; results replay each clip and say why the
+  sentence was picked. Known limitation: two grammatical orders are not both accepted — by design (the audio decides).
 - **2026-09-21 — Game breaks inside the session (P2), time counted in the limit.** Asked to make the `/play` games
   breaks in the day's session. New `game` `PlannerStepTargetKind` (+ optional `gameId` on the step; zod schema updated,
   steps are jsonb so no migration) whose path is the query-free `/play/:gameId/auto`, so `useActiveSession` matches it

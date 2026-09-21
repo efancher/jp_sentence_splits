@@ -154,6 +154,7 @@ import {
   type OddEarClip,
   type OddEarHistoryEntry,
 } from '../lib/oddEarOut';
+import { earTilesRejection } from '../lib/earTiles';
 import {
   buildParticleHistory,
   findBlankableParticles,
@@ -5602,6 +5603,95 @@ export async function getParticlePuzzleData(): Promise<{
     });
   }
   return { candidates, focus: missFocus(history) };
+}
+
+export interface EarTilesCandidate extends PickerCandidate {
+  sentence: Sentence;
+  audio: SentenceAudio;
+  /** Words in the sentence that have lapsed in review (for the "why this sentence" line). */
+  weakWords: string[];
+}
+
+/**
+ * Sentences playable in Ear Tiles (`earTilesRejection`): vocabulary confirmed
+ * (the game should test hearing, not unknown words), native audio, a
+ * translation, and a tile count that makes a real ordering task; skipping
+ * sentences that live only in suspended books. Picker stats come from the FSRS
+ * state of the sentence's own words, so a `weak` round hears sentences that
+ * contain words you have actually lapsed on. Read-only.
+ */
+export async function getEarTilesCandidates(
+  options: { now?: Date } = {},
+): Promise<EarTilesCandidate[]> {
+  const now = options.now ?? new Date();
+  const db = getDb();
+  const [sentences, analyses, audioRows, links, suspendedIndex] = await Promise.all([
+    db.sentences.toArray(),
+    db.analyses.toArray(),
+    db.sentenceAudio.toArray(),
+    db.sentenceVocabulary.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const confirmed = new Set(
+    analyses
+      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+      .map((analysis) => analysis.sentenceId),
+  );
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+
+  const playable = sentences.filter((sentence) => {
+    const audio = audioBySentenceId.get(sentence.id);
+    return (
+      confirmed.has(sentence.id) &&
+      !!audio &&
+      earTilesRejection(sentence, audio.durationMs) === null &&
+      !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex))
+    );
+  });
+  if (playable.length === 0) return [];
+
+  const playableIds = new Set(playable.map((sentence) => sentence.id));
+  const itemIdsBySentence = new Map<string, string[]>();
+  for (const link of links) {
+    if (!link.surfaceForm || !playableIds.has(link.sentenceId)) continue;
+    const list = itemIdsBySentence.get(link.sentenceId);
+    if (list) list.push(link.vocabularyItemId);
+    else itemIdsBySentence.set(link.sentenceId, [link.vocabularyItemId]);
+  }
+  const itemIds = [...new Set([...itemIdsBySentence.values()].flat())];
+  const [items, studyItems] = await Promise.all([
+    db.vocabularyItems.bulkGet(itemIds),
+    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+  ]);
+  const expressionById = new Map(
+    items.flatMap((item) => (item ? [[item.id, item.expression] as const] : [])),
+  );
+  const statesByItemId = new Map<string, FsrsState[]>();
+  for (const studyItem of studyItems) {
+    const list = statesByItemId.get(studyItem.subjectId);
+    if (list) list.push(studyItem.fsrsState);
+    else statesByItemId.set(studyItem.subjectId, [studyItem.fsrsState]);
+  }
+
+  return playable.map((sentence) => {
+    const wordIds = [...new Set(itemIdsBySentence.get(sentence.id) ?? [])];
+    const weakWords = wordIds
+      .filter((id) => summarizeCardStats(statesByItemId.get(id) ?? [], now).lapses > 0)
+      .flatMap((id) => expressionById.get(id) ?? []);
+    return {
+      id: sentence.id,
+      sentence,
+      audio: audioBySentenceId.get(sentence.id)!,
+      weakWords,
+      stats: summarizeCardStats(
+        wordIds.flatMap((id) => statesByItemId.get(id) ?? []),
+        now,
+      ),
+    };
+  });
 }
 
 /**
