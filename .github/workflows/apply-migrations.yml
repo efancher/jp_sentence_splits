@@ -1,9 +1,11 @@
 name: Apply Supabase migrations
 
-# Applies any new file in supabase/migrations/ to the production project when it
-# lands on main, then verifies the schema really has it. Replaces the Supabase
-# GitHub integration's "Deploy to production", which is not enabled on this plan
-# (first attempt, pitch_drill_takes 2026-09-21, never applied).
+# MANUAL FALLBACK. The Supabase GitHub integration ("Deploy to production", branch
+# main) was enabled 2026-09-21 and is the intended way migrations reach prod; this
+# job exists in case it does not fire (the first migration after enabling,
+# pitch_drill_takes, was applied by hand, so the integration is still unproven).
+# Run it from the Actions tab or `gh workflow run apply-migrations.yml`. It applies
+# any migration missing from the history table, then verifies the schema.
 #
 # `supabase db push` applies only versions missing from
 # supabase_migrations.schema_migrations; that table was baselined with the 24
@@ -15,10 +17,6 @@ name: Apply Supabase migrations
 # Tokens) and SUPABASE_DB_PASSWORD (Project Settings → Database). The project
 # ref is not a secret — it is in every Supabase URL.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'supabase/migrations/**'
   workflow_dispatch: {}
 
 permissions:

@@ -85,10 +85,11 @@ what's left is one deferred durability item (below).
   `drillTakeLabels` (2), `tests/pgIntegration/drillTakes.pg.test.ts` (RLS on real Postgres). `test:pg` now
   runs its files serially (`--no-file-parallelism`) — they share one database. **First migration pushed after
   the Supabase GitHub integration was enabled — it did NOT auto-apply** (6+ min, `check:migrations-applied` still
-  reported the table missing, no Supabase check on the commit); the integration turned out not to be
-  enabled on this plan. Replaced by `.github/workflows/apply-migrations.yml` (`supabase db push` on push to `main`
-  touching `supabase/migrations/**`, then `check:migrations-applied`); needs repo secrets
-  `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` — **not yet added**, so `pitch_drill_takes` is still unapplied.
+  reported the table missing, no Supabase check on the commit); the integration had not actually been
+  enabled; it was turned on afterwards and `pitch_drill_takes` was applied **by hand** (28 tables / 392 columns
+  verified by `check:migrations-applied`; live round-trip of the bucket + table on prod OK, test data removed).
+  Whether auto-apply works stays **unproven until the next new migration**. `apply-migrations.yml` (manual-only
+  `supabase db push` + verify, needs repo secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD`) is the fallback.
 
 - **2026-09-21 — Learner pitch grader: fit can rescue a false mismatch; flat takes flagged.** The drill /
   shadowing grader (`buildPitchAccentShapeObservations`, `buildLearnerPitchAccentShapes`) still used the
