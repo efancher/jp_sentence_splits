@@ -24,6 +24,7 @@ import {
   ensureVocabularyStudyItem,
   getConfusionPairCandidates,
   getDb,
+  countVocabularyWordsSeededSince,
   getDueStudyItems,
   getReferencePitchTrack,
   loadSuspendedBookIndex,
@@ -75,6 +76,8 @@ import {
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
+import { startOfLocalDayIso } from '../lib/dailyPractice';
+import { pickQuotaSubjects, quotaRemaining, VOCABULARY_DESCRIPTOR_KEY } from '../lib/newWordQuota';
 import { segmentIntoMorae } from '../lib/mora';
 import type { PitchAnalysisPayload } from '../lib/pitch';
 import { explainPitchAccent } from '../lib/pitchAccentRules';
@@ -1423,11 +1426,53 @@ export function ReviewPage() {
       // Interleaving above still leaves same-word batches from different
       // descriptors adjacent (see spaceOutPendingSeedBatches); space them
       // apart before they're lazily seeded one batch at a time.
-      const spacedPendingSeeds = spaceOutPendingSeedBatches(pendingSeeds);
+      let spacedPendingSeeds = spaceOutPendingSeedBatches(pendingSeeds);
+
+      // Daily new-word top-up (settings.dailyNewWordQuota): introduce up to the
+      // day's quota of never-seeded vocabulary words now, appended after the due
+      // cards — not only once the queue runs dry, which on a heavy review day it
+      // never did (532 confirmed words sat waiting while ~7 a day were seeded).
+      // Counted from the database, so reopening Review can't exceed the quota.
+      const vocabularyDescriptor = descriptors.find(
+        (descriptor) => descriptor.key === VOCABULARY_DESCRIPTOR_KEY,
+      );
+      const quotaSubjects = vocabularyDescriptor
+        ? pickQuotaSubjects(
+            spacedPendingSeeds,
+            quotaRemaining(
+              settings.dailyNewWordQuota,
+              await countVocabularyWordsSeededSince(startOfLocalDayIso(new Date())),
+            ),
+          )
+        : [];
+      const topUpCards: QueueCard[] = [];
+      if (vocabularyDescriptor && !cancelled) {
+        for (const subjectId of quotaSubjects) {
+          const batch = spacedPendingSeeds.filter(
+            (item) => item.descriptorKey === VOCABULARY_DESCRIPTOR_KEY && item.subjectId === subjectId,
+          );
+          topUpCards.push(
+            ...(await Promise.all(
+              batch.map(async (item) =>
+                vocabularyDescriptor.buildCard(
+                  await vocabularyDescriptor.ensure(item.candidate, item.activityType),
+                  item.candidate,
+                ),
+              ),
+            )),
+          );
+        }
+        const seeded = new Set(quotaSubjects);
+        spacedPendingSeeds = spacedPendingSeeds.filter(
+          (item) => !(item.descriptorKey === VOCABULARY_DESCRIPTOR_KEY && seeded.has(item.subjectId)),
+        );
+      }
 
       if (cancelled) return;
-      setQueue(spaced);
+      setQueue([...spaced, ...topUpCards]);
       setPool(spacedPendingSeeds);
+      // The top-up counts toward this sitting's new-card cap like any other new subject.
+      setNewCardsIntroduced(quotaSubjects.length);
       setInitialized(true);
     })();
     return () => {

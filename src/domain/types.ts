@@ -426,6 +426,16 @@ export interface AppSettings {
    */
   newCardsPerSessionLimit: number;
   /**
+   * How many never-introduced vocabulary words Review tops up each local day
+   * (2026-09-21) — seeded when Review opens, whether or not the due queue is
+   * empty. Without it, new words were only introduced once the queue ran dry,
+   * so a heavy review day starved them (532 confirmed words waiting, 22
+   * seeded in a week). A floor, not a ceiling: the lazy path above can still
+   * introduce more once the queue empties, up to `newCardsPerSessionLimit`.
+   * `0` turns the top-up off.
+   */
+  dailyNewWordQuota: number;
+  /**
    * Graduation (Phase 7.10, docs/STATUS.md): a study item stops being
    * treated as due once its FSRS interval (`scheduledDays`) grows past
    * this many days while in the stable `review` state — see

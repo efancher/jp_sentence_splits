@@ -226,7 +226,8 @@ built out Phases 1–9):
   a real encounter, matching this app's native-media-first principle at
   the pattern level, not just the example-sentence level.
 - `AppSettings` (singleton) — theme, TTS voice/rate, `newCardsPerSessionLimit`
-  (session planner cap on new-subject introduction),
+  (session planner cap on new-subject introduction), `dailyNewWordQuota`
+  (new vocabulary words Review tops up per day),
   `graduationMinScheduledDays` (retirement threshold from the due
   rotation), `quietMode` (pauses every speak-aloud activity — see the
   session-planner section).
@@ -421,7 +422,14 @@ with no `vocabularyItem` study item yet, invisible to the due-item scan:
 `buildReviewBatchStep` adds `min(backlog, newCardsPerSessionLimit)`
 retain-costed minutes plus the same count into `targetCount` and the label
 ("Review N due + introduce M new"), so a big first-review backlog no longer
-loses its minutes to glossing. `ReviewPage` separately holds the review
+loses its minutes to glossing. `ReviewPage` also **tops up new vocabulary
+daily** (2026-09-21, `settings.dailyNewWordQuota`, default 12, `newWordQuota.ts`):
+when it opens it seeds up to the day's quota of never-introduced words
+(`countVocabularyWordsSeededSince` counts from the database, so reopening can't
+exceed it) and appends their cards after the due ones — previously new words
+arrived only once the due queue ran dry, which on a heavy review day never
+happened. A floor, not a ceiling: the lazy path still adds more up to the
+per-sitting cap. `ReviewPage` separately holds the review
 step open (no auto-advance) while its pending-seed pool still has
 never-introduced words and the per-session cap isn't reached -> **coherent-chain grouping**
 (steps that share a sentence id, e.g. a grammar pattern and a shadowing

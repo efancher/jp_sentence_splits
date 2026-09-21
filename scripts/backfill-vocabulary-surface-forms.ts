@@ -22,7 +22,11 @@
  *      sentence, first match wins. Only reachable for words with a JMDict
  *      `partOfSpeech` tag already backfilled — a real but separate,
  *      pre-existing gap (see backfill-vocabulary-meanings.ts).
- * A link whose word matches neither way is left alone (not an error —
+ *   3. Phonetic spelling: the sentence writes the word in kana instead of its
+ *      kanji (綺麗 as きれい, 餌 as えさ, タカ, なんとか) — the item's `reading`,
+ *      as hiragana or katakana, when it occurs exactly once in the sentence
+ *      (`surfaceFormFromReading`). Inflected occurrences are not attempted.
+ * A link whose word matches none of these is left alone (not an error —
  * common for words appearing in an okurigana form conjugate() doesn't
  * cover, e.g. the volitional/たい forms, or words the picker's own
  * morphology never lines up with a clean substring at all).
@@ -40,6 +44,7 @@ import {
   conjugationFormsForWordClass,
   conjugationWordClassFromPartOfSpeech,
 } from '../src/lib/conjugation';
+import { surfaceFormFromReading } from '../src/lib/surfaceForm';
 import { fetchAll, parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -94,12 +99,13 @@ function findSurfaceForm(
   if (expression && japanese.includes(expression)) return expression;
 
   const wordClass = conjugationWordClassFromPartOfSpeech(partOfSpeech ?? undefined);
-  if (!wordClass) return null;
-  for (const form of conjugationFormsForWordClass(wordClass)) {
-    const conjugated = conjugate(expression, reading, wordClass, form.key);
-    if (conjugated && japanese.includes(conjugated.expression)) return conjugated.expression;
+  if (wordClass) {
+    for (const form of conjugationFormsForWordClass(wordClass)) {
+      const conjugated = conjugate(expression, reading, wordClass, form.key);
+      if (conjugated && japanese.includes(conjugated.expression)) return conjugated.expression;
+    }
   }
-  return null;
+  return surfaceFormFromReading(japanese, reading);
 }
 
 async function main() {

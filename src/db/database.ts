@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   textDisplayMode: 'plain',
   tts: { ...DEFAULT_TTS_SETTINGS },
   newCardsPerSessionLimit: 20,
+  dailyNewWordQuota: 12,
   graduationMinScheduledDays: 180,
   dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,
   sessionAllocation: { ...BASELINE_SESSION_ALLOCATION },

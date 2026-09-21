@@ -351,6 +351,114 @@ describe('ReviewPage', () => {
   // render as already-active.
   afterEach(() => nativeAudioController.stop());
 
+  /**
+   * Daily new-word top-up (settings.dailyNewWordQuota). `vocab-due` is fully
+   * seeded (a cloze that is due now, its siblings far in the future, all created
+   * long ago) so the queue is never empty; `vocab-new` has no study items yet.
+   */
+  async function seedDueWordAndPendingWord() {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    for (const [id, expression, reading] of [
+      ['vocab-due', '読む', 'よむ'],
+      ['vocab-new', '本', 'ほん'],
+    ] as const) {
+      await db.vocabularyItems.add({ id, expression, reading, meaning: id, createdAt: now, updatedAt: now });
+      await db.sentenceVocabulary.add({
+        id: `sv-${id}`,
+        sentenceId: 'sent-1',
+        vocabularyItemId: id,
+        surfaceForm: expression,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const old = '2026-01-01T00:00:00.000Z';
+    const fsrs = (due: string) => ({
+      due,
+      stability: 1,
+      difficulty: 1,
+      elapsedDays: 0,
+      scheduledDays: 0,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 'review' as const,
+    });
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    for (const activityType of ['reading_retrieval', 'cloze', 'reading_production']) {
+      await db.studyItems.add({
+        id: `si-vocab-due-${activityType}`,
+        subjectType: 'vocabularyItem',
+        subjectId: 'vocab-due',
+        activityType,
+        fsrsState: fsrs(activityType === 'cloze' ? '2026-01-02T00:00:00.000Z' : future),
+        createdAt: old,
+        updatedAt: old,
+      });
+    }
+  }
+
+  const seededActivityTypes = async (vocabularyItemId: string) =>
+    (await getDb().studyItems.where('subjectId').equals(vocabularyItemId).toArray())
+      .map((item) => item.activityType)
+      .sort();
+
+  it('tops up a new vocabulary word at open even while other cards are still due', async () => {
+    await seedDueWordAndPendingWord();
+    await updateSettings({ dailyNewWordQuota: 1 });
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // The due cloze is what's in front of the learner — the queue is not empty…
+    await screen.findByText('Reveal word');
+    // …and the pending word was introduced anyway (all three of its cards).
+    await waitFor(async () => {
+      expect(await seededActivityTypes('vocab-new')).toEqual(['cloze', 'reading_production', 'reading_retrieval']);
+    });
+  });
+
+  it('introduces nothing while the queue is busy when the daily top-up is switched off', async () => {
+    await seedDueWordAndPendingWord();
+    await updateSettings({ dailyNewWordQuota: 0 });
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal word');
+    expect(await seededActivityTypes('vocab-new')).toEqual([]);
+  });
+
+  it("counts words already introduced today against the day's quota", async () => {
+    await seedDueWordAndPendingWord();
+    // A third word whose first card was created today already uses up the quota of 1.
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.studyItems.add({
+      id: 'si-seeded-today',
+      subjectType: 'vocabularyItem',
+      subjectId: 'vocab-today',
+      activityType: 'cloze',
+      fsrsState: {
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        stability: 1,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 0,
+        learningSteps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 'review',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await updateSettings({ dailyNewWordQuota: 1 });
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal word');
+    expect(await seededActivityTypes('vocab-new')).toEqual([]);
+  });
+
   it('lazily seeds a study item and shows the sentence behind a reveal', async () => {
     await seedBookWithSentence();
     const user = userEvent.setup();
@@ -2743,6 +2851,8 @@ describe('ReviewPage', () => {
   });
 
   it('interleaves new-subject seeding across categories instead of draining sentences first (Phase 7.10)', async () => {
+    // This is about the lazy (queue-empty) seeding order; the daily new-word top-up would seed vocab-1 up front.
+    await updateSettings({ dailyNewWordQuota: 0 });
     const db = getDb();
     const now = new Date().toISOString();
     await db.books.add({

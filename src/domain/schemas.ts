@@ -201,6 +201,8 @@ export const settingsSchema = z.object({
   tts: ttsSettingsSchema.default({ rate: 0.9, pitch: 1.0, volume: 1.0 }),
   // Additive (Phase 7.10): absent in older backups.
   newCardsPerSessionLimit: z.number().int().nonnegative().default(20),
+  // Additive (2026-09-21): absent in older backups.
+  dailyNewWordQuota: z.number().int().nonnegative().default(12),
   // Additive (Phase 7.10): absent in older backups.
   graduationMinScheduledDays: z.number().int().nonnegative().default(180),
   // Additive (Learning Orchestrator settings): absent in older backups.

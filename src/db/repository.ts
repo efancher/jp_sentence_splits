@@ -7553,6 +7553,25 @@ export async function countNewVocabularyCardBacklog(): Promise<number> {
   return backlog.size;
 }
 
+/**
+ * How many distinct vocabulary words were first introduced to the SRS since
+ * `sinceIso` — i.e. have a `vocabularyItem`-subject study item created then.
+ * Counts what's already in the database (not per-page state), so the daily
+ * new-word top-up can't exceed its quota by reopening Review.
+ */
+export async function countVocabularyWordsSeededSince(sinceIso: string): Promise<number> {
+  const db = getDb();
+  const items = await db.studyItems.where('subjectType').equals('vocabularyItem').toArray();
+  const first = new Map<string, string>();
+  for (const item of items) {
+    const seen = first.get(item.subjectId);
+    if (seen === undefined || item.createdAt < seen) first.set(item.subjectId, item.createdAt);
+  }
+  let count = 0;
+  for (const createdAt of first.values()) if (createdAt >= sinceIso) count += 1;
+  return count;
+}
+
 async function getRecentActivityEvents(now: Date): Promise<RecentActivityEvent[]> {
   const db = getDb();
   const cutoffIso = new Date(now.getTime() - NEGLECT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();

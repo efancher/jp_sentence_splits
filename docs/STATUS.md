@@ -70,6 +70,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Daily new-word top-up; 6 stuck links backfilled ("最初 has no study items").** Asked why a
+  confirmed word (最初 in sent_2a106f9e) had no study items. Prod (read-only): 642 words with a live link, 103 with
+  a card, **539 none** = 532 seedable + 7 never-seedable. Nothing was lost — cards are created lazily, and only
+  once `ReviewPage`'s due queue is empty; since 2026-09-14, 232 words were confirmed and 22 first-seeded (0 on 5 of
+  8 days) despite 15–185 reviews/day. **Fix:** new setting `dailyNewWordQuota` (default 12, Settings page, `0` = off);
+  when `ReviewPage` builds its queue it seeds up to `quota − words first-seeded today` never-introduced vocabulary
+  words (`src/lib/newWordQuota.ts`, `countVocabularyWordsSeededSince` — counted from the DB so reopening Review
+  can't exceed it), appended after the due cards and counted toward `newCardsPerSessionLimit`. A floor: the lazy
+  queue-empty path still runs. The planner still reserves `min(backlog, newCardsPerSessionLimit)` new-card
+  minutes (slightly over-reserves vs 12). At 12/day the 532 backlog takes ~44 days; you confirm faster than
+  that, so the backlog will keep growing — raise the quota, or pick words more selectively in Analyze.
+  **Backfill:** the 7 never-seedable links were old Anki-import rows with no `surface_form`; the sentence spells
+  the word in kana, not its kanji. `backfill-vocabulary-surface-forms.ts` gained a tier 3 (`surfaceFormFromReading`:
+  the item's reading as hiragana/katakana, accepted only if it occurs exactly once) and `--apply` fixed **6**
+  (綺麗→きれい, 餌→えさ, 何とか→なんとか, わし→ワシ, たか→タカ, 達→たち). **7 links still have no surface form**
+  (inflected or numeral: おいしい→おいしそう, です→でし(た), なる→なり, できる×2, 三→３) — re-confirm those in
+  Analyze. Tests: `newWordQuota` (3), 3 `reviewPage` (seeds while due / off / already-seeded-today), `surfaceForm` (2);
+  one existing interleaving test now sets the quota to 0 (it is about the lazy path).
+
 - **2026-09-21 — Pitch drill takes are stored in Supabase (audio + alignment + pitch + optional self-label).**
   Follow-up to the grader change: we couldn't replay it on the learner's own takes because only per-word
   verdicts were logged. Migration `20260921000000_pitch_drill_takes.sql` — table `pitch_drill_takes` (one row
