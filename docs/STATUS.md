@@ -70,6 +70,22 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Pitch drill takes are stored in Supabase (audio + alignment + pitch + optional self-label).**
+  Follow-up to the grader change: we couldn't replay it on the learner's own takes because only per-word
+  verdicts were logged. Migration `20260921000000_pitch_drill_takes.sql` — table `pitch_drill_takes` (one row
+  per take: `alignment`, `pitch` (rounded frames), `targets`, `results`, `labels`, `grader`) + private
+  `drill-takes` bucket (path `{owner}/{take}.ext`, owner-only policies on both, update/delete allowed so a
+  retention prune is possible later). `src/sync/drillTakeRemote.ts` uploads best-effort after each analysed
+  take (audio first, then the row — row still written if only the audio fails); direct access like
+  `reference_alignment`, no Dexie mirror, no sync-event wiring. After a take the drill shows an optional
+  **Felt right / Felt off** toggle per scored word (`DrillTakeLabelsPanel`, stored in `labels`) — deliberately
+  after the take, never before, so it can't become a guess gate. `DRILL_GRADER_VERSION` = `fit-rescue-flat-v1`.
+  No retention cap yet (≈60 KB/take; revisit past a few thousand takes). Not covered here: reading takes back
+  (a replay script — write it when there are enough labelled takes). Tests: `drillTakeRemote` (7),
+  `drillTakeLabels` (2), `tests/pgIntegration/drillTakes.pg.test.ts` (RLS on real Postgres). `test:pg` now
+  runs its files serially (`--no-file-parallelism`) — they share one database. **First migration to go out
+  through the Supabase GitHub integration** — after the push, run `npm run check:migrations-applied`.
+
 - **2026-09-21 — Learner pitch grader: fit can rescue a false mismatch; flat takes flagged.** The drill /
   shadowing grader (`buildPitchAccentShapeObservations`, `buildLearnerPitchAccentShapes`) still used the
   per-mora-vs-mean rule that agrees with the dictionary on **native** clips only 40% of the time (4-mora heiban

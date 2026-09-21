@@ -1622,6 +1622,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     feedback, an active-recall flashcard, and a recording drill.
   - **Drill usage tracking + SRS-miss-triggered extra practice** (2026-09-11,
     user request — "is the drill actually helping?"). Every take now writes
+    Each take is also kept whole in Supabase (`pitch_drill_takes` row + private
+    `drill-takes` audio object, `src/sync/drillTakeRemote.ts`, direct access —
+    not the sync engine): the audio, the learner's forced alignment, the measured
+    pitch payload, the scored targets and what the grader said (`grader`
+    version), plus the learner's optional after-take "Felt right / Felt off" label
+    per word (`DrillTakeLabelsPanel`). Purpose: replay a grader change on real
+    takes and judge it against the learner's own ear. Best-effort — a failed
+    upload never affects the drill. Holds the learner's voice; owner-only RLS.
     one `PitchDrillAttempt` (append-only, synced like `Review`) per scored
     target word — `measured`/`mismatch`/`confidence` plus the dictionary vs.
     measured H/L shape strings — via `logPitchDrillAttempt`. Separately, a

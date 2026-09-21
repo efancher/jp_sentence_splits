@@ -15,7 +15,7 @@ shape of real error codes, request counts).
   supabase-js client acting as a given user.
 - Tests are skipped unless `SYNC_PG_TEST` is set, so plain `npm test` / `npm run
   check` never need Docker. `KEEP=1 npm run test:pg` leaves the containers up; then
-  `SYNC_PG_TEST=1 npx vitest run tests/pgIntegration` reruns in seconds.
+  `SYNC_PG_TEST=1 npx vitest run --no-file-parallelism tests/pgIntegration` reruns in seconds.
 - Each test simulates a *device* with `device(userId)` (a fresh local Dexie signed
   in as that user), so multi-device scenarios are two `device()` calls.
 - New migration? It is applied automatically; if it needs a new Supabase-provided

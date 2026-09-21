@@ -4,7 +4,7 @@
 # plus PostgREST in front of it — so unique indexes and RLS policies are the real
 # ones. Needs Docker. Extra args go to vitest, e.g.
 #   npm run test:pg -- -t "converge"
-# KEEP=1 leaves the containers up afterwards (faster reruns: SYNC_PG_TEST=1 npx vitest run tests/pgIntegration).
+# KEEP=1 leaves the containers up afterwards (faster reruns: SYNC_PG_TEST=1 npx vitest run --no-file-parallelism tests/pgIntegration).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -48,4 +48,5 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-SYNC_PG_TEST=1 npx vitest run tests/pgIntegration "$@"
+# Files share one database (resetDatabase truncates it), so they must not run in parallel.
+SYNC_PG_TEST=1 npx vitest run --no-file-parallelism tests/pgIntegration "$@"

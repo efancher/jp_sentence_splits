@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { PitchAccentMinimalPairWarmup } from '../components/PitchAccentMinimalPairWarmup';
+import { DrillTakeLabelsPanel } from '../components/DrillTakeLabels';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../db/repository';
 import type { Sentence, WordAlignment } from '../domain/types';
 import { useShadowing } from '../hooks/useShadowing';
+import { createId } from '../lib/ids';
 import { alignAudioDetailed, type AlignAudioFailureReason } from '../lib/analysisApi';
 import { buildKanaTimeline, type KanaTimelineEntry } from '../lib/kanaTimeline';
 import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
@@ -32,6 +34,14 @@ import { splitOnSurfaceForm } from '../lib/surfaceForm';
 import type { TimingObservation } from '../lib/timingObservations';
 import { MAX_RECORDING_DURATION_MS } from '../lib/recording';
 import { canonicalizeAudioBuffer, decodeAudioBuffer } from '../lib/waveform';
+import {
+  saveDrillTakeLabels,
+  uploadDrillTake,
+  type DrillTakeLabel,
+  type DrillTakeLabels,
+  type DrillTakeResult,
+  type DrillTakeTarget,
+} from '../sync/drillTakeRemote';
 
 /**
  * Audio-less pitch-accent production drill (docs/ROADMAP.md). The
@@ -88,6 +98,8 @@ type AnalysisState =
       learnerPitch?: PitchAnalysisPayload;
       /** The take's forced-alignment words — feeds the kana ruler under the contour. */
       learnerWords: WordAlignment[];
+      /** Words whose take was flat (`FLAT_CONTRAST_SEMITONES`) — no accent could be read. */
+      flatSurfaces: Set<string>;
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
       /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
@@ -130,12 +142,14 @@ async function analyzeRecording(
     });
     const learnerClassesBySurface = new Map<string, MoraPitchClass[]>();
     const learnerFollowingBySurface = new Map<string, MoraPitchClass>();
+    const flatSurfaces = new Set<string>();
     for (const shape of buildLearnerPitchAccentShapes({
       learnerWords: alignment.words,
       learnerPitch: pitch,
       targets: scorableTargets,
     })) {
       learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
+      if (shape.flat) flatSurfaces.add(shape.surfaceForm);
       if (shape.followingClass) learnerFollowingBySurface.set(shape.surfaceForm, shape.followingClass);
     }
     // `buildPitchAccentShapeObservations` ids each observation
@@ -153,6 +167,7 @@ async function analyzeRecording(
       observations,
       learnerPitch: pitch,
       learnerWords: alignment.words,
+      flatSurfaces,
       learnerClassesBySurface,
       learnerFollowingBySurface,
       observationBySurfaceForm,
@@ -224,6 +239,9 @@ export function PitchAccentDrillPage() {
   const [pending, setPending] = useState<{ blob: Blob; durationMs: number } | null>(null);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: 'idle' });
+  // The stored take (`pitch_drill_takes`) for the current analysis, and the learner's optional after-take labels.
+  const [takeLabels, setTakeLabels] = useState<{ id: string; labels: DrillTakeLabels } | null>(null);
+  const takeUploadRef = useRef<Promise<boolean>>(Promise.resolve(false));
 
   const list = effectiveMode === 'sentence' ? sentences : activeWords;
   const currentSentence = effectiveMode === 'sentence' ? sentences?.[position] : undefined;
@@ -312,6 +330,7 @@ export function PitchAccentDrillPage() {
     if (!pending || !transcript || analysisTargets.length === 0) return;
     let active = true;
     setAnalysis({ status: 'analyzing' });
+    setTakeLabels(null);
     void analyzeRecording(pending.blob, transcript, analysisTargets).then((next) => {
       if (active) setAnalysis(next);
     });
@@ -328,8 +347,10 @@ export function PitchAccentDrillPage() {
     const contextSentenceId =
       effectiveMode === 'sentence' ? currentSentence?.sentence.id : currentWord?.sentence.id;
     if (!contextSentenceId) return;
-    const { learnerClassesBySurface, learnerFollowingBySurface, observationBySurfaceForm } =
+    const { learnerClassesBySurface, learnerFollowingBySurface, observationBySurfaceForm, flatSurfaces } =
       analysis;
+    const takeTargets: DrillTakeTarget[] = [];
+    const takeResults: DrillTakeResult[] = [];
     for (const target of analysisTargets) {
       const vocabularyItemId =
         effectiveMode === 'sentence'
@@ -347,6 +368,16 @@ export function PitchAccentDrillPage() {
         ? [...measuredClasses, ...(followingClass ? [followingClass] : [])].join('')
         : undefined;
       const observation = observationBySurfaceForm.get(target.surfaceForm);
+      takeTargets.push({ ...target, vocabularyItemId, contextSentenceId });
+      takeResults.push({
+        surfaceForm: target.surfaceForm,
+        measured: !!measuredClasses,
+        mismatch: !!observation,
+        confidence: observation?.confidence,
+        expectedShape,
+        measuredShape,
+        flat: flatSurfaces.has(target.surfaceForm) || undefined,
+      });
       void logPitchDrillAttempt({
         mode: effectiveMode,
         vocabularyItemId,
@@ -361,8 +392,37 @@ export function PitchAccentDrillPage() {
         focusTriggered: focusMode,
       });
     }
+    // Keep the take itself (audio + alignment + pitch) so the grader can be
+    // replayed against it. Best-effort: never blocks or fails the drill.
+    if (pending) {
+      const id = createId('take');
+      setTakeLabels({ id, labels: {} });
+      takeUploadRef.current = uploadDrillTake({
+        id,
+        mode: effectiveMode,
+        transcript: transcript ?? '',
+        focusTriggered: focusMode,
+        audio: { blob: pending.blob, mimeType: pending.blob.type || 'audio/webm', durationMs: pending.durationMs },
+        alignment: { durationSeconds: analysis.learnerPitch?.durationSeconds ?? pending.durationMs / 1000, words: analysis.learnerWords },
+        pitch: analysis.learnerPitch,
+        targets: takeTargets,
+        results: takeResults,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis]);
+
+  const setTakeLabel = (surfaceForm: string, label: DrillTakeLabel | null) => {
+    if (!takeLabels) return;
+    const next = { ...takeLabels.labels };
+    if (label) next[surfaceForm] = label;
+    else delete next[surfaceForm];
+    setTakeLabels({ id: takeLabels.id, labels: next });
+    // The row is written after the upload settles; saving labels waits for it.
+    void takeUploadRef.current.then((uploaded) => {
+      if (uploaded) void saveDrillTakeLabels(takeLabels.id, next);
+    });
+  };
 
   const isRecording = shadowing.status === 'recording';
   const isRequestingMic = shadowing.status === 'requesting-mic';
@@ -532,6 +592,13 @@ export function PitchAccentDrillPage() {
               <div className="stack">
                 <LearnerTake url={pendingUrl} pitch={learnerPitch} kana={learnerKana} />
                 <PitchAccentFeedback analysis={analysis} />
+                {analysis.status === 'done' && takeLabels ? (
+                  <DrillTakeLabelsPanel
+                    words={analysisTargets.map((target) => target.surfaceForm)}
+                    labels={takeLabels.labels}
+                    onChange={setTakeLabel}
+                  />
+                ) : null}
               </div>
             ) : null}
 

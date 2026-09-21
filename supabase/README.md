@@ -11,6 +11,7 @@
 | `migrations/20260818000000_card_issue_reports.sql` | card_issue_reports table |
 | `migrations/20260819000000_grammar_learning_foundation.sql` | Grammar-learning system: grammar_patterns, sentence_grammar, grammar_relationships, analyses.grammar_suggestions, study_items.subject_type widened for 'grammarPattern' |
 | `migrations/20260904000000_sync_issue_reports.sql` | sync_issue_reports table (learner-reported sync trouble, bundled diagnostics snapshot) |
+| `migrations/20260921000000_pitch_drill_takes.sql` | pitch_drill_takes table + private drill-takes bucket (the learner's drill recordings, alignment, pitch, labels) |
 | `functions/invite-book-member/` | Edge Function for email invites |
 | `functions/grammar-assist/` | Edge Function: AI-assisted grammar-pattern suggestion/explanation (Claude Haiku via the Anthropic API; requires `ANTHROPIC_API_KEY` function secret) |
 | `functions/vocab-assist/` | Edge Function: AI-assisted vocabulary meaning glossing in sentence context (Claude Haiku; same `ANTHROPIC_API_KEY` secret) |
