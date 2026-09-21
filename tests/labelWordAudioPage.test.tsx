@@ -418,8 +418,13 @@ describe('LabelWordAudioPage', () => {
   describe('batches', () => {
     const start = async (user: ReturnType<typeof userEvent.setup>) =>
       user.click(await screen.findByRole('button', { name: /start (labelling|a new batch)/i }));
-    const accept = async (user: ReturnType<typeof userEvent.setup>) =>
-      user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+    // Wait for the save before returning: otherwise a slow runner finds the *same* button (the next item hasn't
+    // rendered yet) on the following call, clicks it twice, and the batch never finishes.
+    const accept = async (user: ReturnType<typeof userEvent.setup>) => {
+      const before = (await listWordBoundaryLabels()).length;
+      await user.click(await screen.findByRole('button', { name: /both edges are right/i }));
+      await waitFor(async () => expect(await listWordBoundaryLabels()).toHaveLength(before + 1));
+    };
 
     it('lets you label one at a time, and remembers the batch size', async () => {
       await seed();
