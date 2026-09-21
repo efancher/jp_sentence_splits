@@ -70,6 +70,25 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Game breaks inside the session (P2), time counted in the limit.** Asked to make the `/play` games
+  breaks in the day's session. New `game` `PlannerStepTargetKind` (+ optional `gameId` on the step; zod schema updated,
+  steps are jsonb so no migration) whose path is the query-free `/play/:gameId/auto`, so `useActiveSession` matches it
+  and the SessionBar's "Mark complete" settles it — still no auto-settle. `addMinutesToTodaySession(minutes, now,
+  baseline, gameBreakGames)` is opt-in; `HomePage` passes `loadGameBreakCandidates()` (`src/games/gameBreaks.ts`: each
+  game's own `loadPools` eligibility, rotated by calendar day via `rotatingGameOrder`). **Time accounting:** one break
+  per 20 requested minutes (`GAME_BREAK_INTERVAL_MINUTES`), max 3 per pass, ≤ one per distinct game, each costed
+  `GAME_BREAK_MINUTES` = 3; the break minutes are subtracted from `totalMinutes` *before* the four buckets split the
+  rest, so a 60-min day is 51 min of bucket work + 3 breaks, and the explanation says so. Breaks are interleaved after
+  each equal slice of step time (never first). A top-up tries games not already in today's steps first. Steps carry
+  `bucket: 'review'` only because the field is required; the recap counts them on their own "played N game breaks"
+  line, outside the bucket lines. `stepUsefulness` picks up "Game break" skip-rate for free (the kill switch). The
+  daily-practice panel is unchanged (still counts rounds from the log, so a session break ticks it too). Untried in a
+  browser — unit tests only (planner count/time/placement/path, recap, top-up rotation, eligibility helper).
+  **Manual test:** Home → Add 20 min (or Clear today, then add 60) → session shows "Game break: …" steps between the
+  other steps, the explanation line names the minutes, the step's Go opens `/play/<game>/auto`, the SessionBar names the
+  break and "Mark complete" advances; finishing the session shows "played N game break(s)"; `reviews`/`study_items`
+  untouched. Estimate of 3 min/round is a guess — replace it with the median from `gameRounds` (`items[].ms`) once there
+  is data.
 - **2026-09-21 — First real drill takes replayed; the fit rescue was too lenient (fixed, grader v2).** You recorded 5
   takes; all landed in `pitch_drill_takes` (audio 30–65 KB, ~13–17 KB row, alignment + pitch + results + labels; storage
   verified end to end). New read-only `npm run replay:pitch-drill-takes` re-grades every stored take and lines it up

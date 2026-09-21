@@ -402,14 +402,16 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Start tap does the gesture-gated audio setup) → play (item-count-capped,
     a pace bar with no fail state) → result (per-item replay + one-line
     why, strength/weakness tag).
-  - **Session integration is later and optional:** a `game`
+  - **Session integration — SHIPPED 2026-09-21 (P2; see STATUS).** Planned as: a `game`
     `PlannerStepTargetKind` (`types.ts`) with a query-free path
     (`/play/:gameId/:signal`, since `useActiveSession` matches by exact
     pathname), **no** fifth `SessionBucket` (it's a `Record` across
     allocation/settings/recap/Home), settled only via the SessionBar's
     "Mark complete". `game_*` activity types stay out of `recentActivity`
     neglect scoring; `stepUsefulness` gives skip-rate for free as the kill
-    switch.
+    switch. As built, break minutes come out of the requested time (open question 4
+    answered: displace, not extra); still open: per-game round-time estimate (3 min is a guess),
+    a Settings toggle/frequency for breaks, and a game-aware weak-skill pick instead of day rotation.
   - **Feasibility (prod, 2026-09-19, `scripts/report-game-feasibility.ts`,
     read-only):** *Word Detective* — 490 confirmed words, 194 with 2+
     sentences (121 with 2+ audio sentences); 41 lapsed, only 25 of them

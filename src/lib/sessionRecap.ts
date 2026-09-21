@@ -34,6 +34,8 @@ export interface SessionRecapStudyItemInput {
 export interface SessionRecapStepInput {
   bucket: SessionBucket;
   status: PlannerStepStatus;
+  /** `'game'` steps are counted on their own line, not under their (nominal) bucket. */
+  targetKind?: string;
 }
 
 export interface SessionRecapInput {
@@ -59,6 +61,8 @@ export interface SessionRecap {
   activitiesCompleted: number;
   activitiesTotal: number;
   byBucket: SessionRecapBucketLine[];
+  /** Game-break steps (`targetKind: 'game'`) — kept out of `byBucket` and the activity totals. */
+  games: { completed: number; total: number };
   reviews: {
     /** Scheduled reviews graded within the window (natural encounters excluded). */
     graded: number;
@@ -85,8 +89,10 @@ export function buildSessionRecap(input: SessionRecapInput): SessionRecap {
   const byBucket: SessionRecapBucketLine[] = [];
   let activitiesCompleted = 0;
   let activitiesTotal = 0;
+  const gameSteps = steps.filter((step) => step.targetKind === 'game');
+  const workSteps = steps.filter((step) => step.targetKind !== 'game');
   for (const bucket of BUCKET_ORDER) {
-    const bucketSteps = steps.filter((step) => step.bucket === bucket);
+    const bucketSteps = workSteps.filter((step) => step.bucket === bucket);
     if (bucketSteps.length === 0) continue;
     const completed = bucketSteps.filter((step) => step.status === 'completed').length;
     byBucket.push({ bucket, completed, total: bucketSteps.length });
@@ -119,6 +125,10 @@ export function buildSessionRecap(input: SessionRecapInput): SessionRecap {
     activitiesCompleted,
     activitiesTotal,
     byBucket,
+    games: {
+      completed: gameSteps.filter((step) => step.status === 'completed').length,
+      total: gameSteps.length,
+    },
     reviews: {
       graded: graded.length,
       recalled,
@@ -128,6 +138,7 @@ export function buildSessionRecap(input: SessionRecapInput): SessionRecap {
     grammarNoticed,
     isEmpty:
       activitiesCompleted === 0 &&
+      !gameSteps.some((step) => step.status === 'completed') &&
       graded.length === 0 &&
       newWordSubjects.size === 0 &&
       grammarNoticed === 0,

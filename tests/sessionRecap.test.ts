@@ -49,6 +49,23 @@ describe('buildSessionRecap', () => {
     expect(recap.isEmpty).toBe(true);
   });
 
+  it('counts game breaks on their own line, outside the bucket lines and activity totals', () => {
+    const game = (status: SessionRecapStepInput['status']): SessionRecapStepInput => ({
+      bucket: 'review',
+      status,
+      targetKind: 'game',
+    });
+    const recap = buildSessionRecap(
+      baseInput({ steps: [step('review', 'completed'), game('completed'), game('skipped')] }),
+    );
+    expect(recap.games).toEqual({ completed: 1, total: 2 });
+    expect(recap.byBucket).toEqual([{ bucket: 'review', completed: 1, total: 1 }]);
+    expect(recap.activitiesTotal).toBe(1);
+    // A game alone is still something worth showing.
+    expect(buildSessionRecap(baseInput({ steps: [game('completed')] })).isEmpty).toBe(false);
+    expect(buildSessionRecap(baseInput({ steps: [game('skipped')] })).isEmpty).toBe(true);
+  });
+
   it('counts completed activities per bucket in a fixed order', () => {
     const recap = buildSessionRecap(
       baseInput({

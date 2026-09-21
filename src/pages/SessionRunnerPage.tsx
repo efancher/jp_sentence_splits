@@ -57,6 +57,11 @@ function SessionRecapPanel({ recap }: { recap: SessionRecap }) {
             {RECAP_BUCKET_LABELS[line.bucket]}: {line.completed}/{line.total} done
           </li>
         ))}
+        {recap.games.completed > 0 ? (
+          <li>
+            played {recap.games.completed} game break{recap.games.completed === 1 ? '' : 's'}
+          </li>
+        ) : null}
         {reviews.graded > 0 ? (
           <li>
             graded {reviews.graded} review{reviews.graded === 1 ? '' : 's'}

@@ -200,6 +200,7 @@ import {
   computeRecentActivityDistribution,
   shadowAttemptSummary,
   type ExploreCandidate,
+  type GameBreakCandidate,
   type GrammarNoticingCandidate,
   type RecentActivityEvent,
   type RecommendedSession,
@@ -7666,6 +7667,7 @@ export async function getSessionPlannerInput(
   now: Date = new Date(),
   exclude: SessionPlannerExclusions = NO_EXCLUSIONS,
   baselineOverride?: Record<SessionBucket, number>,
+  gameBreakCandidates?: GameBreakCandidate[],
 ): Promise<SessionPlannerInput> {
   const db = getDb();
   const settings = await readSettings(db);
@@ -7768,6 +7770,7 @@ export async function getSessionPlannerInput(
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
+    gameBreakCandidates,
   };
 }
 
@@ -7801,11 +7804,15 @@ export async function getTodayPlannerSession(now: Date = new Date()): Promise<Pl
  * its displayed count doesn't retroactively grow. `baselineOverride` (Home's
  * per-add-time split picker) applies only to this call's own newly-added
  * steps, not to the session's already-settled allocation history.
+ * `gameBreakGames` (playable `/play` games, most-preferred first) opts the
+ * pass into game breaks whose minutes come out of `minutes`; games already in
+ * today's steps are tried last so a top-up rotates rather than repeats.
  */
 export async function addMinutesToTodaySession(
   minutes: number,
   now: Date = new Date(),
   baselineOverride?: Record<SessionBucket, number>,
+  gameBreakGames?: GameBreakCandidate[],
 ): Promise<PlannerSession> {
   const db = getDb();
   const date = localDateKey(now);
@@ -7817,7 +7824,17 @@ export async function addMinutesToTodaySession(
     (step) => step.activityType === 'due_review_batch' && step.status === 'pending',
   );
 
-  const input = await getSessionPlannerInput(minutes, now, exclude, baselineOverride);
+  const gamesAlreadyToday = new Set(
+    (existing?.steps ?? []).flatMap((step) => (step.gameId ? [step.gameId] : [])),
+  );
+  // Stable sort: unplayed-today games keep the caller's preference order, ahead of repeats.
+  const orderedGames = gameBreakGames
+    ? [...gameBreakGames].sort(
+        (a, b) => Number(gamesAlreadyToday.has(a.gameId)) - Number(gamesAlreadyToday.has(b.gameId)),
+      )
+    : undefined;
+
+  const input = await getSessionPlannerInput(minutes, now, exclude, baselineOverride, orderedGames);
   const recommended = buildRecommendedSession(input);
 
   const newSteps: PlannerSessionStep[] = recommended.steps
@@ -7900,7 +7917,11 @@ export async function getSessionRecap(
   return buildSessionRecap({
     windowStart,
     windowEnd,
-    steps: session.steps.map((step) => ({ bucket: step.bucket, status: step.status })),
+    steps: session.steps.map((step) => ({
+      bucket: step.bucket,
+      status: step.status,
+      targetKind: step.targetKind,
+    })),
     reviews: reviews.map((review) => ({
       studyItemId: review.studyItemId,
       timestamp: review.timestamp,

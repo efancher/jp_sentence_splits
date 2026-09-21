@@ -7,15 +7,19 @@ import {
   buildRecommendedSession,
   computeNeglectScores,
   computeRecentActivityDistribution,
+  gameBreakCount,
   rankReviewPriorities,
+  sessionStepTargetPath,
   scoreReviewPriority,
   type ExploreCandidate,
+  type GameBreakCandidate,
   type RecentActivityEvent,
   type ReviewPriorityInput,
   type SessionPlannerInput,
   type ShadowCandidate,
   type UnderstandCandidate,
 } from '../src/lib/sessionPlanner';
+import { GAME_BREAK_MINUTES } from '../src/lib/sessionPlannerConfig';
 
 const NOW = new Date('2026-08-20T12:00:00.000Z');
 
@@ -707,5 +711,108 @@ describe('buildRecommendedSession', () => {
     const nextSteps = session.steps.filter((step) => step.sentenceId === 'sent_next');
     expect(nextSteps).toHaveLength(1);
     expect(nextSteps[0]!.targetKind).toBe('vocabulary_review');
+  });
+});
+
+describe('game breaks', () => {
+  const GAMES: GameBreakCandidate[] = [
+    { gameId: 'word-detective', title: 'Word Detective', skill: 'word readings in context' },
+    { gameId: 'particle-puzzle', title: 'Particle Puzzle', skill: 'particles' },
+    { gameId: 'verb-lego', title: 'Verb Lego', skill: 'stacked verb forms' },
+    { gameId: 'odd-ear-out', title: 'Odd Ear Out', skill: 'pitch-accent listening' },
+  ];
+
+  function richInput(overrides: Partial<SessionPlannerInput> = {}): SessionPlannerInput {
+    return emptyPlannerInput({
+      totalMinutes: 60,
+      retainDue: Array.from({ length: 20 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+      exploreCandidates: [
+        {
+          bookId: 'b1',
+          label: 'Book',
+          reason: 'Continue',
+          sentences: Array.from({ length: 30 }, (_, i) => ({
+            sentenceId: `s${i}`,
+            preview: 'x',
+            vocabularyConfirmed: false,
+          })),
+        },
+      ],
+      understandCandidates: [
+        { grammarPatternId: 'p1', label: '～ても', reason: 'Encountered recently' },
+        { grammarPatternId: 'p2', label: '～わけがない', reason: 'Encountered recently' },
+      ],
+      shadowCandidates: Array.from({ length: 10 }, (_, i) => ({
+        sentenceId: `sh_${i}`,
+        label: `Sentence ${i}`,
+        reason: 'Not yet shadowed',
+      })),
+      ...overrides,
+    });
+  }
+
+  it('drafts no breaks unless the caller supplies playable games', () => {
+    expect(buildRecommendedSession(richInput()).steps.some((s) => s.targetKind === 'game')).toBe(false);
+    expect(
+      buildRecommendedSession(richInput({ gameBreakCandidates: [] })).steps.some(
+        (s) => s.targetKind === 'game',
+      ),
+    ).toBe(false);
+  });
+
+  it('gives one break per 20 requested minutes, capped, and never more than there are games', () => {
+    expect(gameBreakCount(15, 4)).toBe(0);
+    expect(gameBreakCount(20, 4)).toBe(1);
+    expect(gameBreakCount(45, 4)).toBe(2);
+    expect(gameBreakCount(60, 4)).toBe(3);
+    expect(gameBreakCount(240, 4)).toBe(3);
+    expect(gameBreakCount(60, 2)).toBe(2);
+    expect(gameBreakCount(60, 0)).toBe(0);
+  });
+
+  it('counts break minutes inside the requested time rather than on top of it', () => {
+    const without = buildRecommendedSession(richInput());
+    const withGames = buildRecommendedSession(richInput({ gameBreakCandidates: GAMES }));
+    const games = withGames.steps.filter((s) => s.targetKind === 'game');
+    expect(games).toHaveLength(3);
+    const gameMinutes = games.reduce((sum, s) => sum + s.estimatedMinutes, 0);
+    expect(gameMinutes).toBe(3 * GAME_BREAK_MINUTES);
+    const bucketMinutes = ALL_SESSION_BUCKETS.reduce((sum, b) => sum + withGames.allocation[b], 0);
+    expect(bucketMinutes + gameMinutes).toBe(60);
+    expect(without.allocation.review + without.allocation.glossing).toBeGreaterThan(
+      withGames.allocation.review + withGames.allocation.glossing,
+    );
+    expect(withGames.targetMinutes).toBe(60);
+    const total = withGames.steps.reduce((sum, s) => sum + s.estimatedMinutes, 0);
+    expect(total).toBeLessThanOrEqual(60 + 1);
+    expect(withGames.explanation.some((line) => line.includes('game break'))).toBe(true);
+  });
+
+  it('takes the first games in the caller\'s order, each once, with a deep-linkable path', () => {
+    const session = buildRecommendedSession(richInput({ gameBreakCandidates: GAMES }));
+    const games = session.steps.filter((s) => s.targetKind === 'game');
+    expect(games.map((s) => s.gameId)).toEqual(['word-detective', 'particle-puzzle', 'verb-lego']);
+    expect(games[0]!.label).toBe('Game break: Word Detective');
+    expect(games[0]!.reason).toContain('word readings in context');
+    expect(sessionStepTargetPath({ ...games[0]!, status: 'pending' })).toBe(
+      '/play/word-detective/auto',
+    );
+    expect(sessionStepTargetPath({ ...games[0]!, gameId: undefined, status: 'pending' })).toBeNull();
+  });
+
+  it('spreads breaks between the other steps: never first, never bunched at the end', () => {
+    const session = buildRecommendedSession(richInput({ gameBreakCandidates: GAMES }));
+    const kinds = session.steps.map((s) => s.targetKind === 'game');
+    expect(kinds[0]).toBe(false);
+    expect(kinds[kinds.length - 1]).toBe(false);
+    // No two breaks adjacent.
+    for (let i = 1; i < kinds.length; i += 1) expect(kinds[i] && kinds[i - 1]).toBe(false);
+  });
+
+  it('a 20-minute top-up gets a single break and a session of only games when nothing else is available', () => {
+    const topUp = buildRecommendedSession(richInput({ totalMinutes: 20, gameBreakCandidates: GAMES }));
+    expect(topUp.steps.filter((s) => s.targetKind === 'game')).toHaveLength(1);
+    const bare = buildRecommendedSession(emptyPlannerInput({ totalMinutes: 20, gameBreakCandidates: GAMES }));
+    expect(bare.steps.map((s) => s.targetKind)).toEqual(['game']);
   });
 });

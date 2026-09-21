@@ -1028,8 +1028,18 @@ shortcut ("Play a round") and the `/play` hub. Currently four games:
   them would inflate the proficiency signals that gate other activities. Each
   finished round appends one `GameRound` (per-item correct/clues/points/ms) to
   a **local-only** Dexie table (`gameRounds`, `logGameRound`) — not in the sync
-  engine, no Supabase table. Nothing reads it yet. Games do not appear as
-  planner steps; they are a standalone break, not part of the session plan.
+  engine, no Supabase table. Nothing reads it yet.
+- **Session breaks.** Adding time on Home also drafts `game` planner steps
+  (`targetKind: 'game'`, `gameId`, path `/play/:gameId/auto`): one per 20
+  requested minutes, max 3, distinct games only, each costed at
+  `GAME_BREAK_MINUTES` (3). Those minutes are subtracted from the requested
+  time before the four buckets split the rest, so breaks count toward the
+  session limit. Steps are spaced between the other steps (never first) and
+  settled only by "Mark complete"/Skip. Playable games come from
+  `loadGameBreakCandidates` (`src/games/gameBreaks.ts`, each game's `loadPools`
+  eligibility, rotated by day); a top-up prefers games not yet in today's
+  session. The step carries `bucket: 'review'` only nominally — the session
+  recap shows them on a separate "game breaks" line.
 
 ### 4. Spaced-repetition review system — `ReviewPage.tsx`,
 `src/lib/scheduling.ts`, `src/db/repository.ts`

@@ -12,6 +12,7 @@ import {
   updateSettings,
 } from '../db/repository';
 import type { PlannerStepStatus, SessionBucket } from '../domain/types';
+import { loadGameBreakCandidates } from '../games/gameBreaks';
 import { ALL_SESSION_BUCKETS } from '../lib/sessionPlanner';
 import {
   BASELINE_SESSION_ALLOCATION,
@@ -105,7 +106,9 @@ export function HomePage() {
   async function handleAdd(minutes: number) {
     setAddingMinutes(minutes);
     try {
-      await addMinutesToTodaySession(minutes, new Date(), customSplit ?? undefined);
+      const now = new Date();
+      const games = await loadGameBreakCandidates(now);
+      await addMinutesToTodaySession(minutes, now, customSplit ?? undefined, games);
       if (customSplit) await updateSettings({ sessionAllocation: customSplit });
     } finally {
       setAddingMinutes(null);

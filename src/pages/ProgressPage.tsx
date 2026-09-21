@@ -153,6 +153,7 @@ const TARGET_KIND_LABELS: Record<string, string> = {
   review: 'Due review',
   vocabulary_detail: 'Vocabulary detail',
   vocabulary_review: 'Confirm vocabulary',
+  game: 'Game break',
 };
 
 export function ProgressPage() {

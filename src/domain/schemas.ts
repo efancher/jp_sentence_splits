@@ -473,6 +473,7 @@ export const plannerStepTargetKindSchema = z.enum([
   'review',
   'vocabulary_detail',
   'vocabulary_review',
+  'game',
 ]);
 
 export const plannerSessionStepSchema = z.object({
@@ -484,6 +485,8 @@ export const plannerSessionStepSchema = z.object({
   sentenceId: z.string().optional(),
   grammarPatternId: z.string().optional(),
   vocabularyItemId: z.string().optional(),
+  // Additive (2026-09-21): only set on `game` steps.
+  gameId: z.string().optional(),
   label: z.string(),
   estimatedMinutes: z.number().nonnegative(),
   reason: z.string(),

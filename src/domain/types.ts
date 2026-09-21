@@ -1059,7 +1059,9 @@ export type PlannerStepTargetKind =
   | 'shadow'
   | 'review'
   | 'vocabulary_detail'
-  | 'vocabulary_review';
+  | 'vocabulary_review'
+  /** A short `/play` game break (`gameId`). Settled only by "Mark complete"/Skip, like every other step. */
+  | 'game';
 
 export interface PlannerSessionStep {
   id: string;
@@ -1071,6 +1073,8 @@ export interface PlannerSessionStep {
   sentenceId?: string;
   grammarPatternId?: string;
   vocabularyItemId?: string;
+  /** The `/play` game a `game` step opens (`src/games/registry.tsx` id). */
+  gameId?: string;
   /**
    * Sentences a batched step walks in one flow. Currently only set for the
    * `grammar_noticing` step, which used to be drafted one-per-sentence and
