@@ -938,8 +938,11 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     YIN octave errors — some cues read −5…−11 st).
   - [x] **d′ / criterion in the report** — `signalDetection` in
     `nativeClipPitchAudit.ts`, printed by `report-pitch-drill-effectiveness.ts`.
-  - [ ] **Calibrate the drill scorer against native clips** (*new, from the
-    audit*). The audit is also a validity test of the free drill's grader: run on
+  - [~] **Calibrate the drill scorer against native clips** (*new, from the
+    audit*; **partly done 2026-09-20** — exact mora intervals from the aligner's phones took native-clip
+    agreement 35% → 40%, and a valid-shape least-squares fit (`fitAccentShape`, native audio only) 56%;
+    still open: the *learner* grader (`classifyLearnerMorae` → `buildPitchAccentShapeObservations`) still
+    uses the per-mora-vs-mean rule, i.e. the 40% one, incl. 4-mora heiban at 10% — see STATUS 2026-09-20). The audit is also a validity test of the free drill's grader: run on
     native speakers' own clips it disagrees with the dictionary ~63% of the time
     (4-mora heiban almost always), so it can mark a *correct* production wrong.
     Candidate fixes to try against this benchmark: detrend declination before
