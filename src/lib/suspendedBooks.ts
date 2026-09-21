@@ -61,8 +61,11 @@ export function vocabularyItemIsSuspendedOnly(
 /**
  * Whether a due study item should be withheld from the global review queue
  * because every book its subject belongs to is suspended. `grammarPattern`
- * subjects are never held back — a tracked pattern isn't scoped to one book
- * (same reasoning as ReviewPage's book-scoped grammar exclusion).
+ * subjects are never held back *here* — a tracked pattern isn't scoped to one
+ * book (same reasoning as ReviewPage's book-scoped grammar exclusion) — but
+ * `pickContextSentenceForGrammarPattern` skips encounters that live only in
+ * suspended books, so a pattern whose every encounter is shelved drops out
+ * of the queue via that path instead.
  */
 export function studyItemIsHeldBackBySuspension(
   item: Pick<StudyItem, 'subjectType' | 'subjectId'>,
@@ -80,7 +83,8 @@ export function studyItemIsHeldBackBySuspension(
     default:
       // chunk / vocabularyConfusion / grammarPattern: not held back here.
       // (Confusion pairs are filtered separately in ReviewPage from their
-      // member words; grammar patterns are deliberately book-agnostic.)
+      // member words; grammar patterns are book-agnostic, and are held back
+      // by pickContextSentenceForGrammarPattern's suspendedIndex arg instead.)
       return false;
   }
 }

@@ -856,6 +856,28 @@ describe('FSRS review (study_items/reviews)', () => {
       expect(held('sentenceVocabulary', 'L3')).toBe(false);
     });
 
+    it('pickContextSentenceForGrammarPattern skips encounters that live only in a suspended book', async () => {
+      const { bookA } = await seedSuspensionFixture();
+      const pattern = await ensureGrammarPattern('〜わけがない');
+      // s1 is hard-book-only; s2 is shared with the easy book. Link s2 first
+      // so s1 (linked last) would win the "most recently linked" pick.
+      await ensureSentenceGrammar('s2', pattern.id, {});
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await ensureSentenceGrammar('s1', pattern.id, {});
+
+      await setBookSuspended(bookA.id, true);
+      const index = await loadSuspendedBookIndex();
+
+      expect((await pickContextSentenceForGrammarPattern(pattern.id))?.sentence.id).toBe('s1');
+      expect((await pickContextSentenceForGrammarPattern(pattern.id, index))?.sentence.id).toBe('s2');
+
+      // Only suspended-book encounters left => no card, until the book resumes.
+      const soloPattern = await ensureGrammarPattern('〜ている');
+      await ensureSentenceGrammar('s1', soloPattern.id, {});
+      expect(await pickContextSentenceForGrammarPattern(soloPattern.id, index)).toBeUndefined();
+      expect(await pickContextSentenceForGrammarPattern(soloPattern.id)).toBeDefined();
+    });
+
     it('resuming a book spreads its overdue cards over the coming days', async () => {
       const db = getDb();
       const { bookA } = await seedSuspensionFixture();

@@ -70,6 +70,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-21 — Review-card issue triage: passage context on vocab cards; suspended books no longer feed grammar
+  cards.** Six open reports. (1) Two `grammar_completion` reports ("This book was suspended", 緊張してる？):
+  `studyItemIsHeldBackBySuspension` deliberately never holds back `grammarPattern` subjects (a pattern isn't
+  book-scoped), but the card's context sentence is picked from the pattern's linked sentences, and that one lived
+  only in *First Day at Work*, suspended 2026-09-15 — so the shelved book kept surfacing. `pickContextSentenceFor
+  GrammarPattern` now takes an optional `suspendedIndex` and skips suspended-only encounters; a pattern with none
+  left drops out of the queue (and out of the planner's due backlog via `filterReadyGrammarDueItems`). The
+  persistent `deferUnreadyGrammarReviews` deliberately omits the index — a temporary suspension shouldn't push
+  stored due dates out. (2) Three reports (reading_retrieval ×1, cloze ×2) asking for the two preceding sentences
+  ("if those aren't available, the following one"): the reading-order context `reading_in_context` and grammar
+  cards already use is now passed to `VocabularyTargetCard`; it shows the two before, or the one after when
+  nothing precedes. On an unrevealed `cloze` the target surface form / dictionary form is masked (`_____`) inside
+  those neighbours so context can't leak the answer. No extra readiness gate on the neighbours (unlike
+  `reading_in_context`). (3) The remaining cloze report (まあでも夏休みですね。 — "lots of ways to say *well*,
+  recommendations?") is a question, not a bug: context should help; excluding fillers/interjections from cloze is
+  an open option, not done. Tests: `data.test.ts` (picker + suspension), `reviewPage.test.tsx` (context + masking).
+
 - **2026-09-20 — Native pitch shape: fit a valid accent shape instead of judging each mora against the mean
   (40% → 56% agreement with the dictionary).** Step 1 of the phrase-level pitch plan. The per-mora rule
   (`classifyLearnerMorae`: high if ≥ the word's mean) fails on plateaus: the audit's per-shape breakdown showed

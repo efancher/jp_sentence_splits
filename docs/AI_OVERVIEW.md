@@ -1113,7 +1113,11 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   after `surfaceForm` was added): `reading_retrieval` (show word, hide
   reading), `cloze` (hide the word entirely in its sentence, showing the
   sentence translation as a pre-reveal hint so the blank isn't otherwise
-  under-constrained),
+  under-constrained). `reading_retrieval` and `cloze` are framed by their
+  passage like `reading_in_context` — the two preceding sentences
+  untranslated above the target (or, for a sentence with nothing before
+  it, the following one below), from `buildReadingContextMap`; an unrevealed
+  `cloze` masks the target word out of those neighbours too,
   `reading_production` (show the word, type the reading — typed-answer
   checked via `isReadingAnswerCorrect` in `src/lib/readingAnswer.ts`, which
   is whitespace/kana-form lenient: accepts romaji typed without a Japanese
@@ -1291,7 +1295,10 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   tilde/annotation/whitespace normalization `blankPatternInSentence`
   already uses), blanking the sentence when the pattern's canonical name
   happens to appear in it verbatim (`blankPatternInSentence`,
-  `src/lib/grammarPatterns.ts`). Was a 4-card ladder
+  `src/lib/grammarPatterns.ts`). The card's context sentence skips encounters
+  that live only in suspended books (`pickContextSentenceForGrammarPattern`'s
+  `suspendedIndex`); a pattern with none left drops out of the queue. Was a
+  4-card ladder
   (`grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
   `grammar_production`, 2026-08 through 2026-09-14, with a 5-rung
   learner-state ladder); **collapsed 2026-09-15** (docs/ROADMAP.md) — a

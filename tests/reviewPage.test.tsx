@@ -817,6 +817,68 @@ describe('ReviewPage', () => {
     expect(productionReview?.expectedAnswer).toBe('よむ');
   });
 
+  it('frames vocabulary-target cards with the preceding sentence, blanking the target word on an unrevealed cloze', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-0',
+      normalizedKey: 'sent-0',
+      japanese: '昨日も本を読みます。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'I read a book yesterday too.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-0',
+      bookId: 'book-1',
+      sentenceId: 'sent-0',
+      position: -1,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-0');
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // reading_retrieval: the preceding sentence is shown as-is.
+    await screen.findByText('Reveal dictionary reading');
+    expect(screen.getByText('昨日も本を読みます。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    // cloze: the same neighbour, but the answer is masked out of it.
+    await screen.findByText('Reveal word');
+    expect(screen.getByText('昨日も本を_____。')).toBeInTheDocument();
+    expect(screen.queryByText('昨日も本を読みます。')).not.toBeInTheDocument();
+  });
+
   it('seeds only cloze (not the reading cards) for an all-kana target word', async () => {
     await seedBookWithSentence();
     const db = getDb();

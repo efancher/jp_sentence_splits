@@ -6968,9 +6968,18 @@ async function getReadingContextForSentence(sentenceId: string): Promise<Reading
  * at all, see docs/ROADMAP.md). Used by ReviewPage to pick which of a
  * tracked pattern's encounters to show for its `grammar_completion` card,
  * along with the encounter's reading-order passage context.
+ *
+ * Pass `suspendedIndex` (from `loadSuspendedBookIndex`, loaded once by the
+ * caller) to skip encounters that live only in suspended books — the pattern
+ * itself isn't book-scoped, but drilling it on a sentence from a shelved book
+ * is the same "keeps showing a book I suspended" problem (user report
+ * 2026-09-20). A pattern whose every encounter is suspended-only yields
+ * `undefined`. The persistent defer pass deliberately omits it: a temporary
+ * suspension shouldn't push stored due dates out.
  */
 export async function pickContextSentenceForGrammarPattern(
   grammarPatternId: string,
+  suspendedIndex?: SuspendedBookIndex | null,
 ): Promise<
   { sentence: Sentence; sentenceGrammar: SentenceGrammar; readingContext: ReadingContext } | undefined
 > {
@@ -6982,6 +6991,7 @@ export async function pickContextSentenceForGrammarPattern(
   if (links.length === 0) return undefined;
   const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const link of sorted) {
+    if (suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)) continue;
     const sentence = await db.sentences.get(link.sentenceId);
     if (!sentence) continue;
     const readingContext = await getReadingContextForSentence(sentence.id);
@@ -7602,7 +7612,10 @@ const NO_EXCLUSIONS: SessionPlannerExclusions = {
  * untouched. Used by getSessionPlannerInput, which must not persist a
  * due-date push (planRecommendedSession previews without writing).
  */
-async function filterReadyGrammarDueItems(items: StudyItem[]): Promise<StudyItem[]> {
+async function filterReadyGrammarDueItems(
+  items: StudyItem[],
+  suspendedIndex: SuspendedBookIndex | null,
+): Promise<StudyItem[]> {
   const patternIds = [
     ...new Set(
       items.filter((item) => item.subjectType === 'grammarPattern').map((item) => item.subjectId),
@@ -7612,7 +7625,9 @@ async function filterReadyGrammarDueItems(items: StudyItem[]): Promise<StudyItem
   const readyPatternIds = new Set<string>();
   await Promise.all(
     patternIds.map(async (patternId) => {
-      if (await pickContextSentenceForGrammarPattern(patternId)) readyPatternIds.add(patternId);
+      if (await pickContextSentenceForGrammarPattern(patternId, suspendedIndex)) {
+        readyPatternIds.add(patternId);
+      }
     }),
   );
   return items.filter(
@@ -7683,8 +7698,8 @@ export async function getSessionPlannerInput(
   // purpose: planRecommendedSession must not persist anything, so unlike
   // ReviewPage this can't lean on deferUnreadyGrammarReviews.
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(notSuspended(retainDueItems)),
-    filterReadyGrammarDueItems(notSuspended(practiceDueItems)),
+    filterReadyGrammarDueItems(notSuspended(retainDueItems), suspendedIndex),
+    filterReadyGrammarDueItems(notSuspended(practiceDueItems), suspendedIndex),
   ]);
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream

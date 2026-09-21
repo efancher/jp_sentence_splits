@@ -539,7 +539,7 @@ interface QueueCard {
   pitchAccent?: PitchAccentReviewCandidate;
   /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
   grammar?: GrammarReviewCandidate;
-  /** Set only for `reading_in_context` cards — the surrounding passage. */
+  /** Set for `reading_in_context` and vocabulary-target cards — the surrounding passage. */
   readingContext?: ReadingContext;
 }
 
@@ -769,6 +769,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         studyItem,
         sentence: candidate.sentence,
         target: { vocabularyItem: candidate.vocabularyItem, surfaceForm: candidate.surfaceForm },
+        readingContext: scope.readingContextBySentenceId.get(candidate.sentence.id),
       }),
       ensure: (candidate, activityType) =>
         ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
@@ -1177,9 +1178,12 @@ export function ReviewPage() {
       const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
       if (trackedPatternIds.length > 0) {
         const trackedPatterns = await db.grammarPatterns.bulkGet(trackedPatternIds);
+        // Skip encounters that live only in suspended books (a shelved book's
+        // sentence shouldn't keep coming up as a grammar card's context).
+        const suspendedIndex = await loadSuspendedBookIndex();
         for (const pattern of trackedPatterns) {
           if (!pattern) continue;
-          const context = await pickContextSentenceForGrammarPattern(pattern.id);
+          const context = await pickContextSentenceForGrammarPattern(pattern.id, suspendedIndex);
           if (!context) continue;
           grammarCandidates.push({
             pattern,
@@ -1702,6 +1706,7 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
                 surfaceForm={current.target.surfaceForm}
+                context={current.readingContext}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
               />
@@ -1915,12 +1920,21 @@ function ReadingInContextCard({
  * saw" fits movie/book/photo/... equally), so without the meaning the
  * exercise degenerates into remembering which exact word this sentence
  * used rather than recalling the word from its meaning-in-context.
+ *
+ * Both are framed by the passage they came from (user request, 2026-09-20):
+ * the two preceding sentences, or — for a sentence with nothing before it —
+ * the following one, shown untranslated above/below the target sentence.
+ * Short conversational lines ("まあでも…", "リンクは説明欄にあります。") are
+ * near-unanswerable in isolation. On an unrevealed `cloze` the target word is
+ * blanked out of those neighbours too, so the context can't hand over the
+ * answer.
  */
 function VocabularyTargetCard({
   activityType,
   sentence,
   vocabularyItem,
   surfaceForm,
+  context,
   revealed,
   onReveal,
 }: {
@@ -1928,10 +1942,31 @@ function VocabularyTargetCard({
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
+  context: ReadingContext | undefined;
   revealed: boolean;
   onReveal: () => void;
 }) {
   const isCloze = activityType === 'cloze';
+  const precedes = (context?.before.length ?? 0) > 0;
+  const contextLines = precedes ? (context?.before ?? []) : (context?.after ?? []);
+  const hideTarget = isCloze && !revealed;
+  const contextText = (text: string): string => {
+    if (!hideTarget) return text;
+    let masked = text;
+    for (const word of new Set([surfaceForm, vocabularyItem.expression])) {
+      if (word) masked = masked.split(word).join('_____');
+    }
+    return masked;
+  };
+  const contextBlock = contextLines.length ? (
+    <div className="reading-context">
+      {contextLines.map((item) => (
+        <p key={item.id} className="jp jp-sm reading-context-line">
+          {contextText(item.japanese)}
+        </p>
+      ))}
+    </div>
+  ) : null;
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   // Only reading_retrieval names the dictionary form — cloze hides the word
   // itself pre-reveal, so spelling out its lemma would give the answer away.
@@ -1942,11 +1977,13 @@ function VocabularyTargetCard({
     surfaceForm !== vocabularyItem.expression;
   return (
     <>
+      {precedes ? contextBlock : null}
       <div className="jp jp-lg">
         {before}
         <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
         {after}
       </div>
+      {precedes ? null : contextBlock}
       {showDictionaryForm ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}
