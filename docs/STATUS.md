@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-20.
+Last updated: 2026-09-21.
 
 ## Where things stand
 
@@ -69,6 +69,23 @@ what's left is one deferred durability item (below).
   flagged as approximate.
 
 ## Recent changes
+
+- **2026-09-21 — Prod-schema check (`check:migrations-applied`); matchWord items closed.** Migrations
+  only reach prod if someone applies them, and a miss fails quietly (2026-09-11/12 `books.suspended_at`).
+  New read-only `npm run check:migrations-applied` (`scripts/check-migrations-applied.ts`; manual
+  workflow `check-migrations-applied.yml`, same secrets as `check-duplicate-books`): replays
+  `supabase/migrations/*.sql` into expected public tables/columns
+  (`scripts/lib/migrationSchema.ts` — create table, add/drop/rename column, drop table) and probes prod
+  via PostgREST `select=cols&limit=0`; exits 1 and names anything missing. Tables + columns only, not
+  policies/indexes/functions/buckets. The parser is verified against a real Postgres by
+  `tests/pgIntegration/migrationSchema.pg.test.ts` (runs in `npm run test:pg` and the pg-tests
+  workflow, which already triggers on `supabase/migrations/**`) — a migration in a shape it can't parse
+  fails there. First prod run: **27 tables / 375 columns from 24 migrations, all present.** The Supabase
+  GitHub integration is connected with "Deploy to production" on for `main` (Pro is only needed for
+  preview branches); unverified whether its migration-history table lists the 24 older
+  (SQL-editor-applied) migrations — check Database → Migrations before the next migration push.
+  Also: the two `matchWord` follow-ups turned out already closed (numeral drift fixed by `36a6195`;
+  repeated surface form is not a bug, see 2026-09-20) — ROADMAP/notes corrected.
 
 - **2026-09-21 — Review-card issue triage: passage context on vocab cards; suspended books no longer feed grammar
   cards.** Six open reports. (1) Two `grammar_completion` reports ("This book was suspended", 緊張してる？):

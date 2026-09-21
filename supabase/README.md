@@ -16,6 +16,6 @@
 | `functions/vocab-assist/` | Edge Function: AI-assisted vocabulary meaning glossing in sentence context (Claude Haiku; same `ANTHROPIC_API_KEY` secret) |
 | `tests/rls_expectations.md` | Multi-user RLS verification outline |
 
-Apply migrations via the Dashboard SQL Editor or `supabase db push`.
+Apply migrations via the Dashboard SQL Editor or `supabase db push`. `npm run check:migrations-applied` (read-only) reports any table/column the migrations create that prod lacks.
 
 Setup guide: [`docs/supabase-setup.md`](../docs/supabase-setup.md).
