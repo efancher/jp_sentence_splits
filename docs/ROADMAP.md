@@ -1039,9 +1039,10 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     misses (~1–1.7 s) are the aligner mis-timing a stretch of speech (drawled 「ちょっとねー」, Latin `VIP`),
     which shifts every later word — a gate on implausibly fast tokens (~40 ms/mora vs ≥80 normal) or
     long `<eps>` next to very short tokens could send those to the whole-sentence fallback instead of a
-    confident wrong span; needs more labels to set thresholds. (2) *Repeated surface form:*
-    `matchWord` takes the first occurrence; 2.5% of links (33/1334) have the word twice — needs which
-    occurrence (e.g. from `vocabularySuggestions` spans). (3) *Early starts:* leading breath/noise absorbed
+    confident wrong span; needs more labels to set thresholds. (2) *Repeated surface form — CLOSED, not a bug
+    (STATUS 2026-09-20):* `matchWord` takes the first occurrence; 2.5% of links (33/1334) have the word
+    twice, but a link is one row per word per sentence and never says which occurrence, so each is an
+    equally valid native example. The labeller now says "appears N times — label the first". (3) *Early starts:* leading breath/noise absorbed
     into a word start (今日 +510 ms, いろいろ +270 ms) — a trailing-energy trim on onset is the candidate.
   - **Proactive "needs fixing" list (2026-09-20 idea).** The squashed-alignment guard is a pure function
     of a cached alignment + a link, so it can run for every link when an alignment is stored (mining
