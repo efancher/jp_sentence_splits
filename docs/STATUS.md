@@ -83,8 +83,10 @@ what's left is one deferred durability item (below).
   No retention cap yet (≈60 KB/take; revisit past a few thousand takes). Not covered here: reading takes back
   (a replay script — write it when there are enough labelled takes). Tests: `drillTakeRemote` (7),
   `drillTakeLabels` (2), `tests/pgIntegration/drillTakes.pg.test.ts` (RLS on real Postgres). `test:pg` now
-  runs its files serially (`--no-file-parallelism`) — they share one database. **First migration to go out
-  through the Supabase GitHub integration** — after the push, run `npm run check:migrations-applied`.
+  runs its files serially (`--no-file-parallelism`) — they share one database. **First migration pushed after
+  the Supabase GitHub integration was enabled — it did NOT auto-apply** (6+ min, `check:migrations-applied` still
+  reported the table missing, no Supabase check on the commit); apply by hand + insert the version into
+  `supabase_migrations.schema_migrations`, and find out why the integration didn't fire (possibly Pro-only).
 
 - **2026-09-21 — Learner pitch grader: fit can rescue a false mismatch; flat takes flagged.** The drill /
   shadowing grader (`buildPitchAccentShapeObservations`, `buildLearnerPitchAccentShapes`) still used the
