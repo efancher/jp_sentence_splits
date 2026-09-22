@@ -31,6 +31,25 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Grammar noticing works outside a session (`/notice-grammar` standalone mode).** User: "maybe a
+  way for me to do notice grammar outside of sessions?" — prompted by an earlier explanation of why "notice
+  grammar" steps are scarce (only 64 of 1266 book-sentences across the library are marked `complete`, the
+  flow's real bottleneck). `GrammarNoticingFlowPage` previously only worked with a session-drafted `?ids=`
+  query string; with none, it just said "No sentences to review." and stopped. Now: with no `?ids=` param at
+  all, the page self-populates via `findGrammarNoticingCandidates` (repository.ts, newly exported — the exact
+  same pool `buildGrammarNoticingSteps` draws from for the session planner, just without its per-sitting
+  budget/limit — up to `STANDALONE_CANDIDATE_LIMIT` = 20). New "Notice grammar →" link on `GrammarListPage`
+  (`/grammar`) reaches it directly. Standalone empty state names the actual gate ("needs a sentence you've
+  marked complete... vocabulary confirmed and proficient... hasn't had its grammar-noticing pass done yet")
+  instead of the generic session-flow message. **Bug caught by the new tests, fixed before shipping**: the
+  page's second `useLiveQuery` (sentence/analysis rows) kept its stale `{ sentences: [] }` result from before
+  `ids` resolved, past the point where `ids` became non-empty — `rows[-1]` read `undefined` and crashed on
+  `current.missing`. Fixed by also guarding on `data.sentences.length === 0`, not just `!data`. 4 new tests
+  (`grammarNoticingFlowPage.test.tsx`, previously an untested page entirely; 1 more in `grammarListPage.test.tsx`
+  for the new link). Full suite green (2006). **Manual test plan:** go to `/grammar`, tap "Notice grammar →";
+  with at least one sentence marked complete + vocab-confirmed in a book, confirm it shows up ready to notice
+  grammar in; with none, confirm the specific "nothing eligible" message (not a generic error).
+
 - **2026-09-22 — Grammar: recognition/production split (`grammar_recognition` gates `grammar_completion`).**
   Follow-up to the same-day "role line" card-issue fix — the user reopened it in a broader form: even with
   the pattern's function shown before answering, `grammar_completion` "still feels like memorization," unlike

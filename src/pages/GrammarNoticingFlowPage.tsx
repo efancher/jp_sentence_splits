@@ -3,8 +3,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { GrammarPicker } from '../components/GrammarPicker';
-import { getDb, setSentenceGrammarReviewStatus } from '../db/repository';
+import { findGrammarNoticingCandidates, getDb, setSentenceGrammarReviewStatus } from '../db/repository';
 import type { AnalysisChunk } from '../domain/types';
+
+/** Standalone-mode batch size (no session budget to bound it — just "show me what's currently eligible"). */
+const STANDALONE_CANDIDATE_LIMIT = 20;
 
 /**
  * Batched "notice the grammar in these worked-through sentences" flow. The
@@ -20,11 +23,19 @@ import type { AnalysisChunk } from '../domain/types';
  * closing a sentence here (`GrammarPicker`'s "Done — nothing more to notice",
  * or the "Nothing to notice" shortcut below) flips its
  * `grammarReviewStatus` so it drops out of future noticing nudges.
+ *
+ * **Standalone mode** (2026-09-22, "a way to do notice grammar outside of
+ * sessions"): with no `?ids=` at all (reached via `/notice-grammar` directly
+ * — a link on `GrammarListPage`, not just a session deep link), this page
+ * self-populates from `findGrammarNoticingCandidates` — the same pool the
+ * planner draws from, just without its per-sitting budget/limit, so it shows
+ * everything currently eligible up to `STANDALONE_CANDIDATE_LIMIT`.
  */
 export function GrammarNoticingFlowPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const ids = useMemo(
+  const hasIdsParam = searchParams.has('ids');
+  const urlIds = useMemo(
     () =>
       (searchParams.get('ids') ?? '')
         .split(',')
@@ -34,6 +45,14 @@ export function GrammarNoticingFlowPage() {
   );
 
   const [index, setIndex] = useState(0);
+
+  const standaloneIds = useLiveQuery(async () => {
+    if (hasIdsParam) return undefined;
+    const candidates = await findGrammarNoticingCandidates(STANDALONE_CANDIDATE_LIMIT);
+    return candidates.map((candidate) => candidate.sentenceId);
+  }, [hasIdsParam]);
+
+  const ids = hasIdsParam ? urlIds : (standaloneIds ?? []);
 
   const data = useLiveQuery(async () => {
     if (ids.length === 0) return { sentences: [] as SentenceRow[] };
@@ -57,12 +76,20 @@ export function GrammarNoticingFlowPage() {
     return { sentences: rows };
   }, [ids.join(',')]);
 
+  if (!hasIdsParam && standaloneIds === undefined) {
+    return <p className="muted">Loading…</p>;
+  }
+
   if (ids.length === 0) {
     return (
       <div className="stack">
         <section className="panel stack">
           <h2 style={{ margin: 0 }}>Notice grammar</h2>
-          <p className="muted">No sentences to review.</p>
+          <p className="muted">
+            {hasIdsParam
+              ? 'No sentences to review.'
+              : "Nothing eligible right now — this needs a sentence you've marked complete in its book, with its own vocabulary confirmed and proficient, that hasn't had its grammar-noticing pass done yet."}
+          </p>
           <button type="button" className="primary" onClick={() => navigate(-1)}>
             Back
           </button>
@@ -71,7 +98,12 @@ export function GrammarNoticingFlowPage() {
     );
   }
 
-  if (!data) return <p className="muted">Loading…</p>;
+  // `data`'s useLiveQuery keeps its previous value while recomputing, so
+  // right after `ids` first becomes non-empty (standalone mode resolving)
+  // it can briefly still hold the earlier `{ sentences: [] }` result from
+  // when `ids` was empty — guard on that too, not just `!data`, or
+  // `rows[Math.min(index, rows.length - 1)]` below reads `rows[-1]`.
+  if (!data || data.sentences.length === 0) return <p className="muted">Loading…</p>;
 
   const rows = data.sentences;
   const current = rows[Math.min(index, rows.length - 1)]!;

@@ -40,6 +40,12 @@ describe('GrammarListPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('links to /notice-grammar for standalone grammar noticing', async () => {
+    renderPage();
+    const link = await screen.findByRole('link', { name: /notice grammar/i });
+    expect(link).toHaveAttribute('href', '/notice-grammar');
+  });
+
   it('lists patterns with encounter count and links to the detail page', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",

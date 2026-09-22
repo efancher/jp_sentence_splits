@@ -7914,14 +7914,19 @@ async function findUnderstandCandidates(limit: number): Promise<UnderstandCandid
  * Grammar-noticing candidates: sentences the learner has already worked
  * through (marked `complete` in their book) whose own vocabulary is confirmed
  * + proficient (same getSentenceFullReviewReadiness gate as grammar review /
- * shadowing / glossing — see [[feedback_vocab_before_glossing]]), but whose
- * grammar-noticing pass hasn't been marked done
+ * shadowing / glossing — vocab confirmation always comes before glossing
+ * work in this app), but whose grammar-noticing pass hasn't been marked done
  * (`SentenceAnalysis.grammarReviewStatus !== 'confirmed'`). Reading order
  * within each recent book, mirroring findExploreCandidates' scope and its
  * per-book preview cap so the (expensive) readiness check runs over a bounded
  * shortlist, not the whole worked-through corpus.
+ *
+ * Exported for two callers: `buildGrammarNoticingSteps` (session planner,
+ * budget/session-limited) and `GrammarNoticingFlowPage` in standalone mode
+ * (2026-09-22 — "a way to do notice grammar outside of sessions", no budget,
+ * just "show me what's currently eligible").
  */
-async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoticingCandidate[]> {
+export async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoticingCandidate[]> {
   const db = getDb();
   const books = (await db.books.toArray())
     .filter(isBookInStudyRotation)

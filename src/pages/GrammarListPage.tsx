@@ -55,7 +55,12 @@ export function GrammarListPage() {
   return (
     <div className="stack">
       <section className="panel stack">
-        <h2 style={{ margin: 0 }}>Grammar</h2>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0 }}>Grammar</h2>
+          <Link to="/notice-grammar" className="muted" style={{ fontSize: '0.85rem' }}>
+            Notice grammar →
+          </Link>
+        </div>
         <p className="muted" style={{ margin: 0 }}>
           Constructions noticed and tagged from your own sentences — not a
           fixed syllabus. Tag a pattern from the "Grammar noticed" panel on

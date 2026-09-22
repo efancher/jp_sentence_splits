@@ -379,6 +379,12 @@ backlog drains gradually), deep-linking to `GrammarNoticingFlowPage`
 (`/notice-grammar?ids=…`) — a lightweight walker that shows each sentence
 plus the same `GrammarPicker` the `AnalyzePage` grammar panel uses (it
 sequences, doesn't reimplement — same principle as `SessionRunnerPage`).
+**Also reachable outside a session** (2026-09-22, "a way to do notice
+grammar outside of sessions"): a "Notice grammar →" link on `GrammarListPage`
+(`/grammar`) opens `/notice-grammar` with no `?ids=` at all, and the page
+self-populates from `findGrammarNoticingCandidates` directly (exported for
+this — same pool the planner draws from, just uncapped by a per-sitting
+budget, up to `STANDALONE_CANDIDATE_LIMIT` = 20).
 `GrammarPicker`'s "Done — nothing more to notice" toggle
 (`setSentenceGrammarReviewStatus`), or the flow's "Nothing to notice"
 shortcut, flips `grammarReviewStatus` and drops the sentence from the nudge
