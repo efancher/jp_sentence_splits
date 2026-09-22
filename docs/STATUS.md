@@ -71,10 +71,15 @@ what's left is one deferred durability item (below).
   mismatch feedback branches. Best-effort throughout — no clip, an undecodable/unfetchable blob, or a native
   clip whose own contrast is too weak to fit collapses to "nothing shown," never an error. Logged per attempt
   for a future trend line: `PitchDrillAttempt.fallTimingErrorMorae`/`fallMagnitudeRatio` (new nullable columns,
-  migration `20260922010000_pitch_drill_attempts_continuous_score.sql` — the GitHub integration again did not
-  auto-apply it within a minute of the push (second data point after `pitch_drill_takes`, still unproven),
-  applied instead via the `apply-migrations.yml` fallback and verified live with `check:migrations-applied`,
-  28 tables / 395 columns), and `scripts/report-pitch-drill-effectiveness.ts` gained a
+  migration `20260922010000_pitch_drill_attempts_continuous_score.sql` — **correction, see below**: initially
+  read as missing a few seconds after the push, and `apply-migrations.yml` was triggered as the fallback, but
+  that run itself failed at its "Link project" step (bad/expired `SUPABASE_ACCESS_TOKEN`/`SUPABASE_DB_PASSWORD`
+  repo secret — needs attention, flagged to the user); a `check:migrations-applied` re-run shortly after showed
+  the columns present anyway, confirmed independently with a raw `curl` against the columns directly (empty
+  `[]`, not a `42703` missing-column error). So the GitHub↔Supabase native integration did apply it — just not
+  within the few seconds of the very first check — and the manual fallback workflow is the thing actually
+  broken right now, not auto-apply. See the migration-apply-gap memory for the corrected read),
+  and `scripts/report-pitch-drill-effectiveness.ts` gained a
   weekly avg-mora-off / avg-magnitude-ratio section reading them back. Data starts accumulating from this point
   on; historical attempts have no native-comparison columns. 6 new tests
   (`tests/pitchContinuousScore.test.ts`), full suite green (1985).
