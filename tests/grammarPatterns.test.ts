@@ -97,7 +97,8 @@ describe('computeGrammarLearnerState', () => {
         encounterCount: 1,
         confirmedCount: 0,
         tracked: false,
-        proficient: false,
+        recognitionProficient: false,
+        completionProficient: false,
       }),
     ).toBe('encountered');
   });
@@ -108,37 +109,75 @@ describe('computeGrammarLearnerState', () => {
         encounterCount: 2,
         confirmedCount: 1,
         tracked: false,
-        proficient: false,
+        recognitionProficient: false,
+        completionProficient: false,
       }),
     ).toBe('noticed');
   });
 
-  it('is recognized once tracked and FSRS-proficient, regardless of confirmed count', () => {
+  it('is recognized once tracked and recognition-proficient, regardless of confirmed count', () => {
     expect(
       computeGrammarLearnerState({
         encounterCount: 5,
         confirmedCount: 0,
         tracked: true,
-        proficient: true,
+        recognitionProficient: true,
+        completionProficient: false,
       }),
     ).toBe('recognized');
   });
 
-  it('stays noticed when tracked but not yet proficient', () => {
+  it('stays noticed when tracked but not yet recognition-proficient', () => {
     expect(
       computeGrammarLearnerState({
         encounterCount: 5,
         confirmedCount: 1,
         tracked: true,
-        proficient: false,
+        recognitionProficient: false,
+        completionProficient: false,
       }),
     ).toBe('noticed');
   });
 
+  it('is mastered once both recognition and completion are proficient', () => {
+    expect(
+      computeGrammarLearnerState({
+        encounterCount: 5,
+        confirmedCount: 1,
+        tracked: true,
+        recognitionProficient: true,
+        completionProficient: true,
+      }),
+    ).toBe('mastered');
+  });
+
+  it('stays recognized when completion is proficient but recognition somehow is not (defensive — should not happen in practice)', () => {
+    expect(
+      computeGrammarLearnerState({
+        encounterCount: 5,
+        confirmedCount: 1,
+        tracked: true,
+        recognitionProficient: false,
+        completionProficient: true,
+      }),
+    ).toBe('noticed');
+  });
 });
 
 describe('computeGrammarPriorityBucket', () => {
-  it('is strong when recognized with no recent again ratings', () => {
+  it('is strong when mastered with no recent again ratings', () => {
+    expect(
+      computeGrammarPriorityBucket({
+        encounterCount: 10,
+        tracked: true,
+        state: 'mastered',
+        recentAgainCount: 0,
+        recentReviewCount: 5,
+      }),
+    ).toBe('strong');
+  });
+
+  it('is developing, not strong, when only recognized (not yet mastered)', () => {
     expect(
       computeGrammarPriorityBucket({
         encounterCount: 10,
@@ -147,7 +186,7 @@ describe('computeGrammarPriorityBucket', () => {
         recentAgainCount: 0,
         recentReviewCount: 5,
       }),
-    ).toBe('strong');
+    ).toBe('developing');
   });
 
   it('is developing when tracked but not yet strong', () => {
@@ -186,12 +225,12 @@ describe('computeGrammarPriorityBucket', () => {
     ).toBe('recently_encountered');
   });
 
-  it('recognized but still struggling recently is not strong', () => {
+  it('mastered but still struggling recently is not strong', () => {
     expect(
       computeGrammarPriorityBucket({
         encounterCount: 10,
         tracked: true,
-        state: 'recognized',
+        state: 'mastered',
         recentAgainCount: 1,
         recentReviewCount: 5,
       }),

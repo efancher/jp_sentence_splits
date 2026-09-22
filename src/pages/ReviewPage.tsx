@@ -29,6 +29,7 @@ import {
   getReferencePitchTrack,
   loadSuspendedBookIndex,
   saveReferencePitchTrack,
+  getProficientGrammarRecognitionPatternIds,
   getProficientReadingVocabularyItemIds,
   getSentenceFullReviewReadiness,
   getSentenceListeningReadiness,
@@ -214,21 +215,32 @@ const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
 /**
  * Grammar-pattern review: subjectType `grammarPattern`, subjectId a
  * GrammarPattern.id. Was a 4-card ladder (grammar_comprehension/
- * grammar_completion/grammar_contrast/grammar_production); the other three
- * retired 2026-09-15 (docs/ROADMAP.md) — barely used, and hid the
- * pattern's explanation behind a separate self-rated card instead of
- * putting it in the one moment that actually mattered (choosing the right
- * construction). `grammar_completion` survives as the sole grammar
- * activity type, rebuilt with always-visible translation + passage
- * context (see GrammarCompletionCard). Unlike every other category above,
- * never lazily seeded by ReviewPage itself — a grammarPattern study item
- * only ever comes from an explicit "Track" in GrammarPicker
- * (src/components/GrammarPicker.tsx). `candidates` below is therefore
- * built from *already-tracked* patterns only (not "every pattern in
- * scope"). Global scope only (no bookId): a pattern isn't really "of" one
+ * grammar_completion/grammar_contrast/grammar_production), collapsed
+ * 2026-09-15 to one `grammar_completion` card (docs/ROADMAP.md) — the
+ * other three were barely used, and hid the pattern's explanation behind a
+ * separate self-rated card instead of putting it in the one moment that
+ * actually mattered (choosing the right construction).
+ *
+ * **2026-09-22 (card issue triage):** collapsing to one production-only
+ * card traded away the thing vocab cloze has that grammar didn't — a
+ * lower, context-inferable rung before blind recall. Reintroduced as a
+ * 2-tier ladder, not the old 4-card one: `grammar_recognition` (self-rated
+ * — the construction is already visible in the sentence, the learner
+ * notices its *function*, same shape as the retired grammar_comprehension)
+ * is the entry rung, seeded by "Track" in GrammarPicker
+ * (src/components/GrammarPicker.tsx — still the *only* entry point into a
+ * pattern's FSRS rotation; grammarPattern items are never lazily seeded
+ * from scratch here). `grammar_completion` (typed production: recall the
+ * construction from a blank) is now *lazily seeded by ReviewPage*, same as
+ * every other tier-2 card, once `grammar_recognition` reaches FSRS
+ * proficiency (`GateContext.grammarRecognitionProficientPatternIds`) — see
+ * the `activityIsReady` on the 'grammar' descriptor below. `candidates`
+ * below is therefore built from *already-tracked* patterns only (any
+ * existing grammarPattern study item, either rung), not "every pattern in
+ * scope". Global scope only (no bookId): a pattern isn't really "of" one
  * book the way a sentence is.
  */
-const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_completion'];
+const GRAMMAR_ACTIVITY_TYPES: StudyActivityType[] = ['grammar_recognition', 'grammar_completion'];
 
 const ACTIVITY_LABELS: Record<string, string> = {
   comprehension: 'Comprehension',
@@ -242,6 +254,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sentence_transformation: 'Conjugation in context',
   pitch_accent: 'Pitch accent',
   grammar_completion: 'Grammar completion',
+  grammar_recognition: 'Grammar recognition',
 };
 
 interface SentenceConjugationCandidate {
@@ -715,6 +728,8 @@ interface GateContext {
    * `reading_in_context` can also check its passage neighbours.
    */
   sentenceReadiness: Map<string, boolean>;
+  /** Grammar pattern ids whose `grammar_recognition` item has reached FSRS proficiency — the tier-1 gate for `grammar_completion` (2026-09-22 recognition/production split). */
+  grammarRecognitionProficientPatternIds: Set<string>;
 }
 
 /**
@@ -925,6 +940,14 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       }),
       ensure: (candidate, activityType) =>
         ensureGrammarStudyItem(candidate.pattern.id, activityType),
+      // Tier 2: `grammar_completion` is withheld (from both seeding and the
+      // due queue) until the pattern's `grammar_recognition` item is itself
+      // FSRS-proficient — same two-tier shape as word_listening -> listening.
+      // `grammar_recognition` itself has no gate of its own beyond being
+      // tracked at all.
+      activityIsReady: (candidate, activityType, ctx) =>
+        activityType !== 'grammar_completion' ||
+        ctx.grammarRecognitionProficientPatternIds.has(candidate.pattern.id),
     }),
   ];
 }
@@ -1335,6 +1358,9 @@ export function ReviewPage() {
         ]),
         listeningReadiness: await getSentenceListeningReadiness(sentenceIds),
         sentenceReadiness,
+        grammarRecognitionProficientPatternIds: await getProficientGrammarRecognitionPatternIds(
+          scope.grammarCandidates.map((candidate) => candidate.pattern.id),
+        ),
       };
 
       const dueByDescriptor = await Promise.all(
@@ -1845,6 +1871,13 @@ export function ReviewPage() {
                   setTypedResponseExpected(gradedAgainst);
                   setRevealed(true);
                 }}
+              />
+            ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
+              <GrammarRecognitionCard
+                key={current.studyItem.id}
+                candidate={current.grammar}
+                revealed={revealed}
+                onReveal={() => setRevealed(true)}
               />
             ) : current.grammar ? (
               <GrammarCompletionCard
@@ -2817,12 +2850,122 @@ function ContrastivePairCard({
 }
 
 /**
- * Grammar completion — the sole grammar review card since
- * `grammar_comprehension`/`grammar_contrast`/`grammar_production` were
- * retired 2026-09-15 (docs/ROADMAP.md): a prior redesign collapsed all
- * four into an ambient notice strip under every review card, which in
- * real use "makes the review cards clunky and doesn't help with learning"
- * (user). The target sentence's English translation is always visible —
+ * Grammar recognition — the entry rung of the 2-tier grammar ladder
+ * (2026-09-22, card issue triage: "this card as it is is just v a bit of
+ * memorization... i don't feel [context gives hints] for grammar"). Unlike
+ * `GrammarCompletionCard` below, the construction is *not* blanked — it's
+ * highlighted right where it sits in the sentence, because the skill this
+ * card tests is noticing what a visible construction is doing, not
+ * recalling its exact surface form. Self-rated (no typed/graded answer,
+ * same "bare self-rating" shape as `ReadingInContextCard`): the learner
+ * silently works out the pattern's function, reveals `shortMeaning`/
+ * `explanation`/`structuralNotes` to check themselves, then rates.
+ *
+ * A near-verbatim revival of the pre-2026-09-15 `grammar_comprehension`
+ * card (see git history), brought up to the current passage-context
+ * convention (`readingContext`) `GrammarCompletionCard` already uses, so
+ * the two cards read as one consistent family rather than a regression to
+ * the old card's plainer layout.
+ *
+ * Reuses `blankPatternInSentence` purely as a literal-match check: when
+ * the pattern's dictionary form doesn't appear verbatim in the sentence
+ * (a conjugated/colloquial surface, e.g. てる for ている), a note flags
+ * that on reveal instead of silently mis-highlighting nothing (the same
+ * gap a 2026-09-10 report on the old comprehension card found).
+ */
+function GrammarRecognitionCard({
+  candidate,
+  revealed,
+  onReveal,
+}: {
+  candidate: GrammarReviewCandidate;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const { pattern, sentence, readingContext } = candidate;
+  const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
+  const { before, after } = readingContext;
+
+  const passageBefore = readingContext.bookTitle ? (
+    <>
+      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+        In context · {readingContext.bookTitle}
+      </p>
+      {before.length ? (
+        <div className="reading-context">
+          {before.map((item) => (
+            <p key={item.id} className="jp jp-sm reading-context-line">
+              {item.japanese}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </>
+  ) : null;
+
+  const passageAfter = after.length ? (
+    <div className="reading-context">
+      {after.map((item) => (
+        <p key={item.id} className="reading-context-line">
+          <span className="jp jp-sm">{item.japanese}</span>
+          {item.translation ? <span className="muted"> — {item.translation}</span> : null}
+        </p>
+      ))}
+    </div>
+  ) : null;
+
+  return (
+    <>
+      {passageBefore}
+      <div className="jp jp-lg">
+        {blank ? (
+          <>
+            {blank.before}
+            <mark>{blank.match}</mark>
+            {blank.after}
+          </>
+        ) : (
+          sentence.japanese
+        )}
+      </div>
+      <div className="muted">
+        What is <span className="jp">{pattern.canonicalName}</span> doing in this sentence?
+      </div>
+      {!revealed ? (
+        <button type="button" onClick={onReveal}>
+          Reveal
+        </button>
+      ) : (
+        <>
+          {!blank ? (
+            <div className="muted">
+              Note: this sentence uses a conjugated or colloquial form of{' '}
+              <span className="jp">{pattern.canonicalName}</span>, not its dictionary form
+              verbatim.
+            </div>
+          ) : null}
+          {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
+          {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
+          {pattern.structuralNotes ? (
+            <div className="muted">{pattern.structuralNotes}</div>
+          ) : null}
+          {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          {passageAfter}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Grammar completion — the production rung of the 2-tier grammar ladder,
+ * gated behind `grammar_recognition` above (`activityIsReady` on the
+ * 'grammar' descriptor). Was the sole grammar review card between
+ * 2026-09-15 and 2026-09-22, when `grammar_comprehension`/`grammar_contrast`/
+ * `grammar_production` were retired (docs/ROADMAP.md): a prior redesign
+ * collapsed all four into an ambient notice strip under every review card,
+ * which in real use "makes the review cards clunky and doesn't help with
+ * learning" (user). The target sentence's English translation is always visible —
  * it's the input signal for producing the right construct, the same idea
  * as giving the audio in a pitch-accent card and asking for the pitch
  * shape — and the sentence is framed by its reading-order passage

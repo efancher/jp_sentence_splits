@@ -3953,6 +3953,30 @@ export async function getProficientPitchAccentVocabularyItemIds(
 }
 
 /**
+ * Grammar patterns (of `grammarPatternIds`) whose `grammar_recognition`
+ * study item has reached FSRS proficiency — the tier-1 gate for
+ * `grammar_completion` (2026-09-22 recognition/production split), same
+ * shape as the tier-1 word_listening gate in ReviewPage's GateContext.
+ */
+export async function getProficientGrammarRecognitionPatternIds(
+  grammarPatternIds: string[],
+): Promise<Set<string>> {
+  if (grammarPatternIds.length === 0) return new Set();
+  const db = getDb();
+  const idSet = new Set(grammarPatternIds);
+  return new Set(
+    (await db.studyItems.where('activityType').equals('grammar_recognition').toArray())
+      .filter(
+        (item) =>
+          item.subjectType === 'grammarPattern' &&
+          idSet.has(item.subjectId) &&
+          isVocabularyItemProficient(item.fsrsState.state),
+      )
+      .map((item) => item.subjectId),
+  );
+}
+
+/**
  * `continue_book` readiness (2026-09-16), the "has each word at least been
  * reviewed once" half — paired with `vocabularyConfirmed` in
  * classifyExploreSentences (sessionPlanner.ts). A sentence with zero
@@ -4326,7 +4350,7 @@ export async function getSentenceMasteryArcs(
     allGrammarPatternIds.size
       ? db.studyItems
           .where('activityType')
-          .equals('grammar_completion')
+          .equals('grammar_recognition')
           .filter((item) => item.subjectType === 'grammarPattern' && allGrammarPatternIds.has(item.subjectId))
           .toArray()
       : Promise.resolve([]),
@@ -7244,11 +7268,11 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     if (list) list.push(item);
     else studyItemsByPatternId.set(item.subjectId, [item]);
   }
-  const completionStudyItemIds = studyItems
-    .filter((item) => item.activityType === 'grammar_completion')
+  const gradedStudyItemIds = studyItems
+    .filter((item) => item.activityType === 'grammar_completion' || item.activityType === 'grammar_recognition')
     .map((item) => item.id);
-  const recentReviews = completionStudyItemIds.length
-    ? await db.reviews.where('studyItemId').anyOf(completionStudyItemIds).toArray()
+  const recentReviews = gradedStudyItemIds.length
+    ? await db.reviews.where('studyItemId').anyOf(gradedStudyItemIds).toArray()
     : [];
   const reviewsByStudyItemId = new Map<string, Review[]>();
   for (const review of recentReviews) {
@@ -7272,24 +7296,32 @@ export async function listGrammarPatternSummaries(): Promise<GrammarPatternSumma
     const completionItem = patternStudyItems.find(
       (item) => item.activityType === 'grammar_completion',
     );
-    const recent = completionItem
-      ? (reviewsByStudyItemId.get(completionItem.id) ?? [])
+    const recognitionItem = patternStudyItems.find(
+      (item) => item.activityType === 'grammar_recognition',
+    );
+    // "Recent" reviews come from whichever card is currently the pattern's
+    // active rung — completion once it's seeded (the more advanced skill),
+    // else recognition — so the dashboard's "needed help on N of the last M
+    // reviews" text stays meaningful even before completion unlocks.
+    const activeItem = completionItem ?? recognitionItem;
+    const recent = activeItem
+      ? (reviewsByStudyItemId.get(activeItem.id) ?? [])
           .slice()
           .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
           .slice(0, 7)
       : [];
     const recentAgainCount = recent.filter((review) => review.rating === 'again').length;
-    const proficient = patternStudyItems.some(
-      (item) =>
-        item.activityType === 'grammar_completion' &&
-        isVocabularyItemProficient(item.fsrsState.state),
-    );
+    const recognitionProficient =
+      !!recognitionItem && isVocabularyItemProficient(recognitionItem.fsrsState.state);
+    const completionProficient =
+      !!completionItem && isVocabularyItemProficient(completionItem.fsrsState.state);
 
     const state = computeGrammarLearnerState({
       encounterCount,
       confirmedCount,
       tracked,
-      proficient,
+      recognitionProficient,
+      completionProficient,
     });
     const priorityInput = {
       encounterCount,
@@ -7473,9 +7505,12 @@ export async function recordGrammarNaturalEncounter(input: {
   rating: ReviewRating;
   activityType?: StudyActivityType;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
+  // Defaults to the entry-level rung (2026-09-22 recognition/production
+  // split), mirroring recordNaturalEncounter's own default of
+  // reading_retrieval over reading_production.
   const studyItem = await ensureGrammarStudyItem(
     input.grammarPatternId,
-    input.activityType ?? 'grammar_completion',
+    input.activityType ?? 'grammar_recognition',
   );
   return recordReview({
     studyItemId: studyItem.id,

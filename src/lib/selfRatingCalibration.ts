@@ -25,6 +25,7 @@ const SELF_RATED_ACTIVITY_TYPES = [
   'reading_in_context',
   'listening',
   'word_listening',
+  'grammar_recognition',
 ] as const;
 
 const GRADED_ACTIVITY_TYPES = [

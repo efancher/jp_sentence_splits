@@ -130,9 +130,9 @@ describe('GrammarPatternDetailPage', () => {
     );
   });
 
-  it('shows Recognized once a tracked pattern is FSRS-proficient', async () => {
+  it('shows Recognized once a tracked pattern is recognition-proficient', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
     await getDb().studyItems.update(item.id, {
       fsrsState: { ...item.fsrsState, state: 'review' },
     });
@@ -141,6 +141,23 @@ describe('GrammarPatternDetailPage', () => {
 
     await screen.findByText('〜わけがない');
     expect(screen.getByText('Recognized')).toBeInTheDocument();
+  });
+
+  it('shows Mastered once a tracked pattern is both recognition- and completion-proficient', async () => {
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    const recognitionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
+    await getDb().studyItems.update(recognitionItem.id, {
+      fsrsState: { ...recognitionItem.fsrsState, state: 'review' },
+    });
+    const completionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await getDb().studyItems.update(completionItem.id, {
+      fsrsState: { ...completionItem.fsrsState, state: 'review' },
+    });
+
+    renderPage(pattern.id);
+
+    await screen.findByText('〜わけがない');
+    expect(screen.getByText('Mastered')).toBeInTheDocument();
   });
 
   it('shows an empty related-patterns state with no relationships', async () => {

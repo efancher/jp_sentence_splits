@@ -31,6 +31,51 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Grammar: recognition/production split (`grammar_recognition` gates `grammar_completion`).**
+  Follow-up to the same-day "role line" card-issue fix — the user reopened it in a broader form: even with
+  the pattern's function shown before answering, `grammar_completion` "still feels like memorization," unlike
+  vocab cloze where sentence context narrows the answer to roughly one content word. Diagnosis: a grammar
+  construction's *function* doesn't uniquely determine its *surface form* the way a content word's meaning
+  determines which word fills a cloze blank — several constructions can express a similar function, so
+  recalling the exact form from its definition is pure production recall with no real recognition rung
+  underneath it (that rung, `grammar_comprehension`, was retired 2026-09-15 mainly to fix starvation, not
+  because production was judged pedagogically sufficient on its own).
+  - **New `grammar_recognition` card** (`GrammarRecognitionCard`, self-rated): the construction is shown
+    highlighted *in place* in the sentence (not blanked) — the skill is noticing what a visible construction
+    is doing, not recalling its form. Reveals `shortMeaning`/`explanation`/`structuralNotes` to self-check,
+    same "bare self-rating" shape as `ReadingInContextCard`. A near-revival of the pre-2026-09-15
+    `grammar_comprehension` card (git history), brought up to the current passage-context convention
+    (`readingContext`) `GrammarCompletionCard` already uses.
+  - **2-tier gate, mirroring vocab's reading_retrieval → reading_production**: `GrammarPicker`'s "Track" now
+    seeds `grammar_recognition` (was `grammar_completion` directly — the only entry point into a pattern's
+    FSRS rotation, unchanged). `grammar_completion` is no longer seeded by Track at all — it's now *lazily
+    seeded by ReviewPage* itself, gated behind `grammar_recognition` reaching FSRS proficiency
+    (`GateContext.grammarRecognitionProficientPatternIds`, `repository.ts#getProficientGrammarRecognitionPatternIds`,
+    wired via the 'grammar' descriptor's new `activityIsReady`) — same two-tier shape as
+    `word_listening` → `listening`.
+  - **Ladder grew a 4th rung**: `GrammarLearnerState` gains `'mastered'` — `'recognized'` now means what its
+    name says (recognition-card proficiency, not completion's), `'mastered'` requires both. `computeGrammarPriorityBucket`'s
+    `'strong'` bucket now requires `'mastered'`, not just `'recognized'` — a pattern you can recognize but not
+    yet produce is still developing. `listGrammarPatternSummaries`/`GrammarPatternDetailPage` compute both
+    proficiencies separately; the dashboard's "recent reviews" text now reads from whichever card is currently
+    the pattern's active rung (completion once it exists, else recognition), so it stays meaningful even before
+    completion unlocks. `getSentenceMasteryArcs`'s `grammarRecognized` rung now checks recognition (not
+    completion) proficiency, matching its own name. `recordGrammarNaturalEncounter` defaults to
+    `grammar_recognition`, mirroring `recordNaturalEncounter`'s `reading_retrieval` default.
+  - No migration needed — `activityType` is a free-text column already; `grammar_recognition` is just a new
+    string value.
+  - 8 updated/added tests across `grammarPatterns.test.ts`, `data.test.ts`, `grammarPatternDetailPage.test.tsx`,
+    `grammarPicker.test.tsx`, `practicePage.test.tsx`, `progressPanels.test.ts`, `reviewPage.test.tsx`. Full
+    suite green (2002).
+  - **Manual test plan:** go to `/grammar`, pick an untracked pattern with a linked sentence, tap "Track" —
+    confirm it shows "Tracked" but no typed-answer prompt appears in `/review` yet (recognition, not
+    completion, should be due: the construction shown highlighted in the sentence, a "What is X doing in this
+    sentence?" prompt, a plain Reveal button, self-rate after). Grade it Good/Easy a few times (or advance its
+    FSRS state directly in a debug view) until it reaches `review` state; confirm `/review` then offers a
+    *typed* completion card for the same pattern (blanked construction, "What construction fills the blank?").
+    Corruption spot-check: on `/grammar/:id`, confirm the state badge reads "Recognized" once only the
+    recognition card is proficient, and "Mastered" once completion is too.
+
 - **2026-09-22 — Session planner: review split into ~5-card steps, so game breaks actually interleave.**
   User report: review work "tend to be grouped together a lot," making for "big slogs," and game breaks
   "tend to get lumped at the end" instead of breaking up the studying. Root cause of both, traced to one

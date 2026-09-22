@@ -252,7 +252,12 @@ export function GrammarPatternDetailPage() {
     const confirmedCount = encounters.filter(
       (encounter) => encounter.sentenceGrammar.confirmedByLearner,
     ).length;
-    const proficient = patternStudyItems.some(
+    const recognitionProficient = patternStudyItems.some(
+      (item) =>
+        item.activityType === 'grammar_recognition' &&
+        isVocabularyItemProficient(item.fsrsState.state),
+    );
+    const completionProficient = patternStudyItems.some(
       (item) =>
         item.activityType === 'grammar_completion' &&
         isVocabularyItemProficient(item.fsrsState.state),
@@ -265,7 +270,8 @@ export function GrammarPatternDetailPage() {
       encounterCount: encounters.length,
       confirmedCount,
       tracked,
-      proficient,
+      recognitionProficient,
+      completionProficient,
     });
     return { pattern, encounters, tracked, graduated, state, relationships, allPatterns };
   }, [patternId]);

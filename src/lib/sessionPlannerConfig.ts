@@ -45,6 +45,7 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
   'listening',
   'word_listening',
   'grammar_comprehension',
+  'grammar_recognition',
 ];
 
 /**

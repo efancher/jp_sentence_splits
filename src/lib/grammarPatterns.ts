@@ -85,24 +85,36 @@ export function blankPatternInSentence(
   };
 }
 
-export type GrammarLearnerState = 'encountered' | 'noticed' | 'recognized';
+export type GrammarLearnerState = 'encountered' | 'noticed' | 'recognized' | 'mastered';
 
 /**
- * Derives the Encountered -> Noticed -> Recognized ladder from accumulated
- * evidence — never a manually-set field. Originally a 5-rung ladder whose
- * top two tiers (Distinguished/Productive) depended on FSRS proficiency on
- * dedicated `grammar_contrast`/`grammar_production` study items; those
- * activity types were retired 2026-09-15 (docs/ROADMAP.md) in favor of a
- * single `grammar_completion` card — `proficient` now reflects that card's
- * own FSRS state.
+ * Derives the Encountered -> Noticed -> Recognized -> Mastered ladder from
+ * accumulated evidence — never a manually-set field. Originally a 5-rung
+ * ladder whose top two tiers (Distinguished/Productive) depended on FSRS
+ * proficiency on dedicated `grammar_contrast`/`grammar_production` study
+ * items; those activity types were retired 2026-09-15 (docs/ROADMAP.md) in
+ * favor of a single `grammar_completion` card, collapsing the ladder to 3
+ * rungs with "recognized" reading that card's own FSRS state.
+ *
+ * **2026-09-22 (card issue triage — "this card as it is is just v a bit of
+ * memorization... i don't feel [context gives hints] for grammar"):** split
+ * back into two cards along the same recognition/production line vocab
+ * already uses (`reading_retrieval` before `reading_production`) —
+ * `grammar_recognition` (self-rated: the pattern is already visible in the
+ * sentence, the learner notices its *function*) gates `grammar_completion`
+ * (typed production: recall the *form* from a blank). "Recognized" now
+ * means what its name says — recognition-card proficiency — and a new
+ * "Mastered" top rung requires production proficiency on top of that.
  */
 export function computeGrammarLearnerState(input: {
   encounterCount: number;
   confirmedCount: number;
   tracked: boolean;
-  proficient: boolean;
+  recognitionProficient: boolean;
+  completionProficient: boolean;
 }): GrammarLearnerState {
-  if (input.tracked && input.proficient) return 'recognized';
+  if (input.tracked && input.recognitionProficient && input.completionProficient) return 'mastered';
+  if (input.tracked && input.recognitionProficient) return 'recognized';
   if (input.confirmedCount > 0) return 'noticed';
   return 'encountered';
 }
@@ -112,6 +124,7 @@ export const GRAMMAR_LEARNER_STATE_LABELS: Record<GrammarLearnerState, string> =
   encountered: 'Encountered',
   noticed: 'Noticed',
   recognized: 'Recognized',
+  mastered: 'Mastered',
 };
 
 export type GrammarPriorityBucket =
@@ -139,7 +152,7 @@ export interface GrammarPriorityInput {
   encounterCount: number;
   tracked: boolean;
   state: GrammarLearnerState;
-  /** Among the tracked pattern's most recent grammar_completion reviews. */
+  /** Among the tracked pattern's most recent reviews on its active card (completion once seeded, else recognition). */
   recentAgainCount: number;
   recentReviewCount: number;
 }
@@ -150,11 +163,15 @@ export interface GrammarPriorityInput {
  * buckets, each derivable at a glance from the same fields
  * explainGrammarPriority renders as prose, not a numeric score nobody can
  * audit.
+ *
+ * `'strong'` requires `'mastered'` (2026-09-22, recognition/production
+ * split) — a pattern that can be recognized but not yet produced is still
+ * developing, not done.
  */
 export function computeGrammarPriorityBucket(
   input: GrammarPriorityInput,
 ): GrammarPriorityBucket {
-  if (input.state === 'recognized' && input.recentAgainCount === 0) return 'strong';
+  if (input.state === 'mastered' && input.recentAgainCount === 0) return 'strong';
   if (input.tracked) return 'developing';
   if (input.encounterCount >= 3) return 'worth_learning_now';
   return 'recently_encountered';

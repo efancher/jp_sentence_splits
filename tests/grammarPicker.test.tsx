@@ -101,7 +101,7 @@ describe('GrammarPicker', () => {
     expect(await screen.findByText(/Track becomes available once/i)).toBeInTheDocument();
   });
 
-  it('"Track" confirms the occurrence and creates the grammar_completion study item', async () => {
+  it('"Track" confirms the occurrence and creates the grammar_recognition study item', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-1', pattern.id, {});
     await confirmSentenceVocabulary('sent-1', []); // sentence vocab ready → Track enabled
@@ -118,7 +118,7 @@ describe('GrammarPicker', () => {
       return items;
     });
     expect(studyItems[0]?.subjectType).toBe('grammarPattern');
-    expect(studyItems[0]?.activityType).toBe('grammar_completion');
+    expect(studyItems[0]?.activityType).toBe('grammar_recognition');
   });
 
   it('"Explain" expands the form and Save persists edits to the pattern and the occurrence', async () => {

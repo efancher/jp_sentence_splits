@@ -2244,7 +2244,7 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     expect(await getDb().grammarRelationships.count()).toBe(1);
   });
 
-  it('recordGrammarNaturalEncounter creates the pattern\'s grammar_completion study item and tags the review source/context', async () => {
+  it('recordGrammarNaturalEncounter creates the pattern\'s grammar_recognition study item and tags the review source/context', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
     await getDb().sentences.add(stubSentence('sent-natural'));
 
@@ -2256,14 +2256,14 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
 
     expect(studyItem.subjectType).toBe('grammarPattern');
     expect(studyItem.subjectId).toBe(pattern.id);
-    expect(studyItem.activityType).toBe('grammar_completion');
+    expect(studyItem.activityType).toBe('grammar_recognition');
     expect(review.source).toBe('natural_encounter');
     expect(review.contextSentenceId).toBe('sent-natural');
   });
 
   it('recordGrammarNaturalEncounter reuses an existing tracked study item rather than creating a second one', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const tracked = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    const tracked = await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
     await getDb().sentences.add(stubSentence('sent-natural'));
 
     const { studyItem } = await recordGrammarNaturalEncounter({
@@ -2412,17 +2412,21 @@ describe('listGrammarPatternSummaries/listGrammarRelationshipsForPattern (gramma
     expect(summaries[0]).toMatchObject({ tracked: true, priorityBucket: 'developing' });
   });
 
-  it('buckets a tracked, proficient pattern with no recent again ratings as strong', async () => {
+  it('buckets a tracked, mastered pattern (recognition + completion both proficient) with no recent again ratings as strong', async () => {
     const pattern = await ensureGrammarPattern('〜わけがない');
-    const item = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
-    await getDb().studyItems.update(item.id, {
-      fsrsState: { ...item.fsrsState, state: 'review' },
+    const recognitionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
+    await getDb().studyItems.update(recognitionItem.id, {
+      fsrsState: { ...recognitionItem.fsrsState, state: 'review' },
+    });
+    const completionItem = await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await getDb().studyItems.update(completionItem.id, {
+      fsrsState: { ...completionItem.fsrsState, state: 'review' },
     });
 
     const summaries = await listGrammarPatternSummaries();
     expect(summaries[0]).toMatchObject({
       tracked: true,
-      state: 'recognized',
+      state: 'mastered',
       priorityBucket: 'strong',
     });
   });

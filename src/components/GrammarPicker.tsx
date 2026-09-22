@@ -252,12 +252,13 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                     confirmedByLearner: true,
                   });
                   // Track is the only entry point into grammar's FSRS
-                  // rotation, ReviewPage never lazily seeds a new grammar
-                  // study item on its own. `grammar_completion` is the
-                  // sole grammar activity type since grammar_comprehension/
-                  // grammar_contrast/grammar_production were retired
-                  // 2026-09-15 (docs/ROADMAP.md).
-                  await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+                  // rotation — ReviewPage never lazily seeds the entry-level
+                  // grammar study item on its own (unlike vocabulary). Seeds
+                  // `grammar_recognition`, the entry rung (2026-09-22
+                  // recognition/production split); `grammar_completion` is
+                  // lazily seeded by ReviewPage once recognition is
+                  // FSRS-proficient, same as reading_production for vocab.
+                  await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
                 })()
               }
               onRemove={() => void removeSentenceGrammar(link.id)}

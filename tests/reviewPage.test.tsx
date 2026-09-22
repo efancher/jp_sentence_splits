@@ -3152,14 +3152,39 @@ describe('ReviewPage', () => {
   });
 
   // ---------------------------------------------------------------------
-  // Grammar-pattern review: a single `grammar_completion` card since
-  // `grammar_comprehension`/`grammar_contrast`/`grammar_production` were
-  // retired 2026-09-15 (docs/ROADMAP.md) — global scope only (no bookId),
-  // see GRAMMAR_ACTIVITY_TYPES's doc comment in ReviewPage.tsx. A grammar
-  // study item is never lazily seeded by ReviewPage itself, so these tests
-  // pre-seed via ensureGrammarStudyItem directly (mirroring how "Track" in
-  // GrammarPicker would).
+  // Grammar-pattern review: a 2-tier ladder (2026-09-22 recognition/
+  // production split) — `grammar_recognition` (self-rated, entry rung,
+  // seeded only via "Track" in GrammarPicker) gates `grammar_completion`
+  // (typed production, lazily seeded by ReviewPage once recognition is
+  // FSRS-proficient) — global scope only (no bookId), see
+  // GRAMMAR_ACTIVITY_TYPES's doc comment in ReviewPage.tsx. These tests
+  // pre-seed a *proficient* grammar_recognition item directly (mirroring
+  // "Track" plus enough reps to graduate it) so grammar_completion is ready
+  // to test on its own.
   // ---------------------------------------------------------------------
+
+  /**
+   * Seeds a proficient grammar_recognition item for `patternId` — the
+   * prerequisite for a grammar_completion card to be ready. `due` is pushed
+   * far into the future (not just `state`), or the recognition item would
+   * still be due itself and show up in the queue ahead of completion.
+   */
+  async function seedProficientGrammarRecognition(patternId: string) {
+    const item = await ensureGrammarStudyItem(patternId, 'grammar_recognition');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: {
+        due: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        stability: 10,
+        difficulty: 1,
+        elapsedDays: 0,
+        scheduledDays: 30,
+        learningSteps: 0,
+        reps: 3,
+        lapses: 0,
+        state: 'review',
+      },
+    });
+  }
 
   it('renders a grammar_completion card with the translation visible before typing, grades the typed construction, and reveals the pattern explanation', async () => {
     const db = getDb();
@@ -3187,7 +3212,7 @@ describe('ReviewPage', () => {
       shortMeaning: "there's no way...",
     });
     await ensureSentenceGrammar('sent-grammar-2', correct.id, { confirmedByLearner: true });
-    await ensureGrammarStudyItem(correct.id, 'grammar_completion');
+    await seedProficientGrammarRecognition(correct.id);
 
     const user = userEvent.setup();
     renderReviewPage('/review', '/review');
@@ -3319,7 +3344,7 @@ describe('ReviewPage', () => {
 
     const pattern = await ensureGrammarPattern('〜わけがない');
     await ensureSentenceGrammar('sent-grammar-target', pattern.id, { confirmedByLearner: true });
-    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await seedProficientGrammarRecognition(pattern.id);
 
     renderReviewPage('/review', '/review');
 
@@ -3356,7 +3381,7 @@ describe('ReviewPage', () => {
     // linked sentence, same as pickContextSentenceForVocabularyItem.
     const pattern = await ensureGrammarPattern('〜わけがない', { shortMeaning: "there's no way..." });
     await ensureSentenceGrammar('sent-grammar-loose', pattern.id, { confirmedByLearner: true });
-    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await seedProficientGrammarRecognition(pattern.id);
 
     renderReviewPage('/review', '/review');
 

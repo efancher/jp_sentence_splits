@@ -1368,60 +1368,70 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   reached FSRS proficiency (`getProficientReadingVocabularyItemIds` since
   2026-09-16 — telling two words apart on the page is a reading/meaning
   skill; pitch-drill reps on either member no longer count).
-- **GrammarPattern subject**: a single activity type, `grammar_completion`
-  — the learner types the construction (recall, not multiple choice —
-  graded leniently by `isGrammarPatternAnswerCorrect`, same
-  tilde/annotation/whitespace normalization `blankPatternInSentence`
-  already uses), blanking the sentence when the pattern's canonical name
-  happens to appear in it verbatim (`blankPatternInSentence`,
-  `src/lib/grammarPatterns.ts`). The card's context sentence skips encounters
-  that live only in suspended books (`pickContextSentenceForGrammarPattern`'s
-  `suspendedIndex`); a pattern with none left drops out of the queue. Was a
-  4-card ladder
-  (`grammar_comprehension`/`grammar_completion`/`grammar_contrast`/
-  `grammar_production`, 2026-08 through 2026-09-14, with a 5-rung
-  learner-state ladder); **collapsed 2026-09-15** (docs/ROADMAP.md) — a
-  performance check found it essentially never fired (2 of 74 tracked
-  patterns had ever produced a study item), because its context-sentence
-  gate required the same "vocab already proficient" bar `reading_in_context`
-  uses. A first fix (an ambient "noticing" strip under every review card)
-  was tried and reverted the same day — "makes the review cards clunky and
-  doesn't help with learning" (user). The rebuilt `grammar_completion`:
-  - **Never lazily seeded by `ReviewPage`** — only "Track" in
-    `GrammarPicker.tsx` creates the study item, and only in the global
-    `/review` queue, never book-scoped (a tracked pattern isn't "of" one
-    book).
-  - **Gated the same as vocabulary** —
-    `pickContextSentenceForGrammarPattern` (`repository.ts`) has no
-    "rest of the sentence must be proficient" requirement, mirroring
-    `pickContextSentenceForVocabularyItem` exactly (just needs a linked
-    sentence).
-  - **Translation always visible, not gated behind reveal** — it's the
-    input signal for picking the right construct (same idea as giving the
-    audio in a pitch-accent card and asking for the shape).
-  - **Framed by reading-order passage context**, same convention
-    `reading_in_context` uses (before untranslated always, after
-    translated only post-reveal) — resolved per-pattern via a new
-    `getReadingContextForSentence` (`repository.ts`, bounded per-sentence
-    queries) rather than the shared scope-wide context map, since a
-    tracked pattern's sentence can come from any book.
-  - **Typed recall, not multiple choice** (2026-09-17, card issue triage —
-    "just kind of a search and find"): with the translation always shown,
-    multiple choice let a learner eliminate options by grammatical shape
-    alone without ever recalling the construct from its meaning. Choices/
-    distractors (`buildGrammarCompletionChoices`, `GrammarRelationship`-
-    ranked) are gone; every tracked pattern gets the same typed-input card
-    now, including a lone pattern with nothing to contrast against — no
-    "not enough distractors" special case left. A `GrammarRelationship`-
-    based *discrimination* card (confusable-pair contrast) is parked on
-    docs/ROADMAP.md as a possible follow-up if recall alone isn't enough.
-  - On reveal: correct/incorrect, the correct construct filled into the
-    blank, and the pattern's own explanation — the only place that used to
-    surface (the retired `grammar_comprehension` card), so it must not be
-    lost here.
-  - `computeGrammarLearnerState` is back to 3 rungs (Encountered → Noticed
-    → Recognized) — `Recognized` now reads FSRS proficiency off
-    `grammar_completion` instead of the retired `grammar_comprehension`.
+- **GrammarPattern subject**: a 2-tier ladder — `grammar_recognition` (entry
+  rung, self-rated) gates `grammar_completion` (typed production). Was a
+  4-card ladder (`grammar_comprehension`/`grammar_completion`/
+  `grammar_contrast`/`grammar_production`, 2026-08 through 2026-09-14, with
+  a 5-rung learner-state ladder); **collapsed 2026-09-15** (docs/ROADMAP.md)
+  to a single `grammar_completion` card — a performance check found the old
+  ladder essentially never fired (2 of 74 tracked patterns had ever produced
+  a study item), because its context-sentence gate required the same "vocab
+  already proficient" bar `reading_in_context` uses. A first fix (an ambient
+  "noticing" strip under every review card) was tried and reverted the same
+  day — "makes the review cards clunky and doesn't help with learning"
+  (user). **Split back to 2 tiers 2026-09-22** (card issue triage — even
+  with the pattern's function shown pre-answer, "this card as it is is just
+  v a bit of memorization... i don't feel [context gives hints] for
+  grammar" the way it does for vocab cloze): a grammar construction's
+  function doesn't uniquely determine its surface form the way a content
+  word's meaning determines which word fills a cloze blank, so a single
+  production-only card had no easier, context-inferable rung underneath it.
+  - **`grammar_recognition`** (`GrammarRecognitionCard`): the construction
+    is shown *highlighted in place* in the sentence (not blanked) — self-rated,
+    reveals `shortMeaning`/`explanation`/`structuralNotes` to self-check, same
+    "bare self-rating" shape as `ReadingInContextCard`. A near-revival of the
+    retired `grammar_comprehension` card, brought up to the current
+    passage-context convention. **Only "Track" in `GrammarPicker.tsx` seeds
+    it** — grammarPattern items are still never lazily seeded from scratch,
+    and still only in the global `/review` queue, never book-scoped (a
+    tracked pattern isn't "of" one book).
+  - **`grammar_completion`** — the learner types the construction (recall,
+    not multiple choice — graded leniently by `isGrammarPatternAnswerCorrect`,
+    same tilde/annotation/whitespace normalization `blankPatternInSentence`
+    already uses), blanking the sentence when the pattern's canonical name
+    happens to appear in it verbatim (`blankPatternInSentence`,
+    `src/lib/grammarPatterns.ts`). **Now lazily seeded by `ReviewPage`
+    itself**, gated behind `grammar_recognition` reaching FSRS proficiency
+    (`GateContext.grammarRecognitionProficientPatternIds`, the 'grammar'
+    descriptor's `activityIsReady`) — same two-tier shape as
+    `word_listening` → `listening`.
+  - Both cards share: the card's context sentence skips encounters that live
+    only in suspended books (`pickContextSentenceForGrammarPattern`'s
+    `suspendedIndex`; a pattern with none left drops out of the queue),
+    **gating the same as vocabulary** (`pickContextSentenceForGrammarPattern`
+    has no "rest of the sentence must be proficient" requirement, mirroring
+    `pickContextSentenceForVocabularyItem`), and **framing by reading-order
+    passage context** (`getReadingContextForSentence`, bounded per-sentence
+    queries, since a tracked pattern's sentence can come from any book).
+  - `grammar_completion`-specific: **translation always visible**, not gated
+    behind reveal — the input signal for picking the right construct. On
+    reveal: correct/incorrect, the correct construct filled into the blank,
+    and the pattern's own explanation. **Typed recall, not multiple choice**
+    (2026-09-17, card issue triage — "just kind of a search and find"): with
+    the translation always shown, multiple choice let a learner eliminate
+    options by grammatical shape alone without recalling the construct from
+    its meaning. Choices/distractors (`buildGrammarCompletionChoices`,
+    `GrammarRelationship`-ranked) are gone. A `GrammarRelationship`-based
+    *discrimination* card (confusable-pair contrast) is parked on
+    docs/ROADMAP.md as a possible follow-up if recall alone isn't enough —
+    investigated 2026-09-22 and found not yet evidence-backed (only 2
+    tracked patterns, zero `commonly_confused` relationships in the catalog).
+  - `computeGrammarLearnerState` grew a 4th rung 2026-09-22: Encountered →
+    Noticed → Recognized → **Mastered**. `Recognized` now reads FSRS
+    proficiency off `grammar_recognition` (matching its own name — before
+    2026-09-22 it read `grammar_completion`'s); `Mastered` requires both
+    cards proficient. `computeGrammarPriorityBucket`'s `strong` bucket now
+    requires `Mastered`, not just `Recognized`.
 
 **Gating and assistance tracking**: a sentence's full-sentence card
 (`reading_in_context`) is deliberately withheld
@@ -1452,8 +1462,9 @@ strict readiness rule (2026-08-27 follow-up) — and that turned out to be
 *why* the old 4-card ladder almost never fired (see "GrammarPattern
 subject" above and docs/ROADMAP.md). Since 2026-09-15,
 `pickContextSentenceForGrammarPattern` — which `ReviewPage` uses to choose
-which of a tracked pattern's sentence encounters to show for its
-`grammar_completion` card — is gated the same as vocabulary instead: it
+which of a tracked pattern's sentence encounters to show for its grammar
+cards (both `grammar_recognition` and `grammar_completion`) — is gated the
+same as vocabulary instead: it
 just picks the most-recently-linked sentence, no requirement on the rest
 of that sentence's vocabulary. `deferUnreadyGrammarReviews` and
 `filterReadyGrammarDueItems` (repository.ts) still exist for the one edge
@@ -1533,11 +1544,14 @@ last occurrence mis-tag-corrected) is filtered out of the list —
 though the canonical row itself is never deleted, so it reappears intact if
 the pattern is encountered again. The detail page
 shows a derived learner-state badge (`GrammarLearnerState` — Encountered /
-Noticed / Recognized, `computeGrammarLearnerState`; never manually set —
-`Recognized` reads FSRS proficiency off the pattern's `grammar_completion`
-study item. Originally a 5-rung ladder whose top two tiers depended on the
-retired `grammar_contrast`/`grammar_production` cards; collapsed
-2026-09-15 along with the ladder itself, docs/ROADMAP.md) alongside "Your
+Noticed / Recognized / Mastered, `computeGrammarLearnerState`; never
+manually set — `Recognized` reads FSRS proficiency off the pattern's
+`grammar_recognition` study item, `Mastered` requires `grammar_completion`
+proficient too. Originally a 5-rung ladder whose top two tiers depended on
+the retired `grammar_contrast`/`grammar_production` cards; collapsed to 3
+rungs 2026-09-15, regained a 4th (`Mastered`) 2026-09-22 when
+`grammar_completion` split off `grammar_recognition` as its own gated rung
+— see "GrammarPattern subject" above) alongside "Your
 encounters" (design brief §5/§6 — "where
 else have I seen this?"): every sentence a pattern has been tagged in, via
 `listSentenceGrammarForPattern`, each linking into

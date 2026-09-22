@@ -266,7 +266,7 @@ describe('getSentenceMasteryArcs', () => {
     await advanceSubjectToProficient('sentenceVocabulary', 'sv-pitch', 'word_listening');
     await advanceSubjectToProficient('sentenceVocabulary', 'sv-pitch', 'sentence_transformation');
     await advanceToProficient('vi-pitch', 'pitch_accent');
-    await advanceSubjectToProficient('grammarPattern', 'gp-2', 'grammar_completion');
+    await advanceSubjectToProficient('grammarPattern', 'gp-2', 'grammar_recognition');
     await ensureStudyItem('sentence', 'sent-2', 'reading_in_context');
 
     const arcs = await getSentenceMasteryArcs(['sent-2']);
@@ -274,7 +274,7 @@ describe('getSentenceMasteryArcs', () => {
     const status = (key: string) => arc.rungs.find((r) => r.key === key)?.status;
     expect(status('listeningProficient')).toBe(false); // sv-plain never got a word_listening item
     expect(status('conjugationsProficient')).toBe(true); // only sv-pitch has a conjugation item at all
-    expect(status('grammarRecognized')).toBe(true); // gp-2's grammar_completion item is proficient
+    expect(status('grammarRecognized')).toBe(true); // gp-2's grammar_recognition item is proficient
     // vi-plain has no pitchAccentPositions, so it's exempt; vi-pitch alone is proficient -> true.
     expect(status('pitchProficient')).toBe(true);
     expect(status('shadowed')).toBe(true); // attempt-2 exists for this sentence

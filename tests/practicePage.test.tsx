@@ -163,7 +163,7 @@ describe('PracticePage grammar natural-encounter panel (grammar-learning system 
     await seedBookWithSentence();
     const pattern = await ensureGrammarPattern('〜ました', { shortMeaning: 'past tense' });
     await ensureSentenceGrammar('sent-1', pattern.id, { confirmedByLearner: true });
-    await ensureGrammarStudyItem(pattern.id, 'grammar_completion');
+    await ensureGrammarStudyItem(pattern.id, 'grammar_recognition');
 
     const user = userEvent.setup();
     renderPracticePage('/books/book-1/practice/sent-1');
@@ -187,6 +187,6 @@ describe('PracticePage grammar natural-encounter panel (grammar-learning system 
     const studyItems = await db.studyItems.where('subjectId').equals(pattern.id).toArray();
     expect(studyItems).toHaveLength(1);
     expect(studyItems[0]?.subjectType).toBe('grammarPattern');
-    expect(studyItems[0]?.activityType).toBe('grammar_completion');
+    expect(studyItems[0]?.activityType).toBe('grammar_recognition');
   });
 });
