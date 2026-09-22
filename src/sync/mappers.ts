@@ -502,6 +502,7 @@ export function sentenceVocabularyToRemote(
     surface_form: link.surfaceForm ?? null,
     audio_start_ms: link.audioStartMs ?? null,
     audio_end_ms: link.audioEndMs ?? null,
+    pitch_cue_separation_semitones: link.pitchCueSeparationSemitones ?? null,
     created_at: link.createdAt,
     updated_at: link.updatedAt,
     deleted_at: null,
@@ -520,6 +521,8 @@ export function remoteToSentenceVocabulary(
     surfaceForm: (row.surface_form as string | null) ?? undefined,
     audioStartMs: (row.audio_start_ms as number | null) ?? undefined,
     audioEndMs: (row.audio_end_ms as number | null) ?? undefined,
+    pitchCueSeparationSemitones:
+      (row.pitch_cue_separation_semitones as number | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

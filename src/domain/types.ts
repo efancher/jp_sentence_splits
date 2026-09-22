@@ -582,6 +582,16 @@ export interface SentenceVocabulary {
    */
   audioStartMs?: number;
   audioEndMs?: number;
+  /**
+   * How far apart this citation-form occurrence's native clip actually
+   * holds its dictionary-expected high vs. low morae, in semitones
+   * (`measureNativeWord`'s `separationSemitones` — `scripts/backfill-
+   * pitch-cue-strength.ts`). Undefined for inflected occurrences and any
+   * link not yet measured; the `pitch_accent` review card treats undefined
+   * as "unknown," not "weak" (docs/ROADMAP.md "Gate/rank pitch_accent
+   * cards by measured cue strength").
+   */
+  pitchCueSeparationSemitones?: number;
   createdAt: string;
   updatedAt: string;
 }

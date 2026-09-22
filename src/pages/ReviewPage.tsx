@@ -405,6 +405,17 @@ function hasFollowingVoicedMora(japanese: string, surfaceForm: string): boolean 
 }
 
 /**
+ * Below this semitone separation between a native clip's dictionary-expected
+ * high and low morae (`SentenceVocabulary.pitchCueSeparationSemitones`,
+ * `scripts/backfill-pitch-cue-strength.ts`), the clip is treated the same as
+ * a missing recording — the card can't teach a contrast the ear can't hear.
+ * Matches `scripts/audit-pitch-accent-clips.ts`'s own WEAK_SEPARATION_ST, so
+ * a clip flagged "weak" there is exactly the one gated here. Undefined
+ * (never measured) is "unknown," not "weak," and is never gated on.
+ */
+const PITCH_CUE_WEAK_SEPARATION_ST = 1.5;
+
+/**
  * Pure filter over already-fetched per-occurrence vocabulary candidates (no
  * DB access needed) — a word is a candidate only if it has dictionary
  * pitch-accent data and at least one occurrence with a native reference
@@ -473,6 +484,11 @@ function buildPitchAccentCandidate(
   // skip the occurrence when nothing does (see doc comment).
   const isEdgeAccent = correctPosition === 0 || correctPosition === morae.length;
   if (isEdgeAccent && !hasFollowingVoicedMora(sentence.japanese, targetSurfaceForm)) return null;
+  // A citation-form clip whose measured cue is known to be weak/absent can't
+  // teach the contrast it's testing — same stance as the edge-accent check
+  // above (see PITCH_CUE_WEAK_SEPARATION_ST doc comment).
+  const cueSeparation = link?.pitchCueSeparationSemitones;
+  if (cueSeparation !== undefined && cueSeparation < PITCH_CUE_WEAK_SEPARATION_ST) return null;
 
   return {
     isCitationForm,
@@ -491,6 +507,23 @@ function buildPitchAccentCandidate(
   };
 }
 
+/**
+ * Ranks two citation-form candidates for the same word by how strong their
+ * clip's measured cue is — a known-strong clip beats an as-yet-unmeasured
+ * one, which in turn beats nothing (docs/ROADMAP.md "Gate/rank pitch_accent
+ * cards by measured cue strength"). Weak clips never reach here; they're
+ * already excluded by buildPitchAccentCandidate's own gate.
+ */
+function isStrongerPitchCandidate(
+  candidate: { candidate: PitchAccentReviewCandidate; isCitationForm: boolean },
+  than: { candidate: PitchAccentReviewCandidate; isCitationForm: boolean },
+): boolean {
+  if (candidate.isCitationForm !== than.isCitationForm) return candidate.isCitationForm;
+  const a = candidate.candidate.link?.pitchCueSeparationSemitones ?? -Infinity;
+  const b = than.candidate.link?.pitchCueSeparationSemitones ?? -Infinity;
+  return a > b;
+}
+
 function getPitchAccentReviewCandidates(
   occurrences: VocabularyOccurrenceCandidate[],
   audioBySentenceId: Map<string, SentenceAudio>,
@@ -501,11 +534,16 @@ function getPitchAccentReviewCandidates(
   >();
   for (const occurrence of occurrences) {
     const existing = bestByItemId.get(occurrence.vocabularyItem.id);
-    if (existing?.isCitationForm) continue; // already have the best possible match for this word
+    // Once we have a citation-form match with a known-strong cue, no later
+    // occurrence (citation or inflected) can beat it — skip the rebuild.
+    if (existing?.isCitationForm && (existing.candidate.link?.pitchCueSeparationSemitones ?? -Infinity) >= PITCH_CUE_WEAK_SEPARATION_ST) {
+      continue;
+    }
     const audio = audioBySentenceId.get(occurrence.sentence.id);
     if (!audio) continue;
     const result = buildPitchAccentCandidate(occurrence, audio);
     if (!result) continue;
+    if (existing && !isStrongerPitchCandidate(result, existing)) continue;
     bestByItemId.set(occurrence.vocabularyItem.id, result);
   }
   return [...bestByItemId.values()].map((entry) => entry.candidate);
