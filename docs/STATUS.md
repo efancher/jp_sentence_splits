@@ -70,6 +70,18 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Doc/commit hygiene: NHK Easy's `/align` transcript cap was already raised and live, just
+  never committed or documented.** Found while auditing ROADMAP.md's open items for follow-up work: the
+  "Blocked" NHK Easy import entry said the `ANALYSIS_MAX_TRANSCRIPT_LENGTH` cap (200 chars, sized for
+  per-sentence alignment) still blocked audio for most real articles and that raising it was "not done." In
+  fact `~/projects/shadowing-analysis-api`'s live deployed unit file already had it raised to 2000 (dated
+  2026-09-14 in its own comment — first to 500, then again to 2000 after a longer real article still 422'd)
+  — but that edit existed only in the deployed file + the repo's uncommitted working tree, never `git commit`ed,
+  so it never showed up in that repo's history and this ROADMAP entry never got updated to match. Committed
+  as `shadowing-analysis-api@c572f31` (not yet pushed — a sibling-repo change, held for confirmation). NHK
+  Easy import is effectively unblocked on the audio side now for the real corpus surveyed (max 335 chars,
+  comfortably under 2000); ROADMAP.md's entry updated to reflect this and stop suggesting it's still open.
+
 - **2026-09-22 — Short games P3: `/progress` "Games" panel + adaptive difficulty.** Closes the ROADMAP P3
   bullet. Two pieces, both read-only w.r.t. FSRS (the games' existing stance):
   - **`/progress` "Games" panel.** New `src/lib/gamesProgress.ts` (`buildGamesProgress`, pure) +

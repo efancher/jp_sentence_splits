@@ -641,25 +641,25 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        the ASR-tuned one — NHK Easy's edited-prose style always closes a
        real sentence with proper terminal punctuation even around a quote,
        so this costs no real splits.
-  - **Blocked — a real constraint found by testing against the live
-    service, not assumed:** `shadowing-analysis-api`'s `/align` rejects any
-    transcript over `ANALYSIS_MAX_TRANSCRIPT_LENGTH` (default 200 chars,
-    `422 transcript too long`) — a cap sized for its original per-sentence
-    reference-alignment use case. **80% of the real 50-item corpus's
-    articles exceed 200 characters** (median 239, max 335) once joined into
-    one whole-article transcript, so most real NHK Easy articles fail
-    alignment outright with the service as currently configured (they still
-    import fine as text-only — `audioAligned: false` — this only blocks the
-    audio half). Options, none implemented yet:
-    1. **Raise the cap** (`ANALYSIS_MAX_TRANSCRIPT_LENGTH` env var on
-       `shadowing-analysis-api`, e.g. to 500) — the direct fix, and
-       probably safe (it's a defensive input-size limit, not a technical
-       ceiling of the aligner itself; NHK Easy audio is still under a
-       minute). **Not done because this crosses into a separate,
-       already-live production service** (also backs real-time shadowing-
-       practice grading, on the same memory-constrained box that needs
-       weekly aligner restarts) — a config change there deserves a
-       deliberate decision, not a silent edit from this session.
+  - ~~**Blocked**~~ **Resolved 2026-09-14, cap raised again + committed 2026-09-22:**
+    `shadowing-analysis-api`'s `/align` rejects any transcript over
+    `ANALYSIS_MAX_TRANSCRIPT_LENGTH` (a cap sized for its original
+    per-sentence reference-alignment use case, `422 transcript too long`).
+    Real data: **80% of the 50-item corpus's articles exceed 200 chars**
+    (the original default) once joined into one whole-article transcript
+    (median 239, max 335) — raised to 500 same day (2026-09-14), then a
+    longer-than-usual real article still hit *that* cap and 422'd, so it
+    was raised again to **2000** (generous headroom over any real NHK Easy
+    article, still far short of anything that would meaningfully change
+    per-call compute/memory on the box). Both changes were made and
+    deployed live directly on `shadowing-analysis-api` at the time, but the
+    working-tree edit was never committed and this ROADMAP entry was never
+    updated — found stale 2026-09-22 while auditing open items; committed
+    then (`shadowing-analysis-api@c572f31`) with the reasoning above
+    as the unit-file comment. Still not a durable fix for a genuinely
+    unbounded input (option 3 below remains the real fix if a future
+    article blows even 2000). Options 2/3 below were never implemented:
+    1. ~~**Raise the cap**~~ **Done** (see above).
     2. Chunk by paragraph and align each chunk separately — doesn't
        actually work: alignment needs audio whose duration matches its
        given transcript, and there's no way to know where in the audio one
