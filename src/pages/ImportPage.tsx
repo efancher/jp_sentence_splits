@@ -163,16 +163,28 @@ export function ImportPage() {
         </div>
 
         <div className="panel stack">
-          <h3 style={{ margin: 0 }}>YouTube or podcast</h3>
+          <h3 style={{ margin: 0 }}>YouTube or podcast — quick import</h3>
           <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-            Paste a YouTube URL or a podcast's RSS feed. Downloads audio,
-            transcribes it, and walks you through fixing sentence boundaries
-            and translations before adding a book.
+            Paste a YouTube URL or a podcast's RSS feed. One combined prompt
+            segments and translates the transcript in a single AI round trip,
+            then a quick skim before committing.
           </p>
-          <Link to="/import/youtube">
+          <Link to="/import/quick">
             <button type="button" className="primary">
               Start
             </button>
+          </Link>
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>YouTube or podcast — full wizard</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            Same sources, but with separate transcript, sentence-boundary
+            (waveform editing), and translation review steps. Use this when a
+            source needs closer editing than the quick import's single pass.
+          </p>
+          <Link to="/import/youtube">
+            <button type="button">Start</button>
           </Link>
         </div>
 

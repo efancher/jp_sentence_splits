@@ -40,6 +40,11 @@ const YouTubeMinePage = lazy(() =>
     default: module.YouTubeMinePage,
   })),
 );
+const QuickMinePage = lazy(() =>
+  import('./pages/QuickMinePage').then((module) => ({
+    default: module.QuickMinePage,
+  })),
+);
 const NhkEasyImportPage = lazy(() =>
   import('./pages/NhkEasyImportPage').then((module) => ({
     default: module.NhkEasyImportPage,
@@ -196,6 +201,7 @@ export default function App() {
             <Route path="search" element={<SearchPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="import/youtube" element={<YouTubeMinePage />} />
+            <Route path="import/quick" element={<QuickMinePage />} />
             <Route path="import/nhk-easy" element={<NhkEasyImportPage />} />
             <Route path="review" element={<ReviewPage />} />
             <Route path="issues" element={<CardIssuesPage />} />

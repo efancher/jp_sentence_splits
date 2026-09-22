@@ -31,6 +31,27 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Quick import: one-page alternative to the mining wizard, combining Segment+Translate AI help into a single round trip.**
+  User reported not using most of the 4-step wizard (`YouTubeMinePage`, Transcript→Segment→Translate→Commit)
+  in practice and asked for a single page: pick a source, get one AI prompt, paste the reply, commit. New
+  `QuickMinePage` (`src/pages/QuickMinePage.tsx`, route `/import/quick`) reuses the wizard's URL/podcast-feed
+  idle picker and job-polling, but skips the `applyJobSegments`/`translateJob` stage endpoints entirely —
+  `POST /jobs/{id}/commit` only requires `job.status === 'ready'`, not that those stages ran, so a job can go
+  straight from a ready transcript to commit with client-supplied per-row `japanese`/`english`/timing.
+  `src/lib/miningQuickImport.ts` adds `formatCombinedPromptForAI`/`parseAiCombinedReply`: one prompt asks the
+  assistant to both punctuate/segment and translate in a single reply (`[m:ss] 日本語文。 || English
+  translation` per line), and the parser reuses the existing shared-timestamp proportional-split logic from
+  `parseAiSegmentedTranscript` while additionally carrying the `|| ` translation through. No target-book
+  picker needed — book/chapter destination was already fully automatic from the source URL (video id / feed
+  hash + episode), confirmed by inspecting `commitShadowingPackageImport`/`commitSeriesEpisodeImport` before
+  building this. A lightweight editable row list (with per-row audio playback) stands in for the wizard's
+  waveform `SegmentationEditor` as a last skim before commit — trades away the wizard's interim
+  boundary-review checkpoint, called out to the user as the deliberate tradeoff. `ImportPage` now offers both
+  "quick import" and "full wizard" cards for the YouTube/podcast source. Typecheck + full test suite green;
+  manually verified in a headless browser (idle screen + podcast-picker `<details>` expand, no console
+  errors) — the mining service itself is tailnet-only so the AI-prompt round trip and commit path weren't
+  exercised against a live job.
+
 - **2026-09-22 — Two pre-series podcast episodes merged into their series book; general merge tool built.**
   User noticed `#1557「田舎日記②」` and "Japanese podcast for beginners" showing as separate Books-page
   entries and asked for a way to move a book into another as a chapter. Diagnosis: `#1556「田舎日記①」` and

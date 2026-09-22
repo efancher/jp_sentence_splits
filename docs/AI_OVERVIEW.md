@@ -765,6 +765,32 @@ Targets are constants; no settings UI.
   the identical `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior; only how the preview gets built
   differs.
+- **Quick import** (`QuickMinePage.tsx`, route `/import/quick`) — one-page
+  alternative to the 4-step wizard above, for "just import it": same
+  idle-screen URL/podcast-feed picker and job creation/polling, but instead
+  of separate Segment and Translate stages, one **combined AI prompt**
+  (`formatCombinedPromptForAI` / `parseAiCombinedReply` in
+  `src/lib/miningQuickImport.ts`) asks the assistant to punctuate/segment
+  *and* translate in a single reply — `[m:ss] 日本語文。 || English
+  translation` per line. The parser reuses the same shared-timestamp
+  proportional-time-split logic as `parseAiSegmentedTranscript` (a fragment
+  the assistant splits into several sentences shares a timestamp; the group
+  is divided by Japanese character length rather than collapsing to a 1ms
+  clip) while carrying the `|| ` translation alongside each sentence. Once
+  parsed, a lightweight editable row list (Japanese/English text boxes +
+  per-row audio playback via `fetchJobAudioRange`, no waveform/boundary
+  editor) is the only review step before commit — the deliberate tradeoff
+  against the full wizard's `SegmentationEditor` boundary-drag checkpoint.
+  Skips the server's `/segment` and `/translate` stage endpoints entirely:
+  `POST /jobs/{id}/commit` only requires `job.status === 'ready'` (source
+  downloaded/transcribed), not that those stages ran, so parsed rows go
+  straight from the AI reply to `commitMiningJob()` with each row's own
+  `japanese`/`english`/`startMs`/`endMs`. No target-book picker — same as
+  the full wizard, book/chapter destination is fully automatic from the
+  source URL (`commitShadowingPackageImport` for a plain video,
+  `commitSeriesEpisodeImport` per-episode-as-chapter for a podcast feed).
+  `ImportPage` links both this and the full wizard for YouTube/podcast
+  sources.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on
