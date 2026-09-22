@@ -573,6 +573,18 @@ label/route table, `metaFor`/`classificationKey`, rather than a second
 copy). Deliberately gated on a genuine lapse, not just recent misses, and
 never a standalone drill — each row links to the existing `/study-items/:id`
 debug view and the same next-action route `errorMix` points at.
+**Sentence mastery** (`masteryArc.ts` / `repository.ts#getSentenceMasteryArcs`/
+`getSentenceMasteryOverview`) — an 8-rung ladder per confirmed sentence
+(vocab confirmed → reading-proficient → listening-proficient →
+conjugations in context → grammar recognized → `reading_in_context`
+mature → shadowed → pitch known), each rung `true`/`false`/`null`
+("nothing to gate on for this sentence," never blocking). Reuses the same
+proficiency primitives every other gate in the app already uses — no new
+concept. Panel ranks in-progress sentences fewest-rungs-left-first, each
+row naming its one blocking rung and linking into the sentence's book.
+Planner-step integration ("finish sentence X" as a session step)
+deliberately not built yet — view only, same phased-rollout call as the
+short games feature.
 **`SessionRunnerPage`** sequences today's steps, deep-linking into
 the existing Analyze/Vocabulary/Grammar-detail/Shadow/Review pages for the
 actual activity rather than reimplementing any of them — start/skip/

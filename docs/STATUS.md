@@ -31,6 +31,30 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Per-sentence mastery arc: the view.** Closes the ROADMAP "Per-sentence mastery arc"
+  item's view half (planner-step integration deliberately deferred, see ROADMAP). New `src/lib/masteryArc.ts`
+  (`buildSentenceMasteryArc`, pure, `MasteryRungStatus = true | false | null`) turns a flat set of per-rung
+  booleans into an 8-rung ladder — vocab confirmed → words reading-proficient → listening-proficient →
+  conjugations in context → grammar recognized → `reading_in_context` mature → shadowed → pitch known — plus
+  `complete`/`nextRung`/`clearedCount`/`applicableCount`. `null` means "nothing to gate on" (no audio, no
+  inflectable words, no tagged grammar pattern) and never blocks `complete`; only a real `false` does.
+  `repository.ts#getSentenceMasteryArcs` is the only fetching, batched over every sentence in one pass and
+  built entirely from primitives the rest of the app's gates already use — `getProficientReadingVocabularyItemIds`,
+  `getProficientPitchAccentVocabularyItemIds`, `MATURE_MIN_SCHEDULED_DAYS` (the same "review state +
+  scheduledDays ≥ 21" idiom `StudyItemDebugSubject` already uses), and the same `subjectType:
+  'sentenceVocabulary'`/`subjectId: link.id` keying `word_listening`/`sentence_transformation` study items
+  already use — no new proficiency concept invented for this view. `getSentenceMasteryOverview` wraps it:
+  scans every `vocabularyReviewStatus: 'confirmed'` sentence, ranks the incomplete ones fewest-rungs-left-first
+  (`rankSentenceMasteryArcs` — the "one rung left" cases the ROADMAP entry asked for), and resolves each row's
+  sentence text + first book membership for display. New "Sentence mastery" panel on `/progress` (next to Leech
+  list): confirmed/complete counts, then the ranked rows, each linking into its book with its single next
+  blocking rung named. 8 pure-lib tests (`tests/masteryArc.test.ts`) + 4 repository-integration tests
+  (`tests/progressPanels.test.ts`, covering a bare sentence, a plain confirmed+reading-proficient sentence,
+  and a fuller sentence exercising listening/conjugation/grammar/context/shadowed/pitch all at once). Full
+  suite green (1997). Manual test plan: open `/progress`, confirm the "Sentence mastery" panel shows a
+  confirmed/complete count and, if any sentence is partway through the ladder, its row names the one rung
+  still blocking it and links into the right book.
+
 - **2026-09-22 — Continuous scoring in the pitch-accent drill (fall timing/magnitude vs. a real native clip).**
   Closes the ROADMAP "Pitch-accent: analysis tools" item, unblocked by the 2026-09-21 grader calibration
   (`gradeLearnerMorae`). The categorical grade (`buildPitchAccentShapeObservations`) collapses a near-miss and a

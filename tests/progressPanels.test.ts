@@ -11,6 +11,8 @@ import {
   getGateFunnelSnapshot,
   getLeechList,
   getSelfRatingCalibration,
+  getSentenceMasteryArcs,
+  getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
   recordReview,
@@ -54,14 +56,22 @@ function makeSelection(overrides: Partial<VocabularySelection> = {}): Vocabulary
   };
 }
 
-async function advanceToProficient(vocabularyItemId: string, activityType: string) {
-  const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, activityType);
+async function advanceSubjectToProficient(
+  subjectType: 'vocabularyItem' | 'sentenceVocabulary' | 'grammarPattern' | 'sentence' | 'chunk' | 'vocabularyConfusion',
+  subjectId: string,
+  activityType: string,
+) {
+  const item = await ensureStudyItem(subjectType, subjectId, activityType);
   let studyItemId = item.id;
   for (let i = 0; i < 3; i += 1) {
     const day = new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000);
     const result = await recordReview({ studyItemId, rating: 'good', now: day });
     studyItemId = result.studyItem.id;
   }
+}
+
+async function advanceToProficient(vocabularyItemId: string, activityType: string) {
+  await advanceSubjectToProficient('vocabularyItem', vocabularyItemId, activityType);
 }
 
 describe('getSelfRatingCalibration', () => {
@@ -128,6 +138,204 @@ describe('getSkillCoverage', () => {
     expect(production.count).toBe(1);
     const heard = result.rungs.find((r) => r.label === 'Heard successfully in a sentence')!;
     expect(heard.count).toBe(1);
+  });
+});
+
+describe('getSentenceMasteryArcs', () => {
+  beforeEach(() => {
+    resetDbForTests(`progress-panels-${createId('db')}`);
+  });
+
+  it('reads vocabConfirmed as false (never N/A) and leaves every other rung null with nothing to gate on', async () => {
+    const db = getDb();
+    await db.sentences.add(makeSentence({ id: 'sent-bare' }));
+    const arcs = await getSentenceMasteryArcs(['sent-bare']);
+    const arc = arcs.get('sent-bare')!;
+    expect(arc.rungs.find((r) => r.key === 'vocabConfirmed')?.status).toBe(false);
+    expect(arc.rungs.filter((r) => r.key !== 'vocabConfirmed').every((rung) => rung.status === null)).toBe(true);
+    expect(arc.complete).toBe(false);
+    expect(arc.nextRung?.key).toBe('vocabConfirmed');
+  });
+
+  it('reads vocabConfirmed off the analysis and readingProficient off narrow reading proficiency', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add(makeSentence({ id: 'sent-1' }));
+    await db.analyses.add({
+      sentenceId: 'sent-1',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyItems.add({
+      id: 'vi-1',
+      expression: '猫',
+      reading: 'ねこ',
+      meaning: 'cat',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vi-1',
+      surfaceForm: '猫',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await advanceToProficient('vi-1', 'reading_retrieval');
+
+    const arcs = await getSentenceMasteryArcs(['sent-1']);
+    const arc = arcs.get('sent-1')!;
+    expect(arc.rungs.find((r) => r.key === 'vocabConfirmed')?.status).toBe(true);
+    expect(arc.rungs.find((r) => r.key === 'readingProficient')?.status).toBe(true);
+    // Nothing seeded any word_listening/sentence_transformation/grammar/context/attempt/pitch evidence.
+    expect(arc.rungs.find((r) => r.key === 'listeningProficient')?.status).toBeNull();
+    expect(arc.rungs.find((r) => r.key === 'pitchProficient')?.status).toBeNull();
+  });
+
+  it('gates listening/conjugation/grammar/context/shadowed/pitch on their own evidence, all-or-nothing per sentence', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add(makeSentence({ id: 'sent-2' }));
+    await db.analyses.add({
+      sentenceId: 'sent-2',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.vocabularyItems.bulkAdd([
+      {
+        id: 'vi-pitch',
+        expression: '走る',
+        reading: 'はしる',
+        meaning: 'to run',
+        pitchAccentPositions: [2],
+        createdAt: now,
+        updatedAt: now,
+      },
+      { id: 'vi-plain', expression: '今', reading: 'いま', meaning: 'now', createdAt: now, updatedAt: now },
+    ]);
+    await db.sentenceVocabulary.bulkAdd([
+      { id: 'sv-pitch', sentenceId: 'sent-2', vocabularyItemId: 'vi-pitch', surfaceForm: '走る', createdAt: now, updatedAt: now },
+      { id: 'sv-plain', sentenceId: 'sent-2', vocabularyItemId: 'vi-plain', surfaceForm: '今', createdAt: now, updatedAt: now },
+    ]);
+    await db.sentenceAudio.add({
+      id: 'audio-2',
+      sentenceId: 'sent-2',
+      sourceId: 'src',
+      sourceSentenceId: 'src-2',
+      sourceTitle: 'ref',
+      mimeType: 'audio/mp3',
+      durationMs: 1000,
+      startMs: 0,
+      endMs: 1000,
+      blob: new Blob(['x'], { type: 'audio/mp3' }),
+      importedAt: now,
+    });
+    await db.attempts.add({
+      id: 'attempt-2',
+      sentenceId: 'sent-2',
+      mimeType: 'audio/mp3',
+      durationMs: 500,
+      blob: new Blob(['y'], { type: 'audio/mp3' }),
+      createdAt: now,
+    });
+    await db.sentenceGrammar.add({
+      id: 'sg-2',
+      sentenceId: 'sent-2',
+      grammarPatternId: 'gp-2',
+      confirmedByLearner: true,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // One link (走る) gets proficient word_listening + pitch_accent + sentence_transformation;
+    // the other (今) is left untouched, so both "every link" rungs read false, not true.
+    await advanceSubjectToProficient('sentenceVocabulary', 'sv-pitch', 'word_listening');
+    await advanceSubjectToProficient('sentenceVocabulary', 'sv-pitch', 'sentence_transformation');
+    await advanceToProficient('vi-pitch', 'pitch_accent');
+    await advanceSubjectToProficient('grammarPattern', 'gp-2', 'grammar_completion');
+    await ensureStudyItem('sentence', 'sent-2', 'reading_in_context');
+
+    const arcs = await getSentenceMasteryArcs(['sent-2']);
+    const arc = arcs.get('sent-2')!;
+    const status = (key: string) => arc.rungs.find((r) => r.key === key)?.status;
+    expect(status('listeningProficient')).toBe(false); // sv-plain never got a word_listening item
+    expect(status('conjugationsProficient')).toBe(true); // only sv-pitch has a conjugation item at all
+    expect(status('grammarRecognized')).toBe(true); // gp-2's grammar_completion item is proficient
+    // vi-plain has no pitchAccentPositions, so it's exempt; vi-pitch alone is proficient -> true.
+    expect(status('pitchProficient')).toBe(true);
+    expect(status('shadowed')).toBe(true); // attempt-2 exists for this sentence
+    expect(status('contextMature')).toBe(false); // reading_in_context item exists but is still 'new'
+  });
+});
+
+describe('getSentenceMasteryOverview', () => {
+  beforeEach(() => {
+    resetDbForTests(`progress-panels-${createId('db')}`);
+  });
+
+  it('ranks in-progress confirmed sentences and resolves their text + book', async () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+    const book = await createBook({ title: 'Book A' });
+    await db.sentences.add(makeSentence({ id: 'sent-almost', japanese: 'もうすぐです。' }));
+    await db.sentences.add(makeSentence({ id: 'sent-unconfirmed', japanese: '未確認。' }));
+    await addSentencesToBook(book.id, ['sent-almost', 'sent-unconfirmed']);
+    for (const [id, status] of [
+      ['sent-almost', 'confirmed'],
+      ['sent-unconfirmed', 'pending'],
+    ] as const) {
+      await db.analyses.add({
+        sentenceId: id,
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: status,
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await db.vocabularyItems.add({
+      id: 'vi-almost',
+      expression: 'もう',
+      reading: 'もう',
+      meaning: 'already',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-almost',
+      sentenceId: 'sent-almost',
+      vocabularyItemId: 'vi-almost',
+      surfaceForm: 'もう',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // vi-almost is never reviewed, so readingProficient reads false — one real rung left.
+
+    const overview = await getSentenceMasteryOverview();
+    // Only vocabularyReviewStatus 'confirmed' sentences count toward the denominator.
+    expect(overview.confirmedCount).toBe(1);
+    expect(overview.rows).toHaveLength(1);
+    expect(overview.rows[0]!.arc.sentenceId).toBe('sent-almost');
+    expect(overview.rows[0]!.japanese).toBe('もうすぐです。');
+    expect(overview.rows[0]!.bookId).toBe(book.id);
+    expect(overview.rows[0]!.arc.nextRung?.key).toBe('readingProficient');
   });
 });
 

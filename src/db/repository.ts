@@ -74,6 +74,12 @@ import { buildBlindSpots, vocabularyKey, type BlindSpots } from '../lib/blindSpo
 import { buildBookCoverage, type BookCoverage } from '../lib/bookCoverage';
 import { buildErrorMix, classificationKey, type ErrorMix } from '../lib/errorMix';
 import { buildLeechList, type LeechListReport } from '../lib/leechList';
+import {
+  buildSentenceMasteryArc,
+  rankSentenceMasteryArcs,
+  type MasteryRungStatus,
+  type SentenceMasteryArc,
+} from '../lib/masteryArc';
 import { buildSessionRecap, type SessionRecap } from '../lib/sessionRecap';
 import {
   buildMinimalPairTrials,
@@ -4240,6 +4246,240 @@ export async function getSentenceFullReviewReadiness(
     );
   }
   return readiness;
+}
+
+/**
+ * Per-sentence mastery arc (docs/ROADMAP.md "Per-sentence mastery arc") —
+ * the only fetching for `src/lib/masteryArc.ts#buildSentenceMasteryArc`.
+ * One batched pass over every table each rung needs, reusing the same
+ * proficiency primitives the rest of the app's gates already use
+ * (`getProficientReadingVocabularyItemIds`, `getProficientPitchAccentVocabularyItemIds`,
+ * `MATURE_MIN_SCHEDULED_DAYS`) rather than a new proficiency concept.
+ * `word_listening`/`sentence_transformation` study items are keyed by
+ * `subjectType: 'sentenceVocabulary'`, `subjectId: link.id` — the same
+ * shape ReviewPage's own candidate-building already relies on.
+ */
+export async function getSentenceMasteryArcs(
+  sentenceIds: string[],
+): Promise<Map<string, SentenceMasteryArc>> {
+  const result = new Map<string, SentenceMasteryArc>();
+  if (sentenceIds.length === 0) return result;
+  const db = getDb();
+
+  const [analyses, allLinks, audioRows, grammarLinks, attemptCounts] = await Promise.all([
+    db.analyses.bulkGet(sentenceIds),
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+    countAttemptsForSentences(sentenceIds),
+  ]);
+
+  const analysisBySentenceId = new Map(
+    analyses.filter((item): item is SentenceAnalysis => Boolean(item)).map((item) => [item.sentenceId, item]),
+  );
+  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
+
+  const links = allLinks.filter((link) => !!link.surfaceForm);
+  const linksBySentence = new Map<string, SentenceVocabulary[]>();
+  for (const link of links) {
+    const arr = linksBySentence.get(link.sentenceId);
+    if (arr) arr.push(link);
+    else linksBySentence.set(link.sentenceId, [link]);
+  }
+  const allVocabularyItemIds = [...new Set(links.map((link) => link.vocabularyItemId))];
+  const allLinkIds = new Set(links.map((link) => link.id));
+
+  const grammarPatternIdsBySentence = new Map<string, string[]>();
+  for (const link of grammarLinks) {
+    const arr = grammarPatternIdsBySentence.get(link.sentenceId);
+    if (arr) arr.push(link.grammarPatternId);
+    else grammarPatternIdsBySentence.set(link.sentenceId, [link.grammarPatternId]);
+  }
+  const allGrammarPatternIds = new Set(grammarLinks.map((link) => link.grammarPatternId));
+
+  const [
+    readingProficientIds,
+    pitchProficientIds,
+    vocabularyItems,
+    wordListeningItems,
+    conjugationItems,
+    grammarPatternItems,
+    contextItems,
+  ] = await Promise.all([
+    getProficientReadingVocabularyItemIds(allVocabularyItemIds),
+    getProficientPitchAccentVocabularyItemIds(allVocabularyItemIds),
+    db.vocabularyItems.bulkGet(allVocabularyItemIds),
+    allLinkIds.size
+      ? db.studyItems
+          .where('activityType')
+          .equals('word_listening')
+          .filter((item) => item.subjectType === 'sentenceVocabulary' && allLinkIds.has(item.subjectId))
+          .toArray()
+      : Promise.resolve([]),
+    allLinkIds.size
+      ? db.studyItems
+          .where('activityType')
+          .equals('sentence_transformation')
+          .filter((item) => item.subjectType === 'sentenceVocabulary' && allLinkIds.has(item.subjectId))
+          .toArray()
+      : Promise.resolve([]),
+    allGrammarPatternIds.size
+      ? db.studyItems
+          .where('activityType')
+          .equals('grammar_completion')
+          .filter((item) => item.subjectType === 'grammarPattern' && allGrammarPatternIds.has(item.subjectId))
+          .toArray()
+      : Promise.resolve([]),
+    db.studyItems
+      .where('activityType')
+      .equals('reading_in_context')
+      .filter((item) => item.subjectType === 'sentence')
+      .toArray(),
+  ]);
+
+  const pitchEligibleVocabularyItemIds = new Set(
+    vocabularyItems
+      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
+      .map((item) => item.id),
+  );
+  const isProficient = (item: StudyItem) => isVocabularyItemProficient(item.fsrsState.state);
+  const isMature = (item: StudyItem) =>
+    item.fsrsState.state === 'review' && item.fsrsState.scheduledDays >= MATURE_MIN_SCHEDULED_DAYS;
+
+  const wordListeningByLink = new Map(wordListeningItems.map((item) => [item.subjectId, item]));
+  const conjugationByLink = new Map(conjugationItems.map((item) => [item.subjectId, item]));
+  const grammarItemsByPattern = new Map<string, StudyItem[]>();
+  for (const item of grammarPatternItems) {
+    const arr = grammarItemsByPattern.get(item.subjectId);
+    if (arr) arr.push(item);
+    else grammarItemsByPattern.set(item.subjectId, [item]);
+  }
+  const contextItemBySentence = new Map(contextItems.map((item) => [item.subjectId, item]));
+
+  for (const sentenceId of sentenceIds) {
+    const sentenceLinks = linksBySentence.get(sentenceId) ?? [];
+    const vocabularyItemIds = [...new Set(sentenceLinks.map((link) => link.vocabularyItemId))];
+    const hasVocabulary = vocabularyItemIds.length > 0;
+    const hasAudio = audioSentenceIds.has(sentenceId);
+
+    const vocabConfirmed: MasteryRungStatus =
+      analysisBySentenceId.get(sentenceId)?.vocabularyReviewStatus === 'confirmed';
+
+    const readingProficient: MasteryRungStatus = !hasVocabulary
+      ? null
+      : vocabularyItemIds.every((id) => readingProficientIds.has(id));
+
+    const listeningLinks = hasAudio ? sentenceLinks : [];
+    const listeningProficient: MasteryRungStatus =
+      !hasAudio || listeningLinks.length === 0
+        ? null
+        : listeningLinks.every((link) => {
+            const item = wordListeningByLink.get(link.id);
+            return !!item && isProficient(item);
+          });
+
+    const conjugationLinks = sentenceLinks.filter((link) => conjugationByLink.has(link.id));
+    const conjugationsProficient: MasteryRungStatus =
+      conjugationLinks.length === 0
+        ? null
+        : conjugationLinks.every((link) => isProficient(conjugationByLink.get(link.id)!));
+
+    const sentenceGrammarPatternIds = grammarPatternIdsBySentence.get(sentenceId) ?? [];
+    const grammarRecognized: MasteryRungStatus =
+      sentenceGrammarPatternIds.length === 0
+        ? null
+        : sentenceGrammarPatternIds.every((patternId) =>
+            (grammarItemsByPattern.get(patternId) ?? []).some(isProficient),
+          );
+
+    const contextItem = contextItemBySentence.get(sentenceId);
+    const contextMature: MasteryRungStatus = contextItem ? isMature(contextItem) : null;
+
+    const shadowed: MasteryRungStatus = !hasAudio ? null : (attemptCounts.get(sentenceId) ?? 0) > 0;
+
+    const pitchEligibleIds = vocabularyItemIds.filter((id) => pitchEligibleVocabularyItemIds.has(id));
+    const pitchProficient: MasteryRungStatus =
+      pitchEligibleIds.length === 0 ? null : pitchEligibleIds.every((id) => pitchProficientIds.has(id));
+
+    result.set(
+      sentenceId,
+      buildSentenceMasteryArc(sentenceId, {
+        vocabConfirmed,
+        readingProficient,
+        listeningProficient,
+        conjugationsProficient,
+        grammarRecognized,
+        contextMature,
+        shadowed,
+        pitchProficient,
+      }),
+    );
+  }
+
+  return result;
+}
+
+export interface SentenceMasteryOverviewRow {
+  arc: SentenceMasteryArc;
+  japanese: string;
+  /** First book this sentence belongs to, for a "jump in" link — undefined if it's in none. */
+  bookId?: string;
+}
+
+export interface SentenceMasteryOverview {
+  /** Confirmed sentences with at least one rung climbed and at least one still to go, furthest-along first. */
+  rows: SentenceMasteryOverviewRow[];
+  /** Distinct confirmed sentences considered (whether or not they made the ranked list). */
+  confirmedCount: number;
+  /** Of those, how many have every applicable rung cleared already. */
+  completeCount: number;
+}
+
+/**
+ * `/progress`'s "Sentence mastery" panel: every confirmed sentence's arc,
+ * ranked to surface the "one rung left" cases first
+ * (`rankSentenceMasteryArcs`). Scans every confirmed sentence in one pass —
+ * same full-corpus-scan convention as `getBlindSpots`/`getGateFunnelSnapshot`,
+ * fine at this corpus's size.
+ */
+export async function getSentenceMasteryOverview(limit = 20): Promise<SentenceMasteryOverview> {
+  const db = getDb();
+  const analyses = await db.analyses.toArray();
+  const confirmedSentenceIds = analyses
+    .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+    .map((analysis) => analysis.sentenceId);
+  if (confirmedSentenceIds.length === 0) {
+    return { rows: [], confirmedCount: 0, completeCount: 0 };
+  }
+  const arcsById = await getSentenceMasteryArcs(confirmedSentenceIds);
+  const arcs = [...arcsById.values()];
+  const completeCount = arcs.filter((arc) => arc.complete).length;
+  const ranked = rankSentenceMasteryArcs(arcs, limit);
+
+  const rankedSentenceIds = ranked.map((arc) => arc.sentenceId);
+  const [sentences, memberships] = await Promise.all([
+    db.sentences.bulkGet(rankedSentenceIds),
+    db.bookSentences.where('sentenceId').anyOf(rankedSentenceIds).toArray(),
+  ]);
+  const sentenceById = new Map(
+    sentences.filter((s): s is Sentence => Boolean(s)).map((s) => [s.id, s]),
+  );
+  const bookIdBySentenceId = new Map<string, string>();
+  for (const membership of memberships) {
+    if (!bookIdBySentenceId.has(membership.sentenceId)) {
+      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    }
+  }
+
+  return {
+    rows: ranked.map((arc) => ({
+      arc,
+      japanese: sentenceById.get(arc.sentenceId)?.japanese ?? '',
+      bookId: bookIdBySentenceId.get(arc.sentenceId),
+    })),
+    confirmedCount: arcs.length,
+    completeCount,
+  };
 }
 
 /**

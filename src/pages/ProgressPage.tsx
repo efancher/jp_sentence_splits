@@ -12,6 +12,7 @@ import {
   getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
+  getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
 } from '../db/repository';
@@ -172,6 +173,7 @@ export function ProgressPage() {
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
   const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
   const leechList = useLiveQuery(() => getLeechList(), []);
+  const masteryOverview = useLiveQuery(() => getSentenceMasteryOverview(), []);
   const velocity =
     report && newCardBacklog !== undefined
       ? buildVelocityReport(newCardBacklog, report.weeks)
@@ -653,6 +655,55 @@ export function ProgressPage() {
               Sentences that clear every other requirement for a step and are blocked on
               specifically the one named — not a general readiness count.
             </p>
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Sentence mastery</h3>
+        {masteryOverview === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : masteryOverview.confirmedCount === 0 ? (
+          <p className="muted">No confirmed sentences yet.</p>
+        ) : masteryOverview.rows.length === 0 ? (
+          <p className="muted">
+            Every confirmed sentence with any progress has cleared every rung that applies to it —{' '}
+            {masteryOverview.completeCount} of {masteryOverview.confirmedCount} complete.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              {masteryOverview.completeCount} of {masteryOverview.confirmedCount} confirmed sentences
+              have cleared every rung that applies to them (vocab confirmed → reading → listening →
+              conjugations → grammar → reading in context → shadowed → pitch). Closest to finished
+              first.
+            </p>
+            {masteryOverview.rows.map((row) => (
+              <div
+                key={row.arc.sentenceId}
+                className="row"
+                style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
+              >
+                <span>
+                  {row.bookId ? (
+                    <Link to={`/books/${row.bookId}`} className="jp">
+                      {row.japanese || row.arc.sentenceId}
+                    </Link>
+                  ) : (
+                    <span className="jp">{row.japanese || row.arc.sentenceId}</span>
+                  )}
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {' '}
+                    · {row.arc.clearedCount}/{row.arc.applicableCount} rungs
+                  </span>
+                </span>
+                {row.arc.nextRung ? (
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    {row.arc.nextRung.label} →
+                  </span>
+                ) : null}
+              </div>
+            ))}
           </>
         )}
       </section>

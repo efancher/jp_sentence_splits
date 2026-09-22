@@ -1179,11 +1179,23 @@ possibilities, kept here so the thinking isn't lost:
   bucket is the current, still-in-progress week and would understate the
   rate); reports "no estimate yet" rather than a divide-by-zero/infinity
   when the recent rate is 0.
-- [ ] **Per-sentence mastery arc** — one ladder per encountered sentence
-  (vocab confirmed → words reading-proficient → listening-proficient →
-  conjugations → grammar noticed → `reading_in_context` mature → shadowed
-  → pitch OK), a view plus a "finish sentence X — one rung left" planner
-  step. Turns the flat multi-card queue into a visible arc.
+- [x] **Per-sentence mastery arc — the view.** (2026-09-22) `src/lib/masteryArc.ts`
+  (`buildSentenceMasteryArc`, pure) + `repository.ts#getSentenceMasteryArcs`/
+  `getSentenceMasteryOverview` compute the 8-rung ladder (vocab confirmed →
+  reading-proficient → listening-proficient → conjugations → grammar
+  recognized → `reading_in_context` mature → shadowed → pitch known) for
+  every confirmed sentence, reusing the same proficiency primitives every
+  other gate is built from — no new proficiency concept. A rung is `null`
+  ("not applicable," never blocking) when the sentence has nothing to gate
+  on for it — no audio, no inflectable words, no tagged grammar. New
+  "Sentence mastery" panel on `/progress`: confirmed/complete counts, then
+  in-progress sentences ranked fewest-rungs-left-first (`rankSentenceMasteryArcs`),
+  each linking into its book with its single next blocking rung named. Turns
+  the flat multi-card review queue into a visible arc. **Not built**: the
+  "finish sentence X" planner step (a dedicated session-step target kind) —
+  scoped out for now, same phased-rollout precedent as the short games
+  feature (ship the read-only view first, decide on session integration
+  once it's seen real use). Detail in STATUS.md.
 - [x] **Cross-activity error routing.** (2026-09-22) The `pitch_accent`
   slice shipped 2026-09-11 (`getPitchAccentFocusWords`); this is the rest,
   extending `preferCoherentChains`'s within-plan grouping to miss-driven
