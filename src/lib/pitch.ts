@@ -193,3 +193,28 @@ export function voicedTimeSpan(
     end: Math.min(pitch.durationSeconds, rawEnd + pad),
   };
 }
+
+/**
+ * Voiced relative-semitone extent of a track — `MeasuredPitchContour`'s
+ * vertical scale when a caller wants a *shared* scale across several charts
+ * of the same underlying clip (e.g. a word cropped out of a sentence, next
+ * to the sentence's own full contour). Compute this once from the
+ * *uncropped* track and pass it to every chart derived from that track, so
+ * they all render the same semitone movement at the same visual steepness —
+ * without it, a component that recomputes min/max from just its own visible
+ * window stretches a narrow crop's small pitch range to fill the same chart
+ * height as a wide crop's large one, making the same real movement look
+ * dramatically different depending only on how tightly it happened to be
+ * cropped. Returns undefined when there aren't at least two voiced frames
+ * (same threshold `MeasuredPitchContour` itself uses to decide whether to
+ * render at all).
+ */
+export function pitchSemitoneRange(
+  payload: Pick<PitchAnalysisPayload, 'frames'>,
+): { min: number; max: number } | undefined {
+  const values = payload.frames
+    .filter((frame) => frame.voiced && frame.relativeSemitones !== null)
+    .map((frame) => frame.relativeSemitones as number);
+  if (values.length < 2) return undefined;
+  return { min: Math.min(...values), max: Math.max(...values) };
+}

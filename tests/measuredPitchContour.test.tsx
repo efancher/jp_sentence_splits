@@ -120,6 +120,55 @@ describe('MeasuredPitchContour', () => {
     expect(outOfRange.querySelector('.pitch-contour-playhead')).toBeNull();
   });
 
+  it('shows the plotted semitone extent in the caption', () => {
+    const { getByText } = render(<MeasuredPitchContour payload={payload(frames([0, 1, 2, 1]))} />);
+    expect(getByText('(spans 2.0 st)')).toBeInTheDocument();
+  });
+
+  it('a fixed scaleRange widens the plotted extent instead of autoscaling to the crop', () => {
+    // A narrow 1-semitone wobble would normally autoscale to fill the chart;
+    // passing the whole clip's 6-semitone extent should report that instead,
+    // and flatten the drawn line relative to an unscaled render of the same frames.
+    const narrow = frames([0, 0.5, 1, 0.5]);
+    const { getByText: unscaledText, container: unscaled } = render(
+      <MeasuredPitchContour payload={payload(narrow)} />,
+    );
+    expect(unscaledText('(spans 1.0 st)')).toBeInTheDocument();
+    const unscaledYs = unscaled
+      .querySelector('polyline')!
+      .getAttribute('points')!
+      .trim()
+      .split(' ')
+      .map((pair) => Number(pair.split(',')[1]));
+
+    const { getByText: scaledText, container: scaled } = render(
+      <MeasuredPitchContour payload={payload(narrow)} scaleRange={{ min: -3, max: 3 }} />,
+    );
+    expect(scaledText('(spans 6.0 st)')).toBeInTheDocument();
+    const scaledYs = scaled
+      .querySelector('polyline')!
+      .getAttribute('points')!
+      .trim()
+      .split(' ')
+      .map((pair) => Number(pair.split(',')[1]));
+
+    const unscaledSwing = Math.max(...unscaledYs) - Math.min(...unscaledYs);
+    const scaledSwing = Math.max(...scaledYs) - Math.min(...scaledYs);
+    expect(scaledSwing).toBeLessThan(unscaledSwing);
+  });
+
+  it('draws a 0-semitone reference line only when 0 falls within the plotted range', () => {
+    const { container: crossesZero } = render(
+      <MeasuredPitchContour payload={payload(frames([-1, 0, 1, 0]))} />,
+    );
+    expect(crossesZero.querySelector('.pitch-contour-zero')).not.toBeNull();
+
+    const { container: allPositive } = render(
+      <MeasuredPitchContour payload={payload(frames([1, 2, 3, 2]))} />,
+    );
+    expect(allPositive.querySelector('.pitch-contour-zero')).toBeNull();
+  });
+
   it('styles the playhead as a pacing guide when `pacing` is set', () => {
     const fr = frames([0, 1, 2, 1]);
 

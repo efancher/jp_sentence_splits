@@ -5,6 +5,7 @@ import {
   extractPitch,
   hzToRelativeSemitones,
   medianHz,
+  pitchSemitoneRange,
   voicedTimeSpan,
 } from '../src/lib/pitch';
 import type { PitchFrame } from '../src/lib/pitch';
@@ -177,5 +178,28 @@ describe('voicedTimeSpan', () => {
     const span = voicedTimeSpan({ durationSeconds: 1, frames })!;
     expect(span.start).toBe(0);
     expect(span.end).toBe(1);
+  });
+});
+
+describe('pitchSemitoneRange', () => {
+  const frame = (relativeSemitones: number | null): PitchFrame => ({
+    timeSeconds: 0,
+    hz: relativeSemitones !== null ? 200 : null,
+    voiced: relativeSemitones !== null,
+    confidence: relativeSemitones !== null ? 0.9 : 0,
+    relativeSemitones,
+  });
+
+  it('returns undefined without at least two voiced frames', () => {
+    expect(pitchSemitoneRange({ frames: [] })).toBeUndefined();
+    expect(pitchSemitoneRange({ frames: [frame(1), frame(null)] })).toBeUndefined();
+  });
+
+  it('spans the full track regardless of a later crop', () => {
+    // The min/max should reflect every voiced frame passed in, not just a
+    // narrow slice — callers crop separately (`cropPitchPayload`) and pass
+    // the *uncropped* track here so a word crop shares the whole clip's scale.
+    const frames = [frame(-4), frame(-1), frame(0), frame(2), frame(5), frame(null)];
+    expect(pitchSemitoneRange({ frames })).toEqual({ min: -4, max: 5 });
   });
 });

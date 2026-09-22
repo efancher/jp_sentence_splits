@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { getReferencePitchTrack, saveReferencePitchTrack } from '../db/repository';
 import { cropPitchPayload } from '../lib/oddEarOut';
-import type { PitchAnalysisPayload } from '../lib/pitch';
+import { pitchSemitoneRange, type PitchAnalysisPayload } from '../lib/pitch';
 import type { TimeRangeMs } from '../lib/recording';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
 
@@ -14,6 +14,12 @@ import { MeasuredPitchContour } from './MeasuredPitchContour';
  * shared with every other surface showing that clip). Renders nothing while
  * the blob/track is unavailable — a decode failure is an ordinary condition
  * (some iOS contexts have no working AudioContext), not an error to show.
+ *
+ * Scales against the *whole clip's* semitone extent (`pitchSemitoneRange`),
+ * not just this crop's own — otherwise a narrow word-only slice of pitch
+ * movement gets stretched to fill the same chart height as the full
+ * sentence would, making the same real contour look artificially steep
+ * next to any other view of the same clip.
  */
 export function WordPitchContour({
   audioId,
@@ -30,22 +36,36 @@ export function WordPitchContour({
   ariaLabel: string;
   height?: number;
 }) {
-  const [payload, setPayload] = useState<PitchAnalysisPayload | undefined>(undefined);
+  const [state, setState] = useState<
+    { payload: PitchAnalysisPayload; scaleRange?: { min: number; max: number } } | undefined
+  >(undefined);
   const startMs = span?.startMs;
   const endMs = span?.endMs;
   useEffect(() => {
-    setPayload(undefined);
+    setState(undefined);
     if (!blob || startMs == null || endMs == null) return;
     let cancelled = false;
     void loadOrComputeReferencePitch(audioId, blob, getReferencePitchTrack, saveReferencePitchTrack).then(
       (track) => {
-        if (!cancelled && track) setPayload(cropPitchPayload(track, { startMs, endMs }));
+        if (cancelled || !track) return;
+        setState({
+          payload: cropPitchPayload(track, { startMs, endMs }),
+          scaleRange: pitchSemitoneRange(track),
+        });
       },
     );
     return () => {
       cancelled = true;
     };
   }, [audioId, blob, startMs, endMs]);
-  if (!payload) return null;
-  return <MeasuredPitchContour payload={payload} label={label} ariaLabel={ariaLabel} height={height} />;
+  if (!state) return null;
+  return (
+    <MeasuredPitchContour
+      payload={state.payload}
+      scaleRange={state.scaleRange}
+      label={label}
+      ariaLabel={ariaLabel}
+      height={height}
+    />
+  );
 }

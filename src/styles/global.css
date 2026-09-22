@@ -470,6 +470,20 @@ strong.jp {
   letter-spacing: 0.02em;
 }
 
+.pitch-contour-extent {
+  opacity: 0.75;
+}
+
+/* 0-semitone (speaker's own median) reference line — a fixed anchor so a
+   chart's steepness reads against an absolute point, not just its own
+   auto-fit edges. */
+.pitch-contour-zero {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.4;
+}
+
 .pitch-contour-band {
   fill: color-mix(in srgb, var(--accent) 22%, transparent);
 }

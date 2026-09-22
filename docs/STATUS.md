@@ -70,6 +70,31 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Measured pitch charts: fixed scale + a 0-semitone reference line, instead of autoscaling
+  per crop.** From a card-issue-style report: the same word (なか, in a mid-sentence occurrence) looked
+  "wildly different" between the `pitch_accent` review card's dictionary diagram (`PitchAccentDiagram`,
+  always the idealized textbook shape — not audio at all) and its measured native contour
+  (`WordPitchContour`, real YIN pitch of that exact clip). That divergence between symbolic and measured is
+  by design (the 2026-09-19 "reveal bridge" — see native-clip audit numbers below), but investigating turned
+  up a real, separate display bug on the measured side: `MeasuredPitchContour` recomputed its y-axis min/max
+  from only the *currently visible* window every render, so the same clip's real semitone movement got
+  rubber-banded to fill the same chart height regardless of how tightly it was cropped — a narrow word-only
+  slice stretches a small, possibly-insignificant wobble to full height, while the same movement in a wider
+  sentence-level view looks comparatively flat, and there were no axis labels at all to tell the two apart.
+  Fix: new `pitchSemitoneRange` (`src/lib/pitch.ts`) computes a track's voiced-frame semitone extent;
+  `MeasuredPitchContour` takes an optional `scaleRange` that fixes the vertical scale instead of autoscaling
+  to the visible crop (falls back to the old local behavior when omitted — no change for single-view
+  callers); `WordPitchContour` now computes this from the *uncropped* reference track before cropping to the
+  word's span and passes it down, so a word crop and the clip's own full-sentence view always render at the
+  same steepness. Also added: a dashed 0-semitone (speaker's own median) reference line when 0 falls within
+  the plotted range, and a numeric "(spans N.N st)" readout in the caption, so a chart's steepness reads
+  against a fixed anchor and an actual number instead of only its own auto-fit edges. 5 new tests
+  (`pitchSemitoneRange`, scale-range/zero-line/extent-caption behavior in `MeasuredPitchContour`).
+  **Manual test plan:** open a `pitch_accent` review card, answer, and check the reveal's "Native pitch of
+  this word (measured)" chart — the caption should show a semitone-span number, and a faint dashed line
+  should appear if the contour crosses the speaker's own median; compare the same word's steepness against
+  its appearance on `/pronunciation` or a shadowing panel showing the same clip's full-sentence contour — the
+  visual steepness should now be consistent between the two, not independently rescaled.
 - **2026-09-22 — Shadowing weak words surfaced on the pitch-accent drill (second "extra practice" queue).**
   Closes the "Shadowing weak words → pitch-accent drill" item on ROADMAP.md — the last unbuilt piece of the
   2026-09-08 analytics pass. `getShadowingWeakWords` already existed (feeds `/progress`'s error-mix pronunciation

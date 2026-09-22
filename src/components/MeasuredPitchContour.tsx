@@ -42,6 +42,15 @@ const BAND_HALF = 3;
  * `kana` (from `buildKanaTimeline`, needs a forced alignment) lays the
  * transcript's syllables under the same time axis — same treatment as the
  * shadowing analysis contours.
+ *
+ * `scaleRange`, when given, fixes the vertical (semitone) scale instead of
+ * autoscaling to whatever's in the visible window — pass the *uncropped*
+ * track's own extent (`pitchSemitoneRange`) so a word cropped out of a
+ * sentence renders at the same steepness as the sentence's own full
+ * contour, rather than each chart independently stretching its own local
+ * min/max to fill the same pixel height (see `pitchSemitoneRange`'s doc
+ * comment). Without it, falls back to the previous per-render local
+ * autoscale — unchanged for callers that only ever show one view of a clip.
  */
 export function MeasuredPitchContour({
   payload,
@@ -51,6 +60,7 @@ export function MeasuredPitchContour({
   ariaLabel = 'Measured pitch of the native recording',
   kana,
   height = 36,
+  scaleRange,
 }: {
   payload?: PitchAnalysisPayload;
   progress?: number | null;
@@ -64,6 +74,8 @@ export function MeasuredPitchContour({
   kana?: KanaTimelineEntry[];
   /** Rendered pixel height; the compact review reveals keep the default, ShadowPage passes a taller one. */
   height?: number;
+  /** Fixed semitone extent to scale against, shared across charts of the same clip — see doc comment above. */
+  scaleRange?: { min: number; max: number };
 }) {
   const result = useMemo(() => {
     const frames = payload?.frames ?? [];
@@ -78,10 +90,16 @@ export function MeasuredPitchContour({
     );
     if (voiced.length < 2) return null;
     const values = voiced.map((frame) => frame.relativeSemitones as number);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = scaleRange ? Math.min(scaleRange.min, ...values) : Math.min(...values);
+    const max = scaleRange ? Math.max(scaleRange.max, ...values) : Math.max(...values);
     const span = Math.max(0.001, max - min);
     const windowSpan = Math.max(0.001, window.end - window.start);
+    // A 0-semitone (the speaker's own median) reference line, when it falls
+    // within the plotted range — a stable anchor so a chart's steepness can
+    // be read against a fixed point instead of only against its own edges.
+    const zeroY =
+      min <= 0 && max >= 0 ? height - PAD_Y - ((0 - min) / span) * (height - 2 * PAD_Y) : null;
+    const extentSemitones = (scaleRange ? scaleRange.max - scaleRange.min : max - min).toFixed(1);
 
     const runs: string[] = [];
     let current: string[] = [];
@@ -99,11 +117,11 @@ export function MeasuredPitchContour({
       current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
     });
     if (current.length >= 2) runs.push(current.join(' '));
-    return runs.length ? { runs, window } : null;
-  }, [payload, height]);
+    return runs.length ? { runs, window, zeroY, extentSemitones } : null;
+  }, [payload, height, scaleRange]);
 
   if (!result) return null;
-  const { runs: segments, window } = result;
+  const { runs: segments, window, zeroY, extentSemitones } = result;
 
   const clipDuration = payload?.durationSeconds ?? 0;
   const playheadFrac =
@@ -117,7 +135,9 @@ export function MeasuredPitchContour({
 
   return (
     <div className="pitch-contour">
-      <span className="muted pitch-contour-caption">{label}</span>
+      <span className="muted pitch-contour-caption">
+        {label} <span className="pitch-contour-extent">(spans {extentSemitones} st)</span>
+      </span>
       <svg
         viewBox={`0 0 ${WIDTH} ${height}`}
         preserveAspectRatio="none"
@@ -125,6 +145,9 @@ export function MeasuredPitchContour({
         aria-label={ariaLabel}
         style={{ width: '100%', height }}
       >
+        {zeroY != null ? (
+          <line className="pitch-contour-zero" x1={0} x2={WIDTH} y1={zeroY} y2={zeroY} />
+        ) : null}
         {playheadX != null ? (
           <>
             <rect
