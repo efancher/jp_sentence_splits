@@ -39,6 +39,7 @@
     "fix:truncated-surface-forms": "tsx scripts/fix-truncated-surface-forms.ts",
     "fix:vocabulary-reading-mismatches": "tsx scripts/fix-vocabulary-reading-mismatches.ts",
     "merge:duplicate-vocabulary-items": "tsx scripts/merge-duplicate-vocabulary-items.ts",
+    "merge:book-into-chapter": "tsx scripts/merge-book-into-chapter.ts",
     "fix:vocabulary-godan-readings": "tsx scripts/fix-vocabulary-godan-readings.ts",
     "fix:morphology-batch-vocab-readings": "tsx scripts/fix-morphology-batch-vocab-readings.ts",
     "fix:delete-garbled-combined-vocabulary": "tsx scripts/delete-garbled-combined-vocabulary.ts",

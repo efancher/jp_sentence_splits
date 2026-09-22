@@ -31,6 +31,24 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Two pre-series podcast episodes merged into their series book; general merge tool built.**
+  User noticed `#1557「田舎日記②」` and "Japanese podcast for beginners" showing as separate Books-page
+  entries and asked for a way to move a book into another as a chapter. Diagnosis: `#1556「田舎日記①」` and
+  `#1557「田舎日記②」` (Nihongo con Teppei) were imported before `commitSeriesEpisodeImport` existed
+  (01fa81a, 2026-09-13) and never got the retroactive migration the 2026-09-16 "Imported badge" fix noted as
+  a known gap — they stayed standalone one-episode books instead of chapters in the shared series book.
+  Scanned every book in the library to confirm scope: only these two were affected; the other standalone
+  single-source books are legitimate one-off YouTube imports, not bugs. Built `scripts/merge-book-into-chapter.ts`
+  (`npm run merge:book-into-chapter -- <sourceBookId> <targetBookId> [--apply]`, dry-run by default) — a
+  general "absorb book A into book B as a new chapter" tool: repoints `book_sentences.book_id`/`chapter_id`
+  in place (preserves per-sentence status/study progress), appends a chapter to the target's `chapters`
+  jsonb, promotes the target's status on a colliding sentence only if the target was still `unstarted`, and
+  soft-deletes the emptied source book. Dry-run verified against production data, then applied for both
+  episodes (288 sentences moved, 2 collisions resolved without regressing progress). Full suite green (2006).
+  **Manual test plan:** open the "Japanese podcast for beginners (Nihongo con Teppei)" book and confirm
+  chapters `#1556「田舎日記①」` and `#1557「田舎日記②」` are present with their sentences and prior study
+  status intact; confirm the two old standalone book entries no longer appear on the Books page.
+
 - **2026-09-22 — Grammar noticing works outside a session (`/notice-grammar` standalone mode).** User: "maybe a
   way for me to do notice grammar outside of sessions?" — prompted by an earlier explanation of why "notice
   grammar" steps are scarce (only 64 of 1266 book-sentences across the library are marked `complete`, the
