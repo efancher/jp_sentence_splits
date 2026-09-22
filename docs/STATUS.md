@@ -70,6 +70,21 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — `grammar_completion`'s role line shown before answering, not just on reveal (card issue
+  triage).** Report: "this card as it is is just v a bit of memorization. maybe better to have on the front the
+  role: Describes an ongoing state or condition resulting from an action." (pattern ～ている（状態描写）, item at
+  11 reps/1 lapse, in relearning). Before this, `pattern.shortMeaning` only surfaced post-reveal — the only
+  pre-answer cue was the sentence's translation, which rewards memorizing that specific sentence's wording
+  rather than the pattern's function, and degrades with reps on the same sentence/pattern pair. Moved
+  `shortMeaning` up next to the translation in `GrammarCompletionCard` (`src/pages/ReviewPage.tsx`), labeled
+  "Role:", shown regardless of revealed state; dropped from the post-reveal `explanation` block so it isn't
+  shown twice. A near-identical UX report on this same card ("just kind of a search and find," 2026-09-17,
+  below) was left for the user to weigh in on rather than acted on unilaterally — this one, the user chose to
+  implement. Updated 1 `reviewPage.test.tsx` assertion to expect "Role: there's no way..." pre- and post-reveal.
+  **Manual test plan:** review a `grammar_completion` card (`/grammar` → "Track" a pattern if none is due);
+  confirm a "Role: …" line appears above the input before typing, using the pattern's own short description, and
+  is still present (once, not duplicated) after checking the answer.
+
 - **2026-09-22 — Cross-activity error routing: `cloze` → shadowing, `sentence_transformation` → grammar.**
   Closes the ROADMAP item (the `pitch_accent` slice shipped 2026-09-11 as `getPitchAccentFocusWords`). Two
   independent pieces:

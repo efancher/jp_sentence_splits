@@ -3197,6 +3197,10 @@ describe('ReviewPage', () => {
     // types a construction — not gated behind reveal like the retired
     // grammar_comprehension card used to require.
     expect(screen.getByText("There's no way I'd forget.")).toBeInTheDocument();
+    // The pattern's role (shortMeaning) is also shown before answering
+    // (2026-09-22, card issue triage: showing translation alone rewarded
+    // memorizing this sentence's wording over the pattern's function).
+    expect(screen.getByText("Role: there's no way...")).toBeInTheDocument();
     // Blanking: 〜わけがない strips to わけがない, which appears verbatim
     // in 忘れるわけがない — so the sentence should render blanked.
     expect(screen.queryByText('忘れるわけがない。')).not.toBeInTheDocument();
@@ -3208,9 +3212,9 @@ describe('ReviewPage', () => {
     expect(await screen.findByText('✓ Correct')).toBeInTheDocument();
     expect(screen.queryByText('_____')).not.toBeInTheDocument();
     expect(screen.getAllByText('〜わけがない').length).toBeGreaterThan(0);
-    // The pattern's explanation is the only place this used to surface
-    // (the retired grammar_comprehension card) — must still show here.
-    expect(screen.getByText("there's no way...")).toBeInTheDocument();
+    // The role line stays visible after reveal too (single instance, not
+    // duplicated into the explanation block).
+    expect(screen.getByText("Role: there's no way...")).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
     await waitFor(async () => {

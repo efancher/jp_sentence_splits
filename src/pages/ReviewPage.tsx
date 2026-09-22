@@ -2854,6 +2854,16 @@ function ContrastivePairCard({
  * typed-response/self-rate flow every other typed card uses. Reveals the
  * pattern's own explanation — the only place that used to surface on the
  * retired `grammar_comprehension`, so it must not be lost here.
+ *
+ * **2026-09-22 — role line always shown** (card issue triage: "this card
+ * as it is is just v a bit of memorization. maybe better to have on the
+ * front the role"). `pattern.shortMeaning` used to only appear post-reveal,
+ * so pre-answer the only cue was the translation — which rewards
+ * memorizing *this sentence's* wording rather than the pattern's function,
+ * and degrades after enough reps of the same sentence (this report's item
+ * had 11 reps, 1 lapse, in relearning). Moved `shortMeaning` up next to the
+ * translation, labeled "Role:", shown regardless of revealed state; dropped
+ * from the post-reveal `explanation` block to avoid showing it twice.
  */
 function GrammarCompletionCard({
   candidate,
@@ -2872,7 +2882,6 @@ function GrammarCompletionCard({
 
   const explanation = (
     <>
-      {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
       {pattern.explanation ? <div className="muted">{pattern.explanation}</div> : null}
       {pattern.structuralNotes ? (
         <div className="muted">{pattern.structuralNotes}</div>
@@ -2923,6 +2932,9 @@ function GrammarCompletionCard({
         )}
       </div>
       {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+      {pattern.shortMeaning ? (
+        <div className="muted">Role: {pattern.shortMeaning}</div>
+      ) : null}
       {!revealed ? (
         <form
           className="row"
