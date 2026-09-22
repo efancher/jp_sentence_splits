@@ -86,6 +86,18 @@ export const GAME_BREAK_INTERVAL_MINUTES = 20;
 export const GAME_BREAK_MAX_PER_PASS = 3;
 
 /**
+ * Review cards per step (2026-09-22, user request: the review bucket read as
+ * one long slog and squeezed game breaks to the end — see
+ * `interleaveGameBreaks`'s doc comment). Splitting the ranked due queue into
+ * several small steps instead of one big one gives `interleaveGameBreaks`
+ * real gaps to drop breaks into, and each step settling on its own (the
+ * existing per-step `countReviewsSince(step.startedAt)` auto-advance already
+ * supports several review-kind steps in one session, no new machinery
+ * needed) turns the review pass into short bursts instead of one long one.
+ */
+export const REVIEW_STEP_BATCH_SIZE = 5;
+
+/**
  * Rough minutes one game round takes (3–6 items at ~30 s each, plus the intro
  * and result screens). Charged against the requested time *before* the four
  * buckets split the rest, so breaks count toward the session limit rather than

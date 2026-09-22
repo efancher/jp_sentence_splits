@@ -31,6 +31,27 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Session planner: review split into ~5-card steps, so game breaks actually interleave.**
+  User report: review work "tend to be grouped together a lot," making for "big slogs," and game breaks
+  "tend to get lumped at the end" instead of breaking up the studying. Root cause of both, traced to one
+  place: `buildReviewBatchStep` built exactly **one** step for the whole review bucket (however many due
+  cards fit the budget — often 15-30+), and `interleaveGameBreaks` only ever drops a break *between* whole
+  steps, never mid-step — so one giant review step at the end of the ordered list swallowed several of its
+  own slice boundaries in one jump, dumping multiple breaks right after it instead of spread through it.
+  Fixed at the root: `buildReviewBatchStep` -> `buildReviewBatchSteps` (plural) now packs the same ranked/
+  budgeted selection into several `REVIEW_STEP_BATCH_SIZE` = 5-card steps instead of one
+  (`sessionPlannerConfig.ts`). No new completion machinery needed — `ReviewPage`'s existing per-step
+  `countReviewsSince(step.startedAt)` auto-advance (2026-08-26) already scopes "done" to *this* step's own
+  start time, so several review-kind steps in one session just work, each settling and advancing on its own
+  once its 5 cards are done. A never-introduced-word slice still rides along on the *last* batch only (same
+  "introduce after due reviews drain" semantics as before). Net effect: review reads as short, `Mark
+  complete`-sized bursts instead of one long haul, and `interleaveGameBreaks` now has real gaps between
+  review batches to drop breaks into — games land *between* review chunks, not just trailing all of them.
+  2 new/strengthened tests in `tests/sessionPlanner.test.ts` (a review-heavy fixture asserting >1 review
+  step of <=5 each, and a break landing with a review step both before and after it); full suite green
+  (1998). No UI changes — `SessionBar`'s "N/M steps" count just reads a bit higher on a big due queue, and
+  each review chunk gets its own row/settle, which is the point.
+
 - **2026-09-22 — Per-sentence mastery arc: the view.** Closes the ROADMAP "Per-sentence mastery arc"
   item's view half (planner-step integration deliberately deferred, see ROADMAP). New `src/lib/masteryArc.ts`
   (`buildSentenceMasteryArc`, pure, `MasteryRungStatus = true | false | null`) turns a flat set of per-rung

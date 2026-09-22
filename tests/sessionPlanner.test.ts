@@ -249,12 +249,15 @@ describe('buildRecommendedSession', () => {
     const session = buildRecommendedSession(
       emptyPlannerInput({ retainDue, totalMinutes: 60, reviewLimit: 15 }),
     );
-    const reviewStep = session.steps.find((step) => step.targetKind === 'review');
-    expect(reviewStep).toBeDefined();
-    // A 60-minute planning pass can't fit more than the reviewLimit of
-    // 15 items even if the whole budget went to review — the batch step's
-    // count is derived from the ranked (already-capped) list.
-    expect(reviewStep!.targetCount).toBeLessThanOrEqual(15);
+    const reviewSteps = session.steps.filter((step) => step.targetKind === 'review');
+    expect(reviewSteps.length).toBeGreaterThan(0);
+    // A 60-minute planning pass can't fit more than the reviewLimit of 15
+    // items even if the whole budget went to review — the batched steps'
+    // combined count is derived from the ranked (already-capped) list, split
+    // across several ~5-card steps rather than one big one.
+    const totalTargetCount = reviewSteps.reduce((sum, step) => sum + (step.targetCount ?? 0), 0);
+    expect(totalTargetCount).toBeLessThanOrEqual(15);
+    for (const step of reviewSteps) expect(step.targetCount).toBeLessThanOrEqual(5);
   });
 
   it('a new-card backlog produces a review step even with zero due items, capped by the session limit', () => {
@@ -818,6 +821,34 @@ describe('game breaks', () => {
     expect(kinds[kinds.length - 1]).toBe(false);
     // No two breaks adjacent.
     for (let i = 1; i < kinds.length; i += 1) expect(kinds[i] && kinds[i - 1]).toBe(false);
+  });
+
+  it('splits a big review queue into ~5-card steps and lets game breaks fall between them, not just after all of them', () => {
+    // A review-heavy, glossing/shadowing-light session, so the review bucket
+    // dominates the timeline the way it used to as one giant step.
+    const reviewHeavy = emptyPlannerInput({
+      totalMinutes: 60,
+      retainDue: Array.from({ length: 30 }, (_, i) => dueCandidate({ studyItemId: `d_${i}` })),
+      gameBreakCandidates: GAMES,
+    });
+    const session = buildRecommendedSession(reviewHeavy);
+    const reviewSteps = session.steps.filter((s) => s.targetKind === 'review');
+    expect(reviewSteps.length).toBeGreaterThan(1);
+    for (const step of reviewSteps) expect(step.targetCount).toBeLessThanOrEqual(5);
+
+    const gameIndices = session.steps
+      .map((s, index) => (s.targetKind === 'game' ? index : -1))
+      .filter((index) => index >= 0);
+    expect(gameIndices.length).toBeGreaterThan(0);
+    // At least one break has a review step both before AND after it — i.e.
+    // it's a genuine mid-review breather, not just tacked on once every
+    // review step has already gone by.
+    const hasMidReviewBreak = gameIndices.some((index) => {
+      const before = session.steps.slice(0, index).some((s) => s.targetKind === 'review');
+      const after = session.steps.slice(index + 1).some((s) => s.targetKind === 'review');
+      return before && after;
+    });
+    expect(hasMidReviewBreak).toBe(true);
   });
 
   it('a 20-minute top-up gets a single break and a session of only games when nothing else is available', () => {

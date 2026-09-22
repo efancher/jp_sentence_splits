@@ -20,6 +20,7 @@ import {
   PRACTICE_ACTIVITY_TYPES,
   REDISTRIBUTION_MAX_SHARE_MULTIPLE,
   REVIEW_PRIORITY_DEFAULT_LIMIT,
+  REVIEW_STEP_BATCH_SIZE,
   STALE_PRIORITY_FLOOR,
   STALE_REENCOUNTER_DAYS,
   SYNTHETIC_ACTIVITY_TYPES,
@@ -522,25 +523,32 @@ function reviewBatchCostMinutes(ranked: ReviewPriorityResult[], limit: number): 
 }
 
 /**
- * Step 7 (review bucket): one batched step for "do N due reviews" rather
- * than one step per card — ReviewPage's own due queue is the actual
- * execution surface. Retain- and practice-costed items are ranked together
- * (score doesn't care which pool an item came from) and packed by walking
- * the ranked list summing each item's own cost, since the two pools cost
- * different amounts per item — a plain count-based pack would misprice a
- * batch that's mostly one type or the other.
+ * Step 7 (review bucket): several small batched steps of
+ * `REVIEW_STEP_BATCH_SIZE` cards each, rather than one big "do N due
+ * reviews" step (2026-09-22 — one giant step read as a long slog and left
+ * `interleaveGameBreaks` nothing to actually interleave with, since it only
+ * drops breaks *between* whole steps; see that constant's doc comment).
+ * ReviewPage's own due queue is still the actual execution surface — these
+ * are checkpoints the session settles and auto-advances through
+ * (`countReviewsSince(step.startedAt)` in ReviewPage, already per-step, no
+ * new machinery needed for several review-kind steps in one session).
+ * Retain- and practice-costed items are ranked together (score doesn't care
+ * which pool an item came from) and packed by walking the ranked list
+ * summing each item's own cost, since the two pools cost different amounts
+ * per item — a plain count-based pack would misprice a batch that's mostly
+ * one type or the other.
  */
-function buildReviewBatchStep(
+function buildReviewBatchSteps(
   ranked: ReviewPriorityResult[],
   budgetMinutes: number,
   newCardSlots = 0,
-): PlannerStepDraft | null {
+): PlannerStepDraft[] {
   // Never-introduced words are seeded by ReviewPage after the due queue
   // drains; reserve their minutes up front (retain-costed — a first pass at a
   // word is a reveal/self-rate, like a recognition card) so a big backlog
-  // doesn't get squeezed out by due items, then fold the slice into
-  // targetCount so ReviewPage's auto-advance waits for the new cards too
-  // (countReviewsSince already counts newly-seeded card reviews).
+  // doesn't get squeezed out by due items, then fold the slice into the last
+  // batch's targetCount so ReviewPage's auto-advance waits for the new cards
+  // too (countReviewsSince already counts newly-seeded card reviews).
   let used = newCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
   const chosen: ReviewPriorityResult[] = [];
   for (const item of ranked) {
@@ -549,28 +557,43 @@ function buildReviewBatchStep(
     used += cost;
     chosen.push(item);
   }
-  if (chosen.length === 0 && newCardSlots === 0) return null;
-  const topReasons = [...new Set(chosen.flatMap((item) => item.reasons))].slice(0, 2);
-  const newCardReason =
-    newCardSlots > 0 ? `${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} to introduce` : null;
-  const reasons = [...topReasons, ...(newCardReason ? [newCardReason] : [])].slice(0, 2);
-  const label =
-    chosen.length > 0 && newCardSlots > 0
-      ? `Review ${chosen.length} due + introduce ${newCardSlots} new`
-      : newCardSlots > 0
-        ? `Introduce ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'}`
-        : `Review ${chosen.length} high-priority item${chosen.length === 1 ? '' : 's'}`;
-  return {
-    id: draftStepId(),
-    bucket: 'review',
-    activityType: 'due_review_batch',
-    targetKind: 'review',
-    label,
-    estimatedMinutes: used,
-    reason: reasons.length > 0 ? reasons.join(', ') : 'Due for review',
-    status: 'pending',
-    targetCount: chosen.length + newCardSlots,
-  };
+  if (chosen.length === 0 && newCardSlots === 0) return [];
+
+  const batches: ReviewPriorityResult[][] = [];
+  for (let index = 0; index < chosen.length; index += REVIEW_STEP_BATCH_SIZE) {
+    batches.push(chosen.slice(index, index + REVIEW_STEP_BATCH_SIZE));
+  }
+  if (batches.length === 0) batches.push([]); // new cards only, no due reviews
+
+  return batches.map((batch, index) => {
+    const isLastBatch = index === batches.length - 1;
+    const batchNewCardSlots = isLastBatch ? newCardSlots : 0;
+    const topReasons = [...new Set(batch.flatMap((item) => item.reasons))].slice(0, 2);
+    const newCardReason =
+      batchNewCardSlots > 0
+        ? `${batchNewCardSlots} new word${batchNewCardSlots === 1 ? '' : 's'} to introduce`
+        : null;
+    const reasons = [...topReasons, ...(newCardReason ? [newCardReason] : [])].slice(0, 2);
+    const label =
+      batch.length > 0 && batchNewCardSlots > 0
+        ? `Review ${batch.length} due + introduce ${batchNewCardSlots} new`
+        : batchNewCardSlots > 0
+          ? `Introduce ${batchNewCardSlots} new word${batchNewCardSlots === 1 ? '' : 's'}`
+          : `Review ${batch.length} high-priority item${batch.length === 1 ? '' : 's'}`;
+    return {
+      id: draftStepId(),
+      bucket: 'review',
+      activityType: 'due_review_batch',
+      targetKind: 'review',
+      label,
+      estimatedMinutes:
+        batch.reduce((sum, item) => sum + reviewItemCostMinutes(item.activityType), 0) +
+        batchNewCardSlots * MODE_ACTIVITY_ESTIMATE_MINUTES.retain,
+      reason: reasons.length > 0 ? reasons.join(', ') : 'Due for review',
+      status: 'pending',
+      targetCount: batch.length + batchNewCardSlots,
+    };
+  });
 }
 
 interface ExploreSentenceEntry {
@@ -1043,7 +1066,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     },
   });
 
-  const reviewStep = buildReviewBatchStep(rankedReview, allocation.review, newCardSlots);
+  const reviewSteps = buildReviewBatchSteps(rankedReview, allocation.review, newCardSlots);
 
   const shadowSteps = buildShadowSteps(
     input.shadowCandidates,
@@ -1073,7 +1096,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     ...understandSteps,
     ...grammarNoticingSteps,
     ...shadowSteps,
-    ...(reviewStep ? [reviewStep] : []),
+    ...reviewSteps,
   ];
   const { steps: chainedSteps, chainedSentenceIds } = preferCoherentChains(allSteps);
   const orderedSteps = interleaveGameBreaks(
