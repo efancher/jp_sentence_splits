@@ -533,15 +533,28 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
      real-world finding: Nihongo con Teppei's feed has no `<itunes:duration>`
      tags at all, so durations show blank for every episode there — the UI
      already treats the field as optional, not assumed present.
-  3. **Long-episode ASR headroom** — `ASR_TIMEOUT_SECONDS` (1800s default)
-     and the 8GB analysis box's memory ceiling (the same host the MFA
-     aligner leaks memory on, per its weekly restart timer) may need a bump
-     or chunked transcription past ~30 min; the recommended intermediate
-     shows (Nihongo con Teppei, Miku Real Japanese, Sakura Tips) run
-     10–20 min/episode, so this likely doesn't block v1. Real data point
-     2026-09-13: a 5:32 episode took ~5 minutes wall-clock end to end
-     (download + ASR) on this box — comfortably under the timeout, but not
-     fast; a 20-min episode could plausibly approach it.
+  3. ~~**Long-episode ASR headroom**~~ **Resolved, verified live 2026-09-22.**
+     `MINING_ASR_TIMEOUT_SECONDS` (on `youtube-mining-api`, not
+     `shadowing-analysis-api` — a separate timeout from the `/align` cap
+     above) was already raised from its 1800s default to **3600s**, deployed
+     and committed (`server/youtube-mining/deploy/youtube-mining-api.service`,
+     `1642a34`) — this ROADMAP entry just hadn't been updated to say so.
+     Verified with a real, previously-untested episode: Miku Real Japanese's
+     "No 227" (17:05 audio, a personal-essay episode picked as one of the
+     longer items in that show's feed, real RSS → `/jobs` → ASR → parse, no
+     mocking) took **~17.5 minutes wall-clock** end to end (download +
+     transcription + sentence parsing — essentially 1× realtime, matching
+     the 5:32 episode's ratio from 2026-09-13) and produced 293 sentences.
+     `shadowing-analysis-api`'s RSS climbed to ~4.2–4.8 GB during
+     transcription (baseline ~3.1 GB, `youtube-mining-api` itself under
+     100 MB throughout) and settled back to ~3.9 GB after — no OOM, no
+     leftover growth, comfortably inside the 8 GB box even mid-job. The
+     known MFA/kalpy leak (weekly-restarted, see "Services" in STATUS.md)
+     is a separate multi-day accumulation from repeated *alignment* calls,
+     not something one long *transcription* job triggers. Test job deleted
+     after verifying, per the existing convention. **Conclusion: no further
+     action needed for episodes in the 10–20 min range this feature targets**;
+     chunked transcription past ~30 min remains theoretical, not yet needed.
   3b. **Found + fixed while dogfooding this feature, not really podcast-
      specific**: "Auto-fill translations (AI)" silently shifted every
      translation down by one row on a real 162-sentence episode — the

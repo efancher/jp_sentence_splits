@@ -70,6 +70,19 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Podcast mining's "long-episode ASR headroom" open item verified live, resolved.** Same
+  audit pass as the NHK cap entry below turned up that `MINING_ASR_TIMEOUT_SECONDS` had also already been
+  raised (1800s → 3600s, `youtube-mining-api`, committed as `1642a34`) — ROADMAP.md's "may need a bump" text
+  just hadn't caught up. Rather than trust the config alone, ran a real, previously-untested 17:05 episode
+  (Miku Real Japanese "No 227", picked from real RSS via the iTunes-search method documented under "Podcast
+  mining") through the live service end to end: download → ASR fallback (no captions, as expected) →
+  sentence parse, no mocking. Took ~17.5 min wall-clock (~1× realtime, matching the 5:32-episode data point
+  from 2026-09-13) and produced 293 sentences. `shadowing-analysis-api`'s RSS peaked ~4.8 GB during
+  transcription (baseline ~3.1 GB) and settled to ~3.9 GB after, comfortably under the 8 GB box's ceiling —
+  no OOM, no leftover growth from this one job (the separate MFA/kalpy multi-alignment-call leak stays
+  weekly-restart-bounded as before). Test job deleted after verifying. No code changes; ROADMAP.md's entry
+  updated to close this out.
+
 - **2026-09-22 — Doc/commit hygiene: NHK Easy's `/align` transcript cap was already raised and live, just
   never committed or documented.** Found while auditing ROADMAP.md's open items for follow-up work: the
   "Blocked" NHK Easy import entry said the `ANALYSIS_MAX_TRANSCRIPT_LENGTH` cap (200 chars, sized for
