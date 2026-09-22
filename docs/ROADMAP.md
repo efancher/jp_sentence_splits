@@ -1173,13 +1173,14 @@ possibilities, kept here so the thinking isn't lost:
   walks one lagging sentence through recognition → production → listening →
   shadow back to back. Distinct from the default queue, which
   `spaceOutSiblingCards` deliberately keeps siblings apart in.
-- [ ] **Shadowing weak words → pitch-accent drill** — `getShadowingWeakWords`
-  already exists (feeds the `/progress` error-mix panel). Surface those
-  words as a "focus" sub-list or badge on `PitchAccentDrillPage`; a
-  repo-side sort bias won't work because the drill deliberately
-  `seededShuffle`s its list. (2026-09-11 shipped the sibling feature for
-  `pitch_accent` SRS misses, same UI slot — see Done. This item is still
-  open for shadowing-specifically-weak words.)
+- [x] **Shadowing weak words → pitch-accent drill.** (2026-09-22)
+  `getPitchAccentShadowingFocusWords` resolves `getShadowingWeakWords`'
+  flagged surface forms back to vocabulary items and surfaces them as a
+  second "extra practice" queue ("Weak in shadowing") on
+  `PitchAccentDrillPage`, alongside the 2026-09-11 SRS-miss queue
+  ("Missed in review") — same single-word session/exit machinery, now
+  keyed by a `focusSource: 'review' | 'shadowing' | null` instead of a
+  single boolean. Detail in STATUS.md.
 - [ ] **Free-composition ("writing") skill node** (2026-09-16 discussion,
   card-type/skill graph mapping). `reading_production` only tests
   decode→encode of a word already placed in a sentence (type its reading);

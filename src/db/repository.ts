@@ -5288,6 +5288,86 @@ export async function getPitchAccentFocusWords(): Promise<PitchAccentDrillWord[]
   return result;
 }
 
+/**
+ * Words flagged with a recurring pitch-accent mismatch across shadowing
+ * attempts (`getShadowingWeakWords`, `SHADOWING_WEAK_WORD_MIN_ATTEMPTS`+) —
+ * the shadowing-side sibling of `getPitchAccentFocusWords`' SRS-miss queue,
+ * same "extra practice" slot on `PitchAccentDrillPage`. `wordIssues` only
+ * stores a surface form, not a vocabulary item id, so this resolves each
+ * weak surface form back to its (confirmed, proficient, pitch-carrying)
+ * vocabulary item via `sentenceVocabulary`, then picks the same
+ * dictionary-form-preferring example occurrence `getPitchAccentFocusWords`
+ * does. Never clears itself the way the review-miss queue does (no
+ * "practiced since the miss" signal exists on the shadowing side) — it's a
+ * live reflection of `getShadowingWeakWords`, so it shrinks only once new
+ * attempts stop reproducing the mismatch.
+ */
+export async function getPitchAccentShadowingFocusWords(): Promise<PitchAccentDrillWord[]> {
+  const weakWords = await getShadowingWeakWords();
+  if (weakWords.length === 0) return [];
+  const lastSeenBySurfaceForm = new Map(weakWords.map((word) => [word.surfaceForm, word.lastSeenAt]));
+
+  const db = getDb();
+  const matchingLinks = (await db.sentenceVocabulary.toArray()).filter(
+    (link) => link.surfaceForm && lastSeenBySurfaceForm.has(link.surfaceForm),
+  );
+  if (matchingLinks.length === 0) return [];
+  const candidateItemIds = new Set(matchingLinks.map((link) => link.vocabularyItemId));
+
+  const vocabularyItems = await db.vocabularyItems.bulkGet([...candidateItemIds]);
+  const pitchCarryingItemById = new Map(
+    vocabularyItems
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  if (pitchCarryingItemById.size === 0) return [];
+
+  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
+  if (proficientIds.size === 0) return [];
+
+  // Most recent weak-attempt timestamp among this item's flagged surface forms.
+  const lastSeenByItemId = new Map<string, string>();
+  for (const link of matchingLinks) {
+    if (!proficientIds.has(link.vocabularyItemId)) continue;
+    const lastSeenAt = lastSeenBySurfaceForm.get(link.surfaceForm!);
+    if (!lastSeenAt) continue;
+    const current = lastSeenByItemId.get(link.vocabularyItemId);
+    if (!current || lastSeenAt > current) lastSeenByItemId.set(link.vocabularyItemId, lastSeenAt);
+  }
+
+  const links = await db.sentenceVocabulary
+    .where('vocabularyItemId')
+    .anyOf([...proficientIds])
+    .toArray();
+  const sentenceById = new Map(
+    (await db.sentences.bulkGet([...new Set(links.map((link) => link.sentenceId))]))
+      .filter((row): row is Sentence => Boolean(row))
+      .map((row) => [row.id, row]),
+  );
+
+  const bestByItemId = bestExampleOccurrencesByItemId(
+    links,
+    sentenceById,
+    pitchCarryingItemById,
+    proficientIds,
+  );
+
+  const result: PitchAccentDrillWord[] = [];
+  for (const [itemId, { sentence, surfaceForm, followingParticle }] of bestByItemId) {
+    const item = pitchCarryingItemById.get(itemId);
+    if (!item) continue;
+    result.push({ vocabularyItem: item, sentence, surfaceForm, followingParticle });
+  }
+  // Most recently flagged first, same convention as `getPitchAccentFocusWords`.
+  result.sort((a, b) => {
+    const aSeen = lastSeenByItemId.get(a.vocabularyItem.id) ?? '';
+    const bSeen = lastSeenByItemId.get(b.vocabularyItem.id) ?? '';
+    return bSeen.localeCompare(aSeen);
+  });
+  return result;
+}
+
 export interface PitchAccentMinimalPairOccurrence extends MinimalPairOccurrence {
   expression: string;
   meaning: string;

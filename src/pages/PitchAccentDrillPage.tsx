@@ -12,6 +12,7 @@ import {
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
   getPitchAccentMinimalPairTrials,
+  getPitchAccentShadowingFocusWords,
   logPitchDrillAttempt,
   type PitchAccentDrillWord,
 } from '../db/repository';
@@ -182,19 +183,23 @@ export function PitchAccentDrillPage() {
   const rawSentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
   const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
+  const shadowingFocusWords = useLiveQuery(() => getPitchAccentShadowingFocusWords(), []);
   const minimalPairTrials = useLiveQuery(() => getPitchAccentMinimalPairTrials(), []);
   // `?mode=word` deep-links straight into single words (the Daily practice panel).
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<DrillMode>(() =>
     searchParams.get('mode') === 'word' ? 'word' : 'sentence',
   );
-  const [focusMode, setFocusMode] = useState(false);
+  // Two independent focus queues share this one slot: a word missed twice in
+  // a row in review (`getPitchAccentFocusWords`) or a word flagged with a
+  // recurring pitch mismatch in shadowing (`getPitchAccentShadowingFocusWords`).
+  // Either forces single-word mode over its own small, deliberately-ordered
+  // (most-recently-flagged-first) list — not shuffled like the ordinary pool.
+  const [focusSource, setFocusSource] = useState<'review' | 'shadowing' | null>(null);
+  const focusMode = focusSource !== null;
   const [position, setPosition] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(newShuffleSeed);
 
-  // A word missed twice in a row in review (`getPitchAccentFocusWords`)
-  // forces single-word mode over its own small, deliberately-ordered
-  // (most-recently-missed-first) list — not shuffled like the ordinary pool.
   const effectiveMode: DrillMode = focusMode ? 'word' : mode;
 
   const sentences = useMemo(
@@ -222,11 +227,13 @@ export function PitchAccentDrillPage() {
   // start extra practice.
   const [focusSession, setFocusSession] = useState<PitchAccentDrillWord[] | undefined>(undefined);
   useEffect(() => {
-    setFocusSession(focusMode ? focusWords : undefined);
-    // Intentionally only re-snapshot when focus mode toggles, not on every
-    // `focusWords` change — see comment above.
+    setFocusSession(
+      focusSource === 'review' ? focusWords : focusSource === 'shadowing' ? shadowingFocusWords : undefined,
+    );
+    // Intentionally only re-snapshot when the focus source changes, not on
+    // every `focusWords`/`shadowingFocusWords` change — see comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMode]);
+  }, [focusSource]);
   const activeWords = focusMode ? focusSession : words;
 
   const reshuffle = () => {
@@ -474,8 +481,23 @@ export function PitchAccentDrillPage() {
               never changes when that card comes up for review again.
             </p>
             <div>
-              <button type="button" onClick={() => setFocusMode(true)}>
+              <button type="button" onClick={() => setFocusSource('review')}>
                 Start extra practice ({focusWords.length})
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!focusMode && shadowingFocusWords && shadowingFocusWords.length > 0 ? (
+          <div className="panel stack" style={{ gap: '0.4rem' }}>
+            <strong>Weak in shadowing</strong>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Your shadowing attempts keep flagging a pitch-accent mismatch on{' '}
+              {shadowingFocusWords.length} word{shadowingFocusWords.length === 1 ? '' : 's'}.
+            </p>
+            <div>
+              <button type="button" onClick={() => setFocusSource('shadowing')}>
+                Start extra practice ({shadowingFocusWords.length})
               </button>
             </div>
           </div>
@@ -483,8 +505,10 @@ export function PitchAccentDrillPage() {
 
         {focusMode ? (
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong>Extra practice</strong>
-            <button type="button" className="ghost" onClick={() => setFocusMode(false)}>
+            <strong>
+              Extra practice{focusSource === 'shadowing' ? ' — weak in shadowing' : ''}
+            </strong>
+            <button type="button" className="ghost" onClick={() => setFocusSource(null)}>
               Exit extra practice
             </button>
           </div>

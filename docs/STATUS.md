@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-21.
+Last updated: 2026-09-22.
 
 ## Where things stand
 
@@ -70,6 +70,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Shadowing weak words surfaced on the pitch-accent drill (second "extra practice" queue).**
+  Closes the "Shadowing weak words → pitch-accent drill" item on ROADMAP.md — the last unbuilt piece of the
+  2026-09-08 analytics pass. `getShadowingWeakWords` already existed (feeds `/progress`'s error-mix pronunciation
+  block) but wasn't actionable anywhere. New `getPitchAccentShadowingFocusWords` (`src/db/repository.ts`) resolves
+  each flagged surface form back to its vocabulary item via `sentenceVocabulary` (wordIssues only stores a surface
+  form, not an item id), restricted to confirmed/proficient/pitch-carrying items, then reuses
+  `bestExampleOccurrencesByItemId` — the same dictionary-form-preferring example picker
+  `getPitchAccentFocusWords` (the SRS-miss sibling, 2026-09-11) uses. `PitchAccentDrillPage`'s single boolean
+  `focusMode` became `focusSource: 'review' | 'shadowing' | null` so the two queues can share the same "extra
+  practice" single-word session/exit machinery without colliding; a second banner ("Weak in shadowing") sits
+  under the existing "Missed in review" one. Unlike the review-miss queue, this one has no "practiced since"
+  clear condition — it's a live reflection of `getShadowingWeakWords`, so it only shrinks once shadowing attempts
+  stop reproducing the mismatch. 3 new repository tests. Not browser-verified (no browser libs on this host).
+  **Manual test plan:** shadow a sentence containing a pitch-carrying word at least twice, letting the analysis
+  flag the same word's pitch shape both times (or check `/progress`'s error-mix pronunciation block already
+  names a repeat offender); open `/pitch-accent` and confirm a "Weak in shadowing" panel appears above/alongside
+  "Missed in review" (if any) naming that word count; "Start extra practice" should walk just those words in
+  single-word mode; "Exit extra practice" returns to the normal shuffled pool.
 - **2026-09-21 — Short games: Ear Tiles shipped (fifth `/play` game).** Hear a real sentence's native clip, then rebuild
   it from shuffled phrase tiles in the order heard. New `src/lib/earTiles.ts` (pure: chunker, eligibility, puzzle,
   scoring), `EarTilesGame.tsx`, `getEarTilesCandidates` (repository, read-only), registry entry (all three signals;

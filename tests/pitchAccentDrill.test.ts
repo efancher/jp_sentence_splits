@@ -7,8 +7,10 @@ import {
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
+  getPitchAccentShadowingFocusWords,
   logPitchDrillAttempt,
   recordReview,
+  saveAttemptAnalysisSummary,
 } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 
@@ -421,6 +423,77 @@ describe('getPitchAccentFocusWords', () => {
       now: new Date('2026-09-06T00:00:00.000Z'),
     });
     expect(await getPitchAccentFocusWords()).toHaveLength(1);
+  });
+});
+
+describe('getPitchAccentShadowingFocusWords', () => {
+  beforeEach(async () => {
+    resetDbForTests(`pa-shadow-focus-${createId('db')}`);
+    await ensureSettings();
+  });
+
+  it('surfaces a word flagged with a recurring pitch mismatch across shadowing attempts', async () => {
+    await seedEligibleSentence('s1');
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-1',
+      sentenceId: 's1',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      timingSeverity: 0,
+      pitchSeverity: 0.5,
+      wordIssues: [{ surfaceForm: '食べる', kind: 'pitch-accent-shape', severity: 0.5 }],
+    });
+    expect(await getPitchAccentShadowingFocusWords()).toEqual([]);
+
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-2',
+      sentenceId: 's1',
+      createdAt: '2026-09-02T00:00:00.000Z',
+      timingSeverity: 0,
+      pitchSeverity: 0.5,
+      wordIssues: [{ surfaceForm: '食べる', kind: 'pitch-accent-shape', severity: 0.5 }],
+    });
+    const focus = await getPitchAccentShadowingFocusWords();
+    expect(focus).toHaveLength(1);
+    expect(focus[0]!.vocabularyItem.id).toBe('s1-vocab');
+    expect(focus[0]!.sentence.id).toBe('s1');
+  });
+
+  it('does not surface a word flagged only once', async () => {
+    await seedEligibleSentence('s1');
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-1',
+      sentenceId: 's1',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      timingSeverity: 0,
+      pitchSeverity: 0.5,
+      wordIssues: [{ surfaceForm: '食べる', kind: 'pitch-accent-shape', severity: 0.5 }],
+    });
+    expect(await getPitchAccentShadowingFocusWords()).toEqual([]);
+  });
+
+  it('excludes a flagged word that has not reached proficiency', async () => {
+    await seedEligibleSentence('s1');
+    const studyItem = await getDb().studyItems.where('subjectId').equals('s1-vocab').first();
+    await getDb().studyItems.update(studyItem!.id, {
+      fsrsState: { ...studyItem!.fsrsState, state: 'new', reps: 0 },
+    });
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-1',
+      sentenceId: 's1',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      timingSeverity: 0,
+      pitchSeverity: 0.5,
+      wordIssues: [{ surfaceForm: '食べる', kind: 'pitch-accent-shape', severity: 0.5 }],
+    });
+    await saveAttemptAnalysisSummary({
+      id: 'attempt-2',
+      sentenceId: 's1',
+      createdAt: '2026-09-02T00:00:00.000Z',
+      timingSeverity: 0,
+      pitchSeverity: 0.5,
+      wordIssues: [{ surfaceForm: '食べる', kind: 'pitch-accent-shape', severity: 0.5 }],
+    });
+    expect(await getPitchAccentShadowingFocusWords()).toEqual([]);
   });
 });
 
