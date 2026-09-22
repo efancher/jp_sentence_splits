@@ -31,6 +31,28 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-22 — Continuous scoring in the pitch-accent drill (fall timing/magnitude vs. a real native clip).**
+  Closes the ROADMAP "Pitch-accent: analysis tools" item, unblocked by the 2026-09-21 grader calibration
+  (`gradeLearnerMorae`). The categorical grade (`buildPitchAccentShapeObservations`) collapses a near-miss and a
+  wild swing to the same "mismatch" — this adds a continuous signal underneath it so progress shows even while
+  the categorical grade is still wrong. New `src/lib/pitchContinuousScore.ts` (`compareFallToNative`): for a
+  scored word, fits both the learner's take and a real native clip of the same word (`fitAccentShape` on each),
+  then reports `fallTimingErrorMorae` (`detectedDropPosition` distance between the two fitted shapes) and
+  `fallMagnitudeRatio` (learner contrast ÷ native contrast — both already relative-to-own-median semitones, so
+  the ratio is meaningful across two different speakers with no extra normalization, per the "never compare
+  absolute pitch" rule). `PitchAccentDrillPage` finds a native clip via the same corpus Odd Ear Out and the
+  `pitch_accent` card's "Reveal bridges" already draw from (`getOddEarOutData`, loaded once per session, one
+  clip per `vocabularyItemId`); when one exists, `ContinuousPitchFeedback` renders one line per word ("fall
+  lands on the right mora, magnitude 78% of the native clip's 2.1 st") under *both* the "nicely done" and the
+  mismatch feedback branches. Best-effort throughout — no clip, an undecodable/unfetchable blob, or a native
+  clip whose own contrast is too weak to fit collapses to "nothing shown," never an error. Logged per attempt
+  for a future trend line: `PitchDrillAttempt.fallTimingErrorMorae`/`fallMagnitudeRatio` (new nullable columns,
+  migration `20260922010000_pitch_drill_attempts_continuous_score.sql` — **needs the usual apply-and-verify
+  pass**, see the migration-apply-gap note below), and `scripts/report-pitch-drill-effectiveness.ts` gained a
+  weekly avg-mora-off / avg-magnitude-ratio section reading them back. Data starts accumulating from this point
+  on; historical attempts have no native-comparison columns. 6 new tests
+  (`tests/pitchContinuousScore.test.ts`), full suite green (1985).
+
 - **2026-09-20 — Phrase pitch view on the shadowing screen (native vs you, per phrase).** Step 2 of the
   phrase-level pitch plan. `src/lib/phrasePitch.ts` (`groupIntoPhrases`, `buildPhrasePitch`, `phraseFeedback`)
   groups the aligned tokens into phrases (content word + trailing particles/endings from a small closed

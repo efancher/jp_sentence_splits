@@ -5515,6 +5515,8 @@ export async function logPitchDrillAttempt(input: {
   expectedShape?: string;
   measuredShape?: string;
   focusTriggered: boolean;
+  fallTimingErrorMorae?: number;
+  fallMagnitudeRatio?: number;
   now?: Date;
 }): Promise<PitchDrillAttempt> {
   const db = getDb();
@@ -5532,6 +5534,8 @@ export async function logPitchDrillAttempt(input: {
     expectedShape: input.expectedShape,
     measuredShape: input.measuredShape,
     focusTriggered: input.focusTriggered,
+    fallTimingErrorMorae: input.fallTimingErrorMorae,
+    fallMagnitudeRatio: input.fallMagnitudeRatio,
   };
   await db.pitchDrillAttempts.put(attempt);
   notifySyncMany([

@@ -887,6 +887,8 @@ export function pitchDrillAttemptToRemote(
     expected_shape: attempt.expectedShape ?? null,
     measured_shape: attempt.measuredShape ?? null,
     focus_triggered: attempt.focusTriggered,
+    fall_timing_error_morae: attempt.fallTimingErrorMorae ?? null,
+    fall_magnitude_ratio: attempt.fallMagnitudeRatio ?? null,
     created_at: attempt.timestamp,
     updated_at: attempt.timestamp,
     deleted_at: null,
@@ -911,6 +913,8 @@ export function remoteToPitchDrillAttempt(
     expectedShape: (row.expected_shape as string | null) ?? undefined,
     measuredShape: (row.measured_shape as string | null) ?? undefined,
     focusTriggered: Boolean(row.focus_triggered),
+    fallTimingErrorMorae: (row.fall_timing_error_morae as number | null) ?? undefined,
+    fallMagnitudeRatio: (row.fall_magnitude_ratio as number | null) ?? undefined,
   };
 }
 

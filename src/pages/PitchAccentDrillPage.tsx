@@ -8,12 +8,16 @@ import { DrillTakeLabelsPanel } from '../components/DrillTakeLabels';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import {
+  getOddEarOutData,
   getPitchAccentDrillSentences,
   getPitchAccentDrillWords,
   getPitchAccentFocusWords,
   getPitchAccentMinimalPairTrials,
   getPitchAccentShadowingFocusWords,
+  getReferencePitchTrack,
   logPitchDrillAttempt,
+  saveReferencePitchTrack,
+  type OddEarOutClip,
   type PitchAccentDrillWord,
 } from '../db/repository';
 import type { Sentence, WordAlignment } from '../domain/types';
@@ -22,14 +26,17 @@ import { createId } from '../lib/ids';
 import { alignAudioDetailed, type AlignAudioFailureReason } from '../lib/analysisApi';
 import { buildKanaTimeline, type KanaTimelineEntry } from '../lib/kanaTimeline';
 import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../lib/mora';
+import { measureNativeWord } from '../lib/nativeClipPitchAudit';
 import { extractPitch, type PitchAnalysisPayload } from '../lib/pitch';
-import { seededShuffle } from '../lib/seededShuffle';
 import {
   buildLearnerPitchAccentShapes,
   buildPitchAccentShapeObservations,
   type PitchAccentTarget,
 } from '../lib/pitchAccentObservations';
 import { expectedPitchShape, type MoraPitchClass } from '../lib/pitchAccentShape';
+import { compareFallToNative, type ContinuousPitchComparison } from '../lib/pitchContinuousScore';
+import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
+import { seededShuffle } from '../lib/seededShuffle';
 import type { SentencePitchAccentTarget } from '../lib/sentencePitchAccent';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 import type { TimingObservation } from '../lib/timingObservations';
@@ -103,6 +110,8 @@ type AnalysisState =
       flatSurfaces: Set<string>;
       /** Learner's own measured per-mora H/L, keyed by surface form — the second line under the dictionary row. */
       learnerClassesBySurface: Map<string, MoraPitchClass[]>;
+      /** High − low contrast of the learner's fitted shape (`gradeLearnerMorae`), keyed by surface form — feeds the native-clip continuous comparison. */
+      learnerContrastBySurface: Map<string, number | null>;
       /** Learner's measured level on each word's attached particle, keyed by surface form (odaka/heiban cue). */
       learnerFollowingBySurface: Map<string, MoraPitchClass>;
       /** `observations`, keyed back to the target word they were scored against — usage-log attribution (`logPitchDrillAttempt`). */
@@ -142,6 +151,7 @@ async function analyzeRecording(
       targets: scorableTargets,
     });
     const learnerClassesBySurface = new Map<string, MoraPitchClass[]>();
+    const learnerContrastBySurface = new Map<string, number | null>();
     const learnerFollowingBySurface = new Map<string, MoraPitchClass>();
     const flatSurfaces = new Set<string>();
     for (const shape of buildLearnerPitchAccentShapes({
@@ -150,6 +160,7 @@ async function analyzeRecording(
       targets: scorableTargets,
     })) {
       learnerClassesBySurface.set(shape.surfaceForm, shape.classes);
+      learnerContrastBySurface.set(shape.surfaceForm, shape.contrastSemitones);
       if (shape.flat) flatSurfaces.add(shape.surfaceForm);
       if (shape.followingClass) learnerFollowingBySurface.set(shape.surfaceForm, shape.followingClass);
     }
@@ -170,12 +181,54 @@ async function analyzeRecording(
       learnerWords: alignment.words,
       flatSurfaces,
       learnerClassesBySurface,
+      learnerContrastBySurface,
       learnerFollowingBySurface,
       observationBySurfaceForm,
       scorableCount: scorableTargets.length,
     };
   } catch {
     return { status: 'unavailable', learnerPitch: pitch };
+  }
+}
+
+/**
+ * Best-effort native-clip lookup for the continuous fall-timing/magnitude
+ * comparison (`compareFallToNative`) — null whenever any step is
+ * unavailable (no clip for this word, blob not downloadable offline, no
+ * cached pitch track, native clip itself too flat to fit a shape). Never
+ * throws: this is optional scaffolding on top of the categorical grade,
+ * never a gate on it.
+ */
+async function nativeContinuousComparison(
+  clip: OddEarOutClip | undefined,
+  learnerClasses: MoraPitchClass[] | undefined,
+  learnerContrastSemitones: number | null | undefined,
+): Promise<ContinuousPitchComparison | null> {
+  if (!clip || !learnerClasses || learnerClasses.length === 0) return null;
+  try {
+    const blob =
+      clip.audio.blob && clip.audio.blob.size > 0
+        ? clip.audio.blob
+        : await (await import('../sync/audioSync')).repairSentenceAudio(clip.audio.id);
+    if (!blob) return null;
+    const track = await loadOrComputeReferencePitch(
+      clip.audio.id,
+      blob,
+      getReferencePitchTrack,
+      saveReferencePitchTrack,
+    );
+    if (!track) return null;
+    const native = measureNativeWord({
+      pitch: track,
+      span: clip.span,
+      surfaceForm: clip.expression,
+      moraCount: clip.moraCount,
+      position: clip.position,
+    });
+    if (!native) return null;
+    return compareFallToNative(learnerClasses, learnerContrastSemitones ?? null, native);
+  } catch {
+    return null;
   }
 }
 
@@ -250,6 +303,23 @@ export function PitchAccentDrillPage() {
   const [takeLabels, setTakeLabels] = useState<{ id: string; labels: DrillTakeLabels } | null>(null);
   const takeUploadRef = useRef<Promise<boolean>>(Promise.resolve(false));
 
+  // One real native clip per word, for the continuous fall-timing/magnitude
+  // comparison below — same corpus Odd Ear Out and the pitch_accent card's
+  // "Reveal bridges" already draw native clips from. Loaded once, not
+  // per-take: it's a full sweep of sentenceVocabulary, cheap to keep around
+  // for a whole drill session.
+  const oddEarClips = useLiveQuery(() => getOddEarOutData().then(({ clips }) => clips), []);
+  const clipByVocabularyItemId = useMemo(() => {
+    const map = new Map<string, OddEarOutClip>();
+    for (const clip of oddEarClips ?? []) {
+      if (!map.has(clip.vocabularyItemId)) map.set(clip.vocabularyItemId, clip);
+    }
+    return map;
+  }, [oddEarClips]);
+  const [continuousBySurfaceForm, setContinuousBySurfaceForm] = useState<
+    Map<string, ContinuousPitchComparison>
+  >(new Map());
+
   const list = effectiveMode === 'sentence' ? sentences : activeWords;
   const currentSentence = effectiveMode === 'sentence' ? sentences?.[position] : undefined;
   const currentWord = effectiveMode === 'word' ? activeWords?.[position] : undefined;
@@ -305,6 +375,7 @@ export function PitchAccentDrillPage() {
   useEffect(() => {
     setPending(null);
     setAnalysis({ status: 'idle' });
+    setContinuousBySurfaceForm(new Map());
     cancelRecording();
   }, [currentId, effectiveMode, cancelRecording]);
 
@@ -338,6 +409,7 @@ export function PitchAccentDrillPage() {
     let active = true;
     setAnalysis({ status: 'analyzing' });
     setTakeLabels(null);
+    setContinuousBySurfaceForm(new Map());
     void analyzeRecording(pending.blob, transcript, analysisTargets).then((next) => {
       if (active) setAnalysis(next);
     });
@@ -349,73 +421,103 @@ export function PitchAccentDrillPage() {
   // Log this take's per-word results (docs/STATUS.md) — a usage/effectiveness
   // record only, never a gate on the drill itself. Fires once per completed
   // analysis (a new `analysis` object arrives exactly once per take).
+  // Also resolves each target's continuous fall-timing/magnitude comparison
+  // against a real native clip of the same word (`compareFallToNative`) —
+  // best-effort and async (it may need to fetch/decode a reference clip), so
+  // the whole body is one IIFE rather than a plain sync loop.
   useEffect(() => {
     if (analysis.status !== 'done') return;
     const contextSentenceId =
       effectiveMode === 'sentence' ? currentSentence?.sentence.id : currentWord?.sentence.id;
     if (!contextSentenceId) return;
-    const { learnerClassesBySurface, learnerFollowingBySurface, observationBySurfaceForm, flatSurfaces } =
-      analysis;
-    const takeTargets: DrillTakeTarget[] = [];
-    const takeResults: DrillTakeResult[] = [];
-    for (const target of analysisTargets) {
-      const vocabularyItemId =
-        effectiveMode === 'sentence'
-          ? currentSentence?.targetVocabularyItemIds[target.surfaceForm]
-          : currentWord?.vocabularyItem.id;
-      const moraCount = segmentIntoMorae(target.reading).length;
-      const position = target.pitchAccentPositions[0];
-      const expectedShape =
-        moraCount > 0 && position !== undefined
-          ? expectedPitchShape(moraCount, position, !!target.followingMora).join('')
+    const {
+      learnerClassesBySurface,
+      learnerContrastBySurface,
+      learnerFollowingBySurface,
+      observationBySurfaceForm,
+      flatSurfaces,
+    } = analysis;
+    let cancelled = false;
+    void (async () => {
+      const takeTargets: DrillTakeTarget[] = [];
+      const takeResults: DrillTakeResult[] = [];
+      const continuous = new Map<string, ContinuousPitchComparison>();
+      for (const target of analysisTargets) {
+        const vocabularyItemId =
+          effectiveMode === 'sentence'
+            ? currentSentence?.targetVocabularyItemIds[target.surfaceForm]
+            : currentWord?.vocabularyItem.id;
+        const moraCount = segmentIntoMorae(target.reading).length;
+        const position = target.pitchAccentPositions[0];
+        const expectedShape =
+          moraCount > 0 && position !== undefined
+            ? expectedPitchShape(moraCount, position, !!target.followingMora).join('')
+            : undefined;
+        const measuredClasses = learnerClassesBySurface.get(target.surfaceForm);
+        const followingClass = learnerFollowingBySurface.get(target.surfaceForm);
+        const measuredShape = measuredClasses
+          ? [...measuredClasses, ...(followingClass ? [followingClass] : [])].join('')
           : undefined;
-      const measuredClasses = learnerClassesBySurface.get(target.surfaceForm);
-      const followingClass = learnerFollowingBySurface.get(target.surfaceForm);
-      const measuredShape = measuredClasses
-        ? [...measuredClasses, ...(followingClass ? [followingClass] : [])].join('')
-        : undefined;
-      const observation = observationBySurfaceForm.get(target.surfaceForm);
-      takeTargets.push({ ...target, vocabularyItemId, contextSentenceId });
-      takeResults.push({
-        surfaceForm: target.surfaceForm,
-        measured: !!measuredClasses,
-        mismatch: !!observation,
-        confidence: observation?.confidence,
-        expectedShape,
-        measuredShape,
-        flat: flatSurfaces.has(target.surfaceForm) || undefined,
-      });
-      void logPitchDrillAttempt({
-        mode: effectiveMode,
-        vocabularyItemId,
-        surfaceForm: target.surfaceForm,
-        reading: target.reading,
-        contextSentenceId,
-        measured: !!measuredClasses,
-        mismatch: !!observation,
-        confidence: observation?.confidence,
-        expectedShape,
-        measuredShape,
-        focusTriggered: focusMode,
-      });
-    }
-    // Keep the take itself (audio + alignment + pitch) so the grader can be
-    // replayed against it. Best-effort: never blocks or fails the drill.
-    if (pending) {
-      const id = createId('take');
-      setTakeLabels({ id, labels: {} });
-      takeUploadRef.current = uploadDrillTake({
-        id,
-        mode: effectiveMode,
-        transcript: transcript ?? '',
-        focusTriggered: focusMode,
-        audio: { blob: pending.blob, mimeType: pending.blob.type || 'audio/webm', durationMs: pending.durationMs },
-        alignment: { durationSeconds: analysis.learnerPitch?.durationSeconds ?? pending.durationMs / 1000, words: analysis.learnerWords },
-        pitch: analysis.learnerPitch,
-        targets: takeTargets,
-        results: takeResults,
-      });
-    }
+        const observation = observationBySurfaceForm.get(target.surfaceForm);
+        const clip = vocabularyItemId ? clipByVocabularyItemId.get(vocabularyItemId) : undefined;
+        const comparison = await nativeContinuousComparison(
+          clip,
+          measuredClasses,
+          learnerContrastBySurface.get(target.surfaceForm),
+        );
+        if (comparison) continuous.set(target.surfaceForm, comparison);
+        takeTargets.push({ ...target, vocabularyItemId, contextSentenceId });
+        takeResults.push({
+          surfaceForm: target.surfaceForm,
+          measured: !!measuredClasses,
+          mismatch: !!observation,
+          confidence: observation?.confidence,
+          expectedShape,
+          measuredShape,
+          flat: flatSurfaces.has(target.surfaceForm) || undefined,
+        });
+        void logPitchDrillAttempt({
+          mode: effectiveMode,
+          vocabularyItemId,
+          surfaceForm: target.surfaceForm,
+          reading: target.reading,
+          contextSentenceId,
+          measured: !!measuredClasses,
+          mismatch: !!observation,
+          confidence: observation?.confidence,
+          expectedShape,
+          measuredShape,
+          focusTriggered: focusMode,
+          fallTimingErrorMorae: comparison?.fallTimingErrorMorae,
+          fallMagnitudeRatio: comparison?.fallMagnitudeRatio ?? undefined,
+        });
+      }
+      if (cancelled) return;
+      setContinuousBySurfaceForm(continuous);
+      // Keep the take itself (audio + alignment + pitch) so the grader can be
+      // replayed against it. Best-effort: never blocks or fails the drill.
+      if (pending) {
+        const id = createId('take');
+        setTakeLabels({ id, labels: {} });
+        takeUploadRef.current = uploadDrillTake({
+          id,
+          mode: effectiveMode,
+          transcript: transcript ?? '',
+          focusTriggered: focusMode,
+          audio: { blob: pending.blob, mimeType: pending.blob.type || 'audio/webm', durationMs: pending.durationMs },
+          alignment: {
+            durationSeconds: analysis.learnerPitch?.durationSeconds ?? pending.durationMs / 1000,
+            words: analysis.learnerWords,
+          },
+          pitch: analysis.learnerPitch,
+          targets: takeTargets,
+          results: takeResults,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis]);
 
@@ -615,7 +717,7 @@ export function PitchAccentDrillPage() {
             {pending && pendingUrl ? (
               <div className="stack">
                 <LearnerTake url={pendingUrl} pitch={learnerPitch} kana={learnerKana} />
-                <PitchAccentFeedback analysis={analysis} />
+                <PitchAccentFeedback analysis={analysis} continuousBySurfaceForm={continuousBySurfaceForm} />
                 {analysis.status === 'done' && takeLabels ? (
                   <DrillTakeLabelsPanel
                     words={analysisTargets.map((target) => target.surfaceForm)}
@@ -770,7 +872,50 @@ function LearnerTake({
 }
 
 /** The pitch-accent read-out after a take — shared by both modes. */
-function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
+/**
+ * One line per scored word that had a real native clip to compare against
+ * — fall timing (in morae) and fall magnitude (semitones) relative to that
+ * clip, shown *regardless* of the categorical verdict above. The point:
+ * a take can still be "closer" even while its high/low grade reads as a
+ * mismatch (ROADMAP.md "Continuous scoring in the drill"). Both values are
+ * already relative-to-own-median semitones (`pitch.ts`), so the ratio is
+ * meaningful across two different speakers without any extra
+ * normalization — never shows an absolute pitch number.
+ */
+function ContinuousPitchFeedback({
+  continuousBySurfaceForm,
+}: {
+  continuousBySurfaceForm: Map<string, ContinuousPitchComparison>;
+}) {
+  if (continuousBySurfaceForm.size === 0) return null;
+  return (
+    <div className="stack" style={{ gap: '0.15rem' }}>
+      <span className="muted" style={{ fontSize: '0.8rem' }}>
+        Against a real native clip of the same word:
+      </span>
+      {[...continuousBySurfaceForm.entries()].map(([surfaceForm, comparison]) => (
+        <div key={surfaceForm} className="muted" style={{ fontSize: '0.85rem' }}>
+          <span className="jp">{surfaceForm}</span> —{' '}
+          {comparison.fallTimingErrorMorae === 0
+            ? 'fall lands on the right mora'
+            : `fall lands ${comparison.fallTimingErrorMorae} mora${comparison.fallTimingErrorMorae === 1 ? '' : 'e'} off`}
+          {', magnitude '}
+          {comparison.fallMagnitudeRatio === null
+            ? `${comparison.learnerContrastSemitones.toFixed(1)} st (this native clip's own contrast is too weak to compare against)`
+            : `${Math.round(comparison.fallMagnitudeRatio * 100)}% of the native clip's ${comparison.nativeContrastSemitones.toFixed(1)} st`}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PitchAccentFeedback({
+  analysis,
+  continuousBySurfaceForm,
+}: {
+  analysis: AnalysisState;
+  continuousBySurfaceForm: Map<string, ContinuousPitchComparison>;
+}) {
   if (analysis.status === 'analyzing') {
     return <p className="muted">Checking your pitch accent…</p>;
   }
@@ -799,11 +944,14 @@ function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
   }
   if (observations.length === 0) {
     return (
-      <p>
-        No clear pitch-accent mismatch on the{' '}
-        {measured === scorableCount ? '' : `${measured} of ${scorableCount} `}
-        word{measured === 1 ? '' : 's'} I could measure — nicely done.
-      </p>
+      <div className="stack">
+        <p style={{ margin: 0 }}>
+          No clear pitch-accent mismatch on the{' '}
+          {measured === scorableCount ? '' : `${measured} of ${scorableCount} `}
+          word{measured === 1 ? '' : 's'} I could measure — nicely done.
+        </p>
+        <ContinuousPitchFeedback continuousBySurfaceForm={continuousBySurfaceForm} />
+      </div>
     );
   }
   return (
@@ -828,6 +976,7 @@ function PitchAccentFeedback({ analysis }: { analysis: AnalysisState }) {
           {observation.detail ? <p className="muted">{observation.detail}</p> : null}
         </article>
       ))}
+      <ContinuousPitchFeedback continuousBySurfaceForm={continuousBySurfaceForm} />
     </div>
   );
 }

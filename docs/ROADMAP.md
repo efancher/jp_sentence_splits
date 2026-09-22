@@ -985,11 +985,14 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     **80 (48%) were below the weak threshold** — confirms the audit's earlier "57%
     weak" finding and means this gate has real bite. Undefined (not yet measured) is
     never gated — only a known-weak clip is skipped.
-  - [ ] **Continuous scoring in the drill** — compare the learner's pitch line to
-    the native one for the same word (fall timing error, fall magnitude relative
-    to the native's, trend over time), normalized *per speaker* (never absolute
-    pitch — user is a quiet baritone), so progress shows even while the high/low
-    grade is still wrong. Depends on the scorer calibration above.
+  - [x] **Continuous scoring in the drill.** (2026-09-22) `compareFallToNative`
+    (`src/lib/pitchContinuousScore.ts`) compares the learner's take to a real native clip of the same
+    word (fall timing error in morae, fall magnitude as a ratio of the native's contrast — both already
+    relative-to-own-median semitones, so no extra per-speaker normalization is needed), shown under
+    both the pass and mismatch feedback branches so progress shows even while the categorical grade is
+    still wrong. Logged per attempt (`PitchDrillAttempt.fallTimingErrorMorae`/`fallMagnitudeRatio`) for
+    a weekly trend in `report-pitch-drill-effectiveness.ts`; data starts accumulating from this point on.
+    See STATUS.md.
   - [ ] **Hear-vs-say per-word table** (perception from card reviews vs
     production from `pitch_drill_attempts`). Premature — only ~71 drill takes so
     far; revisit once there is volume.

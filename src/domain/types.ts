@@ -792,6 +792,14 @@ export interface PitchDrillAttempt {
   measuredShape?: string;
   /** Reached via the "extra practice" focus banner (a consistently-missed SRS word), not the ordinary shuffled list. */
   focusTriggered: boolean;
+  /**
+   * Continuous comparison against a real native clip of the same word
+   * (`compareFallToNative`), when one was available — absent whenever no
+   * clip/pitch track could be resolved, distinct from a measured 0. See
+   * ROADMAP.md "Continuous scoring in the drill".
+   */
+  fallTimingErrorMorae?: number;
+  fallMagnitudeRatio?: number;
 }
 
 /**

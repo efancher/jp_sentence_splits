@@ -309,6 +309,8 @@ export interface LearnerPitchAccentShape {
   moraCount: number;
   /** The take's pitch barely moved (`FLAT_CONTRAST_SEMITONES`): `classes` is then the raw per-mora reading. */
   flat?: boolean;
+  /** High − low contrast of the fitted shape, semitones; null when no shape could be fitted (see `gradeLearnerMorae`). */
+  contrastSemitones: number | null;
 }
 
 /**
@@ -353,6 +355,7 @@ export function buildLearnerPitchAccentShapes({
         : undefined,
       voicedBucketCount: learnerResult.voicedBucketCount,
       moraCount: morae.length,
+      contrastSemitones: learnerResult.contrastSemitones,
     });
   }
 

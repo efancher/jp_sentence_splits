@@ -293,7 +293,7 @@ describe('buildLearnerPitchAccentShapes', () => {
     ];
 
     expect(buildLearnerPitchAccentShapes({ learnerWords, learnerPitch, targets })).toEqual([
-      { surfaceForm: '雨', classes: ['h', 'l'], voicedBucketCount: 2, moraCount: 2 },
+      { surfaceForm: '雨', classes: ['h', 'l'], voicedBucketCount: 2, moraCount: 2, contrastSemitones: 10 },
     ]);
   });
 

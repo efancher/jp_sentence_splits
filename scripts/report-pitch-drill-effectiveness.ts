@@ -65,7 +65,7 @@ async function main() {
     fetchAll(
       supabase,
       'pitch_drill_attempts',
-      'timestamp, mode, mismatch, expected_shape, measured_shape, focus_triggered',
+      'timestamp, mode, mismatch, expected_shape, measured_shape, focus_triggered, fall_timing_error_morae, fall_magnitude_ratio',
     ),
     fetchAll(supabase, 'study_items', 'id, activity_type', (q) =>
       q.eq('activity_type', 'pitch_accent'),
@@ -210,6 +210,42 @@ async function main() {
   console.log(`next review pass — offered, not played:    ${nextPass(shown.filter((r) => !has(r, 'pitch_contrast_played')))}`);
   console.log(`next review pass — no contrast offered:    ${nextPass(misses.filter((r) => !has(r, 'pitch_contrast_shown')))}`);
   console.log('(correlational — playing the contrast is self-selected.)');
+
+  // Continuous scoring (docs/ROADMAP.md "Continuous scoring in the drill",
+  // shipped 2026-09-22): compareFallToNative's fall-timing/magnitude
+  // comparison against a real native clip, logged per attempt only when a
+  // clip was available — so weekly n here is a subset of the attempt count
+  // above, not the same denominator. Shows whether the drill is trending
+  // closer to native even on takes whose categorical shape still mismatches.
+  const continuous = attempts.filter(
+    (a) => a.fall_timing_error_morae !== null && a.fall_timing_error_morae !== undefined,
+  );
+  console.log('\n=== Continuous fall-timing/magnitude vs. native clip ===');
+  console.log(`attempts with a native clip to compare against: ${continuous.length} of ${attempts.length}`);
+  if (continuous.length === 0) {
+    console.log('(none yet)');
+  } else {
+    const continuousWeeks = new Map<string, { n: number; timingSum: number; ratios: number[] }>();
+    for (const a of continuous) {
+      const key = weekKey(a.timestamp);
+      const week = continuousWeeks.get(key) ?? { n: 0, timingSum: 0, ratios: [] };
+      week.n += 1;
+      week.timingSum += a.fall_timing_error_morae as number;
+      if (a.fall_magnitude_ratio !== null && a.fall_magnitude_ratio !== undefined) {
+        week.ratios.push(a.fall_magnitude_ratio as number);
+      }
+      continuousWeeks.set(key, week);
+    }
+    console.log('week       n     avg mora off   avg magnitude ratio');
+    for (const [week, data] of [...continuousWeeks.entries()].sort()) {
+      const avgRatio = data.ratios.length
+        ? `${Math.round((data.ratios.reduce((sum, r) => sum + r, 0) / data.ratios.length) * 100)}%`
+        : '—';
+      console.log(
+        `${week}  ${String(data.n).padStart(3)}   ${(data.timingSum / data.n).toFixed(2).padStart(11)}   ${avgRatio}`,
+      );
+    }
+  }
 }
 
 main().catch((error) => {
