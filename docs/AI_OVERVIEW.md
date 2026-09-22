@@ -345,7 +345,12 @@ Unlike glossing's not-ready
 sentences (which fall back to a `vocabulary_review` step), an unready
 sentence simply isn't a shadow candidate at all — there's no
 shadow-adjacent activity to substitute in, so `buildShadowSteps` needed no
-change.
+change. Among otherwise-eligible candidates, `findShadowCandidates` floats
+a sentence to the front (ahead of its usual fewest-attempts order) when its
+`cloze` card was just missed twice in a row (`getRecentlyMissedClozeSentenceIds`,
+keyed off the miss review's `contextSentenceId` — every `QueueCard` records
+the sentence it displayed there, not just `pitch_accent`) — cross-activity
+error routing's cloze/shadowing half.
 
 **Quiet mode** (`settings.quietMode`, per-device, toggle on both Settings
 and Home): when the learner can't speak aloud, `getSessionPlannerInput`
@@ -396,7 +401,11 @@ re-encounter freshness, plus a standalone weakness term, additive rather
 than the source brief's literal product so a fresh single-context item
 never scores to zero; the old two-pool retain/practice ranking is now one
 combined ranked list, since the score doesn't care which pool an item came
-from and `ReviewPage` itself doesn't distinguish them either) -> **time
+from and `ReviewPage` itself doesn't distinguish them either; a due
+`grammar_completion` item also gets a `crossActivityMissBoost` bump when its
+pattern occurs in a sentence whose `sentence_transformation` card was just
+missed twice — cross-activity error routing, reorders among already-due
+items only, never makes a not-due one due) -> **time
 allocation** across the four buckets (a 35/15/15/35
 glossing/grammar/shadowing/review baseline nudged toward neglected buckets,
 then clamped two ways: against how much each bucket's own candidate list can
@@ -1200,6 +1209,13 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   on the word's own morae, so a phrase-final clip can't disambiguate them by
   ear (`hasFollowingVoicedMora`; user request, 2026-09-07). An internal drop
   (atamadaka / nakadaka) is audible on the word alone and skips that check.
+  A citation-form occurrence is also skipped when its own clip's measured
+  cue is known weak (`SentenceVocabulary.pitchCueSeparationSemitones` < 1.5
+  semitones — `measureNativeWord`'s `separationSemitones`, backfilled
+  offline via `scripts/backfill-pitch-cue-strength.ts`; undefined/not-yet-
+  measured is never gated), and among several occurrences of a word the
+  strongest-known-cue one wins rather than always the first seen
+  (2026-09-22, unblocked by the drill scorer's calibration).
   A dictionary-contour-only card was dropped as not worth its queue slot, and
   here the clip is load-bearing. **Audio-first
   perception task**: `PitchAccentNativeAudio` (below) plays *above* the

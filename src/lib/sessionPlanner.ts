@@ -140,6 +140,19 @@ export interface ReviewPriorityInput {
    */
   daysSinceLastEncounter: number | null;
   now: Date;
+  /**
+   * Set only for a `grammarPattern` subject whose pattern occurs in a
+   * sentence where a `sentence_transformation` card was just missed twice
+   * in a row — the conjugation form that tripped the learner up is
+   * (probably) part of the construction this card tests. The
+   * `sentence_transformation`/grammar half of "cross-activity error
+   * routing" (docs/ROADMAP.md "Possibilities"); the `pitch_accent` half
+   * shipped 2026-09-11 as its own focus queue instead of a priority nudge,
+   * since a due `grammar_completion` item is already in this ranked batch
+   * and doesn't need a separate surface. Never makes a not-due item due —
+   * only reorders among what's already here.
+   */
+  crossActivityMissBoost?: boolean;
 }
 
 export interface ReviewPriorityResult {
@@ -192,7 +205,8 @@ export function scoreReviewPriority(input: ReviewPriorityInput): ReviewPriorityR
           1,
         );
 
-  const score = forgettingRisk * usefulness * staleness + weakness * 0.5;
+  const score =
+    forgettingRisk * usefulness * staleness + weakness * 0.5 + (input.crossActivityMissBoost ? 0.4 : 0);
 
   const reasons: string[] = [];
   if (input.state === 'new' || input.state === 'learning') {
@@ -205,6 +219,7 @@ export function scoreReviewPriority(input: ReviewPriorityInput): ReviewPriorityR
     reasons.push(`missed ${input.recentAgainCount}/${input.recentReviewCount} recently`);
   }
   if (staleness < 1) reasons.push('not re-encountered in a while');
+  if (input.crossActivityMissBoost) reasons.push('linked to a recently missed conjugation');
 
   return {
     studyItemId: input.studyItemId,

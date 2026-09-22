@@ -108,6 +108,17 @@ describe('scoreReviewPriority / rankReviewPriorities', () => {
     expect(stale.score).toBeGreaterThan(0);
   });
 
+  it('ranks a grammar item linked to a just-missed conjugation above an otherwise-identical one', () => {
+    const boosted = scoreReviewPriority(
+      dueCandidate({ subjectType: 'grammarPattern', activityType: 'grammar_completion', crossActivityMissBoost: true }),
+    );
+    const plain = scoreReviewPriority(
+      dueCandidate({ subjectType: 'grammarPattern', activityType: 'grammar_completion' }),
+    );
+    expect(boosted.score).toBeGreaterThan(plain.score);
+    expect(boosted.reasons).toContain('linked to a recently missed conjugation');
+  });
+
   it('caps the ranked list at the requested limit even with a large backlog', () => {
     const backlog = Array.from({ length: 80 }, (_, index) =>
       dueCandidate({ studyItemId: `card_${index}`, due: daysAgo(index) }),

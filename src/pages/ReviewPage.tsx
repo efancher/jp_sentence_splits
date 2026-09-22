@@ -1606,9 +1606,12 @@ export function ReviewPage() {
         expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
         pitchExpectedShape: pitchAccentShapes?.pitchExpectedShape,
         pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
-        // Which clip the card played (a word can have several occurrences),
-        // so the pitch audit can join a miss to that clip's measured cue.
-        contextSentenceId: current.pitchAccent?.sentence.id,
+        // The sentence this card actually displayed — every QueueCard has
+        // one, not just pitch_accent (which used this alone, to join a miss
+        // to the clip it played). Generalized 2026-09-22 so any activity's
+        // miss can be traced back to a sentence — see "cross-activity error
+        // routing" (docs/ROADMAP.md "Possibilities").
+        contextSentenceId: current.sentence.id,
       });
       setQueue((q) => q.slice(1));
 

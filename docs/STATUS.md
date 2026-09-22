@@ -70,6 +70,70 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Cross-activity error routing: `cloze` → shadowing, `sentence_transformation` → grammar.**
+  Closes the ROADMAP item (the `pitch_accent` slice shipped 2026-09-11 as `getPitchAccentFocusWords`). Two
+  independent pieces:
+  - **`cloze` miss floats its sentence up as a shadow target.** `ReviewPage`'s single `recordReview` call site
+    used to set `contextSentenceId` only for `pitch_accent` (to join a miss to the clip it played); generalized
+    to `current.sentence.id` for every card, since every `QueueCard` already carries the sentence it displayed —
+    free evidence for every activity type going forward, not just pitch. New
+    `getRecentlyMissedClozeSentenceIds` (`src/db/repository.ts`) finds sentences whose `cloze` card was missed
+    twice in a row (same 2-consecutive-again/hard signal `getPitchAccentFocusWords` uses), keyed off the most
+    recent miss review's `contextSentenceId` (a `cloze` study item's own subject is a vocabularyItem, not a
+    sentence — its context sentence is picked fresh per review, so the subjectId alone can't identify one).
+    `findShadowCandidates` now floats those sentences to the front of its usual fewest-attempts order, reason
+    "Missed in review — reinforce with shadowing" — everything else about shadow eligibility (vocab
+    confirmed+proficient, pitch proficient, audio present) is untouched.
+  - **`sentence_transformation` miss boosts its sentence's tracked grammar patterns.** The original idea —
+    "surface the grammar pattern behind the missed conjugation form" — doesn't hold up against real data:
+    pulled prod's 83 tracked `GrammarPattern` rows and none represent bare morphology (causative/passive/
+    te-form/potential/etc.); that paradigm is `sentence_transformation`'s own closed set
+    (`ConjugationFormKey`), not something the freeform, AI/manually-curated `GrammarPattern` catalog tracks —
+    a form→pattern mapping would either match nothing or require guessing one into existence. Built the
+    grounded version instead, reusing the real `sentence_grammar` join: new
+    `getRecentlyMissedSentenceTransformationSentenceIds` finds sentences whose conjugation card was missed
+    twice; `ReviewPriorityInput` gained `crossActivityMissBoost`, set (in `buildReviewPriorityInputs`) on a
+    `grammarPattern`-subject item when its pattern occurs in one of those sentences via `sentence_grammar`.
+    `scoreReviewPriority` adds +0.4 to the score and a "linked to a recently missed conjugation" reason.
+    Computed independently of the due-item batch being scored (an "again" rating reschedules the card into
+    the near future, so restricting the miss-scan to only currently-due items would miss almost every real
+    case) — same reasoning as why `getPitchAccentFocusWords` scans every `pitch_accent` item, not just due
+    ones. Only reorders among already-due items; never makes a not-due pattern due.
+  2 new tests (`sessionPlanner.test.ts`'s `crossActivityMissBoost` case, plus two new
+  `sessionPlannerRepository.test.ts` integration tests covering both pieces end to end through
+  `getSessionPlannerInput`). Not browser-verified (no browser libs on this host) — the underlying repository
+  functions are integration-tested against real Dexie, same convention as the rest of the planner.
+  **Manual test plan:** miss a `cloze` card twice in a row (rate Again/Hard twice on the same word), then check
+  that its sentence's shadow candidate (if otherwise eligible) shows "Missed in review — reinforce with
+  shadowing" ahead of others on the next session plan. Separately, miss a `sentence_transformation` card twice
+  on a sentence that also has a tracked grammar pattern (`/grammar` → attach one via "Add pattern" if needed);
+  confirm that pattern's `grammar_completion` card, if due, shows up preferentially in the next planned review
+  batch (no direct UI surfaces the reason string today — it's a ranking nudge, not a banner).
+- **2026-09-22 — Gate/rank `pitch_accent` cards by measured native-clip cue strength.** Closes the ROADMAP item,
+  unblocked by the 2026-09-21 scorer calibration. New `SentenceVocabulary.pitchCueSeparationSemitones`
+  (nullable, migration `20260922000000_sentence_vocabulary_pitch_cue_strength.sql`) stores how far apart a
+  citation-form occurrence's native clip actually holds its dictionary-expected high vs. low morae, in
+  semitones — `measureNativeWord`'s own `separationSemitones`, the same measure
+  `scripts/audit-pitch-accent-clips.ts` reports and the drill scorer buckets by. New
+  `scripts/backfill-pitch-cue-strength.ts` (dry-run by default, `--apply`/`--limit`/`--force`) computes it
+  offline, reusing the audit script's decode/pitch-extraction machinery (shares its `/tmp/pitch-audit-cache`).
+  `ReviewPage`'s `buildPitchAccentCandidate` now skips a citation-form occurrence whose clip is known weak
+  (< 1.5 st, matching the audit script's own `WEAK_SEPARATION_ST`) — same "gate cards missing support" stance
+  already applied to missing audio and phrase-final heiban/odaka; undefined (not yet measured) is treated as
+  unknown, never gated. `getPitchAccentReviewCandidates` also now prefers the strongest-known-cue occurrence
+  when a word has several, instead of always taking the first citation-form one seen. **Run against prod**:
+  165 of 328 eligible links measured (rest: no usable span/alignment after the isolate-and-loop cut, or too
+  little voiced signal); **80 of those 165 (48%) came back below the weak threshold** — close to the earlier
+  audit's "57% weak" finding, confirming the gate has real bite rather than being a rare edge case. Typecheck +
+  full test suite green; not browser-verified (no browser libs on this host) — the gate/rank logic sits inside
+  `ReviewPage.tsx`'s private candidate builder, same "thin page logic left for manual verification" convention
+  as its sibling gates (`hasFollowingVoicedMora` has no dedicated test either).
+  **Manual test plan:** open `/review` until a `pitch_accent` card appears; there's no direct visual signal
+  the gate did anything (a filtered-out occurrence just doesn't produce a card), so the real check is data-side:
+  a dry-run re-run of `npx tsx scripts/backfill-pitch-cue-strength.ts` confirms persistence stuck — verified
+  2026-09-22, second run reports `163 to measure (skipped 268 inflected, 165 already measured, 209 no
+  audio/text)`, i.e. exactly the 165 rows just written are now skipped as already-measured and nothing gets
+  re-written without `--force`.
 - **2026-09-22 — Measured pitch charts: fixed scale + a 0-semitone reference line, instead of autoscaling
   per crop.** From a card-issue-style report: the same word (なか, in a mid-sentence occurrence) looked
   "wildly different" between the `pitch_accent` review card's dictionary diagram (`PitchAccentDiagram`,

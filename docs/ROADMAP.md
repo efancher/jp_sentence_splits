@@ -956,10 +956,19 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     agreement on clean native clips before trusting a category. Until then treat
     drill "mismatch" verdicts on long/heiban words sceptically. Do this before
     building anything that leans on the same measurement (below).
-  - [ ] **Gate/rank `pitch_accent` cards by measured cue strength** — only after
-    the scorer is calibrated (the current measure is too noisy to gate on). Same
-    principle as "gate cards missing support": don't show a card whose
-    discriminating cue isn't in the clip; also gives an easy→hard ramp.
+  - [x] **Gate/rank `pitch_accent` cards by measured cue strength.** (2026-09-22)
+    New `SentenceVocabulary.pitchCueSeparationSemitones` (nullable, citation-form
+    occurrences only), backfilled offline via `scripts/backfill-pitch-cue-strength.ts`
+    (reuses `measureNativeWord`, the same rule the audit script and drill scorer use).
+    `ReviewPage`'s `buildPitchAccentCandidate` skips an occurrence whose clip is known
+    weak (< 1.5 st, same threshold `audit-pitch-accent-clips.ts` uses) — same "gate
+    cards missing support" stance already applied to missing audio and phrase-final
+    heiban/odaka — and `getPitchAccentReviewCandidates` prefers the strongest-cue
+    occurrence when a word has several. First prod run: 165/328 eligible links
+    measured (rest: no usable span/alignment, or too little voiced signal), of which
+    **80 (48%) were below the weak threshold** — confirms the audit's earlier "57%
+    weak" finding and means this gate has real bite. Undefined (not yet measured) is
+    never gated — only a known-weak clip is skipped.
   - [ ] **Continuous scoring in the drill** — compare the learner's pitch line to
     the native one for the same word (fall timing error, fall magnitude relative
     to the native's, trend over time), normalized *per speaker* (never absolute
@@ -1156,13 +1165,34 @@ possibilities, kept here so the thinking isn't lost:
   conjugations → grammar noticed → `reading_in_context` mature → shadowed
   → pitch OK), a view plus a "finish sentence X — one rung left" planner
   step. Turns the flat multi-card queue into a visible arc.
-- [ ] **Cross-activity error routing** — a `cloze` miss on word W in
-  sentence S floats S up as a shadowing/reading target; a
-  `sentence_transformation` miss surfaces the grammar pattern behind that
-  form. Extends `preferCoherentChains` from within-plan grouping to
-  miss-driven scheduling. The `pitch_accent` slice of this shipped
-  2026-09-11 (`getPitchAccentFocusWords`, see Done) — this item is the
-  rest: cloze/shadowing and sentence_transformation/grammar.
+- [x] **Cross-activity error routing.** (2026-09-22) The `pitch_accent`
+  slice shipped 2026-09-11 (`getPitchAccentFocusWords`); this is the rest,
+  extending `preferCoherentChains`'s within-plan grouping to miss-driven
+  scheduling:
+  - **`cloze` miss → shadow target.** `ReviewPage` now records every
+    review's `contextSentenceId` as `current.sentence.id` (generalized from
+    a `pitch_accent`-only field — every `QueueCard` already carries the
+    sentence it displayed). `getRecentlyMissedClozeSentenceIds`
+    (`src/db/repository.ts`) finds sentences whose `cloze` card was missed
+    twice in a row (same 2-consecutive-again/hard signal as the pitch
+    case), and `findShadowCandidates` floats those sentences to the front
+    of its usual fewest-attempts order, with the reason "Missed in review —
+    reinforce with shadowing".
+  - **`sentence_transformation` miss → grammar pattern.** Scoped down from
+    the original idea of deriving "the grammar pattern behind this
+    conjugation form": checked prod's 83 tracked `GrammarPattern` rows and
+    none represent bare morphology (causative/passive/te-form/etc — that
+    paradigm is `sentence_transformation`'s own closed set, not something
+    the freeform `GrammarPattern` catalog tracks), so a form→pattern
+    mapping would either match nothing or require guessing. Built the
+    grounded version instead: `getRecentlyMissedSentenceTransformationSentenceIds`
+    finds sentences whose conjugation card was missed twice, and
+    `ReviewPriorityInput` gained `crossActivityMissBoost` — set on a due
+    `grammar_completion` item when its pattern (via the real
+    `sentence_grammar` join) occurs in one of those sentences,
+    adding +0.4 to `scoreReviewPriority`'s score and a
+    "linked to a recently missed conjugation" reason. Reorders among
+    already-due items only — never makes a not-due pattern due.
 - [ ] **Ambient connective tissue in the reveal** — on a `cloze` reveal,
   "you've shadowed this sentence — replay?"; on `reading_in_context`,
   highlight the tracked grammar pattern in the passage. Matches the

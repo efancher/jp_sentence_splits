@@ -7309,10 +7309,56 @@ export async function recordGrammarRelationshipObservation(
  * how many study items are in `studyItems` (mirrors listGrammarPatternSummaries's
  * "batched" discipline above).
  */
+/**
+ * Sentences whose `sentence_transformation` (contextual conjugation) card
+ * was just missed twice in a row — feeds `crossActivityMissBoost` for any
+ * `grammarPattern`-subject item whose pattern also occurs in one of these
+ * sentences (cross-activity error routing, docs/ROADMAP.md "Possibilities";
+ * same 2-consecutive-again/hard signal `getPitchAccentFocusWords` uses for
+ * its sibling case). Computed from *every* `sentence_transformation` study
+ * item regardless of due-ness, like `getRecentlyMissedClozeSentenceIds` —
+ * an "again" rating reschedules the card into the near future, so
+ * restricting this to whichever due batch is being scored right now would
+ * miss almost every real case.
+ */
+async function getRecentlyMissedSentenceTransformationSentenceIds(): Promise<Set<string>> {
+  const db = getDb();
+  const items = await db.studyItems
+    .where('activityType')
+    .equals('sentence_transformation')
+    .toArray();
+  if (items.length === 0) return new Set();
+  const links = await db.sentenceVocabulary.bulkGet(items.map((item) => item.subjectId));
+  const sentenceIdByLinkId = new Map(
+    links.filter((link): link is SentenceVocabulary => Boolean(link)).map((link) => [link.id, link.sentenceId]),
+  );
+  const reviews = await db.reviews
+    .where('studyItemId')
+    .anyOf(items.map((item) => item.id))
+    .sortBy('timestamp');
+  const reviewsByStudyItem = new Map<string, Review[]>();
+  for (const review of reviews) {
+    const list = reviewsByStudyItem.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByStudyItem.set(review.studyItemId, [review]);
+  }
+  const sentenceIds = new Set<string>();
+  for (const item of items) {
+    const itemReviews = reviewsByStudyItem.get(item.id) ?? [];
+    if (itemReviews.length < 2) continue;
+    const lastTwo = itemReviews.slice(-2);
+    if (!lastTwo.every((review) => review.rating === 'again' || review.rating === 'hard')) continue;
+    const sentenceId = sentenceIdByLinkId.get(item.subjectId);
+    if (sentenceId) sentenceIds.add(sentenceId);
+  }
+  return sentenceIds;
+}
+
 async function buildReviewPriorityInputs(
   studyItems: StudyItem[],
   mode: SessionBucket,
   now: Date,
+  recentlyMissedTransformationSentenceIds: Set<string>,
 ): Promise<ReviewPriorityInput[]> {
   if (studyItems.length === 0) return [];
   const db = getDb();
@@ -7417,6 +7463,9 @@ async function buildReviewPriorityInputs(
       sentenceIds = sentenceId ? [sentenceId] : [];
     } else sentenceIds = [];
     const diversity = diversityFor(sentenceIds);
+    const crossActivityMissBoost =
+      item.subjectType === 'grammarPattern' &&
+      sentenceIds.some((sentenceId) => recentlyMissedTransformationSentenceIds.has(sentenceId));
 
     return {
       studyItemId: item.id,
@@ -7434,6 +7483,7 @@ async function buildReviewPriorityInputs(
         ? (now.getTime() - new Date(lastNaturalEncounter.timestamp).getTime()) / (24 * 60 * 60 * 1000)
         : null,
       now,
+      crossActivityMissBoost,
     } satisfies ReviewPriorityInput;
   });
 }
@@ -7642,13 +7692,50 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
 }
 
 /**
+ * Sentences where a `cloze` card was just missed twice in a row (last 2
+ * reviews both `again`/`hard`) — the cloze/shadowing half of "cross-activity
+ * error routing" (docs/ROADMAP.md "Possibilities"; the `pitch_accent` half
+ * shipped 2026-09-11 as `getPitchAccentFocusWords`). Keyed by the *most
+ * recent* miss review's `contextSentenceId`, since that pins down which
+ * sentence the miss actually happened in — `cloze`'s own subjectId is a
+ * vocabularyItem, and a word's context sentence is picked fresh per review,
+ * so the subjectId alone doesn't identify one.
+ */
+async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
+  const db = getDb();
+  const clozeStudyItems = await db.studyItems.where('activityType').equals('cloze').toArray();
+  if (clozeStudyItems.length === 0) return new Set();
+  const reviews = await db.reviews
+    .where('studyItemId')
+    .anyOf(clozeStudyItems.map((item) => item.id))
+    .sortBy('timestamp');
+  const reviewsByStudyItem = new Map<string, Review[]>();
+  for (const review of reviews) {
+    const list = reviewsByStudyItem.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByStudyItem.set(review.studyItemId, [review]);
+  }
+  const sentenceIds = new Set<string>();
+  for (const itemReviews of reviewsByStudyItem.values()) {
+    if (itemReviews.length < 2) continue;
+    const lastTwo = itemReviews.slice(-2);
+    if (!lastTwo.every((review) => review.rating === 'again' || review.rating === 'hard')) continue;
+    const sentenceId = lastTwo[1]!.contextSentenceId;
+    if (sentenceId) sentenceIds.add(sentenceId);
+  }
+  return sentenceIds;
+}
+
+/**
  * Practice(shadowing) candidates: sentences with reference audio and the
  * fewest existing attempts, scoped to sentences actually in progress and
  * ready per getSentenceShadowingReadiness (user request, 2026-08-27;
  * pitch requirement layered on 2026-09-16) — vocabulary confirmed, every
  * linked word's reading/meaning proficient (so shadowing doesn't split
  * attention between recalling words and imitating pronunciation), and
- * every linked word's pitch pattern proficient too.
+ * every linked word's pitch pattern proficient too. A sentence with a just-
+ * missed `cloze` card floats to the front of this otherwise fewest-attempts
+ * order (`getRecentlyMissedClozeSentenceIds`, cross-activity error routing).
  */
 async function findShadowCandidates(limit: number, activeSentenceIds: Set<string>): Promise<ShadowCandidate[]> {
   if (activeSentenceIds.size === 0) return [];
@@ -7661,10 +7748,11 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
   const sentenceIdsWithAudio = sentenceIdsWithAudioUnfiltered.filter((id) => readiness.get(id));
   if (sentenceIdsWithAudio.length === 0) return [];
 
-  const [attempts, sentences, bookSentences] = await Promise.all([
+  const [attempts, sentences, bookSentences, recentlyMissedClozeSentenceIds] = await Promise.all([
     db.attempts.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
     db.sentences.bulkGet(sentenceIdsWithAudio),
     db.bookSentences.where('sentenceId').anyOf(sentenceIdsWithAudio).toArray(),
+    getRecentlyMissedClozeSentenceIds(),
   ]);
   const attemptCountBySentenceId = new Map<string, number>();
   for (const attempt of attempts) {
@@ -7677,15 +7765,21 @@ async function findShadowCandidates(limit: number, activeSentenceIds: Set<string
       sentenceId,
       sentence: sentences[index],
       attemptCount: attemptCountBySentenceId.get(sentenceId) ?? 0,
+      recentlyMissedCloze: recentlyMissedClozeSentenceIds.has(sentenceId),
     }))
     .filter((candidate): candidate is typeof candidate & { sentence: Sentence } => Boolean(candidate.sentence))
-    .sort((a, b) => a.attemptCount - b.attemptCount)
+    .sort((a, b) => {
+      if (a.recentlyMissedCloze !== b.recentlyMissedCloze) return a.recentlyMissedCloze ? -1 : 1;
+      return a.attemptCount - b.attemptCount;
+    })
     .slice(0, limit)
     .map((candidate) => ({
       sentenceId: candidate.sentenceId,
       bookId: bookIdBySentenceId.get(candidate.sentenceId),
       label: candidate.sentence.japanese.slice(0, 24),
-      reason: shadowAttemptSummary(candidate.attemptCount),
+      reason: candidate.recentlyMissedCloze
+        ? 'Missed in review — reinforce with shadowing'
+        : shadowAttemptSummary(candidate.attemptCount),
     }));
 }
 
@@ -7896,9 +7990,11 @@ export async function getSessionPlannerInput(
   // retainDueItems/practiceDueItems are ranked/packed together downstream
   // (one shared `review` bucket) — the 'review' tag here is only used for
   // ReviewPriorityInput's informational `mode` field, not for allocation.
+  const recentlyMissedTransformationSentenceIds =
+    await getRecentlyMissedSentenceTransformationSentenceIds();
   const [retainDue, practiceDue] = await Promise.all([
-    buildReviewPriorityInputs(retainDueReady, 'review', now),
-    buildReviewPriorityInputs(practiceDueReady, 'review', now),
+    buildReviewPriorityInputs(retainDueReady, 'review', now, recentlyMissedTransformationSentenceIds),
+    buildReviewPriorityInputs(practiceDueReady, 'review', now, recentlyMissedTransformationSentenceIds),
   ]);
 
   // Quiet mode (settings, per-device): the learner can't speak aloud, so

@@ -757,4 +757,92 @@ describe('Learning Orchestrator repository layer', () => {
     expect(shadowAttemptSummary(counts.get(s1.id) ?? 0)).toBe('Shadowed 2x so far');
     expect(shadowAttemptSummary(0)).toBe('Not shadowed yet');
   });
+
+  it('floats a sentence to the front of shadow candidates once its cloze card is missed twice in a row (cross-activity error routing)', async () => {
+    const book = await createBook({ title: 'Shadow Cross-Activity' });
+    const db = getDb();
+    const missedSentence = makeSentence({ japanese: '彼は忙しいです。' });
+    const otherSentence = makeSentence({ japanese: '猫が寝ています。' });
+    await db.sentences.bulkPut([missedSentence, otherSentence]);
+    await addSentencesToBook(book.id, [missedSentence.id, otherSentence.id]);
+    for (const sentence of [missedSentence, otherSentence]) {
+      await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
+      await confirmSentenceVocabulary(sentence.id, []);
+      await db.sentenceAudio.add({
+        id: `audio-${sentence.id}`,
+        sentenceId: sentence.id,
+        sourceId: 'source-1',
+        sourceSentenceId: `src-${sentence.id}`,
+        sourceTitle: 'Test Source',
+        mimeType: 'audio/mp3',
+        durationMs: 1500,
+        startMs: 0,
+        endMs: 1500,
+        blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
+        importedAt: new Date().toISOString(),
+      });
+    }
+
+    const beforeMiss = await getSessionPlannerInput(60);
+    const beforeIds = beforeMiss.shadowCandidates.map((candidate) => candidate.sentenceId);
+    expect(beforeIds).toContain(missedSentence.id);
+    expect(beforeIds).toContain(otherSentence.id);
+
+    const clozeItem = await ensureStudyItem('vocabularyItem', 'vocab-cross-activity', 'cloze');
+    await recordReview({ studyItemId: clozeItem.id, rating: 'again', contextSentenceId: missedSentence.id });
+    await recordReview({ studyItemId: clozeItem.id, rating: 'hard', contextSentenceId: missedSentence.id });
+
+    const afterMiss = await getSessionPlannerInput(60);
+    expect(afterMiss.shadowCandidates[0]?.sentenceId).toBe(missedSentence.id);
+    expect(afterMiss.shadowCandidates[0]?.reason).toBe('Missed in review — reinforce with shadowing');
+  });
+
+  it('flags a grammar_completion item with crossActivityMissBoost once its sentence\'s sentence_transformation card is missed twice (cross-activity error routing)', async () => {
+    const db = getDb();
+    const sentence = makeSentence({ japanese: 'これはテストです。' });
+    await db.sentences.put(sentence);
+
+    const vocabLinkId = createId('sv');
+    await db.sentenceVocabulary.put({
+      id: vocabLinkId,
+      sentenceId: sentence.id,
+      vocabularyItemId: createId('vocab_item'),
+      surfaceForm: 'テスト',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const transformationItem = await ensureStudyItem(
+      'sentenceVocabulary',
+      vocabLinkId,
+      'sentence_transformation',
+    );
+    await recordReview({ studyItemId: transformationItem.id, rating: 'again', contextSentenceId: sentence.id });
+    await recordReview({ studyItemId: transformationItem.id, rating: 'again', contextSentenceId: sentence.id });
+
+    const patternId = createId('grammar_pattern');
+    await db.grammarPatterns.put({
+      id: patternId,
+      canonicalName: '～です',
+      normalizedKey: 'です',
+      aliases: [],
+      shortMeaning: 'copula',
+      provenance: 'manual',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await db.sentenceGrammar.put({
+      id: createId('sg'),
+      sentenceId: sentence.id,
+      grammarPatternId: patternId,
+      confirmedByLearner: true,
+      source: 'manual',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await ensureStudyItem('grammarPattern', patternId, 'grammar_completion');
+
+    const input = await getSessionPlannerInput(60);
+    const grammarInput = input.practiceDue.find((item) => item.subjectType === 'grammarPattern');
+    expect(grammarInput?.crossActivityMissBoost).toBe(true);
+  });
 });
