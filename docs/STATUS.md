@@ -70,6 +70,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-22 — Short games P3: `/progress` "Games" panel + adaptive difficulty.** Closes the ROADMAP P3
+  bullet. Two pieces, both read-only w.r.t. FSRS (the games' existing stance):
+  - **`/progress` "Games" panel.** New `src/lib/gamesProgress.ts` (`buildGamesProgress`, pure) +
+    `getGamesProgress` (`src/db/repository.ts`) read `gameRounds` + `reviews`: per-game accuracy (rounds/
+    items/correct), per-signal accuracy across every signal a round can settle on (`weak`/`stale`/`strong`/
+    `any`) — the `weak` row is labelled "recovery rate" in the UI, since a weak-signal item is by definition
+    one that's lapsed before — and a cued-vs-FSRS comparison in the style of `selfRatingCalibration.ts`:
+    overall game item accuracy vs. the learner's overall FSRS pass rate (`rating !== 'again'`), since games
+    hand out clues/hints and can otherwise look like stronger recall than it is. New "Games" section on
+    `ProgressPage.tsx`, same `StatRow` pattern as the other panels, gameId → title via `findGame` from
+    `src/games/registry.tsx`.
+  - **Adaptive difficulty.** New `DifficultyTier` (`'easier' | 'standard' | 'harder'`) in
+    `src/lib/gamePicker.ts`: `recentRoundsAccuracy(rounds, gameId, window=3)` reads a game's own last 3
+    rounds' item accuracy (any signal — this tracks "how is the learner doing at this game lately", not one
+    signal), `pickDifficultyTier` maps ≥85% → `harder`, ≤40% → `easier`, else `standard`. `pickItems` gained
+    an optional `difficulty` option that scales how deep into the ranked pool a round samples from
+    (`DIFFICULTY_SLICE_FACTOR`: harder=1.5×, standard=3× (unchanged), easier=6×) — narrower concentrates on
+    the most extreme end of the ranking (e.g. the very worst lapses), wider dilutes in gentler items. It
+    never changes which signal is used, and never touches the `any` fallback (no ranking there to narrow).
+    New `getRecentGameDifficulty(gameId)` repository helper; all five game components
+    (`WordDetectiveGame`/`ParticlePuzzleGame`/`OddEarOutGame`/`VerbLegoGame`/`EarTilesGame`) now fetch it
+    once per visit alongside their existing candidate load and pass it into their `pickItems` call. No UI
+    surfaces the tier — same "adaptive difficulty works silently" stance as most SRS scheduling in this app.
+  - Scoping note: heterogeneous per-game difficulty knobs (Word Detective's clue ladder, Verb Lego's stack
+    depth, Particle Puzzle's decoy count, …) were deliberately left alone — the picker's pool-depth lever is
+    the one mechanism general enough to apply uniformly across all five games without a bespoke redesign of
+    each.
+  - 9 new tests: `gamePicker.test.ts` (`recentRoundsAccuracy`/`pickDifficultyTier`/difficulty-slice
+    behavior), `gamesProgress.test.ts` (new, `buildGamesProgress`), 2 new `gameRepository.test.ts`
+    integration cases. Typecheck + full suite green.
+  - **Manual test plan:** play the same `/play` game 3 times with high accuracy; a 4th round should skew
+    toward the most extreme end of its signal (spot-checkable only via `getRecentGameDifficulty` — no UI
+    tag). Then open `/progress` → "Games": confirm per-game and per-signal accuracy rows appear, and the
+    cued-vs-FSRS line reads sensibly against your own recent `/review` pass rate.
+
 - **2026-09-22 — `grammar_completion`'s role line shown before answering, not just on reveal (card issue
   triage).** Report: "this card as it is is just v a bit of memorization. maybe better to have on the front the
   role: Describes an ongoing state or condition resulting from an action." (pattern ～ている（状態描写）, item at

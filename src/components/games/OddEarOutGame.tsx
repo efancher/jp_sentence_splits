@@ -3,13 +3,20 @@ import { Link } from 'react-router-dom';
 
 import {
   getOddEarOutData,
+  getRecentGameDifficulty,
   logGameRound,
   type OddEarOutClip,
 } from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
 import { useRangeLoop } from '../../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../../hooks/useSentenceAudioBlob';
-import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../lib/gamePicker';
+import {
+  describeRound,
+  pickItems,
+  SIGNAL_LABELS,
+  type DifficultyTier,
+  type PickResult,
+} from '../../lib/gamePicker';
 import {
   buildContrastCandidates,
   buildOddEarRound,
@@ -237,12 +244,16 @@ export function OddEarOutGame({ signal }: { signal: GameSignal }) {
   const [results, setResults] = useState<Settled[]>([]);
   const logged = useRef(false);
   const started = useRef(false);
+  const [difficulty, setDifficulty] = useState<DifficultyTier>('standard');
 
   // Loaded once per visit (not live) so a Dexie refresh can't reshuffle mid-round.
   useEffect(() => {
     let cancelled = false;
     void getOddEarOutData().then((loaded) => {
       if (!cancelled) setData(loaded);
+    });
+    void getRecentGameDifficulty(ODD_EAR_OUT_GAME_ID).then((tier) => {
+      if (!cancelled) setDifficulty(tier);
     });
     return () => {
       cancelled = true;
@@ -256,7 +267,7 @@ export function OddEarOutGame({ signal }: { signal: GameSignal }) {
       // The picker fixes the signal and the first contrasts; the round then cycles
       // through them (then the remaining contrasts) with fresh words each time, so a
       // corpus with only a few contrasts still fills a round.
-      const pick = pickItems(candidates, { signal, n: ODD_EAR_MIN_TRIALS, seed });
+      const pick = pickItems(candidates, { signal, n: ODD_EAR_MIN_TRIALS, seed, difficulty });
       const rest = seededShuffle(
         candidates.filter((candidate) => !pick.items.some((p) => p.id === candidate.id)),
         (candidate) => candidate.id,
@@ -274,7 +285,7 @@ export function OddEarOutGame({ signal }: { signal: GameSignal }) {
       setResults([]);
       logged.current = false;
     },
-    [signal],
+    [signal, difficulty],
   );
 
   useEffect(() => {

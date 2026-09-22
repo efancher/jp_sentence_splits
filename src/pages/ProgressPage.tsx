@@ -7,6 +7,7 @@ import {
   getBlindSpots,
   getErrorMix,
   getFsrsConfidenceSnapshot,
+  getGamesProgress,
   getGateFunnelSnapshot,
   getLeechList,
   getProgressReport,
@@ -18,6 +19,8 @@ import type { ErrorCategory } from '../lib/errorMix';
 import type { TrendDirection } from '../lib/pronunciationProfile';
 import type { WeekBucket } from '../lib/progressReport';
 import { buildVelocityReport } from '../lib/velocity';
+import { findGame } from '../games/registry';
+import { SIGNAL_LABELS } from '../lib/gamePicker';
 
 /**
  * "How am I doing" progress screen (docs/ROADMAP.md — "Retention /
@@ -162,6 +165,7 @@ export function ProgressPage() {
   const blindSpots = useLiveQuery(() => getBlindSpots(), []);
   const errorMix = useLiveQuery(() => getErrorMix({ windowDays: errorWindow }), [errorWindow]);
   const calibration = useLiveQuery(() => getSelfRatingCalibration(), []);
+  const gamesProgress = useLiveQuery(() => getGamesProgress(), []);
   const skillCoverage = useLiveQuery(() => getSkillCoverage(), []);
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
@@ -500,6 +504,49 @@ export function ProgressPage() {
                   hint={`${row.reviewCount} reviews`}
                 />
               ))}
+          </>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Games</h3>
+        {gamesProgress === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : !gamesProgress.hasData ? (
+          <p className="muted">
+            No `/play` rounds yet — nothing here is fed back into FSRS, this panel just
+            reflects how those rounds have gone.
+          </p>
+        ) : (
+          <>
+            {gamesProgress.byGame.map((row) => (
+              <StatRow
+                key={row.gameId}
+                label={findGame(row.gameId)?.title ?? row.gameId}
+                value={formatPercent(row.accuracy)}
+                hint={`${row.rounds} round${row.rounds === 1 ? '' : 's'} · ${row.items} items`}
+              />
+            ))}
+            <p className="muted" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem' }}>
+              By signal
+            </p>
+            {gamesProgress.bySignal
+              .filter((row) => row.rounds > 0)
+              .map((row) => (
+                <StatRow
+                  key={row.signal}
+                  label={row.signal === 'any' ? 'Fallback (not enough for a signal)' : SIGNAL_LABELS[row.signal]}
+                  value={formatPercent(row.accuracy)}
+                  hint={`${row.items} items${row.signal === 'weak' ? ' · recovery rate' : ''}`}
+                />
+              ))}
+            <p className="muted" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem' }}>
+              {gamesProgress.cuedVsFsrs.gap === null
+                ? 'Not enough game rounds and FSRS reviews yet to compare.'
+                : gamesProgress.cuedVsFsrs.gap > 0.1
+                  ? `Games pass ${Math.round(gamesProgress.cuedVsFsrs.gap * 100)} points more often than unaided FSRS review — cues/hints are doing real work, take the accuracy above with that in mind.`
+                  : `Games pass about as often as unaided FSRS review (within ${Math.round(Math.abs(gamesProgress.cuedVsFsrs.gap) * 100)} points) — accuracy above looks like a fair read of real recall.`}
+            </p>
           </>
         )}
       </section>

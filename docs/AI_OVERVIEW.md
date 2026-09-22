@@ -1044,6 +1044,16 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   `any` (which samples the whole pool for variety) and the intro says so; the
   wording of that note is per-game (`SignalCopy`). `/play/:gameId/auto` (the hub default) requests
   `weak`. The hub hides a game or signal whose pool is too small, with the count.
+- **Adaptive difficulty** (2026-09-22, ROADMAP "Short games" P3). Each game
+  reads `getRecentGameDifficulty(gameId)` once per visit (its own last 3
+  rounds' item accuracy, any signal — `recentRoundsAccuracy` +
+  `pickDifficultyTier` in `gamePicker.ts`) and passes the resulting tier into
+  `pickItems`. It only changes how deep into the ranked pool a round samples
+  from — `'harder'` (≥85% recent accuracy) narrows to the most extreme
+  top slice (the words/items furthest into the signal, e.g. the worst
+  lapses), `'easier'` (≤40%) widens the slice to dilute in gentler items,
+  `'standard'` otherwise. Never changes which signal is used or touches the
+  `any` fallback; a game with no rounds yet reads `'standard'`.
 - **Framework**: `GameShell.tsx` (intro with signal chip + "why these items"
   → play with a no-fail-state pace bar → result), `src/games/registry.tsx`
   (each game supplies `loadPools` = its own eligibility, and a component).
@@ -1051,7 +1061,16 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   them would inflate the proficiency signals that gate other activities. Each
   finished round appends one `GameRound` (per-item correct/clues/points/ms) to
   a **local-only** Dexie table (`gameRounds`, `logGameRound`) — not in the sync
-  engine, no Supabase table. Nothing reads it yet.
+  engine, no Supabase table. Read by the adaptive-difficulty tier above and by
+  the `/progress` "Games" panel below.
+- **`/progress` "Games" panel** (`getGamesProgress` + `src/lib/gamesProgress.ts`,
+  2026-09-22): accuracy by game and by signal (the `weak` row doubles as a
+  "recovery rate" — how often previously-lapsed items get answered right in a
+  low-pressure round), plus a cued-vs-FSRS gap in the style of the
+  self-rating-check panel — overall game item accuracy vs. the learner's
+  overall FSRS pass rate (`rating !== 'again'`), since games hand out
+  clues/hints and can look easier than unaided recall. Read-only, same
+  "nothing feeds FSRS" stance as everything else here.
 - **Session breaks.** Adding time on Home also drafts `game` planner steps
   (`targetKind: 'game'`, `gameId`, path `/play/:gameId/auto`): one per 20
   requested minutes, max 3, distinct games only, each costed at

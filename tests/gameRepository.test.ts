@@ -5,9 +5,11 @@ import {
   ensureStudyItem,
   getDb,
   getEarTilesCandidates,
+  getGamesProgress,
   getOddEarOutData,
   getParticlePuzzleData,
   getPrecedingSentences,
+  getRecentGameDifficulty,
   getVerbLegoData,
   getWordDetectiveCandidates,
   logGameRound,
@@ -140,6 +142,48 @@ describe('game repository', () => {
     expect(stored?.items[0]?.points).toBe(4);
     expect(await getDb().studyItems.count()).toBe(0);
     expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('adaptive difficulty tracks a game\'s own last rounds only, not other games', async () => {
+    expect(await getRecentGameDifficulty('word-detective')).toBe('standard');
+    for (let i = 0; i < 3; i += 1) {
+      await logGameRound({
+        gameId: 'word-detective',
+        signal: 'weak',
+        poolSize: 5,
+        items: [
+          { ref: 'a', correct: true, cluesUsed: 0, wrongGuesses: 0, points: 4, ms: 100 },
+          { ref: 'b', correct: true, cluesUsed: 0, wrongGuesses: 0, points: 4, ms: 100 },
+        ],
+      });
+    }
+    expect(await getRecentGameDifficulty('word-detective')).toBe('harder');
+    expect(await getRecentGameDifficulty('particle-puzzle')).toBe('standard');
+  });
+
+  it('games progress reports accuracy by game/signal and a cued-vs-FSRS gap, writing nothing', async () => {
+    await logGameRound({
+      gameId: 'word-detective',
+      signal: 'weak',
+      poolSize: 5,
+      items: [
+        { ref: 'a', correct: true, cluesUsed: 0, wrongGuesses: 0, points: 4, ms: 100 },
+        { ref: 'b', correct: false, cluesUsed: 1, wrongGuesses: 1, points: 0, ms: 100 },
+      ],
+    });
+    const card = await ensureStudyItem('vocabularyItem', 'vi-x', 'reading_production');
+    await recordReview({ studyItemId: card.id, rating: 'good' });
+    await recordReview({ studyItemId: card.id, rating: 'again' });
+
+    const progress = await getGamesProgress();
+    expect(progress.hasData).toBe(true);
+    expect(progress.byGame).toEqual([
+      { gameId: 'word-detective', rounds: 1, items: 2, correct: 1, accuracy: 0.5 },
+    ]);
+    const weak = progress.bySignal.find((row) => row.signal === 'weak');
+    expect(weak).toMatchObject({ items: 2, correct: 1, accuracy: 0.5 });
+    expect(progress.cuedVsFsrs.fsrsPassRate).toBeCloseTo(0.5);
+    expect(progress.cuedVsFsrs.gap).toBeCloseTo(0);
   });
 });
 

@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getWordDetectiveCandidates, logGameRound, type WordDetectiveCandidate } from '../../db/repository';
+import {
+  getRecentGameDifficulty,
+  getWordDetectiveCandidates,
+  logGameRound,
+  type WordDetectiveCandidate,
+} from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
 import {
   describePick,
   describeRound,
   pickItems,
   SIGNAL_LABELS,
+  type DifficultyTier,
   type PickResult,
 } from '../../lib/gamePicker';
 import {
@@ -175,6 +181,7 @@ export function WordDetectiveGame({ signal }: { signal: GameSignal }) {
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<WordResult[]>([]);
   const [wordSettled, setWordSettled] = useState(false);
+  const [difficulty, setDifficulty] = useState<DifficultyTier>('standard');
   const logged = useRef(false);
 
   // Loaded once per visit (not live) so a Dexie refresh can't reshuffle mid-round.
@@ -182,6 +189,9 @@ export function WordDetectiveGame({ signal }: { signal: GameSignal }) {
     let cancelled = false;
     void getWordDetectiveCandidates().then((rows) => {
       if (!cancelled) setCandidates(rows);
+    });
+    void getRecentGameDifficulty(WORD_DETECTIVE_GAME_ID).then((tier) => {
+      if (!cancelled) setDifficulty(tier);
     });
     return () => {
       cancelled = true;
@@ -195,6 +205,7 @@ export function WordDetectiveGame({ signal }: { signal: GameSignal }) {
           signal,
           n: WORD_DETECTIVE_ROUND_SIZE,
           seed: `${Date.now()}:${Math.random()}`,
+          difficulty,
         }),
       });
       setPhase('intro');
@@ -203,7 +214,7 @@ export function WordDetectiveGame({ signal }: { signal: GameSignal }) {
       setWordSettled(false);
       logged.current = false;
     },
-    [signal],
+    [signal, difficulty],
   );
 
   useEffect(() => {

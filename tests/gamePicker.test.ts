@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FsrsState } from '../src/domain/types';
+import type { FsrsState, GameRound, GameRoundItem } from '../src/domain/types';
 import {
   describePick,
   describeRound,
   isInSignalPool,
+  pickDifficultyTier,
   pickItems,
+  recentRoundsAccuracy,
   signalPoolSizes,
   summarizeCardStats,
   type PickerCandidate,
@@ -148,6 +150,79 @@ describe('pickItems', () => {
     const result = pickItems([], { signal: 'weak', n: 3, seed: 's' });
     expect(result.items).toEqual([]);
     expect(result.signal).toBe('any');
+  });
+
+  it('a "harder" difficulty narrows the sampled slice toward the most extreme end of the ranking', () => {
+    const big = Array.from({ length: 40 }, (_, i) => cand(`w${i}`, { lapses: i + 1 }));
+    // standard: top n*3=9 => w31..w39; harder: top round(n*1.5)=5 => w35..w39.
+    const harder = pickItems(big, { signal: 'weak', n: 3, seed: 's', difficulty: 'harder' });
+    for (const item of harder.items) expect(Number(item.id.slice(1))).toBeGreaterThanOrEqual(35);
+  });
+
+  it('an "easier" difficulty widens the sampled slice, diluting in gentler items', () => {
+    const big = Array.from({ length: 40 }, (_, i) => cand(`w${i}`, { lapses: i + 1 }));
+    // easier: top n*6=18 => w22..w39, wider than the standard w31..w39 slice.
+    const seen = new Set<number>();
+    for (const seed of ['a', 'b', 'c', 'd', 'e']) {
+      const result = pickItems(big, { signal: 'weak', n: 3, seed, difficulty: 'easier' });
+      for (const item of result.items) seen.add(Number(item.id.slice(1)));
+    }
+    expect(Math.min(...seen)).toBeLessThan(31);
+  });
+
+  it('difficulty never changes which signal is used, including the `any` fallback', () => {
+    const tiny = [cand('x', { hasCard: false, retrievability: null, matureCards: false }), cand('y')];
+    const result = pickItems(tiny, { signal: 'weak', n: 2, seed: 's', difficulty: 'harder' });
+    expect(result.signal).toBe('any');
+    expect(result.items).toHaveLength(2);
+  });
+});
+
+describe('recentRoundsAccuracy / pickDifficultyTier', () => {
+  function roundItem(correct: boolean): GameRoundItem {
+    return { ref: 'x', correct, cluesUsed: 0, wrongGuesses: 0, points: correct ? 1 : 0, ms: 100 };
+  }
+
+  function round(
+    gameId: string,
+    timestamp: string,
+    outcomes: boolean[],
+  ): GameRound {
+    return {
+      id: `r_${timestamp}`,
+      timestamp,
+      gameId,
+      signal: 'weak',
+      poolSize: 10,
+      items: outcomes.map(roundItem),
+    };
+  }
+
+  it('is null with no rounds for that game', () => {
+    expect(recentRoundsAccuracy([], 'word-detective')).toBeNull();
+    expect(
+      recentRoundsAccuracy([round('other-game', '2026-09-20T00:00:00Z', [true])], 'word-detective'),
+    ).toBeNull();
+  });
+
+  it('only looks at the most recent `window` rounds for that game, across all its items', () => {
+    const rounds = [
+      round('word-detective', '2026-09-18T00:00:00Z', [false, false, false]), // oldest, outside window
+      round('word-detective', '2026-09-19T00:00:00Z', [true, true]),
+      round('word-detective', '2026-09-20T00:00:00Z', [true, false]),
+      round('word-detective', '2026-09-21T00:00:00Z', [true]),
+    ];
+    // window=3 most recent (09-19..09-21): 4 correct / 5 items = 0.8
+    expect(recentRoundsAccuracy(rounds, 'word-detective', 3)).toBeCloseTo(0.8);
+  });
+
+  it('maps recent accuracy to a difficulty tier with standard in the middle band', () => {
+    expect(pickDifficultyTier(null)).toBe('standard');
+    expect(pickDifficultyTier(0.9)).toBe('harder');
+    expect(pickDifficultyTier(0.85)).toBe('harder');
+    expect(pickDifficultyTier(0.6)).toBe('standard');
+    expect(pickDifficultyTier(0.4)).toBe('easier');
+    expect(pickDifficultyTier(0.1)).toBe('easier');
   });
 });
 

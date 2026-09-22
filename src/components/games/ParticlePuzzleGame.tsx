@@ -4,11 +4,18 @@ import { Link } from 'react-router-dom';
 import {
   getParticlePuzzleData,
   getPrecedingSentences,
+  getRecentGameDifficulty,
   logGameRound,
   type ParticlePuzzleCandidate,
 } from '../../db/repository';
 import type { GameRoundItem, GameSignal, Sentence } from '../../domain/types';
-import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../lib/gamePicker';
+import {
+  describeRound,
+  pickItems,
+  SIGNAL_LABELS,
+  type DifficultyTier,
+  type PickResult,
+} from '../../lib/gamePicker';
 import {
   buildParticlePuzzle,
   describeParticlePick,
@@ -223,12 +230,16 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
   const shownAt = useRef(Date.now());
   const logged = useRef(false);
   const started = useRef(false);
+  const [difficulty, setDifficulty] = useState<DifficultyTier>('standard');
 
   // Loaded once per visit (not live) so a Dexie refresh can't reshuffle mid-round.
   useEffect(() => {
     let cancelled = false;
     void getParticlePuzzleData().then((loaded) => {
       if (!cancelled) setData(loaded);
+    });
+    void getRecentGameDifficulty(PARTICLE_PUZZLE_GAME_ID).then((tier) => {
+      if (!cancelled) setDifficulty(tier);
     });
     return () => {
       cancelled = true;
@@ -238,7 +249,12 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
   const newRound = useCallback(
     async (from: ParticlePuzzleData) => {
       const seed = `${Date.now()}:${Math.random()}`;
-      const pick = pickItems(from.candidates, { signal, n: PARTICLE_PUZZLE_ROUND_SIZE, seed });
+      const pick = pickItems(from.candidates, {
+        signal,
+        n: PARTICLE_PUZZLE_ROUND_SIZE,
+        seed,
+        difficulty,
+      });
       const built = pick.items.flatMap((candidate) => {
         const puzzle = buildParticlePuzzle(candidate.sentence, {
           seed: `${seed}:${candidate.id}`,
@@ -257,7 +273,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
       setResults([]);
       logged.current = false;
     },
-    [signal],
+    [signal, difficulty],
   );
 
   useEffect(() => {

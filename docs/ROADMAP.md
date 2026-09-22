@@ -462,10 +462,13 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     rules, ~28 distinct rounds). Original scope: GameShell + picker (weak/stale/strong from existing
     data) + one game + `/play` + Home chip + local `game_rounds`, no sync,
     no session step. **P2** optional session interlude + recap line
-    (`sessionRecap.ts`). **P3** `/progress` "Games" panel (accuracy by
-    skill/signal, weak-item recovery rate, a "cued vs FSRS" check in the
-    style of `selfRatingCalibration`) + adaptive difficulty from the last 3
-    rounds. **P4** sync `game_rounds`; add "Queue misses". **P5** Keystone,
+    (`sessionRecap.ts`). **P3 — DONE 2026-09-22**: `/progress` "Games" panel
+    (accuracy by game and signal, the `weak` row doubling as weak-item
+    recovery rate, a cued-vs-FSRS gap in the style of
+    `selfRatingCalibration` — see STATUS) + adaptive difficulty (each
+    game's own last 3 rounds' accuracy narrows/widens the picker's sampled
+    pool depth via a new `difficulty` tier on `pickItems`; never changes
+    signal). **P4** sync `game_rounds`; add "Queue misses". **P5** Keystone,
     then Then & Now. **P6** let game misses feed the planner's weakness
     term (riskiest, last).
   - **Decisions taken for P1 (2026-09-19, the recommended defaults):** games are

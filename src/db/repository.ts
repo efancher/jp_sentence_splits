@@ -129,7 +129,14 @@ import {
   type SuspendedBookIndex,
 } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
-import { summarizeCardStats, type PickerCandidate } from '../lib/gamePicker';
+import {
+  pickDifficultyTier,
+  recentRoundsAccuracy,
+  summarizeCardStats,
+  type DifficultyTier,
+  type PickerCandidate,
+} from '../lib/gamePicker';
+import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import { isolatedWordSpans } from '../lib/isolatedWordRange';
 import {
@@ -3516,6 +3523,22 @@ export async function getSelfRatingCalibration(): Promise<SelfRatingCalibration>
 }
 
 /**
+ * "Games" progress panel (docs/ROADMAP.md "Short games" P3): accuracy by
+ * game and by signal, plus a cued-vs-FSRS gap in the style of
+ * `getSelfRatingCalibration` above — games hand out clues/hints, so their
+ * raw accuracy can run ahead of unaided FSRS recall. Read-only; `gameRounds`
+ * is local-only (never synced, never fed back into FSRS).
+ */
+export async function getGamesProgress(): Promise<GamesProgress> {
+  const db = getDb();
+  const [rounds, reviews] = await Promise.all([db.gameRounds.toArray(), db.reviews.toArray()]);
+  return buildGamesProgress(
+    rounds,
+    reviews.map((review) => ({ rating: review.rating })),
+  );
+}
+
+/**
  * "Skill coverage" (2026-09-16, docs/ROADMAP.md "Skill-imbalance metric").
  * Denominator is every vocabulary item recognition-proficient
  * (`reading_retrieval`/`cloze`); numerators are the subset also proficient
@@ -5540,6 +5563,16 @@ export async function logGameRound(input: {
   };
   await getDb().gameRounds.put(round);
   return round;
+}
+
+/**
+ * Adaptive difficulty (docs/ROADMAP.md "Short games" P3) — the tier a game's
+ * next round should sample at, from its own last `DIFFICULTY_WINDOW` rounds.
+ * Read-only; `pickDifficultyTier`/`recentRoundsAccuracy` do the actual work.
+ */
+export async function getRecentGameDifficulty(gameId: string): Promise<DifficultyTier> {
+  const rounds = await getDb().gameRounds.where('gameId').equals(gameId).toArray();
+  return pickDifficultyTier(recentRoundsAccuracy(rounds, gameId));
 }
 
 /**

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getEarTilesCandidates, logGameRound, type EarTilesCandidate } from '../../db/repository';
+import {
+  getEarTilesCandidates,
+  getRecentGameDifficulty,
+  logGameRound,
+  type EarTilesCandidate,
+} from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
 import {
   buildEarTilesPuzzle,
@@ -15,7 +20,13 @@ import {
   type EarTilesPuzzle,
   type EarTilesScore,
 } from '../../lib/earTiles';
-import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../lib/gamePicker';
+import {
+  describeRound,
+  pickItems,
+  SIGNAL_LABELS,
+  type DifficultyTier,
+  type PickResult,
+} from '../../lib/gamePicker';
 import { NativeAudioButton } from '../NativeAudioButton';
 import { GameShell, type GamePhase } from './GameShell';
 
@@ -209,12 +220,16 @@ export function EarTilesGame({ signal }: { signal: GameSignal }) {
   const shownAt = useRef(Date.now());
   const logged = useRef(false);
   const started = useRef(false);
+  const [difficulty, setDifficulty] = useState<DifficultyTier>('standard');
 
   // Loaded once per visit (not live) so a Dexie refresh can't reshuffle mid-round.
   useEffect(() => {
     let cancelled = false;
     void getEarTilesCandidates().then((loaded) => {
       if (!cancelled) setCandidates(loaded);
+    });
+    void getRecentGameDifficulty(EAR_TILES_GAME_ID).then((tier) => {
+      if (!cancelled) setDifficulty(tier);
     });
     return () => {
       cancelled = true;
@@ -224,7 +239,7 @@ export function EarTilesGame({ signal }: { signal: GameSignal }) {
   const newRound = useCallback(
     (from: EarTilesCandidate[]) => {
       const seed = `${Date.now()}:${Math.random()}`;
-      const pick = pickItems(from, { signal, n: EAR_TILES_ROUND_SIZE, seed });
+      const pick = pickItems(from, { signal, n: EAR_TILES_ROUND_SIZE, seed, difficulty });
       const entries = pick.items.flatMap((candidate) => {
         const puzzle = buildEarTilesPuzzle(candidate.sentence, { seed: `${seed}:${candidate.id}` });
         return puzzle ? [{ candidate, puzzle }] : [];
@@ -236,7 +251,7 @@ export function EarTilesGame({ signal }: { signal: GameSignal }) {
       setResults([]);
       logged.current = false;
     },
-    [signal],
+    [signal, difficulty],
   );
 
   useEffect(() => {

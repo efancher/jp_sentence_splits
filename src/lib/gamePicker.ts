@@ -1,4 +1,4 @@
-import type { EffectiveGameSignal, FsrsState, GameSignal } from '../domain/types';
+import type { EffectiveGameSignal, FsrsState, GameRound, GameSignal } from '../domain/types';
 import { MATURE_MIN_SCHEDULED_DAYS } from './maturity';
 import { predictRetrievability } from './scheduling';
 import { seededShuffle } from './seededShuffle';
@@ -54,6 +54,57 @@ export const STALE_MAX_RETRIEVABILITY = 0.85;
 export const STRONG_MIN_RETRIEVABILITY = 0.9;
 /** A round samples from the top `n * POOL_SLICE_FACTOR` ranked items so it isn't the same set every time. */
 const POOL_SLICE_FACTOR = 3;
+
+/**
+ * Adaptive difficulty (docs/ROADMAP.md "Short games" P3): within a signal, a
+ * round samples from the top `n * <factor>` of the ranked pool (see `rank`
+ * above — for `weak`/`stale` the ranking is worst-recall-first). A narrower
+ * slice concentrates on the most extreme, hardest-to-recall items; a wider
+ * slice dilutes in gentler ones. `'harder'`/`'easier'` shift that slice depth
+ * — they never change which signal is used or widen into `any`.
+ */
+export type DifficultyTier = 'easier' | 'standard' | 'harder';
+
+const DIFFICULTY_SLICE_FACTOR: Record<DifficultyTier, number> = {
+  easier: POOL_SLICE_FACTOR * 2,
+  standard: POOL_SLICE_FACTOR,
+  harder: 1.5,
+};
+
+/** How many of a game's most recent rounds `recentRoundsAccuracy` looks at. */
+export const DIFFICULTY_WINDOW = 3;
+/** At or above this per-item accuracy over the window, the next round narrows toward the hardest slice. */
+const HARDER_THRESHOLD = 0.85;
+/** At or below this, the next round widens toward a gentler slice. */
+const EASIER_THRESHOLD = 0.4;
+
+/**
+ * Per-item accuracy across a game's last `window` rounds (most recent first),
+ * across whichever signal each of those rounds happened to use — this tracks
+ * "how is the learner doing at this game lately", not any one signal. `null`
+ * with no rounds played yet (or none of their items scored), so callers can
+ * fall back to `'standard'` rather than guessing.
+ */
+export function recentRoundsAccuracy(
+  rounds: readonly GameRound[],
+  gameId: string,
+  window: number = DIFFICULTY_WINDOW,
+): number | null {
+  const items = rounds
+    .filter((round) => round.gameId === gameId)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, window)
+    .flatMap((round) => round.items);
+  return items.length === 0 ? null : items.filter((item) => item.correct).length / items.length;
+}
+
+/** Maps a recent-accuracy reading to the tier the next round should sample at. */
+export function pickDifficultyTier(recentAccuracy: number | null): DifficultyTier {
+  if (recentAccuracy === null) return 'standard';
+  if (recentAccuracy >= HARDER_THRESHOLD) return 'harder';
+  if (recentAccuracy <= EASIER_THRESHOLD) return 'easier';
+  return 'standard';
+}
 
 /** Collapse an item's study cards (all activity types) into the picker's view of it. */
 export function summarizeCardStats(states: readonly FsrsState[], now: Date = new Date()): PickerStats {
@@ -136,16 +187,20 @@ export interface PickResult<T extends PickerCandidate> {
  */
 export function pickItems<T extends PickerCandidate>(
   candidates: readonly T[],
-  options: { signal: GameSignal; n: number; seed: string },
+  options: { signal: GameSignal; n: number; seed: string; difficulty?: DifficultyTier },
 ): PickResult<T> {
-  const { signal: requested, n, seed } = options;
+  const { signal: requested, n, seed, difficulty = 'standard' } = options;
   const order: GameSignal[] = [requested, ...GAME_SIGNALS.filter((s) => s !== requested)];
 
   const take = (pool: T[], signal: EffectiveGameSignal): PickResult<T> => {
-    // A real signal samples its top-ranked slice; the `any` fallback has no
-    // ranking worth honouring, so it samples the whole pool (otherwise every
-    // fallback round would re-draw the same first few items).
-    const slice = signal === 'any' ? pool : pool.slice(0, Math.max(n, n * POOL_SLICE_FACTOR));
+    // A real signal samples its top-ranked slice, depth adjusted by
+    // `difficulty`; the `any` fallback has no ranking worth honouring, so it
+    // samples the whole pool (otherwise every fallback round would re-draw
+    // the same first few items).
+    const slice =
+      signal === 'any'
+        ? pool
+        : pool.slice(0, Math.max(n, Math.round(n * DIFFICULTY_SLICE_FACTOR[difficulty])));
     return {
       items: seededShuffle(slice, (item) => item.id, seed).slice(0, n),
       signal,

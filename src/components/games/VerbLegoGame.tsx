@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getVerbLegoData, logGameRound } from '../../db/repository';
+import { getRecentGameDifficulty, getVerbLegoData, logGameRound } from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
-import { describeRound, pickItems, SIGNAL_LABELS, type PickResult } from '../../lib/gamePicker';
+import {
+  describeRound,
+  pickItems,
+  SIGNAL_LABELS,
+  type DifficultyTier,
+  type PickResult,
+} from '../../lib/gamePicker';
 import {
   buildVerbLegoPuzzle,
   chooseChain,
@@ -269,12 +275,16 @@ export function VerbLegoGame({ signal }: { signal: GameSignal }) {
   const shownAt = useRef(Date.now());
   const logged = useRef(false);
   const started = useRef(false);
+  const [difficulty, setDifficulty] = useState<DifficultyTier>('standard');
 
   // Loaded once per visit (not live) so a Dexie refresh can't reshuffle mid-round.
   useEffect(() => {
     let cancelled = false;
     void getVerbLegoData().then((loaded) => {
       if (!cancelled) setData(loaded);
+    });
+    void getRecentGameDifficulty(VERB_LEGO_GAME_ID).then((tier) => {
+      if (!cancelled) setDifficulty(tier);
     });
     return () => {
       cancelled = true;
@@ -284,7 +294,7 @@ export function VerbLegoGame({ signal }: { signal: GameSignal }) {
   const newRound = useCallback(
     (from: Data) => {
       const seed = `${Date.now()}:${Math.random()}`;
-      const pick = pickItems(from.candidates, { signal, n: VERB_LEGO_ROUND_SIZE, seed });
+      const pick = pickItems(from.candidates, { signal, n: VERB_LEGO_ROUND_SIZE, seed, difficulty });
       const puzzles = pick.items.map((candidate) => {
         const chain = chooseChain(candidate, `${seed}:${candidate.id}`);
         return buildVerbLegoPuzzle(chain, `${seed}:${chain.id}`);
@@ -296,7 +306,7 @@ export function VerbLegoGame({ signal }: { signal: GameSignal }) {
       setResults([]);
       logged.current = false;
     },
-    [signal],
+    [signal, difficulty],
   );
 
   useEffect(() => {
