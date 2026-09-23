@@ -247,6 +247,19 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-23 — Review: "Delete sentence" button on the card itself.** User request: deleting a bad
+  sentence spotted mid-review meant leaving Review, finding it in `/search`, and using the
+  "Delete selected everywhere" flow added earlier the same day. Added a top-right "Delete sentence"
+  button next to the existing "Why?" link on every review card (`ReviewPage.tsx`), same confirm-gated
+  pattern as "Report issue" (inline confirm, no `window.prompt`). Confirms straight to
+  `deleteSentenceCascade` (the single-id wrapper around the same `deleteSentencesCascade` Search
+  uses), then drops the deleted sentence from both the in-session `queue` and the not-yet-seeded
+  `pool` so no stale card for it can resurface later in the sitting — `pool` entries carry varying
+  candidate shapes per descriptor (`sentence` descriptor's candidate *is* the sentence,
+  `confusion`'s nests it under `itemA`, the rest carry `.sentence` directly), so a small duck-typed
+  `pendingSeedSentenceId` helper (mirroring the existing `pendingSeedVocabularySiblingKey`) resolves
+  the sentence id per shape.
+
 - **2026-09-23 — Search: "Delete selected everywhere" for sentences with no book.** User report:
   a sentence removed from its book via "Remove selected from book" (`BookDetailPage`) keeps its
   `sentenceVocabulary` links and study items alive — it was never actually retired, just unassigned

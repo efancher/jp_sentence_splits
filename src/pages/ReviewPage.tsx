@@ -19,6 +19,7 @@ import {
   deferUnreadyGrammarReviews,
   deferUnreadyReadingInContextReviews,
   deferUnreadySentenceReviews,
+  deleteSentenceCascade,
   ensureGrammarStudyItem,
   ensureStudyItem,
   ensureVocabularyStudyItem,
@@ -975,6 +976,23 @@ function pendingSeedVocabularySiblingKey(candidate: unknown): string | undefined
 }
 
 /**
+ * Same duck-typing as pendingSeedVocabularySiblingKey, generalized to every
+ * descriptor's candidate shape (the 'sentence' descriptor's candidate *is*
+ * the sentence; 'confusion' nests it under itemA) — used to drop a just-
+ * deleted sentence's not-yet-seeded pool entries so a stale card can't
+ * surface later in the same sitting.
+ */
+function pendingSeedSentenceId(seed: PendingSeed): string | undefined {
+  if (seed.descriptorKey === 'sentence') {
+    return (seed.candidate as { id?: string }).id;
+  }
+  if (seed.descriptorKey === 'confusion') {
+    return (seed.candidate as { itemA?: { sentence?: { id: string } } }).itemA?.sentence?.id;
+  }
+  return (seed.candidate as { sentence?: { id: string } }).sentence?.id;
+}
+
+/**
  * Reorders pending-seed batches (one batch = one descriptorKey+subjectId's
  * activity types, always introduced together) so two batches on the same
  * word in the same sentence aren't the two consecutive "new card" reveals —
@@ -1058,6 +1076,9 @@ export function ReviewPage() {
   const [issueNote, setIssueNote] = useState('');
   const [submittingIssue, setSubmittingIssue] = useState(false);
   const [issueReported, setIssueReported] = useState(false);
+  /** "Delete sentence" — one confirm step, no window.prompt (see reportingIssue above). */
+  const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
+  const [deletingSentence, setDeletingSentence] = useState(false);
   /**
    * Session planner (Phase 7.10): counts distinct new subjects seeded this
    * sitting (one per batch, not per card — a word's reading_retrieval +
@@ -1589,6 +1610,7 @@ export function ReviewPage() {
     setReportingIssue(false);
     setIssueNote('');
     setIssueReported(false);
+    setConfirmDeleteSentence(false);
   }, [current?.studyItem.id]);
 
   function markAssistance(kind: ReviewAssistance) {
@@ -1686,6 +1708,26 @@ export function ReviewPage() {
     }
   }
 
+  /**
+   * Deletes the card's sentence everywhere (deleteSentenceCascade — same
+   * soft-delete cascade as Search's "Delete selected everywhere") and drops
+   * every queue/pool entry tied to it, so a bad or duplicate sentence spotted
+   * mid-review doesn't have to be tracked down separately in Search.
+   */
+  async function handleDeleteSentence() {
+    if (!current || deletingSentence) return;
+    setDeletingSentence(true);
+    try {
+      const sentenceId = current.sentence.id;
+      await deleteSentenceCascade(sentenceId);
+      setQueue((q) => q.filter((card) => card.sentence.id !== sentenceId));
+      setPool((p) => p.filter((seed) => pendingSeedSentenceId(seed) !== sentenceId));
+      setConfirmDeleteSentence(false);
+    } finally {
+      setDeletingSentence(false);
+    }
+  }
+
   if (bookId && scope === undefined) return <p className="muted">Loading…</p>;
   if (!initialized) return <p className="muted">Loading…</p>;
 
@@ -1759,7 +1801,37 @@ export function ReviewPage() {
                   current.studyItem.activityType}{' '}
                 · {queue.length} due
               </div>
-              <Link to={`/study-items/${current.studyItem.id}`}>Why?</Link>
+              <div className="row">
+                <Link to={`/study-items/${current.studyItem.id}`}>Why?</Link>
+                {confirmDeleteSentence ? (
+                  <>
+                    <span className="muted">Delete this sentence everywhere?</span>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={deletingSentence}
+                      onClick={() => void handleDeleteSentence()}
+                    >
+                      Confirm delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteSentence(false)}
+                      disabled={deletingSentence}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => setConfirmDeleteSentence(true)}
+                  >
+                    Delete sentence
+                  </button>
+                )}
+              </div>
             </div>
             {reportingIssue ? (
               <form
