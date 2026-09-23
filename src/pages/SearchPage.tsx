@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import {
   addSentencesToBook,
   createBook,
+  deleteSentencesCascade,
   getDb,
   searchAll,
 } from '../db/repository';
@@ -30,6 +31,7 @@ export function SearchPage() {
   const [destinationBookId, setDestinationBookId] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const results = useLiveQuery(() => searchAll(query), [query]);
   const meta = useLiveQuery(async () => {
     const db = getDb();
@@ -226,6 +228,34 @@ export function SearchPage() {
               >
                 Export selected
               </button>
+              {confirmDeleteSelected ? (
+                <>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={async () => {
+                      const ids = [...selected];
+                      await deleteSentencesCascade(ids);
+                      setConfirmDeleteSelected(false);
+                      setSelected(new Set());
+                      setMessage(`Deleted ${ids.length} sentence(s) everywhere.`);
+                    }}
+                  >
+                    Confirm: delete {selected.size} everywhere
+                  </button>
+                  <button type="button" onClick={() => setConfirmDeleteSelected(false)}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => setConfirmDeleteSelected(true)}
+                >
+                  Delete selected everywhere
+                </button>
+              )}
             </div>
           </div>
         ) : null}
