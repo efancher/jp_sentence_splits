@@ -1096,11 +1096,10 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   the learner has actually earned it, rather than a per-sentence review
   card. Design sketch, grounding each piece in what already exists:
   - **Unlock condition.** Fires the first time a chapter's vocabulary
-    coverage reaches ≥80% (assuming this means the same thing
-    `bookCoverage.ts`'s `ratio`/`coveragePercent` already measure —
-    confirmed-vocabulary FSRS reading-proficiency; flag if "recalled"
-    was meant as something narrower, e.g. `progressReport.ts`'s FSRS
-    recall-success rate). **Needs building first**: coverage today is
+    coverage reaches ≥80% — confirmed by user 2026-09-23 to mean exactly
+    what `bookCoverage.ts`'s `ratio`/`coveragePercent` already measure:
+    confirmed-vocabulary FSRS reading-proficiency, not
+    `progressReport.ts`'s FSRS recall-success rate. **Needs building first**: coverage today is
     book-level only (`getBookVocabularyCoverage`) — the "per-chapter
     breakdown not done" gap already noted under NHK Easy import above and
     in STATUS.md. Extending `buildBookCoverage` to take chapter-scoped
