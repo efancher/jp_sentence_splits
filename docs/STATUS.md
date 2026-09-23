@@ -247,6 +247,16 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-23 — Search: "Delete selected everywhere" for sentences with no book.** User report:
+  a sentence removed from its book via "Remove selected from book" (`BookDetailPage`) keeps its
+  `sentenceVocabulary` links and study items alive — it was never actually retired, just unassigned
+  — so review cards for it kept surfacing with no way to locate or remove it: it no longer showed
+  in any book, and `deleteSentencesCascade` was only reachable from a book's own sentence list.
+  `/search` (unfiltered by book membership) could still find it, but had no delete action. Added the
+  same confirm-gated "delete everywhere" button (`deleteSentencesCascade`) to Search's
+  selected-results panel (`SearchPage.tsx`), so any orphaned/unbooked sentence found there can be
+  fully retired, not just relocated.
+
 - **2026-09-22 — Podcast mining's "long-episode ASR headroom" open item verified live, resolved.** Same
   audit pass as the NHK cap entry below turned up that `MINING_ASR_TIMEOUT_SECONDS` had also already been
   raised (1800s → 3600s, `youtube-mining-api`, committed as `1642a34`) — ROADMAP.md's "may need a bump" text
