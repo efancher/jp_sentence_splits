@@ -1639,6 +1639,53 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('seeds and renders a pitch-accent-production card for a proficient sentence with no reference audio', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    // No addReferenceAudio('sent-1') — pitch_accent_production is eligible
+    // *because* there's no reference recording (the complement of the
+    // perception pitch_accent card's eligibility).
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana-production',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana-production',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana-production',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Also grants the word FSRS proficiency (state 'review'), which
+    // getSentenceFullReviewReadiness requires before pitch_accent_production
+    // (or any full-sentence card) is eligible.
+    await suppressVocabularyActivityTypes('vocab-hana-production');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByRole('button', { name: 'Record' });
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+
+    await waitFor(async () => {
+      const sentenceItems = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+      const productionItem = sentenceItems.find(
+        (item) => item.activityType === 'pitch_accent_production',
+      );
+      expect(productionItem).toBeDefined();
+      expect(productionItem?.subjectType).toBe('sentence');
+    });
+  });
+
   it('does not seed an edge-accent (odaka) pitch card when the word is phrase-final', async () => {
     await seedBookWithSentence();
     const db = getDb();

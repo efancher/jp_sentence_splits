@@ -1757,6 +1757,32 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     "Shuffle" / "Shuffle and start over" pick a new seed).
     `settings.quietMode` does not affect this page. So a word's pitch-accent data backs passive shadowing
     feedback, an active-recall flashcard, and a recording drill.
+  - **`pitch_accent_production` SRS card** (2026-09-24): the drill's
+    recording→scoring pipeline pulled into a third, scheduled consumer of
+    the same pitch-accent data. `analyzeRecording`/`AnalysisState` moved
+    out of `PitchAccentDrillPage.tsx` into shared
+    `src/lib/pitchAccentDrillAnalysis.ts`
+    (`analyzePitchAccentDrillRecording`/`PitchAccentDrillAnalysisState`),
+    so the drill and the review card run the identical pipeline — no
+    scoring drift between them. `subjectType: 'sentence'` (unlike
+    perception `pitch_accent`, which is `vocabularyItem`); candidates are
+    exactly `getPitchAccentDrillSentences`'s pool (sentence-mode only for
+    v1 — the drill's single-word mode isn't wired into scheduling). The new
+    `PitchAccentProductionCard` in `ReviewPage.tsx`: record → score → show
+    the measured per-mora H/L under the dictionary marks
+    (`SentencePitchAccentText`) → self-rate via the ordinary shared rating
+    row, same as every other card — the score is feedback and
+    supplementary Review evidence (`pitchProductionMeasuredCount`/
+    `pitchProductionMismatchCount`), never an auto-picked rating (no card
+    in this app auto-derives a rating from an objective result — see
+    `ReadingProductionCard`'s doc comment). An `unavailable` (alignment
+    failure) take records nothing; the learner just re-records. Costed at
+    its own `MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction` tier (3 min)
+    in the session planner, and withheld by quiet mode both there and in
+    ReviewPage's own queue directly (recording required). Kept separate
+    from perception `pitch_accent` in every proficiency/gating list — the
+    shadowing/listening pitch-readiness gate still points at the
+    perception card only, unchanged by this feature.
   - **Drill usage tracking + SRS-miss-triggered extra practice** (2026-09-11,
     user request — "is the drill actually helping?"). Every take now writes
     Each take is also kept whole in Supabase (`pitch_drill_takes` row + private

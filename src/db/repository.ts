@@ -8396,9 +8396,16 @@ export async function getSessionPlannerInput(
   // them in the planner's review backlog just inflates it. Read-only here on
   // purpose: planRecommendedSession must not persist anything, so unlike
   // ReviewPage this can't lean on deferUnreadyGrammarReviews.
+  // Quiet mode also withholds pitch_accent_production due items — same
+  // "can't speak aloud right now" reasoning as shadowCandidates below, but
+  // this one lives in the ordinary due-queue rather than a separate
+  // candidate list, so it's filtered out here instead.
+  const practiceDueItemsForMode = settings.quietMode
+    ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
+    : practiceDueItems;
   const [retainDueReady, practiceDueReady] = await Promise.all([
     filterReadyGrammarDueItems(notSuspended(retainDueItems), suspendedIndex),
-    filterReadyGrammarDueItems(notSuspended(practiceDueItems), suspendedIndex),
+    filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
   ]);
 
   // retainDueItems/practiceDueItems are ranked/packed together downstream

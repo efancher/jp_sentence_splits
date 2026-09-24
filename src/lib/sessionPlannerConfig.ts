@@ -54,7 +54,11 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
  * (slower: typed/produced answers). Both halves are ranked and packed
  * together into one combined `review` batch step (2026-08-26 follow-up) —
  * this split only matters for per-item time-cost lookup and the due-item
- * fetch now, not for a separate top-level allocation.
+ * fetch now, not for a separate top-level allocation. `pitch_accent_production`
+ * rides in this list purely for the due-item fetch (`getDueStudyItems` needs
+ * *some* combined list to query) — `reviewItemCostMinutes` special-cases it
+ * to its own, slower `pitchProduction` cost tier before falling through to
+ * this set, so its presence here doesn't affect its per-item cost.
  */
 export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'cloze',
@@ -64,6 +68,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'grammar_completion',
   'grammar_contrast',
   'grammar_production',
+  'pitch_accent_production',
 ];
 
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */
@@ -116,6 +121,11 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
   shadowing: 3.5,
   retain: 0.75,
   practice: 1.5,
+  // pitch_accent_production (2026-09-24): record -> upload -> align -> score,
+  // real seconds per rep like shadowing, but one take rather than shadowing's
+  // usual several repeats — costed between retain and shadowing rather than
+  // silently defaulting to retain via reviewItemCostMinutes.
+  pitchProduction: 3,
 } as const;
 
 /** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */

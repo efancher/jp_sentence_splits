@@ -11,8 +11,10 @@ import { PitchContrastExample } from '../components/PitchContrastExample';
 import { WordPitchContour } from '../components/WordPitchContour';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
+import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
+import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { VocabChips } from '../components/VocabChips';
 import {
   countReviewsSince,
@@ -27,6 +29,7 @@ import {
   getDb,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
+  getPitchAccentDrillSentences,
   getReferencePitchTrack,
   loadSuspendedBookIndex,
   saveReferencePitchTrack,
@@ -43,12 +46,14 @@ import {
   settleSessionStep,
   updatePlannerSessionStep,
   type ConfusionPairCandidate,
+  type PitchAccentDrillSentence,
   type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
+import { useShadowing } from '../hooks/useShadowing';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
@@ -91,8 +96,12 @@ import {
   pitchPatternLabel,
   type PitchAccentPattern,
 } from '../lib/pitchAccentShape';
+import {
+  analyzePitchAccentDrillRecording,
+  type PitchAccentDrillAnalysisState,
+} from '../lib/pitchAccentDrillAnalysis';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
-import { PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
+import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
 /**
@@ -215,6 +224,28 @@ const CONJUGATION_ACTIVITY_TYPES: StudyActivityType[] = ['sentence_transformatio
 const PITCH_ACCENT_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent'];
 
 /**
+ * Pitch-accent *production* review (docs/ROADMAP.md "Pull the pitch-accent
+ * production drill into a review card…", shipped 2026-09-24). subjectType
+ * `sentence` (unlike perception `pitch_accent`, which is `vocabularyItem`) —
+ * the learner records the whole sentence, scored against every target
+ * word's dictionary shape at once, so the natural subject is the sentence.
+ * Eligibility (`getPitchAccentDrillSentences`, `src/db/repository.ts`) is
+ * the *complement* of perception `pitch_accent`'s: confirmed vocabulary
+ * with dictionary `pitchAccentPositions` and **no** reference recording —
+ * reaches the majority of the corpus that the reference-audio-gated
+ * perception card can't. Self-rated, like every other card in this app;
+ * the learner's own measured per-mora H/L (from
+ * `analyzePitchAccentDrillRecording`, `src/lib/pitchAccentDrillAnalysis.ts`
+ * — the same pipeline `PitchAccentDrillPage`'s free-practice loop uses) is
+ * shown as feedback before rating, never used to auto-pick a rating — see
+ * that module's doc comment and PitchAccentCard's sibling comment above for
+ * why this app never auto-derives a rating from an objective result.
+ * Sentence-mode only for v1 — `PitchAccentDrillPage`'s single-word mode
+ * isn't wired into review scheduling.
+ */
+const PITCH_ACCENT_PRODUCTION_ACTIVITY_TYPES: StudyActivityType[] = ['pitch_accent_production'];
+
+/**
  * Grammar-pattern review: subjectType `grammarPattern`, subjectId a
  * GrammarPattern.id. Was a 4-card ladder (grammar_comprehension/
  * grammar_completion/grammar_contrast/grammar_production), collapsed
@@ -255,6 +286,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Conjugation in context',
   pitch_accent: 'Pitch accent',
+  pitch_accent_production: 'Pitch accent (say it)',
   grammar_completion: 'Grammar completion',
   grammar_recognition: 'Grammar recognition',
 };
@@ -593,6 +625,8 @@ interface QueueCard {
   conjugation?: SentenceConjugationCandidate;
   /** Set only for pitch-accent cards. */
   pitchAccent?: PitchAccentReviewCandidate;
+  /** Set only for pitch-accent *production* cards. */
+  pitchAccentProduction?: PitchAccentDrillSentence;
   /** Set only for grammar-pattern cards (grammar-learning system Phase 5). */
   grammar?: GrammarReviewCandidate;
   /** Set for `reading_in_context` and vocabulary-target cards — the surrounding passage. */
@@ -787,6 +821,8 @@ interface ReviewScope {
   existingWordListeningItems: StudyItem[];
   pitchAccentCandidates: PitchAccentReviewCandidate[];
   existingPitchAccentItems: StudyItem[];
+  pitchAccentProductionCandidates: PitchAccentDrillSentence[];
+  existingPitchAccentProductionItems: StudyItem[];
   grammarCandidates: GrammarReviewCandidate[];
   existingGrammarItems: StudyItem[];
 }
@@ -934,6 +970,21 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       ensure: (candidate, activityType) =>
         ensureVocabularyStudyItem(candidate.vocabularyItem.id, activityType),
     }),
+    defineActivityDescriptor<PitchAccentDrillSentence>({
+      key: 'pitchAccentProduction',
+      activityTypes: PITCH_ACCENT_PRODUCTION_ACTIVITY_TYPES,
+      candidates: scope.pitchAccentProductionCandidates,
+      existingItems: scope.existingPitchAccentProductionItems,
+      subjectId: (candidate) => candidate.sentence.id,
+      buildCard: (studyItem, candidate) => ({
+        studyItem,
+        sentence: candidate.sentence,
+        pitchAccentProduction: candidate,
+      }),
+      ensure: (candidate, activityType) =>
+        ensureStudyItem('sentence', candidate.sentence.id, activityType),
+      gateSentenceId: (candidate) => candidate.sentence.id,
+    }),
     defineActivityDescriptor<GrammarReviewCandidate>({
       key: 'grammar',
       activityTypes: GRAMMAR_ACTIVITY_TYPES,
@@ -1080,6 +1131,10 @@ export function ReviewPage() {
   /** `reading_in_context`'s comprehension-check pick, when the sentence has one; recorded as supplementary Review evidence on rate. */
   const [comprehensionCheckAnswer, setComprehensionCheckAnswer] = useState<
     { correct: boolean; chosenIndex: number } | null
+  >(null);
+  /** `pitch_accent_production`'s completed take, once scored; recorded as supplementary Review evidence on rate. */
+  const [pitchProductionEvidence, setPitchProductionEvidence] = useState<
+    { measuredCount: number; mismatchCount: number } | null
   >(null);
   /** "Report issue" — an inline text box, not window.prompt (silently no-ops on installed iOS Safari PWAs). */
   const [reportingIssue, setReportingIssue] = useState(false);
@@ -1258,6 +1313,31 @@ export function ReviewPage() {
         pitchAccentVocabularyItemIdSet.has(item.subjectId),
     );
 
+    // Pitch-accent *production* (docs/ROADMAP.md, shipped 2026-09-24):
+    // `getPitchAccentDrillSentences` computes over the whole corpus (no
+    // bookId param, same as PitchAccentDrillPage) — filtered to this
+    // scope's sentences so a book-scoped queue only offers its own. Quiet
+    // mode withholds it entirely (recording required), same reasoning as
+    // the session planner's shadowCandidates/pitch_accent_production
+    // handling (src/db/repository.ts#getSessionPlannerInput) — this query
+    // depends on settings.quietMode (see the deps array below) so toggling
+    // it recomputes the queue live.
+    const pitchAccentProductionCandidates = settings?.quietMode
+      ? []
+      : (await getPitchAccentDrillSentences()).filter((candidate) =>
+          sentenceIdSet.has(candidate.sentence.id),
+        );
+    const existingPitchAccentProductionItems = (
+      await db.studyItems
+        .where('activityType')
+        .anyOf(PITCH_ACCENT_PRODUCTION_ACTIVITY_TYPES)
+        .toArray()
+    ).filter(
+      (item) =>
+        item.subjectType === 'sentence' &&
+        sentenceIdSet.has(item.subjectId),
+    );
+
     // Grammar patterns: global scope only (bookId unset) — a tracked
     // pattern isn't scoped to one book the way a sentence is, and its
     // "context sentence" may come from any book it's been encountered in.
@@ -1335,10 +1415,12 @@ export function ReviewPage() {
       existingWordListeningItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
+      pitchAccentProductionCandidates,
+      existingPitchAccentProductionItems,
       grammarCandidates,
       existingGrammarItems,
     };
-  }, [bookId]);
+  }, [bookId, settings?.quietMode]);
 
   const descriptors = useMemo(
     () => (scope ? buildActivityDescriptors(scope) : []),
@@ -1627,6 +1709,7 @@ export function ReviewPage() {
     setTypedResponse('');
     setTypedResponseExpected(null);
     setComprehensionCheckAnswer(null);
+    setPitchProductionEvidence(null);
     setReportingIssue(false);
     setIssueNote('');
     setIssueReported(false);
@@ -1676,6 +1759,8 @@ export function ReviewPage() {
         pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
         comprehensionCheckCorrect: comprehensionCheckAnswer?.correct,
         comprehensionCheckChosenIndex: comprehensionCheckAnswer?.chosenIndex,
+        pitchProductionMeasuredCount: pitchProductionEvidence?.measuredCount,
+        pitchProductionMismatchCount: pitchProductionEvidence?.mismatchCount,
         // The sentence this card actually displayed — every QueueCard has
         // one, not just pitch_accent (which used this alone, to join a miss
         // to the clip it played). Generalized 2026-09-22 so any activity's
@@ -1966,6 +2051,15 @@ export function ReviewPage() {
                   setRevealed(true);
                 }}
               />
+            ) : current.pitchAccentProduction ? (
+              <PitchAccentProductionCard
+                key={current.studyItem.id}
+                candidate={current.pitchAccentProduction}
+                onAnalyzed={(measuredCount, mismatchCount) => {
+                  setPitchProductionEvidence({ measuredCount, mismatchCount });
+                  setRevealed(true);
+                }}
+              />
             ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
               <GrammarRecognitionCard
                 key={current.studyItem.id}
@@ -2017,9 +2111,12 @@ export function ReviewPage() {
               // audio-centric cards (listening / word_listening).
               <ReviewPitchContour audio={(current.audio ?? current.wordListening?.audio)!} />
             ) : null}
-            {revealed && current.studyItem.activityType !== 'pitch_accent' ? (
+            {revealed &&
+            current.studyItem.activityType !== 'pitch_accent' &&
+            current.studyItem.activityType !== 'pitch_accent_production' ? (
               // Ambient pitch-accent contour for the sentence under review.
-              // `pitch_accent` renders its own (target-highlighted) copy.
+              // `pitch_accent`/`pitch_accent_production` render their own
+              // (target-highlighted, and for production, learner-marked) copy.
               // `sentence_transformation`'s own inflected verb is included
               // here now too — getSentencePitchAccentTargets resolves each
               // occurrence's real conjugated contour via
@@ -2612,6 +2709,125 @@ function PitchAccentCard({
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * Pitch-accent *production* (docs/ROADMAP.md "Pull the pitch-accent
+ * production drill into a review card…", shipped 2026-09-24): record the
+ * whole sentence, score every target word's realized pitch against its
+ * dictionary shape (`analyzePitchAccentDrillRecording`, the same pipeline
+ * `PitchAccentDrillPage`'s free-practice loop uses), show the learner's
+ * measured per-mora H/L as a second line under the dictionary marks, then
+ * self-rate via the shared `RATINGS` row — same house convention as every
+ * other card in this app: the objective score is feedback and supplementary
+ * evidence (`onAnalyzed` → `Review.pitchProductionMeasuredCount`/
+ * `pitchProductionMismatchCount`), never an auto-picked rating.
+ *
+ * Unlike every other card, there's no separate "reveal" action — recording
+ * *is* the answer, so `onAnalyzed` (called once scoring finishes) is what
+ * flips the parent's `revealed` flag and shows the rating buttons. When
+ * alignment fails (`status: 'unavailable'`), `onAnalyzed` is *not* called —
+ * no rating is possible on an unmeasured take, so the learner just
+ * re-records; nothing is submitted for that attempt.
+ */
+function PitchAccentProductionCard({
+  candidate,
+  onAnalyzed,
+}: {
+  candidate: PitchAccentDrillSentence;
+  onAnalyzed: (measuredCount: number, mismatchCount: number) => void;
+}) {
+  const shadowing = useShadowing();
+  const { cancelRecording } = shadowing;
+  const [pending, setPending] = useState<{ blob: Blob; durationMs: number } | null>(null);
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<PitchAccentDrillAnalysisState>({ status: 'idle' });
+
+  useEffect(() => () => cancelRecording(), [cancelRecording]);
+
+  useEffect(() => {
+    if (shadowing.status === 'stopped' && shadowing.lastRecording) {
+      setPending(shadowing.lastRecording);
+    }
+  }, [shadowing.status, shadowing.lastRecording]);
+
+  useEffect(() => {
+    if (!pending) {
+      setPendingUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(pending.blob);
+    setPendingUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pending]);
+
+  useEffect(() => {
+    if (!pending) return;
+    let active = true;
+    setAnalysis({ status: 'analyzing' });
+    void analyzePitchAccentDrillRecording(
+      pending.blob,
+      candidate.sentence.japanese,
+      candidate.targets,
+    ).then((next) => {
+      if (!active) return;
+      setAnalysis(next);
+      if (next.status === 'done') {
+        onAnalyzed(next.scorableCount, next.observations.length);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [pending, candidate]);
+
+  const isRecording = shadowing.status === 'recording';
+  const isRequestingMic = shadowing.status === 'requesting-mic';
+  const learnerClasses = analysis.status === 'done' ? analysis.learnerClassesBySurface : undefined;
+  const learnerFollowing = analysis.status === 'done' ? analysis.learnerFollowingBySurface : undefined;
+
+  return (
+    <>
+      <SentencePitchAccentText
+        japanese={candidate.sentence.japanese}
+        targets={candidate.targets}
+        learnerClassesBySurface={learnerClasses}
+        learnerFollowingBySurface={learnerFollowing}
+      />
+      {candidate.sentence.translation ? (
+        <div className="muted">{candidate.sentence.translation}</div>
+      ) : null}
+      <div className="row" style={{ alignItems: 'center' }}>
+        <RecordToggleButton
+          isRecording={isRecording}
+          isRequestingMic={isRequestingMic}
+          elapsedMs={shadowing.recordingElapsedMs}
+          maxDurationMs={MAX_RECORDING_DURATION_MS}
+          idleLabel={pending ? 'Record again' : 'Record'}
+          onStart={() => void shadowing.startRecording()}
+          onStop={() => void shadowing.stopRecording()}
+        />
+      </div>
+      {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+      {analysis.status === 'analyzing' ? <p className="muted">Scoring…</p> : null}
+      {analysis.status === 'unavailable' ? (
+        <p className="muted">Couldn&rsquo;t measure that take — try recording again.</p>
+      ) : null}
+      {pendingUrl && analysis.status === 'done' ? (
+        <div className="stack">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={pendingUrl} />
+          {analysis.learnerPitch ? (
+            <MeasuredPitchContour
+              payload={analysis.learnerPitch}
+              label="Your pitch (measured)"
+              ariaLabel="Measured pitch of your recording"
+            />
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

@@ -440,6 +440,24 @@ describe('Learning Orchestrator repository layer', () => {
     expect(loud.steps.some((step) => step.targetKind === 'shadow')).toBe(true);
   });
 
+  it('quiet mode also withholds due pitch_accent_production items from the review pool (recording required)', async () => {
+    const sentence = makeSentence();
+    const db = getDb();
+    await db.sentences.put(sentence);
+    const card = await ensureStudyItem('sentence', sentence.id, 'pitch_accent_production');
+
+    const before = await getSessionPlannerInput(60);
+    expect(before.practiceDue.some((d) => d.studyItemId === card.id)).toBe(true);
+
+    await updateSettings({ quietMode: true });
+    const quiet = await getSessionPlannerInput(60);
+    expect(quiet.practiceDue.some((d) => d.studyItemId === card.id)).toBe(false);
+
+    await updateSettings({ quietMode: false });
+    const loud = await getSessionPlannerInput(60);
+    expect(loud.practiceDue.some((d) => d.studyItemId === card.id)).toBe(true);
+  });
+
   it('withholds continue_book until a confirmed word\'s reading/meaning card has been reviewed at least once — pitch-only reps do not count (user report, 2026-09-16)', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();

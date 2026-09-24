@@ -31,6 +31,52 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-24 — Pitch-accent production drill becomes a scheduled review
+  card (`pitch_accent_production`).** Second half of the same "what data
+  aren't we collecting" pass as the comprehension check above.
+  `PitchAccentDrillPage`'s free-practice loop already measured the
+  learner's recording against the dictionary pitch shape per mora, but its
+  own doc comment said outright "attempts aren't saved" — real scored data
+  that never became SRS evidence. Extracted the recording→scoring pipeline
+  (`analyzeRecording`/`AnalysisState`) out of `PitchAccentDrillPage.tsx`
+  into a shared `src/lib/pitchAccentDrillAnalysis.ts`
+  (`analyzePitchAccentDrillRecording`/`PitchAccentDrillAnalysisState`) —
+  pure refactor, `PitchAccentDrillPage` now imports it under its old local
+  names, no behavior change. New `pitch_accent_production` activity type,
+  `subjectType: 'sentence'` (unlike perception `pitch_accent`, which is
+  `vocabularyItem`) — reuses `getPitchAccentDrillSentences`
+  (`src/db/repository.ts`) directly as the candidate pool, the same
+  eligibility perception `pitch_accent` can't reach: confirmed vocabulary
+  with dictionary pitch data and **no** reference recording, i.e. the
+  majority of the corpus. Sentence-mode only for v1 (the drill's
+  single-word mode isn't wired into scheduling). New `PitchAccentProductionCard`
+  in `ReviewPage.tsx`: record → score → show the learner's measured
+  per-mora H/L under the dictionary marks (`SentencePitchAccentText`) →
+  self-rate via the same shared rating row every other card uses. Design
+  decision (user-confirmed): the measured score is feedback and
+  supplementary evidence (`Review.pitchProductionMeasuredCount`/
+  `pitchProductionMismatchCount`) — never an auto-picked rating, matching
+  the one convention already used by every other card in this app (nothing
+  auto-derives a rating from an objective result; see
+  `ReadingProductionCard`'s doc comment). An alignment failure
+  (`status: 'unavailable'`) records nothing — no rating on an unmeasured
+  take, learner just re-records. Cost model: `pitch_accent_production`
+  costed at its own tier (`MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction`,
+  3 min — between `retain` and `shadowing`), not the cheap `retain` default
+  it would've silently fallen into. Quiet mode withholds it both from the
+  session planner (`getSessionPlannerInput`) and from ReviewPage's own
+  queue directly (recording required, same "can't speak aloud right now"
+  reasoning as shadowing). Kept deliberately separate from perception
+  `pitch_accent` in every proficiency/gating list (not folded into
+  `repository.ts`'s `PITCH_ACCENT_ACTIVITY_TYPES`) — the shadowing/listening
+  pitch-readiness gate still points at the perception card only; whether
+  that should change is an explicitly unresolved question, same as before
+  this feature. New nullable Supabase columns (bundled into the same
+  migration as the comprehension-check entry above). Tests: cost-tier unit
+  tests + a quiet-mode repository test in `tests/sessionPlanner*.test.ts`,
+  a seeding/render test in `tests/reviewPage.test.tsx`, mapper round-trip
+  in `tests/sync.test.ts`.
+
 - **2026-09-24 — Context-aware comprehension check for `reading_in_context`.**
   User asked what data the app wasn't collecting; `classifyReviewError`
   already documented the gap: `reading_in_context`/`listening` are pure

@@ -9,6 +9,7 @@ import {
   computeRecentActivityDistribution,
   gameBreakCount,
   rankReviewPriorities,
+  reviewItemCostMinutes,
   sessionStepTargetPath,
   scoreReviewPriority,
   type ExploreCandidate,
@@ -19,7 +20,7 @@ import {
   type ShadowCandidate,
   type UnderstandCandidate,
 } from '../src/lib/sessionPlanner';
-import { GAME_BREAK_MINUTES } from '../src/lib/sessionPlannerConfig';
+import { GAME_BREAK_MINUTES, MODE_ACTIVITY_ESTIMATE_MINUTES } from '../src/lib/sessionPlannerConfig';
 
 const NOW = new Date('2026-08-20T12:00:00.000Z');
 
@@ -60,6 +61,25 @@ function emptyPlannerInput(overrides: Partial<SessionPlannerInput> = {}): Sessio
     ...overrides,
   };
 }
+
+describe('reviewItemCostMinutes', () => {
+  it('costs pitch_accent_production at its own tier, not the cheaper practice default', () => {
+    expect(reviewItemCostMinutes('pitch_accent_production')).toBe(
+      MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction,
+    );
+    expect(reviewItemCostMinutes('pitch_accent_production')).not.toBe(
+      MODE_ACTIVITY_ESTIMATE_MINUTES.practice,
+    );
+  });
+
+  it('still costs an ordinary practice-tier activity type at the practice rate', () => {
+    expect(reviewItemCostMinutes('cloze')).toBe(MODE_ACTIVITY_ESTIMATE_MINUTES.practice);
+  });
+
+  it('falls back to the retain rate for an unlisted activity type', () => {
+    expect(reviewItemCostMinutes('reading_in_context')).toBe(MODE_ACTIVITY_ESTIMATE_MINUTES.retain);
+  });
+});
 
 describe('computeRecentActivityDistribution / computeNeglectScores', () => {
   it('treats a bucket with no events at all as maximally neglected', () => {

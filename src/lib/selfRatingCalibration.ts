@@ -26,6 +26,12 @@ const SELF_RATED_ACTIVITY_TYPES = [
   'listening',
   'word_listening',
   'grammar_recognition',
+  // Measured per-mora H/L feedback is shown before rating, but — unlike
+  // pitch_accent's single tapped-position ✓/✗ — nothing compares it to a
+  // single expected answer or feeds classifyReviewError, so it stays in
+  // this bucket rather than GRADED_ACTIVITY_TYPES (docs/ROADMAP.md "Pull
+  // the pitch-accent production drill into a review card…").
+  'pitch_accent_production',
 ] as const;
 
 const GRADED_ACTIVITY_TYPES = [

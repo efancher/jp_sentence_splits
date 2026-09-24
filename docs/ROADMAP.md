@@ -1327,31 +1327,28 @@ possibilities, kept here so the thinking isn't lost:
   there to hang a check on, so it'd be net-new UI, not reuse; left for a
   follow-up. **Not built**: adaptive distractor difficulty — still an open
   angle, parked as originally discussed.
-- [ ] **Pull the pitch-accent production drill into a review card**
-  (2026-09-16 discussion). `PitchAccentDrillPage` (`/pitch-accent`) already
-  measures the learner's recording against the dictionary target per mora
-  (`buildPitchAccentShapeObservations`/`learnerClassesBySurface`) — real
-  scored data, not just a self-tap — and it's the *only* pitch-production
-  surface that reaches most of the corpus, since it needs no reference
-  recording (unlike the perception `pitch_accent` SRS card, which is
-  reference-audio-gated and so only reaches a minority of sentences). Not
-  a simple "add scheduling" move — two real blockers:
-  1. **Rating derivation.** Every existing card gets a rating from a typed
-     match or a self-tap; this one would need a policy for turning a noisy
-     per-mora accuracy score into again/hard/good/easy, plus a fallback for
-     the real fraction of takes that come back `unavailable` (alignment
-     failed, no score at all). This is the actual unlock — worth designing
-     before anything else here.
-  2. **Cost model.** Record → upload → align → score takes real seconds per
-     rep, unlike a tap — the planner's per-card time estimates and
-     quiet-mode exclusion (shadowing already gets excluded since it needs
-     speaking aloud) would need the same treatment, not the normal
-     review-card assumptions.
-  Direct consequence if this ships: shadowing's and listening's
-  pitch-proficiency requirement (2026-09-16, this same session) currently
-  points at the *perception* `pitch_accent` card specifically — would need
-  a decision on whether it stays there, moves to the new production card,
-  or requires both. Explicitly parked — user: "in the roadmap is fine."
+- [x] **Pull the pitch-accent production drill into a review card**
+  (2026-09-16 discussion; shipped 2026-09-24 — see STATUS.md). The two
+  blockers resolved:
+  1. **Rating derivation, resolved by not building it.** Rather than
+     inventing a noisy-score-to-rating heuristic, the measured per-mora
+     score is shown as feedback and recorded as supplementary evidence
+     (`Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`)
+     alongside an ordinary self-rate — matching the one convention already
+     used by every other card in this app (see `ReadingProductionCard`'s
+     doc comment: no card auto-derives a rating from an objective result).
+     Alignment failures (`unavailable`) record nothing and let the learner
+     re-record, sidestepping the "what rating does an unmeasured take get"
+     question entirely.
+  2. **Cost model** — `pitch_accent_production` got its own
+     `MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction` tier (3 min) instead
+     of silently defaulting to `retain`, and quiet-mode exclusion in both
+     the session planner and ReviewPage's own queue, same reasoning as
+     shadowing's existing exclusion.
+  Sentence-mode only for v1 (the drill's single-word mode isn't wired into
+  scheduling). The shadowing/listening pitch-proficiency question is left
+  exactly where it was: still points at perception `pitch_accent` only,
+  not resolved by this pass.
 
 ## Not planned (deliberate)
 

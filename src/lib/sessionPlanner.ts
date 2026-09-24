@@ -511,7 +511,11 @@ function draftStepId(): string {
 const PRACTICE_ACTIVITY_TYPE_SET = new Set<string>(PRACTICE_ACTIVITY_TYPES);
 
 /** Retain-costed items ("recognize/reveal/self-rate") are quicker than practice-costed ones ("type/produce an answer") — see MODE_ACTIVITY_ESTIMATE_MINUTES. */
-function reviewItemCostMinutes(activityType: StudyActivityType): number {
+export function reviewItemCostMinutes(activityType: StudyActivityType): number {
+  // pitch_accent_production is neither list (record -> align -> score is its
+  // own, slower cost tier) — checked first so it doesn't silently fall into
+  // the cheap retain default.
+  if (activityType === 'pitch_accent_production') return MODE_ACTIVITY_ESTIMATE_MINUTES.pitchProduction;
   return PRACTICE_ACTIVITY_TYPE_SET.has(activityType)
     ? MODE_ACTIVITY_ESTIMATE_MINUTES.practice
     : MODE_ACTIVITY_ESTIMATE_MINUTES.retain;
