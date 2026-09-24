@@ -221,7 +221,9 @@ Deno.serve(async (req) => {
         'as they naturally occur in native sentences (not a fixed syllabus). Given one sentence, ' +
         'identify reusable grammar constructions worth a learner noticing — particles, ordinary ' +
         'conjugations, and basic sentence structure do NOT count; focus on constructions with a ' +
-        'distinct communicative function (e.g. わけがない, てしまう, ~ば). Prefer matching an ' +
+        'distinct communicative function (e.g. わけがない, てしまう, ~ば, the manner-demonstrative ' +
+        '+ light-verb pattern こうする/そうする/ああする/どうする "do it this/that way" or ' +
+        'こうなる/そうなる/どうなる "turn out this way"). Prefer matching an ' +
         'existing pattern name over inventing a near-duplicate. Report at most 4 patterns, ranked ' +
         'by how central each is to this sentence.';
       const existingText = existing.length

@@ -132,6 +132,41 @@ function isFunctionAdverb(token: MorphologyToken): boolean {
   return !!lemma && FUNCTION_ADVERB_LEMMAS.has(lemma);
 }
 
+const MANNER_DEMONSTRATIVES = new Set(['こう', 'そう', 'ああ', 'どう']);
+
+/**
+ * する/なる directly glued onto a manner demonstrative — こうする/そうする/
+ * ああする/どうする ("do it this/that way"), こうなる/そうなる/どうなる
+ * ("turn out this way"). Confirmed against the actual UniDic tokenizer
+ * (fugashi, same engine Shadowmine uses): in this position する/なる get the
+ * `動詞/非自立可能` tag, the same "bound verb" tag `isBoundAuxiliaryVerb`
+ * already treats as grammar rather than vocabulary — but that helper only
+ * looks for a preceding て/で, so it misses this shape. Like
+ * `isFunctionAdverb`'s こう/そう/どう, these are productive/grammaticalized
+ * rather than a word to memorize, and unreasonable to expect a learner to
+ * produce unprompted in a cloze blank.
+ *
+ * `ああ` is included here (unlike `FUNCTION_ADVERB_LEMMAS`, which omits it)
+ * because checking `prev.pos` for `副詞` rules out the interjection sense
+ * ("ah", tagged `感動詞`) that would otherwise collide on lemma alone.
+ *
+ * 言う is deliberately not covered by this same pattern — そういう/こう言う
+ * (the "that kind of / such" adnominal use) is tagged identically to a
+ * literal "he said this way" use (彼はこう言った), so POS gives no way to
+ * tell them apart; suppressing it by default would wrongly hide a real verb.
+ */
+function isDemonstrativeLightVerb(
+  token: MorphologyToken,
+  prev: MorphologyToken | undefined,
+): boolean {
+  if (!token.pos?.startsWith('動詞')) return false;
+  const lemma = token.lemma?.trim();
+  if (lemma !== 'する' && lemma !== 'なる') return false;
+  if (!prev?.pos?.startsWith('副詞')) return false;
+  if (!MANNER_DEMONSTRATIVES.has(prev.lemma?.trim() ?? '')) return false;
+  return prev.end === token.start;
+}
+
 /**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
@@ -265,6 +300,7 @@ export function suggestionFromToken(
     selectedByDefault:
       isContentPos(pos) &&
       !isBoundAuxiliaryVerb(token, prevToken) &&
+      !isDemonstrativeLightVerb(token, prevToken) &&
       !isKanaWrittenFormalNoun(token, reading) &&
       !isFunctionAdverb(token),
   };

@@ -31,6 +31,37 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-24 — Vocabulary picker: don't default-check する/なる glued onto
+  a manner demonstrative (こうする/そうする/ああする/どうする,
+  こうなる/そうなる/ああなる/どうなる).** User flagged つぎはこうしよう:
+  expecting a cloze answer of する there is unreasonable — it's a
+  productive light-verb construction ("do/turn out this way"), not a word.
+  New `isDemonstrativeLightVerb` (`src/lib/vocabularySuggestions.ts`),
+  same shape as `isBoundAuxiliaryVerb` (chip stays visible, just unchecked)
+  but keyed on a preceding こう/そう/ああ/どう (`副詞`) instead of て/で —
+  confirmed against the real fugashi/UniDic tokenizer that する/なる get
+  `動詞/非自立可能` in this position, same tag `isBoundAuxiliaryVerb`
+  already treats as grammar. `ああ` is included here (unlike
+  `FUNCTION_ADVERB_LEMMAS`, which omits it to avoid colliding with the
+  `感動詞` interjection sense on lemma alone) because this check also gates
+  on `prev.pos === 副詞`. 言う deliberately *not* covered — そういう/こう言う
+  (the "that kind of" adnominal use) tokenizes identically to a literal
+  "said this way" use, so POS gives no way to tell them apart; a test
+  (`tests/vocabularySuggestions.test.ts`) pins 言う staying checked as a
+  regression guard. Companion tweak: `grammar-assist`'s suggest system
+  prompt (`supabase/functions/grammar-assist/index.ts`) now names this
+  construction as a worked example, so it doesn't fall into a gap between
+  "no longer default vocab" and "AI judges it too basic to flag as
+  grammar" — **needs `supabase functions deploy grammar-assist` to take
+  effect**, not auto-deployed by CI. Forward-only, like the other
+  `selectedByDefault` filters — re-run `backfill:vocabulary-suggestions`
+  to refresh older unreviewed sentences. Broader, harder cases looked at
+  but deliberately left alone (real "become"/"decide" content verb use,
+  not a safe blanket default): plain 〜くなる/〜になる ("became cold"),
+  ことにする/ことになる, ようになる — なる is core vocabulary in those, and
+  UniDic tags them the same `動詞/非自立可能` as the demonstrative case, so
+  there's no free POS signal to scope a fix to just the grammatical use.
+
 - **2026-09-24 — Pitch-accent production drill becomes a scheduled review
   card (`pitch_accent_production`).** Second half of the same "what data
   aren't we collecting" pass as the comprehension check above.

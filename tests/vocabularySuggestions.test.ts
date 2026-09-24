@@ -106,6 +106,50 @@ describe('vocabularySuggestions', () => {
     expect(kanjiSuggestions.find((s) => s.surface === '事')?.selectedByDefault).toBe(true);
   });
 
+  it('does not default-select する/なる glued onto a manner demonstrative, but keeps other verbs after one', () => {
+    // Real fugashi/UniDic output for 次はこうしよう。
+    const suru = '次はこうしよう。';
+    const suruSuggestions = suggestionsFromTokens(suru, [
+      { surface: '次', start: 0, end: 1, lemma: '次', reading: 'つぎ', pos: '名詞/普通名詞' },
+      { surface: 'は', start: 1, end: 2, lemma: 'は', reading: 'は', pos: '助詞/係助詞' },
+      { surface: 'こう', start: 2, end: 4, lemma: 'こう', reading: 'こう', pos: '副詞' },
+      { surface: 'しよう', start: 4, end: 7, lemma: 'する', reading: 'しよう', pos: '動詞/非自立可能' },
+      { surface: '。', start: 7, end: 8, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    expect(suruSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(false);
+    // Still visible in the strip, just unchecked — same treatment as isBoundAuxiliaryVerb.
+    expect(suruSuggestions.some((s) => s.expression === 'する')).toBe(true);
+
+    // Real fugashi/UniDic output for そうなるとは思わなかった。
+    const naru = 'そうなるとは思わなかった。';
+    const naruSuggestions = suggestionsFromTokens(naru, [
+      { surface: 'そう', start: 0, end: 2, lemma: 'そう', reading: 'そう', pos: '副詞' },
+      { surface: 'なる', start: 2, end: 4, lemma: 'なる', reading: 'なる', pos: '動詞/非自立可能' },
+      { surface: 'と', start: 4, end: 5, lemma: 'と', reading: 'と', pos: '助詞/格助詞' },
+      { surface: 'は', start: 5, end: 6, lemma: 'は', reading: 'は', pos: '助詞/係助詞' },
+      { surface: '思わ', start: 6, end: 8, lemma: '思う', reading: 'おもわ', pos: '動詞/一般' },
+      { surface: 'なかっ', start: 8, end: 11, lemma: 'ない', reading: 'なかっ', pos: '助動詞' },
+      { surface: 'た', start: 11, end: 12, lemma: 'た', reading: 'た', pos: '助動詞' },
+      { surface: '。', start: 12, end: 13, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    expect(naruSuggestions.find((s) => s.expression === 'なる')?.selectedByDefault).toBe(false);
+
+    // Real fugashi/UniDic output for 彼はこう言った。 — 言う after こう is
+    // tagged identically whether it's the literal "said this way" or the
+    // grammaticalized そういう/こういう "that kind of" use, so it's left as
+    // an ordinary content verb rather than guessed at.
+    const iu = '彼はこう言った。';
+    const iuSuggestions = suggestionsFromTokens(iu, [
+      { surface: '彼', start: 0, end: 1, lemma: '彼', reading: 'かれ', pos: '代名詞' },
+      { surface: 'は', start: 1, end: 2, lemma: 'は', reading: 'は', pos: '助詞/係助詞' },
+      { surface: 'こう', start: 2, end: 4, lemma: 'こう', reading: 'こう', pos: '副詞' },
+      { surface: '言っ', start: 4, end: 6, lemma: '言う', reading: 'いっ', pos: '動詞/一般' },
+      { surface: 'た', start: 6, end: 7, lemma: 'た', reading: 'た', pos: '助動詞' },
+      { surface: '。', start: 7, end: 8, lemma: '。', reading: '', pos: '補助記号/句点' },
+    ]);
+    expect(iuSuggestions.find((s) => s.expression === '言う')?.selectedByDefault).toBe(true);
+  });
+
   it('still default-selects a content verb that merely follows a comma-broken て', () => {
     const japanese = '歩いて、学ぶ。';
     const suggestions = suggestionsFromTokens(japanese, [
