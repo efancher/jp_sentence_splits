@@ -192,8 +192,6 @@ export function PitchAccentMinimalPairWarmup({
 }) {
   const [position, setPosition] = useState(0);
 
-  if (trials.length === 0) return null;
-
   const done = position >= trials.length;
   const trial = trials[position];
 
@@ -204,7 +202,14 @@ export function PitchAccentMinimalPairWarmup({
         Real native clips of words that share a reading but not a pitch-accent shape. Guess
         which clip is which before checking — not graded, not saved.
       </p>
-      {done ? (
+      {trials.length === 0 ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          No pairs available right now — this needs two words you've already learned (proficient)
+          that happen to be true homophones with a different pitch-accent shape, which is rare in
+          most vocabularies. Odd Ear Out (<code>/play</code>) doesn't need an exact homophone match
+          and has more material for the same kind of practice.
+        </p>
+      ) : done ? (
         <>
           <p className="muted" style={{ margin: 0 }}>
             You've been through all {trials.length} pair{trials.length === 1 ? '' : 's'} available
