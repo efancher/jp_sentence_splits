@@ -18,6 +18,7 @@ import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { filterJapaneseVoices } from '../lib/speech';
 import {
   exportFullBackup,
+  refreshVocabularySuggestionDefaults,
   restoreBackup,
   updateSettings,
 } from '../db/repository';
@@ -106,6 +107,8 @@ export function SettingsPage() {
     typeof parseBackupJson
   > | null>(null);
   const [message, setMessage] = useState('');
+  const [refreshingSuggestions, setRefreshingSuggestions] = useState(false);
+  const [suggestionRefreshResult, setSuggestionRefreshResult] = useState('');
 
   if (!settings) return <p className="muted">Loading settings…</p>;
 
@@ -386,6 +389,40 @@ export function SettingsPage() {
         <Link to="/label-word-audio">
           <button type="button">Label word audio</button>
         </Link>
+      </section>
+
+      <section className="panel stack">
+        <h3 style={{ margin: 0 }}>Vocabulary</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          The vocabulary picker's pre-checked words are decided once, when a
+          sentence is first mined. When that rule improves later, sentences
+          you've already glanced at or confirmed keep their old defaults —
+          this re-derives them for anything you haven't opened the picker on
+          yet.
+        </p>
+        <button
+          type="button"
+          disabled={refreshingSuggestions}
+          onClick={async () => {
+            setRefreshingSuggestions(true);
+            setSuggestionRefreshResult('');
+            try {
+              const result = await refreshVocabularySuggestionDefaults();
+              setSuggestionRefreshResult(
+                result.sentencesUpdated === 0
+                  ? `Checked ${result.sentencesScanned} sentence(s) — already up to date.`
+                  : `Updated ${result.suggestionsChanged} suggestion(s) across ${result.sentencesUpdated} of ${result.sentencesScanned} sentence(s) checked.`,
+              );
+            } finally {
+              setRefreshingSuggestions(false);
+            }
+          }}
+        >
+          {refreshingSuggestions ? 'Refreshing…' : 'Refresh vocabulary suggestion defaults'}
+        </button>
+        {suggestionRefreshResult ? (
+          <div className="status-pill complete">{suggestionRefreshResult}</div>
+        ) : null}
       </section>
 
       <section className="panel stack">

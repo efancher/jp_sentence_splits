@@ -260,6 +260,26 @@ export function deriveDictionaryReading(
   return surfaceReading;
 }
 
+/**
+ * The `selectedByDefault` predicate itself, factored out of
+ * `suggestionFromToken` so `recomputeSuggestionDefaults` can re-derive it
+ * later from stored `VocabularySuggestion`s (no re-tokenization needed) —
+ * see that function's doc comment.
+ */
+function computeSelectedByDefault(
+  token: MorphologyToken,
+  prevToken: MorphologyToken | undefined,
+  reading: string,
+): boolean {
+  return (
+    isContentPos(token.pos?.trim() ?? '') &&
+    !isBoundAuxiliaryVerb(token, prevToken) &&
+    !isDemonstrativeLightVerb(token, prevToken) &&
+    !isKanaWrittenFormalNoun(token, reading) &&
+    !isFunctionAdverb(token)
+  );
+}
+
 export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,
@@ -297,13 +317,62 @@ export function suggestionFromToken(
     reading,
     pos,
     source: 'morphology',
-    selectedByDefault:
-      isContentPos(pos) &&
-      !isBoundAuxiliaryVerb(token, prevToken) &&
-      !isDemonstrativeLightVerb(token, prevToken) &&
-      !isKanaWrittenFormalNoun(token, reading) &&
-      !isFunctionAdverb(token),
+    selectedByDefault: computeSelectedByDefault(token, prevToken, reading),
   };
+}
+
+/**
+ * Re-derives `selectedByDefault` on an already-tokenized sentence's stored
+ * `vocabularySuggestions`, without re-tokenizing — every `selectedByDefault`
+ * rule added after a sentence was first mined (`isBoundAuxiliaryVerb`,
+ * `isDemonstrativeLightVerb`, …) only ever applied going forward, since
+ * `vocabularySuggestions` is a frozen per-sentence snapshot the picker reads
+ * as-is (see docs/STATUS.md, 2026-09-24 correction).
+ *
+ * Reconstructs each suggestion's "previous token" from the *previous
+ * suggestion in the array* rather than needing the original
+ * `MorphologyToken`s back: `suggestionsFromTokens` emits exactly one
+ * suggestion per input token (content or not — punctuation and particles
+ * get one too, just unchecked), in order, so array-adjacency already is
+ * token-adjacency. The one exception is a fused numeral+counter suggestion
+ * (`combineNumeralCounter`, pos containing a literal `+`, which no real
+ * UniDic tag does) — those collapse two tokens into one entry and always
+ * default to checked, so they're left untouched rather than fed through a
+ * predicate built for single tokens.
+ *
+ * Only touches `source: 'morphology'` entries for the same reason — a
+ * 'satori' or 'manual' suggestion never went through this predicate to
+ * begin with.
+ */
+export function recomputeSuggestionDefaults(
+  suggestions: VocabularySuggestion[],
+): VocabularySuggestion[] {
+  return suggestions.map((suggestion, index) => {
+    if (suggestion.source !== 'morphology' || suggestion.pos.includes('+')) {
+      return suggestion;
+    }
+    const prev = suggestions[index - 1];
+    const token: MorphologyToken = {
+      surface: suggestion.surface,
+      start: suggestion.start,
+      end: suggestion.end,
+      lemma: suggestion.expression,
+      reading: suggestion.reading,
+      pos: suggestion.pos,
+    };
+    const prevToken: MorphologyToken | undefined = prev && {
+      surface: prev.surface,
+      start: prev.start,
+      end: prev.end,
+      lemma: prev.expression,
+      reading: prev.reading,
+      pos: prev.pos,
+    };
+    const selectedByDefault = computeSelectedByDefault(token, prevToken, suggestion.reading);
+    return selectedByDefault === suggestion.selectedByDefault
+      ? suggestion
+      : { ...suggestion, selectedByDefault };
+  });
 }
 
 const ALL_DIGITS_RE = /^[0-9０-９]+$/;

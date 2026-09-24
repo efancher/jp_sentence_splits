@@ -58,10 +58,32 @@ what's left is one deferred durability item (below).
   that script only fills sentences whose `vocabulary_suggestions` is
   completely empty (CSV imports never tokenized). `vocabulary_suggestions`
   is a frozen snapshot written once and read as-is by the picker, never
-  recomputed live, so this filter (like the 2026-09-09 filters below) has
+  recomputed live, so this filter (like the 2026-09-09 filters below) had
   no effect on already-mined sentences unless something explicitly
-  regenerates their stored suggestions — no such backfill exists yet, for
-  any of the `selectedByDefault` filters. Broader, harder cases looked at
+  regenerates their stored suggestions. **Fixed same day**: new
+  `recomputeSuggestionDefaults` (`src/lib/vocabularySuggestions.ts`)
+  re-derives `selectedByDefault` from a sentence's already-stored
+  suggestions alone (no re-tokenization/Python needed) — reconstructs each
+  suggestion's "previous token" from the previous array entry, since
+  `suggestionsFromTokens` emits one suggestion per input token in order
+  (content or not), so array-adjacency already is token-adjacency; skips
+  fused numeral+counter entries (`pos` containing a literal `+`, which no
+  real UniDic tag does) and non-`'morphology'` sources. New
+  `refreshVocabularySuggestionDefaults` (`src/db/repository.ts`) runs it
+  across every locally-stored sentence, skipping any sentence whose
+  `analyses` row already has real `vocabularySelections` (even an
+  unconfirmed one — `AnalyzePage`'s autosave writes those just from opening
+  the page, same "still a pristine default" condition
+  `refresh-unreviewed-vocabulary-selections.ts` uses). Wired to a **browser
+  button** ("Refresh vocabulary suggestion defaults", Settings →
+  Vocabulary) per user request ("can it be something I kick off in the
+  browser?") rather than a GitHub Actions workflow like the other backfill
+  scripts — runs entirely against the local Dexie store and reports a
+  summary inline; normal sync propagates the writes. Verified against a
+  running dev server with Playwright (seed a stale suggestion via
+  `getDb()`, click the button, confirm it flips) — not a committed e2e
+  spec, just a one-off check. Tests:
+  `tests/refreshVocabularySuggestionDefaults.test.ts`. Broader, harder cases looked at
   but deliberately left alone (real "become"/"decide" content verb use,
   not a safe blanket default): plain 〜くなる/〜になる ("became cold"),
   ことにする/ことになる, ようになる — なる is core vocabulary in those, and

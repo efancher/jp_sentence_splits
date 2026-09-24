@@ -182,7 +182,7 @@ import {
   type ResegmentPlan,
   type ResegmentPlannedSentence,
 } from '../lib/resegmentPlan';
-import { suggestionsFromTokens } from '../lib/vocabularySuggestions';
+import { recomputeSuggestionDefaults, suggestionsFromTokens } from '../lib/vocabularySuggestions';
 import {
   classifyReviewError,
   computeGraduatedSubjectIds,
@@ -517,6 +517,53 @@ export async function updateSentenceVocabularySuggestions(
   };
   await db.sentences.put(updated);
   notifySync('sentences', updated.id, updated);
+}
+
+/**
+ * Browser-triggered counterpart to the old Python/GitHub-Actions backfill
+ * scripts (`scripts/backfill-vocabulary-suggestions.ts` only fills sentences
+ * with *no* suggestions at all — see its doc comment). Re-derives
+ * `selectedByDefault` (`recomputeSuggestionDefaults`,
+ * `src/lib/vocabularySuggestions.ts`) on every sentence's already-stored
+ * `vocabularySuggestions`, so newer `selectedByDefault` rules
+ * (`isDemonstrativeLightVerb` etc.) reach sentences mined before the rule
+ * existed — nothing does this automatically, since the picker reads the
+ * stored snapshot as-is.
+ *
+ * Only touches a sentence that's still genuinely untouched: no `analyses`
+ * row, or one with an empty `vocabularySelections` — the same "still a
+ * pristine default, nothing to disturb" condition
+ * `refresh-unreviewed-vocabulary-selections.ts` uses for its own backfill,
+ * because once a picker visit has saved real selections (even before
+ * confirming — `AnalyzePage`'s autosave does this just from opening the
+ * page) those are what's shown from then on, not a fresh default derived
+ * from `vocabularySuggestions` again.
+ */
+export async function refreshVocabularySuggestionDefaults(): Promise<{
+  sentencesScanned: number;
+  sentencesUpdated: number;
+  suggestionsChanged: number;
+}> {
+  const db = getDb();
+  const sentences = await db.sentences
+    .filter((sentence) => sentence.vocabularySuggestions.length > 0)
+    .toArray();
+  let sentencesUpdated = 0;
+  let suggestionsChanged = 0;
+  for (const sentence of sentences) {
+    const analysis = await db.analyses.get(sentence.id);
+    if (analysis && analysis.vocabularySelections.length > 0) continue;
+    const recomputed = recomputeSuggestionDefaults(sentence.vocabularySuggestions);
+    const changed = recomputed.filter(
+      (suggestion, index) =>
+        suggestion.selectedByDefault !== sentence.vocabularySuggestions[index]!.selectedByDefault,
+    ).length;
+    if (changed === 0) continue;
+    await updateSentenceVocabularySuggestions(sentence.id, recomputed);
+    sentencesUpdated += 1;
+    suggestionsChanged += changed;
+  }
+  return { sentencesScanned: sentences.length, sentencesUpdated, suggestionsChanged };
 }
 
 /**
