@@ -52,6 +52,7 @@ import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
   Book,
+  ComprehensionCheck,
   GrammarPattern,
   ReviewAssistance,
   ReviewRating,
@@ -596,6 +597,8 @@ interface QueueCard {
   grammar?: GrammarReviewCandidate;
   /** Set for `reading_in_context` and vocabulary-target cards — the surrounding passage. */
   readingContext?: ReadingContext;
+  /** Set only for `reading_in_context` cards with an authored comprehension check. */
+  comprehensionCheck?: ComprehensionCheck;
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -770,6 +773,8 @@ interface ReviewScope {
   existingSentenceItems: StudyItem[];
   /** Reading-order neighbours per in-scope sentence, for `reading_in_context`. */
   readingContextBySentenceId: Map<string, ReadingContext>;
+  /** Authored comprehension-check options per in-scope sentence, for `reading_in_context`. */
+  comprehensionCheckBySentenceId: Map<string, ComprehensionCheck>;
   vocabularyTargetCandidates: VocabularyTargetCandidate[];
   existingVocabularyItems: StudyItem[];
   audioCandidates: AudioCandidate[];
@@ -798,6 +803,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         studyItem,
         sentence,
         readingContext: scope.readingContextBySentenceId.get(sentence.id),
+        comprehensionCheck: scope.comprehensionCheckBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
@@ -1071,6 +1077,10 @@ export function ReviewPage() {
    * still be logged as `incorrect_reading`).
    */
   const [typedResponseExpected, setTypedResponseExpected] = useState<string | null>(null);
+  /** `reading_in_context`'s comprehension-check pick, when the sentence has one; recorded as supplementary Review evidence on rate. */
+  const [comprehensionCheckAnswer, setComprehensionCheckAnswer] = useState<
+    { correct: boolean; chosenIndex: number } | null
+  >(null);
   /** "Report issue" — an inline text box, not window.prompt (silently no-ops on installed iOS Safari PWAs). */
   const [reportingIssue, setReportingIssue] = useState(false);
   const [issueNote, setIssueNote] = useState('');
@@ -1299,11 +1309,20 @@ export function ReviewPage() {
       sentencesById: bySentenceId,
     });
 
+    const analysesForScope = await db.analyses.bulkGet(sentenceIds);
+    const comprehensionCheckBySentenceId = new Map<string, ComprehensionCheck>();
+    analysesForScope.forEach((analysis, index) => {
+      if (analysis?.comprehensionCheck) {
+        comprehensionCheckBySentenceId.set(sentenceIds[index]!, analysis.comprehensionCheck);
+      }
+    });
+
     return {
       book,
       sentences,
       existingSentenceItems,
       readingContextBySentenceId,
+      comprehensionCheckBySentenceId,
       vocabularyTargetCandidates,
       existingVocabularyItems,
       audioCandidates,
@@ -1607,6 +1626,7 @@ export function ReviewPage() {
     setAssistanceUsed(new Set());
     setTypedResponse('');
     setTypedResponseExpected(null);
+    setComprehensionCheckAnswer(null);
     setReportingIssue(false);
     setIssueNote('');
     setIssueReported(false);
@@ -1654,6 +1674,8 @@ export function ReviewPage() {
         expectedAnswer: typedResponse ? expectedAnswerValue : undefined,
         pitchExpectedShape: pitchAccentShapes?.pitchExpectedShape,
         pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
+        comprehensionCheckCorrect: comprehensionCheckAnswer?.correct,
+        comprehensionCheckChosenIndex: comprehensionCheckAnswer?.chosenIndex,
         // The sentence this card actually displayed — every QueueCard has
         // one, not just pitch_accent (which used this alone, to join a miss
         // to the clip it played). Generalized 2026-09-22 so any activity's
@@ -1964,10 +1986,15 @@ export function ReviewPage() {
               />
             ) : current.studyItem.activityType === 'reading_in_context' ? (
               <ReadingInContextCard
+                key={current.studyItem.id}
                 sentence={current.sentence}
                 context={current.readingContext}
+                check={current.comprehensionCheck}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+                onComprehensionAnswered={(correct, chosenIndex) =>
+                  setComprehensionCheckAnswer({ correct, chosenIndex })
+                }
               />
             ) : (
               <>
@@ -2034,27 +2061,47 @@ export function ReviewPage() {
 
 /**
  * `reading_in_context` card body — the sole sentence-subject card. Reveal
- * flow: see JP, reveal EN + vocab, self-rate. The sentence under test is
- * framed by its reading-order neighbours (buildReadingContextMap): the
- * preceding sentences are shown untranslated above it so the passage sets
- * the scene without spoiling the answer, and the following sentence's
- * translation joins the reveal. With no context available (inbox-only
- * sentence, or a book-scoped queue whose neighbours aren't loaded) it
- * degrades to the isolated layout.
+ * flow: see JP, optionally answer a comprehension check, reveal EN + vocab,
+ * self-rate. The sentence under test is framed by its reading-order
+ * neighbours (buildReadingContextMap): the preceding sentences are shown
+ * untranslated above it so the passage sets the scene without spoiling the
+ * answer, and the following sentence's translation joins the reveal. With
+ * no context available (inbox-only sentence, or a book-scoped queue whose
+ * neighbours aren't loaded) it degrades to the isolated layout.
+ *
+ * When the sentence has an authored `check` (docs/ROADMAP.md "Context-aware
+ * comprehension check…"), a 4-option "which English sentence fits this
+ * context" pick gates the Reveal button — purely supplementary evidence
+ * (`onComprehensionAnswered`, recorded as `Review.comprehensionCheckCorrect`),
+ * never a rating override; self-rating afterward is unchanged. No check
+ * authored → falls straight to the plain Reveal button, same as before this
+ * feature existed.
  */
 function ReadingInContextCard({
   sentence,
   context,
+  check,
   revealed,
   onReveal,
+  onComprehensionAnswered,
 }: {
   sentence: Sentence;
   context: ReadingContext | undefined;
+  check: ComprehensionCheck | undefined;
   revealed: boolean;
   onReveal: () => void;
+  onComprehensionAnswered: (correct: boolean, chosenIndex: number) => void;
 }) {
   const before = context?.before ?? [];
   const after = context?.after ?? [];
+  const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+
+  function choose(index: number) {
+    if (chosenIndex !== null || !check) return;
+    setChosenIndex(index);
+    onComprehensionAnswered(index === check.correctIndex, index);
+  }
+
   return (
     <>
       {context?.bookTitle ? (
@@ -2072,10 +2119,28 @@ function ReadingInContextCard({
         </div>
       ) : null}
       <div className="jp jp-lg">{sentence.japanese}</div>
-      {!revealed ? (
-        <button type="button" onClick={onReveal}>
-          Reveal
-        </button>
+      {!revealed && check && chosenIndex === null ? (
+        <div className="stack">
+          <p className="muted" style={{ margin: 0 }}>
+            Which English sentence best fits this sentence in context?
+          </p>
+          {check.options.map((option, i) => (
+            <button key={i} type="button" onClick={() => choose(i)}>
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : !revealed ? (
+        <>
+          {check && chosenIndex !== null ? (
+            <p style={{ fontWeight: 600 }}>
+              {chosenIndex === check.correctIndex ? '✓ Correct' : '✗ Not quite'}
+            </p>
+          ) : null}
+          <button type="button" onClick={onReveal}>
+            Reveal
+          </button>
+        </>
       ) : (
         <>
           <div>{sentence.translation || '(no translation)'}</div>

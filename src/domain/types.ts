@@ -372,8 +372,33 @@ export interface SentenceAnalysis {
    * other additive SentenceAnalysis fields.
    */
   grammarSuggestions: GrammarSuggestion[];
+  /**
+   * Authored comprehension-check options for the `reading_in_context` review
+   * card (docs/ROADMAP.md "Context-aware comprehension check…"). Additive,
+   * same precedent as `grammarSuggestions` — analyses saved before this
+   * field existed won't have it, so read defensively (`?? undefined`).
+   * Absent entirely means the review card falls back to its plain
+   * reveal-and-rate behavior — never a blocking gate on missing content.
+   */
+  comprehensionCheck?: ComprehensionCheck;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Four English options for "which sentence best represents this sentence
+ * *in context*" (docs/ROADMAP.md), authored once per sentence via the
+ * copy-paste-to-AI flow in `src/lib/comprehensionCheck.ts` or by hand.
+ * `options` always has exactly 4 entries; `correctIndex` points at the
+ * in-context-correct one — the other 3 are meant to be the plausible
+ * mistranslations a *cold* (no-context) reading of the sentence would
+ * produce, per the recipe in that lib module's doc comment.
+ */
+export interface ComprehensionCheck {
+  options: string[];
+  correctIndex: number;
+  provenance: 'ai_suggested' | 'manual';
+  createdAt: string;
 }
 
 export interface ImportBatchCounts {
@@ -762,6 +787,29 @@ export interface Review {
    * surfacing" entry.
    */
   predictedRetrievability?: number;
+  /**
+   * `reading_in_context` card only, when the sentence has an authored
+   * `SentenceAnalysis.comprehensionCheck`: whether the pre-reveal 4-option
+   * "which English sentence fits this context" pick was correct, and which
+   * option index was chosen. Purely supplementary evidence — same house
+   * convention as every other "objectively graded" card in this app
+   * (`ReadingProductionCard`'s doc comment): the learner's self-rating stays
+   * the actual scheduling signal, this only feeds `classifyReviewError` so a
+   * generous self-rating after a wrong pick still leaves real evidence.
+   */
+  comprehensionCheckCorrect?: boolean;
+  comprehensionCheckChosenIndex?: number;
+  /**
+   * `pitch_accent_production` card only: counts from the take's
+   * `analyzeRecording` result (`src/lib/pitchAccentDrillAnalysis.ts`) —
+   * how many target words were scorable and how many of those were flagged
+   * a pitch mismatch. Same supplementary-evidence role as the fields above;
+   * self-rating still schedules the card. Mirrors `PitchDrillAttempt`'s
+   * measured/mismatch shape without sharing its table — that one stays the
+   * free-practice usage log, this is the SRS record.
+   */
+  pitchProductionMeasuredCount?: number;
+  pitchProductionMismatchCount?: number;
 }
 
 /**

@@ -1143,7 +1143,18 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   is available). The isolated `comprehension` card was retired 2026-09-08
   (user: "always better to learn in context if possible"); existing items
   were migrated to `reading_in_context`
-  (`scripts/migrate-comprehension-to-reading-in-context.ts`).
+  (`scripts/migrate-comprehension-to-reading-in-context.ts`). Optional
+  comprehension check (2026-09-24): when the sentence has an authored
+  `SentenceAnalysis.comprehensionCheck` (4 English options + correct index,
+  set via `AnalyzePage`'s "Comprehension check" panel —
+  `ComprehensionCheckPicker` + `src/lib/comprehensionCheck.ts`'s
+  copy-prompt/paste-back-parse flow, same shape as mining's "Segment with
+  AI help"), a 4-option "which English sentence fits this context" pick
+  gates the Reveal button. Purely supplementary evidence
+  (`Review.comprehensionCheckCorrect`/`comprehensionCheckChosenIndex`, feeds
+  `classifyReviewError` → `incorrect_meaning` on a miss) — self-rating still
+  decides the schedule, same as every other "objectively graded" card in
+  this app. No authored check → unchanged plain reveal-and-rate.
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same

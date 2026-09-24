@@ -230,6 +230,7 @@ export function analysisToRemote(
     vocabulary_selections: analysis.vocabularySelections ?? [],
     grammar_suggestions: analysis.grammarSuggestions ?? [],
     grammar_review_status: analysis.grammarReviewStatus ?? 'unreviewed',
+    comprehension_check: analysis.comprehensionCheck ?? null,
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
     deleted_at: null,
@@ -255,6 +256,9 @@ export function remoteToAnalysis(row: Record<string, unknown>): SentenceAnalysis
     grammarReviewStatus:
       (row.grammar_review_status as SentenceAnalysis['grammarReviewStatus']) ??
       'unreviewed',
+    comprehensionCheck:
+      (row.comprehension_check as SentenceAnalysis['comprehensionCheck'] | null) ??
+      undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -414,6 +418,10 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     pitch_expected_shape: review.pitchExpectedShape ?? null,
     pitch_chosen_shape: review.pitchChosenShape ?? null,
     predicted_retrievability: review.predictedRetrievability ?? null,
+    comprehension_check_correct: review.comprehensionCheckCorrect ?? null,
+    comprehension_check_chosen_index: review.comprehensionCheckChosenIndex ?? null,
+    pitch_production_measured_count: review.pitchProductionMeasuredCount ?? null,
+    pitch_production_mismatch_count: review.pitchProductionMismatchCount ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -442,6 +450,14 @@ export function remoteToReview(row: Record<string, unknown>): Review {
     pitchChosenShape: (row.pitch_chosen_shape as string | null) ?? undefined,
     predictedRetrievability:
       (row.predicted_retrievability as number | null) ?? undefined,
+    comprehensionCheckCorrect:
+      (row.comprehension_check_correct as boolean | null) ?? undefined,
+    comprehensionCheckChosenIndex:
+      (row.comprehension_check_chosen_index as number | null) ?? undefined,
+    pitchProductionMeasuredCount:
+      (row.pitch_production_measured_count as number | null) ?? undefined,
+    pitchProductionMismatchCount:
+      (row.pitch_production_mismatch_count as number | null) ?? undefined,
   };
 }
 

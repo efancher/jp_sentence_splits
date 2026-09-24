@@ -298,6 +298,38 @@ describe('classifyReviewError (evidence-based only)', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('classifies a wrong reading_in_context comprehension-check pick as incorrect_meaning', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'reading_in_context',
+        rating: 'good',
+        comprehensionCheckCorrect: false,
+      }),
+    ).toBe('incorrect_meaning');
+  });
+
+  it('does not classify a correct reading_in_context comprehension-check pick', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'reading_in_context',
+        rating: 'good',
+        comprehensionCheckCorrect: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('leaves reading_in_context unclassified when no comprehension check was answered', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'reading_in_context',
+        rating: 'again',
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe('computeGraduatedSubjectIds', () => {

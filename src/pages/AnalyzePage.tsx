@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
+import { ComprehensionCheckPicker } from '../components/ComprehensionCheckPicker';
 import { GrammarPicker } from '../components/GrammarPicker';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
@@ -521,6 +522,8 @@ export function AnalyzePage() {
           literalEnglish: chunk.literalEnglish,
         }))}
       />
+
+      <ComprehensionCheckPicker sentenceId={sentenceId} />
 
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Chunk entry</h3>

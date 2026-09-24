@@ -31,6 +31,36 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-24 — Context-aware comprehension check for `reading_in_context`.**
+  User asked what data the app wasn't collecting; `classifyReviewError`
+  already documented the gap: `reading_in_context`/`listening` are pure
+  self-rating with no objective comprehension signal. Shipped the
+  `reading_in_context` half (docs/ROADMAP.md "Context-aware comprehension
+  check…"; `listening` deferred — it has no pre-reveal passage-context
+  block to build on). `SentenceAnalysis` gained an optional
+  `comprehensionCheck` field (4 options + correct index + provenance),
+  authored via a new "Comprehension check" panel on `AnalyzePage`
+  (`ComprehensionCheckPicker`) that reuses the mining wizard's
+  copy-prompt/paste-back-parse pattern (`src/lib/comprehensionCheck.ts`,
+  same shape as `miningTranscript.ts`'s "Segment with AI help") — the
+  prompt asks for a cold vs. in-context translation of the sentence, using
+  the cold reading's plausible errors as the 3 distractors — plus a manual
+  4-option entry fallback. On the review card, a sentence with an authored
+  check shows the 4-option pick before the Reveal button
+  (`ReadingInContextCard`); a sentence with none behaves exactly as before
+  (no gate). The pick is purely supplementary evidence, never a rating
+  override — matches the one convention already used by every other
+  "objectively graded" card in this app — but it does close the
+  `classifyReviewError` gap: a wrong pick now classifies as
+  `incorrect_meaning` even when the learner self-rates generously.
+  `Review` gained `comprehensionCheckCorrect`/`comprehensionCheckChosenIndex`,
+  synced via new nullable Supabase columns
+  (`supabase/migrations/20260924000000_comprehension_check_and_pitch_production.sql`,
+  also carries the pitch-production columns for the sibling feature below).
+  Tests: `tests/comprehensionCheck.test.ts` (prompt/parser), new
+  `classifyReviewError` cases in `tests/scheduling.test.ts`, mapper
+  round-trip tests in `tests/sync.test.ts`.
+
 - **2026-09-24 — New-word top-up now clusters by sentence, in reading order.** User: "prioritize all the
   vocabulary from a single sentence... so I can quickly get to being able to understand the sentence."
   Investigation found `getVocabularyTargetCandidates` (`src/db/repository.ts`) fetched

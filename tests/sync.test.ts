@@ -34,6 +34,7 @@ import type {
   PitchDrillAttempt,
   PlannerSession,
   Review,
+  SentenceAnalysis,
   SentenceAudio,
 } from '../src/domain/types';
 
@@ -852,6 +853,74 @@ describe('sync mappers', () => {
     );
     expect(withoutPrediction.predicted_retrievability).toBeNull();
     expect(remoteToReview(withoutPrediction).predictedRetrievability).toBeUndefined();
+  });
+
+  it('round-trips comprehension-check and pitch-production evidence through remote shape', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const review: Review = {
+      id: 'review_3',
+      studyItemId: 'study_1',
+      timestamp: '2026-09-24T00:00:00.000Z',
+      rating: 'good',
+      comprehensionCheckCorrect: false,
+      comprehensionCheckChosenIndex: 2,
+      pitchProductionMeasuredCount: 3,
+      pitchProductionMismatchCount: 1,
+    };
+    const remote = reviewToRemote(review, 'user-1', 1);
+    expect(remote.comprehension_check_correct).toBe(false);
+    expect(remote.comprehension_check_chosen_index).toBe(2);
+    expect(remote.pitch_production_measured_count).toBe(3);
+    expect(remote.pitch_production_mismatch_count).toBe(1);
+    const local = remoteToReview(remote);
+    expect(local.comprehensionCheckCorrect).toBe(false);
+    expect(local.comprehensionCheckChosenIndex).toBe(2);
+    expect(local.pitchProductionMeasuredCount).toBe(3);
+    expect(local.pitchProductionMismatchCount).toBe(1);
+
+    const empty = reviewToRemote(
+      {
+        id: 'review_4',
+        studyItemId: 'study_1',
+        timestamp: '2026-09-24T00:00:00.000Z',
+        rating: 'good',
+      },
+      'user-1',
+      1,
+    );
+    expect(empty.comprehension_check_correct).toBeNull();
+    expect(remoteToReview(empty).comprehensionCheckCorrect).toBeUndefined();
+  });
+
+  it('round-trips a comprehension check through analysis remote shape', async () => {
+    const { analysisToRemote, remoteToAnalysis } = await import('../src/sync/mappers');
+    const analysis: SentenceAnalysis = {
+      sentenceId: 'sentence_1',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 1,
+      vocabularyReviewStatus: 'unreviewed',
+      vocabularySelections: [],
+      grammarSuggestions: [],
+      grammarReviewStatus: 'unreviewed',
+      comprehensionCheck: {
+        options: ['a', 'b', 'c', 'd'],
+        correctIndex: 1,
+        provenance: 'manual',
+        createdAt: '2026-09-24T00:00:00.000Z',
+      },
+      createdAt: '2026-09-24T00:00:00.000Z',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    };
+    const remote = analysisToRemote(analysis, 'user-1', 1);
+    expect(remote.comprehension_check).toEqual(analysis.comprehensionCheck);
+    const local = remoteToAnalysis(remote);
+    expect(local.comprehensionCheck).toEqual(analysis.comprehensionCheck);
+
+    const empty = analysisToRemote({ ...analysis, comprehensionCheck: undefined }, 'user-1', 1);
+    expect(empty.comprehension_check).toBeNull();
+    expect(remoteToAnalysis(empty).comprehensionCheck).toBeUndefined();
   });
 
   it('round-trips a pitch drill attempt through remote shape', async () => {

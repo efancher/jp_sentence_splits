@@ -17,6 +17,7 @@ import type {
   BookSentence,
   CardIssueReport,
   CardIssueStatus,
+  ComprehensionCheck,
   ErrorClassification,
   FsrsState,
   GrammarPattern,
@@ -2111,6 +2112,7 @@ export async function saveAnalysis(
     grammarSuggestions: existing?.grammarSuggestions ?? [],
     grammarReviewStatus:
       grammar?.reviewStatus ?? existing?.grammarReviewStatus ?? 'unreviewed',
+    comprehensionCheck: existing?.comprehensionCheck,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -4724,6 +4726,12 @@ export async function recordReview(input: {
   /** `pitch_accent` card only — see `Review.pitchExpectedShape`/`pitchChosenShape`. */
   pitchExpectedShape?: string;
   pitchChosenShape?: string;
+  /** `reading_in_context` card only — see `Review.comprehensionCheckCorrect`/`comprehensionCheckChosenIndex`. */
+  comprehensionCheckCorrect?: boolean;
+  comprehensionCheckChosenIndex?: number;
+  /** `pitch_accent_production` card only — see `Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`. */
+  pitchProductionMeasuredCount?: number;
+  pitchProductionMismatchCount?: number;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -4755,6 +4763,7 @@ export async function recordReview(input: {
         rating: input.rating,
         responseRaw: input.responseRaw,
         expectedAnswer: input.expectedAnswer,
+        comprehensionCheckCorrect: input.comprehensionCheckCorrect,
       }),
     assistance: input.assistance,
     source: input.source,
@@ -4762,6 +4771,10 @@ export async function recordReview(input: {
     pitchExpectedShape: input.pitchExpectedShape,
     pitchChosenShape: input.pitchChosenShape,
     predictedRetrievability,
+    comprehensionCheckCorrect: input.comprehensionCheckCorrect,
+    comprehensionCheckChosenIndex: input.comprehensionCheckChosenIndex,
+    pitchProductionMeasuredCount: input.pitchProductionMeasuredCount,
+    pitchProductionMismatchCount: input.pitchProductionMismatchCount,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -5088,6 +5101,41 @@ export async function setSentenceGrammarReviewStatus(
   return saveAnalysis(sentenceId, existing?.chunks ?? [], existing?.notes ?? '', undefined, {
     reviewStatus: status,
   });
+}
+
+/**
+ * Save/clear the authored comprehension-check options for `reading_in_context`
+ * (`src/lib/comprehensionCheck.ts`). A narrow direct update, same precedent as
+ * `setSentenceGrammarReviewStatus` avoiding a full `saveAnalysis` round-trip —
+ * except here there's no chunk data to round-trip through at all, so this
+ * writes the `analyses` row directly (seeding a minimal one if the sentence
+ * has never been opened in AnalyzePage before).
+ */
+export async function setSentenceComprehensionCheck(
+  sentenceId: string,
+  check: ComprehensionCheck | undefined,
+): Promise<void> {
+  const db = getDb();
+  const existing = await db.analyses.get(sentenceId);
+  const timestamp = nowIso();
+  if (!existing) {
+    await db.analyses.put({
+      sentenceId,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: ANALYSIS_FORMAT_VERSION,
+      vocabularyReviewStatus: 'unreviewed',
+      vocabularySelections: [],
+      grammarSuggestions: [],
+      grammarReviewStatus: 'unreviewed',
+      comprehensionCheck: check,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+  await db.analyses.update(sentenceId, { comprehensionCheck: check, updatedAt: timestamp });
 }
 
 // ---------------------------------------------------------------------------
