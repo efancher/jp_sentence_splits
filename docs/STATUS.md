@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-22.
+Last updated: 2026-09-24.
 
 ## Where things stand
 
@@ -30,6 +30,26 @@ remaining planned work: re-mine "After Work" (browser + human review).
 
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
+
+- **2026-09-24 — New-word top-up now clusters by sentence, in reading order.** User: "prioritize all the
+  vocabulary from a single sentence... so I can quickly get to being able to understand the sentence."
+  Investigation found `getVocabularyTargetCandidates` (`src/db/repository.ts`) fetched
+  `sentenceVocabulary` links via Dexie's `.anyOf(sentenceIds)`, which returns rows ordered by the indexed
+  `sentenceId` itself (effectively random relative to reading order) rather than by the `sentenceIds` array
+  order the caller passed in — even though that array is already in book/global reading order
+  (`ReviewPage.tsx`'s `scope.sentences`). Since this candidate order flows straight through
+  `pendingSeedsByDescriptor` → `spaceOutPendingSeedBatches` → `pickQuotaSubjects` into the daily
+  `dailyNewWordQuota` top-up, new words were effectively introduced from scattered, unrelated sentences
+  instead of clustering by the sentence they came from — so a sentence's vocabulary rarely finished (and its
+  `reading_in_context` card rarely unlocked) in one sitting. Fix: sort the returned candidates by each
+  word's representative sentence's position in the caller's `sentenceIds` order (stable sort, so
+  same-sentence words keep their prior relative order). No change to *which* words are picked or how many —
+  only their order — so the existing dedup-per-word, quota, and gating logic are untouched. Added a
+  regression test (`tests/data.test.ts`) using sentence ids that sort alphabetically opposite of the intended
+  reading order, to prove the fix isn't accidentally passing due to lucky id ordering. Typecheck + full test
+  suite green (2007 passed, 12 skipped). **Manual test plan:** open Review (global or book-scoped) on a day
+  with new-word quota remaining; the words introduced in one sitting should now visibly come from the same
+  sentence(s) close together rather than jumping between unrelated sentences each time.
 
 - **2026-09-22 — Quick import: one-page alternative to the mining wizard, combining Segment+Translate AI help into a single round trip.**
   User reported not using most of the 4-step wizard (`YouTubeMinePage`, Transcript→Segment→Translate→Commit)

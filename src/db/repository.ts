@@ -5240,6 +5240,15 @@ export interface VocabularyTargetCandidate {
  * neighbours are held back too, so the card ends up with no passage at all
  * (card issue report, 2026-09-23: 楽しい picked え、楽しかったね。, whose only
  * book had been suspended, when the word also has links in active books).
+ *
+ * Returned in `sentenceIds` order (each word's representative sentence's
+ * position in the caller's reading order) — `.anyOf()` returns rows sorted
+ * by the indexed `sentenceId` itself, not by `sentenceIds` order, so without
+ * this the new-word queue effectively randomized which sentence's words
+ * came up together instead of clustering by sentence (user request,
+ * 2026-09-24: introduce a sentence's vocabulary together so its
+ * reading_in_context card unlocks sooner, rather than trickling in a word
+ * at a time from unrelated sentences).
  */
 export async function getVocabularyTargetCandidates(
   sentenceIds: string[],
@@ -5281,6 +5290,11 @@ export async function getVocabularyTargetCandidates(
     if (!vocabularyItem || !sentence || !link.surfaceForm) return;
     candidates.push({ vocabularyItem, sentence, surfaceForm: link.surfaceForm, link });
   });
+  const sentenceOrder = new Map(sentenceIds.map((id, index) => [id, index]));
+  candidates.sort(
+    (a, b) =>
+      (sentenceOrder.get(a.sentence.id) ?? 0) - (sentenceOrder.get(b.sentence.id) ?? 0),
+  );
   return candidates;
 }
 

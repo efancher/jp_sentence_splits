@@ -1707,6 +1707,28 @@ describe('evidence-model foundation (Phase 7.1)', () => {
     expect(await getVocabularyTargetCandidates([])).toEqual([]);
   });
 
+  it('getVocabularyTargetCandidates orders candidates by the caller\'s sentenceIds order, not link insertion order', async () => {
+    // Sentence ids deliberately sort alphabetically opposite of reading
+    // order, so a naive `.anyOf()` result (sorted by the indexed
+    // sentenceId) would return them in the wrong order if this weren't
+    // re-sorted — new vocabulary words must cluster by the sentence they
+    // came from, in reading order, so a sentence's words are introduced
+    // together (user request, 2026-09-24).
+    await getDb().sentences.bulkAdd([stubSentence('z-sent'), stubSentence('a-sent')]);
+    await materializeVocabularySelections('z-sent', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    await materializeVocabularySelections('a-sent', [
+      selection({ surface: '猫', start: 0, end: 1, expression: '猫', reading: 'ねこ' }),
+    ]);
+
+    const candidates = await getVocabularyTargetCandidates(['z-sent', 'a-sent']);
+    expect(candidates.map((candidate) => candidate.vocabularyItem.expression)).toEqual([
+      '大学',
+      '猫',
+    ]);
+  });
+
   it('recordNaturalEncounter creates the word\'s reading_retrieval study item and tags the review source/context (Phase 7.8)', async () => {
     const vocabItem = await ensureVocabularyItem('表す', 'あらわす');
     await getDb().sentences.add(stubSentence('sent-natural'));
