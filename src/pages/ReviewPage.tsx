@@ -614,7 +614,7 @@ interface QueueCard {
   studyItem: StudyItem;
   sentence: Sentence;
   /** Set only for vocabulary-item-subject cards (e.g. reading_retrieval). */
-  target?: { vocabularyItem: VocabularyItem; surfaceForm: string };
+  target?: { vocabularyItem: VocabularyItem; surfaceForm: string; link?: SentenceVocabulary };
   /** Set only for audio-comprehension cards (listening). */
   audio?: SentenceAudio;
   /** Set only for word-in-context listening cards (per-occurrence word_listening). */
@@ -867,7 +867,11 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       buildCard: (studyItem, candidate) => ({
         studyItem,
         sentence: candidate.sentence,
-        target: { vocabularyItem: candidate.vocabularyItem, surfaceForm: candidate.surfaceForm },
+        target: {
+          vocabularyItem: candidate.vocabularyItem,
+          surfaceForm: candidate.surfaceForm,
+          link: candidate.link,
+        },
         readingContext: scope.readingContextBySentenceId.get(candidate.sentence.id),
       }),
       ensure: (candidate, activityType) =>
@@ -1997,6 +2001,7 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
                 surfaceForm={current.target.surfaceForm}
+                link={current.target.link}
                 context={current.readingContext}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
@@ -2287,6 +2292,7 @@ function VocabularyTargetCard({
   sentence,
   vocabularyItem,
   surfaceForm,
+  link,
   context,
   revealed,
   onReveal,
@@ -2295,6 +2301,8 @@ function VocabularyTargetCard({
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
+  /** The occurrence link this candidate was chosen from — carries any manual word-audio range, forwarded to the reveal-side native audio. */
+  link?: SentenceVocabulary;
   context: ReadingContext | undefined;
   revealed: boolean;
   onReveal: () => void;
@@ -2355,9 +2363,54 @@ function VocabularyTargetCard({
           ) : null}
           {sentence.readingOnly ? <div className="jp muted">{sentence.readingOnly}</div> : null}
           {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          <VocabularyTargetNativeAudio
+            sentenceId={sentence.id}
+            japanese={sentence.japanese}
+            inlineReading={sentence.inlineReading}
+            surfaceForm={surfaceForm}
+            link={link}
+          />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Reveal-side native audio for `reading_retrieval`/`cloze` (user request,
+ * 2026-09-24): loops just the target word and offers whole-sentence
+ * playback, same control PitchAccentNativeAudio already gives the
+ * pitch-accent card. Sentence audio isn't guaranteed here (unlike the
+ * audio-centric cards, which gate candidacy on it), so this live-queries it
+ * and renders nothing when the sentence has no reference recording.
+ */
+function VocabularyTargetNativeAudio({
+  sentenceId,
+  japanese,
+  inlineReading,
+  surfaceForm,
+  link,
+}: {
+  sentenceId: string;
+  japanese: string;
+  inlineReading?: string;
+  surfaceForm: string;
+  link?: SentenceVocabulary;
+}) {
+  const audio = useLiveQuery(
+    () => getDb().sentenceAudio.where('sentenceId').equals(sentenceId).first(),
+    [sentenceId],
+  );
+  if (!audio) return null;
+  return (
+    <SegmentLoopPlayer
+      audio={audio}
+      japanese={japanese}
+      inlineReading={inlineReading}
+      surfaceForm={surfaceForm}
+      link={link}
+      fallbackHint="Couldn’t isolate just the word — play the whole sentence for the native model."
+    />
   );
 }
 

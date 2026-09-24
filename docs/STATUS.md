@@ -343,6 +343,16 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-24 — Reveal-side native audio on `reading_retrieval`/`cloze`.** User request: the reveal
+  side of these cards (`VocabularyTargetCard`, `ReviewPage.tsx`) showed the reading/meaning but no way
+  to hear the word or sentence, unlike `pitch_accent`/`word_listening`. Added `VocabularyTargetNativeAudio`
+  — live-queries the sentence's `SentenceAudio` (not guaranteed here, unlike the audio-centric cards
+  that gate candidacy on it) and, when present, renders `SegmentLoopPlayer` (word loop + whole-sentence
+  playback + "Adjust" editor, same control `PitchAccentNativeAudio` gives the pitch-accent card).
+  Threaded the candidate's `SentenceVocabulary` link (`VocabularyTargetCandidate.link`, already carried
+  for its manual audio-range override) through `QueueCard.target` so the word can be isolated/adjusted
+  the same way. Renders nothing when the sentence has no reference recording. `npm run check` green.
+
 - **2026-09-24 — Two card-issue-report bugs in the full-sentence-review gate and vocab-card context.**
   Triage of two 2026-09-23 reports (`card-issue-triage` skill) found real bugs, not misreadings:
   (1) A `reading_in_context` card for `台風25号は小笠原諸島の近くを通っています。` surfaced with all six
