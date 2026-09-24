@@ -4263,11 +4263,27 @@ export async function getSentenceFullReviewReadiness(
   );
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
-    readiness.set(
-      sentenceId,
-      isSentenceReadyForFullReview(vocabularyReviewStatus, vocabularyItemIds, proficientVocabularyItemIds),
-    );
+    const analysis = analysesBySentenceId.get(sentenceId);
+    // A confirmed sentence whose analysis recorded real vocabulary
+    // selections but whose sentence_vocabulary links haven't resolved
+    // locally (a cross-entity sync-pull ordering gap between `analyses` and
+    // `sentence_vocabulary`, or a confirm that hasn't finished
+    // materializing) must not fall through isSentenceVocabularyReady's
+    // "nothing to gate on" vacuous-true case — that would pass a sentence
+    // whose vocabulary the learner has literally never seen (card issue
+    // report, 2026-09-23: 台風25号 surfaced reading_in_context with all six
+    // linked words at zero reps). Only a sentence with genuinely no
+    // confirmed selections gets the vacuous pass.
+    const selectionsExpected = (analysis?.vocabularySelections?.length ?? 0) > 0;
+    const ready =
+      vocabularyItemIds.length === 0 && selectionsExpected
+        ? false
+        : isSentenceReadyForFullReview(
+            analysis?.vocabularyReviewStatus,
+            vocabularyItemIds,
+            proficientVocabularyItemIds,
+          );
+    readiness.set(sentenceId, ready);
   }
   return readiness;
 }
@@ -5211,23 +5227,42 @@ export interface VocabularyTargetCandidate {
  * word in its sentence — reading retrieval (Phase 7.2) and cloze (Phase
  * 7.3) both consume this, since they share the same eligibility condition
  * and only differ in how the target is rendered. One candidate per
- * distinct vocabulary item (first qualifying link found), not one per
- * sentence×word pair, so seeding stays bounded by vocabulary size, not
- * sentence count.
+ * distinct vocabulary item (first qualifying link found, preferring one
+ * whose sentence isn't suspended-book-only over one that is — 2026-09-24,
+ * see below), not one per sentence×word pair, so seeding stays bounded by
+ * vocabulary size, not sentence count.
+ *
+ * `sentenceIds` is normally already suspension-filtered by the caller
+ * (ReviewPage's global scope), but that filtering happens once per queue
+ * build and can go stale for a long-lived session; this function also
+ * checks directly so a shared word never lands on a since-suspended
+ * sentence as its representative — that sentence's reading-context
+ * neighbours are held back too, so the card ends up with no passage at all
+ * (card issue report, 2026-09-23: 楽しい picked え、楽しかったね。, whose only
+ * book had been suspended, when the word also has links in active books).
  */
 export async function getVocabularyTargetCandidates(
   sentenceIds: string[],
 ): Promise<VocabularyTargetCandidate[]> {
   if (sentenceIds.length === 0) return [];
   const db = getDb();
-  const links = await db.sentenceVocabulary
-    .where('sentenceId')
-    .anyOf(sentenceIds)
-    .toArray();
+  const [links, suspendedIndex] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    loadSuspendedBookIndex(),
+  ]);
   const bestLinkByItemId = new Map<string, SentenceVocabulary>();
   for (const link of links) {
     if (!link.surfaceForm) continue;
-    if (!bestLinkByItemId.has(link.vocabularyItemId)) {
+    const existing = bestLinkByItemId.get(link.vocabularyItemId);
+    if (!existing) {
+      bestLinkByItemId.set(link.vocabularyItemId, link);
+      continue;
+    }
+    if (
+      suspendedIndex &&
+      sentenceIsSuspendedOnly(existing.sentenceId, suspendedIndex) &&
+      !sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)
+    ) {
       bestLinkByItemId.set(link.vocabularyItemId, link);
     }
   }

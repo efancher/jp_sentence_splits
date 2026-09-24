@@ -247,6 +247,30 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-24 — Two card-issue-report bugs in the full-sentence-review gate and vocab-card context.**
+  Triage of two 2026-09-23 reports (`card-issue-triage` skill) found real bugs, not misreadings:
+  (1) A `reading_in_context` card for `台風25号は小笠原諸島の近くを通っています。` surfaced with all six
+  linked vocab words at zero reps — the Phase 7.11 full-review gate (`getSentenceFullReviewReadiness`)
+  should have blocked it. Root cause: `isSentenceVocabularyReady`'s "no vocab items → nothing to gate
+  on → ready" vacuous-true case doesn't distinguish a genuinely vocab-less sentence from one whose
+  `sentence_vocabulary` links just haven't resolved locally yet (a cross-entity sync-pull ordering gap
+  between `analyses` and `sentence_vocabulary`, most plausible across devices). Fixed by checking the
+  analysis's own `vocabularySelections` first: confirmed selections but zero resolved local links now
+  fails closed instead of passing vacuously. (2) A `reading_retrieval` card for 楽しい picked
+  `え、楽しかったね。` as its representative sentence — a sentence whose only book had been suspended
+  8+ days earlier, so its reading-context neighbours were held back too, leaving the card with no
+  passage context at all (report: "It would be good for cards like this to have the two preceding
+  sentences..." — that feature already exists, 2026-09-20, just had nothing to draw on here). Root
+  cause: `getVocabularyTargetCandidates` picked the first sentence_vocabulary link found per word,
+  trusting the caller's suspension-filtered `sentenceIds`; that filtering is computed once per
+  ReviewPage mount and can go stale in a long-lived session (PWA left backgrounded). Fixed by making
+  the candidate picker suspension-aware directly: it now prefers a non-suspended-only sentence over a
+  suspended-only one when a word has both, falling back to the suspended one only if that's the word's
+  only link. Did *not* change `VocabularyTargetCard`'s deliberate before-*or*-after context display
+  (2026-09-20 decision, see its doc comment) to before-*and*-after — the suspended-book fix addresses
+  what the report actually hit; matching `reading_in_context`'s both-sides layout would reverse a past
+  explicit decision and wasn't re-confirmed with the user before this pass. `npm run check` green.
+
 - **2026-09-23 — Review: "Delete sentence" button on the card itself.** User request: deleting a bad
   sentence spotted mid-review meant leaving Review, finding it in `/search`, and using the
   "Delete selected everywhere" flow added earlier the same day. Added a top-right "Delete sentence"
