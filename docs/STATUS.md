@@ -53,9 +53,15 @@ what's left is one deferred durability item (below).
   construction as a worked example, so it doesn't fall into a gap between
   "no longer default vocab" and "AI judges it too basic to flag as
   grammar" — **needs `supabase functions deploy grammar-assist` to take
-  effect**, not auto-deployed by CI. Forward-only, like the other
-  `selectedByDefault` filters — re-run `backfill:vocabulary-suggestions`
-  to refresh older unreviewed sentences. Broader, harder cases looked at
+  effect**, not auto-deployed by CI. Forward-only, and — correction,
+  2026-09-24 — *not* refreshable via `backfill:vocabulary-suggestions`:
+  that script only fills sentences whose `vocabulary_suggestions` is
+  completely empty (CSV imports never tokenized). `vocabulary_suggestions`
+  is a frozen snapshot written once and read as-is by the picker, never
+  recomputed live, so this filter (like the 2026-09-09 filters below) has
+  no effect on already-mined sentences unless something explicitly
+  regenerates their stored suggestions — no such backfill exists yet, for
+  any of the `selectedByDefault` filters. Broader, harder cases looked at
   but deliberately left alone (real "become"/"decide" content verb use,
   not a safe blanket default): plain 〜くなる/〜になる ("became cold"),
   ことにする/ことになる, ようになる — なる is core vocabulary in those, and
