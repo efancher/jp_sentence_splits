@@ -5077,9 +5077,26 @@ export async function materializeVocabularySelections(
       updatedAt: timestamp,
     }));
 
-  await db.transaction('rw', db.sentenceVocabulary, async () => {
+  // Per-occurrence cards (word_listening, pitch_accent, …) key off a
+  // SentenceVocabulary.id as their StudyItem.subjectId — a link going away
+  // (a word un-confirmed on an already-confirmed sentence, not just the
+  // whole sentence being deleted) would otherwise leave that study item
+  // stuck-due forever, same failure `cascadeRetireSentenceLocal` was built
+  // to close for whole-sentence deletes (2026-09-02, ~20 found orphaned).
+  const orphanedStudyItems: StudyItem[] = [];
+  for (const link of toDelete) {
+    const items = await db.studyItems.where('subjectId').equals(link.id).toArray();
+    orphanedStudyItems.push(
+      ...items.filter((item) => item.subjectType === 'sentenceVocabulary'),
+    );
+  }
+
+  await db.transaction('rw', db.sentenceVocabulary, db.studyItems, async () => {
     for (const link of toDelete) {
       await db.sentenceVocabulary.delete(link.id);
+    }
+    for (const item of orphanedStudyItems) {
+      await db.studyItems.delete(item.id);
     }
     for (const link of toCreate) {
       await db.sentenceVocabulary.put(link);
@@ -5091,6 +5108,12 @@ export async function materializeVocabularySelections(
       entity: 'sentence_vocabulary' as const,
       recordId: link.id,
       payload: link,
+      operation: 'delete' as const,
+    })),
+    ...orphanedStudyItems.map((item) => ({
+      entity: 'study_items' as const,
+      recordId: item.id,
+      payload: { id: item.id },
       operation: 'delete' as const,
     })),
     ...toCreate.map((link) => ({

@@ -1517,6 +1517,22 @@ describe('vocabulary/kanji materialization (Phase 5)', () => {
     expect(await getDb().vocabularyItems.count()).toBe(1);
   });
 
+  it('retires a per-occurrence study item whose SentenceVocabulary link becomes stale', async () => {
+    await materializeVocabularySelections('sent-1', [
+      selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),
+    ]);
+    const link = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('sent-1')
+      .first();
+    const studyItem = await ensureStudyItem('sentenceVocabulary', link!.id, 'word_listening');
+
+    await materializeVocabularySelections('sent-1', []);
+
+    expect(await getDb().sentenceVocabulary.get(link!.id)).toBeUndefined();
+    expect(await getDb().studyItems.get(studyItem.id)).toBeUndefined();
+  });
+
   it('collapses duplicate selections resolving to the same item into one link', async () => {
     await materializeVocabularySelections('sent-1', [
       selection({ surface: '大学', start: 0, end: 2, expression: '大学', reading: 'だいがく' }),

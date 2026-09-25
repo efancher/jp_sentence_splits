@@ -83,7 +83,42 @@ what's left is one deferred durability item (below).
   running dev server with Playwright (seed a stale suggestion via
   `getDb()`, click the button, confirm it flips) — not a committed e2e
   spec, just a one-off check. Tests:
-  `tests/refreshVocabularySuggestionDefaults.test.ts`. Broader, harder cases looked at
+  `tests/refreshVocabularySuggestionDefaults.test.ts`.
+
+  **2026-09-25 follow-up — the already-confirmed cases, and a real bug found
+  along the way.** User asked what happens to sentences where
+  こう/そう/ああ/どう+する/なる was already confirmed as vocabulary before this
+  fix existed (the refresh above deliberately never touches those).
+  `scripts/diagnose-demonstrative-light-verb-confirmed.ts` (read-only) found
+  3 out of 1270 sentences — small, and both する/なる are shared
+  `vocabulary_items` with ~18 other links each, so no risk to their SRS
+  history either way.
+  `scripts/unlink-demonstrative-light-verb-confirmed.ts` (dry-run by
+  default) removed just those 3 selections: drops the flagged entry from
+  `analyses.vocabulary_selections`, soft-deletes the `sentence_vocabulary`
+  link *only if* nothing else in the same sentence still needs it (one of
+  the 3 — 頭で「次はこうしよう」と計算する前に — has a second, genuine 計算する
+  occurrence sharing the item, and correctly kept its link), and
+  re-derives `selectedByDefault` on the sentence's suggestions via
+  `recomputeSuggestionDefaults`. Applied 2026-09-25: both words' link
+  counts went 18 → 17, confirming no over-deletion.
+  While scoping the safe path, found `materializeVocabularySelections`
+  (the normal "edit picker selections on an already-confirmed sentence"
+  path — VocabularyReviewPage re-confirm, not just this script) never
+  retired the `sentenceVocabulary`-subject study_item (word_listening,
+  pitch_accent, …) on a link it deletes — the same class of leak
+  `cascadeRetireSentenceLocal` was fixed for on 2026-09-02, but for a
+  different trigger (un-confirming one word, not deleting the whole
+  sentence), so that earlier fix didn't cover it. **Fixed** in
+  `src/db/repository.ts`: now finds and soft-deletes those orphans in the
+  same transaction as the stale link. New regression test in
+  `tests/data.test.ts` ("retires a per-occurrence study item whose
+  SentenceVocabulary link becomes stale"). Turned out to be a non-issue for
+  these specific 3 sentences (0 orphaned study items on any of them), but
+  is a live gap for any future picker edit that removes a word — worth
+  running `scripts/cleanup-orphaned-study-items.ts` again at some point to
+  check for pre-existing leaks from before this fix.
+  Broader, harder cases looked at
   but deliberately left alone (real "become"/"decide" content verb use,
   not a safe blanket default): plain 〜くなる/〜になる ("became cold"),
   ことにする/ことになる, ようになる — なる is core vocabulary in those, and
