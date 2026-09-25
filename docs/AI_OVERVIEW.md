@@ -1063,8 +1063,16 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   function's meaning during play; once a form is finished a fixed block adds *this
   verb* in each function (聞かせる, 聞かれる, 聞いた — from the verb's own
   conjugation, only when its class is trusted: built chains carry their JMdict tag,
-  real chains must have their own stem confirm the class) and, for built forms, a
-  whole-form gloss ("wasn't made to X"). Examples are deliberately withheld during
+  real chains must have their own stem confirm the class) and a whole-form
+  gloss for *either* chain source, matched by function sequence against the
+  10 recipes rather than by source: when the recipe lets the verb's own
+  gloss drop in as a bare infinitive without inflecting it (7 of the 10 —
+  causative/negative/want/past combos, e.g. "made/let someone listen"), it
+  does; the 3 passive-only recipes would need an inflected participle ("was
+  *eaten*") that can't be derived from an arbitrary JMdict gloss, so they
+  keep the original symbolic "wasn't X-ed" wording. A chain outside the 10
+  recipes (polite, 〜ている, 〜たら stacks) has no template and shows nothing
+  here. Examples are deliberately withheld during
   play — they'd hand over the answer. Weakness is per **piece** (`れる|れ`,
   `stem:られる`, …) from the round log; offered as `weak`/`strong`.
 - **Ear Tiles** (`EarTilesGame.tsx`, `src/lib/earTiles.ts`) — 4 real sentences

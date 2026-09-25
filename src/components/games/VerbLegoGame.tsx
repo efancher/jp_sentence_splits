@@ -88,7 +88,8 @@ function HelpContent({ chain, showExamples }: { chain: VerbLegoPuzzle['chain']; 
       ))}
       {overall ? (
         <div>
-          <strong>Whole form</strong> ≈ “{overall}” <span className="muted">(X = the verb)</span>
+          <strong>Whole form</strong> ≈ “{overall}”
+          {overall.includes('X') ? <span className="muted"> (X = the verb)</span> : null}
         </div>
       ) : null}
     </div>

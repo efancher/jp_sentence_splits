@@ -45,7 +45,13 @@ function sentence(tokens: (Tok | string)[], translation = 'A translation.'): Pic
   return { id: 's1', japanese, translation, vocabularySuggestions: suggestions };
 }
 
-const V = (surface: string, lemma: string, reading: string): Tok => ({ surface, lemma, reading, pos: '動詞/一般' });
+const V = (surface: string, lemma: string, reading: string, english?: string): Tok => ({
+  surface,
+  lemma,
+  reading,
+  pos: '動詞/一般',
+  english,
+});
 const A = (surface: string, lemma: string): Tok => ({ surface, lemma, pos: '助動詞' });
 
 const PASSIVE_PAST = sentence(['事実の後、', V('聞か', '聞く', 'きく'), A('れ', 'れる'), A('た', 'た'), '。']);
@@ -381,7 +387,7 @@ describe('candidates by pattern', () => {
 });
 
 describe('plain-English help', () => {
-  const built = (verb: BuildableVerb, recipeId: string) =>
+  const built = (verb: BuildableVerb & { english?: string }, recipeId: string) =>
     buildBuiltChain(verb, BUILT_RECIPES.find((r) => r.id === recipeId)!)!;
   const examples = (chain: ReturnType<typeof built>) =>
     Object.fromEntries(functionHelp(chain).map((h) => [h.name, h.example]));
@@ -430,14 +436,32 @@ describe('plain-English help', () => {
     expect(help.every((h) => h.meaning.length > 0)).toBe(true); // the meaning is still shown
   });
 
-  it('summarises what a built form means, and nothing for a real chain', () => {
+  it('summarises what a built form means, symbolically when the verb has no gloss', () => {
     expect(chainMeaning(built({ expression: '食べる', reading: 'たべる', partOfSpeech: 'v1; vt' }, 'causative-passive-negative-past'))).toBe(
       'wasn’t made to X',
     );
     for (const recipe of BUILT_RECIPES) {
-      expect(chainMeaning({ id: `built:食べる:${recipe.id}`, source: 'built' }), recipe.id).toBeTruthy();
+      expect(chainMeaning(built({ expression: '食べる', reading: 'たべる', partOfSpeech: 'v1; vt' }, recipe.id)), recipe.id).toBeTruthy();
     }
-    expect(chainMeaning(findVerbChains(PASSIVE_PAST)[0]!)).toBeNull();
+  });
+
+  it('substitutes the verb’s own gloss in as a bare infinitive, except for the passive-only recipes', () => {
+    const kikaseta = built({ expression: '聞く', reading: 'きく', partOfSpeech: 'v5k; vt', english: 'to listen, to hear' }, 'causative-past');
+    expect(chainMeaning(kikaseta)).toBe('made / let someone listen');
+
+    const kikareta = built({ expression: '聞く', reading: 'きく', partOfSpeech: 'v5k; vt', english: 'to listen' }, 'passive-past');
+    // Passive alone needs an inflected participle ("was heard") we can't derive from an
+    // arbitrary gloss — keeps the symbolic X rather than guessing at irregular English.
+    expect(chainMeaning(kikareta)).toBe('was X-ed (X was done to the subject)');
+  });
+
+  it('gives a real sentence chain the same treatment as a built one when its stack matches a known recipe', () => {
+    // 聞かれた: passive + past, but no gloss on the token — stays symbolic, not null.
+    expect(chainMeaning(findVerbChains(PASSIVE_PAST)[0]!)).toBe('was X-ed (X was done to the subject)');
+    const withGloss = findVerbChains(
+      sentence([V('聞か', '聞く', 'きく', 'to listen'), A('せ', 'せる'), A('た', 'た')]),
+    )[0]!;
+    expect(chainMeaning(withGloss)).toBe('made / let someone listen');
   });
 
   it('has a short hint for every function the game uses', () => {

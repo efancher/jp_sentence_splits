@@ -760,7 +760,10 @@ export function functionHelp(chain: VerbChain): FunctionHelp[] {
     }));
 }
 
-/** What a built form means overall, with X standing for the verb. Hand-written per recipe; null for real chains. */
+/**
+ * What a chain's stacked form means overall, X standing for the verb.
+ * Hand-written per recipe (`BUILT_RECIPES`' step lists), keyed by recipe id.
+ */
 const RECIPE_MEANING: Record<string, string> = {
   'causative-past': 'made / let someone X',
   'passive-past': 'was X-ed (X was done to the subject)',
@@ -774,7 +777,62 @@ const RECIPE_MEANING: Record<string, string> = {
   'causative-passive-negative-past': 'wasn’t made to X',
 };
 
-export function chainMeaning(chain: Pick<VerbChain, 'id' | 'source'>): string | null {
-  if (chain.source !== 'built') return null;
-  return RECIPE_MEANING[chain.id.slice(chain.id.lastIndexOf(':') + 1)] ?? null;
+/** `functionName` output -> the `Step` it corresponds to, for matching a chain's function sequence against `BUILT_RECIPES`. Polite/ongoing/conditional have no `Step` (not composable steps), so a chain using them never matches a recipe. */
+const STEP_BY_FUNCTION: Partial<Record<string, Step>> = {
+  causative: 'causative',
+  passive: 'passive',
+  negative: 'negative',
+  past: 'past',
+  'want to': 'want',
+};
+
+const RECIPE_ID_BY_STEPS = new Map(BUILT_RECIPES.map((recipe) => [recipe.steps.join('>'), recipe.id]));
+
+/**
+ * Recipes where the verb's own gloss can be dropped into `RECIPE_MEANING`'s
+ * X as a bare infinitive without inflecting it — "made/let someone eat", "is
+ * made to eat". The three passive-only recipes need an inflected participle
+ * ("was eat*en*") that can't be derived from an arbitrary JMdict gloss
+ * (irregular English verbs), so they're excluded and keep the symbolic X.
+ */
+const SUBSTITUTABLE_RECIPES = new Set(
+  BUILT_RECIPES.filter(
+    (recipe) => recipe.steps.includes('causative') || !recipe.steps.includes('passive'),
+  ).map((recipe) => recipe.id),
+);
+
+/** First JMdict sense, "to " stripped — "to open (intransitive)" -> "open (intransitive)". */
+function firstGloss(english: string): string | null {
+  const first = english.split(/[,;]/)[0]?.trim();
+  return first ? first.replace(/^to\s+/i, '') : null;
+}
+
+/**
+ * What a chain's stacked form means overall. Matches by the chain's own
+ * function sequence against `BUILT_RECIPES` (not by `source`), so a real
+ * sentence chain gets the same treatment as a built one whenever its stack
+ * happens to be one of the ten known recipes — a stack outside that set
+ * (polite, ongoing, conditional, or an unrecognized combination) has no
+ * hand-written template and returns null, same as before this only covered
+ * `built` chains. When the recipe is in `SUBSTITUTABLE_RECIPES`, the verb's
+ * own gloss (`chain.english`) replaces the template's X for a real
+ * translation ("made/let someone listen"); otherwise the symbolic X stays
+ * (see `SUBSTITUTABLE_RECIPES`'s doc comment for why).
+ */
+export function chainMeaning(chain: Pick<VerbChain, 'pieces' | 'english'>): string | null {
+  const names = chain.pieces
+    .slice(1)
+    .map(functionName)
+    // "ませ + ん" both read "polite … negative"; collapse a repeated neighbour.
+    .filter((name, i, all) => name !== all[i - 1]);
+  const steps = names.map((name) => STEP_BY_FUNCTION[name]);
+  if (steps.some((step) => !step)) return null;
+  const recipeId = RECIPE_ID_BY_STEPS.get(steps.join('>'));
+  const template = recipeId ? RECIPE_MEANING[recipeId] : undefined;
+  if (!template) return null;
+  const gloss = chain.english ? firstGloss(chain.english) : null;
+  if (gloss && recipeId && SUBSTITUTABLE_RECIPES.has(recipeId)) {
+    return template.replace(/X/g, gloss);
+  }
+  return template;
 }

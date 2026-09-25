@@ -31,6 +31,29 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-25 — Verb Lego: whole-form English translation, for real
+  sentence chains too.** User asked for a translation of the transformed
+  verb form. `chainMeaning` (`src/lib/verbLego.ts`) previously only fired
+  for `built` chains and always showed the generic symbolic template
+  ("made / let someone X") — never the actual verb. Reworked to match by
+  the chain's own function sequence against `BUILT_RECIPES` instead of by
+  `source`, so a real sentence chain (e.g. 聞かせた) gets the same treatment
+  as a built one whenever its stack is one of the 10 known recipes. Where
+  safe, the verb's own gloss now fills the template's `X` as a bare
+  infinitive ("made / let someone listen") — checked against 7 of the 10
+  recipes; the 3 passive-only ones (`passive-past`, `passive-negative`,
+  `passive-negative-past`) would need an inflected English participle
+  ("was *eaten*") that can't be derived from an arbitrary JMdict gloss
+  (irregular verbs), so those keep the original symbolic `X` wording rather
+  than guess at English grammar. `VerbLegoGame.tsx`'s "(X = the verb)"
+  caption now only renders when the returned text still contains a literal
+  `X`. Tests: `tests/verbLego.test.ts` rewritten for the new match-by-steps
+  behavior plus new substitution/non-substitution cases. Typecheck + full
+  test suite green (2041 passed, 12 skipped). Manual test: `/play` → Verb
+  Lego → finish any form → "What do these mean?" / the done screen should
+  show a real English phrase for causative/negative/want/past combos and
+  the original "X"-based phrasing for passive-only ones.
+
 - **2026-09-25 — Particle Puzzle: gate on vocabulary actually reviewed, not
   just confirmed.** User feedback: too many rounds felt like guessing
   because the sentence's vocabulary had been *confirmed* (triaged into the
