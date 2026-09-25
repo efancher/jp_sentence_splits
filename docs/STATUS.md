@@ -31,6 +31,24 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-25 — Particle Puzzle: gate on vocabulary actually reviewed, not
+  just confirmed.** User feedback: too many rounds felt like guessing
+  because the sentence's vocabulary had been *confirmed* (triaged into the
+  tracked word list during vocab review) but never actually *reviewed* —
+  confirming a word seeds a study item but doesn't teach it, so a puzzle
+  could hand back a sentence the learner can't read at all, leaving the
+  particle blanks a pure guess instead of a check on a sentence mostly
+  understood. `getParticlePuzzleData` (`src/db/repository.ts`) now also
+  requires `getSentenceReadingIntroducedReadiness` — the same continue_book
+  bar (every linked vocabulary item has at least one reading/meaning study
+  item that's left FSRS's `new` state), not full proficiency (that bar was
+  already tried for continue_book and reversed 2026-09-16 as too strict).
+  Typecheck + full test suite green (2039 passed, 12 skipped). Manual test:
+  `/play` → Particle Puzzle — if the pool shrinks below 5 sentences the
+  page's existing "needs more sentences" message covers it; otherwise
+  rounds should now consistently draw from sentences whose words are at
+  least familiar.
+
 - **2026-09-25 — Fix: citation-form word clips could silently include a
   fused neighbour (皆さん played for 皆).** Found via the "Compare speakers"
   page above: the user reported two 皆 clips sounding wrong ("tch"/"tan").

@@ -998,9 +998,11 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   from the home book are shown for は/が context. Blanks only 格助詞/係助詞 (が を に と で から は も まで より) —
   never の, へ, sentence-final or conjunctive particles, and never a particle
   touching another particle (には, でも… — ambiguous compounds). A wrong は/が/も
-  swap carries an "often both natural" note (it still costs the point). Eligible sentences: vocabulary confirmed (test particles,
-  not unknown words), translation present, ≤60 chars, ≥2 blankable particles,
-  not suspended-only. Weakness is **per particle** from the round log: each
+  swap carries an "often both natural" note (it still costs the point). Eligible sentences: vocabulary confirmed *and* every linked word actually
+  reviewed at least once (`getSentenceReadingIntroducedReadiness`, the same
+  continue_book bar — test particles in a sentence the learner can mostly
+  read, not guess at one whose words are still unfamiliar), translation
+  present, ≤60 chars, ≥2 blankable particles, not suspended-only. Weakness is **per particle** from the round log: each
   blank is logged as a `GameRoundItem.parts` entry, recent misses become the
   `focus` that biases which particles a weak round blanks, and a sentence's
   picker stats are its particles' recent accuracy (the picker's FSRS-named

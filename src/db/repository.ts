@@ -6114,9 +6114,14 @@ export interface ParticlePuzzleCandidate extends PickerCandidate {
 
 /**
  * Sentences playable in Particle Puzzle (`isParticlePuzzleEligible`), limited
- * to ones whose vocabulary the learner has confirmed — the puzzle should test
- * particles, not unknown words — and skipping sentences that live only in
- * suspended books. Each candidate's picker stats come from the recent
+ * to ones whose vocabulary the learner has confirmed *and* actually reviewed
+ * at least once (`getSentenceReadingIntroducedReadiness`, the same
+ * continue_book bar) — "confirmed" alone only means the word list was
+ * triaged, not that the learner has ever seen it, so without this a puzzle
+ * could hand back a sentence the learner can't read at all and the particle
+ * blanks become a pure guess rather than a check on a sentence they mostly
+ * understand (user report, 2026-09-25). Also skips sentences that live only
+ * in suspended books. Each candidate's picker stats come from the recent
  * per-particle history in the `gameRounds` log; `focus` is the particles
  * missed most, used to bias which blanks a weak round drills. Read-only.
  */
@@ -6138,10 +6143,19 @@ export async function getParticlePuzzleData(): Promise<{
   );
   const history = buildParticleHistory(rounds);
 
+  const eligibleSentences = sentences.filter(
+    (sentence) =>
+      confirmed.has(sentence.id) &&
+      isParticlePuzzleEligible(sentence) &&
+      !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)),
+  );
+  const introducedReadiness = await getSentenceReadingIntroducedReadiness(
+    eligibleSentences.map((sentence) => sentence.id),
+  );
+
   const candidates: ParticlePuzzleCandidate[] = [];
-  for (const sentence of sentences) {
-    if (!confirmed.has(sentence.id) || !isParticlePuzzleEligible(sentence)) continue;
-    if (suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)) continue;
+  for (const sentence of eligibleSentences) {
+    if (!introducedReadiness.get(sentence.id)) continue;
     const tokens = findBlankableParticles(sentence);
     candidates.push({
       id: sentence.id,

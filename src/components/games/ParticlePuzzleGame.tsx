@@ -292,7 +292,7 @@ export function ParticlePuzzleGame({ signal }: { signal: GameSignal }) {
         <h2 style={{ margin: 0 }}>Particle Puzzle</h2>
         <p className="muted" style={{ margin: 0 }}>
           Needs at least {PARTICLE_PUZZLE_ROUND_SIZE} sentences whose vocabulary you&apos;ve
-          confirmed and that have two or more particles to fill — you have{' '}
+          confirmed and reviewed at least once, with two or more particles to fill — you have{' '}
           {data.candidates.length} so far.
         </p>
         <Link to="/play">Back to games</Link>
