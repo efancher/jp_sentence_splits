@@ -175,6 +175,11 @@ const PitchAccentDrillPage = lazy(() =>
     default: module.PitchAccentDrillPage,
   })),
 );
+const PitchAccentSpeakerComparePage = lazy(() =>
+  import('./pages/PitchAccentSpeakerComparePage').then((module) => ({
+    default: module.PitchAccentSpeakerComparePage,
+  })),
+);
 const PitchEarTrainerPage = lazy(() =>
   import('./pages/PitchEarTrainerPage').then((module) => ({
     default: module.PitchEarTrainerPage,
@@ -211,6 +216,7 @@ export default function App() {
             <Route path="play" element={<PlayHubPage />} />
             <Route path="play/:gameId/:signal" element={<PlayGamePage />} />
             <Route path="pitch-accent" element={<PitchAccentDrillPage />} />
+            <Route path="pitch-accent/compare" element={<PitchAccentSpeakerComparePage />} />
             <Route path="pitch-ear-trainer" element={<PitchEarTrainerPage />} />
             <Route path="relative-pitch-trainer" element={<RelativePitchTrainerPage />} />
             <Route path="study-items/:studyItemId" element={<StudyItemDebugPage />} />

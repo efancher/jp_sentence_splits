@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-24.
+Last updated: 2026-09-25.
 
 ## Where things stand
 
@@ -30,6 +30,46 @@ remaining planned work: re-mine "After Work" (browser + human review).
 
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
+
+- **2026-09-25 — Pitch-accent "Compare speakers" browse tool.** User asked
+  how common it is to have the same word/particle recorded by 2+ different
+  speakers, and whether a side-by-side (measured contour + dictionary
+  pattern) comparison would be useful. Investigation: real particles don't
+  carry their own lexical pitch accent, so the useful case is content
+  words. A one-off Supabase query found 143/724 confirmed vocabulary items
+  occur in 2+ distinct books (the app's speaker proxy — see the minimal-
+  pair warm-up's same caveat), 51 of those with both aligned audio in 2+
+  books and a dictionary pitch position — but that count doesn't account
+  for `getOddEarOutData`'s real per-occurrence filters (current-version
+  forced alignment actually locating the word, `isPlausibleClipSpan`,
+  suspended-book exclusion); live-browser verification with real fetched
+  fixture data showed several strong first-round candidates (声, 高い, なる)
+  drop to 0–1 usable books once those filters apply, before landing on one
+  that worked (思う, 2 books) — so the real usable pool is smaller than the
+  raw cross-book count and should be re-measured once the drill sees use.
+  Shipped as a browse page, not a drill: `getPitchAccentSpeakerComparisons`
+  (`src/db/repository.ts`) reuses Odd Ear Out's exact eligibility query
+  (citation-form link, current-version alignment, plausible word-only span,
+  non-suspended book) minus its shape/mora-count restriction, grouped by
+  word and kept only when 2+ distinct books remain. New
+  `PitchAccentSpeakerComparePage` (`/pitch-accent/compare`, linked from
+  `PitchAccentDrillPage`) lists eligible words, and for the selected word
+  shows the dictionary `PitchAccentDiagram` once plus one playable tile per
+  book (`useRangeLoop`/`useSentenceAudioBlob`, same as Odd Ear Out's tiles)
+  with its own `WordPitchContour`. Playback is sequential (tap each clip),
+  not dual-ear/binaural — deferred as unproven extra complexity. Verified
+  live in a real browser: seeded Dexie directly with real fetched rows +
+  audio blobs for one word (bypassing a full account sync, which didn't
+  finish downloading audio within a 3-minute wait), confirmed the word
+  list, diagram, both clip tiles, measured-pitch contours, and actual
+  audio playback all render correctly; also confirmed the empty state
+  (no crash, clear message) against the real signed-in account before its
+  sync caught up. Typecheck + full test suite green (2030 passed, 12
+  skipped). **Manual test plan:** open `/pitch-accent`, click "Compare
+  speakers →"; pick a word from the list (if the list is empty, no
+  confirmed word yet has audio in 2+ non-suspended books); confirm the
+  dictionary pitch diagram renders once and each book's tile plays its
+  clip with a measured-pitch line appearing underneath.
 
 - **2026-09-24 — Vocabulary picker: don't default-check する/なる glued onto
   a manner demonstrative (こうする/そうする/ああする/どうする,

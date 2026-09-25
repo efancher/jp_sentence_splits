@@ -456,11 +456,16 @@ export function PitchAccentDrillPage() {
   return (
     <div className="stack">
       <section className="panel stack">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <h2 style={{ margin: 0 }}>Pitch-accent drill</h2>
-          <Link to="/pronunciation" className="muted" style={{ fontSize: '0.85rem' }}>
-            Pronunciation profile →
-          </Link>
+          <div className="row" style={{ gap: '1rem' }}>
+            <Link to="/pitch-accent/compare" className="muted" style={{ fontSize: '0.85rem' }}>
+              Compare speakers →
+            </Link>
+            <Link to="/pronunciation" className="muted" style={{ fontSize: '0.85rem' }}>
+              Pronunciation profile →
+            </Link>
+          </div>
         </div>
         <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
           Say it aloud and get its pitch-accent shape checked against the dictionary — for words

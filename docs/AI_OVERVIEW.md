@@ -1836,6 +1836,21 @@ a self-hosted pronunciation-analysis backend. Capabilities:
       require the word's exact citation-form surface (`expression`), since
       near-minimal accent pairs are almost always nouns and this sidesteps
       resolving `pitchAccentPositions` against an inflected surface.
+    - **Compare speakers** (`PitchAccentSpeakerComparePage.tsx`,
+      `/pitch-accent/compare`, linked from `PitchAccentDrillPage`) — a
+      browse tool, not a drill: nothing is scored or scheduled. Lists every
+      pitch-carrying word mined in citation form from 2+ distinct books
+      (`getPitchAccentSpeakerComparisons` in `repository.ts`, same
+      eligibility rule as Odd Ear Out's `getOddEarOutData` minus the
+      shape/mora-count restriction that game's round mechanic needs), and
+      for the selected word shows the dictionary `PitchAccentDiagram` once
+      alongside one playable tile per book with its own `WordPitchContour`
+      (measured, not symbolic). Same `Book.id`-as-speaker-proxy caveat as
+      the minimal-pair warm-up above, surfaced in the page copy. In
+      practice the real corpus, after suspended-book exclusion and
+      per-occurrence span-plausibility filtering, yields noticeably fewer
+      usable comparisons than a raw "confirmed in 2+ books" count suggests
+      (STATUS.md 2026-09-25).
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Paired pitch contours** (`PitchCanvas`, reference + dashed learner) —

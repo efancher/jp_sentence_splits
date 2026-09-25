@@ -1349,6 +1349,14 @@ possibilities, kept here so the thinking isn't lost:
   scheduling). The shadowing/listening pitch-proficiency question is left
   exactly where it was: still points at perception `pitch_accent` only,
   not resolved by this pass.
+- [x] **Pitch-accent "Compare speakers" browse tool.** (2026-09-25 — see
+  STATUS.md) Words mined from 2+ distinct books, played side by side
+  against the dictionary pitch pattern with each clip's own measured
+  contour (`/pitch-accent/compare`). Not a drill — nothing scored or
+  scheduled. Real usable pool is smaller than a raw cross-book count once
+  Odd Ear Out's span-plausibility/suspended-book filters apply; worth
+  re-measuring as more single-speaker content is mined. Dual-ear/binaural
+  playback deliberately deferred (sequential tap-to-play for v1).
 
 ## Not planned (deliberate)
 

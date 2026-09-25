@@ -6418,6 +6418,122 @@ export async function getOddEarOutData(): Promise<{
   return { clips, history };
 }
 
+export interface PitchAccentSpeakerClip {
+  bookId: string;
+  bookTitle: string;
+  audio: SentenceAudio;
+  sentence: Sentence;
+  span: TimeRangeMs;
+}
+
+export interface PitchAccentSpeakerComparison {
+  vocabularyItem: VocabularyItem;
+  clips: PitchAccentSpeakerClip[];
+}
+
+/**
+ * Words with a dictionary pitch-accent position that were also mined, in
+ * citation form, out of 2+ distinct books — the app's "same speaker" proxy
+ * (see `getPitchAccentMinimalPairOccurrences`'s doc: a book is normally one
+ * show/narrator, not verified per-clip identity). Lets a learner compare how
+ * different recordings realize the same word's accent, side by side against
+ * the dictionary pattern, rather than drilling one clip in isolation.
+ *
+ * Same eligibility rule as `getOddEarOutData` (citation-form link, current-
+ * version forced alignment, plausible word-only span, non-suspended book),
+ * minus the shape/mora-count restriction that game needs for its round
+ * mechanic — this is a browse tool, not a drill, so single-mora and
+ * shapeless words are still worth showing.
+ */
+export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpeakerComparison[]> {
+  const db = getDb();
+  const [allLinks, suspendedIndex, books] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    loadSuspendedBookIndex(),
+    db.books.toArray(),
+  ]);
+  const links = allLinks.filter(
+    (link) =>
+      !!link.surfaceForm &&
+      !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
+  );
+  if (links.length === 0) return [];
+
+  const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
+  const [items, sentences, audioRows, memberships] = await Promise.all([
+    db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
+    db.sentences.bulkGet(sentenceIds),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const itemById = new Map(
+    items
+      .filter((row): row is VocabularyItem => Boolean(row))
+      .filter((row) => (row.pitchAccentPositions?.length ?? 0) > 0)
+      .map((row) => [row.id, row]),
+  );
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+  const bookIdBySentenceId = new Map<string, string>();
+  for (const membership of memberships) {
+    const current = bookIdBySentenceId.get(membership.sentenceId);
+    const shelved = suspendedIndex?.suspendedBookIds.has(membership.bookId) ?? false;
+    if (!current || (!shelved && suspendedIndex?.suspendedBookIds.has(current))) {
+      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    }
+  }
+  const bookTitleById = new Map(books.map((book) => [book.id, book.title]));
+
+  // One occurrence per (word, book), citation form only, with audio.
+  const chosen = new Map<string, { link: SentenceVocabulary; item: VocabularyItem; bookId: string }>();
+  for (const link of links) {
+    const item = itemById.get(link.vocabularyItemId);
+    const bookId = bookIdBySentenceId.get(link.sentenceId);
+    if (!item || !bookId || link.surfaceForm !== item.expression) continue;
+    if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
+    const key = `${item.id}:${bookId}`;
+    if (!chosen.has(key)) chosen.set(key, { link, item, bookId });
+  }
+
+  const alignments = await loadAlignmentsBulk(
+    [...chosen.values()].map(({ link }) => audioBySentenceId.get(link.sentenceId)!.id),
+  );
+
+  const clipsByItem = new Map<string, PitchAccentSpeakerClip[]>();
+  const itemsSeen = new Map<string, VocabularyItem>();
+  for (const { link, item, bookId } of chosen.values()) {
+    const audio = audioBySentenceId.get(link.sentenceId)!;
+    const sentence = sentenceById.get(link.sentenceId)!;
+    const alignment = alignments.get(audio.id);
+    const span: TimeRangeMs | null = alignment
+      ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
+      : null;
+    if (!span || !isPlausibleClipSpan(span)) continue;
+    const list = clipsByItem.get(item.id) ?? [];
+    list.push({ bookId, bookTitle: bookTitleById.get(bookId) ?? 'Unknown book', audio, sentence, span });
+    clipsByItem.set(item.id, list);
+    itemsSeen.set(item.id, item);
+  }
+
+  const result: PitchAccentSpeakerComparison[] = [];
+  for (const [itemId, clips] of clipsByItem) {
+    if (new Set(clips.map((clip) => clip.bookId)).size < 2) continue;
+    clips.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle));
+    result.push({ vocabularyItem: itemsSeen.get(itemId)!, clips });
+  }
+  result.sort(
+    (a, b) =>
+      b.clips.length - a.clips.length ||
+      a.vocabularyItem.expression.localeCompare(b.vocabularyItem.expression, 'ja'),
+  );
+  return result;
+}
+
 const BUILT_RECIPES_BY_ID = new Map(BUILT_RECIPES.map((recipe) => [recipe.id, recipe]));
 
 /** Built chains per recipe: enough verb variety for a round without composing every verb × recipe. */
