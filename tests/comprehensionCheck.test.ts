@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatBatchComprehensionPromptForAI,
   formatComprehensionPromptForAI,
+  parseBatchComprehensionCheckReply,
   parseComprehensionCheckReply,
 } from '../src/lib/comprehensionCheck';
 import type { Sentence } from '../src/domain/types';
@@ -97,5 +99,64 @@ describe('parseComprehensionCheckReply', () => {
   it('returns null on unparseable input', () => {
     expect(parseComprehensionCheckReply('just some prose')).toBeNull();
     expect(parseComprehensionCheckReply('')).toBeNull();
+  });
+});
+
+describe('formatBatchComprehensionPromptForAI', () => {
+  it('numbers sections in order and notes when a sentence has no preceding context', () => {
+    const prompt = formatBatchComprehensionPromptForAI([
+      { sentence: sentence({ id: 's1', japanese: '猫がいます。' }), before: [] },
+      {
+        sentence: sentence({ id: 's2', japanese: '犬もいます。' }),
+        before: [sentence({ id: 's1', japanese: '猫がいます。' })],
+      },
+    ]);
+    expect(prompt).toContain('=== Sentence 1 ===');
+    expect(prompt).toContain('(none — this is the first sentence)');
+    expect(prompt).toContain('=== Sentence 2 ===');
+    expect(prompt.indexOf('=== Sentence 1 ===')).toBeLessThan(prompt.indexOf('=== Sentence 2 ==='));
+  });
+});
+
+const GOOD_SECTION = ['1. wrong a', '*2. correct', '3. wrong b', '4. wrong c'].join('\n');
+
+describe('parseBatchComprehensionCheckReply', () => {
+  it('parses each section independently, in order', () => {
+    const reply = ['=== Sentence 1 ===', GOOD_SECTION, '', '=== Sentence 2 ===', GOOD_SECTION].join(
+      '\n',
+    );
+    const results = parseBatchComprehensionCheckReply(reply, 2);
+    expect(results).toEqual([
+      { options: ['wrong a', 'correct', 'wrong b', 'wrong c'], correctIndex: 1 },
+      { options: ['wrong a', 'correct', 'wrong b', 'wrong c'], correctIndex: 1 },
+    ]);
+  });
+
+  it('returns null for a missing section without disturbing the others', () => {
+    const reply = ['=== Sentence 1 ===', GOOD_SECTION].join('\n');
+    const results = parseBatchComprehensionCheckReply(reply, 2);
+    expect(results[0]).not.toBeNull();
+    expect(results[1]).toBeNull();
+  });
+
+  it('returns null for a malformed section (missing asterisk)', () => {
+    const badSection = ['1. wrong a', '2. missing asterisk', '3. wrong b', '4. wrong c'].join('\n');
+    const reply = ['=== Sentence 1 ===', badSection].join('\n');
+    expect(parseBatchComprehensionCheckReply(reply, 1)[0]).toBeNull();
+  });
+
+  it('tolerates sections reordered or interleaved with extra prose', () => {
+    const reply = [
+      'Sure, here are the checks:',
+      '',
+      '=== Sentence 2 ===',
+      GOOD_SECTION,
+      '',
+      '=== Sentence 1 ===',
+      GOOD_SECTION,
+    ].join('\n');
+    const results = parseBatchComprehensionCheckReply(reply, 2);
+    expect(results[0]).not.toBeNull();
+    expect(results[1]).not.toBeNull();
   });
 });

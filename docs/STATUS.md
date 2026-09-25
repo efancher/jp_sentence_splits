@@ -517,6 +517,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-25 — Batch comprehension-check authoring, book-scoped.** Follow-up to the 2026-09-24
+  comprehension-check feature: authoring was strictly one sentence per AI copy/paste round-trip
+  (`ComprehensionCheckPicker` on `AnalyzePage`), so a book with hundreds of eligible sentences meant
+  hundreds of round-trips. Added `formatBatchComprehensionPromptForAI`/`parseBatchComprehensionCheckReply`
+  (`src/lib/comprehensionCheck.ts`) — same recipe (cold vs. in-context translation, 4 options, one
+  marked `*`), but one prompt covers many sentences at once, each wrapped in an `=== Sentence N ===`
+  section; the reply is split back into per-sentence sections and each is parsed independently with
+  the existing single-sentence parser, so one malformed section doesn't invalidate the batch. New
+  `BookComprehensionCheckBatch` panel on `BookDetailPage` (next to `BookSharingPanel`) live-queries a
+  book's sentences for ones with confirmed vocabulary, no `comprehensionCheck` yet, and full
+  `getSentenceFullReviewReadiness` (the same gate `reading_in_context` itself uses) — generates a
+  prompt for the next N (batch size configurable, default 15), and applying the pasted reply saves
+  each parsed section via `setSentenceComprehensionCheck`. A sentence drops out of the eligible count
+  as soon as it's saved, so repeated clicks work through a book's backlog with no separate
+  "already generated" bookkeeping. Tests: `tests/comprehensionCheck.test.ts` (batch formatter/parser:
+  section ordering, missing section, malformed section, reordered/interleaved sections). `npm run
+  check` green.
+
 - **2026-09-24 — Reveal-side native audio on `reading_retrieval`/`cloze`.** User request: the reveal
   side of these cards (`VocabularyTargetCard`, `ReviewPage.tsx`) showed the reading/meaning but no way
   to hear the word or sentence, unlike `pitch_accent`/`word_listening`. Added `VocabularyTargetNativeAudio`

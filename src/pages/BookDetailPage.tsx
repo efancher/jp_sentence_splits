@@ -21,6 +21,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Snackbar } from '../components/Snackbar';
 import { VocabChips } from '../components/VocabChips';
 import { BookSharingPanel } from '../components/BookSharingPanel';
+import { BookComprehensionCheckBatch } from '../components/BookComprehensionCheckBatch';
 import {
   assignBookSentencesToChapter,
   createBookChapter,
@@ -571,6 +572,7 @@ export function BookDetailPage() {
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />
         </section>
+        <BookComprehensionCheckBatch bookId={bookId} />
         {data.book.suspendedAt ? (
           <p className="muted" style={{ margin: 0 }}>
             Suspended — this book produces no new session work and its review

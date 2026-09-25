@@ -99,6 +99,95 @@ export function parseComprehensionCheckReply(
   return { options, correctIndex };
 }
 
+// ---------------------------------------------------------------------------
+// Batch variant — same recipe, but one prompt covers many sentences (a
+// book's confirmed-vocab, full-review-ready sentences with no check yet)
+// instead of one round-trip per sentence. The reply is split on
+// "=== Sentence N ===" headers and each section re-uses
+// parseComprehensionCheckReply, so a single malformed section doesn't
+// invalidate the rest of the batch.
+// ---------------------------------------------------------------------------
+
+const BATCH_AI_PROMPT_HEADER = [
+  'You are writing reading-comprehension checks for a Japanese learner, one',
+  'per sentence below. For each sentence: first translate it *in isolation*',
+  '(as if you had not seen the context) — note any ambiguity a cold reading',
+  'would leave unresolved (dropped subject/pronoun referent, tense/aspect,',
+  'register, etc). Then translate it again *using the context* to resolve',
+  'that ambiguity.',
+  '',
+  'Then produce exactly 4 English options for "which sentence best represents',
+  'the target sentence, in context":',
+  '- One correct option: the in-context translation.',
+  "- Three incorrect options: plausible mistranslations a cold (no-context)",
+  '  reading could produce — near-misses, not random sentences.',
+  '',
+  'Reply with one section per sentence, repeating the exact',
+  '"=== Sentence N ===" header shown below, each followed by that',
+  "sentence's 4 options only, one per line, numbered 1-4, with the correct",
+  'one marked by a leading asterisk. Example section:',
+  '=== Sentence 1 ===',
+  '1. Some incorrect option',
+  '*2. The correct, in-context option',
+  '3. Some incorrect option',
+  '4. Some incorrect option',
+].join('\n');
+
+export function formatBatchComprehensionPromptForAI(
+  items: { sentence: Sentence; before: Sentence[] }[],
+): string {
+  const sections = items.map((item, i) => {
+    const contextLines = item.before.length
+      ? item.before.map((s) => s.japanese).join('\n')
+      : '(none — this is the first sentence)';
+    return [
+      `=== Sentence ${i + 1} ===`,
+      '--- context (preceding sentences) ---',
+      contextLines,
+      '--- target sentence ---',
+      item.sentence.japanese,
+    ].join('\n');
+  });
+  return [BATCH_AI_PROMPT_HEADER, '', ...sections].join('\n\n');
+}
+
+const BATCH_SECTION_HEADER_RE = /^===\s*Sentence\s+(\d+)\s*===$/;
+
+/**
+ * Returns one entry per `1..expectedCount`, in order — `null` where that
+ * section is missing or fails parseComprehensionCheckReply's validation,
+ * so the caller can save the good entries and report the rest.
+ */
+export function parseBatchComprehensionCheckReply(
+  reply: string,
+  expectedCount: number,
+): Array<{ options: string[]; correctIndex: number } | null> {
+  const sections = new Map<number, string>();
+  let currentNum: number | null = null;
+  let currentLines: string[] = [];
+  const flush = () => {
+    if (currentNum !== null) sections.set(currentNum, currentLines.join('\n'));
+  };
+  for (const rawLine of reply.split('\n')) {
+    const match = BATCH_SECTION_HEADER_RE.exec(rawLine.trim());
+    if (match) {
+      flush();
+      currentNum = Number(match[1]);
+      currentLines = [];
+    } else if (currentNum !== null) {
+      currentLines.push(rawLine);
+    }
+  }
+  flush();
+
+  const results: Array<{ options: string[]; correctIndex: number } | null> = [];
+  for (let i = 1; i <= expectedCount; i += 1) {
+    const section = sections.get(i);
+    results.push(section ? parseComprehensionCheckReply(section) : null);
+  }
+  return results;
+}
+
 export function buildComprehensionCheck(
   parsed: { options: string[]; correctIndex: number },
   provenance: ComprehensionCheck['provenance'],

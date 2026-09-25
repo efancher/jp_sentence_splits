@@ -1326,7 +1326,11 @@ possibilities, kept here so the thinking isn't lost:
   `listening`'s equivalent — no pre-reveal passage-context display exists
   there to hang a check on, so it'd be net-new UI, not reuse; left for a
   follow-up. **Not built**: adaptive distractor difficulty — still an open
-  angle, parked as originally discussed.
+  angle, parked as originally discussed. **2026-09-25**: single-sentence
+  authoring was the main bottleneck for covering a whole book, so added a
+  book-scoped batch round-trip (`BookComprehensionCheckBatch` on
+  `BookDetailPage`) — one prompt/reply covers many eligible sentences at
+  once instead of one round-trip each; detail in STATUS.md.
 - [x] **Pull the pitch-accent production drill into a review card**
   (2026-09-16 discussion; shipped 2026-09-24 — see STATUS.md). The two
   blockers resolved:

@@ -1150,7 +1150,12 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `ComprehensionCheckPicker` + `src/lib/comprehensionCheck.ts`'s
   copy-prompt/paste-back-parse flow, same shape as mining's "Segment with
   AI help"), a 4-option "which English sentence fits this context" pick
-  gates the Reveal button. Purely supplementary evidence
+  gates the Reveal button. A book-scoped batch variant (2026-09-25,
+  `BookComprehensionCheckBatch` on `BookDetailPage`) covers many
+  confirmed-vocab/full-review-ready sentences with no check yet in one
+  prompt/reply round-trip (`=== Sentence N ===`-delimited sections,
+  `formatBatchComprehensionPromptForAI`/`parseBatchComprehensionCheckReply`),
+  instead of one round-trip per sentence. Purely supplementary evidence
   (`Review.comprehensionCheckCorrect`/`comprehensionCheckChosenIndex`, feeds
   `classifyReviewError` → `incorrect_meaning` on a miss) — self-rating still
   decides the schedule, same as every other "objectively graded" card in
