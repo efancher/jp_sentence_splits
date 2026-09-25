@@ -128,8 +128,16 @@ describe('UI flows', () => {
     });
     fireEvent.blur(litInputs[0]!);
 
+    // Wait for the *completed* "Saved" state, not just "Saving…" — the
+    // debounce fires (flipping the pill to "Saving…") before the async DB
+    // write actually lands, and `/Saved|Saving/i` matches that in-flight
+    // text too. Navigating away while still mid-write let the load effect
+    // for the sentence we come back to re-fetch stale (pre-write) data,
+    // which is the actual source of this test's intermittent
+    // "modifier/content" / "counter expression" display-value failures
+    // under the full suite.
     await waitFor(() => {
-      expect(screen.getByText(/Saved|Saving/i)).toBeInTheDocument();
+      expect(screen.getByText('Saved')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
@@ -137,12 +145,10 @@ describe('UI flows', () => {
     // change for the autosave hook, scheduling its own (redundant,
     // self-)save — clicking Previous immediately after, with no wait,
     // left that debounced timer still pending while navigating back to
-    // sentence A. Likely source of this test's flakiness under the full
-    // suite (intermittent stale display values after navigating back);
-    // letting the cycle settle here (its own "Saved" status) removes the
-    // race regardless of the exact mechanism.
+    // sentence A. Letting the cycle settle here (its own completed "Saved"
+    // status) removes that race too.
     await waitFor(() => {
-      expect(screen.getByText(/Saved|Saving/i)).toBeInTheDocument();
+      expect(screen.getByText('Saved')).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: 'Previous' }));
     await waitFor(() => {
