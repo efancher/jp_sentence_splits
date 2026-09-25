@@ -631,7 +631,7 @@ interface QueueCard {
   grammar?: GrammarReviewCandidate;
   /** Set for `reading_in_context` and vocabulary-target cards — the surrounding passage. */
   readingContext?: ReadingContext;
-  /** Set only for `reading_in_context` cards with an authored comprehension check. */
+  /** Set for `reading_in_context`/`listening` cards whose sentence has an authored comprehension check. */
   comprehensionCheck?: ComprehensionCheck;
 }
 
@@ -896,6 +896,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         studyItem,
         sentence: candidate.sentence,
         audio: candidate.audio,
+        comprehensionCheck: scope.comprehensionCheckBySentenceId.get(candidate.sentence.id),
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
@@ -1132,7 +1133,7 @@ export function ReviewPage() {
    * still be logged as `incorrect_reading`).
    */
   const [typedResponseExpected, setTypedResponseExpected] = useState<string | null>(null);
-  /** `reading_in_context`'s comprehension-check pick, when the sentence has one; recorded as supplementary Review evidence on rate. */
+  /** `reading_in_context`/`listening`'s comprehension-check pick, when the sentence has one; recorded as supplementary Review evidence on rate. */
   const [comprehensionCheckAnswer, setComprehensionCheckAnswer] = useState<
     { correct: boolean; chosenIndex: number } | null
   >(null);
@@ -2011,11 +2012,15 @@ export function ReviewPage() {
                 key={current.studyItem.id}
                 sentence={current.sentence}
                 audio={current.audio}
+                check={current.comprehensionCheck}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onReplay={() => markAssistance('audio_replayed')}
                 playbackRate={audioSpeed}
                 onPlaybackRateChange={setAudioSpeed}
+                onComprehensionAnswered={(correct, chosenIndex) =>
+                  setComprehensionCheckAnswer({ correct, chosenIndex })
+                }
               />
             ) : current.wordListening ? (
               <WordListeningCard
@@ -2999,26 +3004,49 @@ function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
   return <ReviewPitchContour audio={audio} />;
 }
 
+/**
+ * `listening` card body. Reveal flow: audio only, text hidden — then
+ * "Reveal text" — then "Reveal translation" — self-rate. When the sentence
+ * has an authored comprehension `check` (same data `reading_in_context`
+ * uses, docs/ROADMAP.md "Context-aware comprehension check…"), a 4-option
+ * "which English sentence best describes what you heard?" pick gates
+ * "Reveal text" — purely supplementary evidence (`onComprehensionAnswered`,
+ * recorded as `Review.comprehensionCheckCorrect`), never a rating override.
+ * No check authored → falls straight to the plain "Reveal text" button,
+ * same as before this existed.
+ */
 function AudioComprehensionCard({
   sentence,
   audio,
+  check,
   revealed,
   onReveal,
   onReplay,
   playbackRate,
   onPlaybackRateChange,
+  onComprehensionAnswered,
 }: {
   sentence: Sentence;
   audio: SentenceAudio;
+  check: ComprehensionCheck | undefined;
   revealed: boolean;
   onReveal: () => void;
   /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
   onReplay: () => void;
   playbackRate: number;
   onPlaybackRateChange: (value: number) => void;
+  onComprehensionAnswered: (correct: boolean, chosenIndex: number) => void;
 }) {
   const playCountRef = useRef(0);
   const [textRevealed, setTextRevealed] = useState(false);
+  const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+
+  function choose(index: number) {
+    if (chosenIndex !== null || !check) return;
+    setChosenIndex(index);
+    onComprehensionAnswered(index === check.correctIndex, index);
+  }
+
   return (
     <>
       <div className="row" style={{ alignItems: 'center' }}>
@@ -3045,9 +3073,26 @@ function AudioComprehensionCard({
           </select>
         </label>
       </div>
-      {!textRevealed ? (
+      {!textRevealed && check && chosenIndex === null ? (
+        <div className="stack">
+          <p className="muted" style={{ margin: 0 }}>
+            Which English sentence best describes what you heard?
+          </p>
+          {check.options.map((option, i) => (
+            <button key={i} type="button" onClick={() => choose(i)}>
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : !textRevealed ? (
         <>
-          <p className="muted">Listen and see how much you understand before revealing.</p>
+          {check && chosenIndex !== null ? (
+            <p style={{ fontWeight: 600 }}>
+              {chosenIndex === check.correctIndex ? '✓ Correct' : '✗ Not quite'}
+            </p>
+          ) : (
+            <p className="muted">Listen and see how much you understand before revealing.</p>
+          )}
           <button type="button" onClick={() => setTextRevealed(true)}>
             Reveal text
           </button>

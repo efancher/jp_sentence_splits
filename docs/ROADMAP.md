@@ -1322,15 +1322,18 @@ possibilities, kept here so the thinking isn't lost:
   graded" card already uses. Distractor authoring reused the "Segment with
   AI help" copy-paste-to-AI shape (new `src/lib/comprehensionCheck.ts`,
   wired up on `AnalyzePage` via `ComprehensionCheckPicker`), with the
-  cold-vs-in-context-translation recipe as planned. **Not built**:
-  `listening`'s equivalent — no pre-reveal passage-context display exists
-  there to hang a check on, so it'd be net-new UI, not reuse; left for a
-  follow-up. **Not built**: adaptive distractor difficulty — still an open
-  angle, parked as originally discussed. **2026-09-25**: single-sentence
-  authoring was the main bottleneck for covering a whole book, so added a
-  book-scoped batch round-trip (`BookComprehensionCheckBatch` on
-  `BookDetailPage`) — one prompt/reply covers many eligible sentences at
-  once instead of one round-trip each; detail in STATUS.md.
+  cold-vs-in-context-translation recipe as planned. **Not built**: adaptive
+  distractor difficulty — still an open angle, parked as originally
+  discussed. **2026-09-25**: single-sentence authoring was the main
+  bottleneck for covering a whole book, so added a book-scoped batch
+  round-trip (`BookComprehensionCheckBatch` on `BookDetailPage`) — one
+  prompt/reply covers many eligible sentences at once instead of one
+  round-trip each. **2026-09-25**: shipped `listening`'s equivalent too —
+  turned out not to need net-new UI as originally assumed: the same
+  authored check just gates `listening`'s existing "Reveal text" button
+  (audio-only, no text shown until the pick is made), no separate passage-
+  context display needed since `listening` already hides all text
+  pre-reveal. Detail in STATUS.md.
 - [x] **Pull the pitch-accent production drill into a review card**
   (2026-09-16 discussion; shipped 2026-09-24 — see STATUS.md). The two
   blockers resolved:

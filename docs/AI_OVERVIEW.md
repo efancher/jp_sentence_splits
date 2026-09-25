@@ -1150,7 +1150,9 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   `ComprehensionCheckPicker` + `src/lib/comprehensionCheck.ts`'s
   copy-prompt/paste-back-parse flow, same shape as mining's "Segment with
   AI help"), a 4-option "which English sentence fits this context" pick
-  gates the Reveal button. A book-scoped batch variant (2026-09-25,
+  gates the Reveal button. The same authored check also gates `listening`'s
+  "Reveal text" (§ below, 2026-09-25) — one check per sentence, reused by
+  whichever card the sentence surfaces on. A book-scoped batch variant (2026-09-25,
   `BookComprehensionCheckBatch` on `BookDetailPage`) covers many
   confirmed-vocab/full-review-ready sentences with no check yet in one
   prompt/reply round-trip (`=== Sentence N ===`-delimited sections,
@@ -1163,13 +1165,22 @@ subject. Activity types currently wired, grouped by subject/eligibility:
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
-  `PLAYBACK_SPEEDS` as ShadowPage) sits next to the play button. Reveal is
-  staged in two steps, not one: "Reveal text" shows only the Japanese (so
-  the learner can check whether they parsed the audio correctly, separate
-  from whether they know the vocabulary), then "Reveal translation" shows
-  the translation and vocab chips; only the second step satisfies the
-  parent `revealed` gate that unlocks the FSRS rating buttons. On text
-  reveal, the sentence renders via `KaraokeSentenceText`
+  `PLAYBACK_SPEEDS` as ShadowPage) sits next to the play button. When the
+  sentence has an authored comprehension check (below), a 4-option "which
+  English sentence best describes what you heard?" pick gates "Reveal
+  text" (2026-09-25) — the same audio-only, no-text-shown listening test
+  discussed on ROADMAP.md, reusing `reading_in_context`'s check data
+  rather than needing separate authoring; no check authored → straight to
+  "Reveal text". Reveal is staged in two steps, not one: "Reveal text"
+  shows only the Japanese (so the learner can check whether they parsed
+  the audio correctly, separate from whether they know the vocabulary),
+  then "Reveal translation" shows the translation and vocab chips; only
+  the second step satisfies the parent `revealed` gate that unlocks the
+  FSRS rating buttons. A wrong comprehension-check pick is purely
+  supplementary evidence (`Review.comprehensionCheckCorrect`, feeds
+  `classifyReviewError` → `incorrect_meaning`), never a rating override —
+  same convention as `reading_in_context`. On text reveal, the sentence
+  renders via `KaraokeSentenceText`
   (`src/components/KaraokeSentenceText.tsx`): the **real** `sentence.japanese`,
   split into tokens on its `vocabularySuggestions`' char offsets
   (`buildSentenceTokens`, exported + unit-tested in

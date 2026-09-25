@@ -227,12 +227,12 @@ export function isSentenceReadyForFullReview(
  * - A failed (`again`) contrastive-pair review — the card's entire premise
  *   is "can you tell these two words apart," so a miss is definitionally a
  *   `vocabulary_confusion`, no text comparison needed.
- * - A wrong pick on `reading_in_context`'s optional comprehension check
- *   (`Review.comprehensionCheckCorrect === false`, docs/ROADMAP.md
+ * - A wrong pick on `reading_in_context`/`listening`'s optional comprehension
+ *   check (`Review.comprehensionCheckCorrect === false`, docs/ROADMAP.md
  *   "Context-aware comprehension check…") — real evidence even when the
  *   self-rating is generous, closing the gap the next paragraph describes
  *   for sentences that have one authored.
- * Listening/word_listening/grammar_comprehension, and reading_in_context
+ * word_listening/grammar_comprehension, and reading_in_context/listening
  * sentences with no authored comprehension check, stay unclassified: a bare
  * "again" there could mean anything, and guessing would be noise, not
  * signal.
@@ -262,7 +262,10 @@ export function classifyReviewError(input: {
   if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
     return 'vocabulary_confusion';
   }
-  if (input.activityType === 'reading_in_context' && input.comprehensionCheckCorrect === false) {
+  if (
+    (input.activityType === 'reading_in_context' || input.activityType === 'listening') &&
+    input.comprehensionCheckCorrect === false
+  ) {
     return 'incorrect_meaning';
   }
   return undefined;

@@ -330,6 +330,27 @@ describe('classifyReviewError (evidence-based only)', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('classifies a wrong listening comprehension-check pick as incorrect_meaning', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'listening',
+        rating: 'good',
+        comprehensionCheckCorrect: false,
+      }),
+    ).toBe('incorrect_meaning');
+  });
+
+  it('leaves listening unclassified when no comprehension check was answered', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'listening',
+        rating: 'again',
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe('computeGraduatedSubjectIds', () => {

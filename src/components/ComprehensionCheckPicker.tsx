@@ -10,13 +10,16 @@ import {
 } from '../lib/comprehensionCheck';
 
 /**
- * Authoring UI for `reading_in_context`'s comprehension check
+ * Authoring UI for a sentence's comprehension check
  * (docs/ROADMAP.md "Context-aware comprehension check…"), same panel
  * placement/precedent as `GrammarPicker`: an immediate, deliberate
  * repository write per action, not routed through AnalyzePage's
- * debounced chunk-editing autosave. A sentence with no authored check
- * just leaves the `reading_in_context` review card in its existing
- * plain reveal-and-rate behavior — this panel is purely additive.
+ * debounced chunk-editing autosave. Consumed by both `reading_in_context`
+ * (gates its Reveal button) and `listening` (gates its "Reveal text"
+ * button, 2026-09-25) — one authored check per sentence, reused by
+ * whichever review card the sentence surfaces on. A sentence with no
+ * authored check just leaves both cards in their existing plain
+ * reveal-and-rate behavior — this panel is purely additive.
  */
 export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string }) {
   const [copied, setCopied] = useState(false);
@@ -110,8 +113,8 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
           4-option "which English sentence fits this context" check shown before reveal
-          on the reading_in_context review card. Optional — leave unset and the card
-          behaves as before.
+          on the reading_in_context review card, and before "Reveal text" on the
+          listening review card. Optional — leave unset and both cards behave as before.
         </p>
         {check ? (
           <div className="stack" style={{ gap: '0.25rem' }}>

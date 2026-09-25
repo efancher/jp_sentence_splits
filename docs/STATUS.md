@@ -517,6 +517,24 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-25 — Comprehension check now also gates `listening`'s "Reveal text".** Follow-up to
+  2026-09-24's `reading_in_context` comprehension check: user asked about blind listening
+  comprehension (audio only, guess the meaning from options, no text at all). Investigation found the
+  `listening` card already hides all text pre-reveal ("Reveal text" → "Reveal translation" staging) —
+  so the ROADMAP note that this would need "net-new UI, not reuse" turned out to be wrong once the
+  actual card was re-examined: it needed no new context display, since `listening` never showed
+  anything to hang a check on top of anyway. Threaded the same `SentenceAnalysis.comprehensionCheck`
+  data through the `listening` `ActivityDescriptor`'s `buildCard` (`comprehensionCheckBySentenceId`,
+  already computed once per review scope for `reading_in_context`) and gated
+  `AudioComprehensionCard`'s "Reveal text" button behind the 4-option "which English sentence best
+  describes what you heard?" pick when the sentence has one authored — same
+  pick-then-✓/✗-then-reveal shape as `ReadingInContextCard`, same supplementary-evidence convention
+  (`Review.comprehensionCheckCorrect`, never overrides self-rating). `classifyReviewError`
+  (`src/lib/scheduling.ts`) extended from `activityType === 'reading_in_context'` to also cover
+  `'listening'`. No new authoring UI — a check authored once (single-sentence picker or the new batch
+  panel below) now serves whichever card type the sentence surfaces on. Tests:
+  `tests/scheduling.test.ts` (wrong/no-check listening cases). `npm run check` green.
+
 - **2026-09-25 — Batch comprehension-check authoring, book-scoped.** Follow-up to the 2026-09-24
   comprehension-check feature: authoring was strictly one sentence per AI copy/paste round-trip
   (`ComprehensionCheckPicker` on `AnalyzePage`), so a book with hundreds of eligible sentences meant

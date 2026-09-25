@@ -3,8 +3,11 @@ import type { ReadingContext } from './readingContext';
 import type { ComprehensionCheck } from '../domain/types';
 
 // ---------------------------------------------------------------------------
-// Comprehension-check authoring round-trip for `reading_in_context`
-// (docs/ROADMAP.md "Context-aware comprehension check…"). Same shape as
+// Comprehension-check authoring round-trip, one check per sentence, reused
+// by both `reading_in_context` (gates its Reveal button) and `listening`
+// (gates its "Reveal text" button, 2026-09-25) — see ReviewPage.tsx's
+// ReadingInContextCard/AudioComprehensionCard (docs/ROADMAP.md
+// "Context-aware comprehension check…"). Same shape as
 // `miningTranscript.ts`'s "Segment with AI help": build a copy-pasteable
 // prompt, the author pastes an external assistant's reply back in, parse it
 // into structured data. Deliberately a manual copy/paste flow, not another
