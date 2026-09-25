@@ -1850,7 +1850,14 @@ a self-hosted pronunciation-analysis backend. Capabilities:
       practice the real corpus, after suspended-book exclusion and
       per-occurrence span-plausibility filtering, yields noticeably fewer
       usable comparisons than a raw "confirmed in 2+ books" count suggests
-      (STATUS.md 2026-09-25).
+      (STATUS.md 2026-09-25). Also surfaced a real shared bug the same day:
+      a citation-form noun whose only aligner token fuses in a neighbour
+      (皆 always tokenized as 皆さん, place names fused with 県, etc.) was
+      silently playing the fused audio instead of the word alone —
+      `isolatedWordSpans`' new `tokenExact` flag + `isTrustworthyCitationSpan`
+      (`repository.ts`) now excludes those from both this page and Odd Ear
+      Out (~9% of noun citation-form clips corpus-wide, STATUS.md
+      2026-09-25).
   - **ASR** (faster-whisper, `base` model) as a secondary, non-
     authoritative diagnostic signal (`asrObservations.ts`).
   - **Paired pitch contours** (`PitchCanvas`, reference + dashed learner) —

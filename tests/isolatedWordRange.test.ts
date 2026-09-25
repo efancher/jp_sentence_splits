@@ -219,6 +219,7 @@ describe('isolatedWordRange particle folding', () => {
     expect(isolatedWordSpans(words, japanese, '生まれ')).toEqual({
       wordOnly: { startMs: 950, endMs: 1590 },
       withParticle: null,
+      tokenExact: false, // token 生まれた (4 chars) is wider than 生まれ (3)
     });
     // 小さい followed by the noun 場所.
     expect(isolatedWordSpans(words, japanese, '小さい')?.withParticle).toBeNull();
@@ -257,6 +258,7 @@ describe('isolatedWordSpans', () => {
     expect(isolatedWordSpans(words, japanese, '本')).toEqual({
       wordOnly: { startMs: 800, endMs: 1400 },
       withParticle: { startMs: 800, endMs: 1600 },
+      tokenExact: true,
     });
   });
 
@@ -265,11 +267,44 @@ describe('isolatedWordSpans', () => {
     expect(isolatedWordSpans(trailing, '本について', '本')).toEqual({
       wordOnly: { startMs: 0, endMs: 600 },
       withParticle: null,
+      tokenExact: true,
     });
   });
 
   it('returns null when the word can’t be located', () => {
     expect(isolatedWordSpans(words, japanese, '猫')).toBeNull();
+  });
+});
+
+describe('isolatedWordSpans tokenExact (皆 fused into an unsplit 皆さん token)', () => {
+  // Real shape (sent_dfc9671a): the aligner's dictionary never splits 皆 from
+  // さん, so a citation-form '皆' link always matches the whole 皆さん token —
+  // card_issue: the user heard "みなさん" playing where "みな" was expected.
+  it('flags a noun match whose token includes a fused honorific suffix', () => {
+    const japanese = '皆さん、外食するとき';
+    const words: WordAlignment[] = [
+      word('皆さん', 0, 0.34),
+      word('<eps>', 0.34, 0.77),
+      word('外食', 0.77, 1.48),
+      word('する', 1.48, 1.83),
+      word('とき', 1.83, 2.34),
+    ];
+    const result = isolatedWordSpans(words, japanese, '皆');
+    expect(result?.tokenExact).toBe(false);
+    // The span itself still covers the whole fused token — this is exactly
+    // why callers must check tokenExact rather than trust the span alone.
+    expect(result?.wordOnly).toEqual({ startMs: 0, endMs: 400 });
+  });
+
+  it('leaves a clean single-token noun match exact', () => {
+    const japanese = '猫が好きです';
+    const words: WordAlignment[] = [
+      word('猫', 0, 0.4),
+      word('が', 0.4, 0.6),
+      word('好き', 0.6, 1.1),
+      word('です', 1.1, 1.4),
+    ];
+    expect(isolatedWordSpans(words, japanese, '猫')?.tokenExact).toBe(true);
   });
 });
 

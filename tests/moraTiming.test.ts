@@ -136,6 +136,7 @@ describe('isolatedWordSpans with a reading (sub-token cut)', () => {
     expect(isolatedWordSpans(words, '生まれた時', '生まれ', reading)).toEqual({
       wordOnly: { startMs: 970, endMs: 1420 },
       withParticle: null,
+      tokenExact: true, // reading-based refinement cut exactly at 生まれ's own last mora
     });
     // Without a reading the span is the whole token, as before.
     expect(isolatedWordSpans(words, '生まれた時', '生まれ')?.wordOnly.endMs).toBe(1610); // 時 is adjacent → no pad

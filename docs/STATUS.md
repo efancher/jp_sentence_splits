@@ -31,6 +31,46 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-25 — Fix: citation-form word clips could silently include a
+  fused neighbour (皆さん played for 皆).** Found via the "Compare speakers"
+  page above: the user reported two 皆 clips sounding wrong ("tch"/"tan").
+  Root cause, confirmed against real alignment data for both sentences:
+  the forced aligner's dictionary never splits 皆 from さん — "皆さん" is one
+  indivisible token — and `isolatedWordSpans` (shared by Odd Ear Out, this
+  page, and the pitch-accent minimal-pair/word-phrase warm-ups) has always
+  fallen back to returning the *whole* enclosing token when it can't cut a
+  sub-word slice, since that's the correct behavior for verb/adjective
+  endings (食べ→食べます should keep the whole conjugated form for the
+  card's pitch cue). For a noun, though, a wider token is never a
+  legitimate inflection — it's always a fused neighbour (an honorific
+  suffix, a compound the aligner didn't split, a name+さん) — so every 皆
+  citation-form clip in this corpus was actually playing all of "みなさん",
+  mismatched against the 2-mora みな dictionary pattern shown alongside it.
+  Fix: `isolatedWordSpans` (`src/lib/isolatedWordRange.ts`) now returns a
+  `tokenExact: boolean` — true when the matched token(s)' own characters
+  equal the surface form's exactly, or when reading-based mora refinement
+  (`refineToMorae`) fully resolved any excess on both sides down to the
+  target's own boundary (unchanged existing behavior, e.g. 生まれ within
+  生まれた). New `isTrustworthyCitationSpan` (`repository.ts`) rejects a
+  span when `!tokenExact` **and** the vocabulary item is a confirmed noun
+  (`partOfSpeech` starts `名詞` — nouns never inflect, so any excess must be
+  a fused neighbour); verbs/adjectives are unaffected, matching the
+  existing doc comment's reasoning. Wired into both `getOddEarOutData` and
+  `getPitchAccentSpeakerComparisons` (`repository.ts`). Corpus impact,
+  measured directly: of 311 noun citation-form occurrences that previously
+  passed `isPlausibleClipSpan`, 29 (~9%) are now correctly excluded —
+  besides 皆, this also caught 熊本/徳島/宮崎 fused with 県, 飛行機 split as
+  飛行+機, イタリア人 fused, 何 vs. 何か, and a few more. Tests:
+  `tests/isolatedWordRange.test.ts` (new `tokenExact` cases incl. a direct
+  regression test using this exact 皆さん shape), `tests/moraTiming.test.ts`
+  updated for the new field. Typecheck + full test suite green (2032
+  passed, 12 skipped). Not yet touched: `PitchWordPhraseWarmup.tsx` (the
+  `pitch_accent` review card's heiban/odaka warm-up) and
+  `wordBoundaryLabels.ts` share the same underlying risk but don't have a
+  vocabulary item's POS readily in scope — lower priority since the
+  warm-up already requires a detected following particle, which a fully
+  fused token rarely produces.
+
 - **2026-09-25 — Pitch-accent "Compare speakers" browse tool.** User asked
   how common it is to have the same word/particle recorded by 2+ different
   speakers, and whether a side-by-side (measured contour + dictionary

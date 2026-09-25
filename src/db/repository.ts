@@ -145,7 +145,7 @@ import {
 } from '../lib/gamePicker';
 import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
-import { isolatedWordSpans } from '../lib/isolatedWordRange';
+import { isolatedWordSpans, type IsolatedWordSpans } from '../lib/isolatedWordRange';
 import {
   BUILT_RECIPES,
   buildBuiltChain,
@@ -6301,6 +6301,22 @@ export async function loadAlignmentsBulk(audioIds: string[]): Promise<Map<string
   return found;
 }
 
+/**
+ * A noun never inflects, so if `isolatedWordSpans` had to widen the match
+ * past the citation form's own characters (`!tokenExact`), the extra content
+ * is a fused neighbour the aligner's dictionary never learned to split off —
+ * an honorific suffix glued to a name/noun (皆さん for a 皆-only link), a
+ * compound — not legitimately part of this word's audio (card issue: a 皆
+ * citation-form clip played the whole "みなさん", not "みな"). Verbs and
+ * adjectives deliberately keep the wider token (their conjugated ending
+ * carries the pitch cue this game/drill is testing), so this only tightens
+ * the check for confirmed nouns.
+ */
+function isTrustworthyCitationSpan(item: VocabularyItem, spans: IsolatedWordSpans): boolean {
+  if (!item.partOfSpeech?.startsWith('名詞')) return true;
+  return spans.tokenExact;
+}
+
 export interface OddEarOutClip extends OddEarClip {
   audio: SentenceAudio;
   sentence: Sentence;
@@ -6396,9 +6412,11 @@ export async function getOddEarOutData(): Promise<{
     // heiban/odaka cue this game groups away, so only the strict word-only span
     // from a current-version alignment is safe here.
     const alignment = alignments.get(audio.id);
-    const span: TimeRangeMs | null = alignment
-      ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
+    const spans = alignment
+      ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
       : null;
+    const span: TimeRangeMs | null =
+      spans && isTrustworthyCitationSpan(item, spans) ? spans.wordOnly : null;
     if (!span || !isPlausibleClipSpan(span)) continue;
     clips.push({
       vocabularyItemId: item.id,
@@ -6510,9 +6528,11 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
     const audio = audioBySentenceId.get(link.sentenceId)!;
     const sentence = sentenceById.get(link.sentenceId)!;
     const alignment = alignments.get(audio.id);
-    const span: TimeRangeMs | null = alignment
-      ? (isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)?.wordOnly ?? null)
+    const spans = alignment
+      ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
       : null;
+    const span: TimeRangeMs | null =
+      spans && isTrustworthyCitationSpan(item, spans) ? spans.wordOnly : null;
     if (!span || !isPlausibleClipSpan(span)) continue;
     const list = clipsByItem.get(item.id) ?? [];
     list.push({ bookId, bookTitle: bookTitleById.get(bookId) ?? 'Unknown book', audio, sentence, span });

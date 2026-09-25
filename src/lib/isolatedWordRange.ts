@@ -46,6 +46,12 @@ interface WordMatch {
   innerEnd: boolean;
   /** A squashed token sits next to the target — the aligner's timing here can't be trusted (`SQUASHED_MS_PER_MORA`). */
   unreliable: boolean;
+  /**
+   * The returned span's characters are exactly the surface form's own — no
+   * token-boundary leftovers from a fused neighbour (see `tokenExact` on
+   * `IsolatedWordSpans`).
+   */
+  tokenExact: boolean;
 }
 
 /** Length of `text` in aligner characters (see `alignerView`). */
@@ -275,30 +281,51 @@ function matchWord(
   let endMs: number | null = usable[found.last]!.end * 1000;
   const lastIndex = found.last;
 
+  // Total characters the matched token(s) span vs. the surface form's own —
+  // equal unless a neighbour is fused in (see `tokenExact` below). The
+  // coarse fallback for the proportional-match branch, where individual
+  // token edges can't be compared against `charIndex` (different coordinate
+  // spaces).
+  const matchedCharLen = usable
+    .slice(found.first, found.last + 1)
+    .reduce((sum, word) => sum + word.text.length, 0);
+  let tokenExact = matchedCharLen === surfaceLength;
+
   // The target can end (or start) inside a token — 生まれ in 生まれた — in which
   // case the token's own edge would play the extra morae. Cut at the mora
   // boundary instead when the phones and the reading agree on where it is.
   let innerStart = false;
   let innerEnd = false;
-  if (reading && exact) {
-    const refined = refineToMorae({
-      usable,
-      view,
-      japanese,
-      reading,
-      first: found.first,
-      last: found.last,
-      rawStart: rawIndex,
-      rawEnd,
-    });
-    if (refined?.startMs !== undefined) {
-      startMs = refined.startMs;
-      innerStart = true;
+  if (exact) {
+    const tokenCharStart = (index: number) =>
+      usable.slice(0, index).reduce((sum, word) => sum + word.text.length, 0);
+    const excessBefore = charIndex - tokenCharStart(found.first);
+    const excessAfter =
+      tokenCharStart(found.last) + usable[found.last]!.text.length - (charIndex + surfaceLength);
+
+    if (reading) {
+      const refined = refineToMorae({
+        usable,
+        view,
+        japanese,
+        reading,
+        first: found.first,
+        last: found.last,
+        rawStart: rawIndex,
+        rawEnd,
+      });
+      if (refined?.startMs !== undefined) {
+        startMs = refined.startMs;
+        innerStart = true;
+      }
+      if (refined?.endMs !== undefined) {
+        endMs = refined.endMs;
+        innerEnd = true;
+      }
     }
-    if (refined?.endMs !== undefined) {
-      endMs = refined.endMs;
-      innerEnd = true;
-    }
+    // Excess on a side is fine once refinement has cut it down to the exact
+    // mora boundary; a side with no excess to begin with needs nothing.
+    tokenExact = (excessBefore <= 0 || innerStart) && (excessAfter <= 0 || innerEnd);
   }
 
   if (startMs === null || endMs === null || endMs <= startMs) return null;
@@ -317,7 +344,7 @@ function matchWord(
   const unreliable = hasSquashedNeighbour(usable, found.first, found.last);
   if (unreliable && !options.includeUnreliable) return null;
 
-  return { startMs, matchEndMs, lastIndex, usable, innerStart, innerEnd, unreliable };
+  return { startMs, matchEndMs, lastIndex, usable, innerStart, innerEnd, unreliable, tokenExact };
 }
 
 /**
@@ -489,6 +516,15 @@ export function isolatedWordRange(
 export interface IsolatedWordSpans {
   wordOnly: TimeRangeMs;
   withParticle: TimeRangeMs | null;
+  /**
+   * False when `wordOnly` actually covers more than the surface form's own
+   * characters — a fused neighbour the aligner's dictionary never splits off
+   * (an honorific suffix glued to a name/noun, e.g. 皆さん for a 皆-only
+   * target) rather than the word itself. Verbs/adjectives legitimately want
+   * the wider token (their conjugated ending carries the pitch cue), so this
+   * is only meaningful for callers who know the target doesn't inflect.
+   */
+  tokenExact: boolean;
 }
 
 export function isolatedWordSpans(
@@ -503,5 +539,6 @@ export function isolatedWordSpans(
   return {
     wordOnly: pad(words, match.startMs, match.matchEndMs, match),
     withParticle: particle ? pad(words, match.startMs, particle.end * 1000, match) : null,
+    tokenExact: match.tokenExact,
   };
 }
