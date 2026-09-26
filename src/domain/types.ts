@@ -958,6 +958,22 @@ export interface CardIssueReport {
   resolvedAt?: string;
 }
 
+/**
+ * A learner-named podcast RSS feed URL, saved so QuickMinePage/YouTubeMinePage's
+ * "Or import a podcast episode" input can be filled by picking a name (e.g.
+ * "S-Town") instead of remembering/re-finding a feed URL that's often just a
+ * generic host + opaque id. Synced (unlike `AppSettings.recentPodcastFeedUrls`,
+ * which is a per-device MRU convenience) so a saved feed follows the learner
+ * across devices.
+ */
+export interface NamedPodcastFeed {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type SyncIssueStatus = 'open' | 'resolved';
 
 /**

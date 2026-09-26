@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import {
@@ -613,6 +614,7 @@ export function QuickMinePage() {
                   {podcastFeedLoading ? 'Loading…' : 'Load episodes'}
                 </button>
               </div>
+              <NamedPodcastFeedPicker url={podcastFeedUrl} onSelectUrl={setPodcastFeedUrl} />
               {podcastFeedError ? (
                 <div className="muted" style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>
                   {podcastFeedError}

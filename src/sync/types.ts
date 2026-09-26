@@ -20,7 +20,8 @@ export type SyncEntity =
   | 'grammar_relationships'
   | 'planner_sessions'
   | 'sync_issue_reports'
-  | 'pitch_drill_attempts';
+  | 'pitch_drill_attempts'
+  | 'named_podcast_feeds';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

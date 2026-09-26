@@ -765,6 +765,15 @@ Targets are constants; no settings UI.
   the identical `commitShadowingPackageImport()` — same book-per-source,
   idempotent-on-reimport behavior; only how the preview gets built
   differs.
+- **Named podcast feed shortcuts** (`NamedPodcastFeedPicker.tsx`, used by
+  both `QuickMinePage` and `YouTubeMinePage`'s "Or import a podcast
+  episode" input) — a synced (`named_podcast_feeds` table/`NamedPodcastFeed`
+  entity), user-labeled shortlist ("S-Town" → its RSS URL) so a feed URL
+  (often just a generic host + opaque id) doesn't need to be re-found or
+  re-pasted; click a saved name to fill the input, or "Save this feed as…"
+  to add one. Distinct from `AppSettings.recentPodcastFeedUrls`, a
+  per-device MRU datalist of the last few raw URLs typed — that stays
+  unlabeled and local-only.
 - **Quick import** (`QuickMinePage.tsx`, route `/import/quick`) — one-page
   alternative to the 4-step wizard above, for "just import it": same
   idle-screen URL/podcast-feed picker and job creation/polling, but instead

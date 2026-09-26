@@ -31,6 +31,32 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Named, synced podcast feed shortcuts.** User: "I wonder if,
+  for podcasts, I could save named feed URLs so I don't have to remember
+  them — the URL can often just be a generic domain and an id." Distinct
+  from the existing `AppSettings.recentPodcastFeedUrls` (a per-device MRU
+  datalist of the last 8 raw URLs typed) — the new list is user-labeled
+  ("S-Town" → its feed URL) and, since the user wanted it to follow them
+  across devices, synced through Supabase rather than living in `settings`.
+  New `NamedPodcastFeed` entity (`src/domain/types.ts`), Dexie store
+  `namedPodcastFeeds` (v21, additive), `named_podcast_feeds` Supabase table
+  (`supabase/migrations/20260926000000_named_podcast_feeds.sql`, mirrors
+  `sync_issue_reports`'s owner-scoped RLS shape — no cross-table ownership
+  check needed), full sync-engine wiring (mappers, `SyncEntity`,
+  `recordExists`/hard-delete/`applyRemoteUpsert` switch arms,
+  `uploadAllLocalData`/`replaceLocalWithCloud` migration paths), and
+  repository CRUD (`createNamedPodcastFeed`/`renameNamedPodcastFeed`/
+  `deleteNamedPodcastFeed`/`listNamedPodcastFeeds`, `src/db/repository.ts`).
+  New shared `NamedPodcastFeedPicker` component (chips to pick/forget a
+  saved feed, plus a "Save this feed as…" inline name field — no
+  `window.prompt`, which silently no-ops on the installed iOS PWA) wired
+  into both `QuickMinePage` and `YouTubeMinePage`'s "Or import a podcast
+  episode" section, next to the existing URL input/datalist. Tests:
+  `tests/namedPodcastFeedRepository.test.ts`. Manually verified in a
+  running dev instance (Playwright smoke): save "S-Town", chip appears,
+  clicking it refills the URL input, re-saving the same URL is disabled.
+  `npm run check` green (2055 tests).
+
 - **2026-09-26 — Per-chapter book suspension.** User asked for the ability to
   suspend part of a book, not just the whole thing (e.g. one noisy episode
   in an otherwise-fine series). `BookChapter` already existed as a

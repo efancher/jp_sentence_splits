@@ -7,6 +7,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  NamedPodcastFeed,
   PitchDrillAttempt,
   PlannerSession,
   Review,
@@ -44,7 +45,8 @@ export type LocalSyncPayload =
   | GrammarRelationship
   | PlannerSession
   | SyncIssueReport
-  | PitchDrillAttempt;
+  | PitchDrillAttempt
+  | NamedPodcastFeed;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -883,6 +885,35 @@ export function remoteToSyncIssueReport(
   };
 }
 
+export function namedPodcastFeedToRemote(
+  feed: NamedPodcastFeed,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: feed.id,
+    owner_id: ownerId,
+    name: feed.name,
+    url: feed.url,
+    created_at: feed.createdAt,
+    updated_at: feed.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToNamedPodcastFeed(
+  row: Record<string, unknown>,
+): NamedPodcastFeed {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    url: String(row.url),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function pitchDrillAttemptToRemote(
   attempt: PitchDrillAttempt,
   ownerId: string,
@@ -999,6 +1030,8 @@ export function toRemoteRow(
       return syncIssueReportToRemote(payload as SyncIssueReport, ownerId, version);
     case 'pitch_drill_attempts':
       return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
+    case 'named_podcast_feeds':
+      return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
   }
 }
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { SegmentationEditor } from '../components/SegmentationEditor';
+import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
 import { TranscriptStage } from '../components/TranscriptStage';
@@ -817,6 +818,7 @@ export function YouTubeMinePage() {
                   {podcastFeedLoading ? 'Loading…' : 'Load episodes'}
                 </button>
               </div>
+              <NamedPodcastFeedPicker url={podcastFeedUrl} onSelectUrl={setPodcastFeedUrl} />
               {podcastFeedError ? (
                 <div className="muted" style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>
                   {podcastFeedError}

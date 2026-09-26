@@ -17,6 +17,7 @@ import type {
   ImportBatch,
   InboxMembership,
   Kanji,
+  NamedPodcastFeed,
   PitchDrillAttempt,
   PlannerSession,
   ReferenceAlignment,
@@ -136,6 +137,9 @@ export class GlossbookDatabase extends Dexie {
   // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
   // device-local; exported to a file with the labelling page's "Save labels" button, never synced.
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
+  // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
+  // sessions — a small per-user preference list, not learning content.
+  namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -674,6 +678,11 @@ export class GlossbookDatabase extends Dexie {
     // Word-boundary hand labels — device-local, exported to a file (see `WordBoundaryLabel`); no sync wiring.
     this.version(20).stores({
       wordBoundaryLabels: 'id, sentenceVocabularyId, createdAt',
+    });
+
+    // Named podcast feeds — purely additive, every store above unchanged.
+    this.version(21).stores({
+      namedPodcastFeeds: 'id, name, updatedAt',
     });
   }
 }
