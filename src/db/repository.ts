@@ -1788,6 +1788,81 @@ export async function setBookCollapsedChapterIds(
   if (updated) notifySync('books', updated.id, updated);
 }
 
+/**
+ * Attaches `sentenceIds` to `chapterId` within `bookId` as part of an
+ * import — distinct from `assignBookSentencesToChapter` below (the
+ * user-facing "move to a different chapter" action on `BookDetailPage`),
+ * which unconditionally reassigns every named sentence's single membership
+ * row. That's correct for a deliberate user move, but wrong here: a
+ * sentence reused verbatim across podcast episodes (a boilerplate
+ * intro/outro line) already has some *other* episode's chapter on its one
+ * BookSentence row, and reassigning it would silently steal the line out of
+ * whichever episode already claims it. Instead: a sentence with no chapter
+ * yet (freshly added by `addSentencesToBook` moments ago, or an old
+ * chapterless row) gets assigned in place; one that already fully belongs
+ * to a *different* chapter gets its own new row for this chapter, so both
+ * episodes keep their copy of the line. The database has no uniqueness
+ * constraint on (book_id, sentence_id), so this doesn't need a migration —
+ * but `reorderBookSentences`/`reorderChaptersChronologically` had to learn
+ * to disambiguate rows by id instead of assuming one row per sentenceId.
+ */
+async function attachSentencesToChapterForImport(
+  bookId: string,
+  sentenceIds: string[],
+  chapterId: string,
+): Promise<void> {
+  const db = getDb();
+  const timestamp = nowIso();
+  await db.transaction('rw', db.bookSentences, db.books, async () => {
+    const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+    const rowsBySentence = new Map<string, BookSentence[]>();
+    for (const item of memberships) {
+      const list = rowsBySentence.get(item.sentenceId);
+      if (list) list.push(item);
+      else rowsBySentence.set(item.sentenceId, [item]);
+    }
+    let nextPosition =
+      memberships.reduce((max, item) => Math.max(max, item.position), -1) + 1;
+    const toUpdate: BookSentence[] = [];
+    const toCreate: BookSentence[] = [];
+    for (const sentenceId of sentenceIds) {
+      const rows = rowsBySentence.get(sentenceId) ?? [];
+      if (rows.some((row) => row.chapterId === chapterId)) continue; // already here
+      const unassigned = rows.find((row) => !row.chapterId);
+      if (unassigned) {
+        toUpdate.push({ ...unassigned, chapterId });
+        continue;
+      }
+      // No row at all, or every existing row belongs to a different
+      // chapter — either way this chapter needs its own.
+      toCreate.push({
+        id: createId('bs'),
+        bookId,
+        sentenceId,
+        chapterId,
+        position: nextPosition++,
+        status: 'unstarted',
+        addedAt: timestamp,
+      });
+    }
+    if (toUpdate.length) await db.bookSentences.bulkPut(toUpdate);
+    if (toCreate.length) await db.bookSentences.bulkPut(toCreate);
+    const book = await db.books.get(bookId);
+    if (book) await db.books.put({ ...book, updatedAt: timestamp });
+  });
+  const updated = await getDb().bookSentences.where('bookId').equals(bookId).toArray();
+  const touchedIds = new Set(sentenceIds);
+  notifySyncMany(
+    updated
+      .filter((item) => touchedIds.has(item.sentenceId))
+      .map((item) => ({
+        entity: 'book_sentences' as const,
+        recordId: item.id,
+        payload: item,
+      })),
+  );
+}
+
 export async function assignBookSentencesToChapter(
   bookId: string,
   sentenceIds: string[],
@@ -2169,6 +2244,17 @@ export async function mergeBookIntoChapter(options: {
 export async function reorderBookSentences(
   bookId: string,
   orderedSentenceIds: string[],
+  options: {
+    /**
+     * Scope matching to one chapter's own membership row for each
+     * sentenceId — needed once a sentence can have more than one
+     * BookSentence row in the same book (one per chapter it's reused in,
+     * see attachSentencesToChapterForImport). Without this, a shared
+     * sentenceId would resolve to an arbitrary one of its rows and the
+     * other would get silently shoved to the end as a "leftover."
+     */
+    chapterId?: string;
+  } = {},
 ): Promise<void> {
   const db = getDb();
   await db.transaction('rw', db.bookSentences, db.books, async () => {
@@ -2176,24 +2262,29 @@ export async function reorderBookSentences(
       .where('bookId')
       .equals(bookId)
       .toArray();
-    const bySentence = new Map(
-      memberships.map((item) => [item.sentenceId, item]),
-    );
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const sentenceId of orderedSentenceIds) {
-      if (!bySentence.has(sentenceId) || seen.has(sentenceId)) continue;
-      seen.add(sentenceId);
-      ordered.push(sentenceId);
+    const inScope = (item: BookSentence) =>
+      options.chapterId === undefined || item.chapterId === options.chapterId;
+    const bySentence = new Map<string, BookSentence>();
+    for (const item of memberships) {
+      if (inScope(item)) bySentence.set(item.sentenceId, item);
     }
-    // Keep any memberships missing from the payload at the end (prior relative order).
+    const usedRowIds = new Set<string>();
+    const ordered: BookSentence[] = [];
+    for (const sentenceId of orderedSentenceIds) {
+      const row = bySentence.get(sentenceId);
+      if (!row || usedRowIds.has(row.id)) continue;
+      usedRowIds.add(row.id);
+      ordered.push(row);
+    }
+    // Keep any memberships missing from the payload at the end (prior
+    // relative order) — includes every row outside the chapter scope, so
+    // an in-scope duplicate's sibling row elsewhere is never touched here.
     const leftovers = memberships
-      .filter((item) => !seen.has(item.sentenceId))
-      .sort((a, b) => a.position - b.position)
-      .map((item) => item.sentenceId);
+      .filter((item) => !usedRowIds.has(item.id))
+      .sort((a, b) => a.position - b.position);
     const fullOrder = [...ordered, ...leftovers];
-    const updates = fullOrder.map((sentenceId, index) => ({
-      ...bySentence.get(sentenceId)!,
+    const updates = fullOrder.map((row, index) => ({
+      ...row,
       position: index,
     }));
     await db.bookSentences.bulkPut(updates);
@@ -2482,7 +2573,7 @@ export async function commitImport(options: {
     chapterId = chapter.id;
   }
   if (bookId && chapterId) {
-    await assignBookSentencesToChapter(bookId, sentenceIds, chapterId);
+    await attachSentencesToChapterForImport(bookId, sentenceIds, chapterId);
   }
 
   // Enqueue imported sentences + batch for sync (memberships handled by addSentencesToBook).
@@ -2763,8 +2854,11 @@ export async function commitSeriesEpisodeImport(options: {
   // boilerplate intro/outro) keeps whichever episode's index it got *first*,
   // scrambling every later episode that reuses it. `selectedIds` is this
   // episode's own freshly-parsed, correctly-ordered draft list (mirrors
-  // `commitShadowingPackageImport`'s identical fix below).
-  await reorderBookSentences(result.bookId, selectedIds);
+  // `commitShadowingPackageImport`'s identical fix below). Scoped to this
+  // chapter: a reused sentenceId now has its own row per chapter (see
+  // attachSentencesToChapterForImport), so an unscoped reorder could grab
+  // the wrong one.
+  await reorderBookSentences(result.bookId, selectedIds, { chapterId: result.chapterId });
   await reorderChaptersChronologically(result.bookId);
   await applySentenceAudioForPreview(result.bookId, options.preview);
 
@@ -2845,16 +2939,33 @@ async function reorderChaptersChronologically(bookId: string): Promise<void> {
     if (arr) arr.push(membership);
     else byChapter.set(membership.chapterId, [membership]);
   }
-  const orderedSentenceIds: string[] = [];
+  // Built from the actual row objects (not sentenceId strings) so a sentence
+  // reused across two chapters — each with its own BookSentence row since
+  // attachSentencesToChapterForImport — repositions both rows correctly
+  // instead of one shadowing the other.
+  const orderedRows: BookSentence[] = [];
   for (const chapter of nextChapters) {
     const inChapter = (byChapter.get(chapter.id) ?? []).sort(
       (a, b) => a.position - b.position,
     );
-    orderedSentenceIds.push(...inChapter.map((item) => item.sentenceId));
+    orderedRows.push(...inChapter);
   }
   unassigned.sort((a, b) => a.position - b.position);
-  orderedSentenceIds.push(...unassigned.map((item) => item.sentenceId));
-  await reorderBookSentences(bookId, orderedSentenceIds);
+  orderedRows.push(...unassigned);
+  await db.bookSentences.bulkPut(
+    orderedRows.map((row, index) => ({ ...row, position: index })),
+  );
+  const updatedMemberships = await getDb()
+    .bookSentences.where('bookId')
+    .equals(bookId)
+    .toArray();
+  notifySyncMany(
+    updatedMemberships.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+  );
 }
 
 export async function renameImportBatch(

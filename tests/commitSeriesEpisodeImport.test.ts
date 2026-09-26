@@ -143,13 +143,14 @@ describe('commitSeriesEpisodeImport', () => {
     expect(a.bookId).not.toBe(b.bookId);
   });
 
-  it('keeps a later episode in its own declared order even when it reuses an earlier episode\'s boilerplate line', async () => {
+  it('gives each episode its own copy of a reused boilerplate line, each in its own correct order', async () => {
     // "また明日ね。" (a sign-off line) appears at the *end* of episode 1, so
     // it's reused as the same deduped Sentence row with a
     // `firstOccurrenceIndex` anchored to episode 1's numbering. Episode 2
     // reuses that exact line at the *start* — its own true position for
-    // this episode — which must not be scrambled by the stale index
-    // (36a6195-adjacent bug found via ReaderPage 2026-09-26).
+    // this episode. Neither the stale index nor the shared Sentence
+    // identity should scramble episode 2's order or steal the line out of
+    // episode 1 (bugs found via ReaderPage 2026-09-26).
     const first = await commitSeriesEpisodeImport({
       seriesId: 'podcast-series-reuse',
       seriesTitle: 'Reuse Podcast',
@@ -186,18 +187,31 @@ describe('commitSeriesEpisodeImport', () => {
       '文B2です。',
     ]);
 
-    // Separate, pre-existing quirk (not this fix's concern): a book only
-    // ever holds one BookSentence membership per deduped Sentence, so a
-    // line reused verbatim across episodes ends up "belonging" to whichever
-    // episode most recently reimported it — episode 1 is left with just its
-    // other two sentences, in their own still-correct relative order.
+    // Episode 1 keeps its own copy of the shared line — it isn't stolen
+    // away by episode 2's later reuse of the same text.
     const firstMemberships = (
       await db.bookSentences.where('bookId').equals(first.bookId).sortBy('position')
     ).filter((m) => m.chapterId === first.chapterId);
     const firstSentences = await db.sentences.bulkGet(
       firstMemberships.map((m) => m.sentenceId),
     );
-    expect(firstSentences.map((s) => s?.japanese)).toEqual(['文A1です。', '文A2です。']);
+    expect(firstSentences.map((s) => s?.japanese)).toEqual([
+      '文A1です。',
+      '文A2です。',
+      'また明日ね。',
+    ]);
+
+    // Two distinct BookSentence rows share the underlying Sentence.
+    const sharedSentenceId = firstMemberships[2]!.sentenceId;
+    expect(memberships.some((m) => m.sentenceId === sharedSentenceId)).toBe(true);
+    const allRowsForSharedSentence = await db.bookSentences
+      .where('sentenceId')
+      .equals(sharedSentenceId)
+      .toArray();
+    expect(allRowsForSharedSentence).toHaveLength(2);
+    expect(new Set(allRowsForSharedSentence.map((r) => r.chapterId))).toEqual(
+      new Set([first.chapterId, second.chapterId]),
+    );
   });
 
   it('re-importing the same episode updates its own chapter rather than duplicating it', async () => {

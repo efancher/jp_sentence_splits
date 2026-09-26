@@ -31,6 +31,42 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Follow-up: a sentence can now belong to more than one
+  chapter of the same book.** The ordering fix below still left a related
+  gap open on purpose ("out of scope, documented not fixed" — see next
+  entry): a book only ever held one `BookSentence` membership per deduped
+  `Sentence`, so a line reused verbatim across podcast episodes (an
+  intro/outro sign-off) "belonged" to whichever episode most recently
+  reimported it — every *other* episode reusing it was silently missing
+  that one line. Confirmed as real, not theoretical: 25 missing-sentence
+  instances across "Slow Japanese"'s 7 chapters. User asked for the proper
+  fix rather than the cheaper "stop the churn" mitigation. Changed
+  `commitImport`'s chapter-attach step (new `attachSentencesToChapterForImport`,
+  `src/db/repository.ts` — distinct from `assignBookSentencesToChapter`,
+  which stays a real "move" for the user-facing chapter-reassignment UI on
+  `BookDetailPage`): a sentence with no chapter yet gets assigned in place;
+  one that already fully belongs to a *different* chapter gets its own new
+  row, so both episodes keep their copy. That required two more fixes to
+  hold: `reorderBookSentences` gained an optional `chapterId` scope (its
+  internal `Map` keyed by bare `sentenceId` would otherwise resolve a shared
+  sentence to an arbitrary one of its rows), and `reorderChaptersChronologically`'s
+  final position-assignment switched from flattening to `sentenceId` strings
+  (the same ambiguity) to working with the actual row objects directly.
+  **Needed a Supabase migration** (`20260926010000_book_sentences_per_chapter_uniqueness.sql`):
+  an existing unique index on `(book_id, sentence_id)` made the old
+  one-row-only behavior a hard *database* constraint, not just an app
+  convention — initially missed this and told the user no migration was
+  needed, which was wrong; the first repair-script `--apply` run failed
+  cleanly against it (no partial writes) before the correction. Replaced
+  with two narrower indexes: `(book_id, chapter_id, sentence_id)` when
+  chaptered, `(book_id, sentence_id)` when not — every ordinary
+  (non-podcast-series) book keeps today's exact guarantee. `scripts/repair-episode-sentence-order.ts`
+  extended from a pure reorder into a combined backfill-missing-rows +
+  reorder-everything tool, still sourced from each sentence's own
+  episode-specific `reference_audio` clip timing, still dry-run by default.
+  Regression test in `tests/commitSeriesEpisodeImport.test.ts` updated to
+  assert both episodes keep their own row instead of asserting the
+  now-fixed "episode 1 loses it" behavior. Full suite green (2063).
 - **2026-09-26 — Podcast-series episode sentence order scrambled by reused
   boilerplate lines; fixed + 3 chapters repaired.** Found via a user report
   that `ReaderPage`'s playback order didn't match the podcast. Root cause: a
