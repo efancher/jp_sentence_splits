@@ -150,6 +150,32 @@ describe('vocabularySuggestions', () => {
     expect(iuSuggestions.find((s) => s.expression === '言う')?.selectedByDefault).toBe(true);
   });
 
+  it('does not default-select する glued onto an immediately preceding noun, but keeps it when a particle separates them', () => {
+    // Real fugashi/UniDic output for 計算する前に — 計算する ("to calculate")
+    // is a noun+する compound; the noun carries the meaning.
+    const compound = '計算する前に';
+    const compoundSuggestions = suggestionsFromTokens(compound, [
+      { surface: '計算', start: 0, end: 2, lemma: '計算', reading: 'けいさん', pos: '名詞/普通名詞' },
+      { surface: 'する', start: 2, end: 4, lemma: 'する', reading: 'する', pos: '動詞/非自立可能' },
+      { surface: '前', start: 4, end: 5, lemma: '前', reading: 'まえ', pos: '名詞/普通名詞' },
+      { surface: 'に', start: 5, end: 6, lemma: 'に', reading: 'に', pos: '助詞/格助詞' },
+    ]);
+    expect(compoundSuggestions.find((s) => s.expression === '計算')?.selectedByDefault).toBe(true);
+    expect(compoundSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(false);
+    // Still visible in the strip, just unchecked.
+    expect(compoundSuggestions.some((s) => s.expression === 'する')).toBe(true);
+
+    // 計算をする ("to do a calculation") — a particle separates the noun
+    // from する, so the meaning genuinely is separable; both stay checked.
+    const separated = '計算をする';
+    const separatedSuggestions = suggestionsFromTokens(separated, [
+      { surface: '計算', start: 0, end: 2, lemma: '計算', reading: 'けいさん', pos: '名詞/普通名詞' },
+      { surface: 'を', start: 2, end: 3, lemma: 'を', reading: 'を', pos: '助詞/格助詞' },
+      { surface: 'する', start: 3, end: 5, lemma: 'する', reading: 'する', pos: '動詞/非自立可能' },
+    ]);
+    expect(separatedSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(true);
+  });
+
   it('still default-selects a content verb that merely follows a comma-broken て', () => {
     const japanese = '歩いて、学ぶ。';
     const suggestions = suggestionsFromTokens(japanese, [

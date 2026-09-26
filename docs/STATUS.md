@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-25.
+Last updated: 2026-09-26.
 
 ## Where things stand
 
@@ -30,6 +30,33 @@ remaining planned work: re-mine "After Work" (browser + human review).
 
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
+
+- **2026-09-26 — Vocabulary picker: don't default-check する glued onto an
+  immediately preceding noun (計算する, 説明する, 勉強する, … — the standard
+  サ変 compound).** User got a review card testing bare する → "to do" from
+  頭で「次はこうしよう」と計算する前に — the very sentence the 2026-09-25
+  こうしよう follow-up (below) had deliberately *kept* linked, since at the
+  time 計算する looked like the "real, genuine" occurrence worth keeping.
+  Different construction, same underlying problem: 計算する's する is tagged
+  `動詞/非自立可能` immediately after a `名詞` token, and the noun alone
+  carries the compound's specific meaning — a card for bare する there
+  tests nothing 計算's own card doesn't already cover. New
+  `isNounSuruCompound` (`src/lib/vocabularySuggestions.ts`), same
+  unselect-but-stay-visible shape as `isDemonstrativeLightVerb`, gated on
+  `prev.pos` starting with `名詞` and direct adjacency — so 計算をする (a
+  particle separates them, genuinely separable) stays checked. Tests in
+  `tests/vocabularySuggestions.test.ts` cover both. Ran the same
+  three-step rollout as the demonstrative fix: `recomputeSuggestionDefaults`
+  applied to the 83 already-mined, not-yet-confirmed sentences (98
+  suggestions flipped) via a scratch script (not committed — same logic as
+  the Settings → Vocabulary "Refresh vocabulary suggestion defaults"
+  button, just run directly against Supabase); `scripts/diagnose-noun-suru-compound-confirmed.ts`
+  found 9 already-confirmed sentences (13 selections, 0 attached
+  study_items) which `scripts/unlink-noun-suru-compound-confirmed.ts
+  --apply` removed. Verified 0 remain. Noun+する is far more common than
+  the demonstrative construction (107 sentences vs. 3), but still small
+  relative to the corpus and every unlink had zero review history at
+  stake.
 
 - **2026-09-25 — Verb Lego: whole-form English translation, for real
   sentence chains too.** User asked for a translation of the transformed

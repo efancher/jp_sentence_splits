@@ -168,6 +168,30 @@ function isDemonstrativeLightVerb(
 }
 
 /**
+ * する directly glued onto an immediately preceding noun — the standard
+ * サ変 (suru-verb) compound formation (計算する "to calculate", 勉強する "to
+ * study", 説明する "to explain", …). UniDic tags this occurrence of する the
+ * same `動詞/非自立可能` "bound verb" way `isBoundAuxiliaryVerb` and
+ * `isDemonstrativeLightVerb` already treat as grammar rather than
+ * vocabulary: the noun carries the compound's specific meaning (計算する ≠
+ * 計算 + generic "to do"), so a standalone card for する here tests nothing
+ * a card for the noun doesn't already cover. The adjacency check is what
+ * keeps this from also catching noun-as-object-of-する (計算をする), where a
+ * particle sits between the two and the meaning genuinely is separable.
+ * Left visible in the strip — a learner who does want する itself as a word
+ * can still tap it.
+ */
+function isNounSuruCompound(
+  token: MorphologyToken,
+  prev: MorphologyToken | undefined,
+): boolean {
+  if (!token.pos?.startsWith('動詞')) return false;
+  if (token.lemma?.trim() !== 'する') return false;
+  if (!prev?.pos?.startsWith('名詞')) return false;
+  return prev.end === token.start;
+}
+
+/**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
  * deliberately added them. Everything else (content words, and hand-added
@@ -275,6 +299,7 @@ function computeSelectedByDefault(
     isContentPos(token.pos?.trim() ?? '') &&
     !isBoundAuxiliaryVerb(token, prevToken) &&
     !isDemonstrativeLightVerb(token, prevToken) &&
+    !isNounSuruCompound(token, prevToken) &&
     !isKanaWrittenFormalNoun(token, reading) &&
     !isFunctionAdverb(token)
   );
