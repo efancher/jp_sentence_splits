@@ -37,8 +37,10 @@ import {
   getProficientReadingVocabularyItemIds,
   getSentenceFullReviewReadiness,
   getSentenceListeningReadiness,
+  getTrackedGrammarSpansForSentences,
   getVocabularyOccurrenceCandidates,
   getVocabularyTargetCandidates,
+  listAttemptsForSentence,
   pickContextSentenceForGrammarPattern,
   readSettings,
   recordReview,
@@ -47,11 +49,13 @@ import {
   updatePlannerSessionStep,
   type ConfusionPairCandidate,
   type PitchAccentDrillSentence,
+  type TrackedGrammarSpan,
   type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { useNativeAudio } from '../hooks/useNativeAudio';
+import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { useShadowing } from '../hooks/useShadowing';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
@@ -2202,6 +2206,15 @@ function ReadingInContextCard({
   const before = context?.before ?? [];
   const after = context?.after ?? [];
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+  const contextIds = [...before, ...after].map((item) => item.id);
+  const contextKey = contextIds.join(',');
+  // Ambient connective tissue (docs/ROADMAP.md): a tracked grammar pattern
+  // showing up again in the surrounding passage — not the target sentence
+  // itself, which is under test.
+  const grammarSpans = useLiveQuery(
+    () => (contextIds.length ? getTrackedGrammarSpansForSentences(contextIds) : undefined),
+    [contextKey],
+  );
 
   function choose(index: number) {
     if (chosenIndex !== null || !check) return;
@@ -2220,7 +2233,7 @@ function ReadingInContextCard({
         <div className="reading-context">
           {before.map((item) => (
             <p key={item.id} className="jp jp-sm reading-context-line">
-              {item.japanese}
+              <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
             </p>
           ))}
         </div>
@@ -2256,7 +2269,9 @@ function ReadingInContextCard({
             <div className="reading-context">
               {after.map((item) => (
                 <p key={item.id} className="reading-context-line">
-                  <span className="jp jp-sm">{item.japanese}</span>
+                  <span className="jp jp-sm">
+                    <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
+                  </span>
                   {item.translation ? (
                     <span className="muted"> — {item.translation}</span>
                   ) : null}
@@ -2266,6 +2281,29 @@ function ReadingInContextCard({
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * One passage context line, with its tracked grammar occurrence (if any)
+ * highlighted — `span` is `undefined` while spans are still loading and
+ * absent for a line with nothing tracked, both of which just render the
+ * plain sentence.
+ */
+function ContextSentenceText({
+  sentence,
+  span,
+}: {
+  sentence: Sentence;
+  span: TrackedGrammarSpan | undefined;
+}) {
+  if (!span) return <>{sentence.japanese}</>;
+  return (
+    <>
+      {sentence.japanese.slice(0, span.start)}
+      <mark title={span.patternName}>{sentence.japanese.slice(span.start, span.end)}</mark>
+      {sentence.japanese.slice(span.end)}
     </>
   );
 }
@@ -2375,9 +2413,40 @@ function VocabularyTargetCard({
             surfaceForm={surfaceForm}
             link={link}
           />
+          {isCloze ? <ShadowingReplayNote sentenceId={sentence.id} /> : null}
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Ambient connective tissue (docs/ROADMAP.md): on a `cloze` reveal, a small
+ * note when the learner has already shadowed this exact sentence, with a
+ * one-tap replay of their own most recent attempt — reinforcement, not a
+ * link away to another activity. Renders nothing for a sentence with no
+ * attempts, so most reveals are unaffected.
+ */
+function ShadowingReplayNote({ sentenceId }: { sentenceId: string }) {
+  const attempts = useLiveQuery(() => listAttemptsForSentence(sentenceId), [sentenceId]);
+  const latest = attempts?.[0];
+  const loop = useRangeLoop(latest?.id ?? 'none', latest?.blob ?? null);
+  if (!attempts || attempts.length === 0 || !latest) return null;
+  return (
+    <div className="row muted" style={{ alignItems: 'center', fontSize: '0.85rem' }}>
+      <audio ref={loop.audioElRef} src={loop.objectUrl ?? undefined} hidden />
+      <span>
+        You've shadowed this sentence{attempts.length > 1 ? ` (${attempts.length}×)` : ''} —
+      </span>
+      <button
+        type="button"
+        className={`speak-button${loop.isLooping ? ' speaking' : ''}`}
+        onClick={() => void loop.toggleLoop({ startMs: 0, endMs: latest.durationMs })}
+      >
+        {loop.isLooping ? '⏸ Stop' : '🔁 Replay your attempt'}
+      </button>
+      {loop.playbackError ? <span>{loop.playbackError}</span> : null}
+    </div>
   );
 }
 

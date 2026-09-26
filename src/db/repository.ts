@@ -7278,6 +7278,54 @@ export async function computeGrammarPatternContextDiversity(
   return contextDiversityFromSentenceIds(sentenceIds);
 }
 
+export interface TrackedGrammarSpan {
+  surfaceForm: string;
+  start: number;
+  end: number;
+  patternName: string;
+}
+
+/**
+ * For each of `sentenceIds`, its first tracked (`confirmedByLearner`) grammar
+ * occurrence with a real character span — ambient "you're tracking this
+ * pattern too" highlighting for `reading_in_context`'s passage context lines
+ * (docs/ROADMAP.md "Ambient connective tissue in the reveal"), not the
+ * target sentence itself, which is under test. One span per sentence: a
+ * context line highlighting every occurrence at once would be visual noise,
+ * and this is reinforcement, not a review.
+ */
+export async function getTrackedGrammarSpansForSentences(
+  sentenceIds: string[],
+): Promise<Map<string, TrackedGrammarSpan>> {
+  const result = new Map<string, TrackedGrammarSpan>();
+  if (sentenceIds.length === 0) return result;
+  const db = getDb();
+  const links = await db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray();
+  const firstBySentence = new Map<string, SentenceGrammar>();
+  for (const link of links) {
+    if (!link.confirmedByLearner || link.start == null || link.end == null) continue;
+    if (!firstBySentence.has(link.sentenceId)) firstBySentence.set(link.sentenceId, link);
+  }
+  if (firstBySentence.size === 0) return result;
+  const patterns = await db.grammarPatterns.bulkGet([
+    ...new Set([...firstBySentence.values()].map((link) => link.grammarPatternId)),
+  ]);
+  const patternById = new Map(
+    patterns.filter((pattern): pattern is GrammarPattern => !!pattern).map((pattern) => [pattern.id, pattern]),
+  );
+  for (const [sentenceId, link] of firstBySentence) {
+    const pattern = patternById.get(link.grammarPatternId);
+    if (!pattern) continue;
+    result.set(sentenceId, {
+      surfaceForm: link.surfaceForm ?? '',
+      start: link.start!,
+      end: link.end!,
+      patternName: pattern.canonicalName,
+    });
+  }
+  return result;
+}
+
 /** Canonical (unordered) pair ordering so A↔B is never stored twice. */
 function canonicalConfusionPair(
   itemAId: string,

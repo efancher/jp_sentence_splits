@@ -1282,11 +1282,24 @@ possibilities, kept here so the thinking isn't lost:
     adding +0.4 to `scoreReviewPriority`'s score and a
     "linked to a recently missed conjugation" reason. Reorders among
     already-due items only — never makes a not-due pattern due.
-- [ ] **Ambient connective tissue in the reveal** — on a `cloze` reveal,
-  "you've shadowed this sentence — replay?"; on `reading_in_context`,
-  highlight the tracked grammar pattern in the passage. Matches the
-  "ambient surfacing" feedback note. (The `pitch_accent` "missed in the
-  drill twice too" case shipped 2026-09-11 as the focus-queue banner
+- [x] **Ambient connective tissue in the reveal.** (2026-09-26) Two small,
+  independent additions, both read-only/ungraded — reinforcement, not new
+  mechanics:
+  - On a `cloze` reveal, a "You've shadowed this sentence — replay your
+    attempt" note (`ShadowingReplayNote`, `src/pages/ReviewPage.tsx`) when
+    `listAttemptsForSentence` finds one, with a single toggle button (not a
+    Record/Stop pair) that plays the most recent attempt's own recording via
+    `useRangeLoop`. Renders nothing for a never-shadowed sentence, so most
+    reveals are unaffected.
+  - On `reading_in_context`, a tracked grammar pattern recurring in the
+    *passage* context lines (not the target sentence, which is under test)
+    gets a `<mark>` highlight with the pattern name as its title — new
+    `getTrackedGrammarSpansForSentences()` (`src/db/repository.ts`, one
+    `confirmedByLearner` occurrence per sentence, batched over the passage's
+    sentence ids) + `ContextSentenceText`. 6 new repository tests
+    (`tests/trackedGrammarSpans.test.ts`).
+  Matches the "ambient surfacing" feedback note. (The `pitch_accent` "missed
+  in the drill twice too" case shipped 2026-09-11 as the focus-queue banner
   instead of an inline reveal note — see Done.)
 - [ ] **Opt-in single-sentence deep dive** — an explicit focus block that
   walks one lagging sentence through recognition → production → listening →

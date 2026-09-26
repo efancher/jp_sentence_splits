@@ -818,6 +818,43 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-26 — Ambient connective tissue in the reveal.** Picked up from
+  the ROADMAP's analytics/coherence "Possibilities" list. Two small,
+  independent, ungraded additions to existing review cards — reinforcement
+  between activities, not new mechanics:
+  - **`cloze` reveal → shadow replay.** New `ShadowingReplayNote`
+    (`src/pages/ReviewPage.tsx`) live-queries `listAttemptsForSentence` for
+    the card's sentence; when the learner has already shadowed it, shows
+    "You've shadowed this sentence (n×) — Replay your attempt" with a single
+    toggle button (not a Record/Stop pair — this app's UI convention) that
+    plays the most recent attempt's own recorded blob via `useRangeLoop`
+    over its full `durationMs`. Renders nothing for a sentence never
+    shadowed, so the vast majority of `cloze` reveals are unaffected.
+    `reading_retrieval` (the sibling card sharing `VocabularyTargetCard`)
+    deliberately doesn't get this — the ROADMAP item named `cloze`
+    specifically.
+  - **`reading_in_context` passage → tracked grammar highlight.** New
+    `getTrackedGrammarSpansForSentences(sentenceIds)`
+    (`src/db/repository.ts`) returns, per sentence, its first
+    `confirmedByLearner` `sentence_grammar` occurrence with a real
+    start/end span plus the pattern's `canonicalName` — one per sentence by
+    design (highlighting every occurrence in a context line would be visual
+    noise, and this is ambient reinforcement, not a review). Wired into
+    `ReadingInContextCard`'s existing before/after passage lines
+    (`ContextSentenceText`, a `<mark title={patternName}>` around the
+    matched span) — deliberately **not** the target sentence itself, which
+    is still under test. 6 new repository tests
+    (`tests/trackedGrammarSpans.test.ts`: tracked/untracked/no-span/
+    multi-occurrence/empty-ids/multi-sentence cases). `npm run check` green
+    (169 files, 2088 passed). Not browser-verified (no browser libs on this
+    host). **Manual test plan:** in `/review`, find a `cloze` card whose
+    sentence you've shadowed before (via `/shadow`) — the reveal should show
+    the replay note and play your own voice, not the native clip; find a
+    `reading_in_context` card whose passage neighbour has a grammar pattern
+    you've tracked (`/grammar`) — one span in that context line should be
+    highlighted, with the pattern name on hover/long-press. Confirm neither
+    changes `reviews`/`study_items` rows (both are read-only reinforcement).
+
 - **2026-09-26 — Homophone Hunt, a new `/play` game: the pitch-accent
   minimal-pair warm-up promoted to a scored round.** Picked up from the
   2026-09-26 games brainstorm on the ROADMAP. `PitchAccentMinimalPairWarmup`
