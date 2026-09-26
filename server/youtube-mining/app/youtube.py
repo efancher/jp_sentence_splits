@@ -42,6 +42,13 @@ def _ydl(opts: dict[str, Any] | None = None):
         "no_warnings": True,
         "noprogress": True,
         "noplaylist": True,
+        # No retry/timeout options were set before, so a transient DNS
+        # blip or connection hiccup (e.g. "Temporary failure in name
+        # resolution") failed the whole job instead of just that request.
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 3,
+        "socket_timeout": 30,
     }
     if config.YTDLP_COOKIES_FILE:
         base["cookiefile"] = config.YTDLP_COOKIES_FILE

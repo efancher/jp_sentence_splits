@@ -31,6 +31,24 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Podcast import: stop routing enclosure downloads through
+  the YouTube exit-node detour; add yt-dlp retry/timeout.** User reported
+  repeated `Unable to download webpage: [Errno -3] Temporary failure in
+  name resolution` on podcast-episode imports (a CloudFront/Megaphone-style
+  enclosure URL). `_fetch_transcript` (`server/youtube-mining/app/jobs.py`)
+  wrapped *every* download — YouTube or podcast — in
+  `exit_node.routed_for_download()`, the Tailscale detour that exists
+  solely to dodge YouTube's datacenter-IP bot-block; a podcast CDN URL
+  doesn't need it, and routing it through a personal device's connection
+  (laptop/phone exit node) was a plausible source of the DNS failure. Now
+  gated on `job.source_type == "youtube"` (`nullcontext()` otherwise).
+  Also: `app/youtube.py`'s `_ydl()` set no retry/timeout options at all for
+  any source type — added `retries`/`fragment_retries`/`extractor_retries`/
+  `socket_timeout` so a transient resolver blip retries instead of failing
+  the whole job. Existing 150 pytest tests green; no test specifically
+  exercises the exit-node gating (mocked at the `routed_for_download`
+  boundary already).
+
 - **2026-09-26 — Named, synced podcast feed shortcuts.** User: "I wonder if,
   for podcasts, I could save named feed URLs so I don't have to remember
   them — the URL can often just be a generic domain and an id." Distinct

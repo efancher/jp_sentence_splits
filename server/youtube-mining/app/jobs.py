@@ -25,6 +25,7 @@ import shutil
 import threading
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -386,9 +387,12 @@ def _fetch_transcript(job: Job, url: str) -> None:
     job.status = "fetching"
     job.stage = "fetching"
     job.set_message("Downloading audio…")
-    # All three YouTube fetches (audio, subtitles, info) share one exit
-    # node detour — flipping it per-call would thrash the box's routing.
-    with exit_node.routed_for_download():
+    # The exit-node detour dodges YouTube's datacenter-IP bot-block; a
+    # podcast enclosure URL (CDN-hosted, no bot-check) doesn't need it and
+    # routing it through a personal device's flaky connection only adds a
+    # failure point, so only YouTube jobs pay for the detour.
+    detour = exit_node.routed_for_download() if job.source_type == "youtube" else nullcontext()
+    with detour:
         job.source_audio_path = youtube.fetch_audio(url, job.dir)
 
         peak_db = clip.probe_max_volume_db(job.source_audio_path)
