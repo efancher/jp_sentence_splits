@@ -654,6 +654,20 @@ strong.jp {
   border-top: 1px solid var(--border);
 }
 
+/* BookDetailPage sentence list — marks where a chapter/episode begins. */
+.chapter-section-header {
+  position: sticky;
+  top: var(--header-height, 0);
+  z-index: 1;
+  margin: 0.25rem 0 -0.35rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
 .practice-session-controls {
   display: grid;
   grid-template-columns: minmax(10rem, 1fr);

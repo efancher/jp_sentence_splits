@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Snackbar } from '../components/Snackbar';
@@ -135,7 +135,6 @@ function SortableRow({
   bookId,
   position,
   sentence,
-  chapterTitle,
   status,
   vocabularyReviewStatus,
   graduated,
@@ -148,7 +147,6 @@ function SortableRow({
   bookId: string;
   position: number;
   sentence: Sentence;
-  chapterTitle?: string;
   status: string;
   /** Undefined means no analysis row exists yet — never opened AnalyzePage for this sentence. */
   vocabularyReviewStatus: 'unreviewed' | 'confirmed' | undefined;
@@ -201,7 +199,6 @@ function SortableRow({
         ) : null}
       </div>
       <div className="jp">{sentence.japanese}</div>
-      {chapterTitle ? <span className="chip">{chapterTitle}</span> : null}
       <div className="muted">{sentence.translation}</div>
       <VocabChips items={sentence.targetVocabulary} />
       {editOrder ? (
@@ -1397,48 +1394,69 @@ export function BookDetailPage() {
       >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <div className="stack">
-            {data.rows.map((row) =>
-              row.sentence &&
-              !collapsedChapters.has(
-                row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY,
-              ) ? (
-                <SortableRow
-                  key={row.membership.sentenceId}
-                  id={row.membership.sentenceId}
-                  bookId={bookId}
-                  position={row.membership.position}
-                  sentence={row.sentence}
-                  chapterTitle={data.book.chapters?.find(
-                    (chapter) => chapter.id === row.membership.chapterId,
-                  )?.title}
-                  status={row.analysis?.status ?? row.membership.status}
-                  vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
-                  graduated={graduatedSentenceIds.has(row.membership.sentenceId)}
-                  selected={selected.has(row.membership.sentenceId)}
-                  editOrder={editOrder}
-                  onSelect={(checked) => {
-                    const next = new Set(selected);
-                    if (checked) next.add(row.membership.sentenceId);
-                    else next.delete(row.membership.sentenceId);
-                    setSelected(next);
-                  }}
-                  onMove={(action) => {
-                    const previous = [...ids];
-                    void moveBookSentence(
-                      bookId,
-                      row.membership.sentenceId,
-                      action,
-                    ).then(() =>
-                      setSnack({
-                        message: 'Order updated',
-                        undo: async () =>
-                          reorderBookSentences(bookId, previous),
-                      }),
-                    );
-                  }}
-                />
-              ) : null,
-            )}
+            {(() => {
+              const hasChapters = (data.book.chapters?.length ?? 0) > 0;
+              const visibleRows = data.rows.filter(
+                (row) =>
+                  row.sentence &&
+                  !collapsedChapters.has(
+                    row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY,
+                  ),
+              );
+              return visibleRows.map((row, index) => {
+                const chapterKey =
+                  row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
+                const previousKey =
+                  index > 0
+                    ? visibleRows[index - 1]!.membership.chapterId ??
+                      UNASSIGNED_CHAPTER_KEY
+                    : null;
+                const showHeader = hasChapters && chapterKey !== previousKey;
+                const chapterTitle = data.book.chapters?.find(
+                  (chapter) => chapter.id === row.membership.chapterId,
+                )?.title;
+                return (
+                  <Fragment key={row.membership.sentenceId}>
+                    {showHeader ? (
+                      <div className="chapter-section-header">
+                        {chapterTitle ?? 'Unassigned'}
+                      </div>
+                    ) : null}
+                    <SortableRow
+                      id={row.membership.sentenceId}
+                      bookId={bookId}
+                      position={row.membership.position}
+                      sentence={row.sentence!}
+                      status={row.analysis?.status ?? row.membership.status}
+                      vocabularyReviewStatus={row.analysis?.vocabularyReviewStatus}
+                      graduated={graduatedSentenceIds.has(row.membership.sentenceId)}
+                      selected={selected.has(row.membership.sentenceId)}
+                      editOrder={editOrder}
+                      onSelect={(checked) => {
+                        const next = new Set(selected);
+                        if (checked) next.add(row.membership.sentenceId);
+                        else next.delete(row.membership.sentenceId);
+                        setSelected(next);
+                      }}
+                      onMove={(action) => {
+                        const previous = [...ids];
+                        void moveBookSentence(
+                          bookId,
+                          row.membership.sentenceId,
+                          action,
+                        ).then(() =>
+                          setSnack({
+                            message: 'Order updated',
+                            undo: async () =>
+                              reorderBookSentences(bookId, previous),
+                          }),
+                        );
+                      }}
+                    />
+                  </Fragment>
+                );
+              });
+            })()}
           </div>
         </SortableContext>
       </DndContext>

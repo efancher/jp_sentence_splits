@@ -31,6 +31,31 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — `BookDetailPage` sentence list groups by chapter/episode.**
+  User: "I wonder if we can group sentences in a book in the book view by
+  chapter or episode." The data model already fully supported this
+  (`Book.chapters[]`, `BookSentence.chapterId`, assignment/reorder/suspend
+  all shipped for the separate "Chapters" management panel) — the gap was
+  purely visual: the sentence list itself was one flat feed with a small
+  `chip` naming each row's chapter, no section break. Rewrote the list
+  render to walk `data.rows` in their actual `BookSentence.position` order
+  (not `BookChapter.position`, which only orders the management panel and
+  doesn't move sentences) and insert a `chapter-section-header` div
+  whenever the chapter changes from the previous visible row — handles
+  interleaved/non-contiguous chapter membership by emitting a new header
+  per contiguous run rather than assuming one block per chapter. Dropped
+  the now-redundant per-row chip. Headers are plain (non-sortable)
+  `Fragment` siblings inside the existing single `SortableContext`/`ids`
+  list, so drag-and-drop reordering, position math, and the existing
+  per-chapter hide/collapse (`collapsedChapters`) all work unchanged. No
+  header renders at all for books with zero chapters. `npm run check`
+  green (2053 tests, pre-existing suite — no new tests, this is a pure
+  rendering change over already-tested data). Manual test: open a book
+  with chapters assigned → sentence list now shows a labeled header at
+  each chapter boundary (or "Unassigned" for un-chaptered runs) instead of
+  a chip on every row; hiding a chapter in the Chapters panel still hides
+  its rows and its header.
+
 - **2026-09-26 — Podcast import: stop routing enclosure downloads through
   the YouTube exit-node detour; add yt-dlp retry/timeout.** User reported
   repeated `Unable to download webpage: [Errno -3] Temporary failure in
