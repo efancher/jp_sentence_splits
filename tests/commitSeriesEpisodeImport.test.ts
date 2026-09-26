@@ -143,6 +143,63 @@ describe('commitSeriesEpisodeImport', () => {
     expect(a.bookId).not.toBe(b.bookId);
   });
 
+  it('keeps a later episode in its own declared order even when it reuses an earlier episode\'s boilerplate line', async () => {
+    // "また明日ね。" (a sign-off line) appears at the *end* of episode 1, so
+    // it's reused as the same deduped Sentence row with a
+    // `firstOccurrenceIndex` anchored to episode 1's numbering. Episode 2
+    // reuses that exact line at the *start* — its own true position for
+    // this episode — which must not be scrambled by the stale index
+    // (36a6195-adjacent bug found via ReaderPage 2026-09-26).
+    const first = await commitSeriesEpisodeImport({
+      seriesId: 'podcast-series-reuse',
+      seriesTitle: 'Reuse Podcast',
+      episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/reuse-ep-1.mp3',
+      sourceDate: '2026-09-01T00:00:00Z',
+      preview: episodePreview('reuse-ep-1', 'Episode 1', [
+        '文A1です。',
+        '文A2です。',
+        'また明日ね。',
+      ]),
+    });
+    const second = await commitSeriesEpisodeImport({
+      seriesId: 'podcast-series-reuse',
+      seriesTitle: 'Reuse Podcast',
+      episodeTitle: 'Episode 2',
+      sourceId: 'https://example.com/reuse-ep-2.mp3',
+      sourceDate: '2026-09-02T00:00:00Z',
+      preview: episodePreview('reuse-ep-2', 'Episode 2', [
+        'また明日ね。',
+        '文B1です。',
+        '文B2です。',
+      ]),
+    });
+
+    const db = getDb();
+    const memberships = (
+      await db.bookSentences.where('bookId').equals(second.bookId).sortBy('position')
+    ).filter((m) => m.chapterId === second.chapterId);
+    const sentences = await db.sentences.bulkGet(memberships.map((m) => m.sentenceId));
+    expect(sentences.map((s) => s?.japanese)).toEqual([
+      'また明日ね。',
+      '文B1です。',
+      '文B2です。',
+    ]);
+
+    // Separate, pre-existing quirk (not this fix's concern): a book only
+    // ever holds one BookSentence membership per deduped Sentence, so a
+    // line reused verbatim across episodes ends up "belonging" to whichever
+    // episode most recently reimported it — episode 1 is left with just its
+    // other two sentences, in their own still-correct relative order.
+    const firstMemberships = (
+      await db.bookSentences.where('bookId').equals(first.bookId).sortBy('position')
+    ).filter((m) => m.chapterId === first.chapterId);
+    const firstSentences = await db.sentences.bulkGet(
+      firstMemberships.map((m) => m.sentenceId),
+    );
+    expect(firstSentences.map((s) => s?.japanese)).toEqual(['文A1です。', '文A2です。']);
+  });
+
   it('re-importing the same episode updates its own chapter rather than duplicating it', async () => {
     const first = await commitSeriesEpisodeImport({
       seriesId: 'podcast-series-dup',

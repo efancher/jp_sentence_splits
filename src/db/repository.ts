@@ -2754,6 +2754,17 @@ export async function commitSeriesEpisodeImport(options: {
     if (updated) notifySync('books', updated.id, updated);
   }
 
+  // Fix this episode's own within-chapter order before the chronological
+  // chapter cascade below, which only preserves each chapter's *existing*
+  // relative order rather than re-deriving it. Needed because `commitImport`'s
+  // initial `first_occurrence` sort trusts each Sentence's persisted
+  // `firstOccurrenceIndex` — correct only the first time that exact text was
+  // ever imported. A line reused verbatim across episodes (a podcast's
+  // boilerplate intro/outro) keeps whichever episode's index it got *first*,
+  // scrambling every later episode that reuses it. `selectedIds` is this
+  // episode's own freshly-parsed, correctly-ordered draft list (mirrors
+  // `commitShadowingPackageImport`'s identical fix below).
+  await reorderBookSentences(result.bookId, selectedIds);
   await reorderChaptersChronologically(result.bookId);
   await applySentenceAudioForPreview(result.bookId, options.preview);
 

@@ -31,6 +31,39 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Podcast-series episode sentence order scrambled by reused
+  boilerplate lines; fixed + 3 chapters repaired.** Found via a user report
+  that `ReaderPage`'s playback order didn't match the podcast. Root cause: a
+  line reused verbatim across episodes (e.g. a sign-off like "またね。")
+  dedupes to one shared `Sentence` row whose `firstOccurrenceIndex` freezes
+  at whichever episode *first* created it — `mergeSentenceOnReimport`
+  (`src/lib/csvImport.ts`) never updates it on a later reimport. When
+  `commitSeriesEpisodeImport` built each new episode's chapter, it sorted by
+  that stale, foreign index mixed with the episode's own correctly-computed
+  ones, scrambling the result. `commitShadowingPackageImport` (single-video
+  import) already avoided this by force-reordering to the package's own
+  extraction order right after commit; `commitSeriesEpisodeImport` was
+  missing the equivalent call — added it (`src/db/repository.ts`), so a new
+  episode's own within-chapter order is now re-derived immediately, ahead of
+  the existing chronological chapter cascade. Regression test in
+  `tests/commitSeriesEpisodeImport.test.ts` reproduces the exact reuse
+  scenario. Also surfaced (out of scope, documented not fixed): a book only
+  ever holds one `BookSentence` membership per deduped `Sentence`, so a
+  reused line "belongs" to whichever episode most recently reimported it —
+  other episodes reusing it are silently missing that one line from their
+  membership list. Repaired existing corruption in "Slow Japanese"
+  (3 of 7 chapters were scrambled: Episode #2 Family, #4 Hobby, #160
+  restaurants) via new `scripts/repair-episode-sentence-order.ts`
+  (`npm run repair:episode-sentence-order`, dry-run by default) — reorders
+  using each sentence's own `SentenceAudio`/`reference_audio` clip timing
+  for that specific episode (immune to the cross-episode reuse that
+  corrupted `firstOccurrenceIndex`), only among a chapter's own existing
+  `position` values so it can't disturb any other chapter's block, and only
+  when every sentence in the chapter has its own audio clip (skips rather
+  than guessing otherwise). Checked every other multi-chapter podcast-series
+  book at the same time (Nihongo con Teppei, NHK Easier, NHK Easy News) —
+  none needed repair (either already correct or not covered enough to
+  safely verify). Full suite green (2063).
 - **2026-09-26 — Chapter/book read-along viewer (`ReaderPage`), always
   available.** ROADMAP had this sketched as a comprehensible-input viewer
   unlocked once a chapter's vocabulary coverage hit 80%; user asked for it
