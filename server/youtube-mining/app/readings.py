@@ -25,8 +25,17 @@ def has_kanji(text: str) -> bool:
 # reading ワタクシ; わたし is overwhelmingly the intended reading in the drama
 # transcripts this service segments (the learner can still edit it). Keyed on
 # the exact token surface, so compounds like 私たち are unaffected.
+#
+# 日本 similarly defaults to にっぽん, but every corpus sentence checked
+# (casual conversation, weather, news) actually uses the far more common
+# にほん — found via a learner card-issue report on 日本語コンテッペイ
+# ("Nihongo con Teppei"). The one known exception is the fixed political
+# party name 日本維新の会 (にっぽんいしんのかい), which this override will
+# get wrong going forward — same known tradeoff as 私, fix by hand if it
+# recurs.
 READING_OVERRIDES: dict[str, str] = {
     "私": "わたし",
+    "日本": "にほん",
 }
 
 

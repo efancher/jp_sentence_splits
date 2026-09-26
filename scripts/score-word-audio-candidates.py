@@ -57,7 +57,7 @@ MIN_MARGIN = 0.1
 
 _KANJI_RE = re.compile(r"[㐀-鿿豈-﫿々〆〤ヶ]")
 _STRIP_CHARS = "、。！？「」『』・…　 \n\t​"
-_READING_OVERRIDES = {"私": "わたし"}
+_READING_OVERRIDES = {"私": "わたし", "日本": "にほん"}
 
 
 def _has_kanji(text: str) -> bool:

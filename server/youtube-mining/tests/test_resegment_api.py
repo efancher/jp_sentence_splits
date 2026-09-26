@@ -89,3 +89,20 @@ def test_resegment_reads_bare_watashi_as_watashi_not_watakushi() -> None:
     assert "わたくし" not in cue["reading"]
     watashi = next(t for t in cue["tokens"] if t["surface"] == "私")
     assert watashi["reading"] == "わたし"
+
+
+def test_resegment_reads_nihon_as_nihon_not_nippon() -> None:
+    """unidic-lite lemmatizes 日本 as ニッポン; READING_OVERRIDES corrects
+    it to にほん, the reading actually used in this corpus (see readings.py)."""
+    if not reading_engine_available():
+        return
+    resp = client.post(
+        "/resegment",
+        json={"sentences": [{"japanese": "日本に住んでいます。", "startMs": 0, "endMs": 1000}]},
+    )
+    assert resp.status_code == 200
+    cue = resp.json()[0]
+    assert "にほん" in cue["reading"]
+    assert "にっぽん" not in cue["reading"]
+    nihon = next(t for t in cue["tokens"] if t["surface"] == "日本")
+    assert nihon["reading"] == "にほん"

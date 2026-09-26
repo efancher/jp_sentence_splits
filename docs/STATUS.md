@@ -818,6 +818,44 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-26 — Card-issue triage: fixed 日本/日本語 read as にっぽん(ご)
+  instead of にほん(ご) across the whole corpus, plus 時々/高原 one-offs,
+  plus one translation fix.** `npm run issues:list` surfaced two open
+  reports: a `reading_production` card on 日本語コンテッペイ。("the podcast's
+  own title, Nihongo con Teppei") whose vocab reading was にっぽんご when the
+  audio (and everyday speech) says にほんご; and a `cloze` card whose
+  translation opened with "they" for イタリア人の人は… instead of naming
+  "Italians". Checking the first against the rest of the corpus found it
+  wasn't a one-off — unidic-lite's default reading for 日本 is にっぽん, and
+  literally every one of 42 corpus sentences containing 日本 had it, except
+  the 3 that use the political party name 日本維新の会 (officially
+  にっぽんいしんのかい, correctly left alone). Running the existing
+  `audit-vocab-readings.ts` tool (JMDict-membership check, doesn't catch
+  にっぽん since it's a valid-but-wrong-in-context JMDict reading too) turned
+  up two more real mis-readings while it was open: 時々 as じじ instead of
+  ときどき (one sentence), and 高原 as the surname reading たかはら instead of
+  こうげん ("highland/plateau", the sense actually used in context) — the
+  latter also had a duplicate `vocabulary_items` row for 高原/こうげん already
+  sitting alongside it. New `scripts/fix-context-reading-overrides.ts`
+  (`npm run fix:context-reading-overrides -- --apply`, dry-run by default,
+  idempotent, same shape as `fix-pronoun-readings.ts`) fixed all of the
+  above: 41 sentences' `inline_reading`/`reading_only`/vocabulary-suggestion
+  entries, both `vocabulary_items` rows (日本, 日本語), and the 高原 duplicate
+  (repointed its one `sentence_vocabulary` link to the correct row, retired
+  the wrong one — no `study_items` on it, nothing to reconcile). Root cause
+  fixed at the source too: `server/youtube-mining/app/readings.py`
+  `READING_OVERRIDES` gets a new `"日本": "にほん"` entry (same tradeoff as
+  the existing 私→わたし entry — will get 日本維新の会 wrong going forward,
+  fix by hand if that recurs), mirrored into
+  `scripts/score-word-audio-candidates.py`'s standalone copy of the same
+  logic, with a new passing test
+  (`test_resegment_reads_nihon_as_nihon_not_nippon`). Translation fixed
+  directly (one-off, not a pattern): `sent_293bf0fd`'s translation now
+  opens "Italians might think…". `npm run check` green (167 files, 2074
+  passed) + youtube-mining's pytest suite green (6 passed). Both card-issue
+  reports still need marking resolved in-app (`CardIssuesPage` — no resolve
+  script, see the card-issue-triage skill).
+
 - **2026-09-26 — Keystone, a new `/play` game: front door to the no-card
   backlog.** Picked up from the ROADMAP's "Later" games list. Confirmed
   vocabulary that has no `vocabularyItem`-subject study item yet

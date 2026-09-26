@@ -47,6 +47,7 @@
     "fix:numeral-readings": "tsx scripts/fix-numeral-readings.ts",
     "fix:caption-artifacts": "tsx scripts/fix-caption-artifacts.ts",
     "fix:pronoun-readings": "tsx scripts/fix-pronoun-readings.ts",
+    "fix:context-reading-overrides": "tsx scripts/fix-context-reading-overrides.ts",
     "audit:vocab-readings": "tsx scripts/audit-vocab-readings.ts",
     "issues:list": "tsx scripts/list-card-issues.ts",
     "issues:list-sync": "tsx scripts/list-sync-issues.ts",
