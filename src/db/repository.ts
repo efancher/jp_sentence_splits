@@ -131,6 +131,7 @@ import { nowIso, normalizeSentenceKey } from '../lib/normalize';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
 import {
   isBookInStudyRotation,
+  membershipIsShelved,
   sentenceIsSuspendedOnly,
   studyItemIsHeldBackBySuspension,
   type SuspendedBookIndex,
@@ -365,24 +366,69 @@ export async function setBookSuspended(
   await db.books.put(updated);
   notifySync('books', updated.id, updated);
   if (!suspended && existing.suspendedAt) {
-    await rescheduleResumedBookItems(bookId, now);
+    const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+    await rescheduleResumedItems(new Set(memberships.map((m) => m.sentenceId)), now);
   }
   return updated;
 }
 
 /**
- * On resume: pull every overdue study item belonging to this book
+ * Shelve or un-shelve a single chapter (`BookChapter.suspendedAt`) rather than
+ * the whole book — e.g. one noisy episode in an otherwise-fine series. Same
+ * effect as `setBookSuspended` (see `src/lib/suspendedBooks.ts`), scoped to
+ * sentences whose `BookSentence.chapterId` points at this chapter; resuming
+ * spreads only *that chapter's* overdue held-back cards.
+ */
+export async function setChapterSuspended(
+  bookId: string,
+  chapterId: string,
+  suspended: boolean,
+  now: Date = new Date(),
+): Promise<Book> {
+  const db = getDb();
+  const existing = await db.books.get(bookId);
+  if (!existing) throw new Error('Book not found');
+  const chapters = existing.chapters ?? [];
+  const chapterIndex = chapters.findIndex((chapter) => chapter.id === chapterId);
+  if (chapterIndex < 0) throw new Error('Chapter not found');
+  const currentChapter = chapters[chapterIndex]!;
+  const updated: Book = {
+    ...existing,
+    chapters: chapters.map((chapter, index) =>
+      index === chapterIndex
+        ? {
+            ...chapter,
+            suspendedAt: suspended ? (chapter.suspendedAt ?? now.toISOString()) : undefined,
+          }
+        : chapter,
+    ),
+    updatedAt: now.toISOString(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
+  if (!suspended && currentChapter.suspendedAt) {
+    const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+    const sentenceIds = new Set(
+      memberships.filter((m) => m.chapterId === chapterId).map((m) => m.sentenceId),
+    );
+    await rescheduleResumedItems(sentenceIds, now);
+  }
+  return updated;
+}
+
+/**
+ * On resume: pull every overdue study item belonging to these sentences
  * (sentence / vocabularyItem / sentenceVocabulary subjects) forward off "way
  * overdue" and distribute it round-robin across the next
  * `RESUME_RESCHEDULE_SPREAD_DAYS` days. Only ever moves a due date that is
  * already in the past, and only later within the spread window — never earlier
- * than `now`. Idempotent-ish (a second call finds nothing overdue).
+ * than `now`. Idempotent-ish (a second call finds nothing overdue). Shared by
+ * `setBookSuspended` (whole book's sentences) and `setChapterSuspended` (just
+ * the resumed chapter's).
  */
-async function rescheduleResumedBookItems(bookId: string, now: Date): Promise<void> {
+async function rescheduleResumedItems(sentenceIds: Set<string>, now: Date): Promise<void> {
   const db = getDb();
   const nowIsoValue = now.toISOString();
-  const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
-  const sentenceIds = new Set(memberships.map((m) => m.sentenceId));
   if (sentenceIds.size === 0) return;
   const links = await db.sentenceVocabulary
     .where('sentenceId')
@@ -430,10 +476,11 @@ async function rescheduleResumedBookItems(bookId: string, now: Date): Promise<vo
 
 /**
  * Builds the index the global review queue and the session planner use to hold
- * back a suspended book's exclusive cards. Returns `null` when no book is
- * suspended — the overwhelmingly common case — so callers pay nothing. When a
- * book *is* suspended it reads the whole `bookSentences` + `sentenceVocabulary`
- * tables (a few times per review-init / plan); acceptable at this scale.
+ * back a suspended book's or chapter's exclusive cards. Returns `null` when
+ * nothing is suspended — the overwhelmingly common case — so callers pay
+ * nothing. When something *is* suspended it reads the whole `bookSentences` +
+ * `sentenceVocabulary` tables (a few times per review-init / plan); acceptable
+ * at this scale.
  */
 export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | null> {
   const db = getDb();
@@ -441,18 +488,24 @@ export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | nul
   const suspendedBookIds = new Set(
     books.filter((book) => book.suspendedAt).map((book) => book.id),
   );
-  if (suspendedBookIds.size === 0) return null;
+  const suspendedChapterIds = new Set(
+    books.flatMap((book) =>
+      (book.chapters ?? []).filter((chapter) => chapter.suspendedAt).map((chapter) => chapter.id),
+    ),
+  );
+  if (suspendedBookIds.size === 0 && suspendedChapterIds.size === 0) return null;
 
   const [memberships, links] = await Promise.all([
     db.bookSentences.toArray(),
     db.sentenceVocabulary.toArray(),
   ]);
 
-  const bookIdsBySentenceId = new Map<string, string[]>();
+  const membershipsBySentenceId = new Map<string, Array<{ bookId: string; chapterId?: string }>>();
   for (const membership of memberships) {
-    const list = bookIdsBySentenceId.get(membership.sentenceId);
-    if (list) list.push(membership.bookId);
-    else bookIdsBySentenceId.set(membership.sentenceId, [membership.bookId]);
+    const entry = { bookId: membership.bookId, chapterId: membership.chapterId };
+    const list = membershipsBySentenceId.get(membership.sentenceId);
+    if (list) list.push(entry);
+    else membershipsBySentenceId.set(membership.sentenceId, [entry]);
   }
 
   const sentenceIdsByVocabularyItemId = new Map<string, string[]>();
@@ -466,7 +519,8 @@ export async function loadSuspendedBookIndex(): Promise<SuspendedBookIndex | nul
 
   return {
     suspendedBookIds,
-    bookIdsBySentenceId,
+    suspendedChapterIds,
+    membershipsBySentenceId,
     sentenceIdsByVocabularyItemId,
     sentenceIdByLinkId,
   };
@@ -6388,12 +6442,12 @@ export async function getOddEarOutData(): Promise<{
   for (const audio of audioRows) {
     if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
   }
-  const bookIdBySentenceId = new Map<string, string>();
+  const membershipBySentenceId = new Map<string, BookSentence>();
   for (const membership of memberships) {
-    const current = bookIdBySentenceId.get(membership.sentenceId);
-    const shelved = suspendedIndex?.suspendedBookIds.has(membership.bookId) ?? false;
-    if (!current || (!shelved && suspendedIndex?.suspendedBookIds.has(current))) {
-      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    const current = membershipBySentenceId.get(membership.sentenceId);
+    const shelved = suspendedIndex ? membershipIsShelved(membership, suspendedIndex) : false;
+    if (!current || (!shelved && suspendedIndex && membershipIsShelved(current, suspendedIndex))) {
+      membershipBySentenceId.set(membership.sentenceId, membership);
     }
   }
 
@@ -6401,7 +6455,7 @@ export async function getOddEarOutData(): Promise<{
   const chosen = new Map<string, { link: SentenceVocabulary; item: VocabularyItem }>();
   for (const link of links) {
     const item = itemById.get(link.vocabularyItemId);
-    const bookId = bookIdBySentenceId.get(link.sentenceId);
+    const bookId = membershipBySentenceId.get(link.sentenceId)?.bookId;
     if (!item || !bookId || link.surfaceForm !== item.expression) continue;
     if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
     const key = `${item.id}:${bookId}`;
@@ -6511,12 +6565,12 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
   for (const audio of audioRows) {
     if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
   }
-  const bookIdBySentenceId = new Map<string, string>();
+  const membershipBySentenceId = new Map<string, BookSentence>();
   for (const membership of memberships) {
-    const current = bookIdBySentenceId.get(membership.sentenceId);
-    const shelved = suspendedIndex?.suspendedBookIds.has(membership.bookId) ?? false;
-    if (!current || (!shelved && suspendedIndex?.suspendedBookIds.has(current))) {
-      bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
+    const current = membershipBySentenceId.get(membership.sentenceId);
+    const shelved = suspendedIndex ? membershipIsShelved(membership, suspendedIndex) : false;
+    if (!current || (!shelved && suspendedIndex && membershipIsShelved(current, suspendedIndex))) {
+      membershipBySentenceId.set(membership.sentenceId, membership);
     }
   }
   const bookTitleById = new Map(books.map((book) => [book.id, book.title]));
@@ -6525,7 +6579,7 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
   const chosen = new Map<string, { link: SentenceVocabulary; item: VocabularyItem; bookId: string }>();
   for (const link of links) {
     const item = itemById.get(link.vocabularyItemId);
-    const bookId = bookIdBySentenceId.get(link.sentenceId);
+    const bookId = membershipBySentenceId.get(link.sentenceId)?.bookId;
     if (!item || !bookId || link.surfaceForm !== item.expression) continue;
     if (!audioBySentenceId.has(link.sentenceId) || !sentenceById.has(link.sentenceId)) continue;
     const key = `${item.id}:${bookId}`;

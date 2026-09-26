@@ -104,6 +104,7 @@ export const bookSchema = z.object({
         position: z.number(),
         sourceDate: z.string().optional(),
         sourceId: z.string().optional(),
+        suspendedAt: z.string().optional(),
       }),
     )
     .default([]),

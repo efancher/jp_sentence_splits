@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isBookInStudyRotation,
+  membershipIsShelved,
   sentenceIsSuspendedOnly,
   studyItemIsHeldBackBySuspension,
   vocabularyItemIsSuspendedOnly,
@@ -9,19 +10,25 @@ import {
 } from '../src/lib/suspendedBooks';
 
 /**
- * Fixture: book A is suspended, book B is active.
- *   s1 → [A]        (suspended-only)
- *   s2 → [A, B]     (shared → stays active)
- *   s3 → []         (inbox sentence, no membership → not held back)
- *   w1 → [s1]       (suspended-only)
- *   w2 → [s1, s2]   (shared → stays active)
+ * Fixture: book A is suspended, book B is active, chapter C1 (in book B) is
+ * individually suspended.
+ *   s1 → [A]           (suspended-only, via book)
+ *   s2 → [A, B]        (shared → stays active)
+ *   s3 → []            (inbox sentence, no membership → not held back)
+ *   s4 → [B/C1]        (suspended-only, via chapter — book B itself is active)
+ *   s5 → [B/C1, B]     (same book, one chapter-suspended + one unassigned row → stays active)
+ *   w1 → [s1]          (suspended-only)
+ *   w2 → [s1, s2]      (shared → stays active)
  *   link L1 → s1, link L2 → s2
  */
 const index: SuspendedBookIndex = {
   suspendedBookIds: new Set(['A']),
-  bookIdsBySentenceId: new Map([
-    ['s1', ['A']],
-    ['s2', ['A', 'B']],
+  suspendedChapterIds: new Set(['C1']),
+  membershipsBySentenceId: new Map([
+    ['s1', [{ bookId: 'A' }]],
+    ['s2', [{ bookId: 'A' }, { bookId: 'B' }]],
+    ['s4', [{ bookId: 'B', chapterId: 'C1' }]],
+    ['s5', [{ bookId: 'B', chapterId: 'C1' }, { bookId: 'B' }]],
   ]),
   sentenceIdsByVocabularyItemId: new Map([
     ['w1', ['s1']],
@@ -43,6 +50,19 @@ describe('isBookInStudyRotation', () => {
   });
 });
 
+describe('membershipIsShelved', () => {
+  it('shelves via the book flag', () => {
+    expect(membershipIsShelved({ bookId: 'A' }, index)).toBe(true);
+  });
+  it('shelves via the chapter flag even when the book is active', () => {
+    expect(membershipIsShelved({ bookId: 'B', chapterId: 'C1' }, index)).toBe(true);
+  });
+  it('keeps an active book/chapter combination', () => {
+    expect(membershipIsShelved({ bookId: 'B' }, index)).toBe(false);
+    expect(membershipIsShelved({ bookId: 'B', chapterId: 'C2' }, index)).toBe(false);
+  });
+});
+
 describe('sentenceIsSuspendedOnly', () => {
   it('holds back a sentence only in suspended books', () => {
     expect(sentenceIsSuspendedOnly('s1', index)).toBe(true);
@@ -52,6 +72,12 @@ describe('sentenceIsSuspendedOnly', () => {
   });
   it('keeps a sentence with no book membership', () => {
     expect(sentenceIsSuspendedOnly('s3', index)).toBe(false);
+  });
+  it('holds back a sentence only in a suspended chapter', () => {
+    expect(sentenceIsSuspendedOnly('s4', index)).toBe(true);
+  });
+  it('keeps a sentence with one shelved-chapter row and one active row in the same book', () => {
+    expect(sentenceIsSuspendedOnly('s5', index)).toBe(false);
   });
 });
 

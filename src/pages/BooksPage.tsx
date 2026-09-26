@@ -112,6 +112,8 @@ export function BooksPage() {
                   <span className="status-pill">Suspended</span>
                 ) : book.archived ? (
                   <span className="status-pill">Archived</span>
+                ) : book.chapters?.some((chapter) => chapter.suspendedAt) ? (
+                  <span className="status-pill">Chapter suspended</span>
                 ) : null}
               </div>
               {book.subtitle ? <div className="muted">{book.subtitle}</div> : null}

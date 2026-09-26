@@ -846,6 +846,15 @@ Targets are constants; no settings UI.
   over the next week; "Continue" (the old "Resume" button) jumps to the first
   unfinished sentence. The book-scoped review path (`/books/:id/review`) ignores
   suspension — opening it is an explicit opt-in.
+  A single **chapter** can be suspended the same way (`BookChapter.suspendedAt`,
+  `setChapterSuspended`, "Suspend chapter"/"Resume chapter" on its chapter row)
+  when only part of a book is the problem — same planner exclusion and
+  held-back-review-cards behavior, scoped to sentences whose
+  `BookSentence.chapterId` points at that chapter. `SuspendedBookIndex`
+  tracks both book- and chapter-level suspension (`membershipIsShelved`); a
+  sentence is held back only when *every* membership it has — book or
+  specific chapter — is shelved, so a sentence also reachable via an active
+  chapter/book stays live.
   Two book-delete buttons: "Delete book" drops the
   book but leaves its sentences in the library; "Delete book + sentences"
   (`deleteBookCascade`, two-step inline confirm) also retires every

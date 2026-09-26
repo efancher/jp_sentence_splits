@@ -2,13 +2,15 @@ import type { Book, StudyItem } from '../domain/types';
 
 /**
  * A book can be **suspended** (`Book.suspendedAt` set) — shelved because it's
- * too hard right now, to be resumed later. A suspended book:
+ * too hard right now, to be resumed later. A single **chapter** within a book
+ * can be suspended the same way (`BookChapter.suspendedAt`) — useful when
+ * only part of a book is the problem (e.g. one noisy episode). Either form:
  *   - produces no session-planner work (the candidate finders filter it out,
  *     same as `archived`), and
  *   - has its **exclusive** review cards held back from the global `/review`
- *     queue: a word or sentence is only held back when *every* book it belongs
- *     to is suspended. A word that also lives in an active book keeps being
- *     reviewed there.
+ *     queue: a word or sentence is only held back when *every* membership it
+ *     has (book, or specific chapter within a book) is shelved. A word that
+ *     also lives in an active book/chapter keeps being reviewed there.
  *
  * The book-scoped review path (`/books/:id/review`) ignores all of this —
  * opening a suspended book's own review is a deliberate act.
@@ -19,8 +21,10 @@ import type { Book, StudyItem } from '../domain/types';
  */
 export interface SuspendedBookIndex {
   suspendedBookIds: Set<string>;
-  /** sentenceId → every bookId that has a membership row for it. */
-  bookIdsBySentenceId: Map<string, string[]>;
+  /** Chapter ids (`BookChapter.id`, unique across books) that are individually suspended. */
+  suspendedChapterIds: Set<string>;
+  /** sentenceId → every (bookId, chapterId) membership row it has. */
+  membershipsBySentenceId: Map<string, Array<{ bookId: string; chapterId?: string }>>;
   /** vocabularyItemId → every sentenceId it's linked to via sentence_vocabulary. */
   sentenceIdsByVocabularyItemId: Map<string, string[]>;
   /** sentence_vocabulary link id → its sentenceId (for `sentenceVocabulary` study-item subjects). */
@@ -34,14 +38,23 @@ export function isBookInStudyRotation(
   return !book.archived && !book.suspendedAt;
 }
 
-/** True when the sentence has at least one book membership and every one is suspended. */
+/** True when a membership row is shelved by its book's or its own chapter's suspension. */
+export function membershipIsShelved(
+  membership: { bookId: string; chapterId?: string },
+  index: Pick<SuspendedBookIndex, 'suspendedBookIds' | 'suspendedChapterIds'>,
+): boolean {
+  if (index.suspendedBookIds.has(membership.bookId)) return true;
+  return !!membership.chapterId && index.suspendedChapterIds.has(membership.chapterId);
+}
+
+/** True when the sentence has at least one book membership and every one is shelved. */
 export function sentenceIsSuspendedOnly(
   sentenceId: string,
   index: SuspendedBookIndex,
 ): boolean {
-  const bookIds = index.bookIdsBySentenceId.get(sentenceId);
-  if (!bookIds || bookIds.length === 0) return false;
-  return bookIds.every((bookId) => index.suspendedBookIds.has(bookId));
+  const memberships = index.membershipsBySentenceId.get(sentenceId);
+  if (!memberships || memberships.length === 0) return false;
+  return memberships.every((membership) => membershipIsShelved(membership, index));
 }
 
 /**

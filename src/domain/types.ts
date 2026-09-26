@@ -293,6 +293,14 @@ export interface BookChapter {
    * title and creating a second chapter for the same episode.
    */
   sourceId?: string;
+  /**
+   * When set, this chapter alone is shelved — same effect as `Book.suspendedAt`
+   * (no session-planner work, held-back review cards) but scoped to sentences
+   * whose `BookSentence.chapterId` points here. A sentence still counts as
+   * active if it also belongs to a non-suspended chapter/book elsewhere. See
+   * `src/lib/suspendedBooks.ts`.
+   */
+  suspendedAt?: string;
 }
 
 export interface BookSentence {

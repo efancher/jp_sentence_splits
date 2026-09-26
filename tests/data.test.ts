@@ -44,6 +44,7 @@ import {
   listAttemptsForSentence,
   loadSuspendedBookIndex,
   setBookSuspended,
+  setChapterSuspended,
   RESUME_RESCHEDULE_SPREAD_DAYS,
   listCardIssueReports,
   listCardIssueReportsWithContext,
@@ -896,6 +897,84 @@ describe('FSRS review (study_items/reviews)', () => {
       expect(due).toBeLessThanOrEqual(
         Date.now() + (RESUME_RESCHEDULE_SPREAD_DAYS + 1) * 24 * 60 * 60 * 1000,
       );
+    });
+
+    const seedChapterSuspensionFixture = async () => {
+      const db = getDb();
+      const now = new Date().toISOString();
+      const book = await createBook({ title: 'Series' });
+      const chapter = await createBookChapter(book.id, 'Episode 1');
+      for (const id of ['s1', 's2']) {
+        await db.sentences.add({
+          id,
+          normalizedKey: id,
+          japanese: `${id}。`,
+          readingOnly: '',
+          inlineReading: '',
+          translation: '',
+          targetVocabulary: [],
+          vocabularySuggestions: [],
+          sourceReferences: [],
+          conflicts: [],
+          firstOccurrenceIndex: id === 's1' ? 0 : 1,
+          importBatchIds: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      // s1 lives in the suspendable chapter; s2 is unassigned in the same book.
+      await db.bookSentences.bulkAdd([
+        { id: 'm1', bookId: book.id, sentenceId: 's1', position: 0, status: 'in_progress', addedAt: now, chapterId: chapter.id },
+        { id: 'm2', bookId: book.id, sentenceId: 's2', position: 1, status: 'in_progress', addedAt: now },
+      ]);
+      return { book, chapter };
+    };
+
+    it('setChapterSuspended sets and clears BookChapter.suspendedAt without touching the book flag', async () => {
+      const { book, chapter } = await seedChapterSuspensionFixture();
+      const suspended = await setChapterSuspended(book.id, chapter.id, true);
+      expect(suspended.chapters.find((c) => c.id === chapter.id)?.suspendedAt).toBeTruthy();
+      expect(suspended.suspendedAt).toBeUndefined();
+      const resumed = await setChapterSuspended(book.id, chapter.id, false);
+      expect(resumed.chapters.find((c) => c.id === chapter.id)?.suspendedAt).toBeUndefined();
+    });
+
+    it('loadSuspendedBookIndex holds back only cards exclusive to a suspended chapter', async () => {
+      const { book, chapter } = await seedChapterSuspensionFixture();
+      expect(await loadSuspendedBookIndex()).toBeNull();
+
+      await setChapterSuspended(book.id, chapter.id, true);
+      const index = await loadSuspendedBookIndex();
+      expect(index).not.toBeNull();
+
+      const held = (subjectType: string, subjectId: string) =>
+        studyItemIsHeldBackBySuspension({ subjectType: subjectType as never, subjectId }, index!);
+      expect(held('sentence', 's1')).toBe(true);
+      expect(held('sentence', 's2')).toBe(false);
+    });
+
+    it('resuming a chapter spreads only its own overdue cards', async () => {
+      const db = getDb();
+      const { book, chapter } = await seedChapterSuspensionFixture();
+      const wayOverdue = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const chapterItem = await ensureStudyItem('sentence', 's1', 'reading_in_context');
+      const otherItem = await ensureStudyItem('sentence', 's2', 'reading_in_context');
+      await db.studyItems.update(chapterItem.id, {
+        fsrsState: { ...chapterItem.fsrsState, due: wayOverdue },
+      });
+      await db.studyItems.update(otherItem.id, {
+        fsrsState: { ...otherItem.fsrsState, due: wayOverdue },
+      });
+
+      await setChapterSuspended(book.id, chapter.id, true);
+      await setChapterSuspended(book.id, chapter.id, false);
+
+      const afterChapter = await db.studyItems.get(chapterItem.id);
+      expect(new Date(afterChapter!.fsrsState.due).getTime()).toBeGreaterThanOrEqual(
+        Date.now() - 60_000,
+      );
+      const afterOther = await db.studyItems.get(otherItem.id);
+      expect(afterOther!.fsrsState.due).toBe(wayOverdue);
     });
   });
 

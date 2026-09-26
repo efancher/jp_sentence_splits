@@ -227,6 +227,9 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
   `src/lib/suspendedBooks.ts`). Resume spreads now-overdue held-back cards over
   the next week. `BookDetailPage` "Suspend studying" / "Resume studying" toggle;
   "Resume" jump button renamed "Continue". Detail in STATUS.md.
+  Follow-up (2026-09-26): extended to single chapters (`BookChapter.suspendedAt`,
+  `setChapterSuspended`) for when only part of a book is the problem. Detail
+  in STATUS.md.
 - [x] **Pitch-accent drill usage tracking + SRS-miss-triggered extra
   practice + H/L shape tracking.** (2026-09-11) User asked whether the free
   drill is actually helping their pitch perception — three additive pieces,

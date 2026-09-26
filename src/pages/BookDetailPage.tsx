@@ -46,6 +46,7 @@ import {
   restoreBookSentenceSnapshot,
   setBookCollapsedChapterIds,
   setBookSuspended,
+  setChapterSuspended,
   touchBookOpened,
   transferBookSentences,
   updateBook,
@@ -1150,6 +1151,7 @@ export function BookDetailPage() {
                         {sentenceCount} sentence
                         {sentenceCount === 1 ? '' : 's'}
                         {collapsed ? ' · hidden' : ''}
+                        {chapter.suspendedAt ? ' · suspended' : ''}
                       </div>
                     </div>
                     <div className="row">
@@ -1160,6 +1162,14 @@ export function BookDetailPage() {
                         onClick={() => toggleChapterCollapsed(chapter.id)}
                       >
                         {collapsed ? 'Show' : 'Hide'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void setChapterSuspended(bookId, chapter.id, !chapter.suspendedAt)
+                        }
+                      >
+                        {chapter.suspendedAt ? 'Resume chapter' : 'Suspend chapter'}
                       </button>
                       <button
                         type="button"

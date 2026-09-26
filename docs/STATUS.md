@@ -31,6 +31,38 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Per-chapter book suspension.** User asked for the ability to
+  suspend part of a book, not just the whole thing (e.g. one noisy episode
+  in an otherwise-fine series). `BookChapter` already existed as a
+  first-class entity (`Book.chapters[]`, `BookSentence.chapterId`), so this
+  extends the existing `Book.suspendedAt` mechanism (see
+  `src/lib/suspendedBooks.ts`) down to that level rather than introducing a
+  new concept: `BookChapter.suspendedAt` + `setChapterSuspended` (mirrors
+  `setBookSuspended`, including the same overdue-card resume-spread, scoped
+  to just that chapter's sentences via a shared `rescheduleResumedItems`
+  helper both functions now call). `SuspendedBookIndex` changed from a flat
+  `bookIdsBySentenceId: Map<sentenceId, bookId[]>` to
+  `membershipsBySentenceId: Map<sentenceId, {bookId, chapterId?}[]>` plus a
+  `suspendedChapterIds` set, with a new `membershipIsShelved` helper (book
+  OR its own chapter suspended) backing `sentenceIsSuspendedOnly` — a
+  sentence is held back from the global `/review` queue only when *every*
+  membership row it has (book- or chapter-scoped) is shelved, same "shared
+  elsewhere stays active" rule as book-level suspension. The two
+  representative-book-picking blocks in `getOddEarOutData` /
+  `getPitchAccentSpeakerComparisons` (which prefer a non-shelved book id
+  when a sentence has multiple memberships) were updated to check
+  chapter-shelving too. `chapters` is synced as an opaque `jsonb` array
+  (`supabase/migrations/20260722000000_sync_schema.sql`), so no migration
+  was needed for the new field. UI: a "Suspend chapter"/"Resume chapter"
+  button per chapter row on `BookDetailPage` (next to Hide/Show), a
+  "suspended" note in that row's sentence-count line, and a "Chapter
+  suspended" status pill on `BooksPage` when a book itself is active but has
+  a suspended chapter. Tests: `tests/suspendedBooks.test.ts`
+  (`membershipIsShelved`, chapter-only `sentenceIsSuspendedOnly` cases) and
+  `tests/data.test.ts` (`setChapterSuspended` set/clear, held-back index,
+  chapter-scoped resume spread doesn't touch other sentences' due dates).
+  `npm run check` green (2051 tests).
+
 - **2026-09-26 — Vocabulary picker: don't default-check する glued onto an
   immediately preceding noun (計算する, 説明する, 勉強する, … — the standard
   サ変 compound).** User got a review card testing bare する → "to do" from
