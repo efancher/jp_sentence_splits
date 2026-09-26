@@ -6,6 +6,7 @@ import {
   getDb,
   getEarTilesCandidates,
   getGamesProgress,
+  getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
   getPrecedingSentences,
@@ -605,5 +606,102 @@ describe('ear tiles repository', () => {
       addedAt: T,
     } as never);
     expect(await getEarTilesCandidates()).toEqual([]);
+  });
+});
+
+describe('keystone repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  async function addBook(id: string, overrides: Record<string, unknown> = {}) {
+    await getDb().books.add({ id, title: id, createdAt: T, updatedAt: T, ...overrides } as never);
+  }
+
+  async function addMembership(
+    id: string,
+    bookId: string,
+    sentenceId: string,
+    position: number,
+    status: 'unstarted' | 'complete' = 'unstarted',
+    overrides: Record<string, unknown> = {},
+  ) {
+    await getDb().bookSentences.add({
+      id,
+      bookId,
+      sentenceId,
+      position,
+      status,
+      addedAt: T,
+      ...overrides,
+    } as never);
+  }
+
+  it('surfaces a confirmed, card-less word that appears in an upcoming sentence', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addLink('s1', 'vi-park', '公園');
+    await addBook('b1');
+    await addMembership('m1', 'b1', 's1', 0);
+
+    const candidates = await getKeystoneCandidates();
+    expect(candidates.map((c) => c.id)).toEqual(['vi-park']);
+    expect(candidates[0]!.unlockedSentenceIds).toEqual(['s1']);
+    expect(candidates[0]!.stats.hasCard).toBe(false);
+  });
+
+  it('counts every upcoming sentence a word appears in', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addSentence('s2', '公園は広い。');
+    await addLink('s1', 'vi-park', '公園');
+    await addLink('s2', 'vi-park', '公園');
+    await addBook('b1');
+    await addMembership('m1', 'b1', 's1', 0);
+    await addMembership('m2', 'b1', 's2', 1);
+
+    const [candidate] = await getKeystoneCandidates();
+    expect(candidate!.unlockedSentenceIds.sort()).toEqual(['s1', 's2']);
+  });
+
+  it('excludes a word that already has a study item, even if still in the upcoming window', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addLink('s1', 'vi-park', '公園');
+    await addBook('b1');
+    await addMembership('m1', 'b1', 's1', 0);
+    await ensureStudyItem('vocabularyItem', 'vi-park', 'reading_production');
+
+    expect(await getKeystoneCandidates()).toEqual([]);
+  });
+
+  it('ignores sentences already started, not just unstarted ones', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addLink('s1', 'vi-park', '公園');
+    await addBook('b1');
+    await addMembership('m1', 'b1', 's1', 0, 'complete');
+
+    expect(await getKeystoneCandidates()).toEqual([]);
+  });
+
+  it('skips a book that is suspended', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addLink('s1', 'vi-park', '公園');
+    await addBook('b-susp', { suspendedAt: T });
+    await addMembership('m1', 'b-susp', 's1', 0);
+
+    expect(await getKeystoneCandidates()).toEqual([]);
+  });
+
+  it('ignores a link with no surfaceForm (not actually confirmed)', async () => {
+    await addWord('vi-park', '公園', 'こうえん');
+    await addSentence('s1', '公園で遊ぶ。');
+    await addLink('s1', 'vi-park', undefined);
+    await addBook('b1');
+    await addMembership('m1', 'b1', 's1', 0);
+
+    expect(await getKeystoneCandidates()).toEqual([]);
   });
 });

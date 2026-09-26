@@ -147,6 +147,7 @@ import {
 } from '../lib/gamePicker';
 import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
+import type { KeystoneCandidate } from '../lib/keystone';
 import { isolatedWordSpans, type IsolatedWordSpans } from '../lib/isolatedWordRange';
 import {
   BUILT_RECIPES,
@@ -6537,6 +6538,92 @@ export async function getParticlePuzzleData(): Promise<{
     });
   }
   return { candidates, focus: missFocus(history) };
+}
+
+/**
+ * Confirmed vocabulary with no `vocabularyItem`-subject study item yet (the
+ * same backlog `countNewVocabularyCardBacklog` counts), scoped to words that
+ * actually occur in each active book's next unstarted sentences (the same
+ * "next chapter" preview window `findExploreCandidates` uses,
+ * `EXPLORE_SENTENCE_PREVIEW_LIMIT` sentences per book) — Keystone's premise
+ * is "which of these unlocks the most upcoming reading," so a backlog word
+ * with no upcoming occurrence isn't a useful candidate here even though it
+ * still counts in the raw backlog number. Skips sentences that live only in
+ * suspended books/chapters. Read-only.
+ */
+export async function getKeystoneCandidates(
+  options: { now?: Date } = {},
+): Promise<KeystoneCandidate[]> {
+  const now = options.now ?? new Date();
+  const db = getDb();
+  const [allBooks, allMemberships, vocabularyStudyItems, suspendedIndex] = await Promise.all([
+    db.books.toArray(),
+    db.bookSentences.toArray(),
+    db.studyItems.where('subjectType').equals('vocabularyItem').toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const introduced = new Set(vocabularyStudyItems.map((item) => item.subjectId));
+
+  const activeBookIds = new Set(allBooks.filter(isBookInStudyRotation).map((book) => book.id));
+  const membershipsByBook = new Map<string, BookSentence[]>();
+  for (const membership of allMemberships) {
+    if (!activeBookIds.has(membership.bookId)) continue;
+    const list = membershipsByBook.get(membership.bookId);
+    if (list) list.push(membership);
+    else membershipsByBook.set(membership.bookId, [membership]);
+  }
+
+  const upcomingSentenceIds: string[] = [];
+  for (const bookMemberships of membershipsByBook.values()) {
+    const unstarted = bookMemberships
+      .filter((item) => item.status === 'unstarted')
+      .filter(
+        (item) => !(suspendedIndex && sentenceIsSuspendedOnly(item.sentenceId, suspendedIndex)),
+      )
+      .sort((a, b) => a.position - b.position)
+      .slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+    for (const item of unstarted) upcomingSentenceIds.push(item.sentenceId);
+  }
+  if (upcomingSentenceIds.length === 0) return [];
+
+  const vocabByUpcomingSentence = await getReviewableVocabularyItemIdsBySentence(upcomingSentenceIds);
+  const sentenceIdsByVocabularyItemId = new Map<string, string[]>();
+  for (const [sentenceId, vocabIds] of vocabByUpcomingSentence) {
+    for (const vocabId of vocabIds) {
+      const list = sentenceIdsByVocabularyItemId.get(vocabId);
+      if (list) list.push(sentenceId);
+      else sentenceIdsByVocabularyItemId.set(vocabId, [sentenceId]);
+    }
+  }
+
+  const backlogIds = [...sentenceIdsByVocabularyItemId.keys()].filter((id) => !introduced.has(id));
+  if (backlogIds.length === 0) return [];
+
+  const items = await db.vocabularyItems.bulkGet(backlogIds);
+  const itemById = new Map(items.flatMap((item) => (item ? [[item.id, item] as const] : [])));
+  const exampleSentenceIds = new Set(
+    backlogIds.flatMap((id) => sentenceIdsByVocabularyItemId.get(id)?.[0] ?? []),
+  );
+  const exampleSentences = await db.sentences.bulkGet([...exampleSentenceIds]);
+  const sentenceById = new Map(
+    exampleSentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+
+  const candidates: KeystoneCandidate[] = [];
+  for (const id of backlogIds) {
+    const item = itemById.get(id);
+    const unlockedSentenceIds = sentenceIdsByVocabularyItemId.get(id) ?? [];
+    const exampleSentence = sentenceById.get(unlockedSentenceIds[0] ?? '');
+    if (!item || !exampleSentence) continue;
+    candidates.push({
+      id,
+      item,
+      unlockedSentenceIds,
+      exampleSentence,
+      stats: summarizeCardStats([], now),
+    });
+  }
+  return candidates;
 }
 
 export interface EarTilesCandidate extends PickerCandidate {

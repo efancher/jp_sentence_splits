@@ -445,16 +445,19 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
        one shared chip bank (+1–2 decoys), translation hidden until check,
        accept curated equivalents (に/へ). Cheapest; per-particle-pair
        miss rate is the weakness signal.
-    5. Later: **Keystone** ("which 5 words unlock the most of the next
-       chapter" — front door to the no-card backlog), ~~**Ear Tiles**~~
+    5. ~~**Keystone**~~ **[shipped 2026-09-26 — see STATUS]** ("which of these
+       words unlock the most of the next chapter" — front door to the no-card
+       backlog, 127 words in prod per the 2026-09-19 feasibility report).
+       ~~**Ear Tiles**~~
        **[shipped 2026-09-21 — see STATUS; follow-ups: a slower-replay button, per-phrase
        "hear this phrase" once alignment spans are loaded for sentence audio, more tiles
        from the 91 sentences rejected as too few — ~half of eligible-audio sentences are
        under 4 phrases]**, **Then & Now** (replay
        an old clip with then-unknown words ducked out — needs per-word
-       alignment spans), **Draft Day** (choose which backlog words to
-       adopt), **Pair Sort** (only if the error mix shows discrimination
-       errors; unlocked by the discrimination-card item below).
+       alignment spans; **now unblocked** — 2026-09-19's
+       `backfill:reference-alignment` refresh populated these broadly), **Draft Day**
+       (choose which backlog words to adopt), **Pair Sort** (only if the error mix
+       shows discrimination errors; unlocked by the discrimination-card item below).
     Skipped as overlapping an existing card or a sibling game: Connections,
     Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
     Ghost Run (largest build, most likely to feel like work).
@@ -485,9 +488,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     `selfRatingCalibration` — see STATUS) + adaptive difficulty (each
     game's own last 3 rounds' accuracy narrows/widens the picker's sampled
     pool depth via a new `difficulty` tier on `pickItems`; never changes
-    signal). **P4** sync `game_rounds`; add "Queue misses". **P5** Keystone,
-    then Then & Now. **P6** let game misses feed the planner's weakness
-    term (riskiest, last).
+    signal). **P4** sync `game_rounds`; add "Queue misses". **P5** — Keystone
+    shipped 2026-09-26 (see STATUS); Then & Now still open. **P6** let game
+    misses feed the planner's weakness term (riskiest, last).
   - **Decisions taken for P1 (2026-09-19, the recommended defaults):** games are
     strictly read-only w.r.t. FSRS (no "Queue misses" yet); standalone `/play`
     only, no session interlude; local-only data; no streak. Still open: whether

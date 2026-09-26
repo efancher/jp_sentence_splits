@@ -818,6 +818,41 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-26 — Keystone, a new `/play` game: front door to the no-card
+  backlog.** Picked up from the ROADMAP's "Later" games list. Confirmed
+  vocabulary that has no `vocabularyItem`-subject study item yet
+  (`countNewVocabularyCardBacklog`'s exact backlog) sits invisible until the
+  daily session happens to seed it; Keystone surfaces it as a small
+  prediction game instead: each round is 5 multiple-choice puzzles, "which
+  of these words shows up in the most sentences you haven't read yet?",
+  scoped to words that actually occur in an active book's next unstarted
+  sentences (the same preview window `findExploreCandidates` uses,
+  `EXPLORE_SENTENCE_PREVIEW_LIMIT` per book). Picking correctly reveals
+  every choice's real unlock count plus an example sentence; nothing here
+  is FSRS-backed or scored against a signal — a backlog word by definition
+  has no card yet, so the usual weak/stale/strong split doesn't apply
+  (`GameDef.signals: []`, no per-signal hub chips). New pure module
+  `src/lib/keystone.ts` (`buildKeystoneRound`, ranks candidates by
+  upcoming-sentence count and samples a top slice the way `pickItems` does,
+  rather than going through the picker itself, since every candidate looks
+  identical — `hasCard: false` — to its signal logic); new repository
+  fetcher `getKeystoneCandidates()` (`src/db/repository.ts`, alongside the
+  other games' candidate builders); new `KeystoneGame.tsx` component
+  mirroring Particle Puzzle's wiring shape; registered in
+  `src/games/registry.tsx`. Logs to the same local-only `gameRounds` log as
+  every other game (`signal: 'any'`), so it gets the `/progress` Games panel
+  and adaptive difficulty for free. 5 new unit tests
+  (`tests/keystone.test.ts`) + 5 new repository tests
+  (`tests/gameRepository.test.ts`, "keystone repository" block — confirmed
+  card-less word in an upcoming sentence, multi-sentence unlock counting,
+  excludes a word with a study item, excludes already-started sentences,
+  skips a suspended book, ignores an unconfirmed link). `npm run check`
+  green (167 files, 2074 passed). Manual test: open `/play`, "Keystone"
+  should show a round if you have confirmed vocabulary with unstarted
+  words no card yet in an active book's next unread sentences; tap a
+  choice, confirm the reveal shows plausible per-word counts + example
+  sentences, and confirm no `reviews`/`study_items` rows changed.
+
 - **2026-09-26 — "Move into another book" button on `BookDetailPage` (merge a standalone import into a
   series book as a new chapter).** User imported a Slow Japanese episode via a standalone
   `.shadowing.zip` package upload, and it landed as its own one-off book instead of joining the

@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import { EarTilesGame, EAR_TILES_COPY } from '../components/games/EarTilesGame';
+import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
 import {
@@ -11,6 +12,7 @@ import {
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
 import {
   getEarTilesCandidates,
+  getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
   getVerbLegoData,
@@ -24,6 +26,7 @@ import {
   type SignalCopy,
 } from '../lib/gamePicker';
 import { EAR_TILES_GAME_ID, EAR_TILES_ROUND_SIZE } from '../lib/earTiles';
+import { KEYSTONE_GAME_ID, KEYSTONE_ROUND_SIZE } from '../lib/keystone';
 import {
   buildContrastCandidates,
   ODD_EAR_COPY,
@@ -141,6 +144,25 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: VerbLegoGame,
+  },
+  {
+    id: KEYSTONE_GAME_ID,
+    title: 'Keystone',
+    blurb:
+      "Confirmed words you haven't started reviewing yet — for each round, guess which one unlocks the most sentences you haven't read.",
+    needs:
+      "Needs confirmed words with no study card yet that appear in your books' next unread sentences.",
+    skill: 'the no-card backlog',
+    roundSize: KEYSTONE_ROUND_SIZE,
+    // No FSRS signal applies — every candidate is by definition card-less;
+    // the round ranks by upcoming-sentence unlock count instead (see keystone.ts).
+    signals: [],
+    signalCopy: DEFAULT_SIGNAL_COPY,
+    loadPools: async () => {
+      const candidates = await getKeystoneCandidates();
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: KeystoneGame,
   },
   {
     id: EAR_TILES_GAME_ID,
