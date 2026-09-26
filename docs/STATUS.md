@@ -67,6 +67,18 @@ what's left is one deferred durability item (below).
   Regression test in `tests/commitSeriesEpisodeImport.test.ts` updated to
   assert both episodes keep their own row instead of asserting the
   now-fixed "episode 1 loses it" behavior. Full suite green (2063).
+  **Migration verified live and data repaired same day**: polled until the
+  index swap landed, then ran the backfill-capable
+  `repair-episode-sentence-order.ts` — "Slow Japanese" gained 29
+  previously-missing sentence instances across all 7 chapters (176 rows
+  renumbered), and "Japanese podcast for beginners" (Nihongo con Teppei)
+  gained 5 across 2 chapters (500 rows renumbered). Along the way, fixed a
+  bug in the repair script itself: a sentence with more than one audio clip
+  *within the same episode* (a repeated line) needs deduping to its
+  earliest start time before backfilling, or it tries to insert the same
+  (book, chapter, sentence) twice and hits the new unique index. NHK Easy
+  News and NHK Easier needed no repair (no reference-audio coverage on the
+  former; already correct on the latter).
 - **2026-09-26 — Podcast-series episode sentence order scrambled by reused
   boilerplate lines; fixed + 3 chapters repaired.** Found via a user report
   that `ReaderPage`'s playback order didn't match the podcast. Root cause: a

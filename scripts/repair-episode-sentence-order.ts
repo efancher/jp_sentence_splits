@@ -43,11 +43,22 @@
  * Dry-run by default; --apply required to write.
  * Usage: npm run repair:episode-sentence-order -- <bookId> [--apply]
  *
- * Applied 2026-09-26 to "Slow Japanese" (book_5c1ab5fd-c7cb-46c5-b931-d89887a7f2f7):
- * first pass (order only) fixed Episode #2 (Family), #4 (Hobby), #160
- * (restaurants); this backfill-capable version then restored 25
- * missing-sentence instances across all 7 chapters (mostly shared
- * intro/outro lines) and renumbered the whole book.
+ * Applied 2026-09-26, after the `book_sentences_book_sentence_uidx` ->
+ * per-chapter unique-index migration landed (20260926010000_...):
+ *  - "Slow Japanese" (book_5c1ab5fd-c7cb-46c5-b931-d89887a7f2f7) — first pass
+ *    (order only, before the migration) fixed Episode #2 Family, #4 Hobby,
+ *    #160 restaurants; this backfill-capable version restored 29
+ *    missing-sentence instances across all 7 chapters and renumbered the
+ *    whole book (176 rows).
+ *  - "Japanese podcast for beginners" / Nihongo con Teppei
+ *    (book_a882a57a-7b9b-4c08-a925-3fb396e2d28b) — restored 5
+ *    missing-sentence instances across 2 chapters (500 rows). A sentence
+ *    with more than one clip *within* the same episode (a repeated line)
+ *    is deduped to its earliest start time first — an earlier run without
+ *    that dedupe tried to insert the same (book, chapter, sentence) twice
+ *    and hit the new unique index.
+ *  - NHK Easy News and NHK Easier — no repair needed (no reference-audio
+ *    coverage, or already correct).
  */
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
@@ -154,17 +165,32 @@ async function main() {
       continue;
     }
 
+    // A sentence can have more than one clip within the same episode (a
+    // repeated line) — dedupe to its earliest start time before anything
+    // else, matching shadowingImport.ts's own "repeated occurrence" rule,
+    // or a repeated sentence would get two membership rows and collide with
+    // the new (book_id, chapter_id, sentence_id) unique index.
+    const startMsBySentence = new Map<string, number>();
+    for (const row of episodeAudio) {
+      const existing = startMsBySentence.get(row.sentence_id);
+      if (existing === undefined || row.source_start_ms < existing) {
+        startMsBySentence.set(row.sentence_id, row.source_start_ms);
+      }
+    }
+
     const current = memberships.filter((m) => m.chapter_id === chapter.id);
     const currentSentenceIds = new Set(current.map((m) => m.sentence_id));
-    const missing = episodeAudio.filter((row) => !currentSentenceIds.has(row.sentence_id));
+    const missing = [...startMsBySentence.keys()].filter(
+      (sentenceId) => !currentSentenceIds.has(sentenceId),
+    );
 
     if (missing.length) {
       console.log(`${chapter.title}: backfilling ${missing.length} missing sentence(s).`);
     }
-    const missingRows = missing.map((row) => ({
+    const missingRows = missing.map((sentenceId) => ({
       id: createId('bs'),
       book_id: book.id,
-      sentence_id: row.sentence_id,
+      sentence_id: sentenceId,
       chapter_id: chapter.id,
       position: 0, // reassigned below
       status: 'unstarted',
@@ -172,8 +198,6 @@ async function main() {
       owner_id: user.id,
     }));
     newRows.push(...missingRows);
-
-    const startMsBySentence = new Map(episodeAudio.map((row) => [row.sentence_id, row.source_start_ms]));
     const allRowsForChapter: { id: string; sentence_id: string }[] = [
       ...current.map((m) => ({ id: m.id, sentence_id: m.sentence_id })),
       ...missingRows.map((r) => ({ id: r.id, sentence_id: r.sentence_id })),
