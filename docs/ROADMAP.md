@@ -458,6 +458,20 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Skipped as overlapping an existing card or a sibling game: Connections,
     Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
     Ghost Run (largest build, most likely to feel like work).
+    New ideas from a 2026-09-26 brainstorm, unscheduled:
+    - **Homophone Hunt** (pitch, S–M) — score the existing minimal-pair ABX
+      warm-up (`getPitchAccentMinimalPairOccurrences`, true homophones like
+      箸/橋) as its own round instead of an ungraded in-drill warm-up.
+    - **Speaker Match** (pitch, S) — gamifies the 2026-09-25 "Compare
+      speakers" browse tool (`/pitch-accent/compare`): play two same-word
+      clips from different books, guess which matches a shown dictionary
+      shape (or which is which). Pool-size caveat from that tool carries
+      over (cross-book same-word overlap after Odd Ear Out's span/suspended-
+      book filters is the limiting factor, not code).
+    - **Grammar Detective** (grammar, M) — Word Detective's clue-ladder
+      format sourced from `grammar_completion` misses instead of vocab
+      leeches, reusing the passage-context convention `grammar_completion`
+      already uses (`getReadingContextForSentence`).
   - **Phases:** **P1 — DONE 2026-09-19** (`GameShell`, `src/lib/gamePicker.ts`,
     `/play` hub + Home shortcut, local `gameRounds` log, **Word Detective**; see
     STATUS.md). **Particle Puzzle also shipped 2026-09-19** (candidate #4 below;
