@@ -75,6 +75,11 @@ const ReviewPage = lazy(() =>
     default: module.ReviewPage,
   })),
 );
+const ReaderPage = lazy(() =>
+  import('./pages/ReaderPage').then((module) => ({
+    default: module.ReaderPage,
+  })),
+);
 const BuildPage = lazy(() =>
   import('./pages/BuildPage').then((module) => ({
     default: module.BuildPage,
@@ -247,6 +252,7 @@ export default function App() {
               element={<PracticePage />}
             />
             <Route path="books/:bookId/review" element={<ReviewPage />} />
+            <Route path="books/:bookId/read" element={<ReaderPage />} />
             <Route
               path="books/:bookId/resegment"
               element={<ResegmentSourcePage />}

@@ -606,6 +606,9 @@ export function BookDetailPage() {
           <Link to={`/books/${bookId}/review`}>
             <button type="button">Review</button>
           </Link>
+          <Link to={`/books/${bookId}/read`}>
+            <button type="button">Read</button>
+          </Link>
           {data.book.sourceKey?.startsWith('shadowing:') ? (
             <Link to={`/books/${bookId}/resegment`}>
               <button type="button">Re-segment captions</button>
@@ -1246,6 +1249,9 @@ export function BookDetailPage() {
                       </div>
                     </div>
                     <div className="row">
+                      <Link to={`/books/${bookId}/read?chapter=${chapter.id}`}>
+                        <button type="button">Read</button>
+                      </Link>
                       <button
                         type="button"
                         className={collapsed ? 'primary' : undefined}

@@ -25,6 +25,8 @@ export class NativeAudioController {
   private audio: HTMLAudioElement | null = null;
   private objectUrl: string | null = null;
   private generation = 0;
+  /** Fired from `finish()` only on a genuine natural end, never on `stop()` — see `play()`'s `onEnded` option. */
+  private onEndedCallback: (() => void) | null = null;
 
   getSnapshot = (): NativeAudioSnapshot => this.snapshot;
 
@@ -46,10 +48,11 @@ export class NativeAudioController {
   async play(
     record: SentenceAudio,
     playbackRate = 1,
-    options: { loop?: boolean } = {},
+    options: { loop?: boolean; onEnded?: () => void } = {},
   ): Promise<void> {
     this.stop();
     const generation = ++this.generation;
+    this.onEndedCallback = options.onEnded ?? null;
     this.notify({
       isPlaying: true,
       activeItemId: record.id,
@@ -140,6 +143,7 @@ export class NativeAudioController {
 
   stop(): void {
     this.generation += 1;
+    this.onEndedCallback = null;
     if (this.audio) {
       this.audio.pause();
       this.audio.removeAttribute('src');
@@ -159,11 +163,14 @@ export class NativeAudioController {
     if (generation !== this.generation) return;
     this.audio = null;
     this.revokeObjectUrl();
+    const onEnded = this.onEndedCallback;
+    this.onEndedCallback = null;
     this.notify({
       isPlaying: false,
       activeItemId: null,
       error,
     });
+    if (!error) onEnded?.();
   }
 
   private revokeObjectUrl(): void {

@@ -997,6 +997,31 @@ Both are explicitly *not* SRS-scheduled — separate from the Review system
 below, framed in the README as "not a spaced-repetition system" for this
 original layer (the SRS layer was added later, additively).
 
+### 3b. Chapter/book read-along — `ReaderPage.tsx` (`/books/:bookId/read`, optional `?chapter=<id>`)
+An always-available (no unlock/gate), non-SRS comprehensible-input viewer —
+"try it from time to time to see how comprehension is doing," not a card:
+no `Review` row, no self-rating. Reachable from a "Read" button on
+`BookDetailPage`'s main action row (whole book) and one per chapter. A
+single Play/Stop toggle drives continuous, auto-advancing playback through
+each sentence's native `SentenceAudio`, skipping sentences that don't have
+one; tapping any sentence's own play button jumps the sequence there and
+continues. Auto-advance relies on a completion signal on
+`NativeAudioController.play()` — an optional, generation-guarded `onEnded`
+callback (`src/lib/nativeAudio.ts`) that only fires on a genuine natural
+end, never on a manual stop or a superseded clip. Reuses
+`KaraokeSentenceText` (§4) for per-word highlight + tap-word gloss, but only
+on the currently-playing sentence — highlighting only means something
+there, and it keeps alignment-fetch cost to one clip at a time instead of
+firing for every sentence in the chapter on open. A viewer-local
+plain/furigana/reading-only toggle (`textDisplayMode`, defaulting from the
+global setting) degrades to static text with no per-word highlight outside
+plain mode, since ruby markup and the plain-text character-offset
+highlighting don't currently compose. Sentences with no `SentenceAudio`
+degrade to plain static text with no play control rather than blocking the
+chapter. Also: a playback-speed selector, auto-scroll to the active
+sentence, and a per-sentence "Show translation" reveal so a comprehension
+self-check has a way to confirm you got it right.
+
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home

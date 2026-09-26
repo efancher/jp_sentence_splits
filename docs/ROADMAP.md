@@ -1096,61 +1096,39 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     beside the content they act on; no `window.prompt`/`confirm` (dead in the iOS PWA);
     gesture-gated audio; progress + undo-last; a "why this item" chip.
 
-- [ ] **Chapter read/listen-along viewer, unlocked at 80% coverage.**
-  (2026-09-23 idea) A continuous, multi-sentence reading/listening surface
-  for a whole `BookChapter` (podcast episode, NHK Easy article, etc.) once
-  the learner has actually earned it, rather than a per-sentence review
-  card. Design sketch, grounding each piece in what already exists:
-  - **Unlock condition.** Fires the first time a chapter's vocabulary
-    coverage reaches ≥80% — confirmed by user 2026-09-23 to mean exactly
-    what `bookCoverage.ts`'s `ratio`/`coveragePercent` already measure:
-    confirmed-vocabulary FSRS reading-proficiency, not
-    `progressReport.ts`'s FSRS recall-success rate. **Needs building first**: coverage today is
-    book-level only (`getBookVocabularyCoverage`) — the "per-chapter
-    breakdown not done" gap already noted under NHK Easy import above and
-    in STATUS.md. Extending `buildBookCoverage` to take chapter-scoped
-    sentence sets (via `BookChapter.id`, already threaded through
-    `BookSentence.chapterId`) is the natural shape. Should be a sticky
-    **first-reached** flag (persist the unlock, don't re-lock on a later
-    FSRS lapse) — same "first-recalled-recently" convention
-    `progressReport.ts`'s vocabulary ladder already uses, since coverage
-    can dip after a review miss and re-locking a chapter the learner
-    already read through would be a regression, not a safeguard.
-  - **The viewer itself.** Not a card — no `Review` row, no FSRS, no
-    self-rating; comprehensible-input consumption, same non-graded
-    treatment as `ShadowPage`/`/play`. Renders the chapter's sentences in
-    reading order with **continuous, sentence-by-sentence follow-along
-    audio** driven by `PlaybackCoordinator`, auto-advancing through each
-    sentence's `SentenceAudio` clip. Reuses `KaraokeSentenceText` (built
-    for the `listening` review card) for the per-word highlight-as-it-plays
-    + tap-word gloss popup, instead of inventing a second sync mechanism —
-    that component already solves "highlight the token under the playhead
-    via a cached `ReferenceAlignment`" and "tap a token for its English
-    gloss from `vocabularySuggestions`."
-  - **Optional furigana**, per the ask: reuse the existing
-    `textDisplayMode`/`FuriganaText` plain/furigana/reading toggle
-    (`Settings`, `AnalyzePage`) rather than a new rendering path — scope it
-    as a viewer-local override so a learner can drop furigana mid-chapter
-    without touching the global setting.
-  - **Degrade, don't hide** for a mixed-source chapter: sentences lacking
-    `SentenceAudio` or a cached alignment fall back to plain static text
-    for that sentence only (matches the standing feedback note — see
-    memory), not a refusal to open the chapter.
-  - **Additional suggestions, unscheduled:**
-    - Playback-speed selector, reusing `PLAYBACK_SPEEDS`
-      (`ShadowPage`/`listening` card) — a half-speed first pass through a
-      just-barely-80% chapter.
-    - Tap-a-sentence-to-replay/loop it, reusing
-      `SegmentLoopPlayer`/`PlaybackCoordinator.loopRange` conventions
-      rather than a third player implementation.
-    - Auto-scroll to keep the currently-playing sentence in view, one
-      level up from the existing per-word karaoke highlight.
-    - Entry points: a chapter-scoped affordance on `BookDetailPage` once
-      per-chapter coverage exists there, plus a `/progress`
-      "chapters ready to read" list.
-    - Consider a second, stricter threshold (e.g. mature/95%) gating the
-      furigana-off variant specifically, so "read it clean" is a further
-      milestone past "read it at all" — optional, not a decision.
+- [x] **Chapter/book read-along viewer (`ReaderPage`).** (2026-09-23 idea;
+  shipped 2026-09-26, un-gated per user request the same day — see
+  STATUS.md.) A continuous, multi-sentence reading/listening surface for a
+  whole `BookChapter` or book, always available (no vocabulary-coverage
+  unlock — user explicitly dropped that in favor of "something to try from
+  time to time to see how comprehension is doing"). Not a card: no `Review`
+  row, no FSRS, no self-rating, same non-graded treatment as
+  `ShadowPage`/`/play`. Continuous sentence-by-sentence follow-along audio
+  auto-advances via a new `NativeAudioController` `onEnded` completion
+  callback (generation-guarded, so it only fires on a genuine natural end,
+  never on a manual `stop()` or a superseded clip); reuses
+  `KaraokeSentenceText` for per-word highlight + tap-word gloss, but only on
+  the currently-playing sentence (highlighting only ever means something
+  there, and it keeps the alignment-fetch cost to one clip at a time instead
+  of stampeding the whole chapter on open). Viewer-local `textDisplayMode`
+  toggle (plain/furigana/reading, defaulting from the global setting);
+  furigana/reading modes render statically (no per-word highlight — ruby
+  markup and the plain-text character-offset highlighting don't currently
+  compose, a deliberate scope cut, not an oversight). Degrades, doesn't
+  hide: a sentence with no `SentenceAudio` just renders as static text with
+  no play control, rather than blocking the chapter. Shipped along with the
+  unscheduled suggestions below: playback-speed selector (`PLAYBACK_SPEEDS`),
+  tap-a-sentence-to-jump-and-continue-reading, auto-scroll to the active
+  sentence, entry points on `BookDetailPage` (whole-book + per-chapter
+  "Read" buttons), and a per-sentence translation reveal (not in the
+  original sketch — added since a comprehension self-check needs some way
+  to confirm you understood correctly). **Not built** (dropped along with
+  the coverage gate, since they only made sense for it): per-chapter
+  coverage breakdown, sticky first-reached unlock flag, a `/progress`
+  "chapters ready to read" list, a second stricter/furigana-off threshold.
+  Also not built: tap-to-loop a single sentence (`SegmentLoopPlayer`-style)
+  — jump-and-continue covers the "hear that again" need without a second
+  player implementation.
 
 ## Possibilities (analytics & cross-activity coherence)
 

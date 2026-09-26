@@ -559,6 +559,12 @@ strong.jp {
   position: relative;
 }
 
+/* ReaderPage — the sentence currently playing in a continuous chapter read-along. */
+.reader-row-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
 .karaoke-gloss {
   position: absolute;
   z-index: 5;

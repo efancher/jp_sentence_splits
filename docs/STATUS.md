@@ -31,6 +31,37 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-26 — Chapter/book read-along viewer (`ReaderPage`), always
+  available.** ROADMAP had this sketched as a comprehensible-input viewer
+  unlocked once a chapter's vocabulary coverage hit 80%; user asked for it
+  today and said to drop the gate entirely — "not SRS, but something I can
+  try out from time to time to see how my overall comprehension is doing."
+  That cut the scope a lot: no per-chapter coverage breakdown, no sticky
+  unlock flag, no `/progress` "ready to read" list — the viewer itself is
+  the whole feature. New `src/pages/ReaderPage.tsx` at `/books/:bookId/read`
+  (optional `?chapter=<id>`, else the whole book), reachable from a "Read"
+  button on `BookDetailPage`'s main action row and one per chapter. A single
+  Play/Stop toggle drives continuous, auto-advancing playback through each
+  sentence's native `SentenceAudio`; auto-advance needed a real "this clip
+  ended naturally" signal distinct from a manual stop or a superseded clip,
+  so `NativeAudioController.play()` gained an optional generation-guarded
+  `onEnded` callback (`src/lib/nativeAudio.ts`, tested in
+  `tests/nativeAudio.test.ts`). Reuses `KaraokeSentenceText` for per-word
+  highlight + tap-gloss, but only on the currently-playing row — highlighting
+  only means something there, and it avoids firing an alignment fetch for
+  every sentence in the chapter at once. A viewer-local plain/furigana/
+  reading toggle (defaults from the global `textDisplayMode` setting)
+  degrades to static text with no per-word highlight in furigana/reading
+  mode, since ruby markup and the plain-text character-offset highlighting
+  don't currently compose — a deliberate cut, not a bug. Sentences without
+  `SentenceAudio` degrade to plain static text with no play control rather
+  than blocking the chapter. Also added: playback-speed selector, tap a
+  sentence to jump the sequence there, auto-scroll to the active sentence,
+  and a per-sentence "Show translation" reveal (not in the original sketch —
+  a comprehension self-check needs some way to confirm you got it right).
+  Tests: `tests/readerPage.test.tsx` (whole-book vs. chapter scoping, the
+  no-audio degrade, the display-mode toggle, translation reveal) plus the
+  4 new `nativeAudio.test.ts` cases for `onEnded`. Full suite green (2062).
 - **2026-09-26 — `BookDetailPage` sentence list groups by chapter/episode.**
   User: "I wonder if we can group sentences in a book in the book view by
   chapter or episode." The data model already fully supported this

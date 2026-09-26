@@ -162,6 +162,45 @@ describe('NativeAudioController', () => {
     expect(controller.getSnapshot()).toMatchObject({ isPlaying: true, error: null });
   });
 
+  it('fires onEnded when a clip finishes naturally (ReaderPage auto-advance)', async () => {
+    const controller = new NativeAudioController();
+    const onEnded = vi.fn();
+    await controller.play(audioRecord('audio-1'), 1, { onEnded });
+    MockAudio.instances[0]?.onended?.();
+    expect(onEnded).toHaveBeenCalledOnce();
+  });
+
+  it('does not fire onEnded when playback is stopped manually', async () => {
+    const controller = new NativeAudioController();
+    const onEnded = vi.fn();
+    await controller.play(audioRecord('audio-1'), 1, { onEnded });
+    controller.stop();
+    expect(onEnded).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onEnded when a newer clip has already started (stale event)', async () => {
+    const controller = new NativeAudioController();
+    const onEnded = vi.fn();
+    await controller.play(audioRecord('audio-1'), 1, { onEnded });
+    const first = MockAudio.instances[0]!;
+    await controller.play(audioRecord('audio-2'));
+    first.onended?.();
+    expect(onEnded).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onEnded when playback fails', async () => {
+    class RejectingAudio extends MockAudio {
+      override play = vi.fn(async () => {
+        throw new Error('codec details');
+      });
+    }
+    vi.stubGlobal('Audio', RejectingAudio);
+    const controller = new NativeAudioController();
+    const onEnded = vi.fn();
+    await controller.play(audioRecord('audio-1'), 1, { onEnded });
+    expect(onEnded).not.toHaveBeenCalled();
+  });
+
   it('recovers by refetching from the cloud when the local blob is corrupt (Safari WebKitBlobResource)', async () => {
     let failNext = true;
     class FlakyAudio extends MockAudio {
