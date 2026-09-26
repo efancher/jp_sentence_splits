@@ -192,6 +192,32 @@ function isNounSuruCompound(
 }
 
 /**
+ * する directly glued onto a に that itself marks the immediately preceding
+ * word — the "Nに+する" construction ("make/turn into/decide on N": 坊主頭に
+ * する "shave one's head", 赤にする "make it red", ことにする "decide to",
+ * ようにする "make sure to"). UniDic tags this する `動詞/非自立可能`, the
+ * same bound-verb tag `isNounSuruCompound` and `isDemonstrativeLightVerb`
+ * already treat as grammar: the specific meaning comes from the N+に
+ * phrase, not from する itself, so a bare-する card here is exactly as
+ * uninformative as for 計算する's する. Scoped to a literal に particle
+ * (`助詞`) rather than lemma/reading, so the adjectival "make Adj" copula-に
+ * (自然に, tagged `助動詞` — a different token entirely) isn't touched here.
+ * Deliberately not extended to なる (〜になる) — なる is core, unqualified
+ * vocabulary in that construction (ことになる, 〜くなる); see docs/STATUS.md
+ * 2026-09-25.
+ */
+function isNiMarkedSuruConstruction(
+  token: MorphologyToken,
+  prev: MorphologyToken | undefined,
+): boolean {
+  if (!token.pos?.startsWith('動詞')) return false;
+  if (token.lemma?.trim() !== 'する') return false;
+  if (!prev?.pos?.startsWith('助詞')) return false;
+  if (prev.surface !== 'に') return false;
+  return prev.end === token.start;
+}
+
+/**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
  * deliberately added them. Everything else (content words, and hand-added
@@ -300,6 +326,7 @@ function computeSelectedByDefault(
     !isBoundAuxiliaryVerb(token, prevToken) &&
     !isDemonstrativeLightVerb(token, prevToken) &&
     !isNounSuruCompound(token, prevToken) &&
+    !isNiMarkedSuruConstruction(token, prevToken) &&
     !isKanaWrittenFormalNoun(token, reading) &&
     !isFunctionAdverb(token)
   );

@@ -58,6 +58,26 @@ what's left is one deferred durability item (below).
   relative to the corpus and every unlink had zero review history at
   stake.
 
+  **Same-day follow-up — the "Nに+する" construction (坊主頭にする "shave
+  one's head", ことにする "decide to", ようにする "make sure to").** User
+  flagged a second bare-する card, from 気になるレストランが…足を運んでみる
+  ことにしています. Not covered by `isNounSuruCompound` above — こと sits
+  one token further back, separated from する by a に particle
+  (`こと`→`に`→`し`), so the adjacency check didn't fire. Same underlying
+  complaint though: the N+に phrase carries the meaning ("decide on/make
+  into N"), する contributes nothing a card for the phrase doesn't already
+  cover. New `isNiMarkedSuruConstruction`, gated on the immediately
+  preceding token being a literal `に` tagged `助詞` (not the adjectival
+  copula-に in 自然にする, which UniDic tags `助動詞` — a different token,
+  deliberately left alone, along with なる, for the same "core vocabulary,
+  no free POS signal" reason the 2026-09-25 こうしよう follow-up gave for
+  ことになる). 14 sentences / 18 suggestions corpus-wide, 1 already
+  confirmed (the reported sentence) — cleaned up via
+  `scripts/diagnose-ni-suru-construction-confirmed.ts` +
+  `scripts/unlink-ni-suru-construction-confirmed.ts --apply` (0 attached
+  study_items), plus the same scratch-recompute pass for the other 13
+  unconfirmed sentences. Tests in `tests/vocabularySuggestions.test.ts`.
+
 - **2026-09-25 — Verb Lego: whole-form English translation, for real
   sentence chains too.** User asked for a translation of the transformed
   verb form. `chainMeaning` (`src/lib/verbLego.ts`) previously only fired

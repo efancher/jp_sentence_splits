@@ -176,6 +176,49 @@ describe('vocabularySuggestions', () => {
     expect(separatedSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(true);
   });
 
+  it('does not default-select する glued onto a に that marks the preceding word (the "Nにする" construction)', () => {
+    // Real fugashi/UniDic output for 坊主頭にしました — 坊主頭にする ("shave
+    // one's head") is the "make/turn into N" construction.
+    const niSuru = '坊主頭にしました';
+    const niSuruSuggestions = suggestionsFromTokens(niSuru, [
+      { surface: '坊主', start: 0, end: 2, lemma: '坊主', reading: 'ぼうず', pos: '名詞/普通名詞' },
+      { surface: '頭', start: 2, end: 3, lemma: '頭', reading: 'あたま', pos: '名詞/普通名詞' },
+      { surface: 'に', start: 3, end: 4, lemma: 'に', reading: 'に', pos: '助詞/格助詞' },
+      { surface: 'し', start: 4, end: 5, lemma: 'する', reading: 'し', pos: '動詞/非自立可能' },
+      { surface: 'まし', start: 5, end: 7, lemma: 'ます', reading: 'まし', pos: '助動詞' },
+      { surface: 'た', start: 7, end: 8, lemma: 'た', reading: 'た', pos: '助動詞' },
+    ]);
+    expect(niSuruSuggestions.find((s) => s.expression === '頭')?.selectedByDefault).toBe(true);
+    expect(niSuruSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(false);
+    expect(niSuruSuggestions.some((s) => s.expression === 'する')).toBe(true);
+
+    // Real fugashi/UniDic output for 足を運んでみることにしています —
+    // ことにする ("decide to").
+    const kotoNiSuru = '運んでみることにしています';
+    const kotoNiSuruSuggestions = suggestionsFromTokens(kotoNiSuru, [
+      { surface: '運ん', start: 0, end: 2, lemma: '運ぶ', reading: 'はこん', pos: '動詞/一般' },
+      { surface: 'で', start: 2, end: 3, lemma: 'で', reading: 'で', pos: '助詞/接続助詞' },
+      { surface: 'みる', start: 3, end: 5, lemma: 'みる', reading: 'みる', pos: '動詞/非自立可能' },
+      { surface: 'こと', start: 5, end: 7, lemma: 'こと', reading: 'こと', pos: '名詞/普通名詞' },
+      { surface: 'に', start: 7, end: 8, lemma: 'に', reading: 'に', pos: '助詞/格助詞' },
+      { surface: 'し', start: 8, end: 9, lemma: 'する', reading: 'し', pos: '動詞/非自立可能' },
+      { surface: 'て', start: 9, end: 10, lemma: 'て', reading: 'て', pos: '助詞/接続助詞' },
+      { surface: 'い', start: 10, end: 11, lemma: 'いる', reading: 'い', pos: '動詞/非自立可能' },
+      { surface: 'ます', start: 11, end: 13, lemma: 'ます', reading: 'ます', pos: '助動詞' },
+    ]);
+    expect(kotoNiSuruSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(false);
+
+    // だ-derived adjectival に (自然に) is tagged 助動詞, not 助詞 — a
+    // different token the "Nにする" check deliberately doesn't touch here.
+    const keiyoDoshi = '自然にする';
+    const keiyoDoshiSuggestions = suggestionsFromTokens(keiyoDoshi, [
+      { surface: '自然', start: 0, end: 2, lemma: '自然', reading: 'しぜん', pos: '形状詞/一般' },
+      { surface: 'に', start: 2, end: 3, lemma: 'だ', reading: 'に', pos: '助動詞' },
+      { surface: 'する', start: 3, end: 5, lemma: 'する', reading: 'する', pos: '動詞/非自立可能' },
+    ]);
+    expect(keiyoDoshiSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(true);
+  });
+
   it('still default-selects a content verb that merely follows a comma-broken て', () => {
     const japanese = '歩いて、学ぶ。';
     const suggestions = suggestionsFromTokens(japanese, [
