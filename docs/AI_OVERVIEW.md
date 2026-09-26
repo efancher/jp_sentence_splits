@@ -834,6 +834,13 @@ Targets are constants; no settings UI.
   chapter text, `src/lib/pasteOrder.ts`; NFKC substring match, with a
   trailing-`。`-stripped retry since Satori drops the closing punctuation on
   each episode's last sentence), move/copy sentences between books.
+  "Move into another book" (`mergeBookIntoChapter`) folds an entire standalone
+  book into another book as one new chapter in a single step — for when an
+  import lands as its own one-off book instead of joining an existing series
+  book (e.g. a standalone `.shadowing.zip` package upload, which has no
+  series identity to key off, unlike the podcast-feed-picker import path);
+  preserves per-sentence study progress, keeps the target's copy on any
+  sentence collision, and deletes the emptied source book afterward.
   **Two shelving states, distinct:** *Archive* (`Book.archived`) tidies a
   finished book off the library list and out of session-planner rotation but
   leaves its review cards flowing for long-term retention; *Suspend studying*

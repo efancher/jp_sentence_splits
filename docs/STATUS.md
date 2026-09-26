@@ -637,6 +637,26 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-26 — "Move into another book" button on `BookDetailPage` (merge a standalone import into a
+  series book as a new chapter).** User imported a Slow Japanese episode via a standalone
+  `.shadowing.zip` package upload, and it landed as its own one-off book instead of joining the
+  existing "Slow Japanese" book — because `commitShadowingPackageImport` (`src/db/repository.ts`) keys
+  its `sourceKey` on the package's embedded `source.id` (unique per episode), not on series identity;
+  only the podcast-feed-picker import path (`commitSeriesEpisodeImport`) groups episodes into one
+  shared book. Rather than fixing the importer (the feed-picker path already does this correctly for
+  feeds it knows about; a standalone package upload has no series to key off), added a new
+  `mergeBookIntoChapter(sourceBookId, targetBookId, chapterTitle?)` repository function — a
+  Dexie-client port of the existing Supabase-only `scripts/merge-book-into-chapter.ts` (same semantics:
+  moves every sentence into the target book as a new chapter, preserving study progress since it lives
+  on `study_items` keyed by sentence; a sentence already present in the target keeps the target's copy,
+  promoting its status only if it was still `unstarted`; source book is deleted afterward) — and a
+  "Move into another book" toggle button + panel on `BookDetailPage` (target-book select + editable
+  chapter title, defaulting to the source book's title) next to the existing "Duplicate order" control.
+  No new tests (this codebase doesn't unit-test the Dexie repository layer directly; `npm run check`
+  green, 2051 passed). Manual test: open a standalone book → "Move into another book" → pick a target
+  → confirm; book's sentences appear as a new chapter in the target with status preserved, and the
+  source book is gone from `/books`.
+
 - **2026-09-25 — Comprehension check now also gates `listening`'s "Reveal text".** Follow-up to
   2026-09-24's `reading_in_context` comprehension check: user asked about blind listening
   comprehension (audio only, guess the meaning from options, no text at all). Investigation found the

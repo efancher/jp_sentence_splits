@@ -752,6 +752,9 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     **Known gap**: any book already created under the old one-per-episode
     scheme before this change (e.g. an episode imported earlier today)
     stays a separate single-chapter book — not retroactively merged.
+    **Closed 2026-09-26**: "Move into another book" button on
+    `BookDetailPage` (`mergeBookIntoChapter`) does this by hand, one book at
+    a time — still no bulk/automatic retroactive merge.
   - **Follow-up, same day, user request**: the episode/article picker now
     shows an "Imported" badge (via a new `getSeriesImportedSourceIds`
     lookup, matched against the same as-picked URL used as the chapter's

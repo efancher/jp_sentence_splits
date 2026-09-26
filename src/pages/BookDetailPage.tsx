@@ -37,6 +37,7 @@ import {
   getBookGrammarProgress,
   getBookVocabularyCoverage,
   getDb,
+  mergeBookIntoChapter,
   moveBookSentence,
   previewBookOrderFromPaste,
   readSettings,
@@ -274,6 +275,10 @@ export function BookDetailPage() {
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [destinationBookId, setDestinationBookId] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
+  const [showMergeIntoBook, setShowMergeIntoBook] = useState(false);
+  const [mergeTargetBookId, setMergeTargetBookId] = useState('');
+  const [mergeChapterTitle, setMergeChapterTitle] = useState('');
+  const [merging, setMerging] = useState(false);
   const [selectedChapterId, setSelectedChapterId] = useState('');
   const [editingChapterId, setEditingChapterId] = useState<string | null>(
     null,
@@ -651,6 +656,17 @@ export function BookDetailPage() {
           </button>
           <button
             type="button"
+            className={showMergeIntoBook ? 'primary' : undefined}
+            onClick={() => {
+              setShowMergeIntoBook((value) => !value);
+              setMergeTargetBookId('');
+              setMergeChapterTitle(data.book.title);
+            }}
+          >
+            Move into another book
+          </button>
+          <button
+            type="button"
             onClick={async () => {
               const payload = await exportBookBackup(bookId);
               downloadText(
@@ -780,6 +796,84 @@ export function BookDetailPage() {
             </button>
           )}
         </div>
+        {showMergeIntoBook ? (
+          <div className="panel stack">
+            <p className="muted" style={{ margin: 0 }}>
+              Moves every sentence in this book into another book as a new
+              chapter, preserving study progress, then deletes this now-empty
+              book.
+            </p>
+            <label>
+              Target book
+              <select
+                value={mergeTargetBookId}
+                onChange={(event) => setMergeTargetBookId(event.target.value)}
+              >
+                <option value="">Choose a book…</option>
+                {data.otherBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              New chapter title
+              <input
+                type="text"
+                value={mergeChapterTitle}
+                onChange={(event) => setMergeChapterTitle(event.target.value)}
+              />
+            </label>
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                disabled={!mergeTargetBookId || merging}
+                onClick={async () => {
+                  const targetTitle = data.otherBooks.find(
+                    (book) => book.id === mergeTargetBookId,
+                  )?.title;
+                  const ok = window.confirm(
+                    `Move all ${data.rows.length} sentence(s) from "${data.book.title}" into "${targetTitle}" as a new chapter? This book will be deleted afterwards.`,
+                  );
+                  if (!ok) return;
+                  setMerging(true);
+                  try {
+                    const result = await mergeBookIntoChapter({
+                      sourceBookId: bookId,
+                      targetBookId: mergeTargetBookId,
+                      chapterTitle: mergeChapterTitle,
+                    });
+                    navigate(`/books/${mergeTargetBookId}`);
+                    setSnack({
+                      message: `Moved ${result.movedCount} sentence(s) into "${targetTitle}" as a new chapter${
+                        result.collisionCount
+                          ? ` (${result.collisionCount} already present there, kept the existing copy)`
+                          : ''
+                      }.`,
+                    });
+                  } catch (error) {
+                    window.alert(
+                      error instanceof Error ? error.message : String(error),
+                    );
+                  } finally {
+                    setMerging(false);
+                  }
+                }}
+              >
+                {merging ? 'Moving…' : 'Move into other book'}
+              </button>
+              <button
+                type="button"
+                disabled={merging}
+                onClick={() => setShowMergeIntoBook(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
         {selected.size ? (
           <div className="panel stack">
             <strong>{selected.size} selected</strong>

@@ -2024,6 +2024,147 @@ export async function transferBookSentences(options: {
   });
 }
 
+/**
+ * Absorb a whole book into another book as a new chapter, preserving study
+ * progress (it lives on study_items keyed by sentence, not on book_sentences,
+ * so repointing bookId/chapterId in place carries it across untouched), then
+ * delete the now-empty source book. UI counterpart of
+ * scripts/merge-book-into-chapter.ts, for e.g. a standalone shadowing-package
+ * episode import that should have joined an existing series book.
+ *
+ * If a source sentence already exists in the target book, the source's
+ * membership is dropped instead of moved (the target's copy wins), promoting
+ * the target's status only if it was still 'unstarted'.
+ */
+export async function mergeBookIntoChapter(options: {
+  sourceBookId: string;
+  targetBookId: string;
+  chapterTitle?: string;
+}): Promise<{ chapterId: string; movedCount: number; collisionCount: number }> {
+  const db = getDb();
+  const { sourceBookId, targetBookId } = options;
+  if (sourceBookId === targetBookId) {
+    throw new Error('Source and target book are the same.');
+  }
+  const timestamp = nowIso();
+
+  let chapter: BookChapter | undefined;
+  let updatedTarget: Book | undefined;
+  let movedMemberships: BookSentence[] = [];
+  let promotedTargets: BookSentence[] = [];
+  let collisions: BookSentence[] = [];
+
+  await db.transaction('rw', db.books, db.bookSentences, async () => {
+    const [source, target] = await Promise.all([
+      db.books.get(sourceBookId),
+      db.books.get(targetBookId),
+    ]);
+    if (!source) throw new Error('Source book not found');
+    if (!target) throw new Error('Target book not found');
+
+    const [sourceMemberships, targetMemberships] = await Promise.all([
+      db.bookSentences.where('bookId').equals(sourceBookId).sortBy('position'),
+      db.bookSentences.where('bookId').equals(targetBookId).sortBy('position'),
+    ]);
+    const targetBySentenceId = new Map(
+      targetMemberships.map((item) => [item.sentenceId, item]),
+    );
+    const maxTargetPosition = targetMemberships.reduce(
+      (max, item) => Math.max(max, item.position),
+      -1,
+    );
+
+    const toMove = sourceMemberships.filter(
+      (item) => !targetBySentenceId.has(item.sentenceId),
+    );
+    collisions = sourceMemberships.filter((item) =>
+      targetBySentenceId.has(item.sentenceId),
+    );
+
+    const targetChapters = target.chapters ?? [];
+    chapter = {
+      id: createId('chapter'),
+      title:
+        (options.chapterTitle ?? source.title).trim() ||
+        `Chapter ${targetChapters.length + 1}`,
+      position: targetChapters.length,
+      ...(source.sourceUrl || source.sourceKey
+        ? { sourceId: source.sourceUrl ?? source.sourceKey! }
+        : {}),
+      ...(source.createdAt ? { sourceDate: source.createdAt } : {}),
+    };
+
+    movedMemberships = toMove.map((item, index) => ({
+      ...item,
+      bookId: targetBookId,
+      chapterId: chapter!.id,
+      position: maxTargetPosition + 1 + index,
+      addedAt: timestamp,
+    }));
+    if (movedMemberships.length) {
+      await db.bookSentences.bulkPut(movedMemberships);
+    }
+
+    promotedTargets = collisions
+      .map((item) => targetBySentenceId.get(item.sentenceId)!)
+      .filter((targetItem, index) => {
+        const sourceItem = collisions[index]!;
+        return (
+          targetItem.status === 'unstarted' &&
+          sourceItem.status !== 'unstarted'
+        );
+      });
+    if (promotedTargets.length) {
+      const promotedBySentenceId = new Map(
+        collisions.map((item) => [item.sentenceId, item.status]),
+      );
+      promotedTargets = promotedTargets.map((item) => ({
+        ...item,
+        status: promotedBySentenceId.get(item.sentenceId)!,
+      }));
+      await db.bookSentences.bulkPut(promotedTargets);
+    }
+    if (collisions.length) {
+      await db.bookSentences.bulkDelete(collisions.map((item) => item.id));
+    }
+
+    updatedTarget = {
+      ...target,
+      chapters: [...targetChapters, chapter],
+      updatedAt: timestamp,
+    };
+    await db.books.put(updatedTarget);
+    await db.books.delete(sourceBookId);
+  });
+
+  notifySyncMany([
+    ...movedMemberships.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+    ...promotedTargets.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: item,
+    })),
+    ...collisions.map((item) => ({
+      entity: 'book_sentences' as const,
+      recordId: item.id,
+      payload: { id: item.id },
+      operation: 'delete' as const,
+    })),
+  ]);
+  if (updatedTarget) notifySync('books', targetBookId, updatedTarget);
+  notifySync('books', sourceBookId, { id: sourceBookId }, 'delete');
+
+  return {
+    chapterId: chapter!.id,
+    movedCount: movedMemberships.length,
+    collisionCount: collisions.length,
+  };
+}
+
 export async function reorderBookSentences(
   bookId: string,
   orderedSentenceIds: string[],
