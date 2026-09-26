@@ -148,7 +148,11 @@ import {
 import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import type { KeystoneCandidate } from '../lib/keystone';
-import { isolatedWordSpans, type IsolatedWordSpans } from '../lib/isolatedWordRange';
+import {
+  isolatedWordRange,
+  isolatedWordSpans,
+  type IsolatedWordSpans,
+} from '../lib/isolatedWordRange';
 import {
   BUILT_RECIPES,
   buildBuiltChain,
@@ -171,6 +175,11 @@ import {
   type OddEarClip,
   type OddEarHistoryEntry,
 } from '../lib/oddEarOut';
+import {
+  buildHomophoneHistory,
+  HOMOPHONE_HUNT_GAME_ID,
+  type HomophoneHistoryEntry,
+} from '../lib/homophoneHunt';
 import { earTilesRejection } from '../lib/earTiles';
 import {
   buildParticleHistory,
@@ -6299,6 +6308,46 @@ export async function getPitchAccentMinimalPairTrials(): Promise<
   if (occurrences.length === 0) return [];
   const contrasts = findMinimalPairContrasts(occurrences);
   return buildMinimalPairTrials(contrasts, occurrences);
+}
+
+export interface HomophoneClip extends PitchAccentMinimalPairOccurrence {
+  /** The word's own span in its reference recording (may fold in a following particle — see `isolatedWordRange`). */
+  span: TimeRangeMs;
+}
+
+/**
+ * Data for Homophone Hunt (`/play`): every real near-minimal-pair occurrence
+ * `PitchAccentMinimalPairWarmup` already draws from, with its clip span
+ * resolved up front (unlike the warm-up, which resolves it live per
+ * occurrence — a game round wants its eligible count known before play, same
+ * "gate cards missing support" reasoning as Odd Ear Out), plus this game's
+ * own per-pair history from `gameRounds`. The occurrences are
+ * proficiency-gated (see `getPitchAccentMinimalPairOccurrences`) — same rule
+ * as the in-drill warm-up, not the perception-only stance Odd Ear Out takes.
+ */
+export async function getHomophoneHuntData(): Promise<{
+  clips: HomophoneClip[];
+  history: Map<string, HomophoneHistoryEntry>;
+}> {
+  const [occurrences, rounds] = await Promise.all([
+    getPitchAccentMinimalPairOccurrences(),
+    getDb().gameRounds.where('gameId').equals(HOMOPHONE_HUNT_GAME_ID).toArray(),
+  ]);
+  const history = buildHomophoneHistory(rounds);
+  if (occurrences.length === 0) return { clips: [], history };
+
+  const alignments = await loadAlignmentsBulk([
+    ...new Set(occurrences.map((occurrence) => occurrence.audio.id)),
+  ]);
+  const clips: HomophoneClip[] = [];
+  for (const occurrence of occurrences) {
+    const alignment = alignments.get(occurrence.audio.id);
+    const span = alignment
+      ? isolatedWordRange(alignment.words, occurrence.sentence.japanese, occurrence.surfaceForm)
+      : null;
+    if (span) clips.push({ ...occurrence, span });
+  }
+  return { clips, history };
 }
 
 /**

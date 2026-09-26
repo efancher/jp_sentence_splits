@@ -462,9 +462,10 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     Furigana Fog (≈ `reading_in_context`), Gremlin Hunt (≈ Verb Lego),
     Ghost Run (largest build, most likely to feel like work).
     New ideas from a 2026-09-26 brainstorm, unscheduled:
-    - **Homophone Hunt** (pitch, S–M) — score the existing minimal-pair ABX
-      warm-up (`getPitchAccentMinimalPairOccurrences`, true homophones like
-      箸/橋) as its own round instead of an ungraded in-drill warm-up.
+    - ~~**Homophone Hunt**~~ **[shipped 2026-09-26 — see STATUS]** (pitch,
+      S–M) — score the existing minimal-pair ABX warm-up
+      (`getPitchAccentMinimalPairOccurrences`, true homophones like 箸/橋) as
+      its own round instead of an ungraded in-drill warm-up.
     - **Speaker Match** (pitch, S) — gamifies the 2026-09-25 "Compare
       speakers" browse tool (`/pitch-accent/compare`): play two same-word
       clips from different books, guess which matches a shown dictionary

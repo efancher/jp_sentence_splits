@@ -8,7 +8,7 @@ import { loadOrComputeAlignment } from '../lib/alignmentCache';
 import { isolatedWordRange } from '../lib/isolatedWordRange';
 import { segmentIntoMorae } from '../lib/mora';
 import type { MinimalPairTrial } from '../lib/pitchAccentMinimalPairs';
-import { pitchPatternLabel } from '../lib/pitchAccentShape';
+import { describePitchPattern } from '../lib/pitchAccentShape';
 import type { TimeRangeMs } from '../lib/recording';
 
 /**
@@ -23,18 +23,6 @@ import type { TimeRangeMs } from '../lib/recording';
  * permitting, once more across two different books. Ungraded and
  * unpersisted — a perception check, not an SRS card.
  */
-
-const PATTERN_DESCRIPTION: Record<string, string> = {
-  heiban: 'flat — no drop',
-  atamadaka: 'drops right after the first mora',
-  nakadaka: 'drops partway through',
-  odaka: 'drops right after the word (only audible on what follows)',
-};
-
-function describePattern(position: number, moraCount: number): string {
-  const pattern = pitchPatternLabel(position, moraCount);
-  return `${pattern} — ${PATTERN_DESCRIPTION[pattern]}`;
-}
 
 type Slot = 'first' | 'second';
 
@@ -147,9 +135,9 @@ function TrialView({
   return (
     <div className="stack" style={{ gap: '0.5rem' }}>
       <div>
-        <strong>{a.reading}</strong> — {a.expression} ({describePattern(a.position, moraCount)})
+        <strong>{a.reading}</strong> — {a.expression} ({describePitchPattern(a.position, moraCount)})
         {' vs. '}
-        {b.expression} ({describePattern(b.position, moraCount)})
+        {b.expression} ({describePitchPattern(b.position, moraCount)})
       </div>
       <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
         {sameBook

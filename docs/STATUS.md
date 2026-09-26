@@ -818,6 +818,43 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-26 — Homophone Hunt, a new `/play` game: the pitch-accent
+  minimal-pair warm-up promoted to a scored round.** Picked up from the
+  2026-09-26 games brainstorm on the ROADMAP. `PitchAccentMinimalPairWarmup`
+  (same/different ABX on true homophones — 箸 atamadaka vs 橋 heiban/odaka,
+  both はし) was ungraded and buried inside the pitch-accent drill; this game
+  is the exact same corpus and mechanic (`findMinimalPairContrasts`,
+  `buildMinimalPairTrials`, both unchanged) surfaced under `/play` with a
+  weak/strong signal and a `gameRounds` log, mirroring Odd Ear Out's shape.
+  One point per correct guess; the reveal shows both words' measured pitch
+  contours side by side (`WordPitchContour`), same convention Odd Ear Out
+  uses. New pure module `src/lib/homophoneHunt.ts` (word-pair history/
+  candidate/picker-stats plumbing, `describeHomophonePick`,
+  `buildHomophoneRound` — a thin wrapper over `buildMinimalPairTrials` so the
+  game doesn't depend on the warm-up's own module); new repository fetcher
+  `getHomophoneHuntData()` (`src/db/repository.ts`) that, unlike the
+  live-resolving warm-up, precomputes each occurrence's isolated-word span
+  up front via `loadAlignmentsBulk` + `isolatedWordRange` so the hub's
+  eligible count is known before play (the "gate cards missing support"
+  reasoning already applied to Odd Ear Out); new `HomophoneHuntGame.tsx`;
+  registered in `src/games/registry.tsx`. Also extracted the small
+  pattern-description helper both surfaces needed
+  (`describePitchPattern`, `src/lib/pitchAccentShape.ts`) rather than
+  duplicating it, and switched `PitchAccentMinimalPairWarmup` to use the
+  shared version. Real homophone pairs are rare in any one vocabulary (per
+  the warm-up's own "no pairs available" copy), so the round threshold
+  (`HOMOPHONE_HUNT_MIN_TRIALS = 2`) is deliberately low — a single contrast
+  with both a same-book and a cross-book occurrence already fills it. 9 new
+  unit tests (`tests/homophoneHunt.test.ts`). `npm run check` green (168
+  files, 2082 passed). **Manual test plan:** open `/play`; Homophone Hunt
+  only appears if you have a proficient true-homophone pair with audio (rare
+  — check the hub's "needs" line if it's hidden); play a round, confirm each
+  trial plays two real clips, that the reveal names which was which and
+  shows a plausible measured contour for both, and that no `reviews`/
+  `study_items` rows change. Not browser-verified (no browser libs on this
+  host) — shipped on the unit suite + typecheck, same convention as the
+  other games' non-interactive components.
+
 - **2026-09-26 — Card-issue triage: fixed 日本/日本語 read as にっぽん(ご)
   instead of にほん(ご) across the whole corpus, plus 時々/高原 one-offs,
   plus one translation fix.** `npm run issues:list` surfaced two open

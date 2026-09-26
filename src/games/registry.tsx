@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import { EarTilesGame, EAR_TILES_COPY } from '../components/games/EarTilesGame';
+import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
@@ -12,6 +13,7 @@ import {
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
 import {
   getEarTilesCandidates,
+  getHomophoneHuntData,
   getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
@@ -26,6 +28,14 @@ import {
   type SignalCopy,
 } from '../lib/gamePicker';
 import { EAR_TILES_GAME_ID, EAR_TILES_ROUND_SIZE } from '../lib/earTiles';
+import {
+  buildHomophoneCandidates,
+  buildHomophoneRound,
+  HOMOPHONE_HUNT_COPY,
+  HOMOPHONE_HUNT_GAME_ID,
+  HOMOPHONE_HUNT_MIN_TRIALS,
+  HOMOPHONE_HUNT_ROUND_SIZE,
+} from '../lib/homophoneHunt';
 import { KEYSTONE_GAME_ID, KEYSTONE_ROUND_SIZE } from '../lib/keystone';
 import {
   buildContrastCandidates,
@@ -34,6 +44,7 @@ import {
   ODD_EAR_MIN_TRIALS,
   ODD_EAR_OUT_GAME_ID,
 } from '../lib/oddEarOut';
+import { findMinimalPairContrasts } from '../lib/pitchAccentMinimalPairs';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
 import { VERB_LEGO_COPY, VERB_LEGO_GAME_ID, VERB_LEGO_ROUND_SIZE } from '../lib/verbLego';
 import { WORD_DETECTIVE_ROUND_SIZE } from '../lib/wordDetective';
@@ -163,6 +174,32 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: KeystoneGame,
+  },
+  {
+    id: HOMOPHONE_HUNT_GAME_ID,
+    title: 'Homophone Hunt',
+    blurb:
+      'Two real native clips of words that share a reading but not a pitch-accent shape — 箸 vs 橋, both はし. Guess which clip is which, then see both measured contours.',
+    needs:
+      "Needs two confirmed words that are true homophones (same reading, different accent) with playable native clips — rare in most vocabularies.",
+    skill: 'pitch-accent listening',
+    roundSize: HOMOPHONE_HUNT_MIN_TRIALS,
+    // No `stale`, as in Odd Ear Out: recent accuracy on a pair is just the flip
+    // side of `weak`.
+    signals: ['weak', 'strong'],
+    signalCopy: HOMOPHONE_HUNT_COPY,
+    loadPools: async () => {
+      const { clips, history } = await getHomophoneHuntData();
+      const contrasts = findMinimalPairContrasts(clips);
+      const candidates = buildHomophoneCandidates(contrasts, history);
+      const trials = buildHomophoneRound(
+        clips,
+        candidates.map((candidate) => candidate.contrast),
+        HOMOPHONE_HUNT_ROUND_SIZE,
+      );
+      return { eligible: trials.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: HomophoneHuntGame,
   },
   {
     id: EAR_TILES_GAME_ID,

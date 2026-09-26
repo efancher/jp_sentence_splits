@@ -79,6 +79,19 @@ export function pitchPatternLabel(position: number, moraCount: number): PitchAcc
   return 'nakadaka';
 }
 
+const PITCH_PATTERN_DESCRIPTION: Record<PitchAccentPattern, string> = {
+  heiban: 'flat — no drop',
+  atamadaka: 'drops right after the first mora',
+  nakadaka: 'drops partway through',
+  odaka: 'drops right after the word (only audible on what follows)',
+};
+
+/** Plain-language "pattern — what it sounds like" label, shared by the pitch-accent minimal-pair surfaces. */
+export function describePitchPattern(position: number, moraCount: number): string {
+  const pattern = pitchPatternLabel(position, moraCount);
+  return `${pattern} — ${PITCH_PATTERN_DESCRIPTION[pattern]}`;
+}
+
 /**
  * Which pitch-accent categories are actually distinguishable for a word
  * with `moraCount` morae — for building a fair multiple-choice review
