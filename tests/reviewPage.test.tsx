@@ -31,7 +31,17 @@ function expectedPitchAccentDrop(reading: string, position: number) {
   const correctPosition = Math.max(0, Math.min(position, morae.length));
   const caption = (at: number) =>
     at === 0 ? 'Stays high (no fall)' : `Falls after mora ${at}`;
-  return { morae, correctPosition, label: caption(correctPosition), caption };
+  // 4+ mora words go through PitchAccentCard's coarse half-picker before the
+  // individual fall-position buttons render — see the pitch_accent card's
+  // "long word" scaffold (report-pitch-drill-effectiveness.ts, 2026-09-27).
+  const halfwayPosition = Math.floor(morae.length / 2);
+  const halfLabel =
+    morae.length < 4
+      ? null
+      : correctPosition > halfwayPosition
+        ? `Falls later — mora ${halfwayPosition + 1} or beyond`
+        : `Doesn’t fall, or falls by mora ${halfwayPosition}`;
+  return { morae, correctPosition, label: caption(correctPosition), caption, halfLabel };
 }
 
 // Minimal fake <audio> so listening-card tests can drive playback/`onended`
@@ -1670,7 +1680,7 @@ describe('ReviewPage', () => {
     await suppressAudioCards('sent-1', 'sv-hana');
 
     // はな [1] → atamadaka, i.e. the drop is right after mora 1 (は).
-    const { label, correctPosition } = expectedPitchAccentDrop('はな', 1);
+    const { label, correctPosition, halfLabel } = expectedPitchAccentDrop('はな', 1);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -2107,7 +2117,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
 
-    const { label, correctPosition } = expectedPitchAccentDrop('はしらない', 3);
+    const { label, correctPosition, halfLabel } = expectedPitchAccentDrop('はしらない', 3);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -2118,6 +2128,9 @@ describe('ReviewPage', () => {
     // the card.
     expect(screen.getByText('はしらない')).toBeInTheDocument();
 
+    if (halfLabel) {
+      await user.click(screen.getByRole('button', { name: halfLabel }));
+    }
     await user.click(screen.getByRole('button', { name: label }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
@@ -2184,7 +2197,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
 
-    const { label, correctPosition } = expectedPitchAccentDrop('たべない', 2);
+    const { label, correctPosition, halfLabel } = expectedPitchAccentDrop('たべない', 2);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -2192,6 +2205,9 @@ describe('ReviewPage', () => {
     await screen.findByText(/Listen, then mark where it falls/);
     expect(screen.getByText('たべない')).toBeInTheDocument();
 
+    if (halfLabel) {
+      await user.click(screen.getByRole('button', { name: halfLabel }));
+    }
     await user.click(screen.getByRole('button', { name: label }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
@@ -2258,7 +2274,7 @@ describe('ReviewPage', () => {
       updatedAt: now,
     });
 
-    const { label, correctPosition } = expectedPitchAccentDrop('あまいです', 2);
+    const { label, correctPosition, halfLabel } = expectedPitchAccentDrop('あまいです', 2);
 
     const user = userEvent.setup();
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
@@ -2266,6 +2282,9 @@ describe('ReviewPage', () => {
     await screen.findByText(/Listen, then mark where it falls/);
     expect(screen.getByText('あまいです')).toBeInTheDocument();
 
+    if (halfLabel) {
+      await user.click(screen.getByRole('button', { name: halfLabel }));
+    }
     await user.click(screen.getByRole('button', { name: label }));
 
     expect(screen.getByText('✓ Correct')).toBeInTheDocument();
@@ -2360,8 +2379,15 @@ describe('ReviewPage', () => {
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
 
     await screen.findByText(/Listen, then mark where it falls/);
+    // 4 morae: the coarse half-picker gates the individual fall-position
+    // buttons (the "long word" scaffold, report-pitch-drill-effectiveness.ts,
+    // 2026-09-27) — mora 2 and mora 3 sit either side of the halfway split.
+    expect(screen.queryByRole('button', { name: 'Falls after mora 2' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Falls after mora 3' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Doesn’t fall, or falls by mora 2' }));
     expect(screen.getByRole('button', { name: 'Falls after mora 2' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Falls after mora 3' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Falls after mora 3' })).not.toBeInTheDocument();
 
     // Pick the wrong internal fall point.
     await user.click(screen.getByRole('button', { name: 'Falls after mora 2' }));

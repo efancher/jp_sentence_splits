@@ -2723,6 +2723,12 @@ function PitchAccentCard({
   const { vocabularyItem, sentence, surfaceForm, audio, reading, morae, correctPosition, correctLabel } =
     candidate;
   const [selected, setSelected] = useState<number | null>(null);
+  // Long words score far worse than short ones (report-pitch-drill-
+  // effectiveness.ts, 2026-09-27: lhhl 36%, hll 40% vs. hl/lh 53-61%) —
+  // comparing 5-6 full contour diagrams side by side at once is plausibly
+  // just harder to hold in mind than 2-3. For those words, narrow to a
+  // rough half of the word first, then show only that half's contours.
+  const [narrowedHalf, setNarrowedHalf] = useState<'early' | 'late' | null>(null);
   // The span the native-word loop plays (alignment or hand-adjusted), so the
   // reveal can draw that same span's *measured* pitch beside the dictionary
   // diagram — the bridge from "what I heard" to "what the contour is".
@@ -2739,6 +2745,18 @@ function PitchAccentCard({
   const positionChoices = Array.from({ length: morae.length + 1 }, (_, index) => index);
   const dropCaption = (position: number) =>
     position === 0 ? 'Stays high (no fall)' : `Falls after mora ${position}`;
+
+  const LONG_WORD_MORA_THRESHOLD = 4;
+  const isLongWord = morae.length >= LONG_WORD_MORA_THRESHOLD;
+  const halfwayPosition = Math.floor(morae.length / 2);
+  const earlyChoices = positionChoices.filter((position) => position <= halfwayPosition);
+  const lateChoices = positionChoices.filter((position) => position > halfwayPosition);
+  const showHalfPicker = isLongWord && narrowedHalf === null;
+  const visibleChoices = !isLongWord
+    ? positionChoices
+    : narrowedHalf === 'late'
+      ? lateChoices
+      : earlyChoices;
 
   return (
     <>
@@ -2772,25 +2790,56 @@ function PitchAccentCard({
           <div className="muted">
             A word&rsquo;s pitch falls once at most. Listen, then mark where it falls.
           </div>
-          <div className="row" style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
-            {positionChoices.map((position) => (
+          {showHalfPicker ? (
+            <div className="row" style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
               <button
-                key={position}
                 type="button"
-                className="pa-choice-button stack"
-                style={{ gap: '0.2rem', alignItems: 'center' }}
-                onClick={() => {
-                  setSelected(position);
-                  onCheck(String(position), String(correctPosition));
-                }}
+                className="pa-choice-button"
+                onClick={() => setNarrowedHalf('early')}
               >
-                <PitchChoiceContour morae={morae} position={position} />
-                <span className="muted" style={{ fontSize: '0.75rem' }}>
-                  {dropCaption(position)}
-                </span>
+                Doesn&rsquo;t fall, or falls by mora {halfwayPosition}
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                className="pa-choice-button"
+                onClick={() => setNarrowedHalf('late')}
+              >
+                Falls later — mora {halfwayPosition + 1} or beyond
+              </button>
+            </div>
+          ) : (
+            <>
+              {isLongWord ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  style={{ fontSize: '0.75rem', alignSelf: 'flex-start' }}
+                  onClick={() => setNarrowedHalf(null)}
+                >
+                  ← Back
+                </button>
+              ) : null}
+              <div className="row" style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
+                {visibleChoices.map((position) => (
+                  <button
+                    key={position}
+                    type="button"
+                    className="pa-choice-button stack"
+                    style={{ gap: '0.2rem', alignItems: 'center' }}
+                    onClick={() => {
+                      setSelected(position);
+                      onCheck(String(position), String(correctPosition));
+                    }}
+                  >
+                    <PitchChoiceContour morae={morae} position={position} />
+                    <span className="muted" style={{ fontSize: '0.75rem' }}>
+                      {dropCaption(position)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </>
       ) : (
         <>
