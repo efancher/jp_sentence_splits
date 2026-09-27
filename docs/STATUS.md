@@ -818,6 +818,18 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — `SegmentLoopPlayer`'s Speed dropdown now actually affects
+  "Whole sentence" playback, not just the isolated-word loop.** Triage of
+  an open card issue report (`card_issue_cf7577a5`, a `cloze` card: "don't
+  seem like speed adjustment is doing anything on this card"). Root cause:
+  the Speed `<select>` only fed `useRangeLoop`'s `speed` state, which the
+  word-loop button reads at play time — the "Whole sentence"
+  `NativeAudioButton` right next to it never received a `playbackRate`
+  prop at all, so it always played at 1×. One-line fix: pass
+  `playbackRate={speed}` through. Data underneath the reported card
+  (vocab reading, sentence, `reference_audio` span) checked out fine —
+  this was a UI wiring gap, not a data bug. `npm run check` green.
+
 - **2026-09-27 — Context sentences get their hiragana reading too, once
   revealed.** User request: cards that frame the target sentence with
   neighbouring passage sentences only ever showed the neighbours' kanji
