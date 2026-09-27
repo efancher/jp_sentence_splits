@@ -12,6 +12,7 @@ import {
   getParticlePuzzleData,
   getPrecedingSentences,
   getRecentGameDifficulty,
+  getSpeakerMatchData,
   getVerbLegoData,
   getWordDetectiveCandidates,
   logGameRound,
@@ -510,6 +511,98 @@ describe('odd ear out repository', () => {
     });
     const { history } = await getOddEarOutData();
     expect(history.get('3m hll/lhh')).toEqual({ attempts: 1, misses: 1 });
+  });
+});
+
+describe('speaker match repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  /** One playable citation-form clip of `itemId` mined into `bookId`. */
+  async function addSpeakerClip(itemId: string, bookId: string, opts: { withAudio?: boolean } = {}) {
+    const { withAudio = true } = opts;
+    const db = getDb();
+    if (!(await db.vocabularyItems.get(itemId))) {
+      await db.vocabularyItems.put({
+        id: itemId,
+        expression: '桜',
+        reading: 'さくら',
+        meaning: 'cherry blossom',
+        pitchAccentPositions: [0],
+        createdAt: T,
+        updatedAt: T,
+      } as never);
+    }
+    const sid = `s-${itemId}-${bookId}`;
+    await addSentence(sid, 'これは桜です。');
+    await db.sentenceVocabulary.put({
+      id: `l-${itemId}-${bookId}`,
+      sentenceId: sid,
+      vocabularyItemId: itemId,
+      surfaceForm: '桜',
+      createdAt: T,
+      updatedAt: T,
+    } as never);
+    if (!(await db.books.get(bookId))) {
+      await db.books.put({ id: bookId, title: bookId, createdAt: T, updatedAt: T } as never);
+    }
+    await db.bookSentences.put({ id: `m-${sid}`, bookId, sentenceId: sid, position: 0, status: 'unstarted', addedAt: T } as never);
+    await db.referenceAlignments.put({
+      id: `a-${sid}`,
+      alignmentVersion: 3,
+      computedAt: T,
+      result: {
+        durationSeconds: 3,
+        words: [
+          { text: 'これは', start: 0, end: 1, phones: [] },
+          { text: '桜', start: 1, end: 1.6, phones: [] },
+          { text: 'です', start: 1.6, end: 3, phones: [] },
+        ],
+      },
+    });
+    if (withAudio) {
+      await db.sentenceAudio.put({
+        id: `a-${sid}`,
+        sentenceId: sid,
+        sourceId: 'src',
+        sourceSentenceId: sid,
+        sourceTitle: 'src',
+        mimeType: 'audio/mpeg',
+        durationMs: 3000,
+        startMs: 0,
+        endMs: 3000,
+        blob: new Blob(['x']),
+        importedAt: T,
+      });
+    }
+  }
+
+  it('pairs up a word only once mined into 2+ distinct books', async () => {
+    await addSpeakerClip('vi-1', 'book-a');
+    await addSpeakerClip('vi-1', 'book-b');
+    await addSpeakerClip('vi-2', 'book-a'); // only one book — not eligible
+
+    const { comparisons } = await getSpeakerMatchData();
+    expect(comparisons.map((c) => c.word.vocabularyItemId)).toEqual(['vi-1']);
+    expect(comparisons[0]!.clips).toHaveLength(2);
+    expect(new Set(comparisons[0]!.clips.map((c) => c.bookId))).toEqual(new Set(['book-a', 'book-b']));
+  });
+
+  it('reads per-word history from logged rounds, writing nothing', async () => {
+    await addSpeakerClip('vi-1', 'book-a');
+    await addSpeakerClip('vi-1', 'book-b');
+    await logGameRound({
+      gameId: 'speaker-match',
+      signal: 'weak',
+      poolSize: 1,
+      items: [{ ref: 'vi-1', correct: false, cluesUsed: 0, wrongGuesses: 1, points: 0, ms: 1, parts: [{ key: 'vi-1', correct: false }] }],
+    });
+
+    const studyItemsBefore = await getDb().studyItems.count();
+    const { history } = await getSpeakerMatchData();
+    expect(history.get('vi-1')).toEqual({ attempts: 1, misses: 1 });
+    expect(await getDb().studyItems.count()).toBe(studyItemsBefore);
   });
 });
 

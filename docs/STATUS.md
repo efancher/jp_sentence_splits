@@ -818,7 +818,50 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
-- **2026-09-27 — Grammar Detective, a sixth `/play` game.** Word Detective's
+- **2026-09-27 — Speaker Match, a ninth `/play` game.** Gamifies the
+  2026-09-25 "Compare speakers" browse tool
+  (`/pitch-accent/compare`/`getPitchAccentSpeakerComparisons`). The roadmap's
+  original framing — "guess which matches a shown dictionary shape" — turned
+  out to have no wrong answer to detect: two real, correctly-pronounced
+  clips of the same word both match the dictionary shape. Built as the
+  roadmap's own parenthetical alternative instead: **"which is which"** — a
+  pure cross-recording discrimination task, same ABX shape as Homophone Hunt
+  (ClipButton loop, measured-contour reveal) but with a same-word/different-
+  book pair instead of a different-word/same-reading pair; the target book
+  is named ("Which clip is from *Book X*?") and guessed by ear alone. New
+  pure module `src/lib/speakerMatch.ts` (`buildSpeakerMatchCandidates`,
+  `buildSpeakerMatchRound`, `describeSpeakerMatchPick`,
+  `SPEAKER_MATCH_COPY`); new repository fetcher `getSpeakerMatchData()`
+  (`src/db/repository.ts`) that reuses `getPitchAccentSpeakerComparisons`
+  directly rather than re-deriving the ≥2-books eligibility gate; new
+  `SpeakerMatchGame.tsx`; registered in `src/games/registry.tsx`.
+  Proficiency deliberately **not** filtered (perception-only stance, like
+  Odd Ear Out/Homophone Hunt, not the FSRS-gated rule the pitch-accent drill
+  uses). **v1 simplification, documented in the module doc**: a word's clip
+  pair is fixed at its two alphabetically-first book titles rather than
+  rotating through every pair a 3+-book word could offer, and each eligible
+  word contributes exactly one trial (unlike Homophone Hunt, where one
+  contrast can yield both a same-book and cross-book trial) — so the
+  round's minimum pool is *distinct words*, not trials-per-contrast; a real
+  widening if the corpus grows, not attempted here. 2026-09-27 feasibility
+  check against prod: only 14 words have clips from 2+ non-suspended books
+  before the span-quality filters (`isTrustworthyCitationSpan`/
+  `isPlausibleClipSpan`) narrow it further — confirms the roadmap's own
+  "rare, not a code problem" caveat. 9 new unit tests
+  (`tests/speakerMatch.test.ts`) + 2 new repository tests
+  (`tests/gameRepository.test.ts`: 2-book pairing, per-word history) + 2
+  new component tests (`tests/speakerMatchGame.test.tsx`, mirroring
+  `homophoneHuntGame.test.tsx`'s shape: full round with FSRS-untouched
+  assertions, and the too-thin-pool empty state). `npm run check` green
+  (177 files, 2128 passed). **Manual test plan:** open `/play`; Speaker
+  Match only appears with a confirmed word mined from 2+ non-suspended
+  books (rare — check the hub's "needs" line, or browse
+  `/pitch-accent/compare` directly to see the same pool); play a round,
+  confirm both clips are real and loop just the word, that the reveal names
+  which book was which and shows a plausible measured contour for both,
+  and that no `reviews`/`study_items` rows change.
+
+- **2026-09-27 — Grammar Detective, an eighth `/play` game.** Word Detective's
   clue-ladder format (docs/ROADMAP.md's 2026-09-26 brainstorm), sourced from
   tracked grammar patterns' `grammar_completion` misses instead of vocab
   leeches. New pure module `src/lib/grammarDetective.ts`

@@ -466,12 +466,18 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
       S–M) — score the existing minimal-pair ABX warm-up
       (`getPitchAccentMinimalPairOccurrences`, true homophones like 箸/橋) as
       its own round instead of an ungraded in-drill warm-up.
-    - **Speaker Match** (pitch, S) — gamifies the 2026-09-25 "Compare
-      speakers" browse tool (`/pitch-accent/compare`): play two same-word
-      clips from different books, guess which matches a shown dictionary
-      shape (or which is which). Pool-size caveat from that tool carries
-      over (cross-book same-word overlap after Odd Ear Out's span/suspended-
-      book filters is the limiting factor, not code).
+    - ~~**Speaker Match**~~ **[shipped 2026-09-27 — see STATUS]** (pitch, S) —
+      gamifies the 2026-09-25 "Compare speakers" browse tool
+      (`/pitch-accent/compare`): play two same-word clips from different
+      books, guess which is which. Built as the roadmap's own "(or which is
+      which)" framing, not the literal "matches a dictionary shape" one —
+      two real, correctly-pronounced clips of the same word both match the
+      dictionary shape, so there was no wrong answer to detect that way.
+      Pool-size caveat from the compare tool carries over and is real: 2026-
+      09-27 feasibility check found only 14 prod words with clips in 2+
+      non-suspended books (before the span-quality filters narrow it
+      further) — cross-book same-word overlap after Odd Ear Out's span/
+      suspended-book filters is the limiting factor, not code.
     - ~~**Grammar Detective**~~ **[shipped 2026-09-27 — see STATUS]** (grammar, M) —
       Word Detective's clue-ladder format sourced from `grammar_completion`
       misses instead of vocab leeches, reusing the passage-context convention

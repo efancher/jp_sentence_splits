@@ -148,6 +148,13 @@ import {
 import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
 import { buildGrammarDetectiveWord, type GrammarDetectiveWord } from '../lib/grammarDetective';
+import {
+  buildSpeakerMatchHistory,
+  SPEAKER_MATCH_GAME_ID,
+  type SpeakerMatchComparison,
+  type SpeakerMatchHistoryEntry,
+  type SpeakerMatchWordSummary,
+} from '../lib/speakerMatch';
 import type { KeystoneCandidate } from '../lib/keystone';
 import {
   isolatedWordRange,
@@ -7147,6 +7154,38 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
       a.vocabularyItem.expression.localeCompare(b.vocabularyItem.expression, 'ja'),
   );
   return result;
+}
+
+export interface SpeakerMatchClip extends PitchAccentSpeakerClip, SpeakerMatchWordSummary {}
+
+/**
+ * Data for Speaker Match (`/play`): every `getPitchAccentSpeakerComparisons`
+ * word (2+ books, so a real cross-recording pair exists), flattened onto the
+ * shared `SpeakerMatchComparison` shape plus this game's own per-word history
+ * from `gameRounds`. Proficiency deliberately **not** filtered — same
+ * perception-only stance as Odd Ear Out/Homophone Hunt, not the FSRS-gated
+ * rule `getPitchAccentMinimalPairOccurrences` uses.
+ */
+export async function getSpeakerMatchData(): Promise<{
+  comparisons: SpeakerMatchComparison<SpeakerMatchClip>[];
+  history: Map<string, SpeakerMatchHistoryEntry>;
+}> {
+  const [comparisons, rounds] = await Promise.all([
+    getPitchAccentSpeakerComparisons(),
+    getDb().gameRounds.where('gameId').equals(SPEAKER_MATCH_GAME_ID).toArray(),
+  ]);
+  const history = buildSpeakerMatchHistory(rounds);
+  const mapped: SpeakerMatchComparison<SpeakerMatchClip>[] = comparisons.map((comparison) => {
+    const word: SpeakerMatchWordSummary = {
+      vocabularyItemId: comparison.vocabularyItem.id,
+      expression: comparison.vocabularyItem.expression,
+      reading: comparison.vocabularyItem.reading,
+      meaning: comparison.vocabularyItem.meaning ?? '',
+      position: comparison.vocabularyItem.pitchAccentPositions![0]!,
+    };
+    return { word, clips: comparison.clips.map((clip) => ({ ...clip, ...word })) };
+  });
+  return { comparisons: mapped, history };
 }
 
 const BUILT_RECIPES_BY_ID = new Map(BUILT_RECIPES.map((recipe) => [recipe.id, recipe]));

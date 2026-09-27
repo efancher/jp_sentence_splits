@@ -5,6 +5,7 @@ import { GrammarDetectiveGame, GRAMMAR_DETECTIVE_GAME_ID } from '../components/g
 import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
+import { SpeakerMatchGame } from '../components/games/SpeakerMatchGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
 import {
   ParticlePuzzleGame,
@@ -19,6 +20,7 @@ import {
   getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
+  getSpeakerMatchData,
   getVerbLegoData,
   getWordDetectiveCandidates,
 } from '../db/repository';
@@ -52,6 +54,13 @@ import {
 } from '../lib/oddEarOut';
 import { findMinimalPairContrasts } from '../lib/pitchAccentMinimalPairs';
 import { PARTICLE_PUZZLE_ROUND_SIZE } from '../lib/particlePuzzle';
+import {
+  buildSpeakerMatchCandidates,
+  buildSpeakerMatchRound,
+  SPEAKER_MATCH_COPY,
+  SPEAKER_MATCH_GAME_ID,
+  SPEAKER_MATCH_MIN_TRIALS,
+} from '../lib/speakerMatch';
 import { VERB_LEGO_COPY, VERB_LEGO_GAME_ID, VERB_LEGO_ROUND_SIZE } from '../lib/verbLego';
 import { WORD_DETECTIVE_ROUND_SIZE } from '../lib/wordDetective';
 
@@ -222,6 +231,30 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: GrammarDetectiveGame,
+  },
+  {
+    id: SPEAKER_MATCH_GAME_ID,
+    title: 'Speaker Match',
+    blurb:
+      'Two real native clips of the same word, from two different books. Guess which clip belongs to the named book, then see both measured pitch contours.',
+    needs:
+      'Needs a confirmed word mined from playable native clips in two or more different books — rare unless the same word shows up across several books.',
+    skill: 'cross-recording listening',
+    roundSize: SPEAKER_MATCH_MIN_TRIALS,
+    // No `stale`, as in Odd Ear Out/Homophone Hunt: recent accuracy on a word
+    // is just the flip side of `weak`.
+    signals: ['weak', 'strong'],
+    signalCopy: SPEAKER_MATCH_COPY,
+    loadPools: async () => {
+      const { comparisons, history } = await getSpeakerMatchData();
+      const candidates = buildSpeakerMatchCandidates(comparisons, history);
+      const trials = buildSpeakerMatchRound(
+        candidates.map((candidate) => candidate.comparison),
+        candidates.length,
+      );
+      return { eligible: trials.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: SpeakerMatchGame,
   },
   {
     id: EAR_TILES_GAME_ID,
