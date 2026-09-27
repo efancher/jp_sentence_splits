@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { getDb } from '../db/database';
 import { getOddEarOutData, type OddEarOutClip } from '../db/repository';
@@ -18,6 +18,21 @@ function ContrastClipPlayer({
 }) {
   const blob = useSentenceAudioBlob(clip.audio);
   const loop = useRangeLoop(clip.audio.id, blob);
+  // Best-effort auto-play the moment the clip is ready, so hearing the
+  // contrast doesn't depend on a second click after the reveal (2026-09-27:
+  // only 6 of 48 offered contrasts were ever played manually). Silently
+  // no-ops where the browser blocks a non-gesture play() (`useRangeLoop`'s
+  // `NotAllowedError` guard) — the manual button underneath still works.
+  const autoPlayedRef = useRef(false);
+  useEffect(() => {
+    if (autoPlayedRef.current || !blob) return;
+    autoPlayedRef.current = true;
+    onPlay();
+    void loop.toggleLoop(clip.span);
+    // Only the clip becoming playable should retrigger this — not every
+    // `loop`/`onPlay` identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blob]);
   return (
     <div className="stack" style={{ gap: '0.3rem' }}>
       <audio ref={loop.audioElRef} src={loop.objectUrl ?? undefined} hidden />

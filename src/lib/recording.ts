@@ -627,7 +627,17 @@ function playLoopedRange(
     // (see `toggleLoop`'s retry in SegmentLoopPlayer).
     audio.play().catch((error: unknown) => {
       cleanup();
-      reject(error instanceof Error ? error : new Error('Playback failed to start.'));
+      // `DOMException instanceof Error` isn't reliable across engines (jsdom
+      // itself says false, matching the more conservative WebIDL reading —
+      // spec-wise DOMException isn't a Error subtype) — checking for it
+      // explicitly keeps a real `NotAllowedError`'s `.name` intact instead of
+      // collapsing it into a generic Error, which callers (`useRangeLoop`)
+      // rely on to tell "blocked by autoplay policy" apart from "broken clip".
+      reject(
+        error instanceof Error || error instanceof DOMException
+          ? (error as Error)
+          : new Error('Playback failed to start.'),
+      );
     });
   });
 }

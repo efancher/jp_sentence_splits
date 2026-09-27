@@ -70,7 +70,14 @@ export function useRangeLoop(audioId: string, blob: Blob | null): RangeLoop {
     setPlaybackError(null);
     try {
       await coordinatorRef.current.loopRange(el, range, speed);
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        // Browser autoplay policy blocked a play() call made outside a
+        // user gesture (e.g. PitchContrastExample's best-effort auto-play)
+        // — the clip isn't broken, so don't run the blob-repair retry below
+        // or show an error; the manual button is right there to try again.
+        return;
+      }
       const { repairSentenceAudio } = await import('../sync/audioSync');
       const freshBlob = await repairSentenceAudio(audioId);
       if (!freshBlob) {

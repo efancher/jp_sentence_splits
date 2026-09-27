@@ -360,6 +360,25 @@ describe('PlaybackCoordinator.loopRange', () => {
     ).rejects.toThrow('NotSupportedError');
   });
 
+  it('rejects with the original DOMException when play() is blocked by autoplay policy', async () => {
+    // useRangeLoop's `NotAllowedError` guard (best-effort auto-play,
+    // 2026-09-27) depends on this specific error surviving unwrapped —
+    // DOMException already extends Error, so playLoopedRange's
+    // `error instanceof Error ? error : ...` must pass it through as-is.
+    const coordinator = new PlaybackCoordinator();
+    const audio = new FakeAudioElement();
+    audio.play = vi.fn(async () => {
+      throw new DOMException('play() failed because the user didn’t interact', 'NotAllowedError');
+    });
+
+    await expect(
+      coordinator.loopRange(audio as unknown as HTMLAudioElement, {
+        startMs: 0,
+        endMs: 1000,
+      }),
+    ).rejects.toMatchObject({ name: 'NotAllowedError' });
+  });
+
   it('cancelling one loop does not affect a fresh one on the same coordinator', async () => {
     const coordinator = new PlaybackCoordinator();
     const first = new FakeAudioElement();
