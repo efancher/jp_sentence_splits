@@ -34,7 +34,7 @@ import {
 import { expectedPitchShape, type MoraPitchClass } from '../lib/pitchAccentShape';
 import { compareFallToNative, type ContinuousPitchComparison } from '../lib/pitchContinuousScore';
 import { loadOrComputeReferencePitch } from '../lib/referencePitchCache';
-import { seededShuffle } from '../lib/seededShuffle';
+import { seededShuffle, weightedSeededShuffle } from '../lib/seededShuffle';
 import type { SentencePitchAccentTarget } from '../lib/sentencePitchAccent';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 import { MAX_RECORDING_DURATION_MS } from '../lib/recording';
@@ -87,6 +87,19 @@ import {
 type DrillMode = 'sentence' | 'word';
 
 const newShuffleSeed = () => Math.random().toString(36).slice(2);
+
+/**
+ * Weight for `weightedSeededShuffle`'s word-mode pool: 2-mora words are the
+ * basic fall-vs-rise (hl vs. lh) contrast — measured as the weakest-
+ * discriminated shape in the corpus (report-pitch-drill-effectiveness.ts,
+ * 2026-09-27: d' = 0.35, barely above chance) and the most common shape
+ * confusion by far. Surfacing them roughly twice as often gets more reps on
+ * that specific contrast without crowding longer shapes out of the pool
+ * entirely.
+ */
+function pitchDrillWordWeight(word: PitchAccentDrillWord): number {
+  return segmentIntoMorae(word.vocabularyItem.reading).length === 2 ? 2 : 1;
+}
 
 /**
  * Best-effort native-clip lookup for the continuous fall-timing/magnitude
@@ -162,7 +175,12 @@ export function PitchAccentDrillPage() {
   const words = useMemo(
     () =>
       rawWords
-        ? seededShuffle(rawWords, (entry) => entry.vocabularyItem.id, shuffleSeed)
+        ? weightedSeededShuffle(
+            rawWords,
+            (entry) => entry.vocabularyItem.id,
+            shuffleSeed,
+            pitchDrillWordWeight,
+          )
         : rawWords,
     [rawWords, shuffleSeed],
   );
