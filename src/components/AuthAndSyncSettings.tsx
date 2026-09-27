@@ -195,6 +195,32 @@ export function AuthAndSyncSettings() {
                 Download all reference audio now
               </button>
             ) : null}
+            {sync.syncReferenceAudio ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    const { pushMissingReferenceAudio } = await import('../sync/audioSync');
+                    const { uploaded, failed } = await pushMissingReferenceAudio();
+                    setMessage(
+                      uploaded === 0 && failed === 0
+                        ? 'Nothing to push — every clip on this device is already in cloud storage.'
+                        : `Pushed ${uploaded} clip(s) to cloud storage.` +
+                            (failed ? ` ${failed} failed and can be retried later.` : ''),
+                    );
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Audio push failed.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Push this device's audio to cloud storage
+              </button>
+            ) : null}
             <label className="row">
               <input
                 type="checkbox"

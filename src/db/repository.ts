@@ -1452,13 +1452,23 @@ export async function applyResegmentation(
         const { ensureSyncMeta } = await import('../sync/queue');
         const { getSupabase } = await import('../sync/supabaseClient');
         const { uploadReferenceAudio } = await import('../sync/audioSync');
+        const { syncLog } = await import('../sync/logger');
         const meta = await ensureSyncMeta();
         if (!meta.syncReferenceAudio) return;
         const supabase = getSupabase();
         const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
         if (!userId) return;
         for (const record of newAudioRecords) {
-          await uploadReferenceAudio({ audio: record, bookId, ownerId: userId });
+          // One clip's upload failing (network blip, transient storage
+          // error) must not abort every clip after it in the batch — that
+          // silently strands the rest with no local sign anything went
+          // wrong (2026-09-27 incident: ~half a podcast episode's clips
+          // never reached Storage this way, no error surfaced anywhere).
+          try {
+            await uploadReferenceAudio({ audio: record, bookId, ownerId: userId });
+          } catch (err) {
+            syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
+          }
         }
       } catch {
         // Local apply must succeed even if the optional upload fails.
@@ -2763,6 +2773,7 @@ async function applySentenceAudioForPreview(
       const { ensureSyncMeta } = await import('../sync/queue');
       const { getSupabase } = await import('../sync/supabaseClient');
       const { uploadReferenceAudio } = await import('../sync/audioSync');
+      const { syncLog } = await import('../sync/logger');
       const meta = await ensureSyncMeta();
       if (!meta.syncReferenceAudio) return;
       const supabase = getSupabase();
@@ -2770,7 +2781,15 @@ async function applySentenceAudioForPreview(
         ?.id;
       if (!userId) return;
       for (const audio of audioRecords) {
-        await uploadReferenceAudio({ audio, bookId, ownerId: userId });
+        // Isolate each clip's upload — one failure (network blip, transient
+        // storage error) must not silently strand every clip after it in a
+        // long import with no error surfaced anywhere (2026-09-27: ~half a
+        // podcast episode's clips never reached Storage this way).
+        try {
+          await uploadReferenceAudio({ audio, bookId, ownerId: userId });
+        } catch (err) {
+          syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_UPLOAD_SKIP');
+        }
       }
     } catch {
       // Local import must succeed even if optional audio upload fails.

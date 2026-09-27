@@ -159,6 +159,68 @@ export async function repairSentenceAudio(audioId: string): Promise<Blob | null>
   return blob;
 }
 
+/**
+ * Upload every local `sentenceAudio` blob that never made it to Storage —
+ * recovery for the 2026-09-27 incident where a long import's upload loop
+ * aborted partway on one clip's transient failure, silently stranding every
+ * clip after it locally-only (fixed forward: each clip's upload is now
+ * isolated, so a fresh import can't repeat this, but past imports can still
+ * be missing clips this never retried). Diffs the account's `reference_audio`
+ * ids against local `sentenceAudio` ids and pushes only what's missing — a
+ * clip already in Storage is never re-uploaded. No-op when audio sync is
+ * off. Returns `{ uploaded, failed }`.
+ */
+export async function pushMissingReferenceAudio(): Promise<{ uploaded: number; failed: number }> {
+  const meta = await ensureSyncMeta();
+  if (!meta.syncReferenceAudio) return { uploaded: 0, failed: 0 };
+
+  const supabase = getSupabase();
+  if (!supabase) return { uploaded: 0, failed: 0 };
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) return { uploaded: 0, failed: 0 };
+
+  const db = getDb();
+  const [localAudio, remoteRows] = await Promise.all([
+    db.sentenceAudio.toArray(),
+    supabase.from('reference_audio').select('id').eq('owner_id', userId).is('deleted_at', null),
+  ]);
+  if (remoteRows.error) {
+    syncLog('warn', remoteRows.error.message, 'AUDIO_PUSH');
+    return { uploaded: 0, failed: 0 };
+  }
+  const remoteIds = new Set((remoteRows.data ?? []).map((row) => String(row.id)));
+  // A blob-less stub from resyncReferenceAudio/the sync engine has nothing
+  // to push — only a locally-recorded clip with real audio is a candidate.
+  const missing = localAudio.filter((audio) => !remoteIds.has(audio.id) && audio.blob.size > 0);
+  if (missing.length === 0) return { uploaded: 0, failed: 0 };
+
+  const memberships = await db.bookSentences
+    .where('sentenceId')
+    .anyOf(missing.map((audio) => audio.sentenceId))
+    .toArray();
+  const bookIdBySentenceId = new Map(memberships.map((m) => [m.sentenceId, m.bookId]));
+
+  let uploaded = 0;
+  let failed = 0;
+  for (const audio of missing) {
+    try {
+      await uploadReferenceAudio({
+        audio,
+        bookId: bookIdBySentenceId.get(audio.sentenceId),
+        ownerId: userId,
+      });
+      uploaded += 1;
+    } catch (err) {
+      failed += 1;
+      syncLog('warn', err instanceof Error ? err.message : String(err), 'AUDIO_PUSH_SKIP');
+    }
+  }
+  return { uploaded, failed };
+}
+
 export async function clearDownloadedAudioCache(): Promise<number> {
   const db = getDb();
   const count = await db.sentenceAudio.count();

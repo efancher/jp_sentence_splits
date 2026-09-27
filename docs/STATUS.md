@@ -818,6 +818,36 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Fixed a silent partial-audio-upload bug found while
+  chasing the homophone-podcast import gap below: a long import's reference-
+  audio upload could silently strand every clip after the first transient
+  failure.** `applySentenceAudioForPreview` (import commit path) and
+  `applyResegmentation`'s audio-repair path both looped
+  `for (const record of ...) await uploadReferenceAudio(...)` inside one
+  outer `try { } catch { /* optional upload, must not block import */ }` —
+  a single clip throwing (network blip, transient Storage error) aborted
+  the loop entirely, silently leaving every remaining clip in that batch
+  local-only with no error surfaced anywhere. Root-caused live against a
+  fresh import (`journalctl` on the mining service showed every
+  `POST /jobs/{id}/commit` batch return a clean 200 — the mining service's
+  own clipping never failed — so the loss had to be downstream, in this
+  upload loop). Fixed: each clip's upload is now wrapped in its own
+  try/catch (`syncLog('warn', ..., 'AUDIO_UPLOAD_SKIP')` on failure, loop
+  continues) in both call sites. Added `pushMissingReferenceAudio`
+  (`src/sync/audioSync.ts`) — diffs local `sentenceAudio` blobs against the
+  account's `reference_audio` ids and re-uploads only what Storage is
+  missing, isolated per clip — as recovery for imports that already hit
+  this bug before the fix, wired to a new "Push this device's audio to
+  cloud storage" button in Settings next to the existing download-direction
+  one. `npm run check` green (175 files, 2129 passed) — no new automated
+  test (audioSync.ts has no existing unit-test harness; this needs a real
+  Supabase session to exercise meaningfully). **Manual test plan**: Settings
+  → Account & sync, with "Sync reference audio to cloud storage" on, click
+  "Push this device's audio to cloud storage" — should report a clip count
+  pushed (or "nothing to push" if this device's local audio already
+  matches the cloud). Re-running a long podcast/YouTube import afterward
+  should no longer show a mid-episode audio cutoff.
+
 - **2026-09-27 — Content follow-up: hand-confirmed the actual homophone
   vocab from the "#116 Learning Homophones" podcast, direct against prod
   Supabase (not the app UI).** Once the gating fix above shipped, the
