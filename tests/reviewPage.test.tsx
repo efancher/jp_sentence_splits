@@ -749,6 +749,113 @@ describe('ReviewPage', () => {
     expect(screen.getByText('それから出かけました。')).toBeInTheDocument();
   });
 
+  it('highlights a tracked grammar pattern recurring in the reading_in_context passage (docs/ROADMAP.md "ambient connective tissue")', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-0',
+      normalizedKey: 'sent-0',
+      japanese: 'それは訳がないでしょう。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'There is no reason for that.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-0',
+      bookId: 'book-1',
+      sentenceId: 'sent-0',
+      position: -1,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 'sent-0',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-0');
+
+    const pattern = await ensureGrammarPattern('〜わけがない', {
+      shortMeaning: 'no reason to think that',
+    });
+    // それは訳がないでしょう。 — 訳がない sits at chars [3, 7).
+    await ensureSentenceGrammar('sent-0', pattern.id, {
+      surfaceForm: '訳がない',
+      start: 3,
+      end: 7,
+      confirmedByLearner: true,
+    });
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    const mark = await screen.findByText('訳がない');
+    expect(mark.tagName).toBe('MARK');
+    expect(mark).toHaveAttribute('title', '〜わけがない');
+  });
+
+  it('does not highlight anything in the passage when no context sentence has a tracked pattern', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.add({
+      id: 'sent-0',
+      normalizedKey: 'sent-0',
+      japanese: 'それは訳がないでしょう。',
+      readingOnly: '',
+      inlineReading: '',
+      translation: 'There is no reason for that.',
+      targetVocabulary: [],
+      vocabularySuggestions: [],
+      sourceReferences: [],
+      conflicts: [],
+      firstOccurrenceIndex: 0,
+      importBatchIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.bookSentences.add({
+      id: 'bs-0',
+      bookId: 'book-1',
+      sentenceId: 'sent-0',
+      position: -1,
+      status: 'unstarted',
+      addedAt: now,
+    });
+    await db.analyses.add({
+      sentenceId: 'sent-0',
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressUnconditionalSentenceActivityTypes('sent-0');
+
+    const { container } = renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('それは訳がないでしょう。');
+    expect(container.querySelector('mark')).not.toBeInTheDocument();
+  });
+
   async function seedReadingInContextPassage(opts: { followingReady: boolean }) {
     await seedBookWithSentence(); // book-1, sent-1 ('本を読みます。'), vocab confirmed
     const db = getDb();
@@ -985,6 +1092,88 @@ describe('ReviewPage', () => {
     await screen.findByText('Reveal word');
     expect(screen.getByText('昨日も本を_____。')).toBeInTheDocument();
     expect(screen.queryByText('昨日も本を読みます。')).not.toBeInTheDocument();
+  });
+
+  it('offers a one-tap replay of a prior shadowing attempt on a cloze reveal (docs/ROADMAP.md "ambient connective tissue")', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.attempts.add({
+      id: 'attempt-1',
+      sentenceId: 'sent-1',
+      mimeType: 'audio/webm',
+      durationMs: 2000,
+      blob: new Blob(['fake attempt bytes'], { type: 'audio/webm' }),
+      createdAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // reading_retrieval seeds alongside cloze; get past it first.
+    await screen.findByText('Reveal dictionary reading');
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await screen.findByText('Reveal word');
+    expect(screen.queryByText(/You've shadowed this sentence/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reveal word' }));
+
+    expect(await screen.findByText(/You've shadowed this sentence/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Replay your attempt/ })).toBeInTheDocument();
+  });
+
+  it('shows no shadowing-replay note on a cloze reveal for a sentence never shadowed', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await db.vocabularyItems.add({
+      id: 'vocab-1',
+      expression: '読む',
+      reading: 'よむ',
+      meaning: 'to read',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-1',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-1',
+      surfaceForm: '読みます',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('Reveal dictionary reading');
+    await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+
+    await screen.findByText('Reveal word');
+    await user.click(screen.getByRole('button', { name: 'Reveal word' }));
+
+    await screen.findByText('よむ');
+    expect(screen.queryByText(/You've shadowed this sentence/)).not.toBeInTheDocument();
   });
 
   it('seeds only cloze (not the reading cards) for an all-kana target word', async () => {

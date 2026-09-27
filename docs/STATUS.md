@@ -845,8 +845,17 @@ what's left is one deferred durability item (below).
     matched span) — deliberately **not** the target sentence itself, which
     is still under test. 6 new repository tests
     (`tests/trackedGrammarSpans.test.ts`: tracked/untracked/no-span/
-    multi-occurrence/empty-ids/multi-sentence cases). `npm run check` green
-    (169 files, 2088 passed).
+    multi-occurrence/empty-ids/multi-sentence cases).
+    **Follow-up 2026-09-27**: `tests/reviewPage.test.tsx` turned out to
+    already have a real component-test harness for exactly this surface
+    (`@testing-library/react` + a live `getDb()` fixture + `withAppProviders`
+    — missed initially in favor of a one-off browser script). Added 4 tests
+    there instead of leaving this to manual verification alone: the replay
+    note appears/doesn't appear on a cloze reveal depending on whether
+    `attempts` has a row for the sentence, and the passage `<mark>` appears/
+    doesn't appear depending on whether a context sentence has a
+    `confirmedByLearner` `sentence_grammar` occurrence. `npm run check` green
+    (170 files, 2094 passed).
     **Browser-verified 2026-09-27** (headless Chromium via
     `LD_LIBRARY_PATH=/tmp/chromium-libs` against `npm run dev`, in-page
     `import('/src/db/repository.ts')` seeding a fixture-free `getDb()` —
@@ -894,13 +903,18 @@ what's left is one deferred durability item (below).
   the warm-up's own "no pairs available" copy), so the round threshold
   (`HOMOPHONE_HUNT_MIN_TRIALS = 2`) is deliberately low — a single contrast
   with both a same-book and a cross-book occurrence already fills it. 9 new
-  unit tests (`tests/homophoneHunt.test.ts`). `npm run check` green (168
-  files, 2082 passed). **Manual test plan:** open `/play`; Homophone Hunt
-  only appears if you have a proficient true-homophone pair with audio (rare
-  — check the hub's "needs" line if it's hidden); play a round, confirm each
-  trial plays two real clips, that the reveal names which was which and
-  shows a plausible measured contour for both, and that no `reviews`/
-  `study_items` rows change.
+  unit tests (`tests/homophoneHunt.test.ts`).
+  **Follow-up 2026-09-27**: added `tests/homophoneHuntGame.test.tsx`
+  (2 tests, mirroring the existing `earTilesGame.test.tsx` component-test
+  shape: `@testing-library/react` + a live `getDb()` fixture, no mocking) —
+  a full round (guess → reveal → score → log, `gameRounds`/`reviews`/
+  `study_items` counts asserted) and the too-thin-corpus "needs" message.
+  `npm run check` green (170 files, 2094 passed). **Manual test plan:**
+  open `/play`; Homophone Hunt only appears if you have a proficient
+  true-homophone pair with audio (rare — check the hub's "needs" line if
+  it's hidden); play a round, confirm each trial plays two real clips, that
+  the reveal names which was which and shows a plausible measured contour
+  for both, and that no `reviews`/`study_items` rows change.
   **Browser-verified 2026-09-27** (headless Chromium via
   `LD_LIBRARY_PATH=/tmp/chromium-libs` against `npm run dev`, in-page
   `import('/src/db/repository.ts')` seeding a fixture-free `getDb()` — see
