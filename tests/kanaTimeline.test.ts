@@ -166,5 +166,37 @@ describe('buildKanaTimeline', () => {
       expect(exactMoraIntervals([word('あ', 0, 1, [phone('spn', 0, 1)])], segmentIntoMorae('あ'))).toBeNull();
       expect(exactMoraIntervals([], segmentIntoMorae('あ'))).toBeNull();
     });
+
+    it('flags every entry exact when the whole-sentence check passes', () => {
+      const entries = buildKanaTimeline({ words, moraUnits: reading, durationSeconds: 3 });
+      expect(entries.every((entry) => entry.exact)).toBe(true);
+    });
+  });
+
+  describe('per-word fallback (one word fails to parse, its neighbor still can)', () => {
+    it('keeps exact timing for a word whose own phones parse, even though a neighbor fails and the sentence-wide check does not', () => {
+      // ねこ: an unusable 'spn' phone — フォルスキー's own parse fails, so the
+      // whole-sentence exactMoraIntervals check fails too. すき: clean phones
+      // that parse into exactly its own two morae — it should still get
+      // measured timing instead of being dragged down to a proportional guess.
+      const words = [
+        word('ねこ', 0, 1, [phone('spn', 0, 1)]),
+        word('すき', 1, 2, [
+          phone('s', 1.0, 1.1),
+          phone('u', 1.1, 1.3),
+          phone('k', 1.3, 1.6),
+          phone('i', 1.6, 2.0),
+        ]),
+      ];
+      const reading = segmentIntoMorae('ねこすき');
+      expect(exactMoraIntervals(words, reading)).toBeNull(); // whole-sentence check fails
+
+      const entries = buildKanaTimeline({ words, moraUnits: reading, durationSeconds: 2 });
+      expect(entries.map((e) => e.text)).toEqual(['ね', 'こ', 'す', 'き']);
+      expect(entries[0]!.exact).toBe(false);
+      expect(entries[1]!.exact).toBe(false);
+      expect(entries[2]).toMatchObject({ exact: true, start: 1.0, end: 1.3 });
+      expect(entries[3]).toMatchObject({ exact: true, start: 1.3, end: 2.0 });
+    });
   });
 });

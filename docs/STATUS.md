@@ -818,6 +818,34 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Kana-timeline mora markers: per-word fallback + an
+  "estimated" flag, instead of one bad word silently degrading the whole
+  sentence.** User doubted the pitch-accent drill's own-recording contour:
+  the H/L classification seemed to match their own pronunciation, but the
+  mora markers underneath the pitch line didn't line up with what they
+  actually heard themselves say. Root cause in `buildKanaTimeline`
+  (`src/lib/kanaTimeline.ts`): the "exact" path (per-mora intervals from
+  `phonesToMoraIntervals`, i.e. the forced aligner's own phone boundaries)
+  only fired when **every** word in the sentence parsed into recognizable
+  Japanese phone patterns; if even one word failed (a mispronunciation,
+  hesitation, or an accent `japanese_mfa` wasn't trained on — all far more
+  likely on a learner's own take than a clean native clip), the *entire*
+  sentence silently fell back to a cruder proportional-guess overlay, with
+  no indication anything had changed. Changed the fallback loop to retry
+  `phonesToMoraIntervals` **per word** before resorting to the
+  proportional spread, so one bad word only costs itself, not its
+  neighbors. Also added `KanaTimelineEntry.exact: boolean` and a visual
+  flag in `KanaTimelineRow` (dashed, lower-opacity marker + a "these
+  positions are estimated" caption when any appear): an odd-looking marker
+  now reads as "this position is a guess," not as evidence the pitch
+  measurement itself is wrong. Used on the pitch-accent drill's
+  own-recording contour (`PitchAccentDrillPage.tsx`) and the shadowing
+  analysis contours (`AnalysisPanel`). Tests: `tests/kanaTimeline.test.ts`
+  (+2: exact-path entries all flagged `exact: true`; a two-word case where
+  one word's phones are unparseable but its neighbor's still measure
+  exactly, confirming the neighbor keeps real timing instead of both
+  falling back). `npm run check` green (175 files, 2139 passed).
+
 - **2026-09-27 — Sentence-clip "Adjust" trim, alongside the existing
   word-level one.** User's complaint: mined sentence/word boundaries (or
   playback artifacts) sometimes include audio outside the intended bounds,

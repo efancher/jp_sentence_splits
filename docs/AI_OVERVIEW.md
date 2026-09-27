@@ -2027,18 +2027,33 @@ a self-hosted pronunciation-analysis backend. Capabilities:
     available, `buildKanaTimeline` (`src/lib/kanaTimeline.ts`) lays the
     sentence's kana along each contour's linear time axis (the same voiced
     span as the contour above it), one label per mora, positioned by real
-    timing rather than evenly spaced: which morae belong to which aligned
-    word is still decided by character-count proportion onto the mora
-    sequence (same approximation as `SyncedShadowText`), but within a word
-    each mora then claims a proportional slice of that word's own `phones`
-    sub-alignment (interpolated between real phone boundaries), so a mora
-    the speaker held longer renders as a visibly wider label instead of
-    every mora in a word looking identical. Reference side is
-    offset-corrected for a practice-target slice. Degrades to nothing when
-    the aligner is unreachable. The row component (`KanaTimelineRow`) is
-    shared with the pitch-accent drill's own-recording contour (§8). Not on
-    the waveforms — their peaks are
-    edge-trimmed and mode-warped, so there's no honest linear time axis.
+    timing rather than evenly spaced. Tries three things in order, per
+    mora-or-word: (1) a whole-sentence check — every word's phones parse
+    into recognizable Japanese phone patterns (`phonesToMoraIntervals`) and
+    the total mora count matches the reading exactly — gives every mora its
+    own measured phone-boundary interval, no proportion involved anywhere;
+    (2) failing that, retried **per word**, not sentence-wide: which morae
+    belong to which aligned word is decided by character-count proportion
+    onto the mora sequence (same approximation as `SyncedShadowText`), but
+    a word whose *own* phones still parse into exactly its own mora count
+    gets real measured timing anyway — one neighboring word failing to
+    parse (a mispronunciation, hesitation, or an accent the aligner's model
+    wasn't trained on — far more likely on a learner's own take than a
+    clean native clip) no longer drags every other word down; (3) only a
+    word whose own phones don't parse falls all the way back to a
+    proportional slice of its own `phones` sub-alignment (interpolated
+    between real phone boundaries) — still shows a mora held longer as a
+    visibly wider label, just not at its true position. `KanaTimelineEntry.
+    exact` records which of these produced each label; `KanaTimelineRow`
+    renders a `false` one dashed and dimmed, with a caption when any
+    appear, so an odd-looking marker reads as "this position is a guess,"
+    not as evidence the pitch measurement above it is wrong. Reference side
+    is offset-corrected for a practice-target slice. Degrades to nothing
+    when the aligner is unreachable. The row component (`KanaTimelineRow`)
+    is shared with the pitch-accent drill's own-recording contour (§8),
+    where a learner's own take is the common case that hits the per-word
+    fallback. Not on the waveforms — their peaks are edge-trimmed and
+    mode-warped, so there's no honest linear time axis.
   - **Spectrogram** — a "Show spectrogram" toggle draws the reference clip
     and the learner attempt as stacked grayscale spectrograms (0–4 kHz,
     louder = brighter) from a hand-rolled radix-2 FFT + Hann STFT

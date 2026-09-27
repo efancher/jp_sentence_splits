@@ -11,6 +11,17 @@ export interface KanaTimelineEntry {
   /** Horizontal placement over a 0..100 width track. */
   leftPct: number;
   widthPct: number;
+  /**
+   * True when `start`/`end` came from this mora's own measured phone
+   * boundary (or, for a whole single-mora token, its real aligned bounds) —
+   * false when it's a proportional guess (a word's own phones didn't parse
+   * into recognizable morae, or there's no mora reading to sub-divide by at
+   * all). A learner's own take degrades to this far more than a clean
+   * native clip: mispronunciation, hesitation, or an accent MFA's
+   * `japanese_mfa` model wasn't trained on all produce phone sequences
+   * `phonesToMoraIntervals` won't recognize.
+   */
+  exact: boolean;
 }
 
 const INAUDIBLE = new Set(['', '<eps>', '<unk>', '<sil>', '<pad>']);
@@ -84,19 +95,19 @@ export function buildKanaTimeline({
   const totalChars = audible.reduce((sum, word) => sum + word.text.length, 0);
 
   const entries: KanaTimelineEntry[] = [];
-  const pushEntry = (text: string, rawStart: number, rawEnd: number) => {
+  const pushEntry = (text: string, rawStart: number, rawEnd: number, exact: boolean) => {
     const start = rawStart - timeOffsetSeconds;
     const end = rawEnd - timeOffsetSeconds;
     // Drop labels that fall entirely outside a sliced practice-target window.
     if (end <= 0 || start >= durationSeconds) return;
     const leftPct = Math.max(0, Math.min(100, (start / durationSeconds) * 100));
     const rightPct = Math.max(0, Math.min(100, (end / durationSeconds) * 100));
-    entries.push({ text, start, end, leftPct, widthPct: Math.max(0, rightPct - leftPct) });
+    entries.push({ text, start, end, leftPct, widthPct: Math.max(0, rightPct - leftPct), exact });
   };
 
-  const exact = exactMoraIntervals(audible, moraUnits);
-  if (exact) {
-    moraUnits.forEach((unit, index) => pushEntry(unit.text, exact[index]!.start, exact[index]!.end));
+  const sentenceExact = exactMoraIntervals(audible, moraUnits);
+  if (sentenceExact) {
+    moraUnits.forEach((unit, index) => pushEntry(unit.text, sentenceExact[index]!.start, sentenceExact[index]!.end, true));
     return entries;
   }
 
@@ -115,12 +126,28 @@ export function buildKanaTimeline({
 
     if (wordMorae.length === 0) {
       // No mora reading available for this word — one label for the whole span.
-      pushEntry(word.text, word.start, word.end);
+      pushEntry(word.text, word.start, word.end, false);
       continue;
     }
-    if (word.phones.length === 0 || wordMorae.length === 1) {
-      // Nothing to sub-divide: no phone timing, or the word is one mora.
-      pushEntry(wordMorae.map((unit) => unit.text).join(''), word.start, word.end);
+    if (wordMorae.length === 1) {
+      // Nothing to sub-divide, and the token's own bounds are exact.
+      pushEntry(wordMorae[0]!.text, word.start, word.end, true);
+      continue;
+    }
+
+    // Try this word's own phones before spreading proportionally — one
+    // neighboring word failing to parse (a mispronunciation, hesitation, an
+    // accent the model wasn't trained on) shouldn't cost every other word
+    // its exact timing, which the whole-sentence check above would do.
+    const wordExact = word.phones.length > 0 ? phonesToMoraIntervals(word.phones) : null;
+    if (wordExact && wordExact.length === wordMorae.length) {
+      wordMorae.forEach((unit, index) => pushEntry(unit.text, wordExact[index]!.start, wordExact[index]!.end, true));
+      continue;
+    }
+
+    if (word.phones.length === 0) {
+      // Nothing to sub-divide: no phone timing at all.
+      pushEntry(wordMorae.map((unit) => unit.text).join(''), word.start, word.end, false);
       continue;
     }
 
@@ -134,7 +161,7 @@ export function buildKanaTimeline({
     };
     const phonesPerMora = phones.length / wordMorae.length;
     wordMorae.forEach((unit, index) => {
-      pushEntry(unit.text, timeAt(index * phonesPerMora), timeAt((index + 1) * phonesPerMora));
+      pushEntry(unit.text, timeAt(index * phonesPerMora), timeAt((index + 1) * phonesPerMora), false);
     });
   }
   return entries;
