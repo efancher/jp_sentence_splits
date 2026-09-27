@@ -138,6 +138,11 @@ strong.jp {
   color: var(--text-muted);
 }
 
+.reading-context-reading {
+  margin: 0;
+  font-style: italic;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

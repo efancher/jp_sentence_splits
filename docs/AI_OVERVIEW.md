@@ -1250,7 +1250,16 @@ The unified FSRS-based SRS, at `/review` (global) and
 content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
 rating). One `StudyItem` exists per `(subjectType, subjectId,
 activityType)` triple; multiple activity types can exist for the same
-subject. Activity types currently wired, grouped by subject/eligibility:
+subject. Any card that frames its target sentence with passage context
+(preceding/following neighbour sentences, not the sentence under test)
+shows each context sentence's hiragana reading (`sentence.readingOnly`) on
+its own line underneath, once `revealed` — withheld pre-reveal so a
+passage line the card shows up front doesn't hand over reading practice
+before the learner has attempted it. Shared `ContextSentenceReading`
+helper in `ReviewPage.tsx`, used by `ReadingInContextCard`,
+`VocabularyTargetCard` (`cloze`/`reading_retrieval`),
+`GrammarRecognitionCard`, and `GrammarCompletionCard` (2026-09-27).
+Activity types currently wired, grouped by subject/eligibility:
 - **Sentence subject**: `reading_in_context` (JP framed by its
   reading-order neighbours — preceding sentences shown untranslated above
   it, the following sentence folded into the reveal — then reveal EN+vocab,

@@ -2232,9 +2232,12 @@ function ReadingInContextCard({
       {before.length ? (
         <div className="reading-context">
           {before.map((item) => (
-            <p key={item.id} className="jp jp-sm reading-context-line">
-              <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
-            </p>
+            <div key={item.id}>
+              <p className="jp jp-sm reading-context-line">
+                <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
+              </p>
+              <ContextSentenceReading sentence={item} revealed={revealed} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -2268,14 +2271,17 @@ function ReadingInContextCard({
           {after.length ? (
             <div className="reading-context">
               {after.map((item) => (
-                <p key={item.id} className="reading-context-line">
-                  <span className="jp jp-sm">
-                    <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
-                  </span>
-                  {item.translation ? (
-                    <span className="muted"> — {item.translation}</span>
-                  ) : null}
-                </p>
+                <div key={item.id}>
+                  <p className="reading-context-line">
+                    <span className="jp jp-sm">
+                      <ContextSentenceText sentence={item} span={grammarSpans?.get(item.id)} />
+                    </span>
+                    {item.translation ? (
+                      <span className="muted"> — {item.translation}</span>
+                    ) : null}
+                  </p>
+                  <ContextSentenceReading sentence={item} revealed={revealed} />
+                </div>
               ))}
             </div>
           ) : null}
@@ -2306,6 +2312,22 @@ function ContextSentenceText({
       {sentence.japanese.slice(span.end)}
     </>
   );
+}
+
+/**
+ * A context sentence's hiragana reading, on its own line underneath it —
+ * withheld until `revealed` so a passage line the card shows up front
+ * doesn't hand over reading practice before the learner has attempted it.
+ */
+function ContextSentenceReading({
+  sentence,
+  revealed,
+}: {
+  sentence: Sentence;
+  revealed: boolean;
+}) {
+  if (!revealed || !sentence.readingOnly) return null;
+  return <p className="jp jp-sm muted reading-context-reading">{sentence.readingOnly}</p>;
 }
 
 /**
@@ -2365,9 +2387,10 @@ function VocabularyTargetCard({
   const contextBlock = contextLines.length ? (
     <div className="reading-context">
       {contextLines.map((item) => (
-        <p key={item.id} className="jp jp-sm reading-context-line">
-          {contextText(item.japanese)}
-        </p>
+        <div key={item.id}>
+          <p className="jp jp-sm reading-context-line">{contextText(item.japanese)}</p>
+          <ContextSentenceReading sentence={item} revealed={revealed} />
+        </div>
       ))}
     </div>
   ) : null;
@@ -3414,9 +3437,10 @@ function GrammarRecognitionCard({
       {before.length ? (
         <div className="reading-context">
           {before.map((item) => (
-            <p key={item.id} className="jp jp-sm reading-context-line">
-              {item.japanese}
-            </p>
+            <div key={item.id}>
+              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
+              <ContextSentenceReading sentence={item} revealed={revealed} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -3426,10 +3450,13 @@ function GrammarRecognitionCard({
   const passageAfter = after.length ? (
     <div className="reading-context">
       {after.map((item) => (
-        <p key={item.id} className="reading-context-line">
-          <span className="jp jp-sm">{item.japanese}</span>
-          {item.translation ? <span className="muted"> — {item.translation}</span> : null}
-        </p>
+        <div key={item.id}>
+          <p className="reading-context-line">
+            <span className="jp jp-sm">{item.japanese}</span>
+            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
+          </p>
+          <ContextSentenceReading sentence={item} revealed={revealed} />
+        </div>
       ))}
     </div>
   ) : null;
@@ -3560,9 +3587,10 @@ function GrammarCompletionCard({
       {before.length ? (
         <div className="reading-context">
           {before.map((item) => (
-            <p key={item.id} className="jp jp-sm reading-context-line">
-              {item.japanese}
-            </p>
+            <div key={item.id}>
+              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
+              <ContextSentenceReading sentence={item} revealed={revealed} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -3572,10 +3600,13 @@ function GrammarCompletionCard({
   const passageAfter = after.length ? (
     <div className="reading-context">
       {after.map((item) => (
-        <p key={item.id} className="reading-context-line">
-          <span className="jp jp-sm">{item.japanese}</span>
-          {item.translation ? <span className="muted"> — {item.translation}</span> : null}
-        </p>
+        <div key={item.id}>
+          <p className="reading-context-line">
+            <span className="jp jp-sm">{item.japanese}</span>
+            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
+          </p>
+          <ContextSentenceReading sentence={item} revealed={revealed} />
+        </div>
       ))}
     </div>
   ) : null;

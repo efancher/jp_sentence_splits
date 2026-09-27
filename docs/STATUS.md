@@ -818,6 +818,27 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Context sentences get their hiragana reading too, once
+  revealed.** User request: cards that frame the target sentence with
+  neighbouring passage sentences only ever showed the neighbours' kanji
+  text, with no reading — unlike the target sentence itself, which several
+  card types already reveal a plain-hiragana line for
+  (`sentence.readingOnly`). Added a shared `ContextSentenceReading`
+  helper (`ReviewPage.tsx`) that renders a context sentence's
+  `readingOnly` on its own line underneath it, gated on the card's
+  `revealed` state (explicitly requested — a passage line some cards show
+  up front shouldn't hand over its reading before the learner has
+  attempted it, and post-reveal is also when any cloze/reading_retrieval
+  masking of the same word inside context sentences already lifts, so
+  there's no separate leak risk to manage). Wired into all four review
+  card families that render passage context:
+  `ReadingInContextCard` (before/after), `VocabularyTargetCard`
+  (`cloze`/`reading_retrieval`'s context block), `GrammarRecognitionCard`,
+  and `GrammarCompletionCard` (both grammar cards' before/after passage
+  blocks). New `.reading-context-reading` CSS class (italic, muted,
+  `global.css`). `npm run check` green (175 files, 2139 passed) —
+  behavioral change with existing test coverage, no new tests added.
+
 - **2026-09-27 — Kana-timeline mora markers: per-word fallback + an
   "estimated" flag, instead of one bad word silently degrading the whole
   sentence.** User doubted the pitch-accent drill's own-recording contour:
