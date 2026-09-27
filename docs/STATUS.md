@@ -818,6 +818,36 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Odd Ear Out: a "Clip sounds wrong? Fix it" editor for a
+  bad word-only clip, and the fix reaches Speaker Match too.** User report:
+  some Odd Ear Out clips are cut wrong. The game deliberately never
+  consulted `SentenceVocabulary.audioStartMs/EndMs` (see the 2026-09-19
+  entry below — that override is for the pitch cards and usually carries a
+  following particle, which would leak the heiban/odaka cue this game
+  groups away), so there was no way to hand-correct a bad clip at all.
+  Added a second, narrower override — `wordOnlyStartMs`/`wordOnlyEndMs`
+  (migration `20260927020000`, both sync mappers,
+  `setSentenceVocabularyWordOnlyRange`) — that stores a *strict* word-only
+  span with no particle folded in, so it can't reintroduce the problem the
+  first override causes. `isolatedWordSpans` now takes this as an optional
+  5th `override` argument and returns it verbatim (bypassing the aligner
+  match, `withParticle: null`) when set; `getOddEarOutData` and
+  `getPitchAccentSpeakerComparisons` (Speaker Match's data) both pass it
+  through, so one fix made from Odd Ear Out's revealed-tile editor
+  (`ZoomedRangeEditor`, reused from `SegmentLoopPlayer`'s "Adjust") also
+  corrects that occurrence's clip in Speaker Match — the two games share
+  the same strict-span family. The heiban/odaka word-vs-phrase warm-up
+  (`PitchWordPhraseWarmup`) needs `withParticle` alongside `wordOnly` and
+  isn't wired to this override for that reason — same "don't let one
+  override poison an unrelated consumer" logic that kept it off
+  `audioStartMs/EndMs` in the first place. Also fixed a stale doc comment
+  on `getOddEarOutData` still claiming the game skips digit+日/月 dated
+  sentences — that skip was removed in 36a61953 (proper date-expansion
+  span mapping) but the comment never caught up; the game has played dated
+  sentences correctly since. `npm run check` green (179 files, 2146 passed,
+  12 skipped); new coverage in `tests/isolatedWordRange.test.ts`,
+  `tests/gameRepository.test.ts`, `tests/data.test.ts`, `tests/sync.test.ts`.
+
 - **2026-09-27 — Grammar Detective / `grammar_completion`: kana-lenient
   answer checking + real span-based blanking, closing two related bugs the
   user hit on a descriptive pattern ("～という/～ての列挙的記述").** (1)

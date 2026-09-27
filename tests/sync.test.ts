@@ -689,6 +689,18 @@ describe('sync mappers', () => {
     const back = remoteToSentenceVocabulary(withRange);
     expect(back.audioStartMs).toBe(1200);
     expect(back.audioEndMs).toBe(1850);
+
+    // The strict word-only correction round-trips independently of the padded range.
+    const withWordOnly = sentenceVocabularyToRemote(
+      { ...link!, wordOnlyStartMs: 1000, wordOnlyEndMs: 1600 },
+      'user-1',
+      3,
+    );
+    expect(withWordOnly.word_only_start_ms).toBe(1000);
+    expect(withWordOnly.word_only_end_ms).toBe(1600);
+    const backWordOnly = remoteToSentenceVocabulary(withWordOnly);
+    expect(backWordOnly.wordOnlyStartMs).toBe(1000);
+    expect(backWordOnly.wordOnlyEndMs).toBe(1600);
   });
 
   it('round-trips a vocabulary_kanji link through remote shape', async () => {

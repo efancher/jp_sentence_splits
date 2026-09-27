@@ -77,6 +77,7 @@ import {
   setAttemptFavorite,
   setBookSentenceStatus,
   setSentenceVocabularyAudioRange,
+  setSentenceVocabularyWordOnlyRange,
   setSentenceGrammarReviewStatus,
   transferBookSentences,
   updateBookChapter,
@@ -550,6 +551,60 @@ describe('manual word-audio range (setSentenceVocabularyAudioRange)', () => {
   it('is a no-op for an unknown link', async () => {
     await expect(
       setSentenceVocabularyAudioRange('nope', { startMs: 0, endMs: 100 }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('manual word-only range (setSentenceVocabularyWordOnlyRange)', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-word-only-range-${createId('db')}`);
+  });
+
+  async function seedLink(): Promise<string> {
+    await materializeVocabularySelections('wor-sent-1', [
+      {
+        id: 'wor-vsel-1',
+        surface: '大学',
+        start: 0,
+        end: 2,
+        expression: '大学',
+        reading: 'だいがく',
+        source: 'manual',
+      },
+    ]);
+    const link = await getDb()
+      .sentenceVocabulary.where('sentenceId')
+      .equals('wor-sent-1')
+      .first();
+    return link!.id;
+  }
+
+  it('stores a rounded span independently of the padded audioStartMs/EndMs range', async () => {
+    const linkId = await seedLink();
+    await setSentenceVocabularyAudioRange(linkId, { startMs: 900, endMs: 2200 });
+    await setSentenceVocabularyWordOnlyRange(linkId, { startMs: 1000.4, endMs: 1599.6 });
+
+    const link = await getDb().sentenceVocabulary.get(linkId);
+    expect(link?.wordOnlyStartMs).toBe(1000);
+    expect(link?.wordOnlyEndMs).toBe(1600);
+    // The padded override this doesn't touch.
+    expect(link?.audioStartMs).toBe(900);
+    expect(link?.audioEndMs).toBe(2200);
+  });
+
+  it('null clears the override back to the alignment guess', async () => {
+    const linkId = await seedLink();
+    await setSentenceVocabularyWordOnlyRange(linkId, { startMs: 1000, endMs: 1500 });
+    await setSentenceVocabularyWordOnlyRange(linkId, null);
+
+    const link = await getDb().sentenceVocabulary.get(linkId);
+    expect(link?.wordOnlyStartMs).toBeUndefined();
+    expect(link?.wordOnlyEndMs).toBeUndefined();
+  });
+
+  it('is a no-op for an unknown link', async () => {
+    await expect(
+      setSentenceVocabularyWordOnlyRange('nope', { startMs: 0, endMs: 100 }),
     ).resolves.toBeUndefined();
   });
 });

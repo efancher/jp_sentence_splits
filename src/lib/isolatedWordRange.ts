@@ -532,7 +532,16 @@ export function isolatedWordSpans(
   japanese: string,
   surfaceForm: string,
   reading?: SentenceReading,
+  /**
+   * A hand-corrected strict word-only span (`SentenceVocabulary.wordOnlyStartMs/EndMs`)
+   * that replaces `wordOnly` outright, bypassing the aligner match entirely.
+   * `withParticle` can't be derived from it (no token position to fold a
+   * particle from), so it comes back null — callers that need both together
+   * (the heiban/odaka word-vs-phrase warm-up) don't pass this.
+   */
+  override?: TimeRangeMs | null,
 ): IsolatedWordSpans | null {
+  if (override) return { wordOnly: override, withParticle: null, tokenExact: true };
   const match = matchWord(words, japanese, surfaceForm, reading);
   if (!match) return null;
   const particle = foldableParticle(match);

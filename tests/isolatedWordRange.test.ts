@@ -274,6 +274,17 @@ describe('isolatedWordSpans', () => {
   it('returns null when the word can’t be located', () => {
     expect(isolatedWordSpans(words, japanese, '猫')).toBeNull();
   });
+
+  it('a hand-corrected override bypasses the aligner match entirely', () => {
+    // Even an unlocatable target ('猫' isn't in this sentence) is served
+    // straight from the override — a saved correction never falls through
+    // to re-matching.
+    expect(isolatedWordSpans(words, japanese, '猫', undefined, { startMs: 100, endMs: 300 })).toEqual({
+      wordOnly: { startMs: 100, endMs: 300 },
+      withParticle: null,
+      tokenExact: true,
+    });
+  });
 });
 
 describe('isolatedWordSpans tokenExact (皆 fused into an unsplit 皆さん token)', () => {

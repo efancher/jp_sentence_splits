@@ -382,6 +382,8 @@ describe('odd ear out repository', () => {
       withAudio?: boolean;
       alignmentVersion?: number | null; // null = no cached alignment
       override?: [number, number];
+      /** `SentenceVocabulary.wordOnlyStartMs/EndMs` — a hand-corrected strict span. */
+      wordOnlyOverride?: [number, number];
       suspendedBook?: boolean;
       wordEnd?: number;
       /** Text before 語<id> — lets a test put a date in the sentence. */
@@ -390,7 +392,17 @@ describe('odd ear out repository', () => {
       leadToken?: string;
     } = {},
   ) {
-    const { bookId = 'b1', withAudio = true, alignmentVersion = 3, override, suspendedBook = false, wordEnd = 1.6, lead = 'これは', leadToken = lead } = opts;
+    const {
+      bookId = 'b1',
+      withAudio = true,
+      alignmentVersion = 3,
+      override,
+      wordOnlyOverride,
+      suspendedBook = false,
+      wordEnd = 1.6,
+      lead = 'これは',
+      leadToken = lead,
+    } = opts;
     const db = getDb();
     await db.vocabularyItems.put({
       id,
@@ -409,6 +421,7 @@ describe('odd ear out repository', () => {
       vocabularyItemId: id,
       surfaceForm: `語${id}`,
       ...(override ? { audioStartMs: override[0], audioEndMs: override[1] } : {}),
+      ...(wordOnlyOverride ? { wordOnlyStartMs: wordOnlyOverride[0], wordOnlyEndMs: wordOnlyOverride[1] } : {}),
       createdAt: T,
       updatedAt: T,
     } as never);
@@ -484,6 +497,20 @@ describe('odd ear out repository', () => {
     expect((await getOddEarOutData()).clips.map((c) => c.vocabularyItemId)).toEqual(['ovr']);
   });
 
+  it('uses a hand-corrected wordOnlyStartMs/EndMs span in place of the aligner match', async () => {
+    // The aligner would place 語fix at 1.0–1.6 s; the hand fix says 1.05–1.55 s.
+    await addPitchWord('fix', 'さくら', 0, { wordOnlyOverride: [1050, 1550] });
+    const { clips } = await getOddEarOutData();
+    expect(clips).toHaveLength(1);
+    expect(clips[0]!.span).toEqual({ startMs: 1050, endMs: 1550 });
+  });
+
+  it('plays a word-only correction even with no current alignment cached', async () => {
+    await addPitchWord('fixnoaln', 'さくら', 0, { wordOnlyOverride: [1050, 1550], alignmentVersion: null });
+    const { clips } = await getOddEarOutData();
+    expect(clips.map((c) => c.vocabularyItemId)).toEqual(['fixnoaln']);
+  });
+
   it('plays words in sentences with a digit+日/月 date — the aligner expands it, and the span mapping accounts for that', async () => {
     await addPitchWord('dated', 'さくら', 0, { lead: '16日は', leadToken: 'じゅうろくにちは' });
     await addPitchWord('fullwidth', 'いのち', 1, { lead: '１０月に', leadToken: 'じゅうがつに' });
@@ -521,8 +548,12 @@ describe('speaker match repository', () => {
   });
 
   /** One playable citation-form clip of `itemId` mined into `bookId`. */
-  async function addSpeakerClip(itemId: string, bookId: string, opts: { withAudio?: boolean } = {}) {
-    const { withAudio = true } = opts;
+  async function addSpeakerClip(
+    itemId: string,
+    bookId: string,
+    opts: { withAudio?: boolean; wordOnlyOverride?: [number, number] } = {},
+  ) {
+    const { withAudio = true, wordOnlyOverride } = opts;
     const db = getDb();
     if (!(await db.vocabularyItems.get(itemId))) {
       await db.vocabularyItems.put({
@@ -542,6 +573,7 @@ describe('speaker match repository', () => {
       sentenceId: sid,
       vocabularyItemId: itemId,
       surfaceForm: '桜',
+      ...(wordOnlyOverride ? { wordOnlyStartMs: wordOnlyOverride[0], wordOnlyEndMs: wordOnlyOverride[1] } : {}),
       createdAt: T,
       updatedAt: T,
     } as never);
@@ -588,6 +620,14 @@ describe('speaker match repository', () => {
     expect(comparisons.map((c) => c.word.vocabularyItemId)).toEqual(['vi-1']);
     expect(comparisons[0]!.clips).toHaveLength(2);
     expect(new Set(comparisons[0]!.clips.map((c) => c.bookId))).toEqual(new Set(['book-a', 'book-b']));
+  });
+
+  it('honours a wordOnlyStartMs/EndMs correction made from Odd Ear Out', async () => {
+    await addSpeakerClip('vi-1', 'book-a', { wordOnlyOverride: [1050, 1550] });
+    await addSpeakerClip('vi-1', 'book-b');
+    const { comparisons } = await getSpeakerMatchData();
+    const clip = comparisons[0]!.clips.find((c) => c.bookId === 'book-a')!;
+    expect(clip.span).toEqual({ startMs: 1050, endMs: 1550 });
   });
 
   it('reads per-word history from logged rounds, writing nothing', async () => {

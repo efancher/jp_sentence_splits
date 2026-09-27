@@ -1082,7 +1082,14 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   includes a following particle (71 of 92 comparable prod overrides) — that would
   leak the heiban/odaka cue. (Dated sentences are fine: `alignerView` in
   `src/lib/alignerText.ts` reproduces the aligner's digit+日/月 → hiragana expansion
-  and punctuation dropping, so spans map by exact offset.)
+  and punctuation dropping, so spans map by exact offset.) When a clip sounds
+  wrong, the revealed tile has a "Clip sounds wrong? Fix it" toggle
+  (`ZoomedRangeEditor`) that writes a hand-corrected strict span straight to
+  `SentenceVocabulary.wordOnlyStartMs/EndMs` — a field separate from
+  `audioStartMs/EndMs` for the same reason those are ignored above. This is
+  consulted by `isolatedWordSpans` ahead of the aligner match for every
+  `wordOnly` consumer, so one fix here also fixes that occurrence's clip in
+  Speaker Match, without touching the padded pitch/word-listening range.
   Proficiency deliberately **not** required (it's perception, not knowing the word). Weakness is per **shape pair** from the
   round log (unordered, per mora count), offered as `weak`/`strong`. Alignments
   for the pool are loaded in bulk (`loadAlignmentsBulk`: Dexie cache → one

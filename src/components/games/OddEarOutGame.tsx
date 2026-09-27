@@ -5,11 +5,13 @@ import {
   getOddEarOutData,
   getRecentGameDifficulty,
   logGameRound,
+  setSentenceVocabularyWordOnlyRange,
   type OddEarOutClip,
 } from '../../db/repository';
 import type { GameRoundItem, GameSignal } from '../../domain/types';
 import { useRangeLoop } from '../../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../../hooks/useSentenceAudioBlob';
+import type { TimeRangeMs } from '../../lib/recording';
 import {
   describeRound,
   pickItems,
@@ -33,6 +35,7 @@ import {
 } from '../../lib/oddEarOut';
 import { seededShuffle } from '../../lib/seededShuffle';
 import { WordPitchContour } from '../WordPitchContour';
+import { ZoomedRangeEditor } from '../ZoomedRangeEditor';
 import { GameShell, type GamePhase } from './GameShell';
 
 type Data = Awaited<ReturnType<typeof getOddEarOutData>>;
@@ -80,6 +83,10 @@ function ClipTile({
 }) {
   const tileId = `${clip.vocabularyItemId}:${clip.bookId}`;
   const blob = useSentenceAudioBlob(clip.audio);
+  // Seeded from the clip's span, then owned locally so a saved fix takes
+  // effect immediately (replay, pitch contour) without waiting on a re-fetch.
+  const [span, setSpan] = useState<TimeRangeMs>(clip.span);
+  const [fixing, setFixing] = useState(false);
   const loop = useRangeLoop(clip.audio.id, blob);
   const loopRef = useRef(loop);
   loopRef.current = loop;
@@ -96,7 +103,7 @@ function ClipTile({
       return;
     }
     onPlay(tileId);
-    void loop.toggleLoop(clip.span);
+    void loop.toggleLoop(span);
   }
 
   const border =
@@ -147,7 +154,28 @@ function ClipTile({
           </div>
           {clip.meaning ? <div className="muted" style={{ fontSize: '0.85rem' }}>{clip.meaning}</div> : null}
           <div style={{ fontSize: '0.85rem' }}>{shapeLabel(clip.shape)}</div>
-          <WordContour clip={clip} blob={blob} />
+          <WordContour clip={{ ...clip, span }} blob={blob} />
+          {blob ? (
+            <button type="button" className="ghost" style={{ fontSize: '0.8rem' }} onClick={() => setFixing((f) => !f)}>
+              {fixing ? 'Close' : "Clip sounds wrong? Fix it"}
+            </button>
+          ) : null}
+          {fixing && blob ? (
+            <ZoomedRangeEditor
+              blob={blob}
+              audioId={clip.audio.id}
+              value={span}
+              hasOverride={false}
+              description={`Set the edges on just ${clip.expression} (${clip.reading}) alone — no particle or neighbouring word. This fixes the clip everywhere it's used (this game, Speaker Match), not just here.`}
+              onSave={(next) => {
+                setSpan(next);
+                setFixing(false);
+                void setSentenceVocabularyWordOnlyRange(clip.linkId, next);
+              }}
+              onReset={() => {}}
+              onCancel={() => setFixing(false)}
+            />
+          ) : null}
         </div>
       )}
     </div>

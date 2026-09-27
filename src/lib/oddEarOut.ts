@@ -60,6 +60,8 @@ export const MAX_CLIP_MS = 3000;
 export const ODD_EAR_HISTORY_ROUNDS = 60;
 
 export interface OddEarClip {
+  /** The `SentenceVocabulary` occurrence this clip is cut from — target for a boundary correction. */
+  linkId: string;
   vocabularyItemId: string;
   expression: string;
   reading: string;
