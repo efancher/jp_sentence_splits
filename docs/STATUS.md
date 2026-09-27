@@ -818,6 +818,45 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Sentence-clip "Adjust" trim, alongside the existing
+  word-level one.** User's complaint: mined sentence/word boundaries (or
+  playback artifacts) sometimes include audio outside the intended bounds,
+  making it hard to shadow — and the only existing fix-it tool
+  (`SentenceAudioAdjuster` on `AnalyzePage`) re-cuts from the pristine
+  YouTube source over the network, too heavy to pop up wherever audio
+  plays. New `SentenceAudio.trimStartMs/EndMs` (nullable, additive;
+  Supabase migration `20260927000000_reference_audio_trim_range.sql` adds
+  `reference_audio.trim_start_ms/end_ms`) — a local, offline trim within
+  the clip's *own* blob, same shape as `SentenceVocabulary.audioStartMs/EndMs`
+  for words. `setSentenceAudioTrimRange` (`src/db/repository.ts`) writes it
+  and re-uploads the (unchanged) blob via `uploadReferenceAudio` to push
+  the metadata — `reference_audio`'s push path needs the full row
+  (`storagePath`/`sizeBytes` aren't stored locally), so a partial update
+  would have nulled those columns for every other device; extracted
+  `pushReferenceAudioUpdate` so `recutSentenceAudioFromSource` shares it.
+  Re-cutting from source now also clears any stale trim (it was measured
+  against the old blob's timeline). Reused the existing `ZoomedRangeEditor`
+  (built for the word-level editor) — added an optional `description` prop
+  so its copy isn't word-loop-specific — wired into `NativeAudioButton`
+  behind a new "Adjust" toggle (hidden via `hideAdjust` where
+  `SegmentLoopPlayer` already embeds a `NativeAudioButton` next to its own
+  word-level Adjust, to avoid two same-page "Adjust" buttons). Because
+  `NativeAudioButton` and the shared `nativeAudioController` singleton
+  (`src/lib/nativeAudio.ts`) are reused across `ReviewPage`, `AnalyzePage`,
+  `ReaderPage`, `PracticePage`, `VocabularyReviewPage`, and
+  `GrammarPatternDetailPage`, the trim applies everywhere a sentence plays
+  or loops (play-once, `{loop: true}`, reader auto-advance) without
+  touching those call sites — `attemptPlayback` seeks to the trim start and
+  a `timeupdate` handler stops (or, if looping, seeks back) at the trim
+  end. `ShadowPage`'s close-shadow loop/alternate/dual-ear (a separate,
+  ephemeral tap-to-mark range system, not `NativeAudioButton`) falls back
+  to the persisted trim only when the learner hasn't marked a narrower
+  target range of their own; no "Adjust" editor added to that page's layout
+  itself. Tests: `tests/nativeAudio.test.ts` (+3: seek/stop, trimmed loop,
+  inverted range ignored), `tests/data.test.ts` (+3: set/clear, no-op on
+  missing row, recut clears stale trim). `npm run check` green (175 files,
+  2137 passed).
+
 - **2026-09-27 — Grammar blind spots on `/progress` became per-pattern rows
   with a deep link, matching vocab's shape.** Previously the "Blind spots"
   panel's grammar half was a single collapsed line (count + top 3 names,

@@ -203,6 +203,10 @@ export function SegmentLoopPlayer({
             audio={audio}
             displayLabel="Whole sentence"
             onPlay={cancelLoop}
+            // This widget already has its own word-span "Adjust" below; the
+            // clip-level trim is still reachable via any other
+            // NativeAudioButton for this sentence on the page.
+            hideAdjust
           />
         )}
         {editRange ? (

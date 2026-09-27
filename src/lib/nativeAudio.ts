@@ -83,10 +83,34 @@ export class NativeAudioController {
     const audio = new Audio(url);
     audio.playbackRate = playbackRate;
     audio.preservesPitch = true;
-    audio.loop = loop;
+    // A hand-corrected trim (SentenceAudio.trimStartMs/EndMs, "Adjust" on
+    // NativeAudioButton) clips every playback path the same way, without
+    // touching the blob. `loop` still uses the native <audio> `loop`
+    // attribute for an untrimmed clip (simplest/most reliable); a trimmed
+    // loop instead seeks back to the trim start on `timeupdate` since the
+    // browser's own loop would replay past the trimmed end first.
+    const trim =
+      record.trimStartMs != null && record.trimEndMs != null && record.trimEndMs > record.trimStartMs
+        ? { startMs: record.trimStartMs, endMs: record.trimEndMs }
+        : null;
+    audio.loop = loop && !trim;
+    if (trim) audio.currentTime = trim.startMs / 1000;
     this.objectUrl = url;
     this.audio = audio;
     audio.onended = () => this.finish(generation);
+    if (trim) {
+      const endSec = trim.endMs / 1000;
+      const startSec = trim.startMs / 1000;
+      audio.ontimeupdate = () => {
+        if (audio.currentTime < endSec) return;
+        if (loop) {
+          audio.currentTime = startSec;
+          return;
+        }
+        audio.pause();
+        this.finish(generation);
+      };
+    }
 
     let handled = false;
     const handleFailure = () => {

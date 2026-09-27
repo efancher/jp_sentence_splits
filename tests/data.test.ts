@@ -72,6 +72,7 @@ import {
   saveAttemptAnalysisSummary,
   saveAttemptTranscription,
   recutSentenceAudioFromSource,
+  setSentenceAudioTrimRange,
   saveReferenceAlignment,
   setAttemptFavorite,
   setBookSentenceStatus,
@@ -613,6 +614,69 @@ describe('recutSentenceAudioFromSource', () => {
       recutSentenceAudioFromSource('ra-1', { startMs: 0, endMs: 100 }, { clipFromSource }),
     ).rejects.toThrow(/No source URL/);
     expect(clipFromSource).not.toHaveBeenCalled();
+  });
+
+  it('clears a stale trim override on re-cut — it was measured against the old blob', async () => {
+    await seedAudio();
+    await getDb().sentenceAudio.update('ra-1', { trimStartMs: 100, trimEndMs: 900 });
+    const clipFromSource = vi.fn(async (_url: string, cuts: { startMs: number; endMs: number }[]) => [
+      { blob: new Blob(['recut'], { type: 'audio/mp4' }), durationMs: cuts[0]!.endMs - cuts[0]!.startMs },
+    ]);
+
+    await recutSentenceAudioFromSource('ra-1', { startMs: 5800, endMs: 7000 }, { clipFromSource });
+
+    const row = await getDb().sentenceAudio.get('ra-1');
+    expect(row?.trimStartMs).toBeUndefined();
+    expect(row?.trimEndMs).toBeUndefined();
+  });
+});
+
+describe('setSentenceAudioTrimRange', () => {
+  beforeEach(() => {
+    resetDbForTests(`data-trim-${createId('db')}`);
+  });
+
+  async function seedAudio() {
+    const db = getDb();
+    await db.sentenceAudio.put({
+      id: 'ra-1',
+      sentenceId: 'trim-sent-1',
+      sourceId: 'src-1',
+      sourceSentenceId: 'src-1:0',
+      sourceTitle: 'Vid',
+      mimeType: 'audio/mp4',
+      durationMs: 1200,
+      startMs: 0,
+      endMs: 1200,
+      blob: new Blob(['clip'], { type: 'audio/mp4' }),
+      importedAt: new Date().toISOString(),
+    });
+  }
+
+  it('sets a rounded trim override on the clip without touching its blob or source bounds', async () => {
+    await seedAudio();
+    await setSentenceAudioTrimRange('ra-1', { startMs: 120.4, endMs: 999.6 });
+
+    const row = await getDb().sentenceAudio.get('ra-1');
+    expect(row?.trimStartMs).toBe(120);
+    expect(row?.trimEndMs).toBe(1000);
+    expect(row?.startMs).toBe(0);
+    expect(row?.endMs).toBe(1200);
+    expect(row?.blob).toBeDefined();
+  });
+
+  it('clears the override back to the whole clip when passed null', async () => {
+    await seedAudio();
+    await setSentenceAudioTrimRange('ra-1', { startMs: 120, endMs: 900 });
+    await setSentenceAudioTrimRange('ra-1', null);
+
+    const row = await getDb().sentenceAudio.get('ra-1');
+    expect(row?.trimStartMs).toBeUndefined();
+    expect(row?.trimEndMs).toBeUndefined();
+  });
+
+  it('is a no-op for a clip that no longer exists', async () => {
+    await expect(setSentenceAudioTrimRange('missing', { startMs: 0, endMs: 100 })).resolves.toBeUndefined();
   });
 });
 

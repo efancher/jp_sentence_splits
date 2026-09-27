@@ -128,9 +128,20 @@ export function ShadowPage() {
     return { book, sentence, referenceAudio, attempts, analysisSummaries };
   }, [bookId, sentenceId]);
 
-  /** Valid loop-point range (both marks set, end after start), else null. */
+  /**
+   * The clip's own hand-corrected trim (`NativeAudioButton`'s "Adjust" editor,
+   * elsewhere), when the learner hasn't marked a narrower target range here —
+   * without it every rep of the close-shadow loop replays any room tone/bleed
+   * at the reference clip's own edges.
+   */
+  const referenceTrimRange: TimeRangeMs | null =
+    data?.referenceAudio?.trimStartMs != null && data?.referenceAudio?.trimEndMs != null
+      ? { startMs: data.referenceAudio.trimStartMs, endMs: data.referenceAudio.trimEndMs }
+      : null;
+
+  /** Valid loop-point range (both marks set, end after start), else the clip's own trim, else null. */
   const loopRange =
-    targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null;
+    (targetRange && targetRange.endMs > targetRange.startMs ? targetRange : null) ?? referenceTrimRange;
 
   // Pick up recordings that finished either by the Stop button or by hitting
   // the max-duration auto-stop. A just-ended rep loop also lands a final take
@@ -300,7 +311,7 @@ export function ShadowPage() {
         attemptAudioRef.current,
         attempt.id,
         speed,
-        targetRange ?? undefined,
+        targetRange ?? referenceTrimRange ?? undefined,
       );
     } finally {
       URL.revokeObjectURL(attemptUrl);
@@ -315,7 +326,7 @@ export function ShadowPage() {
     try {
       await shadowing.playDualEar(referenceAudio.blob, attempt.blob, attempt.id, {
         playbackRate: speed,
-        referenceRange: targetRange ?? undefined,
+        referenceRange: targetRange ?? referenceTrimRange ?? undefined,
       });
     } finally {
       setActiveAttemptId(null);

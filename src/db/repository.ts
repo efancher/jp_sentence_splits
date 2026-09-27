@@ -1480,6 +1480,55 @@ export async function applyResegmentation(
 }
 
 /**
+ * Pushes a `sentenceAudio` row's current metadata (never blocks the caller
+ * on failure). `reference_audio`'s push path needs the *full* row —
+ * `storagePath`/`sizeBytes` aren't stored locally, only reconstructable via
+ * `uploadReferenceAudio` — so any local-only metadata edit (trim range,
+ * re-cut) re-uploads the (usually unchanged) blob alongside it rather than
+ * risking a partial update that nulls out those columns for every other
+ * device. Looks up the owning book itself since callers only have the audio row.
+ */
+async function pushReferenceAudioUpdate(audio: SentenceAudio): Promise<void> {
+  try {
+    const db = getDb();
+    const { ensureSyncMeta } = await import('../sync/queue');
+    const { getSupabase } = await import('../sync/supabaseClient');
+    const { uploadReferenceAudio } = await import('../sync/audioSync');
+    const meta = await ensureSyncMeta();
+    if (!meta.syncReferenceAudio) return;
+    const supabase = getSupabase();
+    const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
+    if (!userId) return;
+    const membership = await db.bookSentences.where('sentenceId').equals(audio.sentenceId).first();
+    await uploadReferenceAudio({ audio, bookId: membership?.bookId, ownerId: userId });
+  } catch {
+    // Local edit must stand even if the push fails.
+  }
+}
+
+/**
+ * Hand-corrects the playback trim within one sentence's reference clip — the
+ * "Adjust" editor on `NativeAudioButton`, for room tone/bleed at the clip's
+ * own edges without re-cutting from source (works offline, no `sourceUrl`
+ * needed). `null` clears the override back to playing the whole blob.
+ */
+export async function setSentenceAudioTrimRange(
+  audioId: string,
+  range: { startMs: number; endMs: number } | null,
+): Promise<void> {
+  const db = getDb();
+  const audio = await db.sentenceAudio.get(audioId);
+  if (!audio) return;
+  const updated: SentenceAudio = {
+    ...audio,
+    trimStartMs: range ? Math.round(range.startMs) : undefined,
+    trimEndMs: range ? Math.round(range.endMs) : undefined,
+  };
+  await db.sentenceAudio.put(updated);
+  void pushReferenceAudioUpdate(updated);
+}
+
+/**
  * Re-cut one sentence's reference clip from the pristine YouTube source to a
  * new `[startMs, endMs]` span — the per-sentence timing fix on `AnalyzePage`,
  * for when the mining boundary was a touch off and you don't want a
@@ -1525,30 +1574,13 @@ export async function recutSentenceAudioFromSource(
     blob: clip.blob,
     mimeType: 'audio/mp4',
     importedAt: nowIso(),
+    // A trim override was measured against the old blob's own timeline —
+    // carrying it over would clip the wrong part of the freshly re-cut audio.
+    trimStartMs: undefined,
+    trimEndMs: undefined,
   };
   await db.sentenceAudio.put(updated);
-
-  // Optional: push the re-cut blob + metadata, same never-block pattern as
-  // the import / re-segment paths.
-  void (async () => {
-    try {
-      const { ensureSyncMeta } = await import('../sync/queue');
-      const { getSupabase } = await import('../sync/supabaseClient');
-      const { uploadReferenceAudio } = await import('../sync/audioSync');
-      const meta = await ensureSyncMeta();
-      if (!meta.syncReferenceAudio) return;
-      const supabase = getSupabase();
-      const userId = (await supabase?.auth.getSession())?.data.session?.user?.id;
-      if (!userId) return;
-      await uploadReferenceAudio({
-        audio: updated,
-        bookId: membership?.bookId,
-        ownerId: userId,
-      });
-    } catch {
-      // Local re-cut must stand even if the upload fails.
-    }
-  })();
+  void pushReferenceAudioUpdate(updated);
 
   return { durationMs: clip.durationMs };
 }

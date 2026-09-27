@@ -1394,6 +1394,8 @@ export async function applyRemoteUpsert(
           durationMs: meta.durationMs,
           startMs: meta.startMs,
           endMs: meta.endMs,
+          trimStartMs: meta.trimStartMs,
+          trimEndMs: meta.trimEndMs,
         });
         break;
       }
@@ -1413,6 +1415,8 @@ export async function applyRemoteUpsert(
         durationMs: meta.durationMs,
         startMs: meta.startMs,
         endMs: meta.endMs,
+        trimStartMs: meta.trimStartMs,
+        trimEndMs: meta.trimEndMs,
         blob: new Blob([], { type: meta.mimeType }),
         importedAt: meta.importedAt,
       });

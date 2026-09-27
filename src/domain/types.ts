@@ -116,6 +116,17 @@ export interface SentenceAudio {
   endMs: number;
   blob: Blob;
   importedAt: string;
+  /**
+   * Hand-corrected playback trim within this clip's own blob, in ms (the
+   * "Adjust" editor on `NativeAudioButton`). Unlike `startMs`/`endMs` (the
+   * source-video cut points, only changed by re-cutting from source via
+   * `recutSentenceAudioFromSource`), this never touches the blob — every
+   * native-audio playback path (`NativeAudioController`: play-once, loop,
+   * reader auto-advance) clips to this range when set, for room tone/bleed
+   * at the clip's own edges. Undefined = play the whole blob.
+   */
+  trimStartMs?: number;
+  trimEndMs?: number;
 }
 
 /** Manual A/B comparison rating against a sentence's reference audio. */

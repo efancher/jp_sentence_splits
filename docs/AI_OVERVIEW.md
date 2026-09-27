@@ -1475,8 +1475,21 @@ subject. Activity types currently wired, grouped by subject/eligibility:
   what the card *loops*, so for pitch cards it should keep the word's ending/particle. "Adjust" stays
   reachable even when alignment produced no span at all (off-tailnet, OOV, degenerate, or the
   **squashed-alignment guard** withheld it — the hint then says "The timing here looks unreliable"):
-  it's seeded with a rough duration-proportional guess to place by ear. Plays through a local `<audio>` + `PlaybackCoordinator`,
-  not the `nativeAudioController` singleton (no range support there). The reveal
+  it's seeded with a rough duration-proportional guess to place by ear. Plays through a local `<audio>` + `PlaybackCoordinator`.
+  `NativeAudioButton` (the plain whole-sentence play button, used across `ReviewPage`, `AnalyzePage`,
+  `ReaderPage`, `PracticePage`, `VocabularyReviewPage`, `GrammarPatternDetailPage`) has its own,
+  independent "Adjust" toggle reusing the same `<ZoomedRangeEditor>` (a `description` prop swaps its
+  word-loop-specific copy) for a clip-level trim (`SentenceAudio.trimStartMs/EndMs`, synced via
+  `reference_audio`) — room tone/bleed at the *clip's own* edges, distinct from the source-video
+  re-cut `SentenceAudioAdjuster` does on `AnalyzePage`. It's hidden (`hideAdjust`) on the
+  `NativeAudioButton` `SegmentLoopPlayer` embeds for its own whole-sentence fallback, so the two
+  "Adjust" affordances don't collide in one widget. The shared `nativeAudioController` singleton
+  (`src/lib/nativeAudio.ts`) now does have range support for exactly this trim — every play path
+  (once, `{loop: true}`, `ReaderPage`'s auto-advance) seeks to the trim start and stops or loops back
+  at the trim end — so setting it fixes playback everywhere that sentence's audio plays, not just one
+  button. `ShadowPage`'s close-shadow loop/alternate/dual-ear (its own separate, ephemeral tap-to-mark
+  range, predating `NativeAudioButton`) falls back to this trim only when no manual target range is
+  marked; that page has no "Adjust" editor of its own. The reveal
   also shows `SentencePitchAccentRow` (see below) for the whole sentence,
   with the card's target word highlighted.
 

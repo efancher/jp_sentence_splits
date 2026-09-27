@@ -17,6 +17,7 @@ class MockAudio {
   loop = false;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  ontimeupdate: (() => void) | null = null;
   play = vi.fn(async () => undefined);
   pause = vi.fn();
   removeAttribute = vi.fn();
@@ -226,5 +227,44 @@ describe('NativeAudioController', () => {
       activeItemId: 'audio-1',
       error: null,
     });
+  });
+
+  it('seeks to the trim start and stops (as if ended) at the trim end for a trimmed clip', async () => {
+    const controller = new NativeAudioController();
+    const onEnded = vi.fn();
+    const trimmed = { ...audioRecord('audio-1'), trimStartMs: 200, trimEndMs: 800 };
+    await controller.play(trimmed, 1, { onEnded });
+    const audio = MockAudio.instances[0]!;
+    expect(audio.currentTime).toBe(0.2);
+
+    audio.currentTime = 0.8;
+    audio.ontimeupdate?.();
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(onEnded).toHaveBeenCalledOnce();
+    expect(controller.getSnapshot()).toMatchObject({ isPlaying: false, activeItemId: null });
+  });
+
+  it('loops within the trim range instead of the whole clip when both are set', async () => {
+    const controller = new NativeAudioController();
+    const trimmed = { ...audioRecord('audio-1'), trimStartMs: 200, trimEndMs: 800 };
+    await controller.play(trimmed, 1, { loop: true });
+    const audio = MockAudio.instances[0]!;
+    // Relies on manual seeking rather than the native `loop` attribute, which
+    // would replay past the trimmed end before looping.
+    expect(audio.loop).toBe(false);
+
+    audio.currentTime = 0.8;
+    audio.ontimeupdate?.();
+    expect(audio.currentTime).toBe(0.2);
+    expect(audio.pause).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().isPlaying).toBe(true);
+  });
+
+  it('ignores an inverted trim range and plays the whole clip', async () => {
+    const controller = new NativeAudioController();
+    const inverted = { ...audioRecord('audio-1'), trimStartMs: 800, trimEndMs: 200 };
+    await controller.play(inverted);
+    const audio = MockAudio.instances[0]!;
+    expect(audio.currentTime).toBe(0);
   });
 });

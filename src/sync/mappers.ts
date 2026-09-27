@@ -64,6 +64,8 @@ export interface ReferenceAudioLocal {
   storagePath?: string;
   sizeBytes?: number;
   checksum?: string;
+  trimStartMs?: number;
+  trimEndMs?: number;
   importedAt: string;
 }
 
@@ -84,6 +86,8 @@ export function sentenceAudioToReferenceMeta(
     endMs: audio.endMs,
     bookId,
     sizeBytes: audio.blob.size,
+    trimStartMs: audio.trimStartMs,
+    trimEndMs: audio.trimEndMs,
     importedAt: audio.importedAt,
   };
 }
@@ -343,6 +347,8 @@ export function referenceAudioToRemote(
     source_start_ms: audio.startMs,
     source_end_ms: audio.endMs,
     checksum: audio.checksum ?? null,
+    trim_start_ms: audio.trimStartMs ?? null,
+    trim_end_ms: audio.trimEndMs ?? null,
     created_at: audio.importedAt,
     updated_at: audio.importedAt,
     deleted_at: null,
@@ -368,6 +374,8 @@ export function remoteToReferenceAudio(
     storagePath: (row.storage_path as string | null) ?? undefined,
     sizeBytes: Number(row.size_bytes ?? 0),
     checksum: (row.checksum as string | null) ?? undefined,
+    trimStartMs: (row.trim_start_ms as number | null) ?? undefined,
+    trimEndMs: (row.trim_end_ms as number | null) ?? undefined,
     importedAt: String(row.created_at),
   };
 }

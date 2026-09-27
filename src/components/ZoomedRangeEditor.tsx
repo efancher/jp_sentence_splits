@@ -25,6 +25,7 @@ export function ZoomedRangeEditor({
   onSave,
   onReset,
   onCancel,
+  description = 'Set the span this card loops. For pitch cards keep the word’s ending or following particle inside it.',
 }: {
   blob: Blob;
   audioId: string;
@@ -35,6 +36,8 @@ export function ZoomedRangeEditor({
   onSave: (range: TimeRangeMs) => void;
   onReset: () => void;
   onCancel: () => void;
+  /** Caller-specific instructions shown above the waveform — the default assumes a word-loop card. */
+  description?: string;
 }) {
   const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +89,7 @@ export function ZoomedRangeEditor({
   return (
     <div className="stack panel" role="group" aria-label="Word audio range editor" style={{ gap: '0.6rem' }}>
       <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
-        Set the span this card loops. For pitch cards keep the word’s ending or following particle inside it.
+        {description}
       </p>
       {error ? <p className="muted" style={{ margin: 0 }}>{error}</p> : null}
       {!buffer && !error ? <p className="muted" style={{ margin: 0 }}>Loading audio…</p> : null}
