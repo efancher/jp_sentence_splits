@@ -846,14 +846,26 @@ what's left is one deferred durability item (below).
     is still under test. 6 new repository tests
     (`tests/trackedGrammarSpans.test.ts`: tracked/untracked/no-span/
     multi-occurrence/empty-ids/multi-sentence cases). `npm run check` green
-    (169 files, 2088 passed). Not browser-verified (no browser libs on this
-    host). **Manual test plan:** in `/review`, find a `cloze` card whose
-    sentence you've shadowed before (via `/shadow`) — the reveal should show
-    the replay note and play your own voice, not the native clip; find a
-    `reading_in_context` card whose passage neighbour has a grammar pattern
-    you've tracked (`/grammar`) — one span in that context line should be
-    highlighted, with the pattern name on hover/long-press. Confirm neither
-    changes `reviews`/`study_items` rows (both are read-only reinforcement).
+    (169 files, 2088 passed).
+    **Browser-verified 2026-09-27** (headless Chromium via
+    `LD_LIBRARY_PATH=/tmp/chromium-libs` against `npm run dev`, in-page
+    `import('/src/db/repository.ts')` seeding a fixture-free `getDb()` —
+    see the e2e-viable memory): seeded a due `cloze` item with a prior
+    `Attempt` row for its sentence, and a due `reading_in_context` item in
+    a book whose preceding passage line has a `confirmedByLearner`
+    `sentence_grammar` occurrence (its own sentence's `analyses.
+    vocabularyReviewStatus` had to be `'confirmed'` for
+    `isSentenceReadyForFullReview` to pass — a real gate this exposed, not
+    a bug). Confirmed live in `/review`: the cloze reveal showed "You've
+    shadowed this sentence — 🔁 Replay your attempt" (present only after
+    reveal, as designed); the reading_in_context card's "In context ·
+    Ambient Test Book" passage rendered a real `<mark>` around the tracked
+    span in the *context* line (`title="〜わけがない"`, text "訳がない")
+    while the target sentence itself stayed unhighlighted. `reviews`/
+    `study_items` before/after confirmed only the one intentional grading
+    changed — no incidental writes from either ambient addition. Temp
+    verification script written to the repo root and deleted after, per
+    convention — not committed, no new permanent e2e spec.
 
 - **2026-09-26 — Homophone Hunt, a new `/play` game: the pitch-accent
   minimal-pair warm-up promoted to a scored round.** Picked up from the
@@ -888,9 +900,22 @@ what's left is one deferred durability item (below).
   — check the hub's "needs" line if it's hidden); play a round, confirm each
   trial plays two real clips, that the reveal names which was which and
   shows a plausible measured contour for both, and that no `reviews`/
-  `study_items` rows change. Not browser-verified (no browser libs on this
-  host) — shipped on the unit suite + typecheck, same convention as the
-  other games' non-interactive components.
+  `study_items` rows change.
+  **Browser-verified 2026-09-27** (headless Chromium via
+  `LD_LIBRARY_PATH=/tmp/chromium-libs` against `npm run dev`, in-page
+  `import('/src/db/repository.ts')` seeding a fixture-free `getDb()` — see
+  [[project_e2e_browser_testing_viable]]): seeded 箸/橋 as proficient
+  vocabulary items with a fabricated `referenceAlignments` row per clip
+  (dodging the tailnet aligner) across two books, so the round built one
+  same-book and one cross-book trial as designed. Played both live: the
+  hub correctly listed the game once eligible; the intro named the
+  fallback signal ("Not enough material for 'Weak spots' yet…"); guessing
+  right and wrong scored 1/1 and 0/1 respectively; the result screen
+  showed "1 / 2 points — 1 of 2 correct" with a "why this pair" line per
+  trial. `gameRounds` gained exactly one row with the real per-pair
+  outcomes; `reviews` stayed at 0 and `study_items` unchanged — confirms
+  the game never touches FSRS state. Temp verification script written to
+  the repo root and deleted after, per convention.
 
 - **2026-09-26 — Card-issue triage: fixed 日本/日本語 read as にっぽん(ご)
   instead of にほん(ご) across the whole corpus, plus 時々/高原 one-offs,
