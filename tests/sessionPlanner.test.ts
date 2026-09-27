@@ -296,6 +296,30 @@ describe('buildRecommendedSession', () => {
     expect(session.explanation.some((line) => line.includes('193 words'))).toBe(true);
   });
 
+  it('names the fix (raise the per-session cap) once the backlog is many sessions away from draining', () => {
+    const farOut = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        newCardBacklogCount: 300,
+        newCardsPerSessionLimit: 20,
+      }),
+    );
+    expect(
+      farOut.explanation.some((line) => line.includes('~15 daily sessions') && line.includes('Settings')),
+    ).toBe(true);
+
+    // 193/20 rounds up to exactly 10 sessions — at the threshold, not past
+    // it — so the shorter backlog-count line is enough on its own.
+    const atThreshold = buildRecommendedSession(
+      emptyPlannerInput({
+        totalMinutes: 60,
+        newCardBacklogCount: 193,
+        newCardsPerSessionLimit: 20,
+      }),
+    );
+    expect(atThreshold.explanation.some((line) => line.includes('daily sessions'))).toBe(false);
+  });
+
   it('the new-card backlog reserves review minutes that would otherwise go to glossing', () => {
     const exploreCandidates: ExploreCandidate[] = [
       {

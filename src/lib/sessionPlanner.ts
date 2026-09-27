@@ -510,6 +510,9 @@ function draftStepId(): string {
 
 const PRACTICE_ACTIVITY_TYPE_SET = new Set<string>(PRACTICE_ACTIVITY_TYPES);
 
+/** Days-to-drain past which the new-card backlog explanation names the fix (raise the per-session cap) instead of just the count. */
+const NEW_CARD_BACKLOG_NUDGE_SESSIONS_THRESHOLD = 10;
+
 /** Retain-costed items ("recognize/reveal/self-rate") are quicker than practice-costed ones ("type/produce an answer") — see MODE_ACTIVITY_ESTIMATE_MINUTES. */
 export function reviewItemCostMinutes(activityType: StudyActivityType): number {
   // pitch_accent_production is neither list (record -> align -> score is its
@@ -1118,11 +1121,26 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     explanation.push('Quiet mode is on — speaking practice (shadowing) is paused for now.');
   }
   if (newCardSlots > 0) {
-    explanation.push(
-      (input.newCardBacklogCount ?? 0) > newCardSlots
-        ? `${input.newCardBacklogCount} words are waiting for a first review — today's plan introduces ${newCardSlots} of them once the due queue is clear.`
-        : `Today's plan introduces ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} that haven't been reviewed yet.`,
-    );
+    const backlogCount = input.newCardBacklogCount ?? 0;
+    if (backlogCount > newCardSlots) {
+      explanation.push(
+        `${backlogCount} words are waiting for a first review — today's plan introduces ${newCardSlots} of them once the due queue is clear.`,
+      );
+      // Below this many days-to-drain, the backlog line above is enough on
+      // its own; past it, the fix (raise the per-session cap) is worth
+      // naming outright rather than leaving the learner to find the report
+      // script that says the same thing (report-new-card-backlog.ts).
+      const sessionsToDrain = Math.ceil(backlogCount / newCardSlots);
+      if (sessionsToDrain > NEW_CARD_BACKLOG_NUDGE_SESSIONS_THRESHOLD) {
+        explanation.push(
+          `At this pace that's ~${sessionsToDrain} daily sessions to work through — raise "New cards per review session" in Settings to go faster.`,
+        );
+      }
+    } else {
+      explanation.push(
+        `Today's plan introduces ${newCardSlots} new word${newCardSlots === 1 ? '' : 's'} that haven't been reviewed yet.`,
+      );
+    }
   } else if (
     reviewCeiling < allocation.review + MODE_ACTIVITY_ESTIMATE_MINUTES.retain &&
     rankedReview.length < reviewLimit
