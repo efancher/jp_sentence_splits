@@ -219,6 +219,38 @@ describe('vocabularySuggestions', () => {
     expect(keiyoDoshiSuggestions.find((s) => s.expression === 'する')?.selectedByDefault).toBe(true);
   });
 
+  it('does not default-select できる closing a こと+が chain, but keeps standalone できる', () => {
+    // Real fugashi/UniDic output for 学ぶことができます — the "[verb] +
+    // ことができる" ability construction.
+    const kotoGaDekiru = '学ぶことができます';
+    const kotoGaDekiruSuggestions = suggestionsFromTokens(kotoGaDekiru, [
+      { surface: '学ぶ', start: 0, end: 2, lemma: '学ぶ', reading: 'まなぶ', pos: '動詞/一般' },
+      { surface: 'こと', start: 2, end: 4, lemma: 'こと', reading: 'こと', pos: '名詞/普通名詞' },
+      { surface: 'が', start: 4, end: 5, lemma: 'が', reading: 'が', pos: '助詞/格助詞' },
+      { surface: 'でき', start: 5, end: 7, lemma: 'できる', reading: 'でき', pos: '動詞/非自立可能' },
+      { surface: 'ます', start: 7, end: 9, lemma: 'ます', reading: 'ます', pos: '助動詞' },
+    ]);
+    expect(kotoGaDekiruSuggestions.find((s) => s.expression === '学ぶ')?.selectedByDefault).toBe(
+      true,
+    );
+    expect(kotoGaDekiruSuggestions.find((s) => s.expression === 'できる')?.selectedByDefault).toBe(
+      false,
+    );
+    // Still visible in the strip, just unchecked.
+    expect(kotoGaDekiruSuggestions.some((s) => s.expression === 'できる')).toBe(true);
+
+    // 日本語ができる — standalone できる with no preceding こと is a real word.
+    const standalone = '日本語ができる';
+    const standaloneSuggestions = suggestionsFromTokens(standalone, [
+      { surface: '日本語', start: 0, end: 3, lemma: '日本語', reading: 'にほんご', pos: '名詞/普通名詞' },
+      { surface: 'が', start: 3, end: 4, lemma: 'が', reading: 'が', pos: '助詞/格助詞' },
+      { surface: 'できる', start: 4, end: 7, lemma: 'できる', reading: 'できる', pos: '動詞/非自立可能' },
+    ]);
+    expect(standaloneSuggestions.find((s) => s.expression === 'できる')?.selectedByDefault).toBe(
+      true,
+    );
+  });
+
   it('still default-selects a content verb that merely follows a comma-broken て', () => {
     const japanese = '歩いて、学ぶ。';
     const suggestions = suggestionsFromTokens(japanese, [

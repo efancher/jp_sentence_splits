@@ -818,6 +818,45 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Vocab picker: できる closing a こと+が chain (the
+  "ことができる" ability construction) no longer default-checks as
+  vocabulary.** User flagged できる surfacing as an ordinary vocabulary
+  suggestion for 言語を学ぶと、文化や生活も学ぶことができます — asked whether
+  it should instead be treated as grammar. UniDic already tags this できる
+  `動詞/非自立可能`, the same bound-verb tag `isBoundAuxiliaryVerb` treats as
+  grammar rather than vocabulary, but that check only fires on a preceding
+  て/で, so it missed this shape (preceded by が). New
+  `isKotoGaDekiruConstruction` (`src/lib/vocabularySuggestions.ts`), gated on
+  できる directly preceded by が directly preceded by a kana-written こと
+  (all adjacent) — standalone できる (日本語ができる) is untouched, since
+  there's no preceding こと to anchor on and it's a real word there. There's
+  no static grammar-pattern catalog to move it *into* — grammar patterns
+  here are AI-detected per sentence (`grammarAssist.ts`) — so this is scoped
+  to the vocab-picker default-check only, same shape as
+  `isNiMarkedSuruConstruction`. 15 sentences corpus-wide, 2 already had a
+  saved できる selection (one unconfirmed-sentence selection, one confirmed
+  sentence with 8 other unrelated confirmed words) — cleaned up via
+  `scripts/diagnose-koto-ga-dekiru-confirmed.ts` +
+  `scripts/unlink-koto-ga-dekiru-confirmed.ts --apply` (0 attached
+  study_items in both cases). **Found and fixed a latent bug in that
+  unlink script's "stale sentence_vocabulary link" recomputation** while
+  validating the dry run against the confirmed sentence: it matched a
+  surviving selection's item by `expression|reading`, but a `VocabularySelection.reading`
+  is sometimes the pre-`deriveDictionaryReading` conjugated surface reading
+  (おいかけ instead of おいかける, き instead of くる) — a key miss there
+  wrongly flagged an unrelated already-confirmed word's link as stale too
+  (would have severed 3 correct links on the taka/hawk sentence, not just
+  できる's). Fixed by resolving through `expression` alone when it names
+  exactly one vocabulary item corpus-wide (safe fallback; ambiguous
+  multi-reading expressions are left untouched rather than guessed at) —
+  same shape worth carrying into `unlink-ni-suru-construction-confirmed.ts`
+  / `unlink-noun-suru-compound-confirmed.ts` / `unlink-demonstrative-light-verb-confirmed.ts`
+  if any of those are ever re-run, though their original runs are already
+  done and not re-auditable after the fact. Tests in
+  `tests/vocabularySuggestions.test.ts` (+1, covering both the construction
+  and the standalone-できる control case). `npm run check` green (175
+  files, 2130 passed).
+
 - **2026-09-27 — Fixed a silent partial-audio-upload bug found while
   chasing the homophone-podcast import gap below: a long import's reference-
   audio upload could silently strand every clip after the first transient

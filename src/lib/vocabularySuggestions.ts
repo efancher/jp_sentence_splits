@@ -218,6 +218,33 @@ function isNiMarkedSuruConstruction(
 }
 
 /**
+ * できる directly closing a こと+が chain — the standard "[verb dictionary
+ * form] + ことができる" ability construction (学ぶことができる "can learn").
+ * UniDic tags this できる `動詞/非自立可能`, the same bound-verb tag
+ * `isBoundAuxiliaryVerb` already treats as grammar rather than vocabulary —
+ * but that helper only looks for a preceding て/で, so it misses this shape
+ * (できる here is preceded by が). Standalone できる (日本語ができる, これが
+ * できる) is deliberately left alone: there's no preceding こと to anchor on,
+ * and it's a real word worth its own vocabulary card there. Scoped to こと
+ * specifically (not the other `GRAMMATICALIZED_NOUN_READINGS` formal nouns)
+ * since ことができる is the productive pattern; の in place of こと (泳ぐのが
+ * できる) is a rarer variant and left for a future pass rather than guessed
+ * at here.
+ */
+function isKotoGaDekiruConstruction(
+  token: MorphologyToken,
+  prev: MorphologyToken | undefined,
+  prevPrev: MorphologyToken | undefined,
+): boolean {
+  if (!token.pos?.startsWith('動詞')) return false;
+  if (token.lemma?.trim() !== 'できる') return false;
+  if (!prev?.pos?.startsWith('助詞') || prev.surface !== 'が') return false;
+  if (prev.end !== token.start) return false;
+  if (!prevPrev?.pos?.startsWith('名詞') || prevPrev.surface !== 'こと') return false;
+  return prevPrev.end === prev.start;
+}
+
+/**
  * POS classes where a dictionary "meaning" gloss is genuinely optional —
  * particles and auxiliaries you only ever have in the tray because you
  * deliberately added them. Everything else (content words, and hand-added
@@ -320,6 +347,7 @@ function computeSelectedByDefault(
   token: MorphologyToken,
   prevToken: MorphologyToken | undefined,
   reading: string,
+  prevPrevToken: MorphologyToken | undefined,
 ): boolean {
   return (
     isContentPos(token.pos?.trim() ?? '') &&
@@ -327,6 +355,7 @@ function computeSelectedByDefault(
     !isDemonstrativeLightVerb(token, prevToken) &&
     !isNounSuruCompound(token, prevToken) &&
     !isNiMarkedSuruConstruction(token, prevToken) &&
+    !isKotoGaDekiruConstruction(token, prevToken, prevPrevToken) &&
     !isKanaWrittenFormalNoun(token, reading) &&
     !isFunctionAdverb(token)
   );
@@ -336,6 +365,7 @@ export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,
   prevToken?: MorphologyToken,
+  prevPrevToken?: MorphologyToken,
 ): VocabularySuggestion | null {
   if (!validateSpan(japanese, token.start, token.end, token.surface)) {
     return null;
@@ -369,7 +399,7 @@ export function suggestionFromToken(
     reading,
     pos,
     source: 'morphology',
-    selectedByDefault: computeSelectedByDefault(token, prevToken, reading),
+    selectedByDefault: computeSelectedByDefault(token, prevToken, reading, prevPrevToken),
   };
 }
 
@@ -404,6 +434,7 @@ export function recomputeSuggestionDefaults(
       return suggestion;
     }
     const prev = suggestions[index - 1];
+    const prevPrev = suggestions[index - 2];
     const token: MorphologyToken = {
       surface: suggestion.surface,
       start: suggestion.start,
@@ -420,7 +451,15 @@ export function recomputeSuggestionDefaults(
       reading: prev.reading,
       pos: prev.pos,
     };
-    const selectedByDefault = computeSelectedByDefault(token, prevToken, suggestion.reading);
+    const prevPrevToken: MorphologyToken | undefined = prevPrev && {
+      surface: prevPrev.surface,
+      start: prevPrev.start,
+      end: prevPrev.end,
+      lemma: prevPrev.expression,
+      reading: prevPrev.reading,
+      pos: prevPrev.pos,
+    };
+    const selectedByDefault = computeSelectedByDefault(token, prevToken, suggestion.reading, prevPrevToken);
     return selectedByDefault === suggestion.selectedByDefault
       ? suggestion
       : { ...suggestion, selectedByDefault };
@@ -489,7 +528,7 @@ export function suggestionsFromTokens(
         continue;
       }
     }
-    const suggestion = suggestionFromToken(token, japanese, tokens[index - 1]);
+    const suggestion = suggestionFromToken(token, japanese, tokens[index - 1], tokens[index - 2]);
     if (suggestion) out.push(suggestion);
   }
   return out;
