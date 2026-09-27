@@ -94,7 +94,10 @@ export function GrammarListPage() {
                   className="list-card"
                 >
                   <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <strong className="jp">{pattern.canonicalName}</strong>
+                    <strong className="jp">
+                      {pattern.canonicalName}
+                      {pattern.reading ? <span className="muted"> ({pattern.reading})</span> : null}
+                    </strong>
                     <span className="row" style={{ gap: '0.4rem' }}>
                       {tracked ? <span className="status-pill">Tracked</span> : null}
                       {graduated ? <span className="status-pill">Graduated</span> : null}

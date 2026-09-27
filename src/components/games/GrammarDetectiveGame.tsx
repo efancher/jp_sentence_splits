@@ -27,7 +27,7 @@ import {
   scoreGrammarWord,
   type GrammarDetectiveWord,
 } from '../../lib/grammarDetective';
-import { blankPatternInSentence } from '../../lib/grammarPatterns';
+import { blankSentenceGrammar } from '../../lib/grammarPatterns';
 import { NativeAudioButton } from '../NativeAudioButton';
 import { GameShell, type GamePhase } from './GameShell';
 
@@ -39,7 +39,11 @@ interface PatternResult extends GameRoundItem {
 }
 
 function BlankedSentence({ word, revealed }: { word: GrammarDetectiveWord; revealed?: boolean }) {
-  const blank = blankPatternInSentence(word.japanese, word.canonicalName);
+  const blank = blankSentenceGrammar(
+    word.japanese,
+    { surfaceForm: word.surfaceForm, start: word.start, end: word.end },
+    word.canonicalName,
+  );
   if (!blank) return <div className="jp jp-lg">{word.japanese}</div>;
   return (
     <div className="jp jp-lg">
@@ -143,6 +147,11 @@ function PatternCard({
             Guess
           </button>
         </form>
+      ) : null}
+      {!settled && word.reading ? (
+        <div className="muted" style={{ fontSize: '0.8rem' }}>
+          Kana or romaji is fine.
+        </div>
       ) : null}
       {!settled && lastWrong ? (
         <div className="muted" role="status">

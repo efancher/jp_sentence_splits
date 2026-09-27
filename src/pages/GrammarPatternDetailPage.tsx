@@ -289,7 +289,12 @@ export function GrammarPatternDetailPage() {
         ) : (
           <>
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <div className="jp jp-lg">{data.pattern.canonicalName}</div>
+              <div className="jp jp-lg">
+                {data.pattern.canonicalName}
+                {data.pattern.reading ? (
+                  <span className="muted"> ({data.pattern.reading})</span>
+                ) : null}
+              </div>
               <div className="row" style={{ gap: '0.5rem' }}>
                 <span className="status-pill">{GRAMMAR_LEARNER_STATE_LABELS[data.state]}</span>
                 {data.tracked ? <span className="status-pill">Tracked</span> : null}

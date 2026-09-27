@@ -1,4 +1,6 @@
-import type { GrammarRelationshipType } from '../domain/types';
+import { isHiragana, toHiragana } from 'wanakana';
+
+import type { GrammarRelationshipType, SentenceGrammar } from '../domain/types';
 import { normalizeSentenceKey, stripMarkup } from './normalize';
 
 /** Human-readable labels for GrammarRelationshipType, for the detail page's "Related patterns" section. */
@@ -83,6 +85,58 @@ export function blankPatternInSentence(
     match: needle,
     after: japanese.slice(index + needle.length),
   };
+}
+
+/**
+ * Blanks a SentenceGrammar occurrence in its sentence, preferring real
+ * evidence over a guess, in order:
+ * 1. `start`/`end` (character offsets an AI or the learner captured for this
+ *    specific occurrence) — exact, works for any pattern including ones with
+ *    no fixed literal string (e.g. a structural/descriptive pattern like an
+ *    enumerative-listing construction), since the span was read directly off
+ *    this sentence rather than reconstructed from the pattern's name.
+ * 2. `surfaceForm` (the literal text as it appeared here, e.g. "わけないでしょ"
+ *    for canonical "わけがない") — still exact, just re-found by substring
+ *    search instead of using stored offsets.
+ * 3. `blankPatternInSentence`'s substring-of-canonicalName guess — the only
+ *    option before either of the above existed, and still the fallback for
+ *    older/manual occurrences that never captured a span.
+ *
+ * Returns null (render the full unblanked sentence) only when none of the
+ * three finds anything — which is the honest outcome for a pattern that
+ * genuinely has no fixed surface form in this sentence, not a bug to paper
+ * over with a wrong guess.
+ */
+export function blankSentenceGrammar(
+  japanese: string,
+  sentenceGrammar: Pick<SentenceGrammar, 'surfaceForm' | 'start' | 'end'>,
+  canonicalName: string,
+): SentenceBlank | null {
+  const { start, end, surfaceForm } = sentenceGrammar;
+  if (
+    typeof start === 'number' &&
+    typeof end === 'number' &&
+    start >= 0 &&
+    end > start &&
+    end <= japanese.length
+  ) {
+    return {
+      before: japanese.slice(0, start),
+      match: japanese.slice(start, end),
+      after: japanese.slice(end),
+    };
+  }
+  if (surfaceForm) {
+    const index = japanese.indexOf(surfaceForm);
+    if (index !== -1) {
+      return {
+        before: japanese.slice(0, index),
+        match: surfaceForm,
+        after: japanese.slice(index + surfaceForm.length),
+      };
+    }
+  }
+  return blankPatternInSentence(japanese, canonicalName);
 }
 
 export type GrammarLearnerState = 'encountered' | 'noticed' | 'recognized' | 'mastered';
@@ -200,18 +254,35 @@ export function explainGrammarPriority(
 /**
  * Grades a learner's typed answer on a `grammar_completion` card (recall,
  * not multiple choice — see GrammarCompletionCard's doc comment,
- * 2026-09-17) against the pattern's canonical name. Reuses the exact same
- * normalization `blankPatternInSentence` and pattern-dedup
- * (`normalizeGrammarPatternKey`) already apply — a tilde, a parenthetical
- * sense-gloss, or incidental whitespace shouldn't fail an otherwise-right
- * answer. Deliberately *not* kanji/kana-variant-aware (same caveat as
- * `normalizeGrammarPatternKey`) — a pattern stored as 訳がない would reject
- * a typed わけがない; canonical names are conventionally kana already, so
- * this is rare in practice, not something to paper over with a guess.
+ * 2026-09-17) or Grammar Detective, against the pattern's canonical name (and
+ * optionally its `reading`). Reuses the exact same normalization
+ * `blankPatternInSentence` and pattern-dedup (`normalizeGrammarPatternKey`)
+ * already apply — a tilde, a parenthetical sense-gloss, or incidental
+ * whitespace shouldn't fail an otherwise-right answer.
+ *
+ * Kana/romaji-lenient like `isReadingAnswerCorrect`: the typed answer is also
+ * tried as hiragana (via wanakana's `toHiragana`, only trusted when the
+ * *whole* input converts, so a stray latin typo can't partially mutate into a
+ * match). This alone fixes romaji input for patterns whose canonicalName is
+ * already plain kana (e.g. "わけがない"). For a canonicalName that itself
+ * carries kanji — common for descriptive/structural pattern names like
+ * "～という/～ての列挙的記述", which have no natural all-kana canonical
+ * spelling — `reading` (GrammarPattern.reading) supplies the hiragana form to
+ * match against instead of forcing the learner to reproduce the kanji.
  */
-export function isGrammarPatternAnswerCorrect(typed: string, canonicalName: string): boolean {
+export function isGrammarPatternAnswerCorrect(
+  typed: string,
+  canonicalName: string,
+  reading?: string,
+): boolean {
   const key = (value: string) =>
     normalizeSentenceKey(stripPatternAnnotation(normalizeGrammarPatternKey(value)));
-  const typedKey = key(typed);
-  return typedKey.length > 0 && typedKey === key(canonicalName);
+  const typedKeys = new Set([key(typed)]);
+  const typedAsHiragana = toHiragana(typed.trim());
+  if (typedAsHiragana && isHiragana(typedAsHiragana)) {
+    typedKeys.add(key(typedAsHiragana));
+  }
+  const expectedKeys = [key(canonicalName)];
+  if (reading?.trim()) expectedKeys.push(key(reading));
+  return [...typedKeys].some((typedKey) => typedKey.length > 0 && expectedKeys.includes(typedKey));
 }

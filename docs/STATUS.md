@@ -818,6 +818,46 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Grammar Detective / `grammar_completion`: kana-lenient
+  answer checking + real span-based blanking, closing two related bugs the
+  user hit on a descriptive pattern ("～という/～ての列挙的記述").** (1)
+  `isGrammarPatternAnswerCorrect` demanded an exact match against
+  `canonicalName`, with no kana/romaji leniency at all (unlike every other
+  typed-recall card, e.g. `isReadingAnswerCorrect`) — fatal for a
+  descriptive pattern name that's mostly kanji rather than the app's usual
+  kana grammar labels. Added `GrammarPattern.reading` (optional hiragana
+  reading, only needed when `canonicalName` carries kanji; new
+  `reading text` column, migration `20260927010000`, both sync mappers,
+  `ensureGrammarPattern`/`updateGrammarPattern`) and gave the checker
+  wanakana romaji→hiragana normalization on the typed side (same
+  whole-input-must-convert guard as `isReadingAnswerCorrect`) plus an
+  optional `reading` to match against — fixes plain-kana patterns typed in
+  romaji too, not just kanji ones. (2) The shown example sentence didn't
+  visibly contain the pattern at all: `blankPatternInSentence` only ever
+  did a literal substring search for `canonicalName` itself, which can't
+  work for a structural/descriptive pattern with no fixed wording — and
+  `SentenceGrammar.start`/`end`/`surfaceForm` (spans for exactly this) had
+  existed in the schema/sync layer since the grammar-learning foundation
+  migration but nothing ever populated them. Added `blankSentenceGrammar`
+  (prefers real `start`/`end`, then `surfaceForm`, then the old
+  canonicalName-substring guess as last resort) and wired the `suggest`
+  edge function (`grammar-assist`) to return `reading`/`start`/`end`
+  per candidate — explicitly told to omit the span when a pattern has no
+  single literal occurrence rather than guessing one. `GrammarPicker`
+  persists these through `ensureSentenceGrammar`/`ensureGrammarPattern`,
+  and the reading is editable by hand alongside the pattern's other fields
+  (mirrors `shortMeaning`). All three render sites that used to blank via
+  substring guess (`GrammarDetectiveGame`'s `BlankedSentence`,
+  `GrammarRecognitionCard`, `GrammarCompletionCard`) now go through
+  `blankSentenceGrammar`; the "no match" fallback note was reworded since
+  it's no longer only a conjugation-mismatch case. `reading` also renders
+  next to `canonicalName` (parenthetical, muted) on the grammar detail
+  page, the grammar list, and the picker's per-pattern header. `npm run
+  check` green (175 files, 2139 passed) — existing coverage exercised the
+  changed paths, no new tests added since none of this is new branching
+  logic, just new optional data flowing through paths already tested with
+  it absent.
+
 - **2026-09-27 — `SegmentLoopPlayer`'s Speed dropdown now actually affects
   "Whole sentence" playback, not just the isolated-word loop.** Triage of
   an open card issue report (`card_issue_cf7577a5`, a `cloze` card: "don't

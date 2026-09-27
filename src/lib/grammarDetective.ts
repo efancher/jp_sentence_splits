@@ -21,12 +21,15 @@ import type { ReadingContext } from './readingContext';
 export interface GrammarDetectiveWord {
   grammarPatternId: string;
   canonicalName: string;
+  reading?: string;
   aliases: string[];
   shortMeaning: string;
   sentenceId: string;
   japanese: string;
   translation: string;
   surfaceForm?: string;
+  start?: number;
+  end?: number;
   audio?: SentenceAudio;
   readingContext: ReadingContext;
 }
@@ -96,12 +99,15 @@ export function buildGrammarDetectiveWord(input: {
   return {
     grammarPatternId: pattern.id,
     canonicalName: pattern.canonicalName,
+    reading: pattern.reading,
     aliases: pattern.aliases ?? [],
     shortMeaning: pattern.shortMeaning?.trim() ?? '',
     sentenceId: sentence.id,
     japanese: sentence.japanese,
     translation: sentence.translation.trim(),
     surfaceForm: sentenceGrammar.surfaceForm,
+    start: sentenceGrammar.start,
+    end: sentenceGrammar.end,
     audio,
     readingContext,
   };
@@ -136,7 +142,7 @@ export function grammarFirstKana(word: Pick<GrammarDetectiveWord, 'canonicalName
  * against the canonical name, plus any known alias spelling.
  */
 export function isGrammarDetectiveAnswerCorrect(word: GrammarDetectiveWord, typed: string): boolean {
-  if (isGrammarPatternAnswerCorrect(typed, word.canonicalName)) return true;
+  if (isGrammarPatternAnswerCorrect(typed, word.canonicalName, word.reading)) return true;
   return word.aliases.some((alias) => isGrammarPatternAnswerCorrect(typed, alias));
 }
 

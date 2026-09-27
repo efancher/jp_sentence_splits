@@ -101,7 +101,13 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
 
   async function addPattern(
     name: string,
-    opts?: { shortMeaning?: string; provenance?: 'manual' | 'ai_suggested' },
+    opts?: {
+      shortMeaning?: string;
+      reading?: string;
+      provenance?: 'manual' | 'ai_suggested';
+      start?: number;
+      end?: number;
+    },
   ): Promise<void> {
     const existing = allPatterns.find(
       (pattern) => pattern.canonicalName === name || pattern.aliases.includes(name),
@@ -111,9 +117,18 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
       (await ensureGrammarPattern(name, {
         provenance: opts?.provenance ?? 'manual',
         shortMeaning: opts?.shortMeaning,
+        reading: opts?.reading,
       }));
+    const hasSpan =
+      typeof opts?.start === 'number' &&
+      typeof opts?.end === 'number' &&
+      opts.end > opts.start &&
+      opts.end <= japanese.length;
     await ensureSentenceGrammar(sentenceId, pattern.id, {
       source: opts?.provenance === 'ai_suggested' ? 'ai_suggested' : 'manual',
+      start: hasSpan ? opts!.start : undefined,
+      end: hasSpan ? opts!.end : undefined,
+      surfaceForm: hasSpan ? japanese.slice(opts!.start, opts!.end) : undefined,
     });
     setExpandedPatternId(pattern.id);
   }
@@ -187,6 +202,9 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                 <span className="jp">
                   {suggestion.matchedExistingName ?? suggestion.candidateName}
                 </span>
+                {suggestion.reading ? (
+                  <span className="muted jp"> ({suggestion.reading})</span>
+                ) : null}
                 <span className="muted"> — {suggestion.shortMeaning}</span>
               </span>
               <span className="row" style={{ gap: '0.35rem' }}>
@@ -196,7 +214,10 @@ export function GrammarPicker({ sentenceId, japanese, chunks }: GrammarPickerPro
                     void (async () => {
                       await addPattern(suggestion.matchedExistingName ?? suggestion.candidateName, {
                         shortMeaning: suggestion.shortMeaning,
+                        reading: suggestion.reading,
                         provenance: 'ai_suggested',
+                        start: suggestion.start,
+                        end: suggestion.end,
                       });
                       setSuggestions((current) =>
                         current.filter((item) => item !== suggestion),
@@ -354,6 +375,7 @@ function GrammarPatternCard({
   onRemove: () => void;
 }) {
   const [shortMeaning, setShortMeaning] = useState(pattern.shortMeaning);
+  const [reading, setReading] = useState(pattern.reading ?? '');
   const [structuralNotes, setStructuralNotes] = useState(pattern.structuralNotes ?? '');
   const [explanation, setExplanation] = useState(pattern.explanation ?? '');
   const [family, setFamily] = useState(pattern.family ?? '');
@@ -369,6 +391,7 @@ function GrammarPatternCard({
 
   const dirty =
     shortMeaning !== pattern.shortMeaning ||
+    reading !== (pattern.reading ?? '') ||
     structuralNotes !== (pattern.structuralNotes ?? '') ||
     explanation !== (pattern.explanation ?? '') ||
     family !== (pattern.family ?? '') ||
@@ -383,6 +406,7 @@ function GrammarPatternCard({
   // underlying row changes from elsewhere (e.g. another device via sync).
   useEffect(() => {
     setShortMeaning(pattern.shortMeaning);
+    setReading(pattern.reading ?? '');
     setStructuralNotes(pattern.structuralNotes ?? '');
     setExplanation(pattern.explanation ?? '');
     setFamily(pattern.family ?? '');
@@ -399,6 +423,7 @@ function GrammarPatternCard({
       await Promise.all([
         updateGrammarPattern(pattern.id, {
           shortMeaning,
+          reading: reading.trim() || undefined,
           structuralNotes,
           explanation,
           family,
@@ -426,6 +451,7 @@ function GrammarPatternCard({
     setExplainAssistState({ status: 'idle' });
     // Pre-fills only — the learner still must tap Save for anything to persist.
     setShortMeaning(result.data.shortMeaning);
+    if (result.data.reading) setReading(result.data.reading);
     setStructuralNotes(result.data.structuralNotes);
     setExplanation(result.data.explanation);
   }
@@ -436,6 +462,7 @@ function GrammarPatternCard({
         <div>
           <Link to={`/grammar/${encodeURIComponent(pattern.id)}`} className="jp">
             <strong>{pattern.canonicalName}</strong>
+            {pattern.reading ? <span className="muted"> ({pattern.reading})</span> : null}
           </Link>
           {pattern.shortMeaning ? (
             <span className="muted"> — {pattern.shortMeaning}</span>
@@ -508,6 +535,16 @@ function GrammarPatternCard({
             value={shortMeaning}
             onChange={(event) => setShortMeaning(event.target.value)}
             placeholder="e.g. there's no way..."
+          />
+          <label htmlFor={`grammar-reading-${pattern.id}`} className="muted">
+            Hiragana reading (only needed if the name above has kanji)
+          </label>
+          <input
+            id={`grammar-reading-${pattern.id}`}
+            className="jp"
+            value={reading}
+            onChange={(event) => setReading(event.target.value)}
+            placeholder="e.g. わけがない"
           />
           <label htmlFor={`grammar-structural-${pattern.id}`} className="muted">
             Structural explanation (Cure-Dolly style)

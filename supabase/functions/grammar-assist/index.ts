@@ -63,6 +63,11 @@ const SUGGEST_TOOL = {
               description:
                 'Display form of the construction, e.g. "〜わけがない".',
             },
+            reading: {
+              type: 'string',
+              description:
+                'Full hiragana reading of candidateName, ONLY when candidateName itself contains kanji (e.g. a descriptive/structural label like "列挙的記述"). Omit entirely when candidateName is already plain kana/particles — this field exists so a learner can type the reading instead of being forced to reproduce kanji.',
+            },
             matchedExistingName: {
               type: 'string',
               description:
@@ -72,6 +77,16 @@ const SUGGEST_TOOL = {
               type: 'string',
               description:
                 'Concise communicative function, not a dictionary definition — e.g. "there\'s no way..." for わけがない.',
+            },
+            start: {
+              type: 'number',
+              description:
+                '0-based character offset (UTF-16 code units) where this construction begins as a literal, contiguous span of the input sentence exactly as written. Omit BOTH start and end when the construction has no single literal span in this sentence — e.g. it is discontinuous, or it is a structural/descriptive pattern (like an enumerative-listing construction) rather than a fixed phrase. Never guess a span that is not literally there.',
+            },
+            end: {
+              type: 'number',
+              description:
+                'Exclusive 0-based character offset (UTF-16 code units) where the literal span from `start` ends. Required together with `start`; omit both if there is no literal span.',
             },
             rank: {
               type: 'string',
@@ -102,6 +117,11 @@ const EXPLAIN_TOOL = {
       shortMeaning: {
         type: 'string',
         description: 'Concise communicative function of the pattern in general.',
+      },
+      reading: {
+        type: 'string',
+        description:
+          'Full hiragana reading of the construction name, ONLY when it contains kanji (e.g. a descriptive/structural label). Omit entirely when the name is already plain kana/particles.',
       },
       structuralNotes: {
         type: 'string',
@@ -225,7 +245,13 @@ Deno.serve(async (req) => {
         '+ light-verb pattern こうする/そうする/ああする/どうする "do it this/that way" or ' +
         'こうなる/そうなる/どうなる "turn out this way"). Prefer matching an ' +
         'existing pattern name over inventing a near-duplicate. Report at most 4 patterns, ranked ' +
-        'by how central each is to this sentence.';
+        'by how central each is to this sentence. For each pattern, if candidateName contains ' +
+        'kanji, also give its hiragana reading in `reading`. Also report the exact literal ' +
+        'character span (`start`/`end`, 0-based UTF-16 offsets into the sentence as given) where ' +
+        'the construction appears verbatim — but only when it truly is one contiguous literal ' +
+        'span; a purely structural/descriptive pattern (e.g. an enumerative-listing construction ' +
+        'built from omitted copulas, with no fixed wording) has no such span, so omit start/end ' +
+        'rather than pointing at an arbitrary piece of the sentence.';
       const existingText = existing.length
         ? `\n\nExisting canonical pattern names/aliases already in the learner's corpus (prefer matching one of these via matchedExistingName when the same construction recurs, even if the surface form here differs):\n${existing.join('、')}`
         : '';
@@ -250,7 +276,8 @@ Deno.serve(async (req) => {
         'structural analysis (what modifies what, where the topic/subject/object are, where the ' +
         'zero-が is). Explain a grammar construction the same way: literal/structural mechanics ' +
         'first, then its communicative function, then a natural English reading — never collapse ' +
-        'these into one flat gloss, and never claim a single English phrase is "the" translation.';
+        'these into one flat gloss, and never claim a single English phrase is "the" translation. ' +
+        'If the construction name itself contains kanji, also give its hiragana reading in `reading`.';
       const userText = `Sentence: ${sentence}\nConstruction: ${patternName}${chunkContextText(body.chunks)}`;
       const result = await callAnthropic(anthropicApiKey, system, userText, EXPLAIN_TOOL);
       return new Response(JSON.stringify(result), {

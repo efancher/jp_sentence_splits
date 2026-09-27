@@ -627,6 +627,19 @@ export interface SentenceVocabulary {
   audioStartMs?: number;
   audioEndMs?: number;
   /**
+   * Hand-corrected *strict* word-only span (no particle, no pad) for this
+   * occurrence, in ms — set from the citation-form games (Odd Ear Out,
+   * Speaker Match), which loop just the word and need it particle-free.
+   * When both are set they override `isolatedWordSpans`' aligner-derived
+   * `wordOnly` guess for every consumer of it. Deliberately separate from
+   * `audioStartMs`/`audioEndMs` above: that one is padded and often carries
+   * a following particle on purpose (the pitch-accent cue), which would
+   * poison these games' shape grouping if reused here. Undefined = use the
+   * automatic guess.
+   */
+  wordOnlyStartMs?: number;
+  wordOnlyEndMs?: number;
+  /**
    * How far apart this citation-form occurrence's native clip actually
    * holds its dictionary-expected high vs. low morae, in semitones
    * (`measureNativeWord`'s `separationSemitones` — `scripts/backfill-
@@ -1044,6 +1057,15 @@ export interface GrammarPattern {
   aliases: string[];
   /** Concise communicative function — not a dictionary definition. */
   shortMeaning: string;
+  /**
+   * Hiragana reading of canonicalName, only needed when canonicalName itself
+   * carries kanji (e.g. canonicalName "～という/～ての列挙的記述" with
+   * reading "…れっきょてききじゅつ"). Lets a learner answer a
+   * grammar_completion/Grammar Detective prompt in kana or romaji instead of
+   * being forced to reproduce descriptive kanji verbatim — see
+   * isGrammarPatternAnswerCorrect. Unset when canonicalName is already kana.
+   */
+  reading?: string;
   /** e.g. "[verb/adj plain form] + わけがない". */
   structuralTemplate?: string;
   /** Literal/structural mechanics + communicative function + natural English — not collapsed into one gloss (design brief §4). */

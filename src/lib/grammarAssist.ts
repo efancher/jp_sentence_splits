@@ -20,14 +20,21 @@ export interface GrammarAssistChunkContext {
 
 export interface GrammarSuggestionResult {
   candidateName: string;
+  /** Hiragana reading of candidateName — only present when candidateName itself contains kanji. */
+  reading?: string;
   matchedExistingName?: string;
   shortMeaning: string;
   rank: 'important' | 'familiar' | 'nuance' | 'optional';
   confidence: number;
+  /** 0-based UTF-16 offsets into `sentence` where the construction appears verbatim — absent when it has no single literal span (e.g. a structural pattern). */
+  start?: number;
+  end?: number;
 }
 
 export interface GrammarExplanationResult {
   shortMeaning: string;
+  /** Hiragana reading of the construction name — only present when the name itself contains kanji. */
+  reading?: string;
   structuralNotes: string;
   explanation: string;
 }

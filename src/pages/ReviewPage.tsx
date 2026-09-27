@@ -67,6 +67,7 @@ import type {
   ReviewRating,
   Sentence,
   SentenceAudio,
+  SentenceGrammar,
   SentenceVocabulary,
   StudyActivityType,
   StudyItem,
@@ -82,7 +83,7 @@ import {
   type ConjugationWordClass,
 } from '../lib/conjugation';
 import {
-  blankPatternInSentence,
+  blankSentenceGrammar,
   isGrammarPatternAnswerCorrect,
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
@@ -610,6 +611,7 @@ const RATINGS: { value: ReviewRating; label: string }[] = [
 interface GrammarReviewCandidate {
   pattern: GrammarPattern;
   sentence: Sentence;
+  sentenceGrammar: SentenceGrammar;
   /** Passage framing for the target sentence — same shape reading_in_context uses. */
   readingContext: ReadingContext;
 }
@@ -1372,6 +1374,7 @@ export function ReviewPage() {
           grammarCandidates.push({
             pattern,
             sentence: context.sentence,
+            sentenceGrammar: context.sentenceGrammar,
             readingContext: context.readingContext,
           });
         }
@@ -3425,8 +3428,8 @@ function GrammarRecognitionCard({
   revealed: boolean;
   onReveal: () => void;
 }) {
-  const { pattern, sentence, readingContext } = candidate;
-  const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
+  const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
+  const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
   const { before, after } = readingContext;
 
   const passageBefore = readingContext.bookTitle ? (
@@ -3486,9 +3489,9 @@ function GrammarRecognitionCard({
         <>
           {!blank ? (
             <div className="muted">
-              Note: this sentence uses a conjugated or colloquial form of{' '}
-              <span className="jp">{pattern.canonicalName}</span>, not its dictionary form
-              verbatim.
+              Note: {pattern.canonicalName} doesn&rsquo;t appear as a fixed phrase in this
+              sentence — either it&rsquo;s a conjugated/colloquial surface form, or it&rsquo;s a
+              structural pattern with no single literal span.
             </div>
           ) : null}
           {pattern.shortMeaning ? <div>{pattern.shortMeaning}</div> : null}
@@ -3564,10 +3567,10 @@ function GrammarCompletionCard({
   revealed: boolean;
   onCheck: (typed: string, gradedAgainst: string) => void;
 }) {
-  const { pattern, sentence, readingContext } = candidate;
+  const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
   const [value, setValue] = useState('');
   const [wasCorrect, setWasCorrect] = useState(false);
-  const blank = blankPatternInSentence(sentence.japanese, pattern.canonicalName);
+  const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
   const { before, after } = readingContext;
 
   const explanation = (
@@ -3634,7 +3637,7 @@ function GrammarCompletionCard({
           className="row"
           onSubmit={(event) => {
             event.preventDefault();
-            setWasCorrect(isGrammarPatternAnswerCorrect(value, pattern.canonicalName));
+            setWasCorrect(isGrammarPatternAnswerCorrect(value, pattern.canonicalName, pattern.reading));
             onCheck(value, pattern.canonicalName);
           }}
         >
@@ -3650,6 +3653,11 @@ function GrammarCompletionCard({
               onChange={(event) => setValue(event.target.value)}
             />
           </label>
+          {pattern.reading ? (
+            <span className="muted" style={{ fontSize: '0.8rem' }}>
+              Kana or romaji is fine.
+            </span>
+          ) : null}
           <button type="submit">Check</button>
         </form>
       ) : (

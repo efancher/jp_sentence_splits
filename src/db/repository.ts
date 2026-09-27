@@ -662,6 +662,31 @@ export async function setSentenceVocabularyAudioRange(
   notifySync('sentence_vocabulary', updated.id, updated);
 }
 
+/**
+ * Set or clear the hand-corrected *strict* word-only span on a
+ * `SentenceVocabulary` link — the "Fix this clip" editor in the
+ * citation-form games (Odd Ear Out, Speaker Match). `null` reverts to the
+ * forced-alignment guess. Rounds to whole ms; no-op if the link is gone.
+ * Separate from `setSentenceVocabularyAudioRange`: see `wordOnlyStartMs`'s
+ * doc comment for why the two must not be conflated.
+ */
+export async function setSentenceVocabularyWordOnlyRange(
+  linkId: string,
+  range: { startMs: number; endMs: number } | null,
+): Promise<void> {
+  const db = getDb();
+  const link = await db.sentenceVocabulary.get(linkId);
+  if (!link) return;
+  const updated: SentenceVocabulary = {
+    ...link,
+    wordOnlyStartMs: range ? Math.round(range.startMs) : undefined,
+    wordOnlyEndMs: range ? Math.round(range.endMs) : undefined,
+    updatedAt: nowIso(),
+  };
+  await db.sentenceVocabulary.put(updated);
+  notifySync('sentence_vocabulary', updated.id, updated);
+}
+
 type PendingSyncOp = {
   entity: SyncEntity;
   recordId: string;
@@ -6996,13 +7021,15 @@ export interface OddEarOutClip extends OddEarClip {
  * a word with a dictionary pitch position and 2+ morae, whose *word alone*
  * can be cut out of its reference recording by a **current-version** forced
  * alignment (manual/backfilled `audioStartMs/EndMs` ranges are ignored — they
- * usually include the following particle) with a plausible length. One clip per
- * word per book, skipping sentences that live only in suspended books and
- * sentences containing a digit+日/月 date (the aligner expands those to hiragana
- * before aligning, which skews every word's span in the sentence). Also returns this game's per-shape-pair history from
- * `gameRounds`. Read-only apart from caching alignments locally. Proficiency
- * is deliberately not required: it's a perception game about accent shape, not
- * a test of knowing the word.
+ * usually include the following particle; a hand-corrected `wordOnlyStartMs/
+ * EndMs`, set from this game's own "Fix this clip" editor, is used instead
+ * when present) with a plausible length. One clip per word per book,
+ * skipping sentences that live only in suspended books. A sentence with a
+ * digit+日/月 date plays normally — the aligner's date expansion is accounted
+ * for in the span mapping (see `alignerView`). Also returns this game's
+ * per-shape-pair history from `gameRounds`. Read-only apart from caching
+ * alignments locally. Proficiency is deliberately not required: it's a
+ * perception game about accent shape, not a test of knowing the word.
  */
 export async function getOddEarOutData(): Promise<{
   clips: OddEarOutClip[];
@@ -7078,15 +7105,23 @@ export async function getOddEarOutData(): Promise<{
     // *includes a following particle* (71 of the 92 comparable overrides in
     // prod end at word+particle). A clip with the particle in it carries the
     // heiban/odaka cue this game groups away, so only the strict word-only span
-    // from a current-version alignment is safe here.
+    // from a current-version alignment — or this game's own hand-corrected
+    // `wordOnlyStartMs/EndMs` — is safe here.
+    const wordOnlyOverride =
+      link.wordOnlyStartMs != null && link.wordOnlyEndMs != null
+        ? { startMs: link.wordOnlyStartMs, endMs: link.wordOnlyEndMs }
+        : null;
     const alignment = alignments.get(audio.id);
-    const spans = alignment
-      ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
-      : null;
+    const spans = wordOnlyOverride
+      ? { wordOnly: wordOnlyOverride, withParticle: null, tokenExact: true }
+      : alignment
+        ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
+        : null;
     const span: TimeRangeMs | null =
       spans && isTrustworthyCitationSpan(item, spans) ? spans.wordOnly : null;
     if (!span || !isPlausibleClipSpan(span)) continue;
     clips.push({
+      linkId: link.id,
       vocabularyItemId: item.id,
       expression: item.expression,
       reading: item.reading,
@@ -7195,10 +7230,19 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
   for (const { link, item, bookId } of chosen.values()) {
     const audio = audioBySentenceId.get(link.sentenceId)!;
     const sentence = sentenceById.get(link.sentenceId)!;
+    // Same strict word-only span as Odd Ear Out (comparing accent shapes
+    // across speakers also breaks if a particle sneaks in), so a boundary
+    // fix made in that game's editor carries over here too.
+    const wordOnlyOverride =
+      link.wordOnlyStartMs != null && link.wordOnlyEndMs != null
+        ? { startMs: link.wordOnlyStartMs, endMs: link.wordOnlyEndMs }
+        : null;
     const alignment = alignments.get(audio.id);
-    const spans = alignment
-      ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
-      : null;
+    const spans = wordOnlyOverride
+      ? { wordOnly: wordOnlyOverride, withParticle: null, tokenExact: true }
+      : alignment
+        ? isolatedWordSpans(alignment.words, sentence.japanese, link.surfaceForm!)
+        : null;
     const span: TimeRangeMs | null =
       spans && isTrustworthyCitationSpan(item, spans) ? spans.wordOnly : null;
     if (!span || !isPlausibleClipSpan(span)) continue;
@@ -8145,6 +8189,7 @@ export async function ensureGrammarPattern(
   canonicalName: string,
   fields: {
     shortMeaning?: string;
+    reading?: string;
     structuralTemplate?: string;
     explanation?: string;
     structuralNotes?: string;
@@ -8170,6 +8215,7 @@ export async function ensureGrammarPattern(
     normalizedKey,
     aliases: fields.aliases ?? [],
     shortMeaning: fields.shortMeaning ?? '',
+    reading: fields.reading,
     structuralTemplate: fields.structuralTemplate,
     explanation: fields.explanation,
     structuralNotes: fields.structuralNotes,
@@ -8191,6 +8237,7 @@ export async function updateGrammarPattern(
     Pick<
       GrammarPattern,
       | 'shortMeaning'
+      | 'reading'
       | 'structuralTemplate'
       | 'explanation'
       | 'structuralNotes'

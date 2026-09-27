@@ -1595,9 +1595,18 @@ Activity types currently wired, grouped by subject/eligibility:
   - **`grammar_completion`** — the learner types the construction (recall,
     not multiple choice — graded leniently by `isGrammarPatternAnswerCorrect`,
     same tilde/annotation/whitespace normalization `blankPatternInSentence`
-    already uses), blanking the sentence when the pattern's canonical name
-    happens to appear in it verbatim (`blankPatternInSentence`,
-    `src/lib/grammarPatterns.ts`). **Now lazily seeded by `ReviewPage`
+    already uses, plus wanakana romaji/kana leniency and an optional
+    `GrammarPattern.reading` for patterns whose `canonicalName` itself
+    carries kanji — descriptive/structural labels like an enumerative-listing
+    pattern have no natural all-kana spelling, so typing the reading is
+    accepted instead of forcing the kanji verbatim), blanking the sentence
+    via `blankSentenceGrammar` (`src/lib/grammarPatterns.ts`) — prefers a
+    real captured span (`SentenceGrammar.start`/`end`, populated by the
+    `grammar-assist` `suggest` call when the construction is a genuine
+    contiguous literal span, deliberately omitted for structural patterns
+    with none) or `surfaceForm`, falling back to the older
+    canonicalName-substring guess (`blankPatternInSentence`) only when
+    neither exists. **Now lazily seeded by `ReviewPage`
     itself**, gated behind `grammar_recognition` reaching FSRS proficiency
     (`GateContext.grammarRecognitionProficientPatternIds`, the 'grammar'
     descriptor's `activityIsReady`) — same two-tier shape as
