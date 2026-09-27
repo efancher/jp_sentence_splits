@@ -1154,8 +1154,13 @@ shortcut ("Play a round") and the `/play` hub. Currently ten activities:
   (箸 atamadaka vs 橋 heiban/odaka, both はし), guess which clip is which,
   then see both measured contours. One point per correct guess;
   `buildMinimalPairTrials` prefers a same-book pairing first, then cross-book.
-  Proficiency-gated like the warm-up (`getPitchAccentMinimalPairOccurrences`),
-  unlike Odd Ear Out's perception-only stance.
+  Gated on confirmed vocab, not FSRS proficiency
+  (`getPitchAccentMinimalPairOccurrences`, changed 2026-09-27) — same
+  perception-only stance as Odd Ear Out/Speaker Match, shared with the
+  warm-up; a full FSRS-proficiency bar was starving newly-imported or
+  suspended-book vocab (never reviewed, so never "proficient") even though
+  this is a discrimination task with the answer shown right after, not a
+  recall check.
 - **Grammar Detective** (`GrammarDetectiveGame.tsx`,
   `src/lib/grammarDetective.ts`) — Word Detective's clue-ladder format,
   sourced from tracked grammar patterns instead of confirmed vocabulary:

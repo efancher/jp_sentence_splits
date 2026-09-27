@@ -6223,18 +6223,25 @@ export interface PitchAccentMinimalPairOccurrence extends MinimalPairOccurrence 
 
 /**
  * Every audio-backed occurrence eligible for the "real-audio pitch-
- * perception bridge" same/different warm-up (docs/ROADMAP.md): a confirmed,
- * proficient (`getProficientVocabularyItemIds`) word with dictionary
- * `pitchAccentPositions`, restricted to a sentence that both has reference
- * audio *and* uses the word's exact citation form (`link.surfaceForm ===
- * expression`) — near-minimal accent pairs are almost always nouns, and
- * skipping inflected occurrences avoids resolving `pitchAccentPositions`
- * (a citation-form value) against a conjugated surface. `bookId` doubles as
- * a "same speaker" proxy: a book is normally one show/narrator or one
- * consistent cast, so two occurrences sharing a `bookId` are treated as
- * same-speaker and two differing ones as cross-speaker (`STATUS.md`) — an
- * approximation, not a verified per-clip speaker identity, since none
- * exists in this corpus.
+ * perception bridge" same/different warm-up (docs/ROADMAP.md): a confirmed
+ * (vocab picker, `vocabularyReviewStatus === 'confirmed'`) word with
+ * dictionary `pitchAccentPositions`, restricted to a sentence that both has
+ * reference audio *and* uses the word's exact citation form
+ * (`link.surfaceForm === expression`) — near-minimal accent pairs are almost
+ * always nouns, and skipping inflected occurrences avoids resolving
+ * `pitchAccentPositions` (a citation-form value) against a conjugated
+ * surface. Deliberately perception-only, same stance as Odd Ear
+ * Out/Speaker Match: this is a listening-discrimination task with the
+ * answer shown right after, not a recall/production check, so it doesn't
+ * need `getProficientVocabularyItemIds`'s FSRS-reviewed bar — requiring
+ * that would starve a freshly-imported, still-suspended book (like a
+ * homophone-focused podcast) of any candidates, since a suspended book's
+ * study items never surface in the due queue to earn the review rep that
+ * bar requires. `bookId` doubles as a "same speaker" proxy: a book is
+ * normally one show/narrator or one consistent cast, so two occurrences
+ * sharing a `bookId` are treated as same-speaker and two differing ones as
+ * cross-speaker (`STATUS.md`) — an approximation, not a verified per-clip
+ * speaker identity, since none exists in this corpus.
  */
 export async function getPitchAccentMinimalPairOccurrences(): Promise<
   PitchAccentMinimalPairOccurrence[]
@@ -6244,13 +6251,21 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
-  const [audioRows, vocabularyItems, sentences, bookSentences] = await Promise.all([
+  const [audioRows, vocabularyItems, sentences, bookSentences, analyses] = await Promise.all([
     db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
     db.vocabularyItems.bulkGet([...new Set(links.map((link) => link.vocabularyItemId))]),
     db.sentences.bulkGet(sentenceIds),
     db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.analyses.where('sentenceId').anyOf(sentenceIds).toArray(),
   ]);
   if (audioRows.length === 0) return [];
+
+  const confirmedSentenceIds = new Set(
+    analyses
+      .filter((analysis) => analysis.vocabularyReviewStatus === 'confirmed')
+      .map((analysis) => analysis.sentenceId),
+  );
+  if (confirmedSentenceIds.size === 0) return [];
 
   const audioBySentenceId = new Map<string, SentenceAudio>();
   for (const audio of audioRows) {
@@ -6272,16 +6287,13 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
   );
   if (pitchCarryingItemById.size === 0) return [];
 
-  const proficientIds = await getProficientVocabularyItemIds([...pitchCarryingItemById.keys()]);
-  if (proficientIds.size === 0) return [];
-
   const sentenceById = new Map(
     sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
   );
 
   const result: PitchAccentMinimalPairOccurrence[] = [];
   for (const link of links) {
-    if (!link.surfaceForm || !proficientIds.has(link.vocabularyItemId)) continue;
+    if (!link.surfaceForm || !confirmedSentenceIds.has(link.sentenceId)) continue;
     const item = pitchCarryingItemById.get(link.vocabularyItemId);
     if (!item || link.surfaceForm !== item.expression) continue;
     const audio = audioBySentenceId.get(link.sentenceId);
@@ -6330,9 +6342,10 @@ export interface HomophoneClip extends PitchAccentMinimalPairOccurrence {
  * resolved up front (unlike the warm-up, which resolves it live per
  * occurrence — a game round wants its eligible count known before play, same
  * "gate cards missing support" reasoning as Odd Ear Out), plus this game's
- * own per-pair history from `gameRounds`. The occurrences are
- * proficiency-gated (see `getPitchAccentMinimalPairOccurrences`) — same rule
- * as the in-drill warm-up, not the perception-only stance Odd Ear Out takes.
+ * own per-pair history from `gameRounds`. The occurrences are gated on
+ * confirmed vocab, not FSRS proficiency (see
+ * `getPitchAccentMinimalPairOccurrences`) — same perception-only stance as
+ * Odd Ear Out/Speaker Match, shared with the in-drill warm-up.
  */
 export async function getHomophoneHuntData(): Promise<{
   clips: HomophoneClip[];
@@ -7164,8 +7177,9 @@ export interface SpeakerMatchClip extends PitchAccentSpeakerClip, SpeakerMatchWo
  * word (2+ books, so a real cross-recording pair exists), flattened onto the
  * shared `SpeakerMatchComparison` shape plus this game's own per-word history
  * from `gameRounds`. Proficiency deliberately **not** filtered — same
- * perception-only stance as Odd Ear Out/Homophone Hunt, not the FSRS-gated
- * rule `getPitchAccentMinimalPairOccurrences` uses.
+ * perception-only stance as Odd Ear Out/Homophone Hunt (both gated on
+ * confirmed vocab only, not FSRS proficiency; see
+ * `getPitchAccentMinimalPairOccurrences`).
  */
 export async function getSpeakerMatchData(): Promise<{
   comparisons: SpeakerMatchComparison<SpeakerMatchClip>[];

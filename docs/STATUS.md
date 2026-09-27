@@ -818,6 +818,38 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Homophone Hunt (and its shared warm-up) switched from
+  FSRS-proficiency gating to confirmed-vocab gating.** User added a podcast
+  specifically to seed Homophone Hunt, then suspended it from shadowing
+  rotation (`setBookSuspended`) — the game still showed 0 candidates.
+  Root cause, traced live against prod: `getPitchAccentMinimalPairOccurrences`
+  required `getProficientVocabularyItemIds` (FSRS `state === 'review' |
+  'relearning'`, i.e. a successfully graded review rep), but a suspended
+  book's study items are withheld from the due queue
+  (`studyItemIsHeldBackBySuspension`), so a word whose only home is a
+  suspended book could never earn that rep — a structural deadlock, not
+  slow progress. Separately, confirmed the book's actual sentence content:
+  221 real sentences full of genuine homophone/near-homophone sets
+  (拘束/高速, 帰省/寄生/既成, 後援/公演, …) but only 1 of them had ever been
+  through vocab confirmation, so there was also no linked vocabulary yet
+  regardless of the gate. Fix applied: `getPitchAccentMinimalPairOccurrences`
+  now gates on `vocabularyReviewStatus === 'confirmed'` (per sentence, via
+  `db.analyses`) instead of FSRS proficiency — this is a listening-
+  discrimination task with the answer revealed right after the guess, not a
+  recall/production check, so the perception-only stance Odd Ear Out/Speaker
+  Match already take is the right fit, not the drill's recall bar. Both
+  `getHomophoneHuntData` (Homophone Hunt) and `getPitchAccentMinimalPairTrials`
+  (the in-drill `PitchAccentMinimalPairWarmup`) share this function, so both
+  moved together. Speaker Match was already perception-only and untouched by
+  this change — an earlier claim that it'd also benefit was wrong; it never
+  had a proficiency gate. Updated the stale doc comments this uncovered
+  (`getHomophoneHuntData`, `getSpeakerMatchData`) and the hub's empty-state
+  copy ("you've already learned" → "confirmed"). `tests/homophoneHuntGame.test.tsx`
+  updated to seed confirmed `sentence.analyses` instead of a fixture FSRS
+  study item; `npm run check` green (175 files, 2129 passed). Confirming
+  vocab for the actual homophone sentences and re-checking `/play` is still
+  the user's next step — this fix only removes the code-side blocker.
+
 - **2026-09-27 — Then & Now, a tenth `/play` activity — reflective, not
   scored.** The last of three games picked up from the 2026-09-26 games
   brainstorm (with Grammar Detective and Speaker Match above). Unlike every
@@ -901,8 +933,8 @@ what's left is one deferred durability item (below).
   directly rather than re-deriving the ≥2-books eligibility gate; new
   `SpeakerMatchGame.tsx`; registered in `src/games/registry.tsx`.
   Proficiency deliberately **not** filtered (perception-only stance, like
-  Odd Ear Out/Homophone Hunt, not the FSRS-gated rule the pitch-accent drill
-  uses). **v1 simplification, documented in the module doc**: a word's clip
+  Odd Ear Out/Homophone Hunt — both gated on confirmed vocab only, not FSRS
+  proficiency, since 2026-09-27). **v1 simplification, documented in the module doc**: a word's clip
   pair is fixed at its two alphabetically-first book titles rather than
   rotating through every pair a 3+-book word could offer, and each eligible
   word contributes exactly one trial (unlike Homophone Hunt, where one
@@ -1060,7 +1092,7 @@ what's left is one deferred durability item (below).
   a full round (guess → reveal → score → log, `gameRounds`/`reviews`/
   `study_items` counts asserted) and the too-thin-corpus "needs" message.
   `npm run check` green (170 files, 2094 passed). **Manual test plan:**
-  open `/play`; Homophone Hunt only appears if you have a proficient
+  open `/play`; Homophone Hunt only appears if you have a confirmed
   true-homophone pair with audio (rare — check the hub's "needs" line if
   it's hidden); play a round, confirm each trial plays two real clips, that
   the reveal names which was which and shows a plausible measured contour

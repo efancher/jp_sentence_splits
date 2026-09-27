@@ -244,9 +244,9 @@ export function HomophoneHuntGame({ signal }: { signal: GameSignal }) {
       <section className="panel stack">
         <h2 style={{ margin: 0 }}>Homophone Hunt</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Needs two words you've already learned that happen to be true homophones (same reading,
-          different pitch-accent shape) with playable native clips — rare in most vocabularies. You
-          have {data.clips.length} playable clip{data.clips.length === 1 ? '' : 's'} so far. Odd Ear
+          Needs two confirmed words that happen to be true homophones (same reading, different
+          pitch-accent shape) with playable native clips — rare in most vocabularies. You have{' '}
+          {data.clips.length} playable clip{data.clips.length === 1 ? '' : 's'} so far. Odd Ear
           Out (<Link to="/play">/play</Link>) trains the same skill without needing an exact
           homophone match.
         </p>
