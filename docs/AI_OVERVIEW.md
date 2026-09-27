@@ -1025,7 +1025,7 @@ self-check has a way to confirm you got it right.
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
-shortcut ("Play a round") and the `/play` hub. Currently five games:
+shortcut ("Play a round") and the `/play` hub. Currently ten activities:
 - **Word Detective** (`WordDetectiveGame.tsx`, `src/lib/wordDetective.ts`) —
   3 mystery words per round. Each is blanked out of a real sentence from
   the learner's books; they type its reading (typed recall, not multiple
@@ -1140,6 +1140,53 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   confirmed, native audio ≤10 s, translation, ≤45 chars, 4–7 tiles, not
   suspended-only. Weakness comes from the FSRS state of the sentence's own words
   (`getEarTilesCandidates`: lapsed words → `weak`), so all three signals apply.
+- **Keystone** (`KeystoneGame.tsx`, `src/lib/keystone.ts`) — the confirmed-
+  vocabulary no-card backlog's front door: each puzzle shows a few backlog
+  words (confirmed, no study item yet) that appear in the active book's next
+  unread sentences and asks which one unlocks the most upcoming reading
+  (appears in the most of those sentences). No FSRS signal applies (every
+  candidate is by definition card-less); the round's own unlock-count
+  ranking stands in for the picker's signal ranking.
+- **Homophone Hunt** (`HomophoneHuntGame.tsx`, `src/lib/homophoneHunt.ts`) —
+  the in-drill same/different ABX near-minimal-pair warm-up
+  (`PitchAccentMinimalPairWarmup`) promoted to its own scored round: two real
+  native clips of words that share a reading but not a pitch-accent shape
+  (箸 atamadaka vs 橋 heiban/odaka, both はし), guess which clip is which,
+  then see both measured contours. One point per correct guess;
+  `buildMinimalPairTrials` prefers a same-book pairing first, then cross-book.
+  Proficiency-gated like the warm-up (`getPitchAccentMinimalPairOccurrences`),
+  unlike Odd Ear Out's perception-only stance.
+- **Grammar Detective** (`GrammarDetectiveGame.tsx`,
+  `src/lib/grammarDetective.ts`) — Word Detective's clue-ladder format,
+  sourced from tracked grammar patterns instead of confirmed vocabulary:
+  a pattern's single tracked sentence (`pickContextSentenceForGrammarPattern`,
+  the same pick the `grammar_completion` review card uses) is enough to
+  play, since most tracked patterns only have the one — the differentiator
+  clue is the pattern's existing reading-order passage context rather than
+  a second occurrence. Typed recall, graded with the review card's own
+  lenient `isGrammarPatternAnswerCorrect`. Weakness comes from the
+  `grammar_completion` card's own lapses, not vocabulary leeches.
+- **Speaker Match** (`SpeakerMatchGame.tsx`, `src/lib/speakerMatch.ts`) —
+  gamifies the "Compare speakers" browse tool (`/pitch-accent/compare`,
+  `getPitchAccentSpeakerComparisons`): two real clips of the *same*
+  confirmed, citation-form word mined from two different books (a book
+  standing in for a speaker), guess which clip belongs to the named book,
+  then see both measured contours. Not the roadmap's literal "matches a
+  dictionary shape" framing — two correctly-pronounced clips of the same
+  word both match, so there's no wrong answer that way; this is a pure
+  cross-recording discrimination task instead. Proficiency deliberately not
+  filtered (perception-only, like Odd Ear Out). Real corpora are thin here
+  (14 words in prod with 2+ non-suspended books as of 2026-09-27) — the
+  roadmap's own caveat, not a code bug.
+- **Then & Now** (`ThenAndNowGame.tsx`, `src/lib/thenAndNow.ts`,
+  `src/lib/duckedRangePlayer.ts`) — the one purely reflective activity here,
+  not a scored round (there's nothing to grade): replays a sentence read a
+  while ago with the words that were still unknown back then turned down
+  quiet (a real `GainNode`-automated duck, not silence), then again at full
+  volume, so the difference is audible. "Then" = the sentence's earliest
+  real review; "then-unknown" = a linked word confirmed after that moment —
+  both documented v1 approximations, not exact. Writes nothing to
+  `gameRounds` or FSRS; `signals: []`, like Keystone.
 - **Item picker** (`src/lib/gamePicker.ts`, pure, shared by every game): a
   game hands it already-eligible candidates plus a signal — `weak` (a real FSRS
   lapse, worst first), `stale` (lowest predicted recall), or `strong` (mature
@@ -1166,7 +1213,9 @@ shortcut ("Play a round") and the `/play` hub. Currently five games:
   finished round appends one `GameRound` (per-item correct/clues/points/ms) to
   a **local-only** Dexie table (`gameRounds`, `logGameRound`) — not in the sync
   engine, no Supabase table. Read by the adaptive-difficulty tier above and by
-  the `/progress` "Games" panel below.
+  the `/progress` "Games" panel below. Exception: Then & Now is purely
+  reflective (no right/wrong), so it writes no `GameRound` at all — it's
+  absent from the difficulty tier and the progress panel by design.
 - **`/progress` "Games" panel** (`getGamesProgress` + `src/lib/gamesProgress.ts`,
   2026-09-22): accuracy by game and by signal (the `weak` row doubles as a
   "recovery rate" — how often previously-lapsed items get answered right in a

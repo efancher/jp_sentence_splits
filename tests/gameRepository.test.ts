@@ -13,6 +13,7 @@ import {
   getPrecedingSentences,
   getRecentGameDifficulty,
   getSpeakerMatchData,
+  getThenAndNowData,
   getVerbLegoData,
   getWordDetectiveCandidates,
   logGameRound,
@@ -603,6 +604,100 @@ describe('speaker match repository', () => {
     const { history } = await getSpeakerMatchData();
     expect(history.get('vi-1')).toEqual({ attempts: 1, misses: 1 });
     expect(await getDb().studyItems.count()).toBe(studyItemsBefore);
+  });
+});
+
+describe('then and now repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  const NOW = new Date('2026-09-27T00:00:00Z');
+  const OLD_REVIEW = new Date('2026-09-01T00:00:00Z'); // 26 days before NOW
+
+  /** A reviewed sentence with a citation-form link, native audio and a current alignment. */
+  async function addReviewedSentence(
+    sentenceId: string,
+    opts: { bookId?: string; suspendedBook?: boolean; reviewedAt?: Date; translation?: string } = {},
+  ) {
+    const { bookId = 'b1', suspendedBook = false, reviewedAt = OLD_REVIEW, translation = `tr ${sentenceId}` } = opts;
+    const db = getDb();
+    await addSentence(sentenceId, 'これは桜です。', { translation });
+    const studyItem = await ensureStudyItem('sentence', sentenceId, 'cloze');
+    await recordReview({ studyItemId: studyItem.id, rating: 'good', now: reviewedAt });
+    if (!(await db.books.get(bookId))) {
+      await db.books.put({ id: bookId, title: bookId, createdAt: T, updatedAt: T, ...(suspendedBook ? { suspendedAt: T } : {}) } as never);
+    }
+    await db.bookSentences.put({ id: `m-${sentenceId}`, bookId, sentenceId, position: 0, status: 'unstarted', addedAt: T } as never);
+    await db.sentenceAudio.put({
+      id: `a-${sentenceId}`,
+      sentenceId,
+      sourceId: 'src',
+      sourceSentenceId: sentenceId,
+      sourceTitle: 'src',
+      mimeType: 'audio/mpeg',
+      durationMs: 3000,
+      startMs: 0,
+      endMs: 3000,
+      blob: new Blob(['x']),
+      importedAt: T,
+    });
+    await db.referenceAlignments.put({
+      id: `a-${sentenceId}`,
+      alignmentVersion: 3,
+      computedAt: T,
+      result: {
+        durationSeconds: 3,
+        words: [
+          { text: 'これは', start: 0, end: 1, phones: [] },
+          { text: '桜', start: 1, end: 1.6, phones: [] },
+          { text: 'です', start: 1.6, end: 3, phones: [] },
+        ],
+      },
+    });
+  }
+
+  it('plays a clip whose word was confirmed after the sentence was first reviewed', async () => {
+    await addReviewedSentence('s1');
+    await addWord('vi-1', '桜', 'さくら');
+    await getDb().vocabularyItems.update('vi-1', { createdAt: '2026-09-20T00:00:00Z' }); // after OLD_REVIEW
+    await addLink('s1', 'vi-1', '桜');
+
+    const clips = await getThenAndNowData({ now: NOW });
+    expect(clips.map((c) => c.sentenceId)).toEqual(['s1']);
+    expect(clips[0]!.thenUnknownWords).toEqual([
+      { vocabularyItemId: 'vi-1', expression: '桜', startMs: 1000, endMs: 1600 },
+    ]);
+    expect(clips[0]!.audio.id).toBe('a-s1');
+  });
+
+  it('drops a sentence whose linked word was already confirmed before the review', async () => {
+    await addReviewedSentence('s1');
+    await addWord('vi-1', '桜', 'さくら');
+    await getDb().vocabularyItems.update('vi-1', { createdAt: '2026-08-01T00:00:00Z' }); // before OLD_REVIEW
+    await addLink('s1', 'vi-1', '桜');
+
+    expect(await getThenAndNowData({ now: NOW })).toEqual([]);
+  });
+
+  it('drops a sentence reviewed too recently for "then" to mean anything', async () => {
+    await addReviewedSentence('s1', { reviewedAt: new Date('2026-09-25T00:00:00Z') }); // 2 days before NOW
+    await addWord('vi-1', '桜', 'さくら');
+    await getDb().vocabularyItems.update('vi-1', { createdAt: '2026-09-26T00:00:00Z' });
+    await addLink('s1', 'vi-1', '桜');
+
+    expect(await getThenAndNowData({ now: NOW })).toEqual([]);
+  });
+
+  it('drops a sentence that lives only in a suspended book, writing nothing either way', async () => {
+    await addReviewedSentence('s1', { bookId: 'shelved', suspendedBook: true });
+    await addWord('vi-1', '桜', 'さくら');
+    await getDb().vocabularyItems.update('vi-1', { createdAt: '2026-09-20T00:00:00Z' });
+    await addLink('s1', 'vi-1', '桜');
+
+    const reviewsBefore = await getDb().reviews.count();
+    expect(await getThenAndNowData({ now: NOW })).toEqual([]);
+    expect(await getDb().reviews.count()).toBe(reviewsBefore);
   });
 });
 

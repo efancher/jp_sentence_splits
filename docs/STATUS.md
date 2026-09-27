@@ -818,6 +818,71 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Then & Now, a tenth `/play` activity — reflective, not
+  scored.** The last of three games picked up from the 2026-09-26 games
+  brainstorm (with Grammar Detective and Speaker Match above). Unlike every
+  other `/play` activity, the roadmap's own description — "replay an old
+  clip with then-unknown words ducked out" — has no right/wrong to grade, so
+  before building it the user was asked to pick the shape: a scored guess-
+  then-reveal round, skip it, or a purely reflective compare with no score.
+  **User picked the reflective compare.** Replays a sentence's native clip
+  with the words that were still unknown back then turned down quiet
+  (`DUCK_LEVEL = 0.12`, not silent), then again at full volume — the
+  difference is audible, not just stated. Writes nothing to `gameRounds` or
+  FSRS.
+  - **New Web Audio primitive**: `src/lib/duckedRangePlayer.ts`
+    (`DuckedRangePlayer`) — no ducking/gain-mixing code existed anywhere in
+    the app before this. Same single-source-node shape as the existing
+    `RangePlayer`, with a `GainNode` inserted between the source and the
+    destination, automated down to `DUCK_LEVEL` over each duck span (with a
+    30 ms fade either side to avoid a click) and back up outside it.
+    Automation times are clamped to a non-decreasing cursor so two duck
+    spans close together can't schedule an earlier `AudioParam` time after
+    a later one (Web Audio rejects that). Not unit-tested (jsdom has no
+    `AudioContext` — same precedent as the untested `rangePlayer.ts`);
+    covered by the manual test plan below.
+  - **"Then" and "then-unknown" are v1 approximations, documented as such
+    in the module doc** (`src/lib/thenAndNow.ts`), not treated as exact:
+    "then" = the sentence's earliest real review (any `sentence`-subject
+    study item, e.g. `cloze`/`reading_in_context`) — a genuine moment the
+    learner had it in front of them, not a guess. "Then-unknown" = a linked
+    word whose `VocabularyItem.createdAt` is *after* that moment. Both can
+    drift from the true story (a word confirmed for unrelated reasons, a
+    re-imported item's `createdAt`), but there's no existing ground truth to
+    do better with in v1. `THEN_AND_NOW_MIN_AGE_DAYS = 14` — below that,
+    "then" doesn't mean anything yet, so those sentences aren't offered.
+  - New repository fetcher `getThenAndNowData()` (`src/db/repository.ts`):
+    earliest-review-per-sentence via `sentence`-subject study items +
+    `reviews`, `isolatedWordRange` for each then-unknown word's clip span
+    (the general-purpose "isolate this word for playback" span, not the
+    pitch-specific `isolatedWordSpans` Odd Ear Out/Speaker Match use — this
+    isn't a pitch card), suspended-book filtering. New `ThenAndNowGame.tsx`
+    (decodes the clip once via `decodeWithRepair`, offers "Then"/"Now" as
+    separate taps — never simultaneous, never from a timer, the iOS audio-
+    gesture rule every game already follows — "Next" stays disabled until
+    both have played at least once). Registered in `src/games/registry.tsx`
+    with `signals: []` (no FSRS signal applies, same as Keystone's signal-
+    less round) and a `loadPools` that skips `signalPoolSizes` entirely
+    (hardcodes `{weak:0,stale:0,strong:0}` since the hub never renders
+    signal chips for an empty `signals` array).
+  - 11 new unit tests (`tests/thenAndNow.test.ts`) + 4 new repository tests
+    (`tests/gameRepository.test.ts`: eligible clip with a resolved span,
+    word-already-known-then rejection, too-recent-to-mean-anything
+    rejection, suspended-book rejection) + 2 new component tests
+    (`tests/thenAndNowGame.test.tsx`, mocking `useSentenceAudioBlob` and
+    `DuckedRangePlayer` — fake-indexeddb hands Blobs back as plain objects
+    in this test env, same known limitation `labelWordAudioPage.test.tsx`
+    already works around). `npm run check` green (179 files, 2141 passed;
+    one unrelated `vocabularyListPage.test.tsx` timeout was a known CPU-
+    contention flake — passed clean on its own).
+  - **Manual test plan:** open `/play`; Then & Now needs a sentence
+    reviewed 14+ days ago whose linked vocabulary has grown since (check
+    the hub's "needs" line if hidden); play a clip, confirm "Then" audibly
+    quiets the named then-unknown word(s) without going silent or clicking
+    at the edges, "Now" plays the full clip at normal volume, and "Next"
+    stays disabled until both have played; confirm no `reviews`/
+    `study_items`/`gameRounds` rows change afterwards.
+
 - **2026-09-27 — Speaker Match, a ninth `/play` game.** Gamifies the
   2026-09-25 "Compare speakers" browse tool
   (`/pitch-accent/compare`/`getPitchAccentSpeakerComparisons`). The roadmap's

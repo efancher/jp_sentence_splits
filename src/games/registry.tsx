@@ -6,6 +6,7 @@ import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
 import { SpeakerMatchGame } from '../components/games/SpeakerMatchGame';
+import { ThenAndNowGame } from '../components/games/ThenAndNowGame';
 import { VerbLegoGame } from '../components/games/VerbLegoGame';
 import {
   ParticlePuzzleGame,
@@ -21,6 +22,7 @@ import {
   getOddEarOutData,
   getParticlePuzzleData,
   getSpeakerMatchData,
+  getThenAndNowData,
   getVerbLegoData,
   getWordDetectiveCandidates,
 } from '../db/repository';
@@ -61,6 +63,7 @@ import {
   SPEAKER_MATCH_GAME_ID,
   SPEAKER_MATCH_MIN_TRIALS,
 } from '../lib/speakerMatch';
+import { THEN_AND_NOW_GAME_ID, THEN_AND_NOW_ROUND_SIZE } from '../lib/thenAndNow';
 import { VERB_LEGO_COPY, VERB_LEGO_GAME_ID, VERB_LEGO_ROUND_SIZE } from '../lib/verbLego';
 import { WORD_DETECTIVE_ROUND_SIZE } from '../lib/wordDetective';
 
@@ -273,6 +276,23 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: EarTilesGame,
+  },
+  {
+    id: THEN_AND_NOW_GAME_ID,
+    title: 'Then & Now',
+    blurb:
+      "Replay a sentence you read a while ago with the words you didn't know back then turned down quiet, then again at full volume. Purely reflective — nothing here is scored.",
+    needs: 'Needs a sentence reviewed a while ago whose linked vocabulary has grown since.',
+    skill: 'noticing your own progress',
+    roundSize: THEN_AND_NOW_ROUND_SIZE,
+    // No FSRS signal applies — this isn't ranked or graded, just a reflective listen.
+    signals: [],
+    signalCopy: DEFAULT_SIGNAL_COPY,
+    loadPools: async () => {
+      const clips = await getThenAndNowData();
+      return { eligible: clips.length, bySignal: { weak: 0, stale: 0, strong: 0 } };
+    },
+    Component: ThenAndNowGame,
   },
 ];
 

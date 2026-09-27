@@ -155,6 +155,7 @@ import {
   type SpeakerMatchHistoryEntry,
   type SpeakerMatchWordSummary,
 } from '../lib/speakerMatch';
+import { buildThenAndNowClip, type ThenAndNowClip } from '../lib/thenAndNow';
 import type { KeystoneCandidate } from '../lib/keystone';
 import {
   isolatedWordRange,
@@ -7186,6 +7187,103 @@ export async function getSpeakerMatchData(): Promise<{
     return { word, clips: comparison.clips.map((clip) => ({ ...clip, ...word })) };
   });
   return { comparisons: mapped, history };
+}
+
+export interface ThenAndNowClipData extends ThenAndNowClip {
+  audio: SentenceAudio;
+}
+
+/**
+ * Data for Then & Now (`/play`): every sentence with a real review history
+ * whose "then" (its earliest review — see `buildThenAndNowClip`) is far
+ * enough in the past, and at least one linked vocabulary word confirmed
+ * *after* that moment with a resolvable clip span to duck. Read-only, and
+ * never writes anything back — this activity has no `gameRounds` log (2026-
+ * 09-27 decision: there's no right/wrong here to grade).
+ */
+export async function getThenAndNowData(options: { now?: Date } = {}): Promise<ThenAndNowClipData[]> {
+  const now = options.now ?? new Date();
+  const db = getDb();
+  const [sentenceStudyItems, suspendedIndex] = await Promise.all([
+    db.studyItems.where('subjectType').equals('sentence').toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  if (sentenceStudyItems.length === 0) return [];
+
+  const sentenceIdByStudyItemId = new Map(sentenceStudyItems.map((s) => [s.id, s.subjectId]));
+  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceIdByStudyItemId.keys()]).toArray();
+  const thenAtBySentenceId = new Map<string, string>();
+  for (const review of reviews) {
+    const sentenceId = sentenceIdByStudyItemId.get(review.studyItemId);
+    if (!sentenceId) continue;
+    const current = thenAtBySentenceId.get(sentenceId);
+    if (!current || review.timestamp < current) thenAtBySentenceId.set(sentenceId, review.timestamp);
+  }
+  const sentenceIds = [...thenAtBySentenceId.keys()].filter(
+    (id) => !(suspendedIndex && sentenceIsSuspendedOnly(id, suspendedIndex)),
+  );
+  if (sentenceIds.length === 0) return [];
+
+  const [sentences, links, audioRows] = await Promise.all([
+    db.sentences.bulkGet(sentenceIds),
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const sentenceById = new Map(
+    sentences.filter((row): row is Sentence => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+
+  const confirmedLinks = links.filter((link) => !!link.surfaceForm);
+  const items = await db.vocabularyItems.bulkGet([
+    ...new Set(confirmedLinks.map((link) => link.vocabularyItemId)),
+  ]);
+  const itemById = new Map(
+    items.filter((row): row is VocabularyItem => Boolean(row)).map((row) => [row.id, row]),
+  );
+  const linksBySentenceId = new Map<string, SentenceVocabulary[]>();
+  for (const link of confirmedLinks) {
+    const list = linksBySentenceId.get(link.sentenceId);
+    if (list) list.push(link);
+    else linksBySentenceId.set(link.sentenceId, [link]);
+  }
+
+  const alignments = await loadAlignmentsBulk(
+    [...new Set([...audioBySentenceId.values()].map((audio) => audio.id))],
+  );
+
+  const clips: ThenAndNowClipData[] = [];
+  for (const sentenceId of sentenceIds) {
+    const sentence = sentenceById.get(sentenceId);
+    const audio = audioBySentenceId.get(sentenceId);
+    if (!sentence || !audio) continue;
+    const alignment = alignments.get(audio.id);
+    const sentenceLinks = linksBySentenceId.get(sentenceId) ?? [];
+    const spanByVocabularyItemId = new Map<string, { startMs: number; endMs: number }>();
+    for (const link of sentenceLinks) {
+      if (!alignment || spanByVocabularyItemId.has(link.vocabularyItemId)) continue;
+      const span = isolatedWordRange(alignment.words, sentence.japanese, link.surfaceForm!);
+      if (span) spanByVocabularyItemId.set(link.vocabularyItemId, span);
+    }
+    const clip = buildThenAndNowClip({
+      sentenceId,
+      japanese: sentence.japanese,
+      translation: sentence.translation ?? '',
+      thenAt: thenAtBySentenceId.get(sentenceId)!,
+      now,
+      links: sentenceLinks.map((link) => ({
+        vocabularyItemId: link.vocabularyItemId,
+        expression: itemById.get(link.vocabularyItemId)?.expression ?? link.surfaceForm!,
+        createdAt: itemById.get(link.vocabularyItemId)?.createdAt ?? '',
+      })),
+      spanByVocabularyItemId,
+    });
+    if (clip) clips.push({ ...clip, audio });
+  }
+  return clips;
 }
 
 const BUILT_RECIPES_BY_ID = new Map(BUILT_RECIPES.map((recipe) => [recipe.id, recipe]));
