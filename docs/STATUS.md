@@ -818,6 +818,49 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Four fixes off a real-data weakness scan: biased pitch-
+  drill practice, best-effort auto-play on the miss contrast, a long-word
+  scaffold on the `pitch_accent` card, and a named fix in the new-card
+  backlog nudge.** A one-off Supabase pull (reusing `errorMix.ts`/
+  `selfRatingCalibration.ts`/`skillCoverage.ts`/`fsrsConfidence.ts`/
+  `stepUsefulness.ts` against real `reviews`/`study_items`/
+  `planner_sessions` rows, plus `report-pitch-drill-effectiveness.ts`)
+  found pitch accent dominating the error mix (59-65% of all classified
+  misses, the only *worsening* category) with the basic hl-vs-lh contrast
+  barely discriminated (d' = 0.35) and long shapes (`lhhl` 36%, `hll` 40%)
+  far worse than short ones. Four scoped fixes, no scoring/schema changes:
+  (1) `weightedSeededShuffle` (`seededShuffle.ts`, Efraimidis-Spirakis
+  weighted reservoir key) surfaces 2-mora words ~2x as often in
+  `PitchAccentDrillPage`'s word-mode pool via `pitchDrillWordWeight`,
+  without making the queue fully predictable. (2) `PitchContrastExample`'s
+  "hear what your pick sounds like" clip now attempts to play itself the
+  moment it's ready instead of waiting for a second click (only 6 of 48
+  offered contrasts were ever manually played) — best-effort: a blocked
+  autoplay silently leaves the manual button as the fallback, never shows
+  an error. This needed two supporting fixes to be safe: `useRangeLoop`
+  now treats a `NotAllowedError` specially (not a broken clip — skip the
+  blob-repair retry and the "Unable to play this word on this device"
+  message), and `playLoopedRange` (`recording.ts`) now passes a
+  `DOMException` through unwrapped even when `instanceof Error` is false —
+  confirmed via a real jsdom run that `instanceof Error` on a `DOMException`
+  is *not* reliably true across engines (jsdom itself says false, and nothing
+  guarantees Safari agrees), which would have silently defeated the
+  `NotAllowedError` check on exactly the browsers already flagged for
+  audio-gesture quirks. (3) `PitchAccentCard` (`ReviewPage.tsx`) gates its
+  N+1-way fall-position buttons behind a coarse "early half / late half"
+  picker for 4+ mora words, so a long word never asks for more than ~3
+  contour diagrams to be compared at once instead of up to 6. (4) The
+  session planner's new-card-backlog explanation line now adds a second
+  sentence — "raise 'New cards per review session' in Settings" — once the
+  backlog is more than `NEW_CARD_BACKLOG_NUDGE_SESSIONS_THRESHOLD` (10)
+  sessions from draining at the current pace, instead of only naming the
+  count. `npm run check` green; new/updated coverage in
+  `tests/seededShuffle.test.ts` (weighted-shuffle bias + determinism),
+  `tests/sessionPlanner.test.ts` (nudge appears/doesn't at the threshold),
+  `tests/recording.test.ts` (`NotAllowedError` survives `loopRange`
+  unwrapped), and `tests/reviewPage.test.tsx` (the four pitch-accent tests
+  touching 4-5 mora words updated to click through the new half-picker).
+
 - **2026-09-27 — Odd Ear Out: a "Clip sounds wrong? Fix it" editor for a
   bad word-only clip, and the fix reaches Speaker Match too.** User report:
   some Odd Ear Out clips are cut wrong. The game deliberately never

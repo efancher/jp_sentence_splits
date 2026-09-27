@@ -1032,6 +1032,21 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     still wrong. Logged per attempt (`PitchDrillAttempt.fallTimingErrorMorae`/`fallMagnitudeRatio`) for
     a weekly trend in `report-pitch-drill-effectiveness.ts`; data starts accumulating from this point on.
     See STATUS.md.
+  - [x] **Weighted practice + auto-play + long-word scaffold.** (2026-09-27,
+    from a full weakness scan across `reviews`/`study_items`: d′ = 0.35 on
+    hl-vs-lh — still essentially the "no discrimination" reading from the
+    2026-09-19 pull above — and long shapes far worse than short ones,
+    `lhhl` 36%/`hll` 40% vs. `hl`/`lh` 53-61%.) `PitchAccentDrillPage`'s
+    word-mode pool now surfaces 2-mora words ~2x as often
+    (`weightedSeededShuffle`); the "what your pick sounds like" miss
+    contrast now attempts to auto-play instead of waiting for a second
+    click (only 6 of 48 offered were ever manually played); the
+    `pitch_accent` SRS card gates 4+ mora words behind a coarse early-half/
+    late-half picker before showing individual fall-position buttons, so a
+    long word never compares more than ~3 contours at once instead of up to
+    6. See STATUS.md 2026-09-27 for the full writeup, including the
+    autoplay-safety fix this needed (`DOMException instanceof Error` isn't
+    reliable across engines).
   - [ ] **Hear-vs-say per-word table** (perception from card reviews vs
     production from `pitch_drill_attempts`). Premature — only ~71 drill takes so
     far; revisit once there is volume.
