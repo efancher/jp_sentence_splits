@@ -3960,6 +3960,7 @@ export async function getBlindSpots(): Promise<BlindSpots> {
     workedBookIds,
     confirmedKeys,
     grammar: grammarSummaries.map((summary) => ({
+      patternId: summary.pattern.id,
       name: summary.pattern.canonicalName,
       encounterCount: summary.encounterCount,
       worthLearningNow: summary.priorityBucket === 'worth_learning_now',

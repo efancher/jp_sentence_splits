@@ -280,13 +280,13 @@ export function ProgressPage() {
       </section>
       ) : null}
 
-      {(blindSpots && (blindSpots.vocab.length > 0 || blindSpots.grammar.worthLearningNowCount > 0)) ||
+      {(blindSpots && (blindSpots.vocab.length > 0 || blindSpots.grammar.length > 0)) ||
       report?.hasData ? (
       <section className="panel stack">
         <h3 style={{ margin: 0 }}>Blind spots</h3>
         {blindSpots === undefined ? (
           <p className="muted">Loading…</p>
-        ) : blindSpots.vocab.length === 0 && blindSpots.grammar.worthLearningNowCount === 0 ? (
+        ) : blindSpots.vocab.length === 0 && blindSpots.grammar.length === 0 ? (
           <p className="muted">
             Nothing unaccounted for — every recurring word and pattern in the books you've worked
             is confirmed.
@@ -321,27 +321,28 @@ export function ProgressPage() {
                 </Link>
               </div>
             ))}
-            {blindSpots.grammar.worthLearningNowCount > 0 ? (
+            {blindSpots.grammar.map((pattern) => (
               <div
+                key={pattern.patternId}
                 className="row"
                 style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
               >
                 <span>
-                  {blindSpots.grammar.worthLearningNowCount} grammar{' '}
-                  {blindSpots.grammar.worthLearningNowCount === 1 ? 'pattern' : 'patterns'} worth
-                  learning now
-                  {blindSpots.grammar.topNames.length > 0 ? (
-                    <span className="muted" style={{ fontSize: '0.8rem' }}>
-                      {' '}
-                      · {blindSpots.grammar.topNames.join(', ')}
-                    </span>
-                  ) : null}
+                  {pattern.name}
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {' '}
+                    · encountered {pattern.encounterCount}×
+                  </span>
                 </span>
-                <Link to="/grammar" className="muted" style={{ fontSize: '0.85rem' }}>
-                  Grammar →
+                <Link
+                  to={`/grammar/${pattern.patternId}`}
+                  className="muted"
+                  style={{ fontSize: '0.85rem' }}
+                >
+                  View →
                 </Link>
               </div>
-            ) : null}
+            ))}
           </>
         )}
       </section>

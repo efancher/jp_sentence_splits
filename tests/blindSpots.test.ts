@@ -128,17 +128,19 @@ describe('buildBlindSpots', () => {
     expect(result.vocab[0]).toMatchObject({ sentenceCount: 3, bookCount: 2 });
   });
 
-  it('reports the grammar worth-learning-now count and top names', () => {
+  it('surfaces worth-learning-now grammar patterns, ranked by encounter count', () => {
     const result = buildBlindSpots(
       baseInput({
         grammar: [
-          { name: '～わけがない', encounterCount: 5, worthLearningNow: true },
-          { name: '～きり', encounterCount: 3, worthLearningNow: true },
-          { name: '～ている', encounterCount: 40, worthLearningNow: false },
+          { patternId: 'p1', name: '～わけがない', encounterCount: 5, worthLearningNow: true },
+          { patternId: 'p2', name: '～きり', encounterCount: 3, worthLearningNow: true },
+          { patternId: 'p3', name: '～ている', encounterCount: 40, worthLearningNow: false },
         ],
       }),
     );
-    expect(result.grammar.worthLearningNowCount).toBe(2);
-    expect(result.grammar.topNames).toEqual(['～わけがない', '～きり']);
+    expect(result.grammar).toEqual([
+      { patternId: 'p1', name: '～わけがない', encounterCount: 5 },
+      { patternId: 'p2', name: '～きり', encounterCount: 3 },
+    ]);
   });
 });

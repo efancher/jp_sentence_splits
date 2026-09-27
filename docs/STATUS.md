@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-26.
+Last updated: 2026-09-27.
 
 ## Where things stand
 
@@ -817,6 +817,24 @@ what's left is one deferred durability item (below).
   flagged as approximate.
 
 ## Recent changes
+
+- **2026-09-27 — Grammar blind spots on `/progress` became per-pattern rows
+  with a deep link, matching vocab's shape.** Previously the "Blind spots"
+  panel's grammar half was a single collapsed line (count + top 3 names,
+  linking generically to `/grammar`) while vocab already listed individual
+  words with a "Confirm →" link to the exact sentence. The underlying data
+  (`worth_learning_now` bucket: untracked + encountered ≥3 times) was
+  already fully computed by `listGrammarPatternSummaries`, just discarded
+  down to an aggregate in `buildBlindSpots`. Changed `BlindSpots.grammar`
+  from `{ worthLearningNowCount, topNames }` to a ranked `BlindSpotGrammar[]`
+  (`patternId`, `name`, `encounterCount`, top 10 by encounter count —
+  `BLIND_SPOT_GRAMMAR_TOP_N` in `src/lib/blindSpots.ts`); `getBlindSpots`
+  (`src/db/repository.ts`) now threads `summary.pattern.id` through.
+  `ProgressPage.tsx` renders one row per pattern with a "View →" link to
+  the existing `/grammar/:patternId` detail route (`GrammarPatternDetailPage`),
+  the same route `GrammarListPage` already links each row to. Updated
+  `tests/blindSpots.test.ts`'s grammar case to the new array shape. `npm run
+  check` green (175 files, 2130 passed).
 
 - **2026-09-27 — Vocab picker: できる closing a こと+が chain (the
   "ことができる" ability construction) no longer default-checks as

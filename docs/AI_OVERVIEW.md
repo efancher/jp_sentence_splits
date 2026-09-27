@@ -522,10 +522,12 @@ trend on the same `.progress-bar` meter. Read-only, recomputed on load,
 nothing stored. Two further panels (2026-09-08) answer "what next" rather
 than "how am I doing": **Blind spots** (`src/lib/blindSpots.ts` /
 `getBlindSpots`) — vocabulary (tokenizer + Satori suggestions +
-`targetVocabulary`) and grammar (the `worth_learning_now` bucket) that
-recur across books the learner has actually worked but were never confirmed
-/ tracked, distinct from the new-card backlog; each vocab row deep-links to
-that sentence's `VocabularyReviewPage`. **What to work on**
+`targetVocabulary`) and grammar (the `worth_learning_now` bucket, ranked by
+encounter count, top 10) that recur across books the learner has actually
+worked but were never confirmed / tracked, distinct from the new-card
+backlog; each vocab row deep-links to that sentence's
+`VocabularyReviewPage`, each grammar row to that pattern's
+`/grammar/:patternId` detail page. **What to work on**
 (`src/lib/errorMix.ts` / `getErrorMix`) — `Review.errorClassification`
 (written by `classifyReviewError`, otherwise only visible as raw JSON on
 `StudyItemDebugPage`) aggregated into a ranked breakdown with a
