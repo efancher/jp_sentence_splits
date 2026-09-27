@@ -818,6 +818,44 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Content follow-up: hand-confirmed the actual homophone
+  vocab from the "#116 Learning Homophones" podcast, direct against prod
+  Supabase (not the app UI).** Once the gating fix above shipped, the
+  remaining blocker was that this book had almost no confirmed vocab (1
+  linked word out of 221 sentences). Read the full transcript and found 8
+  taught homophone groups (23 words total: いがい, きかい, こうそく, きせい,
+  かいとう ×3, かんき ×3, こうえん ×4, こうしょう ×5), but audio import only
+  reached position ~112/221 — the かんき/こうえん/こうしょう groups (12 words)
+  have no reference audio at all yet and were left unconfirmed; that's a
+  separate mining/import gap, not something this pass could fix. For the
+  5 audio-backed groups (いがい/きかい/こうそく/きせい/かいとう, 11 words),
+  picked each word's cleanest citation-form quoted sentence, cross-checked
+  reading/POS against the sentence's own `vocabularySuggestions`, and wrote
+  `vocabulary_items` (8 new + 3 pre-existing reused)/`vocabulary_kanji`/
+  `sentence_vocabulary` (with `surfaceForm` set — the confirmed-vocabulary-
+  links backfill script's materialization path leaves this blank, which
+  would have silently failed the citation-form gate)/`analyses`
+  (`vocabularyReviewStatus: 'confirmed'`) directly via a throwaway script
+  mirroring `scripts/backfill-confirmed-vocabulary-links.ts`'s exact
+  get-or-create/upsert shape, dry-run validated before `--apply`. Then ran
+  `backfill:pitch-accent` (Kanjium) to fill `pitchAccentPositions` for the
+  new items. **Verified end-to-end against prod**: of the 5 groups, only
+  いがい (以外 atamadaka/pos 1 vs 意外 heiban/pos 0) actually differs in
+  pitch-accent shape and is Homophone-Hunt-playable — きかい/こうそく/きせい/
+  かいとう's members are true homophones (different kanji, identical
+  reading) but Kanjium lists them as sharing the *same* accent shape
+  (mostly heiban), so they don't meet this game's stricter "also differs in
+  accent" bar, though they're now legitimately confirmed vocabulary for
+  every other purpose. `機会` (きかい) itself has an ambiguous Kanjium entry
+  (2 vs 0, order untrustworthy) and was left blank for hand-check like the
+  42 other pre-existing ambiguous items — resolving it correctly could add
+  a second playable pair (機会/機械) if it turns out to differ from 機械's
+  pos 2. Remaining step outside script reach: reference alignment is
+  local-only (per-device Dexie cache, not synced), so the user still needs
+  to open the book and run "Precompute word audio alignment" (or just open
+  `/play` — Homophone Hunt should show the 以外/意外 pair once alignment
+  resolves).
+
 - **2026-09-27 — Homophone Hunt (and its shared warm-up) switched from
   FSRS-proficiency gating to confirmed-vocab gating.** User added a podcast
   specifically to seed Homophone Hunt, then suspended it from shadowing
