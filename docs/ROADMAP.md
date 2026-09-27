@@ -472,10 +472,16 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
       shape (or which is which). Pool-size caveat from that tool carries
       over (cross-book same-word overlap after Odd Ear Out's span/suspended-
       book filters is the limiting factor, not code).
-    - **Grammar Detective** (grammar, M) — Word Detective's clue-ladder
-      format sourced from `grammar_completion` misses instead of vocab
-      leeches, reusing the passage-context convention `grammar_completion`
-      already uses (`getReadingContextForSentence`).
+    - ~~**Grammar Detective**~~ **[shipped 2026-09-27 — see STATUS]** (grammar, M) —
+      Word Detective's clue-ladder format sourced from `grammar_completion`
+      misses instead of vocab leeches, reusing the passage-context convention
+      `grammar_completion` already uses (`pickContextSentenceForGrammarPattern`).
+      Built with a looser eligibility bar than Word Detective: needs only the
+      one tracked sentence the review card already requires (translation
+      present), not a second distinct occurrence — passage context is the
+      differentiator clue instead, and degrades away when a pattern has none.
+      62 of 93 prod patterns eligible (2026-09-27 feasibility check); only 12
+      have 2+ sentences, confirming the looser bar was the right call.
   - **Phases:** **P1 — DONE 2026-09-19** (`GameShell`, `src/lib/gamePicker.ts`,
     `/play` hub + Home shortcut, local `gameRounds` log, **Word Detective**; see
     STATUS.md). **Particle Puzzle also shipped 2026-09-19** (candidate #4 below;

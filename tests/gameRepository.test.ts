@@ -6,6 +6,7 @@ import {
   getDb,
   getEarTilesCandidates,
   getGamesProgress,
+  getGrammarDetectiveCandidates,
   getKeystoneCandidates,
   getOddEarOutData,
   getParticlePuzzleData,
@@ -16,7 +17,7 @@ import {
   logGameRound,
   recordReview,
 } from '../src/db/repository';
-import type { Sentence, SentenceVocabulary } from '../src/domain/types';
+import type { GrammarPattern, Sentence, SentenceGrammar, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
 
 const T = '2026-09-19T00:00:00Z';
@@ -185,6 +186,102 @@ describe('game repository', () => {
     expect(weak).toMatchObject({ items: 2, correct: 1, accuracy: 0.5 });
     expect(progress.cuedVsFsrs.fsrsPassRate).toBeCloseTo(0.5);
     expect(progress.cuedVsFsrs.gap).toBeCloseTo(0);
+  });
+});
+
+async function addGrammarPattern(id: string, canonicalName: string, overrides: Partial<GrammarPattern> = {}) {
+  await getDb().grammarPatterns.add({
+    id,
+    canonicalName,
+    normalizedKey: canonicalName,
+    aliases: [],
+    shortMeaning: 'm',
+    provenance: 'manual',
+    createdAt: T,
+    updatedAt: T,
+    ...overrides,
+  });
+}
+
+async function addGrammarLink(sentenceId: string, grammarPatternId: string, surfaceForm?: string) {
+  const link: SentenceGrammar = {
+    id: createId('sg'),
+    sentenceId,
+    grammarPatternId,
+    surfaceForm,
+    confirmedByLearner: true,
+    source: 'manual',
+    createdAt: T,
+    updatedAt: T,
+  };
+  await getDb().sentenceGrammar.add(link);
+}
+
+describe('grammar detective repository', () => {
+  beforeEach(() => {
+    resetDbForTests(`game-repo-${createId('db')}`);
+  });
+
+  it('plays a pattern from a single tracked, translated sentence', async () => {
+    await addGrammarPattern('gp-1', '〜わけがない');
+    await addSentence('s1', '彼が犯人なわけがない。');
+    await addGrammarLink('s1', 'gp-1', 'わけがない');
+
+    const candidates = await getGrammarDetectiveCandidates();
+    expect(candidates.map((c) => c.id)).toEqual(['gp-1']);
+    expect(candidates[0]!.word.sentenceId).toBe('s1');
+    expect(candidates[0]!.stats.hasCard).toBe(false);
+  });
+
+  it('drops a pattern whose only sentence has no translation', async () => {
+    await addGrammarPattern('gp-1', '〜わけがない');
+    await addSentence('s1', '彼が犯人なわけがない。', { translation: '' });
+    await addGrammarLink('s1', 'gp-1', 'わけがない');
+
+    expect(await getGrammarDetectiveCandidates()).toEqual([]);
+  });
+
+  it('reflects a real grammar_completion lapse in the stats without writing anything, and ignores other activity types', async () => {
+    await addGrammarPattern('gp-1', '〜わけがない');
+    await addSentence('s1', '彼が犯人なわけがない。');
+    await addGrammarLink('s1', 'gp-1', 'わけがない');
+    const completionCard = await ensureStudyItem('grammarPattern', 'gp-1', 'grammar_completion');
+    for (let i = 0; i < 3; i += 1) {
+      await recordReview({
+        studyItemId: completionCard.id,
+        rating: 'good',
+        now: new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    await recordReview({
+      studyItemId: completionCard.id,
+      rating: 'again',
+      now: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    });
+    const recognitionCard = await ensureStudyItem('grammarPattern', 'gp-1', 'grammar_recognition');
+    for (let i = 0; i < 3; i += 1) {
+      await recordReview({
+        studyItemId: recognitionCard.id,
+        rating: 'good',
+        now: new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    await recordReview({
+      studyItemId: recognitionCard.id,
+      rating: 'again',
+      now: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    });
+    await recordReview({
+      studyItemId: recognitionCard.id,
+      rating: 'again',
+      now: new Date(Date.now() + 260 * 24 * 60 * 60 * 1000),
+    });
+
+    const studyItemsBefore = await getDb().studyItems.toArray();
+    const [candidate] = await getGrammarDetectiveCandidates();
+    expect(candidate!.stats.hasCard).toBe(true);
+    expect(candidate!.stats.lapses).toBe(1); // only the grammar_completion lapse, not grammar_recognition's
+    expect(await getDb().studyItems.toArray()).toEqual(studyItemsBefore);
   });
 });
 

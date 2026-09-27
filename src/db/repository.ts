@@ -147,6 +147,7 @@ import {
 } from '../lib/gamePicker';
 import { buildGamesProgress, type GamesProgress } from '../lib/gamesProgress';
 import { buildWordDetectiveWord, type WordDetectiveWord } from '../lib/wordDetective';
+import { buildGrammarDetectiveWord, type GrammarDetectiveWord } from '../lib/grammarDetective';
 import type { KeystoneCandidate } from '../lib/keystone';
 import {
   isolatedWordRange,
@@ -6523,6 +6524,78 @@ export async function getWordDetectiveCandidates(
       id: item.id,
       word,
       stats: summarizeCardStats(statesByItemId.get(item.id) ?? [], now),
+    });
+  }
+  return candidates;
+}
+
+export interface GrammarDetectiveCandidate extends PickerCandidate {
+  word: GrammarDetectiveWord;
+}
+
+/**
+ * Every tracked grammar pattern that can be played in Grammar Detective
+ * (`buildGrammarDetectiveWord`'s eligibility), with the FSRS stats of its
+ * `grammar_completion` card (the "misses" signal the roadmap asks for,
+ * mirroring Word Detective's vocab-lapse ranking). Reuses
+ * `pickContextSentenceForGrammarPattern` — the same sentence + passage
+ * context the review card itself shows — rather than re-deriving it, so a
+ * pattern only needs the one tracked encounter the review card already
+ * requires. Read-only.
+ */
+export async function getGrammarDetectiveCandidates(
+  options: { now?: Date } = {},
+): Promise<GrammarDetectiveCandidate[]> {
+  const now = options.now ?? new Date();
+  const db = getDb();
+  const [patterns, suspendedIndex, studyItems] = await Promise.all([
+    db.grammarPatterns.toArray(),
+    loadSuspendedBookIndex(),
+    db.studyItems.where('subjectType').equals('grammarPattern').toArray(),
+  ]);
+  if (patterns.length === 0) return [];
+
+  const statesByPatternId = new Map<string, FsrsState[]>();
+  for (const studyItem of studyItems) {
+    if (studyItem.activityType !== 'grammar_completion') continue;
+    const list = statesByPatternId.get(studyItem.subjectId);
+    if (list) list.push(studyItem.fsrsState);
+    else statesByPatternId.set(studyItem.subjectId, [studyItem.fsrsState]);
+  }
+
+  const picks: {
+    pattern: GrammarPattern;
+    sentence: Sentence;
+    sentenceGrammar: SentenceGrammar;
+    readingContext: ReadingContext;
+  }[] = [];
+  for (const pattern of patterns) {
+    const picked = await pickContextSentenceForGrammarPattern(pattern.id, suspendedIndex);
+    if (picked) picks.push({ pattern, ...picked });
+  }
+  if (picks.length === 0) return [];
+
+  const sentenceIds = [...new Set(picks.map((pick) => pick.sentence.id))];
+  const audioRows = await db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray();
+  const audioBySentenceId = new Map<string, SentenceAudio>();
+  for (const audio of audioRows) {
+    if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
+  }
+
+  const candidates: GrammarDetectiveCandidate[] = [];
+  for (const { pattern, sentence, sentenceGrammar, readingContext } of picks) {
+    const word = buildGrammarDetectiveWord({
+      pattern,
+      sentence,
+      sentenceGrammar,
+      readingContext,
+      audio: audioBySentenceId.get(sentence.id),
+    });
+    if (!word) continue;
+    candidates.push({
+      id: pattern.id,
+      word,
+      stats: summarizeCardStats(statesByPatternId.get(pattern.id) ?? [], now),
     });
   }
   return candidates;

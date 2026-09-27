@@ -818,6 +818,48 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-27 — Grammar Detective, a sixth `/play` game.** Word Detective's
+  clue-ladder format (docs/ROADMAP.md's 2026-09-26 brainstorm), sourced from
+  tracked grammar patterns' `grammar_completion` misses instead of vocab
+  leeches. New pure module `src/lib/grammarDetective.ts`
+  (`buildGrammarDetectiveWord`, `buildGrammarClueLadder`,
+  `isGrammarDetectiveAnswerCorrect` — reuses the review card's own
+  `isGrammarPatternAnswerCorrect`, `describeGrammarPick`/
+  `GRAMMAR_DETECTIVE_COPY` for grammar-worded "why" text instead of the
+  generic vocabulary-worded `describePick`); new repository fetcher
+  `getGrammarDetectiveCandidates()` (`src/db/repository.ts`) that reuses
+  `pickContextSentenceForGrammarPattern` — the exact sentence + passage
+  context the `grammar_completion` review card already shows — rather than
+  re-deriving eligibility; new `GrammarDetectiveGame.tsx`; registered in
+  `src/games/registry.tsx`.
+  **Deliberately looser eligibility than Word Detective**: needs only the
+  one tracked sentence the review card already requires (canonical name +
+  a translation), not a second distinct occurrence — the clue ladder's
+  differentiator is the pattern's existing reading-order passage context
+  instead (`context` clue, omitted gracefully when there is none, same as
+  the optional `meaning`/`audio` clues). Most tracked patterns only have one
+  sentence, so a second-occurrence requirement (Word Detective's own bar)
+  would have starved the game — the "check gate eligibility before
+  shipping" lesson. Clue ladder mirrors Word Detective 1:1 (translation →
+  context → meaning/role → first kana of the tilde-stripped canonical name
+  → audio), same scoring (`MAX_GRAMMAR_POINTS = 5`, same
+  clues-used-minus-wrong-guesses formula). 2026-09-27 feasibility check
+  against prod: 93 grammar patterns total, 62 with a translated tracked
+  sentence (eligible), only 12 with 2+ distinct sentences — confirms the
+  looser bar was necessary, not just a simplification. 1 pattern currently
+  has a real `grammar_completion` lapse (the `weak` signal falls back
+  gracefully when thin, same as every other game). 11 new unit tests
+  (`tests/grammarDetective.test.ts`) + 3 new repository tests
+  (`tests/gameRepository.test.ts`: single-sentence eligibility, no-
+  translation rejection, `grammar_completion`-only lapse counting ignoring
+  `grammar_recognition`). `npm run check` green (173 files, 2117 passed).
+  **Manual test plan:** open `/play`; Grammar Detective needs 3+ tracked
+  patterns with a translated sentence (likely present in prod per the
+  feasibility check — 62 available); play a round, confirm the blanked
+  sentence, clue ladder (context/role/first-kana/audio, whichever apply),
+  and typed-answer grading against the canonical name feel right; confirm
+  no `reviews`/`study_items` rows change afterwards.
+
 - **2026-09-26 — Ambient connective tissue in the reveal.** Picked up from
   the ROADMAP's analytics/coherence "Possibilities" list. Two small,
   independent, ungraded additions to existing review cards — reinforcement

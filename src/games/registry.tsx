@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import { EarTilesGame, EAR_TILES_COPY } from '../components/games/EarTilesGame';
+import { GrammarDetectiveGame, GRAMMAR_DETECTIVE_GAME_ID } from '../components/games/GrammarDetectiveGame';
 import { HomophoneHuntGame } from '../components/games/HomophoneHuntGame';
 import { KeystoneGame } from '../components/games/KeystoneGame';
 import { OddEarOutGame } from '../components/games/OddEarOutGame';
@@ -13,6 +14,7 @@ import {
 import { WordDetectiveGame, WORD_DETECTIVE_GAME_ID } from '../components/games/WordDetectiveGame';
 import {
   getEarTilesCandidates,
+  getGrammarDetectiveCandidates,
   getHomophoneHuntData,
   getKeystoneCandidates,
   getOddEarOutData,
@@ -36,6 +38,10 @@ import {
   HOMOPHONE_HUNT_MIN_TRIALS,
   HOMOPHONE_HUNT_ROUND_SIZE,
 } from '../lib/homophoneHunt';
+import {
+  GRAMMAR_DETECTIVE_COPY,
+  GRAMMAR_DETECTIVE_ROUND_SIZE,
+} from '../lib/grammarDetective';
 import { KEYSTONE_GAME_ID, KEYSTONE_ROUND_SIZE } from '../lib/keystone';
 import {
   buildContrastCandidates,
@@ -200,6 +206,22 @@ export const GAMES: readonly GameDef[] = [
       return { eligible: trials.length, bySignal: signalPoolSizes(candidates) };
     },
     Component: HomophoneHuntGame,
+  },
+  {
+    id: GRAMMAR_DETECTIVE_GAME_ID,
+    title: 'Grammar Detective',
+    blurb:
+      "A mystery grammar construction from a sentence you've tracked. Type the construction — spend clues (passage context, its role, first kana, audio) to narrow it down, fewer clues score higher.",
+    needs: 'Needs tracked grammar patterns whose sentence has a translation.',
+    skill: 'grammar construction recall',
+    roundSize: GRAMMAR_DETECTIVE_ROUND_SIZE,
+    signals: GAME_SIGNALS,
+    signalCopy: GRAMMAR_DETECTIVE_COPY,
+    loadPools: async () => {
+      const candidates = await getGrammarDetectiveCandidates();
+      return { eligible: candidates.length, bySignal: signalPoolSizes(candidates) };
+    },
+    Component: GrammarDetectiveGame,
   },
   {
     id: EAR_TILES_GAME_ID,
