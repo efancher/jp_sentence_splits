@@ -31,6 +31,42 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Grammar patterns auto-track once vocab-ready, instead of
+  waiting for a manual "Track" revisit.** User asked why so little data
+  exists for a proposed grammar-discrimination card; investigation found
+  `grammar_relationships` (`commonly_confused`) has zero rows at all and
+  only ~5 of 68 annotated patterns had ever been Tracked. A follow-up
+  real-data check (99 `grammar_patterns`, 89 `sentence_grammar` links across
+  50 sentences) found the gap wasn't the readiness bar being too strict —
+  46 of 68 annotated patterns (68%) were already Track-eligible *today* and
+  simply never got the manual tap; only 11 sentences were genuinely not
+  ready yet, and of those, 10 already had vocab confirmed and just needed
+  more review reps (normal FSRS ramp-up, not stuck). User confirmed the
+  gate itself should stay strict (vocab proficiency first — "very difficult
+  to understand the grammar of a sentence you don't recognize the
+  vocabulary for"), so the fix targets the *revisit* gap, not the gate.
+  New `getAutoTrackEligibleGrammarCandidates` (`src/db/repository.ts`) finds
+  annotated-but-untracked patterns whose linked sentence now passes
+  `getSentenceFullReviewReadiness` — the exact bar `GrammarPicker`'s Track
+  button already uses — and `ReviewPage`'s grammar scope-building
+  (`src/pages/ReviewPage.tsx`) folds them into the same `grammarCandidates`
+  list tracked patterns use, so they flow through the ordinary lazy-seed
+  pool at the same `newCardsPerSessionLimit` pace every other new card
+  gets, rather than a one-shot flood of 46 patterns at once. The manual
+  Track button is unchanged (still an immediate accelerant, bypassing that
+  pacing) — this only removes the requirement to come back once the
+  condition it already checks is true, matching every other readiness gate
+  in the app (shadowing, `reading_in_context`, `continue_book`), which
+  already auto-unlock without a manual step. New tests:
+  `getAutoTrackEligibleGrammarCandidates` (eligible/not-eligible/already-
+  tracked) in `tests/data.test.ts`, plus a `ReviewPage` integration test
+  proving an untracked pattern actually gets seeded on `/review` load.
+  **Manual test plan:** annotate a grammar pattern on a sentence whose
+  vocabulary is already fully confirmed+proficient elsewhere, don't click
+  Track, then open `/review` — the pattern should show up as a
+  `grammar_recognition` card ("What is X doing in this sentence?") without
+  ever visiting `GrammarPicker` again.
+
 - **2026-09-28 — Opt-in single-sentence deep dive.** (docs/ROADMAP.md) New
   `SentenceDeepDivePage` (`/sentences/:sentenceId/deep-dive`, linked from
   `/progress`'s "Sentence mastery" panel) walks one lagging sentence's

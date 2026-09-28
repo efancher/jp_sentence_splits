@@ -8718,6 +8718,77 @@ export async function pickContextSentenceForGrammarPattern(
   return undefined;
 }
 
+export interface AutoTrackableGrammarCandidate {
+  pattern: GrammarPattern;
+  sentence: Sentence;
+  sentenceGrammar: SentenceGrammar;
+  readingContext: ReadingContext;
+}
+
+/**
+ * Annotated-but-never-Tracked patterns whose vocabulary has now caught up
+ * enough to review — same eligibility bar `GrammarPicker`'s manual "Track"
+ * button uses (`getSentenceFullReviewReadiness`), just without requiring the
+ * learner to revisit that sentence's Analyze page once the condition is
+ * already true (2026-09-28 — a real-data check found 68% of eligible
+ * patterns were never Tracked for exactly this "forgot to come back" reason,
+ * not because the gate itself was too strict). Every other readiness gate
+ * in the app already auto-unlocks without a manual step; this makes
+ * grammar consistent with that.
+ *
+ * Feeds `ReviewPage`'s ordinary lazy-seed pool (`descriptor.candidates`),
+ * so a newly-eligible pattern is seeded one at a time under the same
+ * `newCardsPerSessionLimit` pacing every other new card gets — deliberately
+ * not a bulk one-shot seed, since many patterns can become eligible at once
+ * and flooding the queue would be its own regression.
+ *
+ * One candidate per pattern: its most-recently-linked sentence that is both
+ * ready and not suspended-only, mirroring `pickContextSentenceForGrammarPattern`'s
+ * own tie-break — callers pass the *same* `trackedPatternIds`/`suspendedIndex`
+ * they already computed for that function, so an already-tracked pattern is
+ * never double-counted here.
+ */
+export async function getAutoTrackEligibleGrammarCandidates(
+  trackedPatternIds: Set<string>,
+  suspendedIndex?: SuspendedBookIndex | null,
+): Promise<AutoTrackableGrammarCandidate[]> {
+  const db = getDb();
+  const untrackedLinks = (await db.sentenceGrammar.toArray()).filter(
+    (link) => !trackedPatternIds.has(link.grammarPatternId),
+  );
+  if (untrackedLinks.length === 0) return [];
+
+  const linksByPattern = new Map<string, SentenceGrammar[]>();
+  for (const link of untrackedLinks) {
+    const arr = linksByPattern.get(link.grammarPatternId);
+    if (arr) arr.push(link);
+    else linksByPattern.set(link.grammarPatternId, [link]);
+  }
+
+  const readiness = await getSentenceFullReviewReadiness([
+    ...new Set(untrackedLinks.map((link) => link.sentenceId)),
+  ]);
+
+  const results: AutoTrackableGrammarCandidate[] = [];
+  for (const [patternId, links] of linksByPattern) {
+    const sorted = [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const readyLink = sorted.find(
+      (link) =>
+        readiness.get(link.sentenceId) === true &&
+        !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
+    );
+    if (!readyLink) continue;
+    const [pattern, sentence] = await Promise.all([
+      db.grammarPatterns.get(patternId),
+      db.sentences.get(readyLink.sentenceId),
+    ]);
+    if (!pattern || !sentence) continue;
+    const readingContext = await getReadingContextForSentence(sentence.id);
+    results.push({ pattern, sentence, sentenceGrammar: readyLink, readingContext });
+  }
+  return results;
+}
+
 /** Get-or-create a grammarPattern-subject study item for a given activityType — thin wrapper, mirrors ensureVocabularyStudyItem. */
 export async function ensureGrammarStudyItem(
   grammarPatternId: string,

@@ -562,6 +562,13 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   and if `commonly_confused` links get seeded some other way (manual
   authoring, or an AI-suggested pass) in the meantime, that would remove
   the bigger blocker on its own.
+  - **Root cause of the low `grammar_completion` volume fixed 2026-09-28** —
+    see "Grammar patterns auto-track once vocab-ready" under Done. The
+    dominant cause turned out to be 68% of annotated patterns sitting
+    Track-eligible and simply forgotten, not the readiness bar or a lack of
+    annotation. Should raise `grammar_completion` volume organically over
+    time; `commonly_confused` still needs its own separate seeding
+    mechanism (manual authoring or AI-suggested) regardless.
 - [ ] **Podcast mining.** (2026-09-13) Extend the existing YouTube-mining
   pipeline to podcast episodes rather than building a new one — the backend
   is already more source-agnostic than it looks: `POST /jobs` takes a raw

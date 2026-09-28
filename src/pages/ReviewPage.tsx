@@ -27,6 +27,7 @@ import {
   ensureGrammarStudyItem,
   ensureStudyItem,
   ensureVocabularyStudyItem,
+  getAutoTrackEligibleGrammarCandidates,
   getConfusionPairCandidates,
   getDb,
   countVocabularyWordsSeededSince,
@@ -1374,12 +1375,12 @@ export function ReviewPage() {
       const grammarStudyItems = (
         await db.studyItems.where('activityType').anyOf(GRAMMAR_ACTIVITY_TYPES).toArray()
       ).filter((item) => item.subjectType === 'grammarPattern');
-      const trackedPatternIds = [...new Set(grammarStudyItems.map((item) => item.subjectId))];
-      if (trackedPatternIds.length > 0) {
-        const trackedPatterns = await db.grammarPatterns.bulkGet(trackedPatternIds);
-        // Skip encounters that live only in suspended books (a shelved book's
-        // sentence shouldn't keep coming up as a grammar card's context).
-        const suspendedIndex = await loadSuspendedBookIndex();
+      const trackedPatternIds = new Set(grammarStudyItems.map((item) => item.subjectId));
+      // Skip encounters that live only in suspended books (a shelved book's
+      // sentence shouldn't keep coming up as a grammar card's context).
+      const suspendedIndex = await loadSuspendedBookIndex();
+      if (trackedPatternIds.size > 0) {
+        const trackedPatterns = await db.grammarPatterns.bulkGet([...trackedPatternIds]);
         for (const pattern of trackedPatterns) {
           if (!pattern) continue;
           const context = await pickContextSentenceForGrammarPattern(pattern.id, suspendedIndex);
@@ -1391,11 +1392,20 @@ export function ReviewPage() {
             readingContext: context.readingContext,
           });
         }
-        const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
-        existingGrammarItems = grammarStudyItems.filter((item) =>
-          grammarCandidateIds.has(item.subjectId),
-        );
       }
+      // Auto-track (docs/ROADMAP.md "grammar auto-track once eligible",
+      // 2026-09-28): an annotated pattern whose vocabulary has caught up
+      // enough to review flows into the same lazy-seed pool as everything
+      // else below, instead of requiring a manual "Track" revisit.
+      const autoTrackCandidates = await getAutoTrackEligibleGrammarCandidates(
+        trackedPatternIds,
+        suspendedIndex,
+      );
+      grammarCandidates.push(...autoTrackCandidates);
+      const grammarCandidateIds = new Set(grammarCandidates.map((c) => c.pattern.id));
+      existingGrammarItems = grammarStudyItems.filter((item) =>
+        grammarCandidateIds.has(item.subjectId),
+      );
     }
 
     // Reading-order neighbours for `reading_in_context` cards

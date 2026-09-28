@@ -3666,6 +3666,24 @@ describe('ReviewPage', () => {
 
     expect(await screen.findByText(/What construction fills the blank/)).toBeInTheDocument();
   });
+
+  it('auto-tracks an annotated-but-never-tracked pattern once its sentence is vocab-ready, without a manual "Track" tap (docs/ROADMAP.md "grammar auto-track once eligible")', async () => {
+    await seedBookWithSentence(); // sent-1, vocab confirmed (vacuously ready — no linked vocab)
+    await suppressUnconditionalSentenceActivityTypes('sent-1'); // isolate the grammar seed from sent-1's own reading_in_context
+    const pattern = await ensureGrammarPattern('〜わけがない');
+    await ensureSentenceGrammar('sent-1', pattern.id, {});
+    // Deliberately no ensureGrammarStudyItem call — this pattern has never
+    // been Tracked via GrammarPicker's manual button.
+
+    renderReviewPage('/review', '/review');
+
+    await screen.findByText(/doing in this sentence/);
+    expect(screen.getByText('〜わけがない')).toBeInTheDocument();
+    await waitFor(async () => {
+      const items = await getDb().studyItems.where('subjectId').equals(pattern.id).toArray();
+      expect(items.map((item) => item.activityType)).toEqual(['grammar_recognition']);
+    });
+  });
 });
 
 describe('spaceOutSiblingCards', () => {

@@ -22,6 +22,7 @@ import {
   ensureKanji,
   ensureSentenceGrammar,
   ensureStudyItem,
+  getAutoTrackEligibleGrammarCandidates,
   removeSentenceGrammar,
   ensureVocabularyConfusion,
   ensureVocabularyItem,
@@ -2418,6 +2419,101 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     // No analyses row at all → sentence vocab unreviewed — still a candidate.
     const picked = await pickContextSentenceForGrammarPattern(pattern.id);
     expect(picked?.sentence.id).toBe('sent-1');
+  });
+
+  async function makeVocabReadySentence(sentenceId: string, vocabularyItemId: string) {
+    const now = new Date().toISOString();
+    await getDb().sentences.put(stubSentence(sentenceId));
+    await getDb().analyses.add({
+      sentenceId,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed',
+      vocabularySelections: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await getDb().vocabularyItems.add({
+      id: vocabularyItemId,
+      expression: vocabularyItemId,
+      reading: vocabularyItemId,
+      meaning: vocabularyItemId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await getDb().sentenceVocabulary.add({
+      id: `sv-${sentenceId}-${vocabularyItemId}`,
+      sentenceId,
+      vocabularyItemId,
+      surfaceForm: vocabularyItemId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, state: 'review' },
+    });
+  }
+
+  describe('getAutoTrackEligibleGrammarCandidates (2026-09-28, grammar auto-track)', () => {
+    it('surfaces an annotated-but-never-tracked pattern once its sentence is vocab-ready — same bar GrammarPicker\'s Track button uses', async () => {
+      await makeVocabReadySentence('sent-1', 'vocab-1');
+      const pattern = await ensureGrammarPattern('〜わけがない');
+      await ensureSentenceGrammar('sent-1', pattern.id, {});
+
+      const candidates = await getAutoTrackEligibleGrammarCandidates(new Set());
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0]?.pattern.id).toBe(pattern.id);
+      expect(candidates[0]?.sentence.id).toBe('sent-1');
+    });
+
+    it('excludes a pattern whose sentence vocabulary is not yet proficient', async () => {
+      const now = new Date().toISOString();
+      await getDb().sentences.put(stubSentence('sent-1'));
+      await getDb().analyses.add({
+        sentenceId: 'sent-1',
+        chunks: [],
+        notes: '',
+        status: 'empty',
+        formatVersion: 2,
+        vocabularyReviewStatus: 'confirmed',
+        vocabularySelections: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await getDb().vocabularyItems.add({
+        id: 'vocab-1',
+        expression: 'vocab-1',
+        reading: 'vocab-1',
+        meaning: 'vocab-1',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await getDb().sentenceVocabulary.add({
+        id: 'sv-1',
+        sentenceId: 'sent-1',
+        vocabularyItemId: 'vocab-1',
+        surfaceForm: 'vocab-1',
+        createdAt: now,
+        updatedAt: now,
+      });
+      // vocab-1 never reviewed — stays 'new', not proficient.
+      const pattern = await ensureGrammarPattern('〜わけがない');
+      await ensureSentenceGrammar('sent-1', pattern.id, {});
+
+      expect(await getAutoTrackEligibleGrammarCandidates(new Set())).toEqual([]);
+    });
+
+    it('excludes an already-tracked pattern, even if its sentence is vocab-ready', async () => {
+      await makeVocabReadySentence('sent-1', 'vocab-1');
+      const pattern = await ensureGrammarPattern('〜わけがない');
+      await ensureSentenceGrammar('sent-1', pattern.id, {});
+
+      const candidates = await getAutoTrackEligibleGrammarCandidates(new Set([pattern.id]));
+      expect(candidates).toEqual([]);
+    });
   });
 
   it('computeGrammarPatternContextDiversity mirrors the vocabulary version, over sentenceGrammar', async () => {

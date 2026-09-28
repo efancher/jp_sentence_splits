@@ -930,9 +930,19 @@ against every `GrammarPattern` already in the corpus), with three
 per-occurrence actions — **Got it** (confirms the occurrence,
 `SentenceGrammar.confirmedByLearner`, no SRS involvement), **Track**
 (confirms *and* seeds a `grammarPattern`-subject `StudyItem`, entering the
-pattern into the same FSRS due-queue vocabulary/sentences use), and
-**Explain** (an inline, no-modal edit form for the pattern's meaning/
-structural notes and this occurrence's own context-specific explanation).
+pattern into the same FSRS due-queue vocabulary/sentences use — gated on
+`getSentenceFullReviewReadiness`, the same "vocab before glossing" bar
+`reading_in_context` uses), and **Explain** (an inline, no-modal edit form
+for the pattern's meaning/structural notes and this occurrence's own
+context-specific explanation). **Track also happens automatically**
+(2026-09-28, `getAutoTrackEligibleGrammarCandidates` — `ReviewPage`'s scope
+building): once an annotated pattern's sentence crosses that same readiness
+bar, it flows into the ordinary lazy-seed pool the next time `/review`
+loads, at the same `newCardsPerSessionLimit` pace every other new card gets
+— a real-data check found most annotated patterns become eligible but are
+simply never revisited to click Track by hand. The manual button stays as
+an accelerant (seeds immediately, bypassing that pacing) rather than being
+removed.
 Unlike `VocabularyPicker`, this panel is deliberately decoupled from the
 page's autosave/chunks state — every action is an immediate repository
 write, not a debounced draft. A **"Suggest grammar (AI)"** button (panel
