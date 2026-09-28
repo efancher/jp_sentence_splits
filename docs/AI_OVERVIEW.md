@@ -1511,7 +1511,15 @@ Activity types currently wired, grouped by subject/eligibility:
 
   On the reveal it also draws the **measured** pitch of the native word's span
   (`WordPitchContour`, cropped from the cached clip track to the loop's span)
-  under the diagram, and — after a wrong pick whose in-word shape differs from
+  under the diagram, plus (when not in Quiet mode) an optional "🔁 Practice
+  this word" step: loops the word's own span hands-free
+  (`shadowingController.startShadowLoop`, the same iOS-Safari-safe mechanism
+  `ShadowPage`'s close-shadow loop uses) while drawing the learner's live
+  pitch trace against that same real native contour as they speak, via
+  `LiveShadowWaveform` (also from `ShadowPage`, given an optional `range` so
+  it zooms to the word instead of the whole sentence clip). Unscored —
+  purely supplementary, closed-loop practice; doesn't touch `onCheck` or the
+  card's rating. And — after a wrong pick whose in-word shape differs from
   the correct one (not heiban↔odaka) — `PitchContrastExample`: a real
   same-mora-count word with the *picked* shape (`pickContrastClip`, from Odd Ear
   Out's word-only clips, same book preferred) with its own contour and a play

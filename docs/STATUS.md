@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-27.
+Last updated: 2026-09-28.
 
 ## Where things stand
 
@@ -30,6 +30,40 @@ remaining planned work: re-mine "After Work" (browser + human review).
 
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
+
+- **2026-09-28 — Live pitch biofeedback on the `pitch_accent` card ("Practice
+  this word").** User: pitch-accent discrimination progress had stayed flat
+  through several rounds of work (ABX/predict-the-drop perception, minimal
+  pairs, L1-transfer hints, the `pitch_accent_production` record→score card)
+  — asked for a genuinely new-to-the-app angle. Everything shipped so far
+  gave feedback only *after* recording; the one untried modality was
+  closed-loop biofeedback: your own measured pitch drawn live, overlaid on
+  the native speaker's real contour, while you're still speaking. Checked
+  two cards for fit: `pitch_accent_production`'s candidates are audio-less
+  by design (`getPitchAccentReviewCandidates` excludes any sentence with a
+  native recording), so no real target contour exists there — ruled out.
+  `pitch_accent` (isolated-word, listen-then-choose-drop-position) requires
+  native audio and already computed the real contour on reveal
+  (`WordPitchContour`), just never live — the right target. User explicitly
+  chose "show the native contour live, not hidden" (real-time correction
+  over blind recall) when asked. Added an optional "🔁 Practice this word"
+  step after reveal: reuses `shadowingController.startShadowLoop` (the same
+  hands-free, iOS-Safari-safe sub-range loop ShadowPage's "Close shadow"
+  panel already uses) scoped to the word's own `wordSpan`, and
+  `LiveShadowWaveform` (ShadowPage's existing rAF + YIN + semitone-normalized
+  live overlay) to draw it — no new recording or pitch-detection stack.
+  `LiveShadowWaveform` gained an optional `range` prop (crops the decoded
+  reference audio to the span via `sliceCanonicalAudio` before computing
+  peaks/pitch, and rebases the live media-time mapping onto that window) so
+  a multi-second sentence clip doesn't zoom out to unusable resolution for a
+  sub-second word; omitting `range` is byte-for-byte the old whole-clip
+  behavior, verified by the full existing test suite passing unchanged.
+  Respects "Quiet mode" (hides just the new button, not the whole card,
+  since the base drop-position task never required speaking) per user
+  follow-up. Purely additive/unscored — `onCheck`/self-rating untouched.
+  Not yet verified live with an actual voice (needs the user's own
+  microphone); typecheck + full test suite (2146 tests) pass and the dev
+  server serves the change cleanly.
 
 - **2026-09-26 — Follow-up: a sentence can now belong to more than one
   chapter of the same book.** The ordering fix below still left a related

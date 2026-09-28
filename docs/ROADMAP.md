@@ -338,6 +338,14 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     near-minimal pairs from the corpus get most of the perceptual benefit
     without a PSOLA/WORLD service on the memory-constrained analysis host
     (same footprint constraint that parked PASQA).
+  - [x] **Live pitch biofeedback on `pitch_accent`'s reveal ("Practice this
+    word").** (2026-09-28) Everything above is post-hoc feedback (score/
+    contour after recording). Genuinely new modality: an optional "🔁
+    Practice this word" step draws the learner's pitch live, overlaid on the
+    real native contour, while they're still speaking — reuses
+    `startShadowLoop` + `LiveShadowWaveform` from ShadowPage's "Close
+    shadow" loop, scoped to the word's own span. Unscored. Detail in
+    STATUS.md.
 
 ## In progress
 
