@@ -370,22 +370,28 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
-- [ ] **Reconsider pitch-accent emphasis outside shadowing.** (2026-09-28,
-  user reflection, unscheduled) User questioned whether they're over-
-  investing effort in pitch-accent precision/perfectionism outside the
-  shadowing loop, given non-Tokyo accents vary and even native listeners
-  tolerate learner deviation. Working conclusion from that conversation:
-  active pitch-accent production drilling/self-rating (the
-  `pitch-accent` drill page, `pitch_accent_production` review card,
-  the perception-ladder warm-ups) is plausibly lower-value early on than
-  vocab/grammar/listening, and the skill likely improves more from passive
-  exposure via shadowing/listening than from conscious production practice.
-  Worth keeping: light passive exposure to the handful of high-frequency
-  minimal pairs. Nothing changed yet — if this holds up, candidate
-  adjustments are de-emphasizing/de-scheduling the standalone pitch-accent
-  drill and production card relative to other review types (e.g. lower
-  session-planner priority, or moving them later in the learner-state
-  ladder) rather than removing them outright.
+- [x] **Reconsider pitch-accent emphasis outside shadowing.** (2026-09-28,
+  user reflection) User questioned whether they're over-investing effort in
+  pitch-accent precision/perfectionism outside the shadowing loop, given
+  non-Tokyo accents vary and even native listeners tolerate learner
+  deviation. Investigation found no single "emphasis knob" — the
+  `pitch_accent` review card isn't even weighted in the session planner
+  (raw FSRS due-date queue), and the standalone drill page is just an
+  opt-in Home shortcut, not pushed by anything. The one real lever found:
+  `getSentenceShadowingReadiness` required every linked word's `pitch_accent`
+  card to be FSRS-proficient before a sentence could be shadowed at all —
+  backwards, since shadowing is meant to be the primary way pitch accent
+  gets learned. **Shipped same day**: removed that pitch requirement
+  entirely, and (per user's own framing — "shadowing should be gated by
+  having seen all the vocabulary words at least once") lowered the sibling
+  reading/meaning requirement from full FSRS proficiency to merely
+  introduced (seen once). Detail + manual test plan in STATUS.md's
+  2026-09-28 "Shadowing readiness loosened" entry. Not touched: the sentence-
+  level `listening` card's own separate pitch requirement
+  (`getSentenceListeningReadiness`), the `pitch_accent`/`pitch_accent_production`
+  review cards themselves, and the standalone drill page — none of those
+  were found to be forcing anything, so there was nothing to de-emphasize
+  there beyond the user's own voluntary use of an already-opt-in tool.
 - [x] **Deterministic ids for get-or-create sync entities + real-Postgres sync tests.**
   (2026-09-20, shipped) `kanji`, `vocabulary_items`, `grammar_patterns`,
   `sentence_grammar`, `grammar_relationships` and `vocabulary_kanji` ids are now derived

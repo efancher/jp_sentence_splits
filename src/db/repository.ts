@@ -4142,8 +4142,6 @@ export interface GateFunnelSnapshot {
   hasData: boolean;
   /** Confirmed sentences whose linked words haven't all been reviewed once yet — the continue_book backlog. */
   continueBookBlocked: number;
-  /** In-progress, audio-bearing, reading-proficient sentences blocked from shadowing only by the pitch requirement. */
-  shadowBlockedOnPitch: number;
   /** Audio-bearing sentences with every word_listening occurrence proficient, blocked from the sentence `listening` card only by the pitch requirement. */
   listeningBlockedOnPitch: number;
 }
@@ -4155,13 +4153,15 @@ export interface GateFunnelSnapshot {
  * sentences that clear every *other* dimension of a gate and are blocked
  * on specifically the one named — not a general "how many sentences are
  * ready" count, which the planner's own candidate lists already cover.
+ * `shadowBlockedOnPitch` was dropped 2026-09-28 when the shadowing gate's
+ * pitch requirement itself was removed (see `getSentenceShadowingReadiness`)
+ * — shadow readiness no longer has a pitch dimension to be stuck on.
  */
 export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
   const db = getDb();
-  const [analyses, audioRows, bookSentences] = await Promise.all([
+  const [analyses, audioRows] = await Promise.all([
     db.analyses.toArray(),
     db.sentenceAudio.toArray(),
-    db.bookSentences.toArray(),
   ]);
 
   // --- continue_book: confirmed but not yet reading-introduced ----------
@@ -4173,23 +4173,13 @@ export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
     (id) => introducedReadiness.get(id) === false,
   ).length;
 
-  // --- shadow / listening: in-progress or audio-bearing sentences -------
-  const inProgressSentenceIds = new Set(
-    bookSentences.filter((row) => row.status === 'in_progress').map((row) => row.sentenceId),
-  );
+  // --- listening: audio-bearing sentences --------------------------------
   const audioSentenceIds = [...new Set(audioRows.map((row) => row.sentenceId))];
-  const analysisBySentenceId = new Map(analyses.map((a) => [a.sentenceId, a]));
-
-  const shadowCandidateIds = audioSentenceIds.filter(
-    (id) =>
-      inProgressSentenceIds.has(id) && analysisBySentenceId.get(id)?.vocabularyReviewStatus === 'confirmed',
-  );
   const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(
     audioSentenceIds,
   );
   const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [readingProficientIds, pitchProficientIds, vocabularyItems] = await Promise.all([
-    getProficientReadingVocabularyItemIds(allVocabularyItemIds),
+  const [pitchProficientIds, vocabularyItems] = await Promise.all([
     getProficientPitchAccentVocabularyItemIds(allVocabularyItemIds),
     db.vocabularyItems.bulkGet(allVocabularyItemIds),
   ]);
@@ -4199,13 +4189,6 @@ export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
       .map((item) => item.id),
   );
   const isPitchSatisfied = (id: string) => !pitchEligibleIds.has(id) || pitchProficientIds.has(id);
-
-  const shadowBlockedOnPitch = shadowCandidateIds.filter((sentenceId) => {
-    const ids = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    const readingOk = ids.every((id) => readingProficientIds.has(id));
-    const pitchOk = ids.every(isPitchSatisfied);
-    return readingOk && !pitchOk;
-  }).length;
 
   const wordListeningItems = await db.studyItems
     .where('activityType')
@@ -4240,7 +4223,6 @@ export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
   return {
     hasData: confirmedSentenceIds.length > 0 || audioSentenceIds.length > 0,
     continueBookBlocked,
-    shadowBlockedOnPitch,
     listeningBlockedOnPitch,
   };
 }
@@ -4533,25 +4515,28 @@ export async function getSentenceReadingIntroducedReadiness(
 }
 
 /**
- * Shadowing readiness (user request, 2026-08-27; pitch requirement added
- * 2026-09-16). A sentence's vocabulary must be confirmed, every linked word
- * must have shown reading/meaning recall — the original rationale: shadowing
- * a sentence full of unfamiliar words splits attention between recalling
- * the words and imitating the pronunciation — *and*, separately, every
- * linked word's pitch pattern must itself be FSRS-proficient, so shadowing
- * reinforces a pitch pattern already learned rather than one never
- * practiced. Unlike getSentenceFullReviewReadiness, reading and pitch
- * proficiency are checked against their own activity types rather than
- * blended into one "any activity type reached review/relearning" set — a
- * word's pitch_accent reps no longer stand in for having recalled its
- * reading, and vice versa (user report, 2026-09-16: a word with only
+ * Shadowing readiness (user request, 2026-08-27). A sentence's vocabulary
+ * must be confirmed and every linked word must have been seen at least once
+ * in a reading/meaning rep (`getIntroducedReadingVocabularyItemIds` — left
+ * FSRS's `new` state, not full proficiency) — shadowing a sentence full of
+ * words the learner has never even looked at splits attention between
+ * recalling the words and imitating the pronunciation. Checked against the
+ * reading/meaning activity types specifically rather than blended into one
+ * "any activity type" set (user report, 2026-09-16: a word with only
  * pitch_accent reps was passing as "known" for gates that meant reading
- * recall). A word with no dictionary pitch data (`VocabularyItem.
- * pitchAccentPositions` empty — the same field `pitch_accent`'s own
- * eligibility rule keys on) can never seed a `pitch_accent` card, so it's
- * exempt from the pitch requirement rather than blocking the sentence
- * forever — the same starvation shape `continue_book`'s FSRS-proficiency
- * gate hit before (docs/STATUS.md 2026-09-16), checked for up front here.
+ * recall).
+ *
+ * **No pitch-accent requirement.** A pitch-proficiency requirement was added
+ * 2026-09-16 and removed 2026-09-28 (user reflection: shadowing should be
+ * the primary vehicle for learning pitch accent, not something gated behind
+ * having already learned it elsewhere — requiring pitch mastery first had it
+ * backwards).
+ *
+ * **Reading bar lowered 2026-09-28** from full FSRS proficiency (review/
+ * relearning) to merely introduced (seen once) — same day as the pitch
+ * removal, same reasoning: shadowing should be reachable once vocabulary has
+ * been looked at, not gated behind having already mastered it through other
+ * review types first.
  */
 export async function getSentenceShadowingReadiness(
   sentenceIds: string[],
@@ -4561,29 +4546,14 @@ export async function getSentenceShadowingReadiness(
   const db = getDb();
   const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
   const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [readingProficientIds, pitchProficientIds, analyses, vocabularyItems] = await Promise.all([
-    filterVocabularyItemIdsByActivity(
-      allVocabularyItemIds,
-      VOCABULARY_RECALL_ACTIVITY_TYPES,
-      isVocabularyItemProficient,
-    ),
-    filterVocabularyItemIdsByActivity(
-      allVocabularyItemIds,
-      PITCH_ACCENT_ACTIVITY_TYPES,
-      isVocabularyItemProficient,
-    ),
+  const [readingIntroducedIds, analyses] = await Promise.all([
+    getIntroducedReadingVocabularyItemIds(allVocabularyItemIds),
     db.analyses.bulkGet(sentenceIds),
-    db.vocabularyItems.bulkGet(allVocabularyItemIds),
   ]);
   const analysesBySentenceId = new Map(
     analyses
       .filter((item): item is SentenceAnalysis => Boolean(item))
       .map((item) => [item.sentenceId, item]),
-  );
-  const pitchEligibleVocabularyItemIds = new Set(
-    vocabularyItems
-      .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
-      .map((item) => item.id),
   );
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
@@ -4591,10 +4561,7 @@ export async function getSentenceShadowingReadiness(
     readiness.set(
       sentenceId,
       vocabularyReviewStatus === 'confirmed' &&
-        vocabularyItemIds.every((id) => readingProficientIds.has(id)) &&
-        vocabularyItemIds.every(
-          (id) => !pitchEligibleVocabularyItemIds.has(id) || pitchProficientIds.has(id),
-        ),
+        vocabularyItemIds.every((id) => readingIntroducedIds.has(id)),
     );
   }
   return readiness;

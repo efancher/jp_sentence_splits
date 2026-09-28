@@ -320,28 +320,25 @@ edges out a harder one opened more recently (unanalyzed books, `ratio:
 null`, still sort last — same convention as `BooksPage`'s "Easiest first"
 toggle).
 
-The **shadowing bucket** has its own, stricter readiness gate
+The **shadowing bucket** has its own readiness gate
 (`getSentenceShadowingReadiness`, `repository.ts`, replacing
 `findShadowCandidates`'s old reuse of `getSentenceFullReviewReadiness`):
-vocabulary confirmed, every linked word FSRS-proficient (review/relearning)
-on the reading/meaning activity types *and*, separately, FSRS-proficient
-on `pitch_accent` (pitch requirement added 2026-09-16). The reading half
-preserves the original 2026-08-27 rationale — shadowing a sentence full
-of unfamiliar words splits attention between recalling the words and
-imitating the pronunciation, when the point is to free up attention for
-the latter — now checked against the reading/meaning activity types
-specifically rather than blended with pitch (the same
-`getProficientVocabularyItemIds` blending problem `continue_book` hit: a
-word could look "proficient" off pitch-drill reps alone, with its
-reading/meaning card never touched). The pitch half is new: shadowing
-should reinforce a pitch pattern the learner has already practiced to
-proficiency, not one they've never drilled — except for a word with no
-dictionary pitch data at all (`VocabularyItem.pitchAccentPositions`
-empty), which is exempt from the pitch half entirely, since it could never
-seed a `pitch_accent` card in the first place and would otherwise block
-the sentence forever (the same shape of starvation `continue_book`'s
-FSRS-proficiency gate hit — caught up front here, not after a report).
-Unlike glossing's not-ready
+vocabulary confirmed and every linked word seen at least once
+(`getIntroducedReadingVocabularyItemIds` — left FSRS's `new` state, not full
+proficiency) on the reading/meaning activity types specifically, not blended
+with pitch (the same `getProficientVocabularyItemIds` blending problem
+`continue_book` hit: a word could look "known" off pitch-drill reps alone,
+with its reading/meaning card never touched) — preserving the original
+2026-08-27 rationale that shadowing a sentence full of words the learner
+has never looked at splits attention between recalling the words and
+imitating the pronunciation. **No pitch-accent requirement**: a
+`pitch_accent`-proficiency half was added 2026-09-16 and removed 2026-09-28
+(user reflection: shadowing is meant to be the primary way pitch accent is
+learned, not something gated behind having already learned it elsewhere via
+the drill/production card). **Reading bar lowered the same day** from full
+FSRS proficiency to merely introduced — same reasoning, shadowing shouldn't
+require having already mastered a word's reading through other review types
+first. Unlike glossing's not-ready
 sentences (which fall back to a `vocabulary_review` step), an unready
 sentence simply isn't a shadow candidate at all — there's no
 shadow-adjacent activity to substitute in, so `buildShadowSteps` needed no

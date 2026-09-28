@@ -488,7 +488,7 @@ describe('Learning Orchestrator repository layer', () => {
     expect(continueStep!.sentenceId).toBe(sentence.id);
   });
 
-  it('withholds a shadow step unless a confirmed word is both reading-proficient and pitch-proficient — either alone is not enough (2026-09-16)', async () => {
+  it('withholds a shadow step until a confirmed word has been seen at least once in reading/meaning — pitch proficiency is not required and full reading proficiency is not required either (both loosened 2026-09-28: shadowing is meant to build pitch accent and reading fluency, not require either mastered first)', async () => {
     const book = await createBook({ title: 'Shadow Me' });
     const db = getDb();
     const sentence = makeSentence();
@@ -511,74 +511,21 @@ describe('Learning Orchestrator repository layer', () => {
     await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
     const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
     const vocabularyItemId = link!.vocabularyItemId;
-    // Dictionary-pitch-eligible (getSentenceShadowingReadiness exempts words
-    // with no pitchAccentPositions from the pitch requirement entirely, so
-    // without this the "reading only" step below would already pass).
+    // Dictionary-pitch-eligible, but pitch is never touched below — proves
+    // shadowing readiness no longer keys on it at all.
     await db.vocabularyItems.update(vocabularyItemId, { pitchAccentPositions: [1] });
 
-    // Push a study item to FSRS "review" (proficient) with a few spaced "good" ratings.
-    const advanceToProficient = async (activityType: string) => {
-      const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, activityType);
-      let studyItemId = item.id;
-      for (let i = 0; i < 3; i += 1) {
-        const day = new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000);
-        const result = await recordReview({ studyItemId, rating: 'good', now: day });
-        studyItemId = result.studyItem.id;
-      }
-    };
+    // Not reviewed yet at all: withheld.
+    const beforeAnyReview = await planRecommendedSession(60);
+    expect(beforeAnyReview.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
 
-    // Neither reading nor pitch proficient yet: withheld.
-    const beforeEither = await planRecommendedSession(60);
-    expect(beforeEither.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-
-    // Reading proficient, pitch still untouched: still withheld.
-    await advanceToProficient('reading_retrieval');
-    const readingOnly = await planRecommendedSession(60);
-    expect(readingOnly.steps.some((step) => step.targetKind === 'shadow')).toBe(false);
-
-    // Both proficient: shadow becomes eligible.
-    await advanceToProficient('pitch_accent');
-    const both = await planRecommendedSession(60);
-    const shadowStep = both.steps.find((step) => step.targetKind === 'shadow');
-    expect(shadowStep).toBeDefined();
-    expect(shadowStep!.sentenceId).toBe(sentence.id);
-  });
-
-  it('does not withhold shadowing on pitch for a word with no dictionary pitch data — it could never seed a pitch_accent card (2026-09-16)', async () => {
-    const book = await createBook({ title: 'Shadow Me' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
-    await db.sentenceAudio.add({
-      id: 'audio-shadow-3',
-      sentenceId: sentence.id,
-      sourceId: 'source-1',
-      sourceSentenceId: 'src-sent-1',
-      sourceTitle: 'Test Source',
-      mimeType: 'audio/mp3',
-      durationMs: 1500,
-      startMs: 0,
-      endMs: 1500,
-      blob: new Blob(['fake audio bytes'], { type: 'audio/mp3' }),
-      importedAt: new Date().toISOString(),
-    });
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
-    const vocabularyItemId = link!.vocabularyItemId;
-    // No pitchAccentPositions set — this word is not pitch-eligible at all.
-
-    const item = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
-    let studyItemId = item.id;
-    for (let i = 0; i < 3; i += 1) {
-      const day = new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000);
-      const result = await recordReview({ studyItemId, rating: 'good', now: day });
-      studyItemId = result.studyItem.id;
-    }
-
-    const session = await planRecommendedSession(60);
-    const shadowStep = session.steps.find((step) => step.targetKind === 'shadow');
+    // One reading/meaning rep — even a miss — introduces the word (left FSRS
+    // 'new'), far short of full proficiency; pitch never reviewed at all:
+    // shadow is eligible immediately.
+    const readingItem = await ensureStudyItem('vocabularyItem', vocabularyItemId, 'reading_retrieval');
+    await recordReview({ studyItemId: readingItem.id, rating: 'again' });
+    const afterOneRep = await planRecommendedSession(60);
+    const shadowStep = afterOneRep.steps.find((step) => step.targetKind === 'shadow');
     expect(shadowStep).toBeDefined();
     expect(shadowStep!.sentenceId).toBe(sentence.id);
   });

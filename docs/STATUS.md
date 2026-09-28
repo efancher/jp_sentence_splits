@@ -31,6 +31,41 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Shadowing readiness loosened: no pitch-accent requirement,
+  reading bar lowered to "seen once."** User reflection: they were
+  questioning whether they'd been over-investing in pitch-accent precision
+  outside shadowing (given regional accent variation and native tolerance
+  for learner deviation), and traced it to `getSentenceShadowingReadiness`
+  (`src/db/repository.ts`) requiring every linked word's `pitch_accent` card
+  to already be FSRS-proficient before a sentence could be shadowed at
+  all — backwards, since shadowing is meant to be the primary way pitch
+  accent gets learned, not something gated behind having already learned it
+  elsewhere (drill/production card). Two changes to the gate, both same
+  session:
+  1. **Pitch-accent requirement removed entirely** — shadowing readiness no
+     longer checks `pitch_accent` proficiency at all (added 2026-09-16,
+     removed 2026-09-28).
+  2. **Reading/meaning bar lowered** from full FSRS proficiency (review/
+     relearning) to merely introduced (`getIntroducedReadingVocabularyItemIds`
+     — left FSRS's `new` state, i.e. seen once) — user's own framing:
+     shadowing should be gated by having seen all the vocabulary at least
+     once, not by having already mastered it.
+  `getGateFunnelSnapshot`'s now-meaningless `shadowBlockedOnPitch` metric
+  (shadow readiness has no pitch dimension left to be stuck on) was removed
+  from the `GateFunnelSnapshot` interface, `ProgressPage`'s "What's stuck"
+  panel, and its dedicated test; `listeningBlockedOnPitch` is untouched — the
+  sentence-level `listening` card's own, separate pitch requirement
+  (`getSentenceListeningReadiness`) was not part of this change and still
+  applies. Updated `tests/sessionPlannerRepository.test.ts`'s shadow-gating
+  tests to match (one rep, any rating, now unlocks shadowing; pitch never
+  touched). Logged as the resolution to the "Reconsider pitch-accent
+  emphasis outside shadowing" ROADMAP item. `docs/AI_OVERVIEW.md`'s shadowing
+  bucket description updated to match. **Manual test plan:** confirm a
+  sentence's vocabulary with audio attached, do exactly one reading/meaning
+  review rep on its word (even "Again"), never touch pitch — the sentence
+  should become a shadow candidate on the next planned session /
+  `/books/:id/shadow`.
+
 - **2026-09-28 — "Practice this part" on ShadowPage's Focus-on-this callout
   now visibly does something.** User report: clicking it on a
   `pitch_accent_shape` finding ("Dictionaries mark 「昨日」 as nakadaka;

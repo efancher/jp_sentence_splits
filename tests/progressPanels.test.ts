@@ -521,40 +521,6 @@ describe('getGateFunnelSnapshot', () => {
     expect(result.continueBookBlocked).toBe(0);
   });
 
-  it('counts an in-progress, audio-bearing, reading-proficient sentence blocked only on pitch', async () => {
-    const book = await createBook({ title: 'Book' });
-    const db = getDb();
-    const sentence = makeSentence();
-    await db.sentences.put(sentence);
-    await addSentencesToBook(book.id, [sentence.id]);
-    await setBookSentenceStatus(book.id, sentence.id, 'in_progress');
-    await db.sentenceAudio.add({
-      id: 'audio-1',
-      sentenceId: sentence.id,
-      sourceId: 'src',
-      sourceSentenceId: 'src-sent',
-      sourceTitle: 'Source',
-      mimeType: 'audio/mp3',
-      durationMs: 1000,
-      startMs: 0,
-      endMs: 1000,
-      blob: new Blob(['x'], { type: 'audio/mp3' }),
-      importedAt: new Date().toISOString(),
-    });
-    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
-    const link = await db.sentenceVocabulary.where('sentenceId').equals(sentence.id).first();
-    const vocabularyItemId = link!.vocabularyItemId;
-    await db.vocabularyItems.update(vocabularyItemId, { pitchAccentPositions: [1] });
-    await advanceToProficient(vocabularyItemId, 'reading_retrieval');
-
-    const result = await getGateFunnelSnapshot();
-    expect(result.shadowBlockedOnPitch).toBe(1);
-
-    // Once pitch is proficient too, it drops out of the blocked count.
-    await advanceToProficient(vocabularyItemId, 'pitch_accent');
-    const after = await getGateFunnelSnapshot();
-    expect(after.shadowBlockedOnPitch).toBe(0);
-  });
 });
 
 describe('getLeechList', () => {

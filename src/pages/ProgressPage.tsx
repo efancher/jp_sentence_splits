@@ -643,11 +643,6 @@ export function ProgressPage() {
               hint="waiting on Analyze"
             />
             <StatRow
-              label="Shadow-ready except pitch"
-              value={String(gateFunnel.shadowBlockedOnPitch)}
-              hint="words known, pitch not yet"
-            />
-            <StatRow
               label="Listening-ready except pitch"
               value={String(gateFunnel.listeningBlockedOnPitch)}
               hint="words heard, pitch not yet"
