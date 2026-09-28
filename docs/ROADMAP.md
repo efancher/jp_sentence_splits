@@ -540,6 +540,28 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   fits") rather than reviving free-form multiple choice. Unscheduled —
   try recall alone first and see whether discrimination errors still show
   up in the error-mix view before building a dedicated card for them.
+  **Checked 2026-09-28: not justified yet, stays unscheduled.** Prod data
+  is far too thin to tell either way — only 2 live `grammar_completion`
+  items (13 more soft-deleted 2026-09-02, not real history), 13 reviews, 6
+  misses. More importantly, `grammar_relationships` has **zero rows of any
+  type** in prod — `commonly_confused` links are only ever created by a
+  manual "link patterns" action on `GrammarPatternDetailPage` and nothing
+  has populated any yet, so the card's proposed data source doesn't exist
+  regardless of error volume. Separately found: `classifyReviewError`
+  collapses every `grammar_completion` typed-mismatch into one
+  `grammar_misunderstanding` bucket — there's no discrimination-specific
+  error classification, so `errorMix`/the error-mix view can't actually
+  surface this signal even in principle; answering "do discrimination
+  errors show up" requires reading `Review.responseRaw` by hand, which is
+  what this check did (`grammar_completion` grades via
+  `isGrammarPatternAnswerCorrect` but does persist the raw typed answer on
+  `Review.responseRaw`/`expectedAnswer`). One recurring miss surfaced
+  (3× typed "～だろ" for ～ている（状態描写）) but doesn't map onto a curated
+  confusable pair since none exist. Revisit once `grammar_completion` (a
+  young redesign, 2026-09-17/22) has real volume across more patterns —
+  and if `commonly_confused` links get seeded some other way (manual
+  authoring, or an AI-suggested pass) in the meantime, that would remove
+  the bigger blocker on its own.
 - [ ] **Podcast mining.** (2026-09-13) Extend the existing YouTube-mining
   pipeline to podcast episodes rather than building a new one — the backend
   is already more source-agnostic than it looks: `POST /jobs` takes a raw
