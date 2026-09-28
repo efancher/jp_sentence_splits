@@ -31,6 +31,14 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Follow-up: "Practice this word" respects a speed selector.**
+  User: many native clips are too fast to shadow at 1×. Extracted
+  `ShadowPage`'s private `SpeedControl` into a shared
+  `src/components/SpeedControl.tsx` and wired it into the practice loop
+  below, kept live-adjustable mid-loop via `updateShadowLoop({
+  playbackRate })` — the same pattern `ShadowPage`'s own speed selector
+  already used, so no new live-tweak mechanism needed.
+
 - **2026-09-28 — Live pitch biofeedback on the `pitch_accent` card ("Practice
   this word").** User: pitch-accent discrimination progress had stayed flat
   through several rounds of work (ABX/predict-the-drop perception, minimal
