@@ -52,6 +52,7 @@ import {
   lintAnalysis,
 } from '../lib/analysisSuggestions';
 import { RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
+import { surfaceReadingFromInline } from '../lib/readingAnswer';
 import { explainChunkWhy } from '../lib/chunkWhyAssist';
 import { suggestStickyEnglish } from '../lib/stickyEnglish';
 import { FuriganaText } from '../lib/furigana';
@@ -273,6 +274,11 @@ export function AnalyzePage() {
       results.push({ text: token.text, gloss: token.gloss });
     }
     return results;
+  }
+  /** A chunk's hiragana reading, pulled out of the sentence's inlineReading markup — null when it can't be derived unambiguously (no inlineReading yet, a zero-が synthetic chunk, or a split mid-furigana-group). */
+  function readingForChunk(chunk: AnalysisChunk): string | null {
+    if (chunk.kind === 'zero_ga' || !data?.sentence) return null;
+    return surfaceReadingFromInline(data.sentence.inlineReading, chunk.japanese);
   }
   const roleStats = useLiveQuery(
     () => getRoleOccurrenceStats(sentenceId),
@@ -882,6 +888,9 @@ export function AnalyzePage() {
               </button>
             </div>
             <div className="jp jp-lg">{wizardChunk.japanese}</div>
+            {readingForChunk(wizardChunk) ? (
+              <div className="jp muted jp-sm">{readingForChunk(wizardChunk)}</div>
+            ) : null}
             {glossesForChunk(wizardChunk).length ? (
               <p className="muted" style={{ margin: 0 }}>
                 {glossesForChunk(wizardChunk)
@@ -972,6 +981,9 @@ export function AnalyzePage() {
                 <span className="muted">#{chunkIndex + 1}</span>
               </span>
             </div>
+            {readingForChunk(chunk) ? (
+              <div className="jp muted jp-sm">{readingForChunk(chunk)}</div>
+            ) : null}
             {zeroGa ? (
               <div className="status-pill">zero-が · not in source</div>
             ) : null}
