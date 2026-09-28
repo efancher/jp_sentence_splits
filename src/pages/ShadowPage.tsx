@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { RecordToggleButton } from '../components/RecordToggleButton';
+import { SpeedControl } from '../components/SpeedControl';
 import { SyncedShadowText } from '../components/SyncedShadowText';
 import {
   deleteAttempt,
@@ -25,7 +26,6 @@ import { getSentenceReadingForMora, segmentIntoMorae, type MoraUnit } from '../l
 import { buildHistoryDisplay } from '../lib/pronunciationHistory';
 import {
   MAX_RECORDING_DURATION_MS,
-  PLAYBACK_SPEEDS,
   PlaybackCoordinator,
   RecordingService,
   calibrateMicrophone,
@@ -42,27 +42,6 @@ const RATINGS: { value: AttemptRating; label: string }[] = [
 
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function SpeedControl({
-  speed,
-  onChange,
-}: {
-  speed: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label>
-      Playback speed
-      <select value={speed} onChange={(event) => onChange(Number(event.target.value))}>
-        {PLAYBACK_SPEEDS.map((value) => (
-          <option key={value} value={value}>
-            {value === 1 ? '1× (normal)' : `${value}×`}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 export function ShadowPage() {

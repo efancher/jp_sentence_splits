@@ -16,6 +16,7 @@ import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
+import { SpeedControl } from '../components/SpeedControl';
 import { VocabChips } from '../components/VocabChips';
 import {
   countReviewsSince,
@@ -2747,8 +2748,15 @@ function PitchAccentCard({
   // after the fact — same substrate as ShadowPage's "Close shadow" loop.
   // Unscored: purely supplementary practice, no onCheck/rating involvement.
   const shadowing = useShadowing();
-  const { cancelRecording } = shadowing;
+  const { cancelRecording, updateShadowLoop } = shadowing;
+  const [practiceSpeed, setPracticeSpeed] = useState(1);
   useEffect(() => () => cancelRecording(), [cancelRecording]);
+  // Keep speed live-adjustable while the loop is running, same as
+  // ShadowPage's own speed selector — many native clips are just too fast
+  // to shadow at 1x (user report, 2026-09-28).
+  useEffect(() => {
+    if (shadowing.shadowActive) updateShadowLoop({ playbackRate: practiceSpeed });
+  }, [practiceSpeed, shadowing.shadowActive, updateShadowLoop]);
   function handleTogglePractice() {
     if (shadowing.shadowActive) {
       shadowing.stopShadowLoop();
@@ -2757,7 +2765,7 @@ function PitchAccentCard({
     if (!audioBlob || !wordSpan) return;
     void shadowing.startShadowLoop(audioBlob, {
       range: wordSpan,
-      playbackRate: 1,
+      playbackRate: practiceSpeed,
       onRep: () => {},
     });
   }
@@ -2895,9 +2903,12 @@ function PitchAccentCard({
           />
           {!quietMode && audioBlob && wordSpan ? (
             <div className="stack">
-              <button type="button" onClick={handleTogglePractice}>
-                {shadowing.shadowActive ? '⏹ Stop' : '🔁 Practice this word'}
-              </button>
+              <div className="row" style={{ alignItems: 'center' }}>
+                <button type="button" onClick={handleTogglePractice}>
+                  {shadowing.shadowActive ? '⏹ Stop' : '🔁 Practice this word'}
+                </button>
+                <SpeedControl speed={practiceSpeed} onChange={setPracticeSpeed} />
+              </div>
               {shadowing.shadowActive ? (
                 <LiveShadowWaveform
                   referenceBlob={audioBlob}
