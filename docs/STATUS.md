@@ -84,9 +84,16 @@ what's left is one deferred durability item (below).
   `inline_reading`; added `scripts/fix-vocabulary-numeral-readings.ts`
   (`npm run fix:vocabulary-numeral-readings -- [--apply]`) reusing the
   same `fixNumeralsInReadingOnly` repair for `vocabulary_items.reading`.
-  Found 8 affected rows (2人, 20歳, たったの1ヶ月, 3週間, ３羽, １羽, ２羽,
-  ２番目) — dry-run confirmed correct output; `--apply` (writes to prod)
-  pending user go-ahead.
+  Found 8 affected rows; applied. 7 fixed (2人, 20歳, 3週間, ３羽, １羽,
+  ２羽, ２番目 — including the reported 3週間). 1 (たったの1ヶ月) collides
+  with a pre-existing correct duplicate on
+  `vocabulary_items_owner_expr_reading_uidx` — the script now detects and
+  reports this case rather than crashing (same pattern as
+  `fix-vocabulary-reading-mismatches.ts`), but `merge:duplicate-vocabulary-
+  items`'s detection is scoped to the ichidan/godan reading-mismatch bug,
+  not numeral fusion, so this one pair is left unmerged pending a
+  numeral-aware extension or a manual call — no open card issue points at
+  it.
 
 - **2026-09-28 — Ichidan `plain_past_negative` pitch-accent coverage closed.**
   Last open gap from the 2026-09-12/13 inflected-pitch-accent pass (see

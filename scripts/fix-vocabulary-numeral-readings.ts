@@ -13,6 +13,13 @@
  * `vocabulary_items.reading` is the same shape (pure kana, digit + known
  * counter).
  *
+ * Same duplicate-collision handling as `fix-vocabulary-reading-mismatches.ts`:
+ * `vocabulary_items_owner_expr_reading_uidx` is unique on (expression,
+ * reading), and the fixed reading can collide with a pre-existing correct
+ * duplicate (e.g. mined a second time, or from an Anki import). Those are
+ * reported separately as needing `merge:duplicate-vocabulary-items` rather
+ * than written here.
+ *
  * Dry-run by default; --apply required to write. Idempotent: re-running
  * finds nothing once applied.
  *
@@ -35,27 +42,50 @@ async function main() {
     .is('deleted_at', null);
   if (error) throw new Error(`Failed to fetch vocabulary_items: ${error.message}`);
 
-  let fixed = 0;
-  for (const row of data ?? []) {
+  const items = data ?? [];
+  const idByExpressionReading = new Map(
+    items.map((item) => [`${item.expression} ${item.reading}`, item.id]),
+  );
+
+  const toFix: { id: string; expression: string; reading: string; next: string }[] = [];
+  const needsMerge: { id: string; expression: string; reading: string; next: string; duplicateOfId: string }[] = [];
+
+  for (const row of items) {
     const reading = String(row.reading ?? '');
     const nextReading = fixNumeralsInReadingOnly(reading);
     if (nextReading === reading) continue;
 
-    fixed += 1;
-    console.log(`  ${row.id}  ${row.expression}  "${reading}" -> "${nextReading}"`);
+    const duplicateOfId = idByExpressionReading.get(`${row.expression} ${nextReading}`);
+    if (duplicateOfId) {
+      needsMerge.push({ id: row.id, expression: row.expression, reading, next: nextReading, duplicateOfId });
+      continue;
+    }
+    toFix.push({ id: row.id, expression: row.expression, reading, next: nextReading });
+  }
 
+  for (const { id, expression, reading, next } of toFix) {
+    console.log(`  ${id}  ${expression}  "${reading}" -> "${next}"`);
     if (apply) {
       const { error: updateError } = await supabase
         .from('vocabulary_items')
-        .update({ reading: nextReading })
-        .eq('id', row.id);
+        .update({ reading: next })
+        .eq('id', id);
       if (updateError) {
-        throw new Error(`Failed to update vocabulary_item ${row.id}: ${updateError.message}`);
+        throw new Error(`Failed to update vocabulary_item ${id}: ${updateError.message}`);
       }
     }
   }
 
-  console.log(`\nDone. ${fixed} vocabulary_item(s) ${apply ? 'fixed' : 'would be fixed'}.`);
+  if (needsMerge.length) {
+    console.log(
+      `\n${needsMerge.length} item(s) whose fix would collide with an existing duplicate (not touched — run merge:duplicate-vocabulary-items after applying this):`,
+    );
+    for (const { id, expression, reading, next, duplicateOfId } of needsMerge) {
+      console.log(`  ${expression}: "${reading}" (${id}) duplicates "${next}" (${duplicateOfId})`);
+    }
+  }
+
+  console.log(`\nDone. ${toFix.length} item(s) ${apply ? 'fixed' : 'would be fixed'}.`);
   if (!apply) console.log('Dry run — nothing written. Re-run with --apply to write.');
 }
 
