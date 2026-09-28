@@ -686,13 +686,9 @@ export function ProgressPage() {
                 style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
               >
                 <span>
-                  {row.bookId ? (
-                    <Link to={`/books/${row.bookId}`} className="jp">
-                      {row.japanese || row.arc.sentenceId}
-                    </Link>
-                  ) : (
-                    <span className="jp">{row.japanese || row.arc.sentenceId}</span>
-                  )}
+                  <Link to={`/sentences/${row.arc.sentenceId}/deep-dive`} className="jp">
+                    {row.japanese || row.arc.sentenceId}
+                  </Link>
                   <span className="muted" style={{ fontSize: '0.8rem' }}>
                     {' '}
                     · {row.arc.clearedCount}/{row.arc.applicableCount} rungs

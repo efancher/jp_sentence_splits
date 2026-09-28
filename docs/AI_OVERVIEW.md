@@ -589,7 +589,17 @@ mature → shadowed → pitch known), each rung `true`/`false`/`null`
 ("nothing to gate on for this sentence," never blocking). Reuses the same
 proficiency primitives every other gate in the app already uses — no new
 concept. Panel ranks in-progress sentences fewest-rungs-left-first, each
-row naming its one blocking rung and linking into the sentence's book.
+row linking to `SentenceDeepDivePage` (`/sentences/:sentenceId/deep-dive`)
+instead of straight into the book. That page shows the full rung ladder and,
+for the reviewable rungs, a "Start deep-dive review" button that opens
+`ReviewPage` pinned to just this sentence (`?sentenceId=`) — real, graded
+FSRS reviews, pulled out of the normal due-date schedule on purpose
+(`getDueStudyItems`'s `ignoreDue` option, `new`/`learning`-state items only;
+an already-`review`/`relearning` item, including a not-yet-`contextMature`
+one, stays on its real schedule since cramming it early wouldn't grow
+`scheduledDays` the way maturity needs). `vocabConfirmed`/`shadowed` aren't
+FSRS cards, so those two rungs link to their existing confirm-vocab/shadow
+pages instead.
 Planner-step integration ("finish sentence X" as a session step)
 deliberately not built yet — view only, same phased-rollout call as the
 short games feature.

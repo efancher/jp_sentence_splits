@@ -1361,10 +1361,54 @@ possibilities, kept here so the thinking isn't lost:
   Matches the "ambient surfacing" feedback note. (The `pitch_accent` "missed
   in the drill twice too" case shipped 2026-09-11 as the focus-queue banner
   instead of an inline reveal note — see Done.)
-- [ ] **Opt-in single-sentence deep dive** — an explicit focus block that
-  walks one lagging sentence through recognition → production → listening →
-  shadow back to back. Distinct from the default queue, which
-  `spaceOutSiblingCards` deliberately keeps siblings apart in.
+- [x] **Opt-in single-sentence deep dive.** (2026-09-28) An explicit focus
+  block that walks one lagging sentence through its remaining mastery rungs
+  back to back — distinct from the default queue, which
+  `spaceOutSiblingCards` deliberately keeps siblings apart in. User decision
+  up front: reviewing a rung's card in the deep dive counts as a real FSRS
+  review (graded), not a read-only/ungraded practice pass — so this
+  deliberately bypasses normal due-date pacing, opt-in and scoped to one
+  sentence only.
+  - `SentenceMasteryOverview`'s existing arc/rung data (already scoped to
+    exactly this use case) drives it — `getSentenceDeepDiveInfo`
+    (`src/db/repository.ts`) plus a new `SentenceDeepDivePage`
+    (`/sentences/:sentenceId/deep-dive`, linked from `/progress`'s "Sentence
+    mastery" panel rows).
+  - **Reused `ReviewPage` itself rather than duplicating any of its ~10
+    per-activity-type card renderers** (`ReadingInContextCard`,
+    `SentenceConjugationCard`, `GrammarCompletionCard`, etc. — all
+    module-private to that file). A new `?sentenceId=` search param narrows
+    `ReviewPage`'s whole candidate-building scope to just that one sentence
+    (the same `scope.sentences` plumbing book-scoped `/books/:bookId/review`
+    already uses, just narrower) and sets a new `ignoreDue` option on
+    `getDueStudyItems` so not-yet-due cards for that sentence are pulled in
+    anyway. Every other gate (full-sentence readiness, quiet mode, grammar's
+    global-scope candidate picking) is untouched — this only relaxes the due
+    check.
+  - **`ignoreDue` only bypasses `new`/`learning`-state items.** An
+    already-`review`/`relearning` item (i.e. already proficient, or —
+    `contextMature` specifically — already reviewed at least once but not
+    yet mature) is deliberately left on its real schedule: cramming an early
+    review there wouldn't grow `scheduledDays` the way FSRS maturity needs
+    and would just miscalibrate its stability estimate. Concretely this
+    means `contextMature` and already-proficient rungs can't be force-
+    completed by the deep dive — `SentenceDeepDivePage` shows `contextMature`
+    as informational only ("comes with time"), never a button.
+  - `vocabConfirmed` and `shadowed` aren't FSRS cards at all, so those two
+    rungs link to their existing flows (`/books/:bookId/vocabulary/:sentenceId`,
+    `/books/:bookId/shadow/:sentenceId`) instead of joining the pinned
+    review session.
+  - New repository tests (`getDueStudyItems` ignoreDue behavior,
+    `getSentenceDeepDiveInfo`) plus a `ReviewPage` integration test proving
+    `?sentenceId=` surfaces a not-yet-due card the plain queue withholds.
+  - **Manual test plan:** on `/progress`, find a "Sentence mastery" row with
+    a rung left, click the sentence to open its deep dive, click "Start
+    deep-dive review" — it should open `/review` showing that sentence's
+    cards even if none were otherwise due today; grade one and confirm it
+    behaves like any other review (records a `Review` row, advances FSRS
+    state). Corruption spot-check: open `/study-items/:id` for the graded
+    item afterward and confirm its `Review` history looks normal, not
+    duplicated or misattributed to a different subject.
 - [x] **Shadowing weak words → pitch-accent drill.** (2026-09-22)
   `getPitchAccentShadowingFocusWords` resolves `getShadowingWeakWords`'
   flagged surface forms back to vocabulary items and surfaces them as a

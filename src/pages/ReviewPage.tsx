@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
@@ -1097,6 +1097,14 @@ export function ReviewPage() {
   const { bookId } = useParams();
   const navigate = useNavigate();
   const activeSession = useActiveSession();
+  // "Deep dive" (docs/ROADMAP.md "Opt-in single-sentence deep dive") — an
+  // explicit focus session on one lagging sentence's remaining mastery
+  // rungs, reached from SentenceDeepDivePage. Narrows the whole scope below
+  // to that one sentence and pulls its not-due cards in anyway (see
+  // `ignoreDue` on getDueStudyItems) — a deliberate, opt-in bypass of normal
+  // FSRS pacing, not a change to the regular queue's behavior.
+  const [searchParams] = useSearchParams();
+  const deepDiveSentenceId = searchParams.get('sentenceId') || undefined;
   // Only the `review` batch step type carries a targetCount to track against
   // (2026-08-26 follow-up). Prefer the step whose page this actually is
   // (`routeStep`) so the counter/auto-advance still work when the learner
@@ -1174,7 +1182,10 @@ export function ReviewPage() {
     const db = getDb();
     const book = bookId ? await db.books.get(bookId) : undefined;
     let sentences: Sentence[];
-    if (bookId) {
+    if (deepDiveSentenceId) {
+      const sentence = await db.sentences.get(deepDiveSentenceId);
+      sentences = sentence ? [sentence] : [];
+    } else if (bookId) {
       const memberships = await db.bookSentences
         .where('bookId')
         .equals(bookId)
@@ -1434,7 +1445,7 @@ export function ReviewPage() {
       grammarCandidates,
       existingGrammarItems,
     };
-  }, [bookId, settings?.quietMode]);
+  }, [bookId, deepDiveSentenceId, settings?.quietMode]);
 
   const descriptors = useMemo(
     () => (scope ? buildActivityDescriptors(scope) : []),
@@ -1504,6 +1515,7 @@ export function ReviewPage() {
           getDueStudyItems(descriptor.activityTypes, {
             subjectIds: descriptor.candidates.map(descriptor.subjectId),
             graduationMinScheduledDays: settings.graduationMinScheduledDays,
+            ignoreDue: Boolean(deepDiveSentenceId),
           }),
         ),
       );
@@ -1678,7 +1690,7 @@ export function ReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [scope, initialized, descriptors, settings]);
+  }, [scope, initialized, descriptors, settings, deepDiveSentenceId]);
 
   // Lazily seed study_items for the next never-reviewed subject once the
   // due queue runs dry (confirmed with the user — no batch seeding step),

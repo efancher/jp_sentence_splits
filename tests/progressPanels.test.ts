@@ -11,6 +11,7 @@ import {
   getGateFunnelSnapshot,
   getLeechList,
   getSelfRatingCalibration,
+  getSentenceDeepDiveInfo,
   getSentenceMasteryArcs,
   getSentenceMasteryOverview,
   getSkillCoverage,
@@ -336,6 +337,28 @@ describe('getSentenceMasteryOverview', () => {
     expect(overview.rows[0]!.japanese).toBe('もうすぐです。');
     expect(overview.rows[0]!.bookId).toBe(book.id);
     expect(overview.rows[0]!.arc.nextRung?.key).toBe('readingProficient');
+  });
+});
+
+describe('getSentenceDeepDiveInfo', () => {
+  beforeEach(() => {
+    resetDbForTests(`progress-panels-${createId('db')}`);
+  });
+
+  it('resolves the sentence, its arc, and its first book', async () => {
+    const db = getDb();
+    const book = await createBook({ title: 'Book A' });
+    await db.sentences.add(makeSentence({ id: 'sent-almost', japanese: 'もうすぐです。' }));
+    await addSentencesToBook(book.id, ['sent-almost']);
+
+    const info = await getSentenceDeepDiveInfo('sent-almost');
+    expect(info?.sentence.japanese).toBe('もうすぐです。');
+    expect(info?.bookId).toBe(book.id);
+    expect(info?.arc.sentenceId).toBe('sent-almost');
+  });
+
+  it('returns undefined for a nonexistent sentence', async () => {
+    expect(await getSentenceDeepDiveInfo('no-such-sentence')).toBeUndefined();
   });
 });
 

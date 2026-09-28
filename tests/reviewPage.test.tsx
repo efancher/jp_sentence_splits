@@ -9,6 +9,7 @@ import {
   ensureGrammarPattern,
   ensureGrammarStudyItem,
   ensureSentenceGrammar,
+  ensureStudyItem,
   getDb,
   setBookSuspended,
   updateSettings,
@@ -504,6 +505,22 @@ describe('ReviewPage', () => {
 
     // The book's own review page is an explicit opt-in — still shows its cards.
     renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+    expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
+  });
+
+  it('a sentence-pinned "deep dive" (?sentenceId=) pulls in a not-yet-due new-state card the plain queue withholds (docs/ROADMAP.md "Opt-in single-sentence deep dive")', async () => {
+    await seedBookWithSentence();
+    const item = await ensureStudyItem('sentence', 'sent-1', 'reading_in_context');
+    await getDb().studyItems.update(item.id, {
+      fsrsState: { ...item.fsrsState, due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() },
+    });
+
+    const plain = renderReviewPage('/review', '/review');
+    expect(await screen.findByText('All caught up.')).toBeInTheDocument();
+    expect(screen.queryByText('本を読みます。')).not.toBeInTheDocument();
+    plain.unmount();
+
+    renderReviewPage('/review?sentenceId=sent-1', '/review');
     expect(await screen.findByText('本を読みます。')).toBeInTheDocument();
   });
 

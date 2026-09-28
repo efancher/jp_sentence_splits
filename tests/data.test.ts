@@ -901,6 +901,34 @@ describe('FSRS review (study_items/reviews)', () => {
     expect(withoutGraduation.map((row) => row.id)).toEqual([item.id]);
   });
 
+  it('getDueStudyItems with ignoreDue pulls in a not-yet-due new/learning item (sentence deep dive)', async () => {
+    const newItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await getDb().studyItems.update(newItem.id, {
+      fsrsState: { ...newItem.fsrsState, due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() },
+    });
+    const results = await getDueStudyItems(['comprehension'], {
+      subjectIds: [newItem.subjectId],
+      ignoreDue: true,
+    });
+    expect(results.map((row) => row.id)).toEqual([newItem.id]);
+  });
+
+  it('getDueStudyItems with ignoreDue still respects the schedule for review/relearning items — cramming a not-yet-due already-graduated card would miscalibrate its FSRS stability, not help it', async () => {
+    const reviewItem = await ensureStudyItem('sentence', 'sent-1', 'comprehension');
+    await getDb().studyItems.update(reviewItem.id, {
+      fsrsState: {
+        ...reviewItem.fsrsState,
+        state: 'review',
+        due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    const results = await getDueStudyItems(['comprehension'], {
+      subjectIds: [reviewItem.subjectId],
+      ignoreDue: true,
+    });
+    expect(results).toEqual([]);
+  });
+
   describe('book suspension', () => {
     const seedSuspensionFixture = async () => {
       const db = getDb();

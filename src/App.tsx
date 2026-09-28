@@ -165,6 +165,11 @@ const ProgressPage = lazy(() =>
     default: module.ProgressPage,
   })),
 );
+const SentenceDeepDivePage = lazy(() =>
+  import('./pages/SentenceDeepDivePage').then((module) => ({
+    default: module.SentenceDeepDivePage,
+  })),
+);
 const PlayHubPage = lazy(() =>
   import('./pages/PlayHubPage').then((module) => ({
     default: module.PlayHubPage,
@@ -218,6 +223,7 @@ export default function App() {
             <Route path="study-items" element={<StudyItemsListPage />} />
             <Route path="pronunciation" element={<PronunciationProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
+            <Route path="sentences/:sentenceId/deep-dive" element={<SentenceDeepDivePage />} />
             <Route path="play" element={<PlayHubPage />} />
             <Route path="play/:gameId/:signal" element={<PlayGamePage />} />
             <Route path="pitch-accent" element={<PitchAccentDrillPage />} />

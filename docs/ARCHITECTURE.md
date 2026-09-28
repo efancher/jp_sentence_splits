@@ -239,7 +239,13 @@ the `grammarPattern` subject (grammar-learning system Phase 5,
 its history) — see `docs/STATUS.md` for the full list. Also includes
 auto error-classification (`classifyReviewError`) and graduation
 (`isGraduated`, retiring a study item from the due rotation past a
-configurable FSRS-interval threshold).
+configurable FSRS-interval threshold). `getDueStudyItems`'s `ignoreDue`
+option (2026-09-28) is the one deliberate bypass of due-date gating: opt-in,
+scoped to a single pinned sentence (`ReviewPage`'s `?sentenceId=` "deep
+dive" mode, `SentenceDeepDivePage`), and only for `new`/`learning`-state
+items — an already-`review`/`relearning` item still waits for its real due
+date, since cramming it early wouldn't grow `scheduledDays` the way FSRS
+maturity actually needs.
 
 ## External interop
 

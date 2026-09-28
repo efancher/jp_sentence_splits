@@ -4287,6 +4287,18 @@ export async function getDueStudyItems(
     limit?: number;
     /** Graduation (Phase 7.10) — omitted or 0 disables it; see isGraduated, src/lib/scheduling.ts. */
     graduationMinScheduledDays?: number;
+    /**
+     * Skip the `due <= now` filter, but only for items still in `new`/
+     * `learning` state — used solely by ReviewPage's single-sentence "deep
+     * dive" mode (docs/ROADMAP.md "Opt-in single-sentence deep dive") to
+     * pull a lagging sentence's not-yet-proficient cards into a focused
+     * session on purpose. Deliberately does NOT bypass the date for
+     * `review`/`relearning` items: those are already proficient (or, for
+     * `contextMature`, waiting on real calendar time to accumulate — cramming
+     * an early review there doesn't grow `scheduledDays` the way maturity
+     * actually needs and would just miscalibrate FSRS's stability estimate).
+     */
+    ignoreDue?: boolean;
   } = {},
 ): Promise<StudyItem[]> {
   const db = getDb();
@@ -4296,8 +4308,13 @@ export async function getDueStudyItems(
     .where('activityType')
     .anyOf(activityTypes)
     .toArray();
+  const isUngraduatedState = (item: StudyItem) =>
+    item.fsrsState.state === 'new' || item.fsrsState.state === 'learning';
   const due = candidates
-    .filter((item) => item.fsrsState.due <= nowIsoValue)
+    .filter(
+      (item) =>
+        item.fsrsState.due <= nowIsoValue || (options.ignoreDue && isUngraduatedState(item)),
+    )
     .filter((item) => !subjectIdSet || subjectIdSet.has(item.subjectId))
     .filter((item) => !isGraduated(item.fsrsState, options.graduationMinScheduledDays ?? 0))
     .sort((a, b) => a.fsrsState.due.localeCompare(b.fsrsState.due));
@@ -5037,6 +5054,31 @@ export async function getSentenceMasteryOverview(limit = 20): Promise<SentenceMa
     confirmedCount: arcs.length,
     completeCount,
   };
+}
+
+export interface SentenceDeepDiveInfo {
+  sentence: Sentence;
+  arc: SentenceMasteryArc;
+  /** First book this sentence belongs to — for the confirm-vocab/shadow links, same convention as SentenceMasteryOverviewRow. */
+  bookId?: string;
+}
+
+/**
+ * `SentenceDeepDivePage` — one sentence's arc plus enough to link out to its
+ * non-review rungs (`vocabConfirmed`, `shadowed`) and open a `/review`
+ * session scoped to just this sentence for the reviewable ones. `undefined`
+ * when the sentence doesn't exist (soft-deleted, bad id).
+ */
+export async function getSentenceDeepDiveInfo(sentenceId: string): Promise<SentenceDeepDiveInfo | undefined> {
+  const db = getDb();
+  const sentence = await db.sentences.get(sentenceId);
+  if (!sentence) return undefined;
+  const [arcsById, membership] = await Promise.all([
+    getSentenceMasteryArcs([sentenceId]),
+    db.bookSentences.where('sentenceId').equals(sentenceId).first(),
+  ]);
+  const arc = arcsById.get(sentenceId) ?? buildSentenceMasteryArc(sentenceId, {});
+  return { sentence, arc, bookId: membership?.bookId };
 }
 
 /**

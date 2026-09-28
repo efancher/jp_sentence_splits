@@ -31,6 +31,25 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Opt-in single-sentence deep dive.** (docs/ROADMAP.md) New
+  `SentenceDeepDivePage` (`/sentences/:sentenceId/deep-dive`, linked from
+  `/progress`'s "Sentence mastery" panel) walks one lagging sentence's
+  remaining rungs, with the user's own up-front call that this is graded
+  (a real FSRS review), not read-only practice. Reused `ReviewPage`'s
+  existing candidate-building/card-rendering wholesale instead of
+  duplicating any of its ~10 per-activity-type card components: a new
+  `?sentenceId=` param narrows `ReviewPage`'s scope to one sentence, and a
+  new `ignoreDue` option on `getDueStudyItems` pulls that sentence's
+  not-yet-due cards in anyway — but only while they're still `new`/
+  `learning` state, never `review`/`relearning` (an already-proficient or
+  not-yet-mature item stays on its real schedule; cramming it early doesn't
+  grow `scheduledDays` the way maturity needs and would just miscalibrate
+  FSRS's stability estimate). `vocabConfirmed`/`shadowed` aren't FSRS cards,
+  so those rungs link to their existing flows instead;
+  `contextMature` is shown informational-only, never a button, since it
+  can't be fast-tracked this way. See ARCHITECTURE.md's Scheduling section
+  and ROADMAP.md for the full detail + manual test plan.
+
 - **2026-09-28 — Ichidan `plain_past_negative` pitch-accent coverage closed.**
   Last open gap from the 2026-09-12/13 inflected-pitch-accent pass (see
   ROADMAP's "Remaining inflected `pitch_accent` gaps"). Verified against
