@@ -31,6 +31,39 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Sentence glossing accessible with mostly-unknown
+  vocabulary.** User brainstorm (four parallel agents: UI, gating, AI/data
+  pipeline, pedagogy — see docs/ROADMAP.md's new "Possibilities (sentence
+  glossing accessibility)" for what was parked). Shipped:
+  1. `VocabularyReviewPage` now shows the sentence's existing
+     `translation` (when set) above the word picker — previously only
+     shown on `AnalyzePage`/`ReaderPage`, never at the earlier
+     confirmation stage where it helps most.
+  2. `KaraokeSentenceText`'s per-word English gloss popup no longer
+     requires the sentence to be actively playing — tapping any glossed
+     word now pins its popup (toggle off by tapping again); playback
+     highlighting still takes priority over a tapped word once it starts.
+     Used by `ReaderPage` and the listening review card.
+  3. `ReaderPage` gained a per-sentence "Show structure" toggle: an
+     ungated, client-side-only heuristic chunk preview
+     (`previewHeuristicChunks`, the same Cure-Dolly chunker `AnalyzePage`
+     uses in dry-run form — no AI, no saved analysis, no gate) rendered
+     via `ChunkPuzzleStrip`, labeled as a rough guess rather than the
+     confirmed analysis.
+  4. The `continue_book` (structural analysis) readiness gate
+     (`getSentenceReadingIntroducedReadiness`, repository.ts) changed from
+     requiring *every* linked word to have at least one reading/meaning
+     SRS rep to requiring only `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` (0.5,
+     `sessionPlannerConfig.ts`) of them — the all-or-nothing form meant a
+     sentence with even one never-reviewed word was completely unreachable
+     for glossing, which blocked exactly the sentences glossing should
+     help with. `getSentenceReadingIntroducedReadiness` now takes an
+     optional `minRatio` param; `getParticlePuzzleData` explicitly passes
+     `1` to keep its own stricter "must be able to read the whole
+     sentence" bar (2026-09-25), so the game's eligibility is unaffected.
+     `getGateFunnelSnapshot`'s `continueBookBlocked` count on `/progress`
+     now reflects the loosened gate automatically.
+  Full test suite green (2168 passed), `npm run typecheck` clean.
 - **2026-09-28 — "Pause pitch accent" setting.** Follow-on to the shadowing-
   readiness loosening above, same session: user decided to go further and
   pause active pitch-accent practice outright for now, letting shadowing

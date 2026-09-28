@@ -1519,6 +1519,66 @@ possibilities, kept here so the thinking isn't lost:
   re-measuring as more single-speaker content is mined. Dual-ear/binaural
   playback deliberately deferred (sequential tap-to-play for v1).
 
+## Possibilities (sentence glossing accessibility)
+
+From a 2026-09-28 brainstorm on making sentence glossing (structural
+analysis + the read-along/vocab-confirmation surfaces around it) more
+usable when most of a sentence's vocabulary is still unknown, not just
+once a sentence is nearly mastered. Four shipped the same day (see
+STATUS.md): showing `sentence.translation` on `VocabularyReviewPage`,
+tap-to-toggle word glosses in `KaraokeSentenceText` independent of
+playback, an ungated client-side heuristic structure preview on
+`ReaderPage` (`previewHeuristicChunks`, no AI, no saved analysis), and
+replacing `continue_book`'s all-or-nothing "every word introduced" gate
+with a `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` density threshold
+(`getSentenceReadingIntroducedReadiness`, repository.ts — `getParticlePuzzleData`
+deliberately keeps the strict all-or-nothing bar via `minRatio: 1`, since
+that game needs the whole sentence readable for the particle blank to be
+a comprehension check rather than a guess). The rest are unscheduled,
+kept here so the thinking isn't lost:
+
+- **Passed `reading_in_context` comprehension check as an alternate
+  `continue_book`/shadowing readiness signal**, alongside (not replacing)
+  `vocabularyIntroduced`. Comprehension is arguably a more valid readiness
+  proxy than per-word SRS reps, but `reading_in_context`'s 4-option check
+  is currently documented as informational-only — using its result to
+  drive a real gate is a deliberate repurposing, not a silent extension.
+  Needs an explicit decision before building, not a default.
+- **A genuinely non-SRS "preview glossing" step/bucket** for sentences too
+  unknown even for the density threshold above — pure exposure (never
+  writes to `SentenceAnalysis`/FSRS), the highest-fidelity answer to "an
+  on-ramp for brand-new material." Needs a new `PlannerStepTargetKind` and
+  budget-slice plumbing in `buildExploreSteps`/`sessionPlanner.ts` — a
+  real lift, not a config tweak like the density threshold was.
+- **Precompute `vocab-assist` (and sentence translation, for the
+  sentences that don't have one yet) at mining/import commit time** via
+  Anthropic's Message Batches API (50% off Haiku), instead of live-firing
+  on first `VocabularyReviewPage` visit. Since both write to the shared
+  `Sentence` row (not per-user), the cost is paid once per sentence ever
+  mined, and it removes the "translation isn't ready yet" gap the
+  translation quick-win above can still hit on a freshly-imported,
+  not-yet-glossed sentence.
+- **Port the offline POS-disambiguated JMDict lookup (`scripts/lib/
+  jmdict.ts`) into a runtime the browser/edge function can query**, as a
+  free first pass before any Haiku call — closes the gap where
+  `KaraokeSentenceText`'s tap gloss shows nothing until `vocab-assist` has
+  fired for that sentence, and could eliminate most Haiku calls outright
+  (the ambiguity guard already filters down to the cases that actually
+  need AI).
+- **Per-chunk masking of unconfirmed words in `AnalyzePage`'s chunk
+  cards** (show role only, tap to reveal, rather than literal English
+  always visible) — parked because `AnalysisChunk` has no real link to
+  `SentenceVocabulary` spans today (`chunk.japanese` is free text, not a
+  span reference), and because `AnalyzePage` is where the literal-English
+  gloss is *authored*, not just displayed — the "hide it from the
+  learner" framing fits a read-only viewer better than this page's actual
+  role. Would need real chunk↔vocabulary-span data first.
+- **Frequency-rank-based glossing thresholds** (gloss only words below
+  some corpus-frequency rank — standard in L2 reading pedagogy) — currently
+  infeasible: there's no lexical frequency-rank data anywhere in this
+  codebase (only acoustic pitch Hz "frequency," an unrelated concept).
+  Would need a new data source before this is buildable.
+
 ## Not planned (deliberate)
 
 - **Dictionary H/L marks on conjugation (`sentence_transformation`)

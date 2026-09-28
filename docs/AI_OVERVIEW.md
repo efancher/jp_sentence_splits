@@ -276,14 +276,16 @@ longer always paired in the same pass (vocabulary-first reorder, user
 request, 2026-08-27): a not-yet-confirmed sentence gets only
 `vocabulary_review`; `continue_book` becomes eligible once the sentence's
 vocabulary is confirmed (`SentenceAnalysis.vocabularyReviewStatus ===
-'confirmed'`) *and* every linked word has a reading/meaning study item
-(`reading_retrieval`/`cloze`/`reading_production`) that's left FSRS's
-`new` state — `isVocabularyItemIntroduced`, `getSentenceReadingIntroducedReadiness`
-(`repository.ts`), patched onto `ExploreCandidate.sentences[].vocabularyIntroduced`
-— so structural analysis/grammar-noticing never surfaces before the
-learner has actually had the word come up in a review, not just picked it
-during confirmation. `continue_book` used to also wait on every linked
-vocabulary item independently reaching full FSRS *proficiency* (reusing
+'confirmed'`) *and* at least `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` (0.5,
+`sessionPlannerConfig.ts`) of its linked words have a reading/meaning
+study item (`reading_retrieval`/`cloze`/`reading_production`) that's left
+FSRS's `new` state — `isVocabularyItemIntroduced`,
+`getSentenceReadingIntroducedReadiness` (`repository.ts`), patched onto
+`ExploreCandidate.sentences[].vocabularyIntroduced` — so structural
+analysis/grammar-noticing never surfaces before the learner has had *some*
+of the sentence's words come up in a review, not just picked them during
+confirmation. `continue_book` used to also wait on every linked vocabulary
+item independently reaching full FSRS *proficiency* (reusing
 `isSentenceReadyForFullReview`, §4, the same gate full-sentence review
 cards use), but that reuse was a bug, not a deliberate rule: on a corpus
 with several books mid-read, most frontier sentences sat "confirmed but
@@ -292,14 +294,24 @@ supply to near zero (user report, 2026-09-16). Dropping the proficiency
 wait entirely (first fix, same day) went too far the other way — a word
 picked during confirmation but never seen in a single review rep (zero
 study items at all) started surfacing for analysis too. The
-`vocabularyIntroduced` check (second fix, same day) is the middle ground:
-cheap to satisfy (one rep, any rating), but requires the *reading/meaning*
-activity types specifically — a word with only a `pitch_accent` rep on the
-same `vocabularyItem` subject doesn't count, since pitch practice isn't
-reading/meaning recall (the blended `getProficientVocabularyItemIds` used
-to let pitch reps stand in for recall almost everywhere; this is the first
-consumer split off it). Full-sentence review cards are untouched — they
-still gate on `isSentenceReadyForFullReview` directly. Within the glossing
+`vocabularyIntroduced` check (second fix, same day) required the
+*reading/meaning* activity types specifically — a word with only a
+`pitch_accent` rep on the same `vocabularyItem` subject doesn't count,
+since pitch practice isn't reading/meaning recall (the blended
+`getProficientVocabularyItemIds` used to let pitch reps stand in for
+recall almost everywhere; this is the first consumer split off it) — but
+made the check all-or-nothing (every linked word), which overcorrected:
+a sentence with even one never-reviewed word was completely unreachable
+for glossing, blocking exactly the mostly-unfamiliar sentences glossing
+should help with. `CONTINUE_BOOK_MIN_INTRODUCED_RATIO` (2026-09-28)
+relaxes that to a share instead of all of them.
+`getSentenceReadingIntroducedReadiness` takes an optional `minRatio`
+param for this — `getParticlePuzzleData` (§3, `/play`) passes `1`
+deliberately, since that game needs the whole sentence readable for its
+particle blank to be a comprehension check rather than a guess
+(2026-09-25), so its eligibility is unaffected by the `continue_book`
+loosening. Full-sentence review cards are untouched — they still gate on
+`isSentenceReadyForFullReview` directly. Within the glossing
 bucket, vocabulary confirmations get first claim on the minutes (user
 request, 2026-08-29): `buildExploreSteps` runs two passes — pass 1 spends
 up to `VOCAB_CONFIRM_MIN_GLOSSING_SHARE` (0.6) of the bucket on
@@ -995,7 +1007,10 @@ script, so blank is a normal transient state). `selectionNeedsMeaning`
 exempts particles/auxiliaries deliberately added to the tray.
 `AnalyzePage` and `VocabularyReviewPage` cross-link (a "Vocabulary" button
 on `AnalyzePage`'s header and on each `BookDetailPage` sentence row; an
-"Analyze" link back from the vocabulary page).
+"Analyze" link back from the vocabulary page). `VocabularyReviewPage` also
+shows the sentence's existing `translation` (when set) above the picker
+(2026-09-28) — whole-sentence meaning while confirming/glossing individual
+words, not just once analysis begins on `AnalyzePage`.
 
 **Vocabulary meaning glossing.** The fugashi/UniDic tokenizer gives every
 suggestion a surface/lemma/reading/POS but never an English gloss, so
@@ -1052,18 +1067,27 @@ continues. Auto-advance relies on a completion signal on
 `NativeAudioController.play()` — an optional, generation-guarded `onEnded`
 callback (`src/lib/nativeAudio.ts`) that only fires on a genuine natural
 end, never on a manual stop or a superseded clip. Reuses
-`KaraokeSentenceText` (§4) for per-word highlight + tap-word gloss, but only
-on the currently-playing sentence — highlighting only means something
-there, and it keeps alignment-fetch cost to one clip at a time instead of
-firing for every sentence in the chapter on open. A viewer-local
-plain/furigana/reading-only toggle (`textDisplayMode`, defaulting from the
-global setting) degrades to static text with no per-word highlight outside
-plain mode, since ruby markup and the plain-text character-offset
-highlighting don't currently compose. Sentences with no `SentenceAudio`
-degrade to plain static text with no play control rather than blocking the
-chapter. Also: a playback-speed selector, auto-scroll to the active
-sentence, and a per-sentence "Show translation" reveal so a comprehension
-self-check has a way to confirm you got it right.
+`KaraokeSentenceText` (§4) for per-word highlight + gloss, but only on the
+currently-playing sentence — highlighting only means something there, and
+it keeps alignment-fetch cost to one clip at a time instead of firing for
+every sentence in the chapter on open. Each glossed word's popup can now
+also be tapped directly (2026-09-28) — independent of whether the sentence
+is playing, so checking a word's gloss doesn't require starting playback;
+playback highlighting still wins over a tapped word once it starts. A
+viewer-local plain/furigana/reading-only toggle (`textDisplayMode`,
+defaulting from the global setting) degrades to static text with no
+per-word highlight outside plain mode, since ruby markup and the
+plain-text character-offset highlighting don't currently compose.
+Sentences with no `SentenceAudio` degrade to plain static text with no
+play control rather than blocking the chapter. Also: a playback-speed
+selector, auto-scroll to the active sentence, a per-sentence "Show
+translation" reveal so a comprehension self-check has a way to confirm you
+got it right, and (2026-09-28) a per-sentence "Show structure" reveal — an
+ungated, client-side-only heuristic chunk preview (`previewHeuristicChunks`,
+the same Cure-Dolly chunker `AnalyzePage` uses, dry-run — no AI, no saved
+analysis) rendered via `ChunkPuzzleStrip`, so a sentence too new/unfamiliar
+to have cleared `continue_book`'s gate can still get a rough structural
+glance here.
 
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
