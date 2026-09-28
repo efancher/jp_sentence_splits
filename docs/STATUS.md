@@ -31,6 +31,29 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — "Practice this part" on ShadowPage's Focus-on-this callout
+  now visibly does something.** User report: clicking it on a
+  `pitch_accent_shape` finding ("Dictionaries mark 「昨日」 as nakadaka;
+  your pitch here sounds like heiban instead.") "doesn't seem to do
+  anything." It wasn't broken — `AnalysisPanel`'s button correctly calls
+  `onProposeSegment` → `setTargetRange`, which is covered by an existing
+  test — but the visible effect (the "Target: …" label and "Loop target"
+  button) renders in the reference-player section at the *top* of the
+  page, while the button lives far below, inside a past attempt's
+  expanded `AnalysisPanel`. On a page this long the state change was real
+  but off-screen, reading as a no-op. Fix: `ShadowPage.tsx`'s
+  `onProposeSegment` now points at a new `handlePracticeSegment` that sets
+  the target range as before and then scrolls the reference player's
+  Mark-start/Mark-end/Target row (`targetControlsRef`) into view. No
+  behavior change to the target-range mechanism itself, so the existing
+  `shadowPage.test.tsx` coverage passes unmodified (jsdom doesn't
+  implement `scrollIntoView`, called via `?.()` so it's a no-op there).
+  **Manual test plan:** on a sentence with a saved shadowing attempt and a
+  pitch-accent mismatch in "Focus on this," click Analyze, scroll down to
+  "Practice this part," click it — the page should scroll back up to a
+  newly-visible "Target: …s–…s" label with an enabled "Loop target"
+  button.
+
 - **2026-09-28 — Grammar patterns auto-track once vocab-ready, instead of
   waiting for a manual "Track" revisit.** User asked why so little data
   exists for a proposed grammar-discrimination card; investigation found

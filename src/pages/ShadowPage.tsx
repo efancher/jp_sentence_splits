@@ -86,6 +86,11 @@ export function ShadowPage() {
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
   const ephemeralAudioRef = useRef<HTMLAudioElement | null>(null);
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
+  // Scroll target for "Practice this part" (AnalysisPanel, down in the
+  // Past-attempts list) — it only sets targetRange, which renders the
+  // Target/Loop-target controls up here in the reference player. Without a
+  // scroll, clicking it looks like it did nothing.
+  const targetControlsRef = useRef<HTMLDivElement | null>(null);
 
   const quietMode = useLiveQuery(async () => (await readSettings()).quietMode ?? false, []);
 
@@ -326,6 +331,11 @@ export function ShadowPage() {
     setTargetRange((prev) => ({ startMs: prev?.startMs ?? 0, endMs }));
   }
 
+  function handlePracticeSegment(range: TimeRangeMs) {
+    setTargetRange(range);
+    targetControlsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }
+
   function handleClearTarget() {
     targetLoopCoordinator.current.cancel();
     setTargetRange(null);
@@ -543,7 +553,7 @@ export function ShadowPage() {
             />
             {referenceError ? <p className="muted">{referenceError}</p> : null}
             <SpeedControl speed={speed} onChange={setSpeed} />
-            <div className="row" style={{ alignItems: 'center' }}>
+            <div className="row" style={{ alignItems: 'center' }} ref={targetControlsRef}>
               <button type="button" onClick={handleMarkStart}>
                 Mark start
               </button>
@@ -825,7 +835,7 @@ export function ShadowPage() {
                       durationHintSeconds={attempt.durationMs / 1000}
                       targetRange={targetRange ?? undefined}
                       referencePlaybackRate={attempt.referencePlaybackRate}
-                      onProposeSegment={setTargetRange}
+                      onProposeSegment={handlePracticeSegment}
                     />
                   ) : null}
                 </li>
