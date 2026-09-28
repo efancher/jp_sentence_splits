@@ -164,6 +164,89 @@ describe('grammar pattern duplicate adoption', () => {
   });
 });
 
+describe('study_items duplicate adoption', () => {
+  beforeEach(() => {
+    resetDbForTests(`sync-adopt-${createId('db')}`);
+    fake.calls.length = 0;
+    fake.state.result = { data: null, error: null };
+  });
+
+  const REMOTE_STUDY_ITEM_ID = 'study_item_00000000-remote';
+
+  function remoteStudyItemRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: REMOTE_STUDY_ITEM_ID,
+      subject_type: 'vocabularyItem',
+      subject_id: 'vocab_1',
+      activity_type: 'cloze',
+      fsrs_state: { due: '2026-09-28T00:00:00.000Z', reps: 3, state: 'review', lapses: 0 },
+      created_at: '2026-09-18T20:42:02.000Z',
+      updated_at: '2026-09-18T20:42:33.000Z',
+      version: 2,
+      ...overrides,
+    };
+  }
+
+  it('adopts the remote study item and repoints its reviews and card issue report (and their queued pushes)', async () => {
+    const local = await ensureStudyItem('vocabularyItem', 'vocab_1', 'cloze');
+    const db = getDb();
+    const review = {
+      id: createId('review'),
+      studyItemId: local.id,
+      timestamp: '2026-09-27T10:00:00.000Z',
+      rating: 'good' as const,
+    };
+    const report = {
+      id: createId('card_issue_report'),
+      studyItemId: local.id,
+      activityType: 'cloze' as const,
+      note: 'speed adjustment does nothing',
+      status: 'open' as const,
+      createdAt: '2026-09-27T19:23:03.000Z',
+      updatedAt: '2026-09-27T19:23:03.000Z',
+    };
+    await db.reviews.put(review);
+    await db.cardIssueReports.put(report);
+    for (const [entity, recordId, payload] of [
+      ['reviews', review.id, review],
+      ['card_issue_reports', report.id, report],
+    ] as const) {
+      await enqueueMutation({ entity, recordId, operation: 'upsert', expectedVersion: null, payload });
+    }
+
+    await remapDuplicateEntityId('study_items', local.id, remoteStudyItemRow());
+
+    // the local duplicate is gone, the remote row is adopted
+    expect(await db.studyItems.get(local.id)).toBeUndefined();
+    expect((await db.studyItems.get(REMOTE_STUDY_ITEM_ID))?.fsrsState.reps).toBe(3);
+    expect(await db.syncRecordMeta.get(`study_items:${local.id}`)).toBeUndefined();
+    expect((await db.syncRecordMeta.get(`study_items:${REMOTE_STUDY_ITEM_ID}`))?.version).toBe(2);
+
+    // review history follows, locally and in its queued push
+    expect((await db.reviews.get(review.id))?.studyItemId).toBe(REMOTE_STUDY_ITEM_ID);
+    const reviewQueued = await db.syncQueue.where('[entity+recordId]').equals(['reviews', review.id]).first();
+    expect((reviewQueued?.payload as { studyItemId: string }).studyItemId).toBe(REMOTE_STUDY_ITEM_ID);
+
+    // filed card issue report follows too
+    expect((await db.cardIssueReports.get(report.id))?.studyItemId).toBe(REMOTE_STUDY_ITEM_ID);
+    const reportQueued = await db.syncQueue.where('[entity+recordId]').equals(['card_issue_reports', report.id]).first();
+    expect((reportQueued?.payload as { studyItemId: string }).studyItemId).toBe(REMOTE_STUDY_ITEM_ID);
+  });
+
+  it('leaves unrelated study items, reviews and reports alone', async () => {
+    const local = await ensureStudyItem('vocabularyItem', 'vocab_1', 'cloze');
+    const bystanderItem = await ensureStudyItem('vocabularyItem', 'vocab_2', 'cloze');
+    const db = getDb();
+    const bystanderReview = { id: createId('review'), studyItemId: bystanderItem.id, timestamp: '2026-09-27T10:00:00.000Z', rating: 'good' as const };
+    await db.reviews.put(bystanderReview);
+
+    await remapDuplicateEntityId('study_items', local.id, remoteStudyItemRow());
+
+    expect(await db.studyItems.get(bystanderItem.id)).toBeDefined();
+    expect((await db.reviews.get(bystanderReview.id))?.studyItemId).toBe(bystanderItem.id);
+  });
+});
+
 describe('sentence_grammar / grammar_relationships duplicate adoption', () => {
   beforeEach(() => {
     resetDbForTests(`sync-adopt-${createId('db')}`);
@@ -231,6 +314,11 @@ describe('adoptRemoteDuplicate remote lookup', () => {
     ],
     ['kanji', { character: '大' }, [['character', '大']]],
     ['vocabulary_items', { expression: '大学', reading: 'だいがく' }, [['expression', '大学'], ['reading', 'だいがく']]],
+    [
+      'study_items',
+      { subject_type: 'vocabularyItem', subject_id: 'vocab_1', activity_type: 'cloze' },
+      [['subject_type', 'vocabularyItem'], ['subject_id', 'vocab_1'], ['activity_type', 'cloze']],
+    ],
   ];
 
   for (const [entity, row, eqs] of lookups) {

@@ -50,6 +50,26 @@ what's left is one deferred durability item (below).
   can't be fast-tracked this way. See ARCHITECTURE.md's Scheduling section
   and ROADMAP.md for the full detail + manual test plan.
 
+- **2026-09-28 — Sync issue triage: `study_items` can permanently deadlock
+  the push queue on a 23505, now recovered like the other dedup entities.**
+  A learner's sync_issue report showed 24 `study_items` upserts stuck
+  forever on "duplicate key value violates unique constraint
+  `study_items_uidx`" (retryCount 10 each). Root cause: `study_items` are
+  created lazily per-device with a random id (`ensureStudyItem`), not a
+  deterministic natural-key id like the existing dedup entities, but
+  Postgres still enforces one row per (owner, subject_type, subject_id,
+  activity_type) — so two devices creating the same next-due card before
+  either syncs mint permanent-conflict twins, and `study_items` was
+  missing from `DEDUP_ENTITIES` in `src/sync/engine.ts`, so the existing
+  `adoptRemoteDuplicate` 23505-recovery path never ran for it. Added
+  `study_items` to `DEDUP_ENTITIES`/`GetOrCreateEntity`, a natural-key
+  lookup case in `adoptRemoteDuplicate`, and reference remapping for
+  `reviews.studyItemId` and `cardIssueReports.studyItemId` (mirrors the
+  existing `remapGrammarStudyItems` precedent, just in the other
+  direction — study_items is the deduped entity here, not the referrer).
+  New coverage in `tests/syncAdoptDuplicate.test.ts`; full suite green
+  (2156 passed).
+
 - **2026-09-28 — Ichidan `plain_past_negative` pitch-accent coverage closed.**
   Last open gap from the 2026-09-12/13 inflected-pitch-accent pass (see
   ROADMAP's "Remaining inflected `pitch_accent` gaps"). Verified against

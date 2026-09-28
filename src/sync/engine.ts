@@ -568,7 +568,8 @@ type DedupEntity =
   | 'vocabulary_items'
   | 'grammar_patterns'
   | 'sentence_grammar'
-  | 'grammar_relationships';
+  | 'grammar_relationships'
+  | 'study_items';
 
 const DEDUP_ENTITIES = new Set<SyncEntity>([
   'kanji',
@@ -576,6 +577,7 @@ const DEDUP_ENTITIES = new Set<SyncEntity>([
   'grammar_patterns',
   'sentence_grammar',
   'grammar_relationships',
+  'study_items',
 ]);
 
 function isDedupEntity(entity: SyncEntity): entity is DedupEntity {
@@ -585,7 +587,15 @@ function isDedupEntity(entity: SyncEntity): entity is DedupEntity {
 /**
  * Entities whose ids are derived from their natural key (`mintGetOrCreateId`
  * in repository.ts): the dedup entities plus `vocabulary_kanji`, whose id comes
- * from its (deterministic) vocabulary item + position.
+ * from its (deterministic) vocabulary item + position. `study_items` is the
+ * odd one out here — its id is a random UUID (`ensureStudyItem`), not
+ * natural-key-derived, so the "same id, first push" dance in
+ * `adoptSameIdRemote` below essentially never fires for it. It still needs to
+ * be a `GetOrCreateEntity`/`DedupEntity` for `adoptRemoteDuplicate`: two
+ * devices can lazily mint a study item for the same (subject, activity) with
+ * *different* random ids before either has synced, and Postgres enforces the
+ * one-per-subject-per-activity natural key itself (`study_items_uidx`), so
+ * the second insert hits 23505 exactly like the deterministic-id entities do.
  */
 type GetOrCreateEntity = DedupEntity | 'vocabulary_kanji';
 
@@ -611,7 +621,7 @@ async function adoptSameIdRemote(entity: GetOrCreateEntity, recordId: string): P
 
   const db = getDb();
   const version = Number((remote as { version?: number }).version ?? 1);
-  await db.transaction('rw', [db.kanji, db.vocabularyItems, db.vocabularyKanji, db.grammarPatterns, db.sentenceGrammar, db.grammarRelationships, db.syncRecordMeta], async () => {
+  await db.transaction('rw', [db.kanji, db.vocabularyItems, db.vocabularyKanji, db.grammarPatterns, db.sentenceGrammar, db.grammarRelationships, db.studyItems, db.syncRecordMeta], async () => {
     const row = remote as Record<string, unknown>;
     switch (entity) {
       case 'kanji':
@@ -631,6 +641,9 @@ async function adoptSameIdRemote(entity: GetOrCreateEntity, recordId: string): P
         break;
       case 'grammar_relationships':
         await db.grammarRelationships.put(remoteToGrammarRelationship(row));
+        break;
+      case 'study_items':
+        await db.studyItems.put(remoteToStudyItem(row));
         break;
     }
     await putRecordMeta({
@@ -694,6 +707,12 @@ export async function adoptRemoteDuplicate(
         .eq('pattern_b_id', row.pattern_b_id as string)
         .eq('relationship_type', row.relationship_type as string);
       break;
+    case 'study_items':
+      lookup = query
+        .eq('subject_type', row.subject_type as string)
+        .eq('subject_id', row.subject_id as string)
+        .eq('activity_type', row.activity_type as string);
+      break;
   }
   const { data: remote, error } = await lookup.maybeSingle();
   // A remote row with our own id would have taken the update path, not this one.
@@ -736,6 +755,8 @@ export async function remapDuplicateEntityId(
       db.sentenceGrammar,
       db.grammarRelationships,
       db.studyItems,
+      db.reviews,
+      db.cardIssueReports,
       db.syncQueue,
       db.syncRecordMeta,
     ],
@@ -761,6 +782,10 @@ export async function remapDuplicateEntityId(
           await db.grammarRelationships.delete(oldId);
           await db.grammarRelationships.put(remoteToGrammarRelationship(remoteRow));
           break;
+        case 'study_items':
+          await db.studyItems.delete(oldId);
+          await db.studyItems.put(remoteToStudyItem(remoteRow));
+          break;
       }
 
       await db.syncRecordMeta.delete(recordMetaKey(entity, oldId));
@@ -783,6 +808,12 @@ export async function remapDuplicateEntityId(
         await remapLinkReferences(db.sentenceGrammar, 'grammarPatternId', oldId, newId, 'sentence_grammar');
         await remapRelationshipReferences(oldId, newId);
         await remapGrammarStudyItems(oldId, newId);
+      } else if (entity === 'study_items') {
+        // The abandoned study item may already have local review history and
+        // a filed card-issue report; both must follow it to the adopted id or
+        // they push as orphans (reviews) or point at nothing (issue reports).
+        await remapLinkReferences(db.reviews, 'studyItemId', oldId, newId, 'reviews');
+        await remapLinkReferences(db.cardIssueReports, 'studyItemId', oldId, newId, 'card_issue_reports');
       }
     },
   );
