@@ -70,6 +70,24 @@ what's left is one deferred durability item (below).
   New coverage in `tests/syncAdoptDuplicate.test.ts`; full suite green
   (2156 passed).
 
+- **2026-09-28 — Card issue triage: two open reports, one already fixed,
+  one root-caused with a new backfill script pending go-ahead.** The cloze
+  card_issue_cf7577a5 ("speed adjustment does nothing") was already fixed
+  minutes later by `ecda23d` (Speed dropdown now feeds the whole-sentence
+  player too) — resolve in-app, no further action needed. The
+  reading_production card_issue_9431a960 (`3週間` rejecting さんしゅうかん):
+  `vocabulary_items.reading` for a handful of pre-`bcbf157` mines still
+  stored an un-fused digit+counter reading (`3しゅうかん` instead of
+  `さんしゅうかん`) — `isReadingAnswerCorrect` can never match typed kana
+  against a literal digit, so the card was unanswerable. `fix-numeral-
+  readings.ts` already covers this shape for `sentences.reading_only`/
+  `inline_reading`; added `scripts/fix-vocabulary-numeral-readings.ts`
+  (`npm run fix:vocabulary-numeral-readings -- [--apply]`) reusing the
+  same `fixNumeralsInReadingOnly` repair for `vocabulary_items.reading`.
+  Found 8 affected rows (2人, 20歳, たったの1ヶ月, 3週間, ３羽, １羽, ２羽,
+  ２番目) — dry-run confirmed correct output; `--apply` (writes to prod)
+  pending user go-ahead.
+
 - **2026-09-28 — Ichidan `plain_past_negative` pitch-accent coverage closed.**
   Last open gap from the 2026-09-12/13 inflected-pitch-accent pass (see
   ROADMAP's "Remaining inflected `pitch_accent` gaps"). Verified against
