@@ -943,20 +943,59 @@ Targets are constants; no settings UI.
 The core, most-differentiated feature. A sentence is split into an ordered
 list of `AnalysisChunk`s, each assigned a grammatical role (topic/subject/
 object/verb/particle/etc. — see `ROLE_PRESETS` in `appConfig.ts` and
-`src/lib/roleGuide.tsx` for the full taxonomy) and a "literal English"
-gloss (sticky/word-for-word, not fluent translation — a local heuristic,
-never machine translation; the two Claude Edge Functions only ever pre-fill
-*editable* fields, never the chunk/sentence sticky English). Supports
-synthetic zero-が chunks for Japanese's
-frequent implicit subject. Chunks render as visually distinct "puzzle
-piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge shape
-encodes grammatical fit, so structure is visually scannable.
+`src/lib/roleGuide.tsx` for the full taxonomy, `roleGuideBlurb(role)` for a
+lookup by exact role string) and a "literal English" gloss (sticky/
+word-for-word, not fluent translation — a local heuristic, never machine
+translation; every Claude Edge Function this app calls (`grammar-assist`,
+`chunk-why-assist`, `vocab-assist`) only ever pre-fills *editable* fields,
+never the chunk/sentence sticky English). Supports synthetic zero-が chunks for
+Japanese's frequent implicit subject. Chunks render as visually distinct
+"puzzle piece" shapes (`puzzleShapes.ts`/`puzzlePiecePath.ts`) whose edge
+shape encodes grammatical fit, so structure is visually scannable.
 `lintAnalysis` (`analysisSuggestions.ts`) flags likely mistakes (e.g.
 discarded annotations, chunk/source mismatches). Sentence translation is
 directly editable inline (textarea, autosave). The preceding one or two
 sentences (same chapter only) render dimmed above the working sentence for
 context — useful for short conversational lines; their translations show
-only when "Show Satori English" is toggled on. A **"Grammar noticed" panel**
+only when "Show Satori English" is toggled on.
+
+**Guided walkthrough (2026-09-28)**, Cure-Dolly-style: a per-chunk
+"Why this role here?" field (`AnalysisChunk.notes`, previously declared on
+the type but entirely unwired) defaults its placeholder to
+`roleGuideBlurb(chunk.role)` so every chunk gets baseline reasoning for
+free, overridden by a real note once one exists. A "Guided walkthrough"
+toggle steps through `chunks` engine-first (`isEngineRole`,
+`clauseBands.ts`) then the rest in source order, one at a time
+(`wizardStep`, single "Confirm & next" advance control) — `ChunkPuzzleStrip`
+gained a `revealedIds` prop so not-yet-reached pieces show their shape/
+Japanese text (the sentence's full outline is visible up front) with the
+role label withheld until reached. Starting the walkthrough on a blank
+sentence (the common case — `continue_book` mostly lands on unauthored
+sentences, since the *authoring itself* is the glossing activity in this
+single-user app) auto-runs the existing heuristic chunker first. Each
+wizard step also surfaces that chunk's vocabulary gloss, reusing
+`KaraokeSentenceText`'s `buildSentenceTokens` matcher against
+`vocabularySuggestions`/`targetVocabulary` — a `continue_book` sentence can
+have real vocab still unfamiliar too (only `CONTINUE_BOOK_MIN_INTRODUCED_RATIO`,
+0.5, of its words need be introduced, see the glossing-accessibility entry
+below), so the walkthrough doesn't assume the words are known just because
+the structure is being taught. `getRoleOccurrenceStats(excludeSentenceId?)`
+(repository.ts) feeds two things: a fading "you've seen 「role」 N times
+before" line under each chunk (silent after
+`ROLE_RECURRENCE_FADE_THRESHOLD`, 5, occurrences) and a live "(seen N×)"
+badge on `RoleGuideContent` (`counts` prop) — both purely informational,
+deliberately not SRS/FSRS (roles are a closed, ~30-item vocabulary, not a
+rateable skill). A new `chunk-why-assist` Edge Function (mirrors
+`grammar-assist`'s shape) auto-drafts a sentence-specific "why" explanation
+— automatic rather than a manual button, unlike `grammar-assist`'s Explain
+flow — the first time the walkthrough reaches a chunk whose role is one of
+the classic Cure-Dolly confusions (`CHUNK_WHY_AUTO_ROLES`: topic は, zero-が,
+Aが) with no existing note; still only pre-fills the same editable `notes`
+field. Unlike `vocab-assist`/`grammar-assist`'s fully-silent degrade, a
+failed draft here shows a small inline note rather than hiding the failure
+— deliberate for this feature only.
+
+A **"Grammar noticed" panel**
 (`GrammarPicker.tsx`) is the entry point for the grammar-learning system's
 second layer: search-existing-or-create-new pattern tagging (autocomplete
 against every `GrammarPattern` already in the corpus), with three
@@ -2561,25 +2600,33 @@ gap — new UI work should default to a real-browser check per CLAUDE.md.
   `shadowing` repo via table-prefix isolation (`shadowing_*` tables
   coexist, unused going forward). Entirely optional — the app is fully
   functional local-only without it. Also hosts `supabase/functions/
-  invite-book-member/`, `supabase/functions/grammar-assist/`, and
-  `supabase/functions/vocab-assist/` — Deno Edge Functions, one of two kinds
-  of server-side (non-browser, non-Dexie) code in this app (the other is
+  invite-book-member/`, `supabase/functions/grammar-assist/`,
+  `supabase/functions/chunk-why-assist/`, and `supabase/functions/
+  vocab-assist/` — Deno Edge Functions, one of two kinds of server-side
+  (non-browser, non-Dexie) code in this app (the other is
   `server/youtube-mining/`, below).
-- **Anthropic API** (via `supabase/functions/grammar-assist/` and
-  `supabase/functions/vocab-assist/`) — the LLM/AI integrations in this
-  codebase. Called server-side only, from the Edge Functions, using
-  `claude-haiku-4-5` with forced structured tool output (`strict: true`);
-  the API key is an Edge Function secret (`ANTHROPIC_API_KEY`), never
-  shipped to the browser. Deliberately not routed through
-  `shadowing-analysis-api` below — a different kind of workload on an
-  already memory-constrained host. Entirely optional and additive: every
-  AI-assisted surface (`src/lib/grammarAssist.ts`, `src/lib/vocabAssist.ts`)
-  degrades to an inline "unavailable" message / silently leaves a field
-  blank if the function isn't deployed, the key isn't configured, or the
-  network is unreachable. `grammar-assist` suggests/explains grammar
-  patterns; `vocab-assist` glosses vocabulary meanings in sentence context
-  (both a just-in-time pass on `VocabularyReviewPage` and a per-word
-  "Suggest (AI)" button).
+- **Anthropic API** (via `supabase/functions/grammar-assist/`,
+  `supabase/functions/chunk-why-assist/`, and `supabase/functions/
+  vocab-assist/`) — the LLM/AI integrations in this codebase. Called
+  server-side only, from the Edge Functions, using `claude-haiku-4-5` with
+  forced structured tool output (`strict: true`); the API key is an Edge
+  Function secret (`ANTHROPIC_API_KEY`), never shipped to the browser.
+  Deliberately not routed through `shadowing-analysis-api` below — a
+  different kind of workload on an already memory-constrained host.
+  Entirely optional and additive: every AI-assisted surface
+  (`src/lib/grammarAssist.ts`, `src/lib/chunkWhyAssist.ts`,
+  `src/lib/vocabAssist.ts`) degrades gracefully if the function isn't
+  deployed, the key isn't configured, or the network is unreachable —
+  `grammar-assist`/`vocab-assist` degrade to an inline "unavailable"
+  message / silently leave a field blank; `chunk-why-assist` shows a small
+  explicit inline failure note instead (deliberate for that one feature).
+  `grammar-assist` suggests/explains grammar patterns; `chunk-why-assist`
+  auto-drafts a sentence-specific "why this role" explanation for a small
+  set of commonly-confused chunk roles during AnalyzePage's guided
+  walkthrough; `vocab-assist` glosses vocabulary meanings in sentence
+  context (both a just-in-time pass on `VocabularyReviewPage` and a
+  per-word "Suggest (AI)" button). **`chunk-why-assist` still needs its
+  one-time `supabase functions deploy chunk-why-assist`** — not yet run.
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only

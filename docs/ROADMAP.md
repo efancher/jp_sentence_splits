@@ -1579,6 +1579,68 @@ kept here so the thinking isn't lost:
   codebase (only acoustic pitch Hz "frequency," an unrelated concept).
   Would need a new data source before this is buildable.
 
+## Possibilities (Cure Dolly pedagogy pass)
+
+From the same 2026-09-28 session, a follow-on brainstorm (four more
+parallel agents) on making `AnalyzePage` teach structure the way Cure
+Dolly's videos do, not just label it. The guided walkthrough, per-chunk
+"why" field + roleGuide-seeded placeholder, cross-sentence recurrence
+callback, and automatic `chunk-why-assist` drafting for commonly-confused
+roles all shipped (see STATUS.md). Ideas considered but not built:
+
+- **Clause-chained reveal for multi-clause sentences** — the walkthrough
+  currently walks engine-first, then everything else in flat source order;
+  sequencing by clause (engine of clause 0 → its cars → the connector →
+  engine of clause 1 → …) would better match how Cure Dolly actually
+  chains compound sentences. Skipped for v1 since most sentences here are
+  single-clause enough that the flat order already reads as clause-chained
+  by construction; revisit if multi-clause sentences prove confusing in
+  practice.
+- **Audio-synced "narrate it" autoplay** — pace the walkthrough's reveal to
+  the existing "Play by chunks" TTS instead of tap-to-advance, for
+  repeat-sentence fatigue. The tap-driven version shipped first as the
+  simpler mechanic to validate before adding a second, autoplay-paced one.
+- **Cross-sentence callback as a real link**, not just a count — "you've
+  seen 「topic は」 3 times before" currently doesn't link to the actual
+  earlier sentence, which is the specific mechanism that makes Cure
+  Dolly's "we saw this in lesson 3" callbacks work pedagogically rather
+  than being a bare counter. Deferred because resolving and rendering
+  another sentence's preview text per role adds a second query per card;
+  worth adding once the plain-count version has been lived with a bit.
+- **Fixed narrative template with phrasing variants** ("This sentence's
+  engine is X… notice that Y is marked with は, not が…") repeated in the
+  same shape every sentence, so the *format* itself becomes recognizable —
+  a bigger authoring lift (10-15 templates × 2-3 phrasing variants each)
+  than the roleGuide-blurb-per-step version that shipped; the "predict
+  before reveal" thinking-prompt framing for は/が contrasts is a related,
+  separately-scoped idea on top of this.
+- **TTS narration of the English structural reasoning** (not just the
+  Japanese sentence) — infrastructure-ready (`SpeakButton`/
+  `useJapaneseSpeech` precedent) but flagged as the highest attention-
+  budget risk of anything in the brainstorm, against this app's own
+  single-audio-source-at-a-time convention; would need to be a narrow,
+  explicit opt-in slice, not a full narrated-lesson mode.
+- **Contrastive structured "why" sub-field** (separate "alternative
+  rejected" / "why rejected" fields for は/に-car pairs etc.) instead of
+  one free-text `notes` field — more Cure-Dolly-faithful for the
+  particle-choice subset of chunks specifically, but a bespoke schema
+  change the shipped free-text version avoids; only the general `notes`
+  field shipped.
+- **A reasoning cache keyed by structural signature** (role + adjacent
+  role + ambiguity shape, not full sentence text) so a second sentence
+  with the same shape of ambiguity could offer the same AI draft as a
+  starting point instead of paying for a fresh generation — an efficiency
+  layer worth revisiting once real usage data on `chunk-why-assist` calls
+  exists, not something to build ahead of that.
+- **Routing ambiguous-particle "why" through the existing `GrammarPattern`
+  Explain flow** instead of the new `chunk.notes`/`chunk-why-assist`
+  mechanism, for the subset of ambiguity that already corresponds to a
+  named, trackable pattern — the best reuse profile of anything
+  considered (no new field, no new Edge Function), but only covers cases
+  with a `GrammarPattern` to hang off; plain role-assignment reasoning
+  (why this is the を-car, why this modifier attaches here) has nothing to
+  route through and still needs the mechanism that shipped.
+
 ## Not planned (deliberate)
 
 - **Dictionary H/L marks on conjugation (`sentence_transformation`)

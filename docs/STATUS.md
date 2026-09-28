@@ -31,6 +31,78 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — AnalyzePage guided walkthrough, Cure-Dolly style.**
+  Follow-on to the same-day glossing-accessibility pass below, from user
+  brainstorm on making structural glossing feel like Cure Dolly's actual
+  teaching style (engine-first, one car at a time, explaining *why*, and
+  compounding understanding across sentences) rather than a static labeled
+  diagram. A key correction mid-design: `continue_book` mostly lands on a
+  *blank* sentence (`chunks: []`) the user authors from scratch — the
+  authoring *is* the glossing activity for this single-user app — so the
+  brainstorm's originally-scoped read-only "reveal a finished analysis"
+  page was reworked into a guided *authoring* wizard instead. Shipped:
+  1. **`AnalysisChunk.notes` wired as a "why this role here?" field**
+     (`AnalyzePage.tsx`) — previously declared on the type but completely
+     unused. Placeholder text falls back to the matching `roleGuide.tsx`
+     blurb (new `roleGuideBlurb(role)` lookup) when the chunk has no
+     sentence-specific note yet, so every chunk gets baseline reasoning
+     for free; a real note (hand-typed or AI-drafted, see 4) overrides it.
+  2. **Cross-sentence recurrence callback** — new
+     `getRoleOccurrenceStats(excludeSentenceId?)` (repository.ts) scans
+     `db.analyses`, groups by `chunk.role`, returns
+     `{count, firstSentenceId, mostRecentSentenceId}` per role (ordered by
+     `createdAt`, stable across later edits). Feeds a "you've seen 「role」
+     N times before" line under each chunk, fading out after
+     `ROLE_RECURRENCE_FADE_THRESHOLD` (5) occurrences so the page doesn't
+     get noisier as the learner advances — and a live "(seen N×)" badge on
+     the existing `RoleGuideContent` panel (`counts` prop), turning the
+     static glossary into a lightweight "principles you've learned so far"
+     view. Deliberately not SRS/FSRS — informational only, same trust tier
+     as the panel itself; roles are a closed ~30-item vocabulary, not a
+     rateable skill.
+  3. **Guided walkthrough** — a "Start guided walkthrough"/"Guided
+     walkthrough (Cure Dolly style)" toggle steps through `chunks` engine
+     chunks first (`isEngineRole`, existing `clauseBands.ts` helper), then
+     the rest in source order, one at a time (`wizardStep`,
+     "Confirm & next"/"◀ Back"/"Exit walkthrough" — a single primary
+     advance control, mirroring the house "session advance" convention).
+     `ChunkPuzzleStrip` gained a `revealedIds` prop: pieces not yet
+     reached still show their shape/Japanese text (the sentence's full
+     length is visible up front) but their role label is dimmed/withheld
+     until the wizard reaches them — no schema change, additive prop,
+     `undefined` behaves exactly as before. On an empty sentence, starting
+     the walkthrough auto-runs the existing heuristic chunker first
+     (`applyHeuristicChunks`) so there's something to step through. The
+     current wizard chunk also gets each chunk's vocabulary gloss (reusing
+     `KaraokeSentenceText`'s exported `buildSentenceTokens` matcher against
+     `sentence.vocabularySuggestions`/`targetVocabulary`) — added mid-build
+     per user note that a `continue_book` sentence (now reachable at only
+     ~50% vocab introduced, see the gate change below) may still have
+     genuinely unfamiliar words, not just unfamiliar structure.
+  4. **Automatic AI "why" draft for commonly-confused roles** — new
+     `chunk-why-assist` Supabase Edge Function (Claude Haiku, mirrors
+     `grammar-assist`'s shape exactly: session-verified, `ANTHROPIC_API_KEY`
+     server-side only) + client wrapper `src/lib/chunkWhyAssist.ts`. Fires
+     automatically (user request — not a manual button, unlike
+     `grammar-assist`'s Explain flow) the first time the walkthrough
+     reaches a chunk whose role is in `CHUNK_WHY_AUTO_ROLES` (topic は,
+     zero-が, Aが — the classic Cure-Dolly confusions) with no existing
+     note, pre-filling the same editable `notes` field from (1) — never a
+     separate AI-authored flag or auto-commit, identical persistence path
+     to a hand-typed note. Unlike `vocab-assist`/`grammar-assist`, which
+     degrade fully silently on failure, a failed draft shows a small
+     inline note ("Couldn't get an AI explanation here…") — a deliberate,
+     explicit user choice for this feature only, not a change to the other
+     two functions' existing silent-degrade behavior.
+  **Not yet deployed**: `chunk-why-assist` needs a one-time
+  `supabase functions deploy chunk-why-assist` (+ confirm
+  `ANTHROPIC_API_KEY` secret is set, same as `grammar-assist`) before the
+  automatic drafting actually works in production — the client degrades to
+  the inline failure note until then, so nothing is broken meanwhile.
+  New tests: `tests/roleOccurrenceStats.test.ts`,
+  `tests/roleGuide.test.ts` (incl. a guard that every `ROLE_PRESET_GROUPS`
+  role has a matching `roleGuide.tsx` entry, and vice versa). Full suite
+  green (2176 passed), `npm run typecheck`/`npm run lint` clean.
 - **2026-09-28 — Sentence glossing accessible with mostly-unknown
   vocabulary.** User brainstorm (four parallel agents: UI, gating, AI/data
   pipeline, pedagogy — see docs/ROADMAP.md's new "Possibilities (sentence
