@@ -1,11 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { ComprehensionCheckPicker } from '../components/ComprehensionCheckPicker';
 import { GrammarPicker } from '../components/GrammarPicker';
+import { buildSentenceTokens } from '../components/KaraokeSentenceText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
@@ -15,10 +16,12 @@ import { readSettings } from '../db/database';
 import {
   deleteSentenceCascade,
   getDb,
+  getRoleOccurrenceStats,
   saveAnalysis,
   setBookSentenceStatus,
   updateSentenceText,
 } from '../db/repository';
+import type { RoleOccurrenceStats } from '../db/repository';
 import type {
   AnalysisChunk,
   Sentence,
@@ -43,11 +46,13 @@ import {
   splitChunkAt,
   surfaceJapaneseParts,
 } from '../lib/analysisHelpers';
+import { isEngineRole } from '../lib/clauseBands';
 import {
   applySuggestion,
   lintAnalysis,
 } from '../lib/analysisSuggestions';
-import { RoleGuideContent } from '../lib/roleGuide';
+import { RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
+import { explainChunkWhy } from '../lib/chunkWhyAssist';
 import { suggestStickyEnglish } from '../lib/stickyEnglish';
 import { FuriganaText } from '../lib/furigana';
 import { ichiMoeUrl } from '../lib/ichiMoe';
@@ -72,6 +77,41 @@ const SENTENCE_STATUS_LABEL: Record<string, string> = {
   needs_review: 'Needs review',
 };
 
+/**
+ * "You've seen this role before" fading callback (Cure Dolly's "we saw this
+ * in lesson 3" texture) — shown for the first ROLE_RECURRENCE_FADE_THRESHOLD
+ * times a role recurs across the whole corpus, then silently omitted so the
+ * page doesn't get noisier as the learner advances. Purely informational,
+ * same trust tier as the static role-guide panel — not SRS, no tracking of
+ * whether it was read.
+ */
+const ROLE_RECURRENCE_FADE_THRESHOLD = 5;
+
+/**
+ * Roles worth an automatic AI "why" draft during the guided walkthrough
+ * (chunk-why-assist) rather than every chunk — concentrates AI spend and
+ * the learner's attention on the classic Cure-Dolly confusions (topic は
+ * vs subject が, and the implied zero-が subject's referent) instead of
+ * restating the obvious for a plain を-car or engine.
+ */
+const CHUNK_WHY_AUTO_ROLES = new Set(['topic は', 'zero-が (∅ subject)', 'Aが']);
+
+function roleGuideCallout(
+  role: string,
+  stats: Map<string, RoleOccurrenceStats> | undefined,
+) {
+  const trimmed = role.trim();
+  if (!trimmed || !stats) return null;
+  const entry = stats.get(trimmed);
+  if (!entry || entry.count > ROLE_RECURRENCE_FADE_THRESHOLD) return null;
+  return (
+    <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+      You&rsquo;ve seen 「{trimmed}」{' '}
+      {entry.count === 1 ? 'once before' : `${entry.count} times before`}.
+    </p>
+  );
+}
+
 export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
@@ -80,6 +120,11 @@ export function AnalyzePage() {
   const [showEnglish, setShowEnglish] = useState(false);
   const [spaced, setSpaced] = useState('');
   const [chunks, setChunks] = useState<AnalysisChunk[]>([]);
+  /** Guided walkthrough (Cure Dolly style): engine-first, one chunk at a time. Undefined outside a walkthrough. */
+  const [wizardActive, setWizardActive] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const chunkWhyAttempted = useRef<Set<string>>(new Set());
+  const [chunkWhyErrorIds, setChunkWhyErrorIds] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
   const [translation, setTranslation] = useState('');
   const [readingOnly, setReadingOnly] = useState('');
@@ -188,6 +233,58 @@ export function AnalyzePage() {
   const openWarnings = openSuggestions.filter(
     (item) => item.severity === 'warning',
   );
+  // Guided walkthrough ordering: every engine chunk first (in their existing
+  // relative order — most sentences have exactly one), then every other
+  // chunk in original source order. Recomputed from live `chunks` rather
+  // than frozen on wizard entry, so mid-walkthrough edits (e.g. relabeling
+  // a chunk as the engine) are reflected immediately.
+  const wizardOrder = useMemo(
+    () => [
+      ...chunks.filter((chunk) => isEngineRole(chunk.role)),
+      ...chunks.filter((chunk) => !isEngineRole(chunk.role)),
+    ],
+    [chunks],
+  );
+  const wizardChunk = wizardActive ? wizardOrder[wizardStep] : undefined;
+  const wizardRevealedIds = useMemo(
+    () => new Set(wizardOrder.slice(0, wizardStep + 1).map((chunk) => chunk.id)),
+    [wizardOrder, wizardStep],
+  );
+  // Vocabulary glosses per chunk (the sentence may still be mostly unknown
+  // to the learner even once continue_book's gate has opened) — reuses
+  // KaraokeSentenceText's own suggestion/target-vocabulary matching so the
+  // walkthrough doesn't need a second gloss-resolution path.
+  const sentenceTokens = useMemo(() => {
+    if (!data?.sentence) return [];
+    return buildSentenceTokens(
+      data.sentence.japanese,
+      data.sentence.vocabularySuggestions ?? [],
+      data.sentence.targetVocabulary ?? [],
+    );
+  }, [data?.sentence]);
+  function glossesForChunk(chunk: AnalysisChunk): { text: string; gloss: string }[] {
+    if (chunk.kind === 'zero_ga') return [];
+    const seen = new Set<string>();
+    const results: { text: string; gloss: string }[] = [];
+    for (const token of sentenceTokens) {
+      if (!token.gloss || seen.has(token.text)) continue;
+      if (!chunk.japanese.includes(token.text)) continue;
+      seen.add(token.text);
+      results.push({ text: token.text, gloss: token.gloss });
+    }
+    return results;
+  }
+  const roleStats = useLiveQuery(
+    () => getRoleOccurrenceStats(sentenceId),
+    [sentenceId],
+  );
+  const roleCounts = useMemo(
+    () =>
+      new Map(
+        [...(roleStats ?? new Map())].map(([role, entry]) => [role, entry.count]),
+      ),
+    [roleStats],
+  );
   const speech = useJapaneseSpeech();
   const { stop: stopSpeech } = speech;
   const nativeAudio = useNativeAudio();
@@ -222,6 +319,55 @@ export function AnalyzePage() {
     },
     { enabled: hydrated },
   );
+
+  // Auto-draft a "why this role here" explanation while the guided
+  // walkthrough sits on a commonly-confused role with no note yet —
+  // automatic rather than a manual button (user request, 2026-09-28), but
+  // it still only ever pre-fills the same editable `notes` field a
+  // hand-typed explanation would use. Unlike vocab-assist/grammar-assist,
+  // a failure surfaces as a small inline note rather than failing silently.
+  useEffect(() => {
+    if (!hydrated || !wizardChunk || !data?.sentence) return;
+    if (!CHUNK_WHY_AUTO_ROLES.has(wizardChunk.role)) return;
+    if (wizardChunk.notes?.trim()) return;
+    if (chunkWhyAttempted.current.has(wizardChunk.id)) return;
+    chunkWhyAttempted.current.add(wizardChunk.id);
+    const chunkId = wizardChunk.id;
+    const japanese = data.sentence.japanese;
+    const context = chunks.map((item) => ({
+      japanese: item.japanese,
+      role: item.role,
+      literalEnglish: item.literalEnglish,
+    }));
+    void (async () => {
+      const result = await explainChunkWhy({
+        sentence: japanese,
+        chunk: {
+          japanese: wizardChunk.japanese,
+          role: wizardChunk.role,
+          literalEnglish: wizardChunk.literalEnglish,
+        },
+        chunks: context,
+      });
+      if (result.ok) {
+        setChunks((current) =>
+          current.map((item) =>
+            item.id === chunkId && !item.notes?.trim()
+              ? { ...item, notes: result.explanation }
+              : item,
+          ),
+        );
+        void saveNow();
+      } else {
+        setChunkWhyErrorIds((current) => {
+          const next = new Set(current);
+          next.add(chunkId);
+          return next;
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, wizardChunk, data?.sentence]);
 
   if (!data) return <p className="muted">Loading sentence…</p>;
   if (!data.sentence || !data.book) {
@@ -651,7 +797,7 @@ export function AnalyzePage() {
             <strong>clause connector</strong> for そして / しかし — not て-car
             (that is for verb て-form links).
           </p>
-          <RoleGuideContent compact />
+          <RoleGuideContent compact counts={roleCounts} />
         </details>
       </section>
 
@@ -661,10 +807,15 @@ export function AnalyzePage() {
             <ChunkPuzzleStrip
               chunks={chunks}
               activeItemId={
-                speech.isSpeaking ? speech.activeItemId : null
+                wizardChunk
+                  ? `chunk-${wizardChunk.id}`
+                  : speech.isSpeaking
+                    ? speech.activeItemId
+                    : null
               }
               revealRoles
               showLegend
+              revealedIds={wizardActive ? wizardRevealedIds : undefined}
             />
             <div className="row">
               <button
@@ -690,8 +841,89 @@ export function AnalyzePage() {
                   Stop audio
                 </button>
               ) : null}
+              {!wizardActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWizardStep(0);
+                    setWizardActive(true);
+                  }}
+                >
+                  Guided walkthrough (Cure Dolly style)
+                </button>
+              ) : null}
             </div>
           </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              applyHeuristicNow();
+              setWizardStep(0);
+              setWizardActive(true);
+            }}
+          >
+            Start guided walkthrough
+          </button>
+        )}
+        {wizardActive && wizardChunk ? (
+          <div className="panel stack" aria-label="Guided walkthrough">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <strong>
+                Step {wizardStep + 1} of {wizardOrder.length}
+                {isEngineRole(wizardChunk.role) ? ' — find the engine first' : ''}
+              </strong>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setWizardActive(false)}
+              >
+                Exit walkthrough
+              </button>
+            </div>
+            <div className="jp jp-lg">{wizardChunk.japanese}</div>
+            {glossesForChunk(wizardChunk).length ? (
+              <p className="muted" style={{ margin: 0 }}>
+                {glossesForChunk(wizardChunk)
+                  .map((item) => `${item.text} — ${item.gloss}`)
+                  .join(' · ')}
+              </p>
+            ) : null}
+            <p style={{ margin: 0 }}>
+              {roleGuideBlurb(wizardChunk.role) ??
+                (wizardChunk.role.trim()
+                  ? wizardChunk.role
+                  : 'What role does this play — is it the engine, or is it marked by a particle as one of its cars?')}
+            </p>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Set (or correct) its role and literal English below, then
+              confirm to move on.
+            </p>
+            <div className="row">
+              <button
+                type="button"
+                disabled={wizardStep === 0}
+                onClick={() => setWizardStep((step) => Math.max(0, step - 1))}
+              >
+                ◀ Back
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  if (wizardStep >= wizardOrder.length - 1) {
+                    setWizardActive(false);
+                    return;
+                  }
+                  setWizardStep((step) => step + 1);
+                }}
+              >
+                {wizardStep >= wizardOrder.length - 1
+                  ? 'Confirm & finish'
+                  : 'Confirm & next'}
+              </button>
+            </div>
+          </div>
         ) : null}
         {chunks.map((chunk, chunkIndex) => {
           const zeroGa = isZeroGaChunk(chunk);
@@ -699,7 +931,8 @@ export function AnalyzePage() {
           <article
             key={chunk.id}
             className={`chunk-card${
-              speech.isSpeaking && speech.activeItemId === `chunk-${chunk.id}`
+              (speech.isSpeaking && speech.activeItemId === `chunk-${chunk.id}`) ||
+              wizardChunk?.id === chunk.id
                 ? ' speaking-chunk'
                 : ''
             }`}
@@ -840,6 +1073,34 @@ export function AnalyzePage() {
             >
               Suggest sticky English
             </button>
+            <label>
+              Why this role here?
+              <textarea
+                value={chunk.notes ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setChunks((current) =>
+                    current.map((item) =>
+                      item.id === chunk.id
+                        ? { ...item, notes: value || undefined }
+                        : item,
+                    ),
+                  );
+                }}
+                onBlur={() => void saveNow()}
+                placeholder={
+                  roleGuideBlurb(chunk.role) ??
+                  'Why does this chunk have this role in this sentence?'
+                }
+              />
+            </label>
+            {chunkWhyErrorIds.has(chunk.id) && !chunk.notes?.trim() ? (
+              <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                Couldn&rsquo;t get an AI explanation here (offline or
+                unavailable) — feel free to write one yourself.
+              </p>
+            ) : null}
+            {roleGuideCallout(chunk.role, roleStats)}
             <div className="row">
               <button
                 type="button"
