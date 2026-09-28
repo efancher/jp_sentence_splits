@@ -370,6 +370,22 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 **`comprehension` vs `reading_in_context` differentiation**, and
 **Retention / progress-over-time view** under Done above.
 
+- [ ] **Reconsider pitch-accent emphasis outside shadowing.** (2026-09-28,
+  user reflection, unscheduled) User questioned whether they're over-
+  investing effort in pitch-accent precision/perfectionism outside the
+  shadowing loop, given non-Tokyo accents vary and even native listeners
+  tolerate learner deviation. Working conclusion from that conversation:
+  active pitch-accent production drilling/self-rating (the
+  `pitch-accent` drill page, `pitch_accent_production` review card,
+  the perception-ladder warm-ups) is plausibly lower-value early on than
+  vocab/grammar/listening, and the skill likely improves more from passive
+  exposure via shadowing/listening than from conscious production practice.
+  Worth keeping: light passive exposure to the handful of high-frequency
+  minimal pairs. Nothing changed yet — if this holds up, candidate
+  adjustments are de-emphasizing/de-scheduling the standalone pitch-accent
+  drill and production card relative to other review types (e.g. lower
+  session-planner priority, or moving them later in the learner-state
+  ladder) rather than removing them outright.
 - [x] **Deterministic ids for get-or-create sync entities + real-Postgres sync tests.**
   (2026-09-20, shipped) `kanji`, `vocabulary_items`, `grammar_patterns`,
   `sentence_grammar`, `grammar_relationships` and `vocabulary_kanji` ids are now derived
