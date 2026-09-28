@@ -262,6 +262,23 @@ export function HomePage() {
           </span>
         </label>
 
+        <label className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
+          <input
+            type="checkbox"
+            checked={settings?.pitchAccentPaused ?? false}
+            onChange={(event) => {
+              void updateSettings({ pitchAccentPaused: event.target.checked });
+            }}
+          />
+          <span>
+            Pause pitch accent
+            <span className="muted" style={{ fontSize: '0.85rem' }}>
+              {' '}
+              (let shadowing carry it for now)
+            </span>
+          </span>
+        </label>
+
         <div className="row" role="group" aria-label="Add time to today's session">
           <button
             type="button"
@@ -318,7 +335,9 @@ export function HomePage() {
 
       <section className="panel">
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          {SHORTCUTS.map((shortcut) => (
+          {SHORTCUTS.filter(
+            (shortcut) => shortcut.to !== '/pitch-accent' || !(settings?.pitchAccentPaused ?? false),
+          ).map((shortcut) => (
             <Link key={shortcut.to} to={shortcut.to} className="list-card" style={{ flex: '1 0 auto' }}>
               {shortcut.label}
             </Link>

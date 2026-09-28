@@ -76,7 +76,7 @@ export function DailyPracticePanel() {
   const input: DailyPracticeInput = {
     quietMode: settings.quietMode ?? false,
     pitchDrill: {
-      available: drillWords.length > 0,
+      available: drillWords.length > 0 && !(settings.pitchAccentPaused ?? false),
       focusWordCount: focusWords.length,
       takesToday: counts.pitchDrillTakes,
     },

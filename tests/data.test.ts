@@ -83,6 +83,7 @@ import {
   transferBookSentences,
   updateBookChapter,
   updateGrammarPattern,
+  updateSettings,
 } from '../src/db/repository';
 import type {
   AlignmentResult,
@@ -3212,5 +3213,22 @@ describe('getSentenceListeningReadiness (word_listening tier-2 gate)', () => {
     });
     const readiness = await getSentenceListeningReadiness(['sent-1']);
     expect(readiness.get('sent-1')).toBe(true);
+  });
+
+  it('treats the pitch requirement as satisfied while pitch accent is paused, even with no pitch_accent item at all (2026-09-28)', async () => {
+    await addAudio('sent-1');
+    const a = await linkVocab('sent-1', '本', { pitchEligible: true });
+    await addWordListeningItem(a.linkId, 'review');
+    // No pitch_accent item exists — would normally fail the pitch dimension.
+    const beforePause = await getSentenceListeningReadiness(['sent-1']);
+    expect(beforePause.get('sent-1')).toBe(false);
+
+    await updateSettings({ pitchAccentPaused: true });
+    const whilePaused = await getSentenceListeningReadiness(['sent-1']);
+    expect(whilePaused.get('sent-1')).toBe(true);
+
+    await updateSettings({ pitchAccentPaused: false });
+    const afterUnpause = await getSentenceListeningReadiness(['sent-1']);
+    expect(afterUnpause.get('sent-1')).toBe(false);
   });
 });

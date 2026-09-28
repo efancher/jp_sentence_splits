@@ -31,6 +31,49 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — "Pause pitch accent" setting.** Follow-on to the shadowing-
+  readiness loosening above, same session: user decided to go further and
+  pause active pitch-accent practice outright for now, letting shadowing
+  carry it alone. New per-device `settings.pitchAccentPaused` (mirrors
+  `quietMode`'s pattern, toggle on both Settings and Home), reversible —
+  nothing is deleted. While on:
+  - `ReviewPage` withholds both `pitch_accent` and `pitch_accent_production`
+    entirely — their candidate lists are emptied, which (via
+    `getDueStudyItems`'s `subjectIds` filter) also hides any already-due
+    existing items, not just new seeding. `getSessionPlannerInput`'s
+    `practiceDueItemsForMode` filter does the same for the session planner's
+    `pitch_accent_production` due-count.
+  - `PitchAccentDrillPage` (`/pitch-accent`) shows a "Pitch accent is
+    paused" panel with a one-tap resume button instead of the drill, and its
+    Home shortcut is hidden. `DailyPracticePanel`'s pitch-drill target is
+    withheld the same way.
+  - The three pitch-based `/play` games (Odd Ear Out, Homophone Hunt,
+    Speaker Match) report `eligible: 0` with a `pausedReason` string
+    (`GamePools.pausedReason`, new optional field) instead of the generic
+    "not enough data" message — `PlayHubPage` shows that reason when
+    present. `DailyPracticePanel`'s rotating-game slot picks up the same
+    ineligibility automatically since it calls the same `loadPools`.
+  - `getSentenceListeningReadiness`'s own separate pitch sub-requirement
+    (for the sentence-level `listening` card) is treated as satisfied while
+    paused, rather than left permanently blocked — `pitch_accent` items
+    don't advance while paused, so leaving that requirement live would have
+    starved every `listening` card for a pitch-eligible word the whole time
+    pitch accent is paused (the same gate-starvation shape `continue_book`'s
+    FSRS-proficiency gate hit before). `getGateFunnelSnapshot`'s
+    `listeningBlockedOnPitch` diagnostic was updated to match, so "What's
+    stuck" doesn't report words as pitch-blocked that the real gate no
+    longer blocks.
+  New tests: `tests/data.test.ts` (listening-readiness pause exemption),
+  `tests/reviewPage.test.tsx` (pitch_accent/pitch_accent_production seeding
+  withheld while paused), `tests/gameRegistryPitchPause.test.ts` (the three
+  games report `pausedReason`, other games unaffected). **Manual test
+  plan:** flip "Pause pitch accent" on in Settings or Home — `/pitch-accent`
+  should show the paused panel, `/play` should hide Odd Ear Out/Homophone
+  Hunt/Speaker Match with a "paused" note, and no `pitch_accent`/
+  `pitch_accent_production` cards should appear in `/review` even for a
+  word that would otherwise be due. Flip it back off — everything should
+  resume exactly where FSRS state left it, nothing lost.
+
 - **2026-09-28 — Shadowing readiness loosened: no pitch-accent requirement,
   reading bar lowered to "seen once."** User reflection: they were
   questioning whether they'd been over-investing in pitch-accent precision

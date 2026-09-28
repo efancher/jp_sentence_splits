@@ -283,6 +283,23 @@ export function SettingsPage() {
           also toggleable on Home. (The pitch-accent drill ignores it — it's
           a page you only open when you can speak.)
         </p>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={settings.pitchAccentPaused ?? false}
+            onChange={(event) => {
+              void updateSettings({ pitchAccentPaused: event.target.checked });
+            }}
+          />
+          Pause pitch accent (let shadowing carry it for now)
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Stops seeding/showing `pitch_accent` and `pitch_accent_production`
+          review cards, hides the pitch-accent drill and the pitch-based
+          `/play` games (Odd Ear Out, Homophone Hunt, Speaker Match). Nothing
+          is deleted — turn this off to pick pitch-accent practice back up
+          where it left off. Per-device.
+        </p>
       </section>
 
       <AuthAndSyncSettings />

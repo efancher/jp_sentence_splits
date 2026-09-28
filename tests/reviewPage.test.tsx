@@ -1815,6 +1815,48 @@ describe('ReviewPage', () => {
     });
   });
 
+  it('does not seed a pitch-accent card while pitch accent is paused (2026-09-28)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await addReferenceAudio('sent-1');
+    await updateSettings({ pitchAccentPaused: true });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana-paused',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana-paused',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana-paused',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hana-paused');
+    await suppressAudioCards('sent-1', 'sv-hana-paused');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // Everything else in this sentence's scope is deliberately suppressed
+    // (matching the equivalent unpaused test above), so with pitch_accent
+    // also withheld, nothing is left to show.
+    await screen.findByText('All caught up.');
+    const studyItems = await db.studyItems
+      .where('subjectId')
+      .equals('vocab-hana-paused')
+      .toArray();
+    expect(studyItems.some((item) => item.activityType === 'pitch_accent')).toBe(false);
+  });
+
   it('does not seed a pitch-accent card when the sentence has no reference audio', async () => {
     await seedBookWithSentence();
     const db = getDb();
@@ -1900,6 +1942,45 @@ describe('ReviewPage', () => {
       expect(productionItem).toBeDefined();
       expect(productionItem?.subjectType).toBe('sentence');
     });
+  });
+
+  it('does not seed a pitch-accent-production card while pitch accent is paused, even though it would otherwise be eligible (2026-09-28)', async () => {
+    await seedBookWithSentence();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await suppressUnconditionalSentenceActivityTypes('sent-1');
+    await updateSettings({ pitchAccentPaused: true });
+
+    await db.vocabularyItems.add({
+      id: 'vocab-hana-production-paused',
+      expression: '花',
+      reading: 'はな',
+      meaning: 'flower',
+      partOfSpeech: 'n',
+      pitchAccentPositions: [1],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.sentenceVocabulary.add({
+      id: 'sv-hana-production-paused',
+      sentenceId: 'sent-1',
+      vocabularyItemId: 'vocab-hana-production-paused',
+      surfaceForm: '花',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await suppressVocabularyActivityTypes('vocab-hana-production-paused');
+
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    // Everything else in this sentence's scope is deliberately suppressed
+    // (matching the base "seeds and renders" test above), so with
+    // pitch_accent_production also withheld, nothing is left to show.
+    await screen.findByText('All caught up.');
+    const sentenceItems = await db.studyItems.where('subjectId').equals('sent-1').toArray();
+    expect(sentenceItems.some((item) => item.activityType === 'pitch_accent_production')).toBe(
+      false,
+    );
   });
 
   it('does not seed an edge-accent (odaka) pitch card when the word is phrase-final', async () => {

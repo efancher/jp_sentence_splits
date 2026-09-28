@@ -16,7 +16,9 @@ import {
   getPitchAccentShadowingFocusWords,
   getReferencePitchTrack,
   logPitchDrillAttempt,
+  readSettings,
   saveReferencePitchTrack,
+  updateSettings,
   type OddEarOutClip,
   type PitchAccentDrillWord,
 } from '../db/repository';
@@ -143,6 +145,10 @@ async function nativeContinuousComparison(
 }
 
 export function PitchAccentDrillPage() {
+  const pitchAccentPaused = useLiveQuery(
+    async () => (await readSettings()).pitchAccentPaused ?? false,
+    [],
+  );
   const rawSentences = useLiveQuery(() => getPitchAccentDrillSentences(), []);
   const rawWords = useLiveQuery(() => getPitchAccentDrillWords(), []);
   const focusWords = useLiveQuery(() => getPitchAccentFocusWords(), []);
@@ -470,6 +476,28 @@ export function PitchAccentDrillPage() {
       durationSeconds: analysis.learnerPitch.durationSeconds,
     });
   }, [analysis, moraUnits]);
+
+  if (pitchAccentPaused) {
+    return (
+      <div className="stack">
+        <section className="panel stack" style={{ gap: '0.4rem' }}>
+          <strong>Pitch accent is paused</strong>
+          <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+            You paused pitch-accent practice to let shadowing carry it for now — see Settings.
+            Nothing here is lost; turn it back on to pick up where you left off.
+          </p>
+          <button
+            type="button"
+            className="ghost"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => void updateSettings({ pitchAccentPaused: false })}
+          >
+            Resume pitch accent
+          </button>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="stack">

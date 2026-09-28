@@ -358,6 +358,30 @@ Nothing is consumed — the candidates recompute on the next plan once it's
 off. `/shadow` shows a non-blocking banner. (The pitch-accent drill (§8)
 ignores quiet mode — it's a page you only open when you can speak.)
 
+**"Pause pitch accent"** (`settings.pitchAccentPaused`, per-device, toggle
+on both Settings and Home, added 2026-09-28): the learner wants to stop
+actively drilling pitch accent for now and let shadowing carry it instead.
+Unlike quiet mode, this *does* affect the pitch-accent drill (§8) — it
+blocks the whole surface, not just speak-aloud steps:
+- `ReviewPage` empties the `pitch_accent`/`pitch_accent_production`
+  candidate lists entirely (not just new seeding — `getDueStudyItems`'s
+  `subjectIds` filter then also excludes already-due existing items), and
+  `getSessionPlannerInput` filters `pitch_accent_production` out of the
+  practice due-queue the same way `quietMode` already does.
+- `PitchAccentDrillPage` (`/pitch-accent`) renders a "paused" panel with a
+  one-tap resume button instead of the drill; its Home shortcut is hidden.
+- The three pitch-based `/play` games (Odd Ear Out, Homophone Hunt, Speaker
+  Match) report `eligible: 0` with a `GamePools.pausedReason` string, which
+  `PlayHubPage` shows in place of the generic "not enough data" message.
+  `DailyPracticePanel`'s pitch-drill target and rotating-game slot pick up
+  the same withholding automatically (same `loadPools` calls).
+- `getSentenceListeningReadiness`'s own separate pitch sub-requirement is
+  treated as satisfied while paused — otherwise `listening` cards for
+  pitch-eligible words would starve for as long as pitch accent stays
+  paused, since `pitch_accent` items can't advance while withheld.
+Nothing is deleted; turning the setting back off resumes every surface
+exactly where its FSRS/history state left off.
+
 The **grammar bucket** runs two passes over its one budget. Pass 1
 (`buildUnderstandSteps`, `findUnderstandCandidates`): corpus-flagged patterns
 "worth learning now" (encountered ≥3 times, never tracked — reuses

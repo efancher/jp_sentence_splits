@@ -21,6 +21,10 @@ function GameCard({ game }: { game: GameDef }) {
         <p className="muted" style={{ margin: 0 }}>
           Loading…
         </p>
+      ) : pools.pausedReason ? (
+        <p className="muted" style={{ margin: 0 }}>
+          {pools.pausedReason}
+        </p>
       ) : !playable ? (
         <p className="muted" style={{ margin: 0 }}>
           Not enough to play yet: {game.needs} You have {pools.eligible}; a round needs{' '}

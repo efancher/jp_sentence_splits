@@ -515,6 +515,21 @@ export interface AppSettings {
    */
   quietMode?: boolean;
   /**
+   * "Pause pitch accent" (per-device, like `quietMode`): the learner wants
+   * to stop actively drilling pitch accent for now and let shadowing carry
+   * it instead (2026-09-28 user decision — see docs/STATUS.md). While set,
+   * no new `pitch_accent`/`pitch_accent_production` study items are seeded
+   * and existing due ones are withheld from `/review`; the standalone
+   * `/pitch-accent` drill and its Home shortcut are hidden; the pitch-based
+   * `/play` games (Odd Ear Out, Homophone Hunt, Speaker Match) report
+   * themselves ineligible with a "paused" reason; and the sentence-level
+   * `listening` card's own pitch-accent sub-requirement is treated as
+   * satisfied rather than left permanently blocked (the exact gate-
+   * starvation shape `continue_book`'s FSRS-proficiency gate hit before).
+   * Defaults to `false`.
+   */
+  pitchAccentPaused?: boolean;
+  /**
    * Most-recently-used podcast RSS feed URLs (newest first), so
    * YouTubeMinePage's "Or import a podcast episode" input can offer them
    * back via a datalist instead of making the user re-paste/re-find the

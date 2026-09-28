@@ -66,6 +66,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dailyBudgetMinutes: DEFAULT_DAILY_BUDGET_MINUTES,
   sessionAllocation: { ...BASELINE_SESSION_ALLOCATION },
   quietMode: false,
+  pitchAccentPaused: false,
   recentPodcastFeedUrls: [],
   recentNhkEasyFeedUrls: [],
 };

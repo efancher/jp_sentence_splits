@@ -25,6 +25,7 @@ import {
   getThenAndNowData,
   getVerbLegoData,
   getWordDetectiveCandidates,
+  readSettings,
 } from '../db/repository';
 import type { GameSignal } from '../domain/types';
 import {
@@ -72,7 +73,16 @@ export interface GamePools {
   eligible: number;
   /** Of those, how many fall in each signal's pool. */
   bySignal: Record<GameSignal, number>;
+  /**
+   * Overrides the hub's generic "not enough data" message when a game is
+   * hidden for a deliberate reason rather than a thin pool — e.g.
+   * `settings.pitchAccentPaused` (2026-09-28).
+   */
+  pausedReason?: string;
 }
+
+const PITCH_ACCENT_PAUSED_REASON =
+  'Pitch accent is paused — turn it back on in Settings to play this.';
 
 export interface GameDef {
   id: string;
@@ -142,6 +152,9 @@ export const GAMES: readonly GameDef[] = [
     signals: ['weak', 'strong'],
     signalCopy: ODD_EAR_COPY,
     loadPools: async () => {
+      if ((await readSettings()).pitchAccentPaused) {
+        return { eligible: 0, bySignal: signalPoolSizes([]), pausedReason: PITCH_ACCENT_PAUSED_REASON };
+      }
       const { clips, history } = await getOddEarOutData();
       const candidates = buildContrastCandidates(clips, history);
       // Eligibility is how many trials a round could actually be built with, not
@@ -207,6 +220,9 @@ export const GAMES: readonly GameDef[] = [
     signals: ['weak', 'strong'],
     signalCopy: HOMOPHONE_HUNT_COPY,
     loadPools: async () => {
+      if ((await readSettings()).pitchAccentPaused) {
+        return { eligible: 0, bySignal: signalPoolSizes([]), pausedReason: PITCH_ACCENT_PAUSED_REASON };
+      }
       const { clips, history } = await getHomophoneHuntData();
       const contrasts = findMinimalPairContrasts(clips);
       const candidates = buildHomophoneCandidates(contrasts, history);
@@ -249,6 +265,9 @@ export const GAMES: readonly GameDef[] = [
     signals: ['weak', 'strong'],
     signalCopy: SPEAKER_MATCH_COPY,
     loadPools: async () => {
+      if ((await readSettings()).pitchAccentPaused) {
+        return { eligible: 0, bySignal: signalPoolSizes([]), pausedReason: PITCH_ACCENT_PAUSED_REASON };
+      }
       const { comparisons, history } = await getSpeakerMatchData();
       const candidates = buildSpeakerMatchCandidates(comparisons, history);
       const trials = buildSpeakerMatchRound(

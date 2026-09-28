@@ -4159,7 +4159,8 @@ export interface GateFunnelSnapshot {
  */
 export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
   const db = getDb();
-  const [analyses, audioRows] = await Promise.all([
+  const [settings, analyses, audioRows] = await Promise.all([
+    readSettings(db),
     db.analyses.toArray(),
     db.sentenceAudio.toArray(),
   ]);
@@ -4188,7 +4189,8 @@ export async function getGateFunnelSnapshot(): Promise<GateFunnelSnapshot> {
       .filter((item): item is VocabularyItem => Boolean(item?.pitchAccentPositions?.length))
       .map((item) => item.id),
   );
-  const isPitchSatisfied = (id: string) => !pitchEligibleIds.has(id) || pitchProficientIds.has(id);
+  const isPitchSatisfied = (id: string) =>
+    settings.pitchAccentPaused || !pitchEligibleIds.has(id) || pitchProficientIds.has(id);
 
   const wordListeningItems = await db.studyItems
     .where('activityType')
@@ -4676,6 +4678,13 @@ export async function getBookGrammarProgress(bookId: string): Promise<{
  * (mirrors isSentenceReadyForFullReview treating 'unreviewed' as gating).
  * Only sentences with a SentenceAudio row matter; one with audio but no
  * surface-form vocabulary has nothing to gate on and is ready.
+ *
+ * While `settings.pitchAccentPaused` is on (2026-09-28), the pitch dimension
+ * is treated as satisfied for every word rather than left permanently
+ * blocked — pitch_accent items don't advance while paused, so leaving the
+ * requirement live would starve `listening` cards the whole time pitch
+ * accent is paused (the same gate-starvation shape `continue_book`'s
+ * FSRS-proficiency gate hit before).
  */
 export async function getSentenceListeningReadiness(
   sentenceIds: string[],
@@ -4683,11 +4692,11 @@ export async function getSentenceListeningReadiness(
   const readiness = new Map<string, boolean>();
   if (sentenceIds.length === 0) return readiness;
   const db = getDb();
-  const audioSentenceIds = new Set(
-    (await db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray()).map(
-      (row) => row.sentenceId,
-    ),
-  );
+  const [settings, audioRows] = await Promise.all([
+    readSettings(db),
+    db.sentenceAudio.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const audioSentenceIds = new Set(audioRows.map((row) => row.sentenceId));
   const links = (
     await db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray()
   ).filter((link) => !!link.surfaceForm && audioSentenceIds.has(link.sentenceId));
@@ -4733,10 +4742,11 @@ export async function getSentenceListeningReadiness(
     readiness.set(
       sentenceId,
       linkIds.every((id) => proficientLinkIdSet.has(id)) &&
-        wordIds.every(
-          (id) =>
-            !pitchEligibleVocabularyItemIds.has(id) || pitchProficientVocabularyItemIds.has(id),
-        ),
+        (settings.pitchAccentPaused ||
+          wordIds.every(
+            (id) =>
+              !pitchEligibleVocabularyItemIds.has(id) || pitchProficientVocabularyItemIds.has(id),
+          )),
     );
   }
   return readiness;
@@ -9578,10 +9588,13 @@ export async function getSessionPlannerInput(
   // Quiet mode also withholds pitch_accent_production due items — same
   // "can't speak aloud right now" reasoning as shadowCandidates below, but
   // this one lives in the ordinary due-queue rather than a separate
-  // candidate list, so it's filtered out here instead.
-  const practiceDueItemsForMode = settings.quietMode
-    ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
-    : practiceDueItems;
+  // candidate list, so it's filtered out here instead. "Pause pitch accent"
+  // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
+  // ReviewPage's pitchAccentProductionCandidates.
+  const practiceDueItemsForMode =
+    settings.quietMode || settings.pitchAccentPaused
+      ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
+      : practiceDueItems;
   const [retainDueReady, practiceDueReady] = await Promise.all([
     filterReadyGrammarDueItems(notSuspended(retainDueItems), suspendedIndex),
     filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),

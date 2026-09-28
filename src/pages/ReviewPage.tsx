@@ -1320,10 +1320,16 @@ export function ReviewPage() {
         wordListeningLinkIdSet.has(item.subjectId),
     );
 
-    const pitchAccentCandidates = getPitchAccentReviewCandidates(
-      occurrenceCandidates,
-      audioBySentenceId,
-    );
+    // "Pause pitch accent" (settings.pitchAccentPaused, 2026-09-28 user
+    // decision to let shadowing carry pitch accent for now) withholds both
+    // the pitch_accent and pitch_accent_production candidate lists entirely
+    // — an empty candidates list makes getDueStudyItems' subjectIds filter
+    // match nothing, so existing due items are withheld too, not just new
+    // seeding. See src/db/repository.ts#getSentenceListeningReadiness for
+    // the matching exemption on the listening card's pitch sub-requirement.
+    const pitchAccentCandidates = settings?.pitchAccentPaused
+      ? []
+      : getPitchAccentReviewCandidates(occurrenceCandidates, audioBySentenceId);
     const pitchAccentVocabularyItemIdSet = new Set(
       pitchAccentCandidates.map((candidate) => candidate.vocabularyItem.id),
     );
@@ -1346,12 +1352,14 @@ export function ReviewPage() {
     // the session planner's shadowCandidates/pitch_accent_production
     // handling (src/db/repository.ts#getSessionPlannerInput) — this query
     // depends on settings.quietMode (see the deps array below) so toggling
-    // it recomputes the queue live.
-    const pitchAccentProductionCandidates = settings?.quietMode
-      ? []
-      : (await getPitchAccentDrillSentences()).filter((candidate) =>
-          sentenceIdSet.has(candidate.sentence.id),
-        );
+    // it recomputes the queue live. `pitchAccentPaused` withholds it too,
+    // same as the perception card above.
+    const pitchAccentProductionCandidates =
+      settings?.quietMode || settings?.pitchAccentPaused
+        ? []
+        : (await getPitchAccentDrillSentences()).filter((candidate) =>
+            sentenceIdSet.has(candidate.sentence.id),
+          );
     const existingPitchAccentProductionItems = (
       await db.studyItems
         .where('activityType')
@@ -1455,7 +1463,7 @@ export function ReviewPage() {
       grammarCandidates,
       existingGrammarItems,
     };
-  }, [bookId, deepDiveSentenceId, settings?.quietMode]);
+  }, [bookId, deepDiveSentenceId, settings?.quietMode, settings?.pitchAccentPaused]);
 
   const descriptors = useMemo(
     () => (scope ? buildActivityDescriptors(scope) : []),

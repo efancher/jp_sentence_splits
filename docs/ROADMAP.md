@@ -386,12 +386,18 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   having seen all the vocabulary words at least once") lowered the sibling
   reading/meaning requirement from full FSRS proficiency to merely
   introduced (seen once). Detail + manual test plan in STATUS.md's
-  2026-09-28 "Shadowing readiness loosened" entry. Not touched: the sentence-
-  level `listening` card's own separate pitch requirement
-  (`getSentenceListeningReadiness`), the `pitch_accent`/`pitch_accent_production`
-  review cards themselves, and the standalone drill page — none of those
-  were found to be forcing anything, so there was nothing to de-emphasize
-  there beyond the user's own voluntary use of an already-opt-in tool.
+  2026-09-28 "Shadowing readiness loosened" entry.
+  **Follow-up, same day: user decided to go further and pause pitch-accent
+  practice outright** rather than merely de-emphasize it — new per-device
+  `settings.pitchAccentPaused` toggle (Settings + Home, mirrors `quietMode`),
+  fully reversible. Withholds `pitch_accent`/`pitch_accent_production` from
+  `/review` and the session planner, hides `/pitch-accent` (shows a resume
+  panel instead) and its Home shortcut, hides the three pitch-based `/play`
+  games (Odd Ear Out, Homophone Hunt, Speaker Match) with a "paused" reason,
+  and exempts `getSentenceListeningReadiness`'s own separate pitch
+  sub-requirement while paused (so `listening` cards don't starve in the
+  meantime). Detail + manual test plan in STATUS.md's 2026-09-28 "Pause
+  pitch accent setting" entry.
 - [x] **Deterministic ids for get-or-create sync entities + real-Postgres sync tests.**
   (2026-09-20, shipped) `kanji`, `vocabulary_items`, `grammar_patterns`,
   `sentence_grammar`, `grammar_relationships` and `vocabulary_kanji` ids are now derived
