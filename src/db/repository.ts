@@ -246,6 +246,7 @@ import {
   type UnderstandCandidate,
 } from '../lib/sessionPlanner';
 import {
+  CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
@@ -4495,14 +4496,31 @@ export async function getProficientGrammarRecognitionPatternIds(
 }
 
 /**
- * `continue_book` readiness (2026-09-16), the "has each word at least been
- * reviewed once" half — paired with `vocabularyConfirmed` in
- * classifyExploreSentences (sessionPlanner.ts). A sentence with zero
- * reviewable vocabulary items has nothing to gate on and is ready
- * (mirrors isSentenceVocabularyReady).
+ * `continue_book` readiness (2026-09-16, density threshold 2026-09-28), the
+ * "has enough of the sentence's vocabulary at least been reviewed once"
+ * half — paired with `vocabularyConfirmed` in classifyExploreSentences
+ * (sessionPlanner.ts). A sentence with zero reviewable vocabulary items has
+ * nothing to gate on and is ready (mirrors isSentenceVocabularyReady).
+ *
+ * Ready once at least `minRatio` of the sentence's reviewable words are
+ * introduced — defaults to `CONTINUE_BOOK_MIN_INTRODUCED_RATIO`, not every
+ * single one: an all-or-nothing check meant a sentence with even one
+ * never-reviewed word was completely unreachable for structural glossing,
+ * which starves exactly the case a learner most wants glossing's help
+ * with — a sentence that's mostly unfamiliar. The original gate's purpose
+ * (don't split attention between recalling words and parsing structure on a
+ * sentence that's entirely unfamiliar) only needs *some* of the words to
+ * already be familiar, not all of them.
+ *
+ * `getParticlePuzzleData` passes `minRatio: 1` deliberately — that game
+ * needs the learner to actually be able to read the whole sentence for the
+ * particle blank to be a comprehension check rather than a guess (user
+ * report, 2026-09-25), so it keeps the original all-or-nothing bar even
+ * though `continue_book` no longer does.
  */
 export async function getSentenceReadingIntroducedReadiness(
   sentenceIds: string[],
+  minRatio: number = CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
 ): Promise<Map<string, boolean>> {
   const readiness = new Map<string, boolean>();
   if (sentenceIds.length === 0) return readiness;
@@ -4511,7 +4529,12 @@ export async function getSentenceReadingIntroducedReadiness(
   const introducedIds = await getIntroducedReadingVocabularyItemIds(allVocabularyItemIds);
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
-    readiness.set(sentenceId, vocabularyItemIds.every((id) => introducedIds.has(id)));
+    if (vocabularyItemIds.length === 0) {
+      readiness.set(sentenceId, true);
+      continue;
+    }
+    const introducedCount = vocabularyItemIds.filter((id) => introducedIds.has(id)).length;
+    readiness.set(sentenceId, introducedCount / vocabularyItemIds.length >= minRatio);
   }
   return readiness;
 }
@@ -6763,6 +6786,7 @@ export async function getParticlePuzzleData(): Promise<{
   );
   const introducedReadiness = await getSentenceReadingIntroducedReadiness(
     eligibleSentences.map((sentence) => sentence.id),
+    1,
   );
 
   const candidates: ParticlePuzzleCandidate[] = [];

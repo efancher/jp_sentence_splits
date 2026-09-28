@@ -377,7 +377,7 @@ export interface ExploreCandidate {
     sentenceId: string;
     preview: string;
     vocabularyConfirmed: boolean;
-    /** Every reviewable vocabulary item linked to this sentence has a reading/meaning study item that's left FSRS's `new` state — see isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
+    /** At least CONTINUE_BOOK_MIN_INTRODUCED_RATIO of this sentence's reviewable vocabulary items have a reading/meaning study item that's left FSRS's `new` state — see getSentenceReadingIntroducedReadiness/isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
     vocabularyIntroduced: boolean;
   }[];
 }
@@ -672,18 +672,27 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
  *    English glosses per chunk) in the same pass (2026-08-27) — otherwise
  *    the learner sees a sentence's grammar/meaning glossed before they've
  *    even looked at its words. Once vocabulary is confirmed, `continue_book`
- *    becomes eligible once every linked word has at least been reviewed
- *    once (`vocabularyIntroduced`, isVocabularyItemIntroduced) — a lower
- *    bar than full-sentence *review* cards (`isSentenceReadyForFullReview`),
- *    which require FSRS proficiency, since structural analysis and
- *    grammar-noticing aren't testing recall the way a review card is. This
- *    gate used to be "confirmed" alone (2026-09-16 fix for `continue_book`
- *    supply near zero, when it wrongly required full proficiency), but a
- *    word merely picked during vocabulary confirmation and never actually
- *    reviewed shouldn't count as "looked at" either (user report, 2026-09-16
- *    — 皆 in "皆さん元気ですか" surfaced for analysis with zero study items
- *    of any kind; separately, a word with only `pitch_accent` reps doesn't
- *    count as introduced — pitch practice isn't reading/meaning recall).
+ *    becomes eligible once *enough* of the linked words have at least been
+ *    reviewed once (`vocabularyIntroduced`,
+ *    getSentenceReadingIntroducedReadiness's CONTINUE_BOOK_MIN_INTRODUCED_RATIO
+ *    threshold) — a lower bar than full-sentence *review* cards
+ *    (`isSentenceReadyForFullReview`), which require FSRS proficiency on
+ *    every word, since structural analysis and grammar-noticing aren't
+ *    testing recall the way a review card is. This gate used to be
+ *    "confirmed" alone (2026-09-16 fix for `continue_book` supply near
+ *    zero, when it wrongly required full proficiency), then "every word
+ *    introduced" (same day — a word merely picked during vocabulary
+ *    confirmation and never actually reviewed shouldn't count as "looked
+ *    at" either; user report, 2026-09-16 — 皆 in "皆さん元気ですか" surfaced
+ *    for analysis with zero study items of any kind; separately, a word
+ *    with only `pitch_accent` reps doesn't count as introduced — pitch
+ *    practice isn't reading/meaning recall). The all-or-nothing form of
+ *    that fix overcorrected (2026-09-28): a sentence with even one
+ *    never-reviewed word was completely unreachable for structural
+ *    glossing, which blocks exactly the case glossing should help with —
+ *    a sentence that's mostly unfamiliar. A ratio threshold keeps the
+ *    original protection (don't analyze a sentence that's entirely
+ *    unfamiliar) without requiring every last word first.
  *
  * 2. Vocabulary confirmations get first claim on the glossing budget
  *    (2026-08-29): pass 1 spends up to VOCAB_CONFIRM_MIN_GLOSSING_SHARE of

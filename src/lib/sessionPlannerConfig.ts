@@ -146,6 +146,23 @@ export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
 export const VOCAB_CONFIRM_MIN_GLOSSING_SHARE = 0.6;
 
 /**
+ * Share of a confirmed sentence's reviewable vocabulary that must be
+ * "introduced" (at least one reading/meaning rep, `isVocabularyItemIntroduced`)
+ * before `continue_book` (structural analysis) becomes eligible —
+ * `getSentenceReadingIntroducedReadiness`, repository.ts. Was an all-or-
+ * nothing "every word" check until 2026-09-28; that meant a sentence with
+ * even one never-reviewed word was completely unreachable for structural
+ * glossing, which cuts against genuinely new/unfamiliar material ever being
+ * accessible — the opposite of the "vocab before glossing" gate's actual
+ * goal (don't split attention between recall and parsing on a sentence
+ * that's *entirely* unfamiliar). 0.5 means at least half the sentence's
+ * words have been looked at once; the rest can still be genuinely unknown
+ * going in. Tune down to open the gate further, up to tighten it — 1.0
+ * restores the old all-or-nothing behavior.
+ */
+export const CONTINUE_BOOK_MIN_INTRODUCED_RATIO = 0.5;
+
+/**
  * Ceiling on how far redistribution (minutes freed by a bucket that hit its
  * own candidate ceiling) can push any single bucket past its own
  * weight-based fair share of the requested time. Without this, a session
