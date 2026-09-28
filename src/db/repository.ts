@@ -2542,6 +2542,56 @@ export async function saveAnalysis(
   return analysis;
 }
 
+export interface RoleOccurrenceStats {
+  count: number;
+  firstSentenceId: string;
+  mostRecentSentenceId: string;
+}
+
+/**
+ * How many times each `AnalysisChunk.role` has been used across every
+ * authored sentence, plus the first and most-recently-authored sentence
+ * that used it — feeds the "you've seen this role before" fading callback
+ * on `AnalyzePage` (Cure Dolly's "we saw this in lesson 3" callback
+ * texture). Ordered by `SentenceAnalysis.createdAt` (when the chunk was
+ * first authored, stable across later edits — `updatedAt` would misdate
+ * "most recent" whenever an old sentence gets a correction), which tracks
+ * the learner's actual authoring/encounter order well enough for a UI
+ * nicety without needing real reading-order data.
+ *
+ * Full scan of `db.analyses`, not an indexed query — `role` lives embedded
+ * inside each row's `chunks` array, not as its own indexed column. Cheap at
+ * this corpus's scale (thousands of sentences); revisit with real
+ * aggregation if it ever shows up as slow.
+ */
+export async function getRoleOccurrenceStats(
+  excludeSentenceId?: string,
+): Promise<Map<string, RoleOccurrenceStats>> {
+  const db = getDb();
+  const analyses = (await db.analyses.toArray())
+    .filter((analysis) => analysis.sentenceId !== excludeSentenceId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const stats = new Map<string, RoleOccurrenceStats>();
+  for (const analysis of analyses) {
+    for (const chunk of analysis.chunks) {
+      const role = chunk.role.trim();
+      if (!role) continue;
+      const existing = stats.get(role);
+      if (!existing) {
+        stats.set(role, {
+          count: 1,
+          firstSentenceId: analysis.sentenceId,
+          mostRecentSentenceId: analysis.sentenceId,
+        });
+      } else {
+        existing.count += 1;
+        existing.mostRecentSentenceId = analysis.sentenceId;
+      }
+    }
+  }
+  return stats;
+}
+
 export async function commitImport(options: {
   preview: ImportPreview;
   selectedIds: string[];

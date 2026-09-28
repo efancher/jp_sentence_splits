@@ -1133,6 +1133,11 @@ strong.jp {
   z-index: 3;
 }
 
+/* Guided walkthrough (AnalyzePage): a piece not reached yet — shape/text visible, role withheld. */
+.chunk-puzzle-piece-unrevealed {
+  opacity: 0.4;
+}
+
 .chunk-puzzle-piece-speaking .chunk-puzzle-chrome-stroke {
   stroke: var(--accent);
   stroke-width: 2.25;

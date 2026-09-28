@@ -38,6 +38,14 @@ type ChunkPuzzleStripProps = {
   revealRoles?: boolean;
   /** Compact shape key under the strip (Analyze only). */
   showLegend?: boolean;
+  /**
+   * Guided-walkthrough mode (AnalyzePage): chunk ids the learner has reached
+   * so far. Pieces outside this set still render their shape/Japanese text
+   * (so the sentence's full length/outline is visible up front) but their
+   * role label is hidden and the piece is dimmed, regardless of
+   * `revealRoles` — undefined (the default) reveals every piece normally.
+   */
+  revealedIds?: Set<string>;
 };
 
 const CLAUSE_TINT_COUNT = 4;
@@ -85,6 +93,7 @@ export function ChunkPuzzleStrip({
   activeItemId = null,
   revealRoles = true,
   showLegend = false,
+  revealedIds,
 }: ChunkPuzzleStripProps) {
   if (!chunks.length) return null;
 
@@ -119,6 +128,7 @@ export function ChunkPuzzleStrip({
             index < chunks.length - 1 && rightEdge !== 'flat'
               ? PUZZLE_TAB_DEPTH
               : 0;
+          const revealed = !revealedIds || revealedIds.has(chunk.id);
 
           return (
             <div
@@ -129,6 +139,7 @@ export function ChunkPuzzleStrip({
                 engine ? 'chunk-puzzle-piece-engine' : '',
                 clauseFinal ? 'chunk-puzzle-piece-clause-final' : '',
                 speaking ? 'chunk-puzzle-piece-speaking' : '',
+                revealed ? '' : 'chunk-puzzle-piece-unrevealed',
                 puzzleFitClassName(fit),
               ]
                 .filter(Boolean)
@@ -159,7 +170,7 @@ export function ChunkPuzzleStrip({
               </div>
               <div className="chunk-puzzle-body">
                 <div className="jp chunk-puzzle-japanese">{chunk.japanese}</div>
-                {revealRoles ? (
+                {revealRoles && revealed ? (
                   <div className="chunk-puzzle-role muted">
                     {chunk.role.trim() || '—'}
                   </div>

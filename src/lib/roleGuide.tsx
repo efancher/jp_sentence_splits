@@ -210,10 +210,24 @@ export const ROLE_GUIDE_GROUPS: readonly RoleGuideGroup[] = [
   },
 ] as const;
 
+const ROLE_GUIDE_BLURB_BY_ROLE = new Map<string, string>(
+  ROLE_GUIDE_GROUPS.flatMap((group) =>
+    group.entries.map((entry) => [entry.role, entry.blurb] as const),
+  ),
+);
+
+/** Cure Dolly–style blurb for an exact `AnalysisChunk.role` string (matches `ROLE_PRESET_GROUPS`), or undefined for a custom/blank role with no guide entry. */
+export function roleGuideBlurb(role: string): string | undefined {
+  return ROLE_GUIDE_BLURB_BY_ROLE.get(role);
+}
+
 export function RoleGuideContent({
   compact = false,
+  counts,
 }: {
   compact?: boolean;
+  /** Per-role occurrence count (e.g. from `getRoleOccurrenceStats`) — appends a "seen N×" badge to each entry the learner has actually encountered, turning this static reference into a live "principles you've learned so far" view. Omit for the plain static glossary. */
+  counts?: Map<string, number>;
 }) {
   return (
     <div className="stack" style={{ gap: compact ? '0.75rem' : '1rem' }}>
@@ -246,6 +260,12 @@ export function RoleGuideContent({
                   }}
                 >
                   {entry.role}
+                  {counts?.get(entry.role) ? (
+                    <span className="muted" style={{ fontWeight: 400 }}>
+                      {' '}
+                      (seen {counts.get(entry.role)}×)
+                    </span>
+                  ) : null}
                 </dt>
                 <dd
                   className="muted"
