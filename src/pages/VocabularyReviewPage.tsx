@@ -246,6 +246,11 @@ export function VocabularyReviewPage() {
           </div>
         </div>
         <div className="jp jp-lg">{sentence.japanese}</div>
+        {sentence.translation ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {sentence.translation}
+          </p>
+        ) : null}
         <div className="row">
           {orderedAudio.map((audio, audioIndex) => (
             <NativeAudioButton

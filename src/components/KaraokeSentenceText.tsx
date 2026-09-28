@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository';
 import type { SentenceAudio, TargetVocabulary, VocabularySuggestion } from '../domain/types';
@@ -149,6 +149,8 @@ export function KaraokeSentenceText({
   const [glossPopup, setGlossPopup] = useState<{ text: string; left: number; top: number } | null>(
     null,
   );
+  /** Tap-pinned token, independent of playback — lets a learner check a word's gloss on a paused/static sentence, not just while it's playing. Playback highlighting still takes priority once it starts (see effect below). */
+  const [tappedTokenIndex, setTappedTokenIndex] = useState<number | null>(null);
 
   const tokens = useMemo(
     () => buildSentenceTokens(japanese, vocabularySuggestions, targetVocabulary ?? []),
@@ -202,15 +204,24 @@ export function KaraokeSentenceText({
   const activeTokenIndex =
     activeWordIndex >= 0 ? tokenIndexForChar(tokens, charPositions[activeWordIndex] ?? -1) : -1;
 
+  // Reset any tapped word when the sentence itself changes underneath us.
   useEffect(() => {
-    const token = tokens[activeTokenIndex];
-    const el = wordRefs.current[activeTokenIndex];
+    setTappedTokenIndex(null);
+  }, [tokens]);
+
+  // Playback highlight wins when it's driving a word; otherwise fall back to
+  // whatever the learner last tapped.
+  const displayedTokenIndex = activeTokenIndex >= 0 ? activeTokenIndex : (tappedTokenIndex ?? -1);
+
+  useEffect(() => {
+    const token = tokens[displayedTokenIndex];
+    const el = wordRefs.current[displayedTokenIndex];
     if (!token?.gloss || !el) {
       setGlossPopup(null);
       return;
     }
     setGlossPopup({ text: token.gloss, left: el.offsetLeft, top: el.offsetTop + el.offsetHeight + 4 });
-  }, [activeTokenIndex, tokens]);
+  }, [displayedTokenIndex, tokens]);
 
   return (
     <div className="stack" style={{ gap: '0.25rem' }}>
@@ -221,7 +232,20 @@ export function KaraokeSentenceText({
             ref={(el) => {
               wordRefs.current[index] = el;
             }}
-            className={`karaoke-word${index === activeTokenIndex ? ' karaoke-word-active' : ''}`}
+            className={`karaoke-word${index === displayedTokenIndex ? ' karaoke-word-active' : ''}${token.gloss ? ' karaoke-word-tappable' : ''}`}
+            {...(token.gloss
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () =>
+                    setTappedTokenIndex((prev) => (prev === index ? null : index)),
+                  onKeyDown: (event: KeyboardEvent) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    setTappedTokenIndex((prev) => (prev === index ? null : index));
+                  },
+                }
+              : {})}
           >
             {token.text}
           </span>

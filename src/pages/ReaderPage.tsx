@@ -2,11 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
+import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { getDb, readSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
+import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -25,6 +27,10 @@ export function ReaderPage() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [revealedTranslations, setRevealedTranslations] = useState<Set<string>>(
+    () => new Set(),
+  );
+  /** Sentences with the ungated heuristic structure preview open — a rough, client-side-only chunk guess (no AI, no saved analysis), available regardless of whether the sentence has cleared the `continue_book` gate yet. */
+  const [revealedStructures, setRevealedStructures] = useState<Set<string>>(
     () => new Set(),
   );
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -141,6 +147,15 @@ export function ReaderPage() {
     });
   }
 
+  function toggleStructure(sentenceId: string) {
+    setRevealedStructures((prev) => {
+      const next = new Set(prev);
+      if (next.has(sentenceId)) next.delete(sentenceId);
+      else next.add(sentenceId);
+      return next;
+    });
+  }
+
   function sentenceLine(sentence: Sentence, isActive: boolean, audio?: SentenceAudio) {
     if (displayMode === 'plain' && isActive && audio) {
       return (
@@ -242,16 +257,44 @@ export function ReaderPage() {
                 ) : null}
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
                   {sentenceLine(row.sentence, isActive, audio)}
-                  {revealedTranslations.has(row.sentence.id) ? (
-                    <div className="muted">{row.sentence.translation || '(no translation)'}</div>
-                  ) : (
+                  <div className="row" style={{ gap: '0.5rem' }}>
+                    {revealedTranslations.has(row.sentence.id) ? (
+                      <div className="muted">{row.sentence.translation || '(no translation)'}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleTranslation(row.sentence.id)}
+                      >
+                        Show translation
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => toggleTranslation(row.sentence.id)}
+                      onClick={() => toggleStructure(row.sentence.id)}
                     >
-                      Show translation
+                      {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
-                  )}
+                  </div>
+                  {revealedStructures.has(row.sentence.id)
+                    ? (() => {
+                        const preview = previewHeuristicChunks(row.sentence.japanese);
+                        return (
+                          <div className="stack" style={{ gap: '0.25rem' }}>
+                            <ChunkPuzzleStrip
+                              chunks={preview.parts.map((japanese, partIndex) => ({
+                                id: `${row.sentence.id}-${partIndex}`,
+                                japanese,
+                                role: preview.roles[partIndex] ?? '',
+                              }))}
+                            />
+                            <span className="muted" style={{ fontSize: '0.8em' }}>
+                              Rough automatic guess, not a saved analysis — a quick peek at
+                              structure, not a substitute for working through it on Analyze.
+                            </span>
+                          </div>
+                        );
+                      })()
+                    : null}
                 </div>
               </div>
             </div>

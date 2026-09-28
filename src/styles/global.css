@@ -560,6 +560,10 @@ strong.jp {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+.karaoke-word-tappable {
+  cursor: pointer;
+}
+
 .karaoke-line {
   position: relative;
 }
