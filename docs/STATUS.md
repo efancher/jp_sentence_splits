@@ -31,6 +31,20 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Follow-up: `ShadowPage`'s hands-free loop now zooms its live
+  waveform to the actual looped span, closing a display/playback mismatch.**
+  User noticed the `pitch_accent` card's new live overlay felt more
+  responsive than `ShadowPage`'s — real, not imagined: `LiveShadowWaveform`
+  always spreads its fixed 240 buckets across whatever duration it's given,
+  so a sub-second word reads as snappier than a multi-second sentence at
+  identical underlying latency. `ShadowPage`'s loop already restricts actual
+  playback/recorder-cycling to `loopRange` (the marked target range, or a
+  silence-trimmed fallback when none is marked) — the live waveform just
+  wasn't told about it, so it rendered against the whole clip regardless.
+  Passed `range={loopRange}` through to `LiveShadowWaveform`
+  (`ShadowPage.tsx`), making the display match what's actually looped —
+  fixes the mismatch and gets the same zoomed-in responsiveness for free.
+
 - **2026-09-28 — Follow-up: "Practice this word" respects a speed selector.**
   User: many native clips are too fast to shadow at 1×. Extracted
   `ShadowPage`'s private `SpeedControl` into a shared

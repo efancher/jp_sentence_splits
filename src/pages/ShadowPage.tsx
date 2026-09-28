@@ -610,6 +610,7 @@ export function ShadowPage() {
             {isLoopingReps && shadowing.shadowActive ? (
               <LiveShadowWaveform
                 referenceBlob={referenceAudio.blob}
+                range={loopRange ?? undefined}
                 active={isLoopingReps && shadowing.shadowActive}
                 getMediaTime={shadowing.getShadowMediaTime}
                 analyser={shadowing.getShadowAnalyser()}
