@@ -94,11 +94,7 @@ what's left is one deferred durability item (below).
      inline note ("Couldn't get an AI explanation here…") — a deliberate,
      explicit user choice for this feature only, not a change to the other
      two functions' existing silent-degrade behavior.
-  **Not yet deployed**: `chunk-why-assist` needs a one-time
-  `supabase functions deploy chunk-why-assist` (+ confirm
-  `ANTHROPIC_API_KEY` secret is set, same as `grammar-assist`) before the
-  automatic drafting actually works in production — the client degrades to
-  the inline failure note until then, so nothing is broken meanwhile.
+  `chunk-why-assist` deployed 2026-09-28 (user).
   New tests: `tests/roleOccurrenceStats.test.ts`,
   `tests/roleGuide.test.ts` (incl. a guard that every `ROLE_PRESET_GROUPS`
   role has a matching `roleGuide.tsx` entry, and vice versa). Full suite

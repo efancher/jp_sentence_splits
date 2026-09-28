@@ -2625,8 +2625,7 @@ gap — new UI work should default to a real-browser check per CLAUDE.md.
   set of commonly-confused chunk roles during AnalyzePage's guided
   walkthrough; `vocab-assist` glosses vocabulary meanings in sentence
   context (both a just-in-time pass on `VocabularyReviewPage` and a
-  per-word "Suggest (AI)" button). **`chunk-why-assist` still needs its
-  one-time `supabase functions deploy chunk-why-assist`** — not yet run.
+  per-word "Suggest (AI)" button).
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only
