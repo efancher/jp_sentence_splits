@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
+import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { MeasuredPitchContour } from '../components/MeasuredPitchContour';
 import { NativeAudioButton } from '../components/NativeAudioButton';
 import { PitchAccentDiagram } from '../components/PitchAccentDiagram';
@@ -2062,6 +2063,7 @@ export function ReviewPage() {
                 onAssist={markAssistance}
                 candidate={current.pitchAccent}
                 revealed={revealed}
+                quietMode={settings?.quietMode ?? false}
                 onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
                   setTypedResponseExpected(gradedAgainst);
@@ -2713,12 +2715,15 @@ function PitchAccentCard({
   revealed,
   onCheck,
   onAssist,
+  quietMode,
 }: {
   candidate: PitchAccentReviewCandidate;
   revealed: boolean;
   onCheck: (chosenPosition: string, correctPosition: string) => void;
   /** Usage tracking — lands in the review's `assistance` log. */
   onAssist: (kind: ReviewAssistance) => void;
+  /** Can't speak aloud right now — hide the "Practice this word" live-shadowing step. */
+  quietMode: boolean;
 }) {
   const { vocabularyItem, sentence, surfaceForm, audio, reading, morae, correctPosition, correctLabel } =
     candidate;
@@ -2735,6 +2740,27 @@ function PitchAccentCard({
   const [wordSpan, setWordSpan] = useState<TimeRangeMs | null>(null);
   const audioBlob = useSentenceAudioBlob(audio);
   const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
+
+  // Live pitch biofeedback (2026-09-27): loops the isolated word/phrase span
+  // hands-free while the learner shadows it, drawing their pitch live
+  // against the real measured native contour instead of only showing it
+  // after the fact — same substrate as ShadowPage's "Close shadow" loop.
+  // Unscored: purely supplementary practice, no onCheck/rating involvement.
+  const shadowing = useShadowing();
+  const { cancelRecording } = shadowing;
+  useEffect(() => () => cancelRecording(), [cancelRecording]);
+  function handleTogglePractice() {
+    if (shadowing.shadowActive) {
+      shadowing.stopShadowLoop();
+      return;
+    }
+    if (!audioBlob || !wordSpan) return;
+    void shadowing.startShadowLoop(audioBlob, {
+      range: wordSpan,
+      playbackRate: 1,
+      onRep: () => {},
+    });
+  }
 
   // Drop positions 0..N. 0 = no downstep; N (= morae.length) is odaka —
   // indistinguishable from heiban within the word, which is why the native
@@ -2867,6 +2893,24 @@ function PitchAccentCard({
             label="Native pitch of this word (measured)"
             ariaLabel={`Measured native pitch of ${surfaceForm}`}
           />
+          {!quietMode && audioBlob && wordSpan ? (
+            <div className="stack">
+              <button type="button" onClick={handleTogglePractice}>
+                {shadowing.shadowActive ? '⏹ Stop' : '🔁 Practice this word'}
+              </button>
+              {shadowing.shadowActive ? (
+                <LiveShadowWaveform
+                  referenceBlob={audioBlob}
+                  range={wordSpan}
+                  active={shadowing.shadowActive}
+                  getMediaTime={shadowing.getShadowMediaTime}
+                  analyser={shadowing.getShadowAnalyser()}
+                  sampleRate={shadowing.getShadowSampleRate()}
+                />
+              ) : null}
+              {shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+            </div>
+          ) : null}
           {selected !== null && selected !== correctPosition ? (
             <PitchContrastExample
               moraCount={morae.length}

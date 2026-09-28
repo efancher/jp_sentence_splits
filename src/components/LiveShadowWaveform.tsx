@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { estimateFramePitch, extractPitch, hzToRelativeSemitones, medianHz } from '../lib/pitch';
+import type { TimeRangeMs } from '../lib/recording';
 import {
   LIVE_PITCH_DISPLAY_MAX_SEMITONES,
   LIVE_PITCH_DISPLAY_MIN_SEMITONES,
@@ -8,16 +9,17 @@ import {
   LIVE_WAVEFORM_BUCKETS,
   SHADOW_OUTPUT_LATENCY_SECONDS,
   canonicalizeAudioBuffer,
+  computePeaks,
   decodeAudioBuffer,
   emptyLivePeaks,
   emptyLivePitchBuckets,
   gentleLiveGain,
   livePeaksFromAmplitudes,
   peakMagnitude,
-  peaksFromBlob,
   peaksToPolyline,
   pitchBucketsToPolyline,
   pitchFramesToBucketSemitones,
+  sliceCanonicalAudio,
   type WavePeak,
 } from '../lib/waveform';
 
@@ -47,6 +49,7 @@ export function LiveShadowWaveform({
   getMediaTime,
   analyser,
   sampleRate = 48_000,
+  range,
 }: {
   referenceBlob: Blob;
   active: boolean;
@@ -55,6 +58,14 @@ export function LiveShadowWaveform({
   /** Shared analyser from ShadowReferencePlayer (do not open a second AudioContext). */
   analyser: AnalyserNode | undefined;
   sampleRate?: number;
+  /**
+   * Zooms the reference/live display to a sub-span of `referenceBlob`
+   * (e.g. one word within a full sentence clip) instead of the whole clip.
+   * `getMediaTime()` still reports the full clip's timeline; ticks are
+   * rebased to `range.startMs` before mapping into buckets. Omit for the
+   * original whole-clip behavior (ShadowPage's hands-free loop).
+   */
+  range?: TimeRangeMs;
 }) {
   const [referencePeaks, setReferencePeaks] = useState<WavePeak[]>([]);
   const [referencePitchBuckets, setReferencePitchBuckets] = useState<Array<number | null>>([]);
@@ -79,6 +90,8 @@ export function LiveShadowWaveform({
   const frameCountRef = useRef(0);
   const getMediaTimeRef = useRef(getMediaTime);
   getMediaTimeRef.current = getMediaTime;
+  const rangeStartMs = range?.startMs;
+  const rangeEndMs = range?.endMs;
 
   useEffect(() => {
     let cancelled = false;
@@ -86,18 +99,21 @@ export function LiveShadowWaveform({
     void (async () => {
       try {
         if (!referenceBlob.size) throw new Error('Reference audio is missing.');
-        const [wave, buffer] = await Promise.all([
-          peaksFromBlob(referenceBlob, LIVE_WAVEFORM_BUCKETS),
-          decodeAudioBuffer(referenceBlob),
-        ]);
-        const pitch = extractPitch(canonicalizeAudioBuffer(buffer));
+        const buffer = await decodeAudioBuffer(referenceBlob);
+        const fullCanonical = canonicalizeAudioBuffer(buffer);
+        const canonical =
+          rangeStartMs !== undefined && rangeEndMs !== undefined
+            ? sliceCanonicalAudio(fullCanonical, { startMs: rangeStartMs, endMs: rangeEndMs })
+            : fullCanonical;
+        const peaks = computePeaks(canonical.samples, LIVE_WAVEFORM_BUCKETS);
+        const pitch = extractPitch(canonical);
         if (cancelled) return;
-        setReferencePeaks(wave.peaks);
-        setDurationSeconds(wave.durationSeconds);
+        setReferencePeaks(peaks);
+        setDurationSeconds(canonical.durationSeconds);
         setReferenceMedianHz(pitch.medianHz);
-        referenceMagnitudeRef.current = peakMagnitude(wave.peaks);
+        referenceMagnitudeRef.current = peakMagnitude(peaks);
         setReferencePitchBuckets(
-          pitchFramesToBucketSemitones(pitch.frames, wave.durationSeconds, LIVE_WAVEFORM_BUCKETS),
+          pitchFramesToBucketSemitones(pitch.frames, canonical.durationSeconds, LIVE_WAVEFORM_BUCKETS),
         );
       } catch (reason) {
         if (!cancelled) {
@@ -108,7 +124,7 @@ export function LiveShadowWaveform({
     return () => {
       cancelled = true;
     };
-  }, [referenceBlob]);
+  }, [referenceBlob, rangeStartMs, rangeEndMs]);
 
   useEffect(() => {
     if (!active) {
@@ -144,8 +160,12 @@ export function LiveShadowWaveform({
       const rawMediaTime = getMediaTimeRef.current();
       if (lastMediaTimeRef.current - rawMediaTime > durationSeconds / 2) startRep();
       lastMediaTimeRef.current = rawMediaTime;
-      // Shift left by output latency so drawing tracks what you hear over AirPods.
-      const mediaTime = Math.max(0, rawMediaTime - SHADOW_OUTPUT_LATENCY_SECONDS);
+      // Shift left by output latency so drawing tracks what you hear over AirPods,
+      // then rebase onto the cropped range's own clock (getMediaTime() still
+      // reports position in the *full* clip, not the zoomed-in word span).
+      const latencyAdjusted = Math.max(0, rawMediaTime - SHADOW_OUTPUT_LATENCY_SECONDS);
+      const mediaTime =
+        rangeStartMs !== undefined ? Math.max(0, latencyAdjusted - rangeStartMs / 1000) : latencyAdjusted;
       const progress = Math.min(1, Math.max(0, mediaTime / durationSeconds));
       const index = Math.min(buckets - 1, Math.floor(progress * buckets));
 
@@ -210,7 +230,7 @@ export function LiveShadowWaveform({
     return () => {
       if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
     };
-  }, [active, analyser, durationSeconds, referencePeaks.length, sampleRate]);
+  }, [active, analyser, durationSeconds, rangeStartMs, referencePeaks.length, sampleRate]);
 
   const referenceLine = useMemo(
     () => peaksToPolyline(referencePeaks, VIEW_WIDTH, WAVE_HEIGHT),
