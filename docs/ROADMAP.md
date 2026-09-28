@@ -884,10 +884,10 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
     2026-09-13: 96 of 134 candidate verbs matched. i-adjective
     te_form/plain_past/ba_form (kute/katta/kereba) still excluded — see
     below, same external-data problem but not yet extended to adjectives.
-  - **Ichidan `plain_past_negative`.** Unlike godan (where なかった cleanly
-    carries the negative form's value forward), this wasn't verified
-    against real ichidan なかった data this pass — stays excluded until it
-    is.
+  - ~~**Ichidan `plain_past_negative`.**~~ **Closed 2026-09-28** — verified
+    against real Wiktionary data (食べる/見る/出る/開ける): the same
+    "carries the negative form's value forward" rule holds for ichidan too,
+    just built on ichidan's own `plain_negative` value. See STATUS.md.
   - **Accented i-adjective `plain_negative`/`plain_past_negative`.** Not
     excluded out of caution — real data for 高くない shows a genuine
     two-accent realization (the く-stem's own downstep plus ない's own

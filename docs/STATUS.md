@@ -31,6 +31,23 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-28 — Ichidan `plain_past_negative` pitch-accent coverage closed.**
+  Last open gap from the 2026-09-12/13 inflected-pitch-accent pass (see
+  ROADMAP's "Remaining inflected `pitch_accent` gaps"). Verified against
+  real Wiktionary `Module:ja-acc-table` output (curl'd directly, not
+  summarized) for 食べる/見る/出る (accented) and 開ける (heiban): なかった
+  carries the word class's own `plain_negative` position straight through
+  unchanged, for ichidan exactly as it already did for godan — ichidan's
+  accented `plain_negative` value is just different (unchanged citation
+  position, not godan's +1), and the unaccented fixed-`conjugatedMoraCount
+  - 3` offset is identical across both word classes (confirmed directly
+  with 開ける's あけなかった → position 3). `predictVerbPosition`'s
+  `plain_past_negative` case (`src/lib/pitchAccentShift.ts`) now branches
+  by word class instead of hard-excluding ichidan; 2 new fixture rows
+  (食べる たべなかった, 開ける あけなかった) plus the stale "returns null"
+  test removed. No backfill needed — this path is computed at review time,
+  not stored.
+
 - **2026-09-28 — Follow-up: `ShadowPage`'s hands-free loop now zooms its live
   waveform to the actual looped span, closing a display/playback mismatch.**
   User noticed the `pitch_accent` card's new live overlay felt more

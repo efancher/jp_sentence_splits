@@ -170,6 +170,16 @@
     "note": "real rendered romaji [àkémáséꜜǹ], drop after mora 4 (せ)"
   },
   {
+    "expression": "開ける",
+    "reading": "あける",
+    "wordClass": "ichidan",
+    "citationPosition": 0,
+    "formKey": "plain_past_negative",
+    "expectedReading": "あけなかった",
+    "expectedPosition": 3,
+    "note": "same fixed-3-morae-from-the-end offset as godan's heiban case, identical across word classes — real rendered romaji [àkénáꜜkàttà], drop after mora 3 (な)"
+  },
+  {
     "expression": "食べる",
     "reading": "たべる",
     "wordClass": "ichidan",
@@ -218,6 +228,16 @@
     "expectedReading": "たべません",
     "expectedPosition": 4,
     "note": "real rendered romaji [tàbémáséꜜǹ], drop after mora 4 (せ)"
+  },
+  {
+    "expression": "食べる",
+    "reading": "たべる",
+    "wordClass": "ichidan",
+    "citationPosition": 2,
+    "formKey": "plain_past_negative",
+    "expectedReading": "たべなかった",
+    "expectedPosition": 2,
+    "note": "accented ichidan verb's already-shifted plain_negative position (unchanged from citation, unlike godan's +1) carries straight through — real rendered romaji [tàbéꜜnàkàttà], drop after mora 2 (べ)"
   },
   {
     "expression": "甘い",

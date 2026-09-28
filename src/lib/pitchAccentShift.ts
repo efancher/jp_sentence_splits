@@ -32,11 +32,15 @@
  *   accented verb's negative lands one mora *past* the citation position
  *   (right before ない); an unaccented verb's ba-form/past-negative are
  *   *not* flat.
- * - **ichidan plain_negative/ba_form**: same shape as godan's ba_form,
- *   but plain_negative differs — an accented ichidan verb's negative
- *   downstep stays at the *unchanged* citation position (not +1 like
- *   godan). `plain_past_negative` isn't verified for ichidan and stays
- *   excluded.
+ * - **ichidan plain_negative/ba_form/plain_past_negative**: same shape as
+ *   godan's, but plain_negative differs — an accented ichidan verb's
+ *   negative downstep stays at the *unchanged* citation position (not +1
+ *   like godan). Verified 2026-09-28 against real なかった data (食べる,
+ *   見る, 出る, 開ける): plain_past_negative carries that ichidan-specific
+ *   negative position straight through unchanged for an accented verb,
+ *   same "carries forward" rule as godan, just built on ichidan's own
+ *   plain_negative value; the unaccented fixed-offset case is identical
+ *   across both word classes.
  * - **te_form/plain_past/tara_form (godan + ichidan)**: not formula-
  *   derivable at all — confirmed by real data, not just by Wiktionary's
  *   module structure: 走って keeps 走る's citation downstep, but 食べて
@@ -158,12 +162,15 @@ function predictVerbPosition(
       // different from godan's +1 shift.
       return isUnaccented ? 0 : citationMoraCount - 1;
     case 'plain_past_negative':
-      if (wordClass !== 'godan') return null; // not verified for ichidan
       // なかった, built from the negative form above: an unaccented verb's
       // negative was flat, but なかった still isn't — the downstep sits a
-      // fixed 3 morae from the end. An accented verb's negative was
-      // already downstepped right before ない and that carries straight through.
-      return isUnaccented ? conjugatedMoraCount - 3 : citationMoraCount;
+      // fixed 3 morae from the end, identical for both word classes
+      // (verified directly against 開ける's あけなかった). An accented verb's
+      // negative was already downstepped and that carries straight through
+      // unchanged — at godan's citation position, or ichidan's own
+      // one-mora-earlier plain_negative position.
+      if (isUnaccented) return conjugatedMoraCount - 3;
+      return wordClass === 'godan' ? citationMoraCount : citationMoraCount - 1;
     default:
       return null;
   }

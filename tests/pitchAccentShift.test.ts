@@ -33,7 +33,7 @@ const fixtures = JSON.parse(
 
 describe('predictInflectedPitchAccentPosition (fixtures, verified against Module:ja-acc-table)', () => {
   it('has the expected fixture count', () => {
-    expect(fixtures).toHaveLength(26);
+    expect(fixtures).toHaveLength(28);
   });
 
   it.each(fixtures)(
@@ -168,19 +168,6 @@ describe('predictInflectedPitchAccentPosition (excluded combinations stay silent
         }),
       ).toBeNull();
     }
-  });
-
-  it('returns null for ichidan plain_past_negative (not verified this pass)', () => {
-    expect(
-      predictInflectedPitchAccentPosition({
-        wordClass: 'ichidan',
-        formKey: 'plain_past_negative',
-        citationReading: 'x',
-        citationPosition: 2,
-        citationMoraCount: 3,
-        conjugatedMoraCount: 7,
-      }),
-    ).toBeNull();
   });
 
   it('returns null for accented i_adjective plain_negative/plain_past_negative (a genuine two-accent realization, not one position)', () => {
