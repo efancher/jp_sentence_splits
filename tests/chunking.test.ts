@@ -7,11 +7,10 @@ import {
 } from '../src/lib/chunking';
 
 describe('chunkJapaneseSentence 紙 / 髪 passage', () => {
-  it('keeps という, counters, sentence-final ね and 髪の毛 sensible', () => {
+  it('keeps という, counter+noun together, sentence-final ね and 髪の毛 sensible', () => {
     expect(chunkJapaneseSentence('紙というのは、二つ言葉がありますね。一つは髪、髪の毛。')).toEqual([
       '紙というのは、',
-      '二つ',
-      '言葉が',
+      '二つ言葉が',
       'ありますね。',
       '一つは',
       '髪、',

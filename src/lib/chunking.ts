@@ -263,18 +263,11 @@ function peelLeadingAdverbs(chunks: string[]): string[] {
   return peeled;
 }
 
-function isSoftBoundary(text: string, index: number, start: number): boolean {
+function isSoftBoundary(text: string, index: number): boolean {
   const prev = text[index - 1]!;
   const next = text[index]!;
   if (CLAUSE_END_CHARS.has(next)) return false;
-  if ('、，,。．！？!?'.includes(prev)) return true;
-  // 二つ言葉が: a counter phrase modifies the next noun, not part of it.
-  return (
-    prev === 'つ' &&
-    index - 2 >= start &&
-    '一二三四五六七八九'.includes(text[index - 2]!) &&
-    !'目ず'.includes(next)
-  );
+  return '、，,。．！？!?'.includes(prev);
 }
 
 export function chunkJapaneseSentence(japanese: string): string[] {
@@ -293,7 +286,7 @@ export function chunkJapaneseSentence(japanese: string): string[] {
       index = end;
       continue;
     }
-    if (index > start && isSoftBoundary(text, index, start)) {
+    if (index > start && isSoftBoundary(text, index)) {
       chunks.push(text.slice(start, index));
       start = index;
       continue;
