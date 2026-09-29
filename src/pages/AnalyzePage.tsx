@@ -51,7 +51,7 @@ import {
   applySuggestion,
   lintAnalysis,
 } from '../lib/analysisSuggestions';
-import { RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
+import { AMBIGUITY_PRONE_ROLES, RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
 import { surfaceReadingFromInline } from '../lib/readingAnswer';
 import { explainChunkWhy } from '../lib/chunkWhyAssist';
 import { suggestStickyEnglish } from '../lib/stickyEnglish';
@@ -87,15 +87,6 @@ const SENTENCE_STATUS_LABEL: Record<string, string> = {
  * whether it was read.
  */
 const ROLE_RECURRENCE_FADE_THRESHOLD = 5;
-
-/**
- * Roles worth an automatic AI "why" draft during the guided walkthrough
- * (chunk-why-assist) rather than every chunk — concentrates AI spend and
- * the learner's attention on the classic Cure-Dolly confusions (topic は
- * vs subject が, and the implied zero-が subject's referent) instead of
- * restating the obvious for a plain を-car or engine.
- */
-const CHUNK_WHY_AUTO_ROLES = new Set(['topic は', 'zero-が (∅ subject)', 'Aが']);
 
 function roleGuideCallout(
   role: string,
@@ -334,7 +325,7 @@ export function AnalyzePage() {
   // a failure surfaces as a small inline note rather than failing silently.
   useEffect(() => {
     if (!hydrated || !wizardChunk || !data?.sentence) return;
-    if (!CHUNK_WHY_AUTO_ROLES.has(wizardChunk.role)) return;
+    if (!AMBIGUITY_PRONE_ROLES.has(wizardChunk.role)) return;
     if (wizardChunk.notes?.trim()) return;
     if (chunkWhyAttempted.current.has(wizardChunk.id)) return;
     chunkWhyAttempted.current.add(wizardChunk.id);
