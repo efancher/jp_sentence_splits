@@ -6725,3 +6725,5 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   `shadowing` repo. Always soft-delete synced tables (`deleted_at`), never
   raw `DELETE`, or clients never learn of the change.
 - Edge Functions — `grammar-assist`, `vocab-assist` (Claude Haiku).
+
+- **2026-09-29 — Stale planner sessions auto-expire.** An `in_progress` PlannerSession with no activity (`updatedAt`) for 24h is now ended via `expireStalePlannerSessions` (repository.ts): remaining steps skipped, status `ended_early`, synced. Runs on AppShell mount and hourly, so a forgotten session stops showing in the SessionBar. Test plan: set an in_progress session's `updatedAt` >24h back in Dexie, reload — the SessionBar should vanish and the session shows as ended.

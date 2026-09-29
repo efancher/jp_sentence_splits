@@ -10093,6 +10093,25 @@ export async function endPlannerSessionEarly(sessionId: string): Promise<Planner
   return updated;
 }
 
+export const STALE_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Ends in-progress sessions with no activity (`updatedAt`) for `maxAgeMs`, so a forgotten session stops surfacing in the SessionBar. */
+export async function expireStalePlannerSessions(
+  now: Date = new Date(),
+  maxAgeMs: number = STALE_SESSION_MAX_AGE_MS,
+): Promise<PlannerSession[]> {
+  const db = getDb();
+  const cutoff = new Date(now.getTime() - maxAgeMs).toISOString();
+  const open = await db.plannerSessions.where('status').equals('in_progress').toArray();
+  const expired: PlannerSession[] = [];
+  for (const session of open) {
+    if (session.updatedAt >= cutoff) continue;
+    const ended = await endPlannerSessionEarly(session.id);
+    if (ended) expired.push(ended);
+  }
+  return expired;
+}
+
 /**
  * Deletes today's PlannerSession outright (user request, 2026-08-27: "clear
  * out a session after I created it with the wrong split") — unlike

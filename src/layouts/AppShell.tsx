@@ -5,6 +5,7 @@ import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
 import { MigrationModal } from '../components/MigrationModal';
 import { SessionBar } from '../components/SessionBar';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
+import { expireStalePlannerSessions } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 
 const NAV = [
@@ -41,6 +42,12 @@ export function AppShell() {
   // (see SessionBar's own matching route check).
   const showSessionBar =
     !!activeSession && location.pathname !== `/session/${activeSession.session.id}`;
+
+  useEffect(() => {
+    void expireStalePlannerSessions();
+    const timer = window.setInterval(() => void expireStalePlannerSessions(), 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setMenuOpen(false);
