@@ -1640,6 +1640,24 @@ roles all shipped (see STATUS.md). Ideas considered but not built:
   with a `GrammarPattern` to hang off; plain role-assignment reasoning
   (why this is the を-car, why this modifier attaches here) has nothing to
   route through and still needs the mechanism that shipped.
+- **Gloss-first sequencing (2026-09-29, user idea; big change, not
+  committed to).** Today the planner is vocab-first: an unconfirmed
+  sentence only gets `vocabulary_review`; `continue_book` (the Analyze
+  walkthrough) opens once ≥50% of its words are introduced
+  (`CONTINUE_BOOK_MIN_INTRODUCED_RATIO`); "Grammar noticed" comes after.
+  Proposal: make the guided walkthrough the *first exposure*, with the
+  English translation shown as the answer key, and pick up vocabulary
+  and grammar from inside it. The harder unaided gloss (translation and
+  role labels hidden) becomes a later, separate pass, so the
+  vocab-before-glossing rule still protects the unaided attempt. The
+  translation is what resolves the usual objection (glossing unknown
+  words means guessing). Low-risk first step: surface unconfirmed words
+  inline at the chunk where they appear and confirm them there, keeping
+  the current order otherwise. Before building, check that
+  vocab-suggestion and confirmed-vocab data are populated when the
+  picker is skipped, since the planner keys many downstream steps off
+  confirmed vocab, and that the walkthrough can show/hide the
+  translation (it's an editable field today, not an answer key).
 
 ## Possibilities (sentence-revisit repetition)
 
