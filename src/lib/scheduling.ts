@@ -221,9 +221,10 @@ export function isSentenceReadyForFullReview(
  * unproven need" precedent). Two evidence sources:
  * - A typed answer/selected choice that doesn't match what was expected
  *   (`reading_production`/`sentence_transformation`/`grammar_completion`/
- *   `grammar_contrast` cards) — the specific comparison already happened in the UI to show
- *   "✓/✗", this just reuses the same two strings to decide *why* it was
- *   wrong.
+ *   `grammar_contrast` cards, and `reading_in_context`'s optional
+ *   later-review structure check, 2026-09-29) — the specific comparison
+ *   already happened in the UI to show "✓/✗", this just reuses the same
+ *   two strings to decide *why* it was wrong.
  * - A failed (`again`) contrastive-pair review — the card's entire premise
  *   is "can you tell these two words apart," so a miss is definitionally a
  *   `vocabulary_confusion`, no text comparison needed.
@@ -258,6 +259,10 @@ export function classifyReviewError(input: {
     if (input.activityType === 'grammar_completion') return 'grammar_misunderstanding';
     if (input.activityType === 'grammar_contrast') return 'grammar_misunderstanding';
     if (input.activityType === 'pitch_accent') return 'pronunciation_difficulty';
+    // reading_in_context's optional later-review structure check (2026-09-29
+    // repetition pass) — a missed chunk reading is a structural/grammar miss,
+    // not a meaning miss (that's what comprehensionCheckCorrect covers below).
+    if (input.activityType === 'reading_in_context') return 'grammar_misunderstanding';
   }
   if (input.subjectType === 'vocabularyConfusion' && input.rating === 'again') {
     return 'vocabulary_confusion';

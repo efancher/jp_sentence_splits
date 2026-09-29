@@ -63,6 +63,7 @@ import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { useShadowing } from '../hooks/useShadowing';
 import { sessionStepTargetPath } from '../lib/sessionPlanner';
 import type {
+  AnalysisChunk,
   Book,
   ComprehensionCheck,
   GrammarPattern,
@@ -91,6 +92,7 @@ import {
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
+import { AMBIGUITY_PRONE_ROLES } from '../lib/roleGuide';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
 import { pickQuotaSubjects, quotaRemaining, VOCABULARY_DESCRIPTOR_KEY } from '../lib/newWordQuota';
@@ -642,6 +644,8 @@ interface QueueCard {
   readingContext?: ReadingContext;
   /** Set for `reading_in_context`/`listening` cards whose sentence has an authored comprehension check. */
   comprehensionCheck?: ComprehensionCheck;
+  /** Set for `reading_in_context` cards whose sentence has a saved structural analysis. */
+  analysisChunks?: AnalysisChunk[];
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -818,6 +822,8 @@ interface ReviewScope {
   readingContextBySentenceId: Map<string, ReadingContext>;
   /** Authored comprehension-check options per in-scope sentence, for `reading_in_context`. */
   comprehensionCheckBySentenceId: Map<string, ComprehensionCheck>;
+  /** Saved structural-analysis chunks per in-scope sentence, for `reading_in_context`'s later-review structure check. */
+  chunksBySentenceId: Map<string, AnalysisChunk[]>;
   vocabularyTargetCandidates: VocabularyTargetCandidate[];
   existingVocabularyItems: StudyItem[];
   audioCandidates: AudioCandidate[];
@@ -849,6 +855,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         sentence,
         readingContext: scope.readingContextBySentenceId.get(sentence.id),
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(sentence.id),
+        analysisChunks: scope.chunksBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
@@ -1434,9 +1441,13 @@ export function ReviewPage() {
 
     const analysesForScope = await db.analyses.bulkGet(sentenceIds);
     const comprehensionCheckBySentenceId = new Map<string, ComprehensionCheck>();
+    const chunksBySentenceId = new Map<string, AnalysisChunk[]>();
     analysesForScope.forEach((analysis, index) => {
       if (analysis?.comprehensionCheck) {
         comprehensionCheckBySentenceId.set(sentenceIds[index]!, analysis.comprehensionCheck);
+      }
+      if (analysis?.chunks.length) {
+        chunksBySentenceId.set(sentenceIds[index]!, analysis.chunks);
       }
     });
 
@@ -1446,6 +1457,7 @@ export function ReviewPage() {
       existingSentenceItems,
       readingContextBySentenceId,
       comprehensionCheckBySentenceId,
+      chunksBySentenceId,
       vocabularyTargetCandidates,
       existingVocabularyItems,
       audioCandidates,
@@ -2134,11 +2146,24 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 context={current.readingContext}
                 check={current.comprehensionCheck}
+                structureCheck={
+                  // Only from the sentence's second review onward — the
+                  // first pass stays exactly as it always has, this is
+                  // specifically the "repeat with less passive scaffolding"
+                  // pass (docs/ROADMAP.md repetition brainstorm, 2026-09-29).
+                  current.studyItem.fsrsState.reps >= 1
+                    ? pickStructureCheckChunk(current.analysisChunks, current.sentence.inlineReading)
+                    : undefined
+                }
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onComprehensionAnswered={(correct, chosenIndex) =>
                   setComprehensionCheckAnswer({ correct, chosenIndex })
                 }
+                onStructureCheckAnswered={(typed, expected) => {
+                  setTypedResponse(typed);
+                  setTypedResponseExpected(expected);
+                }}
               />
             ) : (
               <>
@@ -2206,15 +2231,45 @@ export function ReviewPage() {
   );
 }
 
+export interface StructureCheckTarget {
+  japanese: string;
+  expectedReading: string;
+}
+
+/**
+ * Picks the (at most one) chunk of a sentence's saved structural analysis
+ * worth a typed-recall production check on a `reading_in_context` review —
+ * the first chunk whose role is a classic Cure-Dolly confusion
+ * (`AMBIGUITY_PRONE_ROLES`, shared with AnalyzePage's guided walkthrough)
+ * and whose reading can actually be derived from the sentence's
+ * `inlineReading` markup. Returns undefined when neither condition is met
+ * (no flagged role, or no reading data yet) — the card just falls back to
+ * its existing behavior, same degrade-gracefully convention as everything
+ * else keyed off `inlineReading`.
+ */
+export function pickStructureCheckChunk(
+  chunks: AnalysisChunk[] | undefined,
+  inlineReading: string,
+): StructureCheckTarget | undefined {
+  if (!chunks) return undefined;
+  for (const chunk of chunks) {
+    if (!AMBIGUITY_PRONE_ROLES.has(chunk.role)) continue;
+    const expectedReading = surfaceReadingFromInline(inlineReading, chunk.japanese);
+    if (expectedReading) return { japanese: chunk.japanese, expectedReading };
+  }
+  return undefined;
+}
+
 /**
  * `reading_in_context` card body — the sole sentence-subject card. Reveal
- * flow: see JP, optionally answer a comprehension check, reveal EN + vocab,
- * self-rate. The sentence under test is framed by its reading-order
- * neighbours (buildReadingContextMap): the preceding sentences are shown
- * untranslated above it so the passage sets the scene without spoiling the
- * answer, and the following sentence's translation joins the reveal. With
- * no context available (inbox-only sentence, or a book-scoped queue whose
- * neighbours aren't loaded) it degrades to the isolated layout.
+ * flow: see JP, optionally answer a structure check, optionally answer a
+ * comprehension check, reveal EN + vocab, self-rate. The sentence under
+ * test is framed by its reading-order neighbours (buildReadingContextMap):
+ * the preceding sentences are shown untranslated above it so the passage
+ * sets the scene without spoiling the answer, and the following sentence's
+ * translation joins the reveal. With no context available (inbox-only
+ * sentence, or a book-scoped queue whose neighbours aren't loaded) it
+ * degrades to the isolated layout.
  *
  * When the sentence has an authored `check` (docs/ROADMAP.md "Context-aware
  * comprehension check…"), a 4-option "which English sentence fits this
@@ -2223,25 +2278,43 @@ export function ReviewPage() {
  * never a rating override; self-rating afterward is unchanged. No check
  * authored → falls straight to the plain Reveal button, same as before this
  * feature existed.
+ *
+ * `structureCheck` (2026-09-29 repetition pass, docs/ROADMAP.md) is the
+ * same shape of optional pre-reveal gate, one step earlier: only offered
+ * from the sentence's second `reading_in_context` review onward
+ * (`ReviewPage`'s call site checks `fsrsState.reps`), it marks one chunk
+ * flagged as a classic Cure-Dolly confusion (`pickStructureCheckChunk`) and
+ * asks the learner to type its reading, rather than just showing the
+ * sentence again passively — evidence recorded via the same generic
+ * `responseRaw`/`expectedAnswer` path every other typed-recall card uses
+ * (`onStructureCheckAnswered` → `setTypedResponse`/`setTypedResponseExpected`
+ * in `ReviewPage`), not a new field.
  */
 function ReadingInContextCard({
   sentence,
   context,
   check,
+  structureCheck,
   revealed,
   onReveal,
   onComprehensionAnswered,
+  onStructureCheckAnswered,
 }: {
   sentence: Sentence;
   context: ReadingContext | undefined;
   check: ComprehensionCheck | undefined;
+  structureCheck: StructureCheckTarget | undefined;
   revealed: boolean;
   onReveal: () => void;
   onComprehensionAnswered: (correct: boolean, chosenIndex: number) => void;
+  onStructureCheckAnswered: (typed: string, expected: string) => void;
 }) {
   const before = context?.before ?? [];
   const after = context?.after ?? [];
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+  const [structureValue, setStructureValue] = useState('');
+  const [structureAnswered, setStructureAnswered] = useState(false);
+  const [structureCorrect, setStructureCorrect] = useState(false);
   const contextIds = [...before, ...after].map((item) => item.id);
   const contextKey = contextIds.join(',');
   // Ambient connective tissue (docs/ROADMAP.md): a tracked grammar pattern
@@ -2257,6 +2330,10 @@ function ReadingInContextCard({
     setChosenIndex(index);
     onComprehensionAnswered(index === check.correctIndex, index);
   }
+
+  const [beforeChunk, targetChunk, afterChunk] = structureCheck
+    ? splitOnSurfaceForm(sentence.japanese, structureCheck.japanese)
+    : [sentence.japanese, '', ''];
 
   return (
     <>
@@ -2277,9 +2354,47 @@ function ReadingInContextCard({
           ))}
         </div>
       ) : null}
-      <div className="jp jp-lg">{sentence.japanese}</div>
-      {!revealed && check && chosenIndex === null ? (
+      <div className="jp jp-lg">
+        {targetChunk ? (
+          <>
+            {beforeChunk}
+            <mark>{targetChunk}</mark>
+            {afterChunk}
+          </>
+        ) : (
+          sentence.japanese
+        )}
+      </div>
+      {structureCheck && !revealed && !structureAnswered ? (
+        <form
+          className="row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const correct = isReadingAnswerCorrect(structureValue, structureCheck.expectedReading);
+            setStructureCorrect(correct);
+            setStructureAnswered(true);
+            onStructureCheckAnswered(structureValue, structureCheck.expectedReading);
+          }}
+        >
+          <label>
+            Type the reading of the highlighted part
+            <input
+              type="text"
+              value={structureValue}
+              autoComplete="off"
+              onChange={(event) => setStructureValue(event.target.value)}
+            />
+          </label>
+          <button type="submit">Check</button>
+        </form>
+      ) : !revealed && check && chosenIndex === null ? (
         <div className="stack">
+          {structureAnswered ? (
+            <p className="muted" style={{ margin: 0 }}>
+              {structureCorrect ? '✓ Correct' : '✗ Not quite'} — reading:{' '}
+              <span className="jp">{structureCheck!.expectedReading}</span>
+            </p>
+          ) : null}
           <p className="muted" style={{ margin: 0 }}>
             Which English sentence best fits this sentence in context?
           </p>
@@ -2291,6 +2406,12 @@ function ReadingInContextCard({
         </div>
       ) : !revealed ? (
         <>
+          {structureAnswered ? (
+            <p className="muted" style={{ margin: 0 }}>
+              {structureCorrect ? '✓ Correct' : '✗ Not quite'} — reading:{' '}
+              <span className="jp">{structureCheck!.expectedReading}</span>
+            </p>
+          ) : null}
           {check && chosenIndex !== null ? (
             <p style={{ fontWeight: 600 }}>
               {chosenIndex === check.correctIndex ? '✓ Correct' : '✗ Not quite'}

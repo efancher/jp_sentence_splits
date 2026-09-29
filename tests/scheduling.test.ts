@@ -235,6 +235,30 @@ describe('classifyReviewError (evidence-based only)', () => {
     ).toBe('grammar_misunderstanding');
   });
 
+  it('classifies a wrong reading_in_context structure-check answer as grammar_misunderstanding', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'reading_in_context',
+        rating: 'again',
+        responseRaw: 'たべる',
+        expectedAnswer: 'たべた',
+      }),
+    ).toBe('grammar_misunderstanding');
+  });
+
+  it('does not classify a correct reading_in_context structure-check answer', () => {
+    expect(
+      classifyReviewError({
+        subjectType: 'sentence',
+        activityType: 'reading_in_context',
+        rating: 'good',
+        responseRaw: 'たべた',
+        expectedAnswer: 'たべた',
+      }),
+    ).toBeUndefined();
+  });
+
   it('does not classify a correct grammar_contrast choice', () => {
     expect(
       classifyReviewError({
