@@ -10,6 +10,11 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Follow-up session: no code change.** Checked the "Adjust audio"
+  claim against code: the walkthrough already offers Adjust (local trim) and
+  Can't speak, so a tried second adjuster was reverted. Slice choice waits on
+  the user's feedback on Practise this / Compare uses (see handoff).
+
 - **2026-09-30 — Session checkpoint.** The user pasted a real external-AI reply
   for the real episode and it saved after the two fixes below. Everything is
   pushed to draft PR #1 (no merge/deploy). Pick-up notes and owed housekeeping

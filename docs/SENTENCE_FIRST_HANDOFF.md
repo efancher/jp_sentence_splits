@@ -212,7 +212,12 @@ Suggested next slices (none confirmed by the user):
 1. Ask the user how Practise this / Compare uses felt on the real episode; adjust.
 2. Decide with the user whether `sentenceLearningEvents` should sync/back up
    (needs a Supabase migration) or stay device-local.
-3. Phase 1 leftover: move secondary controls into an accessible sheet.
+3. Phase 1 leftover: move secondary controls into an accessible sheet. Verified
+   2026-09-30: "Adjust" (local clip trim, `NativeAudioButton`) and "Can't speak"
+   are already in the walkthrough; do NOT add `SentenceAudioAdjuster` (a
+   network source re-cut used on Analyze) there. Only Reader header controls
+   (Speed/Text) and the focus/pack panels are candidates; needs the user's view
+   on what counts as secondary.
 4. Phase 2 leftovers: contextual target selection, promoting a practised target
    into durable tracking, "Another answer works"/"Poor question" reports.
 5. Saved chunk-level analysis so walkthrough roles are not generic.
