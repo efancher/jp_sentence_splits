@@ -24,6 +24,7 @@ export function buildStructureInstructions(): string[] {
     'SENTENCE STRUCTURE: split each sentence in "STRUCTURE THESE" into its natural chunks (a content word plus its particle,',
     'a verb phrase, a clause). For every chunk give its role and a short literal English gloss. Prefer these role names exactly:',
     STRUCTURE_ROLES.join(' | '),
+    'Do not use quotation marks inside a gloss.',
     'Chunks must be in sentence order and, joined together, must rebuild the sentence exactly (punctuation may sit on the chunk before it).',
   ];
 }

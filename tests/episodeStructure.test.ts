@@ -53,3 +53,13 @@ describe('episode structure', () => {
     expect(walkthroughChunks(sentence, undefined, [{ japanese: '違う', role: 'x' }]).source).toBe('draft');
   });
 });
+
+import { extractJson } from '../src/lib/episodePreparation';
+
+describe('extractJson with curly quotes', () => {
+  it('repairs curly delimiters that also contain curly quotation marks inside a value', () => {
+    const reply = '{“structure”: {“S1”: [{“text”: “本を”, “role”: “object”, “gloss”: “the “book” (object)”}]}}';
+    const parsed = extractJson(reply) as { structure: { S1: { gloss: string }[] } };
+    expect(parsed.structure.S1[0]!.gloss).toBe("the 'book' (object)");
+  });
+});

@@ -124,6 +124,11 @@ export function extractJson(reply: string): unknown {
     try {
       return JSON.parse(repaired);
     } catch {
+      try {
+        return JSON.parse(repairCurlyQuotes(json));
+      } catch {
+        // fall through to the error below
+      }
       const detail = strictError instanceof Error ? strictError.message : 'parse error';
       throw new Error(`The reply is not valid JSON (${detail}). Ask the AI to answer again with only the JSON, using plain straight quotes.`);
     }
@@ -254,4 +259,35 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
     targets,
     rejected,
   };
+}
+
+/**
+ * Curly quotes may be the JSON's own delimiters or quotation marks inside a
+ * string value (a gloss like “the book”). A curly quote outside a string opens
+ * one; inside a string it closes it only when followed by , : } or ]; otherwise
+ * it is content and becomes a single quote so the JSON stays valid.
+ */
+export function repairCurlyQuotes(json: string): string {
+  const curly = /[\u201c\u201d\u201e\u201f\u00ab\u00bb]/;
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i += 1) {
+    const ch = json[i]!;
+    if (ch === '\\' && inString) {
+      out += ch + (json[i + 1] ?? '');
+      i += 1;
+    } else if (ch === '"') {
+      inString = !inString;
+      out += ch;
+    } else if (curly.test(ch)) {
+      if (!inString) {
+        inString = true;
+        out += '"';
+      } else if (/^\s*[,:}\]]/.test(json.slice(i + 1))) {
+        inString = false;
+        out += '"';
+      } else out += "'";
+    } else out += ch;
+  }
+  return out.replace(/\u00a0/g, ' ').replace(/,(\s*[}\]])/g, '$1');
 }
