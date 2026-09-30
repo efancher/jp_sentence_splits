@@ -42,6 +42,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
 
     await page.getByRole('button', { name: 'Walk through' }).first().click();
     const panel = page.getByRole('region', { name: 'Sentence walkthrough' });
+    await expect(panel.getByLabel('Words in this sentence').first()).toContainText('読む (よむ) — to read');
     await panel.getByRole('button', { name: 'Practise this' }).click();
     await expect(panel.getByText(/Before you look/)).toBeVisible();
     await expect(panel.getByText('Marks the thing being read or bought.')).toHaveCount(0);

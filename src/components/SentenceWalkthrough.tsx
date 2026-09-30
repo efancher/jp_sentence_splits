@@ -10,7 +10,7 @@ import type { CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { NativeAudioButton } from './NativeAudioButton';
-import { TargetLessonCard, type CompareAids, type LessonEventInput } from './TargetLessonCard';
+import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
 export interface WalkthroughChunk {
   id: string;
@@ -140,6 +140,12 @@ export function SentenceWalkthrough({
           <div><strong>{chunk.role || 'Unlabelled'}</strong>{chunk.literalEnglish ? <> · “{chunk.literalEnglish}”</> : null}</div>
           {blurb ? <div className="muted">{blurb}</div> : <div className="muted">No guide text for this role yet.</div>}
           {chunk.notes ? <div className="muted">{chunk.notes}</div> : null}
+        </div>
+      ) : null}
+      {compareAids?.get(sentence.id)?.words.length ? (
+        <div className="stack" style={{ gap: '0.15rem' }}>
+          <span className="muted">Words in this sentence:</span>
+          <WordGlossList words={compareAids.get(sentence.id)!.words} />
         </div>
       ) : null}
       <div className="row">

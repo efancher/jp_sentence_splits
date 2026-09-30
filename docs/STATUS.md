@@ -21,7 +21,8 @@ Last updated: 2026-09-30.
   schema. Tests: unit (`glossableWords`), `e2e/sentence-lesson.spec.ts`
   extended; `npm run check` and Docker e2e (Chromium+WebKit) pass. Not done:
   glosses come from morphology suggestions, so a word missing `english` has no
-  gloss; the walkthrough's own sentence has no gloss list yet.
+  gloss. Follow-up same day: the walkthrough panel itself now shows the same
+  "Words in this sentence" list (`WordGlossList`) for the open sentence.
 
 - **2026-09-30 — Follow-up session: no code change.** Checked the "Adjust audio"
   claim against code: the walkthrough already offers Adjust (local trim) and

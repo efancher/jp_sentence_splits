@@ -211,8 +211,8 @@ Housekeeping owed:
 Suggested next slices (none confirmed by the user):
 1. DONE 2026-09-30: user said Practise this / Compare uses "both seem good" and
    asked for vocabulary aids in Compare uses (glosses, audio, on-request
-   translation; see STATUS). Possible follow-up: same gloss list in the walkthrough
-   itself, and glosses for words with no `english` suggestion.
+   translation; see STATUS). The walkthrough itself now shows the gloss list too. Possible follow-up:
+   glosses for words with no `english` suggestion.
 2. Decide with the user whether `sentenceLearningEvents` should sync/back up
    (needs a Supabase migration) or stay device-local.
 3. Phase 1 leftover: move secondary controls into an accessible sheet. Verified
