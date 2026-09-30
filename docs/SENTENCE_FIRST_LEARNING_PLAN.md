@@ -1,6 +1,8 @@
 # Sentence-first learning through guided glossing
 
 Date: 2026-09-29  
+Revised: 2026-09-30 — episode preparation, speech practice, target quality, transfer and measurement.
+
 Status: Design proposal; no application changes implemented.  
 Starting point: [Roadmap: sentence glossing accessibility](ROADMAP.md#possibilities-sentence-glossing-accessibility), the guided walkthrough, and the sentence mastery/deep-dive work.
 
@@ -25,6 +27,10 @@ The user clarified the following during planning:
 - **Teaching style:** a Cure Dolly style walkthrough.
 - **Final production goal:** “Express the same meaning naturally, even with different Japanese.”
 - **Review interface direction:** display the whole chapter or episode, highlight or blank the vocabulary/grammar target in place, and put the question and response section below. This extends the passage-first idea to ordinary reviews as well as new learning.
+- **Import and planning scope:** consider the whole incoming episode when choosing learning priorities, including an AI preparation pass if useful.
+- **Speech and availability:** incorporate shadowing and independent verbal production, retain the “can't speak” switch, and simplify secondary controls with a pop-up where helpful.
+- **Evidence and transfer:** collect useful learning/usage data and compare vocabulary/grammar across encounters, including differences in meaning and use.
+- **Question and audio quality:** avoid underdetermined tiny clozes; choose an appropriate phrase/clause or a different question. Keep sentence/word audio adjustment readily available.
 
 Accordingly, the recommendation is a passage reader containing expandable guided sentence lessons, with progress through understanding, acquisition-oriented practice and production. Independent reading is an intermediate milestone, not 100% completion. The original Japanese is a model answer, not an exact-string target.
 
@@ -48,6 +54,71 @@ Code inspected at baseline commit `e82e768`. Some older architecture prose descr
 | Grammar recognition/completion cards | Existing recognition-to-production progression and reusable renderers. | Entry/tracking and auto-tracking still have sentence-readiness checks. A new supported lesson must not simply inherit those checks. |
 
 The existing deep-dive `?sentenceId=` path is useful but is not a complete lesson runner. Its due-date bypass applies only to new/learning items; other readiness checks remain, and grammar context selection needs particular attention before claiming everything is pinned to the displayed sentence.
+
+Additional inspected foundations for the September 30 revision: `YouTubeMinePage` already has a resumable transcript → segment → translate → commit flow and series-episode import; `miningQuickImport.ts` supports an external AI segmentation/translation round-trip; `shadowingImport.ts` handles prepared imports. `ShadowPage` already provides close-shadow loops, recording and analysis. `settings.quietMode` is per-device, is exposed on Home/Settings, and filters planned speaking work; the existing shadow page remains manually usable with a banner. `NativeAudioButton` and `SegmentLoopPlayer` expose sentence trim and word-range adjustment. `Review`, pronunciation attempts, game records, `sessionRecap.ts`, `progressReport.ts`, and effectiveness-report scripts provide evidence foundations, but do not constitute the new event/transfer scheme proposed below.
+
+## Bringing an episode into learning
+
+The importer should prepare a coherent source for learning, not produce a pile of independently ranked sentence cards. Keep two responsibilities separate: preserve and repair the imported material, then propose how to teach it. Preparation can start before commit as a preview, but learner evidence and durable study targets must refer to committed identities.
+
+### Import flow and provenance
+
+Proposed flow: **Import/resume → inspect transcript and boundaries → save source → prepare episode learning map → start reading**. Preparation may run in the background, and “Start reading now” must work with partial results. Use the same preparation entry point for podcast/YouTube, quick import, text/CSV/prepared packages and existing episodes; do not hide the feature inside only one importer.
+
+1. Preserve original transcript/cues, source identity, chapter/episode membership, ordering, source timestamps and audio revision. Record edits separately from the original where possible. Sentence, phrase, token and audio identities must resolve back to this source.
+2. Validate sentence boundaries, missing text/translations, obvious timing gaps/overlaps and speaker changes where reliable metadata exists. Keep the current preview and correction paths; uncertainty should be visible rather than silently repaired by a teaching model.
+3. Commit usable source content idempotently. Reimport/resume must not duplicate the episode, vocabulary, jobs or evidence. Preserve user corrections and already-reviewed targets.
+4. Run/resume preparation against an explicit source/text revision. Store its status as pending/partial/ready/failed/stale separately from study progress. Retry failed pieces without repeating paid work unnecessarily. Import success does not depend on optional AI availability.
+5. Land in the chapter/episode reader with a small “Suggested focus for this episode” panel, not a mandatory vocabulary-harvesting page. Let the learner accept, adjust or ignore priorities and begin immediately.
+
+### Whole-episode preparation, including an optional AI pass
+
+Recommend a structured episode-analysis job. An AI agent can implement it, but the useful contract is the output, not autonomous agency: it drafts a cited, versioned learning map and cannot rewrite the source, grade the learner, or enroll every suggestion in SRS.
+
+Give it the episode transcript in order, available translations, occurrence IDs/ranges, existing vocabulary/grammar identities, relevant prior learner evidence and preparation settings. Keep episode-content analysis reusable; apply changing learner priorities as a separate ranking pass. Do not send recordings or unrelated learner history merely to rank text targets. Treat source text as material to analyze, never as instructions to the agent.
+
+Suggested output:
+
+- Episode/topic/discourse outline with references to actual sentence ranges, including context needed for omitted participants and conversational turns.
+- Repeated words, senses, inflected forms, collocations and constructions; occurrence groups rather than duplicated per-sentence suggestions.
+- A small ranked focus set, with reasons such as “needed to understand the episode,” “appears in several distinct uses,” “contrasts with a familiar construction,” or “recently difficult.” Identify peripheral details that can remain gloss-only.
+- Candidate structural explanations and meaning/intent prompts grounded in source spans, plus uncertainties requiring inspection. An episode summary does not replace sentence-specific analysis.
+- Suitable learning activities and target scope for each focus item, including underdetermined clozes and proposed larger units or alternate tasks.
+- Same-use examples, contrast pairs and possible later transfer checks, linked to real occurrences. Content/audiotiming quality issues remain separate from linguistic learning priorities.
+
+For a long episode, use a whole-source outline plus bounded overlapping scene passes, then reconcile canonical targets and cross-scene recurrence globally. Independent per-sentence calls followed by concatenation would miss the point. Validate all cited IDs and ranges against the committed revision; reject invented examples presented as source material. Model confidence is an annotation, not calibrated truth.
+
+Start with an inspectable structured prompt/reply workflow compatible with the existing AI-assisted importer, or a resumable background job using existing service conventions. Choose the transport during implementation; the schema/validation and source preservation are required either way. Cache by content revision, preparation schema/prompt/model version and relevant configuration. A later model run must not overwrite manual corrections or silently alter a completed assessment's target inventory.
+
+### Episode-level selection and workload
+
+Choose **what is worth learning in this episode** before deciding **which occurrence teaches or tests it best**. The priority calculation should combine episode importance, recurrence across distinct contexts, learner need, usefulness beyond this episode, prerequisite burden, content quality and available time. Expose a short reason instead of an unexplained numeric score. No particular weights are established yet.
+
+Do not prioritize raw frequency alone: a filler repeated 40 times may be a poor recall target, while one construction may determine a key relationship in the story. Choose a bounded focus set and introduction budget; retain other material as contextual help. Preview the extra review load before accepting a large set, and distinguish selecting a learning focus from scheduling all its possible activity types.
+
+Reserve some occurrences as later transfer checks where practical. Re-rank as actual practice supplies evidence, without repeatedly rebuilding the whole episode analysis. A learner can continue through the story while earlier targets develop; the episode plan should connect those encounters, not turn each sentence into an isolated completion requirement.
+
+## Choosing fair questions and useful target sizes
+
+A short discourse expression such as “well,” “so,” or “wow” often does not have a unique Japanese completion from the prompt alone. Exact-source matching is then a poor comprehension test. Do not solve this only with a stop list: a common expression can be worth studying when its pragmatic function or contrast matters.
+
+At preparation and question construction, apply an explicit target-quality decision:
+
+| Situation | Preferred question |
+| --- | --- |
+| A word/form is sufficiently constrained and useful | Keep the contextual word/form test, with appropriate accepted variants. |
+| Meaning depends on an idiom, collocation or construction | Use that coherent phrase/construction as the target rather than a misleading isolated token. |
+| Several expressions would be natural in the blank | Accept defensible alternatives, or ask what the visible expression contributes; do not secretly demand the source wording. |
+| The intended distinction depends on the surrounding clause | Test the clause's meaning, relationship or natural expression with the relevant context specified. |
+| It is mostly an incidental filler with no current learning value | Leave it available as a gloss; omit the cloze from the plan. |
+
+For example, instead of blanking ええと and accepting only that spelling, highlight it and ask about its role in that conversational turn, compare actual uses elsewhere, or test the substantive clause that follows. Which replacement is natural depends on the turn, speaker intention and register; do not declare all fillers interchangeable.
+
+**A larger blank is not automatically a better question.** It can increase ambiguity and memory burden. Enlarge the target only when the larger unit has a clear linguistic purpose; otherwise change the task or skip it. Distinguish natural-meaning production from explicit phrase-form practice and label the latter honestly.
+
+Each proposed question should carry target scope, objective, prompt/support contract, contextual constraints, expected meaning/form criteria, accepted-variant policy, quality reason and content revision. AI suggestions can flag ambiguity, but no model can certify a unique answer merely by saying so. Give the learner “Another answer works” / “Poor question” at the response panel and let them record their actual answer. Route those reports to content repair; an invalid/ungradable prompt should not automatically produce a learner failure or FSRS lapse.
+
+Expanding a vocabulary cloze into phrase/meaning production changes what was tested. Do not write that result to the old word's StudyItem as if it were the same retrieval task. Use an appropriate existing activity only if its contract matches; otherwise record lesson/phrase evidence and introduce new scheduling semantics deliberately. Keep question-revision history so improved prompts can be evaluated without mixing unlike tests.
 
 ## Three interaction models
 
@@ -333,11 +404,13 @@ For the example sentence, a valid alternative might reorder 昨日 and the objec
 
 Distinguish two results when practising a specific construction: **meaning conveyed** and **target construction demonstrated**. A valid paraphrase avoiding the selected construction can satisfy the communication goal while leaving that construction's productive evidence untested. Do not fail the overall meaning attempt merely to force a particular pattern.
 
-Start with text input and/or a self-rated spoken attempt, depending on preference. Existing typed word-reading and conjugation exercises can help, but do not implement whole-sentence expression. A model-plus-checklist is usable offline, but the app must label self-assessed success honestly; it cannot certify that every alternative is natural. Optional AI feedback can later suggest problems and alternatives, with uncertainty and learner correction, rather than supplying authoritative exact-match grading. Speech recognition and pitch scoring are additional feedback, not requirements for semantic success.
+Support text input and self-rated spoken attempts, with separate modality evidence and quiet-mode availability. Existing typed word-reading and conjugation exercises can help, but do not implement whole-sentence expression. A model-plus-checklist is usable offline, but the app must label self-assessed success honestly; it cannot certify that every alternative is natural. Optional AI feedback can later suggest problems and alternatives, with uncertainty and learner correction, rather than supplying authoritative exact-match grading. Speech recognition and pitch scoring are additional feedback, not requirements for semantic success.
 
 This revisits the roadmap's deliberately deferred free-composition idea in a narrower, sentence-grounded form. It is real new work; `reading_production` does not already cover this goal.
 
 ## How vocabulary and grammar enter activities
+
+Episode preparation supplies the initial priority set; the current sentence supplies the concrete teaching occurrence. Either can be adjusted during reading. “Practise this” should explain whether the target recurs elsewhere in this episode and offer those encounters when useful.
 
 Discover suggestions as preparation for the sentence, display them where they matter, and let “Practise this” resolve/select the target within that context. Confirmation becomes an action inside the lesson, not an entrance requirement.
 
@@ -348,6 +421,73 @@ The initial in-lesson practice can be simpler than a full review card: read a wo
 For durable vocabulary tracking, reuse existing materialization and canonical identity logic. Do not call `confirmSentenceVocabulary` with just the newest clicked word: it currently treats selections as an authoritative snapshot and replaces the sentence’s links. Provide an atomic merge/update operation or rebuild the complete intended snapshot without erasing earlier selections.
 
 For grammar, allow explanation and supported recognition before full-sentence vocabulary proficiency. Initially these are lesson activities, without bypassing every existing SRS gate. Later, if tracked `grammar_recognition` should start sooner, introduce an explicit supported-entry policy covering manual Track, automatic seeding, context selection and queues together. Preserve the recognition-before-completion distinction.
+
+## Comparing encounters and developing transferable knowledge
+
+Add **Compare uses** to a highlighted word, construction or phrase, and to its explanation/feedback panel. Open two real sentence excerpts side by side (stacked on mobile), each with the relevant span highlighted, a short context/source caption, and optional trustworthy audio. Provide an explicit link back to each full chapter/episode. Keep comparison excerpts concise even though the main review surface offers the whole source.
+
+Use three comparison types:
+
+- **Same use, different situation:** recognize the same meaning or construction with different participants, verbs or inflections.
+- **Same form, different use:** distinguish senses, pragmatic functions or grammatical uses without conflating them because the written form matches.
+- **Related alternatives:** compare two words/constructions that differ in register, perspective, implication, collocation or structural constraints. State when swapping is unnatural or changes the meaning; do not imply interchangeability merely because English glosses overlap.
+
+Begin with actual corpus examples from this episode, then earlier episodes/books. Existing `SentenceVocabulary`/`SentenceGrammar`, `GrammarRelationship` and vocabulary-confusion relationships are starting points. Add finer sense/use keys or occurrence annotations only where the current identities cannot distinguish the relevant uses; do not destructively split or merge historical canonical records merely to fit a new taxonomy. Generated examples, if later added, must be labeled as generated and must not masquerade as prior learner encounters.
+
+The comparison should ask a concrete question: “What stays the same?”, “What changes here?”, “Could you swap these in this context?”, or “Which expresses this intention?” Give a brief explanation grounded in both excerpts. Start with a few curated or validated pairs; a huge automatically generated contrast graph would add more uncertainty than useful instruction.
+
+Record evidence at three levels: the exact occurrence/task, the relevant sense/use or construction, and the broader vocabulary/pattern identity. Success on one occurrence supports that use; it does not certify every sense, productive use, register or modality. Global evidence can reduce unnecessary repetition while an unfamiliar occurrence still gets local help.
+
+Operationalize transfer as a successful check in a **different context under known support conditions**, after a gap where practical. Record whether an example was already taught or shown in a comparison. A pair just displayed together is practice, not an unseen transfer test. Hold back suitable existing occurrences for later checks, or say “new use not yet checked” when none are available. Count distinct useful contexts and first unassisted successes, not just total encounters. Several copies of the same line are not several independent contexts.
+
+For selection, combine local mistakes, uncertainty across senses, useful episode recurrence and available contrast examples. Keep an intelligible reason such as “You recognize this in the original line; try it with a different verb.” Do not require transfer for every sentence's same-meaning completion, but show transferable vocabulary/grammar progress separately from sentence completion.
+
+## Shadowing, verbal production and a quieter interface
+
+Speech should be a core available learning path, with distinct tasks and evidence:
+
+| Task | Support and purpose | What success can establish |
+| --- | --- | --- |
+| Listen/read and follow | Source audio, text and optional glosses | Exposure and supported comprehension where actually checked. |
+| Close shadow | Source voice and usually visible Japanese; repeat a phrase/sentence with its timing | Practice reproducing the model's sound; measured pronunciation evidence when alignment is usable. |
+| Delayed imitation / reduced-text retell | Hear a model, then speak with fewer cues | A bridge to recall; still model-exposed production, not independent formulation. |
+| Express the meaning aloud | Intent/meaning/context cue, target Japanese and model audio hidden | Spoken formulation of the meaning, assessed separately for communicative adequacy and pronunciation. |
+
+These are available routes rather than an obligatory sequence. Reuse `ShadowPage`'s close-shadow loop, target range, playback speed, recording/save/compare and analysis pipeline. Start with a useful phrase inside the passage when a full sentence is too much, then restore the complete context. Independent speech can succeed with different Japanese, so a source-transcript forced-alignment score cannot judge a natural paraphrase's correctness. Assess meaning separately; score pronunciation only against an appropriate transcript/reference and disclose unavailable measurements.
+
+Preserve attempts and analysis provenance. The existing shadowing-to-SRS natural-encounter bridge must be handled explicitly: the new lesson event must not duplicate its review, and imitation alone must not satisfy independent comprehension or expression milestones. If changing that existing bridge's credit policy, migrate/report it deliberately rather than silently changing historical meaning.
+
+### Keep “Can't speak” visible
+
+Retain per-device `settings.quietMode` and show a compact **Can't speak** toggle in the reader/review header as well as existing Home/Settings access. It means speech is unavailable, not that listening is unavailable. Headphone listening, reading, grammar and typed expression can continue; audio playback remains a separate choice.
+
+When enabled, omit automatic speak-aloud tasks, redistribute their budget, and leave spoken goals pending without counting a failure or marking them complete. If enabled mid-session, defer upcoming speaking work in that session too, rather than only affecting the next plan. Handle any active recording safely with an explicit stop/save/discard state; never automatically grade an interrupted take.
+
+Preserve the existing possibility of intentionally entering speech practice despite the switch, with a visible indication and explicit user action. No automatic microphone start. Typed expression is a useful alternative at work but supplies typed evidence only. A semantic completion badge can say “expressed in writing”; spoken competence remains a separate visible goal. If speech is the learner's selected completion goal, quiet mode defers that milestone instead of silently lowering the goal.
+
+### Put secondary controls in a sheet, not the whole task
+
+Keep the chapter/episode, current question/response, Play, the main speaking action when available, **Can't speak**, and **Adjust audio** readily accessible. A popover/side sheet on desktop or bottom sheet on mobile can hold speed/loop settings, mic calibration, waveform/pitch details, previous takes and advanced analysis. Use the same pattern for Compare uses where space is tight.
+
+Keep one primary task active. Do not stack multiple modal dialogs or bury Stop recording inside a closed panel. A sheet must retain the target/context, restore focus on close, preserve the answer/scroll position and support keyboard navigation. Closing a sheet or navigating away must stop its playback/recording safely or leave a clearly visible stop control; no invisible active microphone. Required instructions, response entry and feedback stay below the document.
+
+## Audio reliability and adjustment are part of the learning surface
+
+Place **Adjust audio** beside playback for the active sentence/word and in the speaking sheet. It must remain reachable when automatic alignment fails, not appear only after a successful word isolation. Preserve `NativeAudioButton`'s sentence trim and `SegmentLoopPlayer`/`ZoomedRangeEditor`'s word-range editing, audition, save and reset behavior; move controls only if the new location remains one clear action away.
+
+Different coordinate systems and purposes must stay distinct:
+
+- Source/episode timestamps and sentence segmentation boundaries refer to the original media.
+- `SentenceAudio.trimStartMs/trimEndMs` trims playback inside a sentence clip. It cannot recover speech already cut out of that clip; offer source-boundary repair/reimport/resegmentation when needed.
+- `SentenceVocabulary.audioStartMs/audioEndMs` can include a useful following particle/padding for phrase or pitch practice.
+- `wordOnlyStartMs/wordOnlyEndMs` are strict word-only ranges for consumers that require them. Do not overwrite one with the other.
+- Text occurrence offsets locate displayed Japanese; audio time ranges cannot substitute for source-text alignment.
+
+Show the current source/take and whether its timing is automatic or manually adjusted. Persist an override against the correct occurrence and audio revision, with origin and timestamp. Inspect current override identity granularity before implementation: if a stored override is only sentence-vocabulary scoped, add source/audio binding before applying it across multiple recordings. On audio replacement, resegmentation or source edits, revalidate bounds and mark incompatible overrides stale rather than silently reusing them. Save once and have reader/reviews/shadowing consume the same valid correction.
+
+When timing is unreliable, fall back to whole-sentence/source playback and keep the learning task usable. Log measurement unavailable/content defect separately from an incorrect learner response. Do not score pitch or pronunciation from knowingly invalid boundaries, and do not charge repair time as slow recall. Corrections should invalidate affected alignment/pitch caches and derived measurements by audio/range revision while retaining earlier results with their original provenance.
+
+An alignment issue report should carry source/clip/occurrence IDs, automatic-versus-manual range, revision, failure reason and the correction if supplied. Aggregate which stages or source types generate repairs. This turns the adjustment tool into both an immediate escape hatch and a source of concrete quality improvements.
 
 ## Evidence and scheduling
 
@@ -369,6 +509,44 @@ A real due review should precede answer-bearing lesson content when practical. I
 
 A sentence’s percentage and stage help choose the next action; they do not dictate FSRS intervals. Production lesson events remain separate from existing word-level `reading_production` evidence. Future due reviews can appear within a passage visit when eligible and useful. Unrelated due work remains accessible and gets protected session time.
 
+## Data collection that can guide improvements
+
+Build on existing review, attempt, pronunciation, game and planner records. Add missing exposure/decision/quality events rather than a second copy of every review. The purpose is to answer specific product and learning questions, including what was available but not selected; an outcome-only log cannot explain selection bias or why a learning path is never reached.
+
+### Event contract
+
+Use a versioned append-only envelope: stable event ID/idempotency key, owner, client/device identity, occurrence and received timestamps, session/visit/task-attempt IDs, event/schema version, app/policy version, source/chapter/sentence/occurrence IDs where applicable, canonical target plus sense/use key if known, content/audio/inventory revisions, and links to existing Review/Attempt/GameRound records rather than duplicate grade writes. Fields are conditional, not all mandatory for every event.
+
+| Event family | What to retain | Question it answers |
+| --- | --- | --- |
+| Import/preparation | Stage start/end/failure, input revision, validation warnings, suggestion accept/edit/dismiss, job/prompt/model version, measured latency and usage/cost where available | Does preparation make usable lessons, and where does incoming material fail? |
+| Recommendation | Eligible counts by activity, selected target/occurrence, reason/features used, major blocked reasons, policy version, budget and quiet-mode state | Why was this proposed, and what is being starved? |
+| Presentation/exposure | Target and prompt revision, support actually visible, relevant examples/answers already exposed, modality, audio provenance, start/end and visibility intervals | Was this a fair independent check or recently cued practice? |
+| Response/help | Submitted response when appropriate, correctness/self-rating, assessor type/version/confidence, hints before/after submission, skip reason, content-issue flag | What needed help, and was the difficulty linguistic or a bad question? |
+| Speech/audio | Existing attempt reference, shadow versus independent speech, model exposure, measured/unavailable status, boundary repairs and affected revisions | Is speech improving, or are alignment failures distorting results? |
+| Navigation/availability | Task completion/abandonment, meaningful context switches, quiet-mode changes and technical interruption | Is the interface helping completion under real usage constraints? |
+
+Log important transitions and exposures, not every scroll pixel or keystroke. Measure foreground active time separately from wall-clock time, excluding long inactivity, background tabs, audio repair and service waits where detectable. Keep unknown values unknown. “Not answered,” “technical failure,” “invalid question” and “wrong answer” must be different outcomes. Self-assessed naturalness must not be labeled objectively verified correctness.
+
+Write locally first; deduplicate retries/offline sync by event/attempt identity. Specify ordering for events within an attempt and tolerate clock skew between devices. Avoid full-document snapshots in every event: retain a revision reference and the minimal prompt/criteria artifact needed to reconstruct the historical question. Do not collect continuous microphone audio or hidden draft keystrokes. Keep recordings under the existing explicit attempt-save behavior, and provide understandable export/deletion/retention controls for new evidence alongside backups. This is a personal learning data scheme, not a requirement for an external analytics service.
+
+### Reports tied to decisions
+
+| Decision to improve | Useful measures, with denominators | What not to infer |
+| --- | --- | --- |
+| Whether guided glossing helps | Later unassisted success among attempted revisits; change in help use for matched targets; active time to usable understanding | Viewing explanations or higher same-session scores do not prove retention. |
+| Whether knowledge transfers | Success on different, previously unexposed contexts versus taught contexts, by sense/use, modality and delay | Repeating a familiar line is not transfer. |
+| Whether speech practice helps | Later independent spoken meaning success; valid pronunciation measurements across comparable takes; measurement coverage/failure rate | Good shadowing alone does not prove independent formulation. |
+| Whether target selection is sensible | Accepted/edited/dismissed suggestions; ambiguous-question reports; downstream review load; episode progress and distinct-context evidence | Frequent tokens or many generated cards do not imply value. |
+| Whether the interface helps | Completion/abandonment, context switching, repair/help burden, active time and due-backlog trend | Faster answering caused by accidental answer exposure is not improvement. |
+| Whether alignment is improving | Repairs/failures per eligible clip/attempt, validity after correction, source/pipeline breakdown and repeated repairs | Unmeasurable speech is not failed speech. |
+
+Always show sample counts, time windows, missing-data coverage and the exact inclusion rule. Break down results by activity, prior target proficiency, support level, source quality and elapsed gap where data permits. Do not compare different learner/target mixes as if they were the same experiment; quieter days also have a different modality mix.
+
+Start with a small inspectable report joining new events to `progressReport`, session recap and existing effectiveness-report conventions. Capture a baseline before enabling a new presentation/preparation policy. Then inspect concrete problem examples alongside aggregates. For a single learner with limited data, observational trends should be labeled as such; confidence in a change should come from later outcomes and enough comparable attempts, not a short-term success-rate jump.
+
+If useful after sufficient usage, evaluate one modest policy change at a time with an explicit version and randomized assignment at a suitable unit, such as target group or episode. Keep variants stable within that unit and account for cross-exposure; no hidden per-card oscillation that teaches the answer in one variant and tests it in another. Do not add adaptive optimization or automatic percentage-weight changes before the evidence is interpretable.
+
 ## Technical shape
 
 ### Reusable teaching surface
@@ -387,13 +565,16 @@ Validate that ranges match the source. On an edit/resegmentation, retain history
 
 Keep preparation and learner evidence distinct. Use existing saved analysis and imported meanings first, local heuristic drafts next, and existing optional assistance where appropriate. An unavailable explanation should show what is missing and allow reading/editing to continue. A heuristic role-guide blurb is a generic explanation, not verified sentence-specific reasoning. Draft content needs visible provenance and an easy correction path.
 
-Do not make import-time AI batching or a runtime dictionary port prerequisites. They are useful later improvements from the roadmap; introducing a new generated-analysis service would require its own content-quality and offline design.
+Episode-level learning preparation is now a core part of this plan. Import-time AI batching and a runtime dictionary port remain optional implementation optimizations, not prerequisites for usable import/reading. The preparation output, validation/provenance contract, manual-correction preservation and offline/partial-result behavior are required whether the first version uses an external AI round-trip or a service.
 
 ### Proposed records — refine during implementation
 
 - `SentenceLearningEvent`: owner-scoped append-only event ID, sentence/book context, timestamp, visit ID, action/stage, optional target references, content/inventory revision, requested support preset, actual support shown before answering, response mode/outcome, production modality and assessment source, recent exposure, and optional existing Review ID for attribution without duplicate credit.
 - `SentenceLearningState`: small resumable per-sentence state such as current chunk, last chosen support and active visit. This may be a derived/cache view where possible; durable evidence must not live only in last-write-wins planner sessions.
 - `SentenceTargetInventory`: explicit essential targets and their scope/revision, with unresolved/excluded/not-applicable reasons. Initially derive as much as possible from existing links and analysis; persist only decisions/revisions that cannot be reconstructed reliably.
+- `EpisodeLearningPlan` (proposed): source/chapter revision, preparation status/provenance, occurrence-grouped targets, ranked focus/reasons, target-quality decisions, contrast/transfer candidates and learner overrides. Separate reusable source analysis from personalized priority state.
+- Versioned task/prompt criteria and occurrence-level sense/use annotations where needed: support honest variant acceptance, phrase/clause targets and later transfer analysis without rewriting existing canonical history.
+- Learning/decision/quality event families using the contract above, linked to existing scheduled reviews and speech attempts. Audio override revisions/source binding may require strengthening current persistence rather than adding a parallel correction store.
 - `buildSentenceLearningProgress`: pure aggregation over inventory, compatible canonical evidence and sentence events; repository layer batches the fetches. Keep it separate from `buildSentenceMasteryArc` until compatibility is understood.
 
 The implementation must include Dexie upgrades, owner-scoped Postgres schema/RLS if syncing, sync entity/mappers/ordering, backup validation/export/import, and cascade behavior for deletion/merge/resegmentation. Deduplicate retries by stable event/attempt identity. Restore and sync must not replay an attempt as a new FSRS review. New persisted state should follow existing repository conventions.
@@ -412,17 +593,23 @@ Do not rewrite an in-progress daily session underneath the learner during rollou
 
 ## Incremental delivery
 
-The chapter/episode review surface above is an independent early slice: existing vocabulary and grammar reviews can use it before the new progress model exists. It establishes shared document rendering and target presentation for the phases below without requiring a scheduling redesign.
+The chapter/episode review surface above is an independent early slice: existing vocabulary and grammar reviews can use it before the new progress model exists. It establishes shared document rendering and target presentation for the phases below without requiring a scheduling redesign. Instrument that slice's presentation/help/quality outcomes from the start so later changes have a baseline.
+
+### Phase 0 — Define preparation and evidence contracts
+
+Map current import paths to the common source/episode preparation entry point; define versioned episode-output, target-quality and event schemas. Preserve original content and corrections, and create a small real-episode fixture set covering long transcripts, repeated discourse expressions, contrasting uses and bad alignment. Add basic data validation and a usable partial/preparation-failed state. Start with an inspectable episode-analysis round-trip if it is the smallest reliable path.
+
+Acceptance: the same episode imported/resumed twice is not duplicated; a failed AI preparation does not block reading; proposed target IDs/spans are validated; suggestions are editable; a small recommended focus set reflects the whole episode; preparation and review events can be joined without duplicate grades.
 
 ### Phase 1 — Put guided sentence learning inside the passage
 
-Extend the reader with an ungated expandable sentence walkthrough, prepared/heuristic explanation, generous help, and “Continue.” Keep editing available. Show the intended stage journey from understanding to natural expression without claiming unimplemented stages are assessed. Do not change FSRS or advertise a mastery percentage yet.
+Extend the reader with an ungated expandable sentence walkthrough, prepared/heuristic explanation, generous help, and “Continue.” Surface the episode's suggested focus and preserve editing. Keep **Can't speak** and **Adjust audio** readily available, with secondary controls in an accessible sheet. Show the intended stage journey from understanding to natural expression without claiming unimplemented stages are assessed. Do not change FSRS or advertise a mastery percentage yet.
 
 Acceptance: a passage with zero vocabulary reviews opens directly into useful guidance; offline or missing gloss data still permits reading; the learner can leave an exercise and return to the same sentence/scroll position. The walkthrough teaches structural relationships, not just a vocabulary list.
 
 ### Phase 2 — Bring the activities into the sentence
 
-Add contextual target selection and a few supported exercises. Reuse canonical materialization safely; add learning events and resumption. Start with a simple declared inventory and coverage counts. Keep practice distinct from reviews.
+Add contextual target selection and a few supported exercises, guided by episode priorities and target-quality decisions. Reuse canonical materialization safely; add learning events and resumption. Start with a simple declared inventory and coverage counts. Add a small Compare uses flow over real occurrences and preserve which examples have been exposed. Keep practice distinct from reviews.
 
 Acceptance: practising a word/pattern returns to the sentence in its passage, duplicate targets do not duplicate canonical cards, existing selections survive incremental additions, and explanation/assisted practice leaves FSRS unchanged.
 
@@ -434,19 +621,19 @@ Acceptance: a revealed answer cannot earn an independent result; repeated text m
 
 ### Phase 4 — Close the loop with supported and independent expression
 
-Add a meaning/intent cue, optional structural/lexical scaffolds, a typed or spoken attempt before reveal, and a model-plus-meaning-checklist assessment. Accept natural alternative Japanese through explicit self-assessment; record its assessment source. Distinguish communicative success from demonstration of a selected pattern. Add later revisits and the full journey percentage once all six stages have meaningful evidence.
+Add a meaning/intent cue, optional structural/lexical scaffolds, typed and spoken attempt paths before reveal, and a model-plus-meaning-checklist assessment. Bring existing close-shadow practice into the same source/target surface as an optional bridge with separate evidence. Accept natural alternative Japanese through explicit self-assessment; record its assessment source. Distinguish communicative success, selected-pattern use and pronunciation measurement. Honor quiet mode in new and in-progress sessions, with written and spoken milestones separately labeled. Add later revisits and the full journey percentage once all six stages have meaningful evidence.
 
 Acceptance: a correct paraphrase is not rejected for differing from the source, a missing essential meaning relation remains visible, revealed cues prevent an independent-production label, and simple string equality is never used as a naturalness judge. Independent reading alone cannot produce 100%.
 
 ### Phase 5 — Make this the planner’s main learning unit
 
-Add `sentence_learning` end to end, replace the vocabulary-before-glossing path for new lessons, and fit eligible due activities into passage visits without double budgeting. Connect the current deep-dive view to the same lesson components.
+Add `sentence_learning` end to end, replace the vocabulary-before-glossing path for new lessons, and fit eligible due activities into passage visits without double budgeting. Select episode-level priorities before occurrences, preserve review workload limits and expose recommendation reasons. Connect the current deep-dive view to the same lesson components. Deliver the first joined outcome/quality report and check for starvation, content defects and backlog changes before tuning policy.
 
 Acceptance: the normal daily flow leads with sentences even when their vocabulary is new, a visit does not auto-confirm/complete old records, due reviews are not starved, and old sessions still resume correctly.
 
 ### Phase 6 — Improve transfer and optional skill tracks
 
-Offer a second corpus sentence using the same construction, richer clause sequencing, and optional listening/pronunciation/new-meaning transfer goals. Consider preparation batching or dictionary infrastructure only once missing content is an observed bottleneck. Production of the same meaning is already part of the core plan, not deferred to this phase.
+Expand the early Compare uses flow into broader sense/use distinctions and delayed checks on held-back contexts. Improve clause sequencing and optional listening/pronunciation/new-meaning transfer goals. Consider preparation batching or dictionary infrastructure when observed bottlenecks justify them. Speech practice, same-meaning production and whole-episode preparation are already core parts of the plan, not deferred to this phase. Use recorded outcome/quality data to decide which additions are useful.
 
 Acceptance: evidence distinguishes expressing the original meaning from using the pattern for a new meaning elsewhere. Audio-less sentences still have a full typed-expression path.
 
@@ -465,6 +652,12 @@ This is a documentation-only proposal; no application tests are needed for this 
 - Interrupted lesson, replayed writes, two-device sync, backup/restore, sentence merge/delete/resegmentation.
 - Coexistence with an in-progress daily session and existing review gates; no repeated grading or silent empty vocabulary confirmation.
 - Full-chapter review: repeated target answers elsewhere, furigana/reading-only/gloss/audio leakage, long-episode navigation, mobile keyboard layout, correct source selection for shared sentences, sibling spacing, and no new chapter-wide proficiency gate.
+- All import paths, preparation retry/resume/version invalidation, preserved manual edits, invented/invalid AI span rejection, and a whole-episode focus set that does not become a card for every token.
+- Ambiguous filler cloze changed to a justified larger target or alternate task; valid variants, poor-question reporting, and no word-level FSRS credit for a different phrase-level task.
+- Quiet mode switched during a session/recording, explicit speaking override, separate written/spoken evidence, and no comprehension credit inferred solely from shadowing.
+- Alignment failure with Adjust still available; sentence trim versus source-boundary repair; multiple audio sources; stale manual spans; distinct padded and strict word-only ranges.
+- Same form/different sense contrasts, source-specific pragmatic differences, held-back transfer occurrences, and no inflation from repeated copies of the same context.
+- Event deduplication, meaningful denominators, active versus idle/repair time, insufficient/missing data and app/prompt/scorer versions in comparison reports.
 
 Manually try a small varied sample of actual corpus sentences before planner rollout: new and familiar, simple and multi-clause, with and without audio. Compare whether it reduces page hopping and time to a useful explanation, whether activities return naturally to the sentence, and whether help use decreases on later visits. Check due-backlog growth alongside any improvement. Do not treat more clicks, explanations viewed, or same-session percentages as evidence of retention.
 
@@ -479,9 +672,9 @@ Manually try a small varied sample of actual corpus sentences before planner rol
 
 ## Questions for the next design pass
 
-The passage-first direction, Cure Dolly style walkthrough and same-meaning natural-expression goal are settled. Remaining details can be decided during a small prototype:
+The passage-first direction, Cure Dolly style walkthrough, same-meaning natural-expression goal, speech path, quiet mode and accessible audio repair are settled. Whole-episode preparation, comparisons and useful measurement are now core design requirements. Remaining details can be decided during a small prototype:
 
-1. Is production primarily spoken, written, or separately tracked in both modalities? Provisional implementation: typed attempts plus optional self-rated speaking, without claiming they are equivalent.
+1. Should final sentence completion require spoken expression, written expression, or either with the modality clearly labeled? Support and track both; quiet mode defers spoken goals and never silently certifies them through typing.
 2. Should “Practise this” normally add the target to spaced repetition, or offer one-off practice versus keep-reviewing? Provisional default: allow one-off practice and make durable tracking explicit.
 3. Should essential target identification be a quick learner confirmation or mostly automatic with editing? Provisional default: prepared suggestions with one lightweight coverage check; unresolved targets stay visible.
 4. Is a model-plus-checklist self-assessment sufficient initially, or is optional AI feedback important for judging natural alternatives? Provisional default: honest self-assessment first, no automated naturalness claim.
