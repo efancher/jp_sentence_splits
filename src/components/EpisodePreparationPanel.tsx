@@ -32,8 +32,8 @@ export function EpisodePreparationPanel({
   const [reply, setReply] = useState('');
   const [message, setMessage] = useState<string>();
   const [copiedPart, setCopiedPart] = useState<number>();
-  const [forceTargets, setForceTargets] = useState(false);
-  const [wantStructure, setWantStructure] = useState(false);
+  const [forceTargets, setForceTargets] = useState(true);
+  const [wantStructure, setWantStructure] = useState(true);
   const prompts = useMemo(() => {
     if (!loaded) return [];
     const plan = planEpisodePack(loaded.context, loaded.preparation, {
