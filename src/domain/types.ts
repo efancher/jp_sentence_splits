@@ -314,6 +314,19 @@ export interface BookChapter {
   suspendedAt?: string;
   /** Inspectable whole-episode teaching-priority proposal (sentence-first plan, Phase 0). */
   preparation?: EpisodePreparation;
+  /**
+   * AI-proposed chunk structure per sentence id, from a pasted episode-pack reply.
+   * A draft beside — never instead of — the learner's saved `analyses`; the
+   * walkthrough uses it only when no saved analysis exists, and re-checks it
+   * against the current sentence text before use.
+   */
+  structureDrafts?: Record<string, StructureDraftChunk[]>;
+}
+
+export interface StructureDraftChunk {
+  japanese: string;
+  role: string;
+  literalEnglish?: string;
 }
 
 export type PreparedTargetKind = 'vocabulary' | 'grammar' | 'expression';

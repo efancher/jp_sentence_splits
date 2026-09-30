@@ -10,7 +10,8 @@
  * handles (S1..) and text; ids and offsets are resolved here, and existing
  * translations are never overwritten.
  */
-import type { EpisodePreparation } from '../domain/types';
+import type { EpisodePreparation, StructureDraftChunk } from '../domain/types';
+import { STRUCTURE_SENTENCES_PER_PART, STRUCTURE_SHAPE, buildStructureInstructions, parseStructure } from './episodeStructure';
 import {
   EPISODE_PREPARATION_VERSION,
   MAX_PREPARED_TARGETS,
@@ -26,12 +27,14 @@ const MAX_TRANSLATION_LENGTH = 600;
 export interface EpisodePackPlan {
   wantsTargets: boolean;
   missingTranslationHandles: string[];
+  /** Handles whose chunk structure is wanted (opt-in); asked in separate parts after translations/targets. */
+  structureHandles: string[];
 }
 
 export function planEpisodePack(
   context: PreparationContext,
   preparation: EpisodePreparation | undefined,
-  options: { forceTargets?: boolean } = {},
+  options: { forceTargets?: boolean; structureSentenceIds?: ReadonlySet<string> } = {},
 ): EpisodePackPlan {
   const hasFreshTargets =
     !!preparation && preparation.targets.length > 0 && !isPreparationStale(preparation, context.sentences);
@@ -39,6 +42,9 @@ export function planEpisodePack(
     wantsTargets: !!options.forceTargets || !hasFreshTargets,
     missingTranslationHandles: context.sentences.flatMap((sentence, index) =>
       sentence.translation?.trim() ? [] : [`S${index + 1}`],
+    ),
+    structureHandles: context.sentences.flatMap((sentence, index) =>
+      options.structureSentenceIds?.has(sentence.id) ? [`S${index + 1}`] : [],
     ),
   };
 }
@@ -65,13 +71,33 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
   for (let i = 0; i < plan.missingTranslationHandles.length; i += PACK_TRANSLATIONS_PER_PART) {
     batches.push(plan.missingTranslationHandles.slice(i, i + PACK_TRANSLATIONS_PER_PART));
   }
-  if (batches.length === 0 && !plan.wantsTargets) return [];
+  const structureBatches: string[][] = [];
+  for (let i = 0; i < plan.structureHandles.length; i += STRUCTURE_SENTENCES_PER_PART) {
+    structureBatches.push(plan.structureHandles.slice(i, i + STRUCTURE_SENTENCES_PER_PART));
+  }
+  if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0) return [];
   if (plan.wantsTargets && batches.length === 0) batches.push([]);
 
   const sentenceByHandle = new Map(context.sentences.map((s, i) => [`S${i + 1}`, s]));
-  const total = batches.length;
+  const total = batches.length + structureBatches.length;
 
-  return batches.map((batch, partIndex) => {
+  const structurePrompts = structureBatches.map((batch, index) =>
+    [
+      `You are helping a Japanese learner prepare one episode: "${context.title}".` +
+        (total > 1 ? ` This is part ${batches.length + index + 1} of ${total}; each part is answered separately.` : ''),
+      '',
+      ...buildStructureInstructions(),
+      '',
+      'STRUCTURE THESE:',
+      ...batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`),
+      '',
+      'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
+      JSON.stringify({ version: EPISODE_PREPARATION_VERSION, structure: STRUCTURE_SHAPE }, null, 2),
+      '"structure" must have one entry per handle listed under STRUCTURE THESE, keyed by that handle.',
+    ].join('\n'),
+  );
+
+  const mainPrompts = batches.map((batch, partIndex) => {
     const includeTargets = plan.wantsTargets && partIndex === 0;
     const lines: string[] = [
       `You are helping a Japanese learner prepare one episode: "${context.title}".` +
@@ -133,6 +159,7 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
     }
     return lines.join('\n');
   });
+  return [...mainPrompts, ...structurePrompts];
 }
 
 export interface PackTranslation {
@@ -145,6 +172,8 @@ export interface PackReplyResult {
   preparation?: EpisodePreparation;
   translations: PackTranslation[];
   rejectedTranslations: { handle: string; reason: string }[];
+  /** Present only when the reply had a "structure" object. */
+  structure?: { drafts: Map<string, StructureDraftChunk[]>; rejected: { handle: string; reason: string }[] };
 }
 
 export function parseEpisodePackReply(reply: string, context: PreparationContext, now: string): PackReplyResult {
@@ -161,8 +190,9 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
   const object = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const hasTargets = 'targets' in object;
   const hasTranslations = 'translations' in object;
-  if (!hasTargets && !hasTranslations) {
-    return { error: 'The reply has neither "targets" nor "translations".', translations: [], rejectedTranslations: [] };
+  const hasStructure = 'structure' in object;
+  if (!hasTargets && !hasTranslations && !hasStructure) {
+    return { error: 'The reply has none of "targets", "translations" or "structure".', translations: [], rejectedTranslations: [] };
   }
 
   const translations: PackTranslation[] = [];
@@ -189,5 +219,6 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
     preparation: hasTargets ? parsePreparationObject(raw, context, now) : undefined,
     translations,
     rejectedTranslations,
+    structure: hasStructure ? parseStructure(object.structure, context) : undefined,
   };
 }

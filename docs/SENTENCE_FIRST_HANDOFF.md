@@ -227,7 +227,9 @@ Suggested next slices (none confirmed by the user):
    on what counts as secondary.
 4. Phase 2 leftovers: contextual target selection, promoting a practised target
    into durable tracking, "Another answer works"/"Poor question" reports.
-5. Saved chunk-level analysis so walkthrough roles are not generic.
+5. DONE 2026-09-30 (unverified on a real reply): opt-in AI chunk structure in the
+   episode pack -> `BookChapter.structureDrafts` -> walkthrough source `ai_draft`
+   (see STATUS). Try it on the real episode via the pack's new checkbox.
 6. Phases 3-6 per `docs/SENTENCE_FIRST_LEARNING_PLAN.md`.
 Note: the derived (pre-preparation) focus strip favours generic verbs; consider
 prompting for preparation sooner or ranking better.

@@ -32,7 +32,7 @@ const context: PreparationContext = {
 describe('episode pack prompts', () => {
   it('asks for targets and only the missing translations in one prompt', () => {
     const plan = planEpisodePack(context, undefined);
-    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'] });
+    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'], structureHandles: [] });
     const prompts = buildEpisodePackPrompts(context, plan);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('S2: 本を買いました。');
@@ -55,8 +55,8 @@ describe('episode pack prompts', () => {
     // Empty targets never count as fresh targets.
     expect(planEpisodePack(context, preparation).wantsTargets).toBe(true);
     const done = { ...context, sentences: context.sentences.map((s) => ({ ...s, translation: 'x' })) };
-    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [] })).toEqual([]);
-    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'] });
+    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [], structureHandles: [] })).toEqual([]);
+    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'], structureHandles: [] });
     expect(only[0]).not.toContain('"targets"');
     expect(only[0]).not.toContain('KNOWN VOCABULARY');
   });
@@ -107,7 +107,7 @@ describe('parseEpisodePackReply', () => {
 
   it('errors on non-JSON, on an unrelated object, and on a malformed translations value', () => {
     expect(parseEpisodePackReply('sure! here you go', context, NOW).error).toBeTruthy();
-    expect(parseEpisodePackReply('{"foo":1}', context, NOW).error).toMatch(/neither/);
+    expect(parseEpisodePackReply('{"foo":1}', context, NOW).error).toMatch(/none of/);
     expect(parseEpisodePackReply('{"translations":["a"]}', context, NOW).error).toMatch(/keyed by sentence handle/);
   });
 });
@@ -157,6 +157,20 @@ describe('saveEpisodePackReply', () => {
     expect((await getDb().sentences.get(sentenceIds[1]!))?.translation).toBe('Mine.');
     const { preparation } = await getEpisodePreparationContext(bookId, chapterId);
     expect(preparation?.status).toBe('ready');
+  });
+
+  it('stores structure drafts on the chapter, never over a saved analysis, and stops asking for them', async () => {
+    const { bookId, chapterId, sentenceIds } = await seedEpisode();
+    expect((await getEpisodePreparationContext(bookId, chapterId)).needsStructureIds).toEqual(sentenceIds);
+    const chunks = [{ text: '本を', role: 'object' }, { text: '読みます。', role: 'engine' }];
+    const result = await saveEpisodePackReply(bookId, chapterId, JSON.stringify({ structure: { S1: chunks, S2: [{ text: 'x', role: 'engine' }] } }));
+    expect(result.structureSaved).toBe(1);
+    expect(result.rejectedStructure.map((item) => item.handle)).toEqual(['S2']);
+    const book = await getDb().books.get(bookId);
+    expect(book!.chapters.find((chapter) => chapter.id === chapterId)!.structureDrafts![sentenceIds[0]!]![0]!.role).toBe('object');
+    expect((await getEpisodePreparationContext(bookId, chapterId)).needsStructureIds).toEqual([sentenceIds[1]]);
+    expect(await getDb().analyses.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(0);
   });
 
   it('changes nothing when the reply cannot be parsed', async () => {

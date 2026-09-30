@@ -448,6 +448,7 @@ export function ReaderPage() {
                     <SentenceWalkthrough
                       sentence={row.sentence}
                       savedChunks={data.chunksBySentence.get(row.sentence.id)}
+                      structureDraft={data.chapter?.structureDrafts?.[row.sentence.id]}
                       audio={audio}
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}

@@ -10,6 +10,21 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — AI-drafted sentence structure for the walkthrough.** The episode
+  pack has an opt-in "Also ask for sentence structure" checkbox (only sentences
+  with no saved analysis and no valid draft). It adds separate prompt parts of 20
+  sentences; the reply key is `structure` (`{"S1":[{text,role,gloss}]}`). A draft
+  is accepted only if its chunks rebuild the sentence exactly; it is stored on
+  `BookChapter.structureDrafts` (syncs with the book row), never in `analyses`.
+  `walkthroughChunks` ranks saved analysis > AI draft > automatic draft and labels
+  the AI one "From the AI reply you pasted, not verified by you". No Reviews,
+  StudyItems or FSRS state. `saveEpisodePackReply` now also returns
+  `structureSaved`/`rejectedStructure`; the plan shape gained `structureHandles`.
+  Code: `src/lib/episodeStructure.ts`; tests `tests/episodeStructure.test.ts`,
+  `tests/episodePack.test.ts`. Not yet exercised against a real AI reply or in
+  e2e beyond regression of the existing specs. Deferred from the Reader-controls
+  slice: book-style restyle and the accessible "More" dialog.
+
 - **2026-09-30 — `sentenceLearningEvents` now sync (user chose sync over
   device-local).** New `sentence_learning_events` entity (mapper pair, push tier 3,
   full-pull, resync, clear-on-reset, conflict-diff created_at exemption) and

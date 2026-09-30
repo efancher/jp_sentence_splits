@@ -33,11 +33,15 @@ export function EpisodePreparationPanel({
   const [message, setMessage] = useState<string>();
   const [copiedPart, setCopiedPart] = useState<number>();
   const [forceTargets, setForceTargets] = useState(false);
+  const [wantStructure, setWantStructure] = useState(false);
   const prompts = useMemo(() => {
     if (!loaded) return [];
-    const plan = planEpisodePack(loaded.context, loaded.preparation, { forceTargets });
+    const plan = planEpisodePack(loaded.context, loaded.preparation, {
+      forceTargets,
+      structureSentenceIds: wantStructure ? new Set(loaded.needsStructureIds) : undefined,
+    });
     return buildEpisodePackPrompts(loaded.context, plan);
-  }, [loaded, forceTargets]);
+  }, [loaded, forceTargets, wantStructure]);
 
   if (!loaded) return null;
   const { context, preparation } = loaded;
@@ -65,6 +69,12 @@ export function EpisodePreparationPanel({
       bits.push(
         `${result.translationsSaved} translation${result.translationsSaved === 1 ? '' : 's'} saved` +
           (result.rejectedTranslations.length > 0 ? `, ${result.rejectedTranslations.length} skipped (${result.rejectedTranslations[0]!.reason})` : ''),
+      );
+    }
+    if (result.structureSaved > 0 || result.rejectedStructure.length > 0) {
+      bits.push(
+        `${result.structureSaved} sentence structure${result.structureSaved === 1 ? '' : 's'} saved` +
+          (result.rejectedStructure.length > 0 ? `, ${result.rejectedStructure.length} skipped (${result.rejectedStructure[0]!.reason})` : ''),
       );
     }
     setMessage(`Saved: ${bits.join('; ') || 'nothing new'}.`);
@@ -115,6 +125,12 @@ export function EpisodePreparationPanel({
           <label className="row" style={{ gap: '0.35rem' }}>
             <input type="checkbox" checked={forceTargets} onChange={(event) => setForceTargets(event.target.checked)} />
             Ask for focus targets again
+          </label>
+        ) : null}
+        {loaded.needsStructureIds.length > 0 ? (
+          <label className="row" style={{ gap: '0.35rem' }}>
+            <input type="checkbox" checked={wantStructure} onChange={(event) => setWantStructure(event.target.checked)} />
+            Also ask for sentence structure ({loaded.needsStructureIds.length} without an analysis) so walkthrough roles are not generic
           </label>
         ) : null}
         <label className="stack" style={{ gap: '0.25rem' }}>

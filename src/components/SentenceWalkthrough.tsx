@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AnalysisChunk, Sentence, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
+import { chunksMatchSource } from '../lib/chunking';
 import { createId } from '../lib/ids';
 import { roleGuideBlurb } from '../lib/roleGuide';
 import type { CompareSentence } from '../lib/sentenceLearning';
@@ -28,7 +29,8 @@ export interface WalkthroughChunk {
 export function walkthroughChunks(
   sentence: Pick<Sentence, 'id' | 'japanese'>,
   saved?: AnalysisChunk[],
-): { chunks: WalkthroughChunk[]; source: 'saved' | 'draft' } {
+  aiDraft?: StructureDraftChunk[],
+): { chunks: WalkthroughChunk[]; source: 'saved' | 'ai_draft' | 'draft' } {
   const surface = (saved ?? [])
     .filter((chunk) => chunk.kind !== 'zero_ga' && chunk.japanese)
     .sort((a, b) => a.order - b.order);
@@ -38,6 +40,15 @@ export function walkthroughChunks(
       chunks: surface.map((chunk) => ({
         id: chunk.id, japanese: chunk.japanese, role: chunk.role,
         literalEnglish: chunk.literalEnglish || undefined, notes: chunk.notes || undefined,
+      })),
+    };
+  }
+  if (aiDraft && aiDraft.length > 0 && chunksMatchSource(aiDraft.map((chunk) => chunk.japanese), sentence.japanese)) {
+    return {
+      source: 'ai_draft',
+      chunks: aiDraft.map((chunk, index) => ({
+        id: `${sentence.id}-ai-${index}`, japanese: chunk.japanese, role: chunk.role,
+        literalEnglish: chunk.literalEnglish,
       })),
     };
   }
@@ -60,6 +71,7 @@ const STAGES = ['Understand', 'Recognise', 'Recall', 'Use', 'Say it', 'Express i
 export function SentenceWalkthrough({
   sentence,
   savedChunks,
+  structureDraft,
   audio,
   focusTargets,
   episodeSentences = [],
@@ -72,6 +84,7 @@ export function SentenceWalkthrough({
 }: {
   sentence: Sentence;
   savedChunks?: AnalysisChunk[];
+  structureDraft?: StructureDraftChunk[];
   audio?: SentenceAudio;
   focusTargets: EpisodeFocusTarget[];
   /** The whole episode, for "Compare uses" excerpts. */
@@ -85,7 +98,7 @@ export function SentenceWalkthrough({
   onQuietModeChange: (quiet: boolean) => void;
   onClose: () => void;
 }) {
-  const { chunks, source } = useMemo(() => walkthroughChunks(sentence, savedChunks), [sentence, savedChunks]);
+  const { chunks, source } = useMemo(() => walkthroughChunks(sentence, savedChunks, structureDraft), [sentence, savedChunks, structureDraft]);
   const ordered = useMemo(() => walkthroughOrder(chunks), [chunks]);
   const [step, setStep] = useState(0);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -158,7 +171,9 @@ export function SentenceWalkthrough({
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
         {source === 'saved'
           ? 'From your saved analysis of this sentence.'
-          : 'Automatic draft: roles are generic, not verified for this sentence. Correct it on Analyze.'}
+          : source === 'ai_draft'
+            ? 'From the AI reply you pasted, not verified by you. Correct it on Analyze.'
+            : 'Automatic draft: roles are generic, not verified for this sentence. Correct it on Analyze.'}
       </p>
       {here.length > 0 ? (
         <div className="stack" style={{ gap: '0.25rem' }}>

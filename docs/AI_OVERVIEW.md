@@ -1151,7 +1151,7 @@ layout/document size used at grading for chapter-context reviews. The same panel
 is an "episode pack" (`src/lib/episodePack.ts`): one prompt (ordered parts for
 long episodes) asks for focus targets and English for sentences lacking a
 translation; the JSON reply is validated, translations only fill empty
-sentences, and series imports land on the Reader with the panel open.
+sentences, and series imports land on the Reader with the panel open. An opt-in extra part asks for chunk structure (`structure` reply key, `src/lib/episodeStructure.ts`); validated drafts live on `BookChapter.structureDrafts` and the walkthrough uses them only when no saved analysis exists, labelled as unverified.
 
 Inside the walkthrough each prepared target has **Practise this** (recall
 before the explanation is shown, self-rated) and **Compare uses** (another real

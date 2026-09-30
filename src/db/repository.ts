@@ -1,4 +1,5 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
+import { chunksMatchSource } from '../lib/chunking';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
 import { parseEpisodePackReply, type PackReplyResult } from '../lib/episodePack';
 import {
@@ -8851,7 +8852,7 @@ export async function listSentenceLearningEvents(bookId: string): Promise<Senten
 export async function getEpisodePreparationContext(
   bookId: string,
   chapterId: string,
-): Promise<{ context: PreparationContext; preparation?: EpisodePreparation }> {
+): Promise<{ context: PreparationContext; preparation?: EpisodePreparation; needsStructureIds: string[] }> {
   const db = getDb();
   const book = await db.books.get(bookId);
   const chapter = book?.chapters.find((item) => item.id === chapterId);
@@ -8877,6 +8878,15 @@ export async function getEpisodePreparationContext(
       grammar: grammar.flatMap((item) => (item ? [{ id: item.id, canonicalName: item.canonicalName, shortMeaning: item.shortMeaning }] : [])),
     },
     preparation: chapter.preparation,
+    // Sentences with neither a saved analysis nor an AI draft that still rebuilds the text.
+    needsStructureIds: await (async () => {
+      const analyses = await db.analyses.bulkGet(sentenceIds);
+      return sentences.flatMap((sentence, index) => {
+        if (analyses[index]?.chunks?.length) return [];
+        const draft = chapter.structureDrafts?.[sentence.id];
+        return draft && chunksMatchSource(draft.map((chunk) => chunk.japanese), sentence.japanese) ? [] : [sentence.id];
+      });
+    })(),
   };
 }
 
@@ -8940,6 +8950,8 @@ export interface EpisodePackSaveResult {
   preparation?: EpisodePreparation;
   translationsSaved: number;
   rejectedTranslations: PackReplyResult['rejectedTranslations'];
+  structureSaved: number;
+  rejectedStructure: { handle: string; reason: string }[];
 }
 
 /**
@@ -8956,7 +8968,7 @@ export async function saveEpisodePackReply(
   const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
   const parsed = parseEpisodePackReply(reply, context, nowIso());
   if (parsed.error) {
-    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations };
+    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations, structureSaved: 0, rejectedStructure: [] };
   }
   const db = getDb();
   let translationsSaved = 0;
@@ -8973,7 +8985,26 @@ export async function saveEpisodePackReply(
   const preparation = parsed.preparation
     ? await storePreparationResult(bookId, chapterId, existing, parsed.preparation)
     : undefined;
-  return { preparation, translationsSaved, rejectedTranslations };
+  let structureSaved = 0;
+  if (parsed.structure && parsed.structure.drafts.size > 0) {
+    const drafts = parsed.structure.drafts;
+    const book = await db.books.get(bookId);
+    if (book) {
+      const updated: Book = {
+        ...book,
+        chapters: book.chapters.map((chapter) =>
+          chapter.id === chapterId
+            ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...Object.fromEntries(drafts) } }
+            : chapter,
+        ),
+        updatedAt: nowIso(),
+      };
+      await db.books.put(updated);
+      notifySync('books', updated.id, updated);
+      structureSaved = drafts.size;
+    }
+  }
+  return { preparation, translationsSaved, rejectedTranslations, structureSaved, rejectedStructure: parsed.structure?.rejected ?? [] };
 }
 
 export async function updatePreparedTarget(
