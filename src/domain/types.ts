@@ -338,6 +338,8 @@ export interface PreparedTarget {
   reason: string;
   treatment: PreparedTargetTreatment;
   decision: PreparedTargetDecision;
+  /** Quoted occurrences the reply named that did not match a real sentence and were dropped. */
+  droppedOccurrences?: number;
   /** The learner's own edit of the reason/why; the AI's `reason` is preserved. */
   learnerNote?: string;
 }

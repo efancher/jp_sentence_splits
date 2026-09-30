@@ -96,6 +96,7 @@ const preparedTargetSchema = z.object({
   reason: z.string(),
   treatment: z.enum(['recall', 'phrase', 'gloss_only']),
   decision: z.enum(['suggested', 'accepted', 'dismissed']),
+  droppedOccurrences: z.number().int().nonnegative().optional(),
   learnerNote: z.string().optional(),
 });
 

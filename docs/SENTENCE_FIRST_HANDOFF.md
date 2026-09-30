@@ -159,7 +159,7 @@ Phase 0 leftovers
 - [x] Learner accept / note / dismiss of prepared targets (derived focus panel itself is not editable)
 - [x] Chapterless books: on-demand real "Whole book" chapter (Reader button)
 - [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
-- [ ] Real-episode fixture set (long transcript, repeated fillers, contrasting uses, bad alignment)
+- [~] Real-episode fixture set: one real episode tried locally (Teppei #1461, `e2e/real-chapter.spec.ts`, data kept out of git); still need repeated-filler / bad-alignment / very long cases and a real external-AI reply
 - [x] Re-test idempotent re-import of the same episode (unit test; not against a real episode)
 - [x] Fix backup `reviewSchema` dropping existing optional Review fields
 

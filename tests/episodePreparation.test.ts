@@ -109,8 +109,9 @@ describe('parsePreparationReply', () => {
       ],
     });
     const result = parsePreparationReply(reply, context, NOW);
-    expect(result.status).toBe('ready');
+    expect(result.status).toBe('partial');
     expect(result.targets[0]!.occurrences).toHaveLength(1);
+    expect(result.targets[0]!.droppedOccurrences).toBe(1);
   });
 
   it('fails cleanly on unparseable, wrong-shaped or all-invalid replies', () => {

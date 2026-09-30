@@ -192,13 +192,16 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
 
     const rawOccurrences = Array.isArray(entry.occurrences) ? entry.occurrences : [];
     const occurrences: PreparedTarget['occurrences'] = [];
+    let dropped = 0;
     for (const occurrence of rawOccurrences) {
       const o = (occurrence && typeof occurrence === 'object' ? occurrence : {}) as Record<string, unknown>;
       const sentence = typeof o.sentence === 'string' ? sentenceByHandle.get(o.sentence.trim()) : undefined;
       const text = typeof o.text === 'string' ? o.text : '';
-      if (!sentence || !text) continue;
-      const start = sentence.japanese.indexOf(text);
-      if (start < 0) continue;
+      const start = sentence && text ? sentence.japanese.indexOf(text) : -1;
+      if (!sentence || start < 0) {
+        dropped += 1;
+        continue;
+      }
       if (!occurrences.some((existing) => existing.sentenceId === sentence.id && existing.start === start)) {
         occurrences.push({ sentenceId: sentence.id, start, end: start + text.length, text });
       }
@@ -215,6 +218,7 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
       reason: typeof entry.reason === 'string' ? entry.reason.trim() : '',
       treatment,
       decision: 'suggested',
+      ...(dropped > 0 ? { droppedOccurrences: dropped } : {}),
     });
   });
 
@@ -223,7 +227,7 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
   }
   return {
     version: EPISODE_PREPARATION_VERSION,
-    status: rejected.length > 0 ? 'partial' : 'ready',
+    status: rejected.length > 0 || targets.some((t) => t.droppedOccurrences) ? 'partial' : 'ready',
     preparedAt: now,
     provenance: 'pasted_ai_reply',
     sentenceFingerprint: fingerprint,

@@ -10,6 +10,34 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Real-chapter trial (with the user's OK): Teppei #1461 "箸
+  (はし) について！".** Read-only export via the main checkout's existing script
+  login (credentials stay in its `.env`; nothing copied into the preview or the
+  repo) to `/tmp/real-chapter` (outside git): 80 memberships / 79 live sentences,
+  all already translated, 82 native m4a clips, 43 vocabulary items. Loaded into
+  the Docker browser by the local-only `e2e/real-chapter.spec.ts` (skips unless
+  `/real-chapter` is mounted: add `-v /tmp/real-chapter:/real-chapter:ro`).
+  Findings: (1) the Reader, focus strip, pack panel, walkthrough, Compare uses
+  and native audio all worked on real data at 390/1280px; a real AAC clip played
+  to the end in Chromium (WebKit's ephemeral test context still refuses Blob
+  storage, so audio isn't exercised there). (2) The pack prompt is 4.1k chars
+  as-is and would split into two parts (5.8k + 0.9k) if untranslated. (3) I acted
+  as the AI on the real prompt (8 targets, one deliberately wrong quote): all
+  valid targets resolved, but a bad quoted occurrence was dropped **silently**;
+  fixed: `PreparedTarget.droppedOccurrences` (optional, in the backup schema)
+  makes the status `partial` and the panel says "N quoted place(s) … did not
+  match the episode text and were dropped". (4) Before preparation the derived
+  focus strip favours generic verbs (食べる、思う、使う); the prepared list (箸,
+  〜で, 〜たり, 取る, 便利, …) is clearly better. (5) Walkthrough chunk roles are
+  still generic (one "engine" chunk) without a saved chunk analysis. (6) The
+  lesson summary no longer says "practised 0×" when only compared.
+  **Data defects found, NOT fixed (production data, needs a decision):** a live
+  `book_sentences` row (position 421) points at the opening sentence
+  "ジャパニーズ！今日は箸について。", soft-deleted 2026-09-23 (a sentence-delete
+  orphan; the Reader skips it); and the shared sign-off "それでは、またね。"
+  (also in #1467) sits at position 420, so it renders **before** the intro
+  although its audio here is at 364 s.
+
 - **2026-09-30 — Phase 2 first slice: practise + compare uses inside the
   sentence walkthrough.** Each "Worth noticing here" target is now a
   `TargetLessonCard`: **Practise this** asks "Before you look…", reveals the

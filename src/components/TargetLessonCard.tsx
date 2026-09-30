@@ -99,7 +99,7 @@ export function TargetLessonCard({
         <strong className="jp">{target.label}</strong>
         {activity.practised > 0 || activity.comparedSentenceIds.size > 0 ? (
           <span className="muted">
-            {' '}· practised {activity.practised}× ({activity.gotIt} got it)
+            {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it)` : ''}
             {activity.comparedSentenceIds.size > 0 ? ` · compared with ${activity.comparedSentenceIds.size} other ${activity.comparedSentenceIds.size === 1 ? 'use' : 'uses'}` : ''}
           </span>
         ) : null}

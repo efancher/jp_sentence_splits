@@ -145,6 +145,11 @@ export function EpisodePreparationPanel({
                     {target.occurrences.length === 1 ? 'place' : 'places'}
                   </span>
                   {target.reason ? <div className="muted">{target.reason}</div> : null}
+                  {target.droppedOccurrences ? (
+                    <div className="muted">
+                      {target.droppedOccurrences} quoted {target.droppedOccurrences === 1 ? 'place' : 'places'} in the reply did not match the episode text and {target.droppedOccurrences === 1 ? 'was' : 'were'} dropped.
+                    </div>
+                  ) : null}
                   <div className="row" style={{ flexWrap: 'wrap', gap: '0.35rem' }}>
                     <button
                       type="button"
