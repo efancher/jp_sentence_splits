@@ -10,6 +10,11 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 3: per-sentence progress line.** Each Reader sentence
+  shows "Your progress here: walked through · N targets practised · gist: had
+  it/needed help", derived read-only from `sentenceLearningEvents`
+  (`summariseSentenceProgress`). Distinct targets, latest gist; nothing is
+  stored or scheduled, and a sentence with no evidence shows no line.
 - **2026-09-30 — Phase 3: whole-sentence gist check.** When a walkthrough
   finishes, "Check my understanding" asks the learner to say (or type) what the
   whole sentence means with the translation hidden; "Reveal the translation"

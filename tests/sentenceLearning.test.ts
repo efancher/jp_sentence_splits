@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -170,5 +170,31 @@ describe('gap practice', () => {
     ];
     const summary = summariseTargetActivity(events, 'k');
     expect(summary).toMatchObject({ practised: 3, gotIt: 2, independent: 1, neededHelp: 1 });
+  });
+});
+
+describe('sentence progress', () => {
+  const ev = (over: Partial<SentenceLearningEvent>): SentenceLearningEvent => ({
+    id: Math.random().toString(), timestamp: '2026-09-30T10:00:00Z', visitId: 'v', action: 'target_practice',
+    bookId: 'b', sentenceId: 's1', ...over,
+  });
+
+  it('summarises only that sentence, counting distinct targets and the latest gist', () => {
+    const events = [
+      ev({ action: 'walkthrough_completed' }),
+      ev({ target: { kind: 'expression', key: 'a', label: 'a' } }),
+      ev({ target: { kind: 'expression', key: 'a', label: 'a' } }),
+      ev({ target: { kind: 'expression', key: 'b', label: 'b' } }),
+      ev({ action: 'gist_check', outcome: 'needed_help', timestamp: '2026-09-30T10:01:00Z' }),
+      ev({ action: 'gist_check', outcome: 'got_it', timestamp: '2026-09-30T10:05:00Z' }),
+      ev({ sentenceId: 's2', action: 'walkthrough_completed' }),
+    ];
+    const progress = summariseSentenceProgress(events, 's1');
+    expect(progress).toEqual({ walkedThrough: true, targetsPractised: 2, gist: 'got_it' });
+    expect(describeSentenceProgress(progress)).toBe('walked through · 2 targets practised · gist: had it');
+  });
+
+  it('is empty without evidence', () => {
+    expect(describeSentenceProgress(summariseSentenceProgress([], 's1'))).toBe('');
   });
 });

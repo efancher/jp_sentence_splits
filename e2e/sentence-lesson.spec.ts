@@ -100,6 +100,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(panel.getByText('Translation 0.')).toBeVisible();
     await panel.getByRole('button', { name: 'I had the gist' }).click();
     await expect(panel.getByText(/says nothing about any single word/)).toBeVisible();
+    await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · gist: had it');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 

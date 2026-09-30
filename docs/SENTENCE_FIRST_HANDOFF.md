@@ -183,7 +183,7 @@ Phase 2 - activities inside the sentence + learning events (first slice done)
 - [ ] Decide on sync/backup/Supabase migration for the events
 - [ ] Contextual target selection; promote practised target into durable tracking; content-defect reports
 
-Phase 3 started 2026-09-30: targeted masking ("Fill the gap") and a whole-sentence gist check (`gist_check`, no target; see STATUS); remaining
+Phase 3 started 2026-09-30: targeted masking ("Fill the gap") a whole-sentence gist check (`gist_check`, no target) and a derived per-sentence progress line (see STATUS); remaining
 Phase 3 items below are not started.
 Phases 3-6 (mostly not started): support fading + sentence progress; supported/independent expression and
 shadowing; planner `sentence_learning`; transfer/compare uses. Also open:

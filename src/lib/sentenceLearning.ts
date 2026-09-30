@@ -112,6 +112,40 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
   return summary;
 }
 
+export interface SentenceProgress {
+  walkedThrough: boolean;
+  targetsPractised: number;
+  /** Latest whole-sentence gist self-judgement, if any. */
+  gist?: 'got_it' | 'needed_help';
+}
+
+/** Derived, read-only view of lesson evidence for one sentence; never persisted or scheduled. */
+export function summariseSentenceProgress(events: SentenceLearningEvent[], sentenceId: string): SentenceProgress {
+  const progress: SentenceProgress = { walkedThrough: false, targetsPractised: 0 };
+  const keys = new Set<string>();
+  let latestGist = '';
+  for (const event of events) {
+    if (event.sentenceId !== sentenceId) continue;
+    if (event.action === 'walkthrough_completed') progress.walkedThrough = true;
+    else if (event.action === 'target_practice' && event.target) keys.add(event.target.key);
+    else if (event.action === 'gist_check' && event.outcome && event.timestamp >= latestGist) {
+      latestGist = event.timestamp;
+      progress.gist = event.outcome;
+    }
+  }
+  progress.targetsPractised = keys.size;
+  return progress;
+}
+
+export function describeSentenceProgress(progress: SentenceProgress): string {
+  const parts: string[] = [];
+  if (progress.walkedThrough) parts.push('walked through');
+  if (progress.targetsPractised > 0) parts.push(`${progress.targetsPractised} ${progress.targetsPractised === 1 ? 'target' : 'targets'} practised`);
+  if (progress.gist === 'got_it') parts.push('gist: had it');
+  else if (progress.gist === 'needed_help') parts.push('gist: needed help');
+  return parts.join(' · ');
+}
+
 export const SENTENCE_TARGET_LIMIT = 3;
 
 /**

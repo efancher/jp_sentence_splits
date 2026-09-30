@@ -14,7 +14,7 @@ import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
-import { glossableWords, sentenceWordHelp } from '../lib/sentenceLearning';
+import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -451,6 +451,10 @@ export function ReaderPage() {
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
                   </div>
+                  {(() => {
+                    const progress = describeSentenceProgress(summariseSentenceProgress(lessonEvents ?? [], row.sentence.id));
+                    return progress ? <div className="muted" aria-label="Sentence progress">Your progress here: {progress}</div> : null;
+                  })()}
                   {walkthroughId === row.sentence.id ? (
                     <SentenceWalkthrough
                       sentence={row.sentence}
