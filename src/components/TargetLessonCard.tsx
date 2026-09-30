@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { SentenceLearningEvent } from '../domain/types';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
-import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, findDueTransferRecheck, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
+import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, findDueTransferRecheck, pickHeldBackContext, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
 import { createId } from '../lib/ids';
 import type { SentenceAudio } from '../domain/types';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -109,6 +109,13 @@ export function TargetLessonCard({
   );
   const dueRecheck = useMemo(() => findDueTransferRecheck(events, target.id, new Date()), [events, target.id]);
   const [rechecking, setRechecking] = useState(false);
+  const [heldBack, setHeldBack] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
+  const [heldBackAnswer, setHeldBackAnswer] = useState('');
+  const heldBackContext = useMemo(
+    () => pickHeldBackContext(compareTarget, episodeSentences, sentenceId, events),
+    [compareTarget, episodeSentences, sentenceId, events],
+  );
+  const [heldBackShown, setHeldBackShown] = useState<CompareExcerpt>();
   const canCompare = useMemo(
     () => pickCompareUses(compareTarget, episodeSentences, sentenceId, new Set()) !== undefined,
     [compareTarget, episodeSentences, sentenceId],
@@ -165,6 +172,31 @@ export function TargetLessonCard({
     });
     setGap('recorded');
     setGapAnswer('');
+  }
+
+  function startHeldBack() {
+    setHeldBackShown(heldBackContext);
+    setHeldBackAnswer('');
+    setHeldBack(heldBackContext ? 'asking' : 'closed');
+  }
+
+  function recordHeldBack(outcome: 'got_it' | 'needed_help') {
+    if (!heldBackShown) return;
+    onEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'held_back_check',
+      sentenceId,
+      target: targetRef,
+      support: 'target_masked',
+      outcome,
+      assessmentSource: 'self',
+      modality: 'typed',
+      exposedSentenceId: heldBackShown.sentenceId,
+      ...(heldBackAnswer.trim() ? { learnerAnswer: heldBackAnswer.trim().slice(0, 300) } : {}),
+      quietMode,
+    });
+    setHeldBack('recorded');
   }
 
   function startTransfer() {
@@ -227,6 +259,7 @@ export function TargetLessonCard({
         {activity.practised > 0 || activity.comparedSentenceIds.size > 0 || activity.transferAttempts > 0 ? (
           <span className="muted">
             {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it${activity.independent > 0 ? `, ${activity.independent} with the word hidden` : ''})` : ''}
+            {activity.heldBackChecks > 0 ? ` · new sentences ${activity.heldBackGotIt}/${activity.heldBackChecks}` : ''}
             {activity.recheckAttempts > 0 ? ` · re-checked ${activity.recheckAttempts}× (${activity.recheckSucceeded} ok)` : ''}
             {activity.transferAttempts > 0 ? ` · own sentence ${activity.transferAttempts}× (${activity.transferSucceeded} new meaning)` : ''}
             {activity.comparedSentenceIds.size > 0 ? ` · compared with ${activity.comparedSentenceIds.size} other ${activity.comparedSentenceIds.size === 1 ? 'use' : 'uses'}` : ''}
@@ -240,6 +273,11 @@ export function TargetLessonCard({
         {gapSpan ? (
           <button type="button" onClick={() => setGap(gap === 'closed' || gap === 'recorded' ? 'asking' : 'closed')}>
             Fill the gap
+          </button>
+        ) : null}
+        {heldBackContext || heldBack !== 'closed' ? (
+          <button type="button" onClick={() => (heldBack === 'closed' || heldBack === 'recorded' ? startHeldBack() : setHeldBack('closed'))}>
+            Try a sentence you haven't seen
           </button>
         ) : null}
         <button type="button" onClick={() => (transfer === 'closed' || transfer === 'recorded' ? startTransfer() : setTransfer('closed'))}>
@@ -316,6 +354,34 @@ export function TargetLessonCard({
             </>
           )}
         </div>
+      ) : null}
+      {heldBack === 'asking' || heldBack === 'revealed' ? (
+        <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Try ${target.label} in a sentence you haven't seen`} aria-live="polite">
+          <div className="jp jp-lg">{heldBackShown?.span ? maskSpan(heldBackShown.japanese, heldBackShown.span) : ''}</div>
+          {heldBack === 'asking' ? (
+            <>
+              <div>A different sentence from this episode. What fits the gap? Type it or think it through.</div>
+              <input type="text" lang="ja" aria-label="Your answer for the gap" value={heldBackAnswer} onChange={(event) => setHeldBackAnswer(event.target.value)} />
+              <button type="button" onClick={() => setHeldBack('revealed')}>Show the answer</button>
+            </>
+          ) : (
+            <>
+              <div>
+                Answer: <span className="jp"><mark>{heldBackShown?.span ? heldBackShown.japanese.slice(heldBackShown.span.start, heldBackShown.span.end) : target.label}</mark></span>
+                {heldBackAnswer.trim() ? <span className="muted"> · you wrote <span className="jp">{heldBackAnswer.trim()}</span></span> : null}
+              </div>
+              {heldBackShown && compareAids?.get(heldBackShown.sentenceId)?.translation ? <div className="muted">{compareAids.get(heldBackShown.sentenceId)!.translation}</div> : null}
+              <div className="muted">Judge yourself honestly: only count it if you had it before looking.</div>
+              <div className="row" style={{ gap: '0.35rem' }}>
+                <button type="button" onClick={() => recordHeldBack('got_it')}>I had it before looking</button>
+                <button type="button" onClick={() => recordHeldBack('needed_help')}>I needed to see it</button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+      {heldBack === 'recorded' ? (
+        <div className="muted" role="status">Noted as a check on a sentence you hadn't seen (separate from same-sentence practice). Your review schedule is unchanged.</div>
       ) : null}
       {transfer === 'writing' || transfer === 'checking' ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Use ${target.label} in your own sentence`} aria-live="polite">

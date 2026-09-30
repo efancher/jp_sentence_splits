@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, findDueTransferRecheck, type CompareSentence } from '../src/lib/sentenceLearning';
+import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, findDueTransferRecheck, pickHeldBackContext, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -98,6 +98,23 @@ describe('findDueTransferRecheck', () => {
   it('counts re-checks apart from same-day attempts', () => {
     const r = summariseTargetActivity([attempt, { ...attempt, id: '2', action: 'transfer_recheck', outcome: 'got_it' }], 'k');
     expect(r).toMatchObject({ transferAttempts: 1, recheckAttempts: 1, recheckSucceeded: 1 });
+  });
+});
+
+describe('pickHeldBackContext', () => {
+  const target = { key: 'v', label: '本', sentenceIds: ['a', 'b', 'd'] };
+  const ev = (over: Partial<SentenceLearningEvent>): SentenceLearningEvent => ({ id: 'e', visitId: 'v', bookId: 'b', sentenceId: 'a', timestamp: 't', action: 'target_practice', target: { kind: 'vocabulary', key: 'v', label: '本' }, ...over });
+  it('picks the nearest occurrence never met in this target\'s lesson', () => {
+    expect(pickHeldBackContext(target, sentences, 'a', [])!.sentenceId).toBe('b');
+  });
+  it('skips sentences already compared, practised, used as a transfer model or held back', () => {
+    expect(pickHeldBackContext(target, sentences, 'a', [ev({ action: 'compare_uses_viewed', exposedSentenceId: 'b' })])!.sentenceId).toBe('d');
+    expect(pickHeldBackContext(target, sentences, 'a', [ev({ sentenceId: 'b' })])!.sentenceId).toBe('d');
+    expect(pickHeldBackContext(target, sentences, 'a', [ev({ action: 'transfer_attempt', exposedSentenceId: 'b' }), ev({ id: 'f', action: 'held_back_check', exposedSentenceId: 'd' })])).toBeUndefined();
+  });
+  it('ignores other targets\' events, and counts checks apart from practice', () => {
+    expect(pickHeldBackContext(target, sentences, 'a', [ev({ target: { kind: 'vocabulary', key: 'other', label: 'x' }, exposedSentenceId: 'b' })])!.sentenceId).toBe('b');
+    expect(summariseTargetActivity([ev({ action: 'held_back_check', outcome: 'got_it', support: 'target_masked' })], 'v')).toMatchObject({ practised: 0, independent: 0, heldBackChecks: 1, heldBackGotIt: 1 });
   });
 });
 

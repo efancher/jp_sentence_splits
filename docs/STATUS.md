@@ -10,6 +10,19 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 6: held-back context check.** Targets with another real
+  occurrence you haven't met get "Try a sentence you haven't seen": that
+  sentence with the target masked, no translation until you reveal, type or
+  think, then self-rate. `pickHeldBackContext` excludes the lesson sentence,
+  Compare-uses exposures, transfer models, earlier held-back sentences and any
+  sentence where you already practised that target, and requires a reliably
+  located span. Logged as `held_back_check` (`exposedSentenceId` = the sentence),
+  counted apart from `practised`/`independent`; shown on the card line and as
+  "Recalled in a sentence you hadn't seen" on `/progress`. Lesson events only; no
+  Reviews/FSRS. Migration (unapplied) action check gained `held_back_check`;
+  rehearsal re-verified (11 actions). Self-judged; typed only; no delay rule
+  (it is offered whenever an unmet occurrence exists); clause sequencing still
+  not built.
 - **2026-09-30 — Phase 6: delayed re-check of own-sentence transfer.** When a
   target's latest own-sentence attempt is at least one local calendar day old
   and hasn't been re-checked, the button reads "Re-check: use it again from

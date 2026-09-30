@@ -99,6 +99,8 @@ export interface TargetActivitySummary {
   transferSucceeded: number;
   recheckAttempts: number;
   recheckSucceeded: number;
+  heldBackChecks: number;
+  heldBackGotIt: number;
 }
 
 const localDay = (iso: string) => {
@@ -122,7 +124,7 @@ export function findDueTransferRecheck(
 }
 
 export function summariseTargetActivity(events: SentenceLearningEvent[], targetKey: string): TargetActivitySummary {
-  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set(), transferAttempts: 0, transferSucceeded: 0, recheckAttempts: 0, recheckSucceeded: 0 };
+  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set(), transferAttempts: 0, transferSucceeded: 0, recheckAttempts: 0, recheckSucceeded: 0, heldBackChecks: 0, heldBackGotIt: 0 };
   for (const event of events) {
     if (event.target?.key !== targetKey) continue;
     if (event.action === 'target_practice') {
@@ -133,6 +135,9 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
     } else if (event.action === 'transfer_attempt') {
       summary.transferAttempts += 1;
       if (event.outcome === 'got_it') summary.transferSucceeded += 1;
+    } else if (event.action === 'held_back_check') {
+      summary.heldBackChecks += 1;
+      if (event.outcome === 'got_it') summary.heldBackGotIt += 1;
     } else if (event.action === 'transfer_recheck') {
       summary.recheckAttempts += 1;
       if (event.outcome === 'got_it') summary.recheckSucceeded += 1;
@@ -141,6 +146,33 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
     }
   }
   return summary;
+}
+
+/**
+ * A real occurrence of the target the learner has not met in this target's lesson: not the lesson
+ * sentence, not one shown in Compare uses / as a transfer model / previously held-back, and not a
+ * sentence where they already practised it. Needs a reliably located span, so the mask is exact.
+ */
+export function pickHeldBackContext(
+  target: CompareTarget,
+  sentences: CompareSentence[],
+  currentSentenceId: string,
+  events: SentenceLearningEvent[],
+): CompareExcerpt | undefined {
+  const met = new Set<string>([currentSentenceId]);
+  for (const event of events) {
+    if (event.target?.key !== target.key) continue;
+    met.add(event.sentenceId);
+    if (event.exposedSentenceId) met.add(event.exposedSentenceId);
+  }
+  const byId = new Map(sentences.map((sentence) => [sentence.id, sentence]));
+  const current = byId.get(currentSentenceId);
+  if (!current) return undefined;
+  return [...new Set(target.sentenceIds)]
+    .filter((id) => !met.has(id) && byId.has(id))
+    .map((id) => excerpt(target, byId.get(id)!))
+    .filter((item) => item.span)
+    .sort((a, b) => Math.abs(a.position - current.position) - Math.abs(b.position - current.position))[0];
 }
 
 export interface SentenceProgress {
