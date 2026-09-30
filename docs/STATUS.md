@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Handoff checkpoint.** The user tried the private preview and
+  said “looks good.” The first review-layout slice is implemented and available
+  privately, with the original layout retained for comparison; the broader
+  sentence-first learning redesign remains planned. Draft PR:
+  <https://github.com/efancher/jp_sentence_splits/pull/1>. No production merge or
+  deployment. See [Sentence-first handoff](SENTENCE_FIRST_HANDOFF.md) for the
+  active worktree/branch, verified tests, preview service and sample links,
+  maintenance pitfalls, user preferences and suggested next steps.
+
 - **2026-09-30 — Preview sample data.** Generate a validated, fictional
   12-sentence chapter plus three due vocabulary reviews and one grammar
   recognition review with `./node_modules/.bin/tsx scripts/generate-review-demo.ts

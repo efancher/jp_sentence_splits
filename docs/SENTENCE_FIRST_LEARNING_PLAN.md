@@ -3,7 +3,7 @@
 Date: 2026-09-29  
 Revised: 2026-09-30 — episode preparation, speech practice, target quality, transfer and measurement.
 
-Status: Design proposal with the first review-interface slice implemented on `feat/chapter-review`; not deployed.
+Status: Design proposal with the first review-interface slice implemented on `feat/chapter-review`, available in a private preview and positively reviewed by the user; not merged or deployed to production. See [handoff](SENTENCE_FIRST_HANDOFF.md) for the current implementation and continuation notes.
 Starting point: [Roadmap: sentence glossing accessibility](ROADMAP.md#possibilities-sentence-glossing-accessibility), the guided walkthrough, and the sentence mastery/deep-dive work.
 
 ## Intent
@@ -681,7 +681,7 @@ Acceptance: evidence distinguishes expressing the original meaning from using th
 
 ## Validation and evaluation
 
-This is a documentation-only proposal; no application tests are needed for this file. During implementation, test behavioral boundaries rather than duplicating component internals:
+The broader design remains a proposal; the review-interface slice has implementation tests documented in the handoff. For subsequent work, test behavioral boundaries rather than duplicating component internals:
 
 - Fresh sentence, entirely unknown vocabulary, no saved analysis.
 - Already-familiar vocabulary but an unfamiliar structure; the reverse case as well.

@@ -1,0 +1,167 @@
+# Sentence-first learning handoff
+
+Updated: 2026-09-30. The user tried the preview and said “looks good.”
+This is feedback on the first review-layout slice, not acceptance of the whole
+learning redesign or authorization to merge/deploy to production.
+
+## Start here
+
+- Repository: `/home/ed/projects/jp_sentence_splits` (leave the main checkout alone).
+- Active implementation worktree: `/home/ed/projects/jp_sentence_splits-chapter-review`.
+- Branch: `feat/chapter-review`.
+- Draft PR: <https://github.com/efancher/jp_sentence_splits/pull/1>.
+- Implementation HEAD before this documentation checkpoint: `e039dad`.
+- Read `CLAUDE.md`, `docs/STATUS.md`, `docs/ARCHITECTURE.md`,
+  `docs/AI_OVERVIEW.md`, `docs/ROADMAP.md`, and especially
+  `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. Follow local worktree instructions;
+  the implementation checkout is already isolated. Check for new changes before editing.
+- The separate `plan/sentence-first-learning` branch/worktree contains the
+  earlier plan; the implementation branch already includes and extends it.
+  Continue from the implementation branch, not the older plan branch.
+
+## User direction to preserve
+
+The main learning flow should start with a passage and a guided, Cure Dolly
+style structural explanation of a sentence. Vocabulary and grammar practice
+come out of that sentence; they must not gate access to the initial lesson.
+Return to sentences as their components become familiar. The destination is
+expressing the same meaning naturally, including different Japanese, with
+stages between understanding, acquisition and production. Independent reading
+is not the final 100% milestone. Percentage weights remain proposals.
+
+Take the whole imported chapter/episode into account when selecting teaching
+priorities, potentially through an AI preparation pass. Import failure or
+missing analysis must not block reading. Compare vocabulary/grammar across
+real encounters and distinguish familiarity from transfer. Avoid tiny,
+underdetermined clozes such as interchangeable discourse expressions; a larger
+phrase is useful only if it actually makes the question fair.
+
+Include shadowing and independent spoken production as distinct activities.
+Keep **Can't speak** and audio adjustment readily available. Secondary controls
+can go in accessible sheets/popovers. Prefer native-speaker reference audio.
+**TTS was deliberately shut down: do not restart it or synthesize fallback audio.**
+Use trustworthy usage/progress data to improve the app. Keep assisted practice,
+independent retrieval, content defects and audio defects distinguishable.
+The user explicitly asked us to verify repository/service claims.
+
+## Implemented and checked
+
+- Full source chapter/episode for vocabulary `reading_retrieval`, vocabulary
+  `cloze`, and `grammar_recognition`.
+- Target highlight/blank in the document, existing question/reveal/rating below,
+  bounded scrolling and **Back to target**. No whole-chapter learning gate.
+- Correct source membership/chapter selection, including unassigned sentences;
+  sentence fallback if no source exists. Stale previous documents are withheld.
+- Cloze masks known literal surface/lemma/linked forms throughout the chapter
+  and titles. The document uses plain Japanese without ruby/gloss/audio leaks.
+- **Review layout** switch: **Original · sentence** / **New · chapter**.
+  Chapter is the initial default; the browser remembers the choice in
+  `satori-glossbook:review-layout`. Switching preserves reveal state and uses
+  one queue and grading path. It is not a second learning database or scheduler.
+- Existing FSRS, eligibility and grading remain unchanged. No database migration
+  or new learning-event schema. Other review types retain their current layouts.
+- Text-only fictional demo: 12 sentences, three due vocabulary reviews and one
+  grammar recognition review. Schema-validated backup, merged via existing UI.
+
+Key files: `src/components/ReviewDocumentText.tsx`, `src/lib/reviewDocument.ts`,
+`src/lib/readingContext.ts`, `src/db/repository.ts` (`getReviewDocument`),
+`src/pages/ReviewPage.tsx`, `src/styles/global.css`,
+`scripts/generate-review-demo.ts`, `tests/reviewDocument.test.tsx`,
+`tests/reviewPage.test.tsx`, `e2e/review-document.spec.ts`.
+
+Validation evidence, with scope:
+
+- Initial slice: build and full Vitest suite, **2184 passed / 12 skipped**.
+- Layout-switch follow-up: build and **80 relevant unit tests passed**;
+  **4 Playwright cases passed** (Chromium/WebKit × phone/desktop), covering
+  masking, scroll position, preference persistence, switching after reveal and
+  one persisted review per grade. Do not claim the full suite was rerun afterward.
+- Demo: manually scripted Playwright checks through the actual HTTPS URL in
+  Chromium and WebKit: download, import, all four reviews, both layouts.
+- Reproduced the offline-cache interception bug with an active service worker,
+  then verified the separate-origin download/import/review flow in both engines.
+
+## Preview access and maintenance
+
+Tailscale must be connected:
+
+- App: <https://codex-dev.tailfbd89c.ts.net:8443/>.
+- Sample download/instructions: <https://codex-dev.tailfbd89c.ts.net:8444/review-demo.html>.
+- Import via Settings → Import backup JSON → Merge into existing data.
+- Open the **global Review page** (`/#/review`) for all four sample reviews.
+  Existing book-scoped review queues omit grammar patterns.
+
+The preview has separate browser storage from the user's usual app. Keep cloud
+sync disconnected for isolated experiments. Do not copy production credentials
+into the preview. No production deployment or merge has been performed.
+
+The preview runs as the user systemd **transient** service
+`chapter-review-preview.service`, serving this worktree's `dist` directory on
+`127.0.0.1:4174` using Python's static HTTP server. Tailscale HTTPS 8443 and 8444
+proxy to that port. This survives chat turns, but is not an installed boot-time
+service; check/recreate it after a machine restart. Check with:
+
+```bash
+systemctl --user status chapter-review-preview --no-pager
+tailscale serve status
+```
+
+If absent, the service was created with:
+
+```bash
+systemd-run --user --unit=chapter-review-preview \
+  --description='Chapter review trial preview' --property=Restart=on-failure \
+  /usr/bin/python3 -m http.server 4174 --bind 127.0.0.1 \
+  --directory /home/ed/projects/jp_sentence_splits-chapter-review/dist
+```
+
+After building, regenerate sample assets because Vite clears `dist`:
+
+```bash
+npm run build
+./node_modules/.bin/tsx scripts/generate-review-demo.ts \
+  dist/review-demo.json https://codex-dev.tailfbd89c.ts.net:8443
+```
+
+The app's offline navigation fallback intercepts standalone HTML on its own
+origin. **Do not give the user the sample HTML on port 8443.** Port 8444 is the
+separate download origin, with links back to the app on 8443. Test with an
+already-installed service worker, not just fresh browser contexts. Builds may
+require accepting the app's update prompt to replace a cached app version.
+
+Browser tests: use the cached `mcr.microsoft.com/playwright:v1.61.1-jammy`
+container; see `e2e/README.md`. Native browser binaries exist but host libraries
+are missing. Do not install host packages to solve this. The automated suite
+uses a separate localhost preview on **4173**, not the user preview on 4174.
+The worktree's `node_modules` symlink points to the main checkout; Docker needs
+both mounts documented in the README. Use fresh synthetic browser data.
+
+## Remaining work and suggested continuation
+
+Only the first review presentation slice is implemented. Guided sentence
+lessons, episode preparation, new event collection, sentence progress,
+cross-encounter comparison, integrated shadowing/production and planner changes
+are still planned. Known-form masking does not detect every inflection or
+semantic alternative. Very long chapters are not virtualized. Existing audio
+alignment defects are not fixed by this work.
+
+Recommended next step: take a bounded piece of **Phase 0 — preparation and
+evidence contracts** from the plan. Inspect current import paths and existing
+learning/assistance events first, then define the smallest episode-level
+preparation and review-presentation evidence addition that reuses them. Record
+which layout/support was used without duplicate grade writes. Keep initial
+guided access independent of vocabulary readiness. Follow with the ungated
+passage walkthrough in Phase 1. This is a suggested sequence, not a claim the
+user selected every proposed schema or UX detail.
+
+Speech/import investigation previously verified separate repos
+`/home/ed/projects/shadowing-analysis-api` and `/home/ed/projects/shadowing`,
+plus mining under `server/youtube-mining` in the main app repo. At that time,
+analysis ran on 8002 and mining on 8003; verify live status again before relying
+on it. The old shadowing web app was documented as retired, while some shared
+dependencies remained. Consult the plan's service inventory. A leftover proxy
+to 8001 is not authorization to restore TTS.
+
+Continue autonomously within the agreed plan, test meaningful behavior, update
+the docs and draft PR. Do not infer permission to merge/deploy to production
+from the user's positive preview feedback.
