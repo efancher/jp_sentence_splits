@@ -2639,6 +2639,30 @@ describe('grammar patterns (grammar-learning system, Phase 1 foundation)', () =>
     ).toBe(1);
   });
 
+  it('backup round-trips every optional Review evidence field', async () => {
+    const review = {
+      id: 'rev-full',
+      studyItemId: 'si-full',
+      timestamp: new Date().toISOString(),
+      rating: 'good' as const,
+      contextSentenceId: 'sent-1',
+      pitchExpectedShape: 'lhh',
+      pitchChosenShape: 'lhl',
+      predictedRetrievability: 0.83,
+      comprehensionCheckCorrect: true,
+      comprehensionCheckChosenIndex: 2,
+      pitchProductionMeasuredCount: 3,
+      pitchProductionMismatchCount: 1,
+      presentation: { layout: 'chapter' as const, documentSentenceCount: 12, layoutSwitched: true },
+    };
+    await getDb().reviews.add(review);
+    const parsed = parseBackupJson(JSON.stringify(await exportFullBackup()));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.data.reviews.find((item) => item.id === 'rev-full')).toEqual(review);
+    }
+  });
+
   it('exportFullBackup/restoreBackup round-trips grammar data', async () => {
     const wakega = await ensureGrammarPattern('〜わけがない', {
       shortMeaning: "there's no way...",

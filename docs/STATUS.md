@@ -68,7 +68,9 @@ Last updated: 2026-09-30.
     (`src/domain/schemas.ts`) omits several existing optional Review fields
     (pitch shapes, `predictedRetrievability`, comprehension-check and
     pitch-production counts), so a backup restore would drop them; only the
-    new field was added here. Worth its own fix.
+    new field was added there. FIXED later the same day: all seven fields now in
+    `reviewSchema`, with a `tests/data.test.ts` round-trip test that fails without
+    the fix (sync mappers already carried them).
   - **Validation.** `npm run check` and the affected suites (review document,
     review page, reader, sync, episode focus); Docker Playwright
     (`e2e/review-document.spec.ts`, Chromium + WebKit, 390px/1280px) now also

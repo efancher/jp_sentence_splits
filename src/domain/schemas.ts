@@ -310,6 +310,13 @@ export const reviewSchema = z.object({
   assistance: z.array(reviewAssistanceSchema).optional(),
   source: reviewSourceSchema.optional(),
   contextSentenceId: z.string().optional(),
+  pitchExpectedShape: z.string().optional(),
+  pitchChosenShape: z.string().optional(),
+  predictedRetrievability: z.number().optional(),
+  comprehensionCheckCorrect: z.boolean().optional(),
+  comprehensionCheckChosenIndex: z.number().int().nonnegative().optional(),
+  pitchProductionMeasuredCount: z.number().int().nonnegative().optional(),
+  pitchProductionMismatchCount: z.number().int().nonnegative().optional(),
   presentation: reviewPresentationSchema.optional(),
 });
 
