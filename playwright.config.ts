@@ -19,7 +19,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: 'review-document.spec.ts',
+      testMatch: ['review-document.spec.ts', 'reader-walkthrough.spec.ts'],
     },
     {
       name: 'webkit',

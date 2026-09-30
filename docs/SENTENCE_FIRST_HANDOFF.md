@@ -165,7 +165,7 @@ Phase 1 - guided sentence learning in the passage (in progress)
 - [x] Ungated expandable sentence walkthrough in the Reader (structure, literal/natural gloss) — heuristic/saved chunks, generic role text; no AI explanations yet
 - [x] Can't speak + Adjust audio reachable in the walkthrough (inline, not yet a sheet)
 - [ ] Surface episode focus more prominently; move secondary controls into an accessible sheet
-- [ ] Docker Playwright check for the Reader walkthrough (Adjust with a real Blob)
+- [x] Docker Playwright check for the Reader walkthrough (Chromium + WebKit)
 - [x] Show the stage journey without claiming unbuilt stages are assessed
 
 Phases 2-6 (not started): activities inside the sentence + learning events;

@@ -27,8 +27,12 @@ Last updated: 2026-09-30.
   marked as guided; the rest read "not assessed yet". Episode-focus targets
   that occur in the sentence are noted. Tests: `tests/sentenceWalkthrough.test.ts`,
   `tests/readerPage.test.tsx` (the unit test cannot see Adjust because
-  fake-indexeddb drops Blob size; Adjust is unchanged NativeAudioButton). Not
-  done: Docker browser check for the walkthrough, AI-provided per-chunk
+  fake-indexeddb drops Blob size; Adjust is unchanged NativeAudioButton). Docker
+  Playwright `e2e/reader-walkthrough.spec.ts` passes in Chromium + WebKit at
+  390/1280px (ungated, draft label, focus note, quiet-mode persistence across
+  reload, no studyItems/reviews written, no-audio message; Adjust asserted in
+  Chromium only — WebKit's test context may refuse Blob storage, so it falls
+  back to the no-audio assertion). Not done: AI-provided per-chunk
   explanations, accessible secondary-controls sheet, a more prominent focus
   surface. `npm run check`: 2199 passed / 12 skipped.
 - **2026-09-30 — Phase 0 slice: review-presentation evidence + episode focus
