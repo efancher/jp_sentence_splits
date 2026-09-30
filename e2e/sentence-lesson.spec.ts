@@ -36,7 +36,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     const firstRow = page.locator('.panel').filter({ hasText: '本を読みます。' }).last();
     await expect(firstRow.getByLabel('Words in this sentence')).toContainText('読む (よむ) — to read');
     await expect(firstRow).toContainText('1 of 1 words are new to you');
-    await firstRow.getByRole('button', { name: 'Hide' }).click();
+    // All words are new here, so the translation shows by default and can be hidden.
+    await expect(firstRow.getByRole('button', { name: 'Hide translation' })).toBeVisible();
+    await firstRow.getByRole('button', { name: 'Hide translation' }).click();
+    await expect(firstRow.getByRole('button', { name: 'Show translation' })).toBeVisible();
+    await firstRow.getByRole('button', { name: 'Hide', exact: true }).click();
     await expect(firstRow.getByLabel('Words in this sentence')).toHaveCount(0);
     await firstRow.getByRole('button', { name: 'Reset' }).click();
     await expect(firstRow.getByLabel('Words in this sentence')).toHaveCount(1);

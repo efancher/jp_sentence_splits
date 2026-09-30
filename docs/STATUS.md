@@ -10,6 +10,8 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Reader auto-shows the translation for mostly-unknown sentences** (user's call): when more than half a sentence's content words are new to the learner the translation is shown by default, with "Hide translation"; otherwise it stays behind "Show translation". The button flips whichever default applies. e2e updated.
+
 - **2026-09-30 — AI-drafted sentence structure for the walkthrough.** The episode
   pack has an opt-in "Also ask for sentence structure" checkbox (only sentences
   with no saved analysis and no valid draft). It adds separate prompt parts of 20

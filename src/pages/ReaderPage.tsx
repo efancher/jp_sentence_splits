@@ -423,16 +423,20 @@ export function ReaderPage() {
                     );
                   })()}
                   <div className="row" style={{ gap: '0.5rem' }}>
-                    {revealedTranslations.has(row.sentence.id) ? (
-                      <div className="muted">{row.sentence.translation || '(no translation)'}</div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => toggleTranslation(row.sentence.id)}
-                      >
-                        Show translation
-                      </button>
-                    )}
+                    {(() => {
+                      const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
+                      // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
+                      const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
+                      const shown = mostlyUnknown !== revealedTranslations.has(row.sentence.id);
+                      return shown ? (
+                        <>
+                          <div className="muted">{row.sentence.translation || '(no translation)'}</div>
+                          <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Hide translation</button>
+                        </>
+                      ) : (
+                        <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Show translation</button>
+                      );
+                    })()}
                     <button
                       type="button"
                       aria-expanded={walkthroughId === row.sentence.id}
