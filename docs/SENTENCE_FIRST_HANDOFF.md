@@ -147,6 +147,32 @@ real-episode fixture set, and the backup-schema field gap noted in STATUS.
 Next: the ungated guided passage walkthrough (Phase 1), then persisted
 preparation records with the inspectable AI round-trip.
 
+## Remaining-work checklist (updated 2026-09-30)
+
+Done: chapter review layouts + switch; `Review.presentation` evidence;
+derived episode focus panel on the Reader.
+
+Phase 0 leftovers
+- [ ] Persisted preparation status (pending/partial/ready/failed/stale), separate from study progress
+- [ ] Inspectable AI episode-analysis round trip with ID/span validation and provenance
+- [ ] Learner accept / edit / dismiss of focus suggestions
+- [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
+- [ ] Real-episode fixture set (long transcript, repeated fillers, contrasting uses, bad alignment)
+- [ ] Re-test idempotent re-import of the same episode
+- [ ] Fix backup `reviewSchema` dropping existing optional Review fields
+
+Phase 1 - guided sentence learning in the passage (in progress)
+- [ ] Ungated expandable sentence walkthrough in the Reader (structure, literal/natural gloss)
+- [ ] Surface episode focus alongside it; keep **Can't speak** and **Adjust audio** reachable (accessible sheet)
+- [ ] Show the stage journey without claiming unbuilt stages are assessed
+
+Phases 2-6 (not started): activities inside the sentence + learning events;
+support fading + sentence progress; supported/independent expression and
+shadowing; planner `sentence_learning`; transfer/compare uses. Also open:
+per-chunk source spans, long-chapter virtualization, browser test for the Reader
+focus panel, live re-check of speech/mining services before relying on them.
+Constraints: no TTS, native audio preferred, no merge/deploy without approval.
+
 ## Remaining work and suggested continuation
 
 Only the first review presentation slice is implemented. Guided sentence
