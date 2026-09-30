@@ -10,6 +10,11 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 5: review charging settled (no code change).** A lesson
+  embeds no review activity (events never create Reviews), so there is nothing
+  to double-charge: lessons spend only the glossing bucket and review minutes
+  are allocated separately. Pinned by a planner test (review step minutes
+  identical with the flag on/off; total within budget).
 - **2026-09-30 — Phase 5: joined lesson report.** `/progress` has a "Sentence
   lessons (last 14 days)" panel (`buildSentenceLessonReport`, derived, nothing
   stored) joining supply (lessons planned/done/skipped, plan days with no

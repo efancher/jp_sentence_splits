@@ -962,3 +962,32 @@ describe('sentence-first revisits', () => {
     expect(lessons[0]!.reason).toMatch(/earlier day/);
   });
 });
+
+describe('sentence-first planning and due-review time', () => {
+  it('lessons spend only the glossing bucket; review steps and their minutes are unchanged by the flag', () => {
+    const base = {
+      totalMinutes: 40,
+      retainDue: Array.from({ length: 6 }, () => dueCandidate()),
+      exploreCandidates: [
+        {
+          bookId: 'b',
+          label: 'Book',
+          reason: 'Continue',
+          sentences: Array.from({ length: 6 }, (_, i) => ({
+            sentenceId: `s${i}`,
+            preview: 'x',
+            vocabularyConfirmed: false,
+            vocabularyIntroduced: false,
+          })),
+        },
+      ],
+    };
+    const off = buildRecommendedSession(emptyPlannerInput(base));
+    const on = buildRecommendedSession(emptyPlannerInput({ ...base, sentenceFirst: true }));
+    const minutes = (s: typeof on, kind: string) =>
+      s.steps.filter((step) => step.targetKind === kind).reduce((t, step) => t + step.estimatedMinutes, 0);
+    expect(minutes(on, 'review')).toBe(minutes(off, 'review'));
+    const total = on.steps.reduce((t, step) => t + step.estimatedMinutes, 0);
+    expect(total).toBeLessThanOrEqual(40 + 0.001);
+  });
+});
