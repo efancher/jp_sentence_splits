@@ -138,6 +138,7 @@ export function SentenceWalkthrough({
   };
   const ask = (kind: 'role' | 'gloss' | 'why') =>
     setAskedFor((current) => ({ ...current, [kind]: new Set(current[kind]).add(step) }));
+  const emit = (event: LessonEventInput) => onEvent?.({ ...event, helpLevel: preset });
   const showRole = preset !== 'minimal' || askedFor.role.has(step);
   const showGloss = preset !== 'minimal' || askedFor.gloss.has(step);
   const showWhy = preset === 'full' || askedFor.why.has(step);
@@ -147,18 +148,18 @@ export function SentenceWalkthrough({
   const visitId = useMemo(() => createId('visit'), []);
 
   function recordGist(outcome: 'got_it' | 'needed_help') {
-    onEvent?.({ id: createId('sl_event'), visitId, action: 'gist_check', sentenceId: sentence.id, outcome, assessmentSource: 'self', quietMode });
+    emit({ id: createId('sl_event'), visitId, action: 'gist_check', sentenceId: sentence.id, outcome, assessmentSource: 'self', quietMode });
     setGist('recorded');
   }
 
   useEffect(() => {
-    onEvent?.({ id: `${visitId}:opened`, visitId, action: 'walkthrough_opened', sentenceId: sentence.id, quietMode });
+    emit({ id: `${visitId}:opened`, visitId, action: 'walkthrough_opened', sentenceId: sentence.id, quietMode });
     // Once per opening; quietMode at that moment is what is recorded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visitId, sentence.id]);
 
   useEffect(() => {
-    if (done && ordered.length > 0) onEvent?.({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
+    if (done && ordered.length > 0) emit({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done]);
 
@@ -172,7 +173,7 @@ export function SentenceWalkthrough({
         quietMode={quietMode}
         wordBank={[...new Set(sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression))]}
         shadowHref={audio ? shadowHref : undefined}
-        onEvent={(event) => onEvent?.(event)}
+        onEvent={emit}
         onClose={() => setExpressing(false)}
       />
     );
@@ -290,7 +291,7 @@ export function SentenceWalkthrough({
                 compareAids={compareAids}
                 events={events}
                 quietMode={quietMode}
-                onEvent={(event) => onEvent?.(event)}
+                onEvent={emit}
               />
             ))}
           </ul>

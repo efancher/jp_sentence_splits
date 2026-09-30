@@ -27,6 +27,7 @@ create table public.sentence_learning_events (
   scaffold text check (scaffold in ('none', 'words', 'frame', 'words_and_frame')),
   units_expressed integer check (units_expressed >= 0),
   units_total integer check (units_total >= 0),
+  help_level text check (help_level in ('full', 'less', 'minimal')),
   exposed_sentence_id text,
   quiet_mode boolean,
   inventory_revision text,

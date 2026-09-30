@@ -138,11 +138,17 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      const result = { events: await count('sentenceLearningEvents'), reviews: await count('reviews'), items: await count('studyItems') };
+      const all = await new Promise<Array<{ helpLevel?: string }>>((resolve, reject) => {
+        const request = db.transaction('sentenceLearningEvents').objectStore('sentenceLearningEvents').getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const result = { unstamped: all.filter((event) => !event.helpLevel).length, events: await count('sentenceLearningEvents'), reviews: await count('reviews'), items: await count('studyItems') };
       db.close();
       return result;
     });
     expect(counts.events).toBe(8);
+    expect(counts.unstamped).toBe(0);
     expect(counts.reviews).toBe(0);
     expect(counts.items).toBe(0);
 

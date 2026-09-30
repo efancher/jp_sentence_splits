@@ -1471,6 +1471,8 @@ export interface SentenceLearningEvent {
   scaffold?: 'none' | 'words' | 'frame' | 'words_and_frame';
   unitsExpressed?: number;
   unitsTotal?: number;
+  /** The walkthrough's Help level when the event was logged (not per-channel support; that is `support`/`scaffold`). Absent on older events. */
+  helpLevel?: 'full' | 'less' | 'minimal';
   /** Compare uses: the other real occurrence that was shown. */
   exposedSentenceId?: string;
   quietMode?: boolean;

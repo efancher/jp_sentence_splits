@@ -10,6 +10,13 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Help level recorded on lesson events.** Every
+  `SentenceLearningEvent` from the walkthrough (including the expression card)
+  now carries `helpLevel` ('full'|'less'|'minimal') — the Help level select's
+  value when it was logged; absent on older events. New `help_level` column in
+  the still-unapplied migration (edited in place). Not yet used by the journey
+  or report scoring. The e2e asserts no event is unstamped (8/8 on chromium +
+  webkit).
 - **2026-09-30 — "Pause word & grammar drills" (`settings.legacyDrillsPaused`).**
   The reversible alternative to resetting vocabulary/grammar (user chose it
   over a reset). When on, vocabulary / vocabulary-confusion / word-listening /

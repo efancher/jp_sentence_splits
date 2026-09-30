@@ -17,7 +17,7 @@ describe('sentence learning event mapping', () => {
       support: 'explanation_hidden', outcome: 'needed_help', assessmentSource: 'self',
       exposedSentenceId: 's2', quietMode: true, inventoryRevision: 'rev',
       report: 'another_answer_works', learnerAnswer: 'it marks the topic',
-      modality: 'typed', scaffold: 'frame', unitsExpressed: 2, unitsTotal: 3,
+      modality: 'typed', scaffold: 'frame', unitsExpressed: 2, unitsTotal: 3, helpLevel: 'minimal',
     };
     expect(remoteToSentenceLearningEvent(sentenceLearningEventToRemote(full, 'owner', 1))).toEqual(full);
   });
