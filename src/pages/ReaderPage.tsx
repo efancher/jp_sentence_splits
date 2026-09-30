@@ -6,15 +6,15 @@ import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
-import type { CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
+import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
-import { glossableWords } from '../lib/sentenceLearning';
+import { glossableWords, sentenceWordHelp } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -41,6 +41,8 @@ export function ReaderPage() {
     () => new Set(),
   );
   const [walkthroughId, setWalkthroughId] = useState<string>();
+  /** Per-sentence override of the default word help: show every word, or none. */
+  const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
@@ -77,7 +79,17 @@ export function ReaderPage() {
     const chunksBySentence = new Map(
       analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
     );
-    return { book, chapter, rows, audioRows, chunksBySentence };
+    const contentExpressions = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.sentence.vocabularySuggestions
+            .filter((suggestion) => suggestion.selectedByDefault)
+            .map((suggestion) => suggestion.expression),
+        ),
+      ),
+    ];
+    const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
+    return { book, chapter, rows, audioRows, chunksBySentence, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
   const focus = useLiveQuery(
@@ -134,7 +146,7 @@ export function ReaderPage() {
     data?.rows.forEach((row, index) => {
       map.set(row.sentence.id, {
         translation: row.sentence.translation || undefined,
-        words: glossableWords(row.sentence.vocabularySuggestions),
+        words: glossableWords(row.sentence.vocabularySuggestions, data.savedMeanings),
         audio: audioByRow[index],
       });
     });
@@ -370,6 +382,42 @@ export function ReaderPage() {
                         Focus here: <span className="jp">{here.map((target) => target.label).join('、')}</span>
                       </span>
                     ) : null;
+                  })()}
+                  {(() => {
+                    const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
+                    const override = wordHelpOverride.get(row.sentence.id);
+                    const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
+                    const setOverride = (value: 'all' | 'none' | undefined) =>
+                      setWordHelpOverride((prev) => {
+                        const next = new Map(prev);
+                        if (value) next.set(row.sentence.id, value);
+                        else next.delete(row.sentence.id);
+                        return next;
+                      });
+                    if (help.allWords.length === 0) return null;
+                    return (
+                      <div className="stack" style={{ gap: '0.15rem' }}>
+                        {shown.length > 0 ? <WordGlossList words={shown} /> : null}
+                        <span className="muted" style={{ fontSize: '0.8em' }}>
+                          {override === 'all'
+                            ? 'Showing every word. '
+                            : override === 'none'
+                              ? 'Word help hidden. '
+                              : help.newWords.length > 0
+                                ? `${help.unknownCount} of ${help.total} words are new to you. `
+                                : 'You know these words. '}
+                          {override !== 'all' && help.allWords.length > shown.length ? (
+                            <button type="button" onClick={() => setOverride('all')}>Show all words</button>
+                          ) : null}{' '}
+                          {shown.length > 0 && override !== 'none' ? (
+                            <button type="button" onClick={() => setOverride('none')}>Hide</button>
+                          ) : null}
+                          {override ? (
+                            <button type="button" onClick={() => setOverride(undefined)}>Reset</button>
+                          ) : null}
+                        </span>
+                      </div>
+                    );
                   })()}
                   <div className="row" style={{ gap: '0.5rem' }}>
                     {revealedTranslations.has(row.sentence.id) ? (

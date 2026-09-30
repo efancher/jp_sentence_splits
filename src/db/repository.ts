@@ -4436,6 +4436,21 @@ export async function getProficientVocabularyItemIds(
 }
 
 /**
+ * Saved meanings and "known" status for surface expressions: an expression is
+ * known when a saved vocabulary item with it is reading-proficient. Read-only;
+ * used to decide how much word help the Reader shows.
+ */
+export async function getSavedWordStatus(
+  expressions: string[],
+): Promise<{ savedMeanings: Map<string, string>; knownExpressions: Set<string> }> {
+  const items = expressions.length ? await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
+  const savedMeanings = new Map<string, string>();
+  for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
+  const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
+  return { savedMeanings, knownExpressions: new Set(items.filter((item) => proficientIds.has(item.id)).map((item) => item.expression)) };
+}
+
+/**
  * Reading/meaning vocabulary cards (subjectType `vocabularyItem`) — the
  * activity types that actually test recalling a word's reading or meaning,
  * as opposed to `pitch_accent` on the same subject, a different skill (see

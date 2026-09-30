@@ -32,6 +32,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     });
 
     await page.goto('/#/books/book/read?chapter=chapter');
+    // Default word help shows only words new to the learner, with an override.
+    const firstRow = page.locator('.panel').filter({ hasText: '本を読みます。' }).last();
+    await expect(firstRow.getByLabel('Words in this sentence')).toContainText('読む (よむ) — to read');
+    await expect(firstRow).toContainText('1 of 1 words are new to you');
+    await firstRow.getByRole('button', { name: 'Hide' }).click();
+    await expect(firstRow.getByLabel('Words in this sentence')).toHaveCount(0);
+    await firstRow.getByRole('button', { name: 'Reset' }).click();
+    await expect(firstRow.getByLabel('Words in this sentence')).toHaveCount(1);
     await page.getByText(/Episode preparation/).click();
     await page.getByLabel('AI reply').fill(JSON.stringify({ targets: [
       { kind: 'expression', label: '本を', reason: 'Marks the thing being read or bought.',

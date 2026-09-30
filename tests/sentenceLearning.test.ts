@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { glossableWords, pickCompareUses, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { glossableWords, pickCompareUses, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -101,5 +101,38 @@ describe('glossableWords', () => {
         suggestion('買う', '  to buy '),
       ]).map((word) => `${word.expression}:${word.english}`),
     ).toEqual(['読む:to read', '買う:to buy']);
+  });
+
+  it('falls back to a saved vocabulary meaning (first sense, capped) when the suggestion has none', () => {
+    const saved = new Map([['本', 'book; volume'], ['電気', 'x'.repeat(200)], ['読む', 'ignored: suggestion has its own']]);
+    const words = glossableWords(
+      [
+        { expression: '本', reading: 'ほん', english: undefined, selectedByDefault: true },
+        { expression: '電気', reading: 'でんき', english: '', selectedByDefault: true },
+        { expression: '読む', reading: 'よむ', english: 'to read', selectedByDefault: true },
+        { expression: '猫', reading: 'ねこ', english: undefined, selectedByDefault: true },
+      ],
+      saved,
+    );
+    expect(words.map((word) => word.english)).toEqual(['book', `${'x'.repeat(77)}…`, 'to read']);
+  });
+});
+
+describe('sentenceWordHelp', () => {
+  const suggestion = (expression: string, english?: string) => ({ expression, reading: 'r', english, selectedByDefault: true });
+  it('defaults to the glossed words the learner does not know and counts unglossed unknowns', () => {
+    const help = sentenceWordHelp(
+      [suggestion('本', 'book'), suggestion('読む', 'to read'), suggestion('猫')],
+      new Set(['本']),
+    );
+    expect(help.total).toBe(3);
+    expect(help.newWords.map((word) => word.expression)).toEqual(['読む']);
+    expect(help.allWords).toHaveLength(2);
+    expect(help.unknownCount).toBe(2);
+  });
+  it('shows nothing extra when every word is known', () => {
+    const help = sentenceWordHelp([suggestion('本', 'book')], new Set(['本']));
+    expect(help.newWords).toEqual([]);
+    expect(help.unknownCount).toBe(0);
   });
 });

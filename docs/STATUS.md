@@ -10,6 +10,21 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Reader word help adapts to what the learner knows; glosses fall
+  back to saved vocabulary.** Each Reader sentence now shows, by default, only
+  the glossed content words the learner has not shown they can recall (a saved
+  vocabulary item with that expression at FSRS review/relearning on a
+  reading/meaning card — `getSavedWordStatus`; pitch_accent reps don't count),
+  with a marker ("N of M words are new to you") and per-sentence overrides
+  (Show all words / Hide / Reset). Translation stays behind its button (the
+  user has not asked for it auto-shown). A suggestion with no English falls back
+  to the first sense of a saved vocabulary meaning (`glossableWords`). Read-only:
+  no events, reviews or schema. Not done from the agreed design: the book-style
+  restyle and the accessible "More" dialog for the pack panel/focus dropdown
+  (wrapping them would hide the pack panel the e2e and paste-back flow rely on;
+  needs its own pass). Tests: `tests/sentenceLearning.test.ts`,
+  `tests/savedWordStatus.test.ts`, e2e extended.
+
 - **2026-09-30 — Compare uses now carries aids.** The user reviewed Practise this
   / Compare uses ("both seem good") and noted they may not know most of the
   vocabulary in the compared sentences. Each excerpt (this sentence and the
