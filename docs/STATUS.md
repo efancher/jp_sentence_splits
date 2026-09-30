@@ -31,7 +31,9 @@ Last updated: 2026-09-30.
   Edge Function so nothing needs deploying or new secrets; a server-side call
   can later produce the same reply shape. Tests: `tests/episodePreparation.test.ts`,
   `tests/readerPage.test.tsx`, `tests/sync.test.ts`. `npm run check`: 2218
-  passed / 12 skipped. Not done: browser test of the panel, chapterless-book
+  passed / 12 skipped. Docker Playwright `e2e/episode-preparation.spec.ts` passes in Chromium +
+  WebKit at 390/1280px (paste, partial rejection, dismiss, persists across
+  reload). Not done: chapterless-book
   support (Book has no preparation field; would need a migration), wiring
   `treatment: phrase|gloss_only` into card creation (stored only), real-episode
   fixtures, and no AI reply has been run against a real episode yet.
