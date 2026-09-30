@@ -286,6 +286,22 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.sentenceFirstPlanning ?? false}
+            onChange={(event) => {
+              void updateSettings({ sentenceFirstPlanning: event.target.checked });
+            }}
+          />
+          Plan sentence lessons (walk through each new sentence before any word drills)
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          When on, new daily plans suggest one lesson per upcoming sentence
+          (walkthrough, practise a target, say it yourself) instead of
+          vocabulary-confirmation steps. Today's plan, if already started, is
+          left as it is. Lessons never create review cards.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.pitchAccentPaused ?? false}
             onChange={(event) => {
               void updateSettings({ pitchAccentPaused: event.target.checked });

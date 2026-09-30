@@ -75,6 +75,7 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
 export const SYNTHETIC_ACTIVITY_TYPES = {
   newSentence: 'new_sentence',
   vocabularyReview: 'vocabulary_review',
+  sentenceLearning: 'sentence_learning',
   grammarExplore: 'grammar_explore',
   grammarNoticing: 'grammar_noticing',
   shadowingPractice: 'shadowing_practice',
@@ -129,7 +130,7 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
 } as const;
 
 /** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */
-export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1 } as const;
+export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3 } as const;
 
 /**
  * Minimum share of the glossing bucket's minutes that vocabulary

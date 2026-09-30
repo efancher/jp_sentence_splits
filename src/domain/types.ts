@@ -594,6 +594,13 @@ export interface AppSettings {
    */
   pitchAccentPaused?: boolean;
   /**
+   * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
+   * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
+   * instead of vocabulary_review/continue_book. Existing in-progress sessions
+   * are never rewritten. Defaults to `false`.
+   */
+  sentenceFirstPlanning?: boolean;
+  /**
    * Most-recently-used podcast RSS feed URLs (newest first), so
    * YouTubeMinePage's "Or import a podcast episode" input can offer them
    * back via a datalist instead of making the user re-paste/re-find the
@@ -1279,6 +1286,8 @@ export type PlannerStepTargetKind =
   | 'review'
   | 'vocabulary_detail'
   | 'vocabulary_review'
+  /** Sentence-first lesson (`/books/:bookId/learn/:sentenceId`) — the Reader's walkthrough, no vocabulary gate. Logs only SentenceLearningEvents; settling it never confirms vocabulary or changes BookSentence status. */
+  | 'sentence_learning'
   /** A short `/play` game break (`gameId`). Settled only by "Mark complete"/Skip, like every other step. */
   | 'game';
 

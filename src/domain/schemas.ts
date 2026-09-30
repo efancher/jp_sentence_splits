@@ -516,6 +516,7 @@ export const plannerStepTargetKindSchema = z.enum([
   'review',
   'vocabulary_detail',
   'vocabulary_review',
+  'sentence_learning',
   'game',
 ]);
 

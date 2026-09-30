@@ -26,10 +26,19 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * `Review` row, no FSRS, no self-rating, same treatment as `ShadowPage`/`/play`.
  */
 export function ReaderPage() {
-  const { bookId = '' } = useParams();
+  const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const chapterId = searchParams.get('chapter') || undefined;
+  // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
+  const lessonChapterId = useLiveQuery(
+    async () =>
+      lessonSentenceId
+        ? (await getDb().bookSentences.where('[bookId+sentenceId]').equals([bookId, lessonSentenceId]).first())
+            ?.chapterId ?? null
+        : null,
+    [bookId, lessonSentenceId],
+  );
+  const chapterId = searchParams.get('chapter') || lessonChapterId || undefined;
   const native = useNativeAudio();
   const settings = useLiveQuery(() => readSettings(), []);
   const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
@@ -93,6 +102,17 @@ export function ReaderPage() {
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
     return { book, chapter, rows, audioRows, chunksBySentence, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
+
+  const openedLessonRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!lessonSentenceId || !data || openedLessonRef.current === lessonSentenceId) return;
+    if (lessonChapterId === undefined) return;
+    const index = data.rows.findIndex((row) => row.sentence.id === lessonSentenceId);
+    if (index < 0) return;
+    openedLessonRef.current = lessonSentenceId;
+    setWalkthroughId(lessonSentenceId);
+    setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
+  }, [lessonSentenceId, lessonChapterId, data]);
 
   const focus = useLiveQuery(
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),

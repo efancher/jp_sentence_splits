@@ -9509,7 +9509,10 @@ async function buildReviewPriorityInputs(
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
-async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]> {
+async function findExploreCandidates(
+  limit: number,
+  sentenceFirst = false,
+): Promise<ExploreCandidate[]> {
   const db = getDb();
   const [allBooks, coverageByBookId] = await Promise.all([
     db.books.toArray(),
@@ -9523,8 +9526,21 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    // Sentence-first: a lesson never changes BookSentence.status, so a
+    // sentence is "done" once its walkthrough was completed, not once it's marked complete.
+    const walked = sentenceFirst
+      ? new Set(
+          (await listSentenceLearningEvents(book.id))
+            .filter((event) => event.action === 'walkthrough_completed')
+            .map((event) => event.sentenceId),
+        )
+      : undefined;
     const unstarted = memberships
-      .filter((item) => item.status === 'unstarted')
+      .filter((item) =>
+        walked
+          ? item.status !== 'complete' && !walked.has(item.sentenceId)
+          : item.status === 'unstarted',
+      )
       .sort((a, b) => a.position - b.position);
     if (unstarted.length === 0) continue;
     const preview = unstarted.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
@@ -9556,7 +9572,7 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
       const rank = (c: ExploreCandidate) =>
-        c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
+        !sentenceFirst && c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
       const rankA = rank(a.candidate);
       const rankB = rank(b.candidate);
       if (rankA !== rankB) return rankA - rankB;
@@ -9900,7 +9916,7 @@ function exclusionsFromSteps(steps: PlannerSessionStep[]): SessionPlannerExclusi
   for (const step of steps) {
     if (step.sentenceId) sentenceIds.add(step.sentenceId);
     for (const id of step.sentenceIds ?? []) sentenceIds.add(id);
-    if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review')) {
+    if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review' || step.targetKind === 'sentence_learning')) {
       bookIds.add(step.bookId);
     }
     if (step.grammarPatternId) grammarPatternIds.add(step.grammarPatternId);
@@ -9982,7 +9998,10 @@ export async function getSessionPlannerInput(
       graduationMinScheduledDays: settings.graduationMinScheduledDays,
     }),
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
-    findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
+    findExploreCandidates(
+      EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
+      settings.sentenceFirstPlanning ?? false,
+    ),
     findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
     // NOTE: not filtered for suspended books — a word only met in a suspended
@@ -10071,6 +10090,7 @@ export async function getSessionPlannerInput(
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
+    sentenceFirst: settings.sentenceFirstPlanning ?? false,
     gameBreakCandidates,
   };
 }

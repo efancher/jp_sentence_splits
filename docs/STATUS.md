@@ -10,6 +10,22 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 5 first slice: `sentence_learning` planner step (behind a setting).**
+  New target kind `sentence_learning` (types, zod schema, synthetic activity
+  type, route `/books/:bookId/learn/:sentenceId` rendered by ReaderPage, which
+  opens that sentence's walkthrough in its own chapter). Settings toggle "Plan
+  sentence lessons" (`settings.sentenceFirstPlanning`, default off): when on,
+  the glossing bucket drafts one 3-minute lesson per upcoming sentence with
+  zero vocabulary required and no vocabulary-confirmation reserve; a sentence
+  is "done" once its `walkthrough_completed` event exists (lessons never change
+  `BookSentence.status`). Settling the step has no side effects
+  (`advanceCompletedStepProgress` ignores it): no vocabulary confirmation, no
+  Reviews/StudyItems. Quiet mode, suspended books and in-progress sessions are
+  unaffected (existing gates). Legacy vocabulary/continue_book steps remain
+  when the flag is off. Not yet done: revisit-priority ordering
+  (`sentencesReadyToRevisit` into the plan), embedded-due-review charging,
+  joined outcome/quality report, any reset of legacy vocabulary/grammar
+  (needs a reviewed reversible script and explicit go-ahead).
 - **2026-09-30 — Phase 4 completed: cue ladder, revisits, shadowing bridge.**
   "Say it in Japanese" now has two separate optional cues, "Show the words"
   (Japanese content-word bank) and "Give me a frame" (chunk glosses), logged as

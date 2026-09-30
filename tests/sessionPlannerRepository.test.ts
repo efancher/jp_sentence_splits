@@ -294,6 +294,31 @@ describe('Learning Orchestrator repository layer', () => {
     expect(vocabStep!.sentenceId).toBe(backlogSentence.id);
   });
 
+  it('sentence-first planning drafts a lesson at zero vocabulary, and settling it confirms nothing', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Lesson Book' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const lesson = session.steps.find((step) => step.targetKind === 'sentence_learning');
+    expect(lesson?.sentenceId).toBe(sentence.id);
+    expect(session.steps.some((step) => step.targetKind === 'vocabulary_review')).toBe(false);
+
+    await updatePlannerSessionStep(session.id, lesson!.id, { status: 'completed' });
+    const analysis = await db.analyses.get(sentence.id);
+    expect(analysis?.vocabularyReviewStatus).not.toBe('confirmed');
+    const membership = await db.bookSentences
+      .where('[bookId+sentenceId]')
+      .equals([book.id, sentence.id])
+      .first();
+    expect(membership?.status).toBe('unstarted');
+    expect(await db.reviews.count()).toBe(0);
+    expect(await db.studyItems.count()).toBe(0);
+  });
+
   it('ending a session early marks remaining steps skipped, never completed', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();

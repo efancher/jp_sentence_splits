@@ -151,6 +151,7 @@ const ERROR_WINDOWS = [
 
 const TARGET_KIND_LABELS: Record<string, string> = {
   continue_book: 'Analyze',
+  sentence_learning: 'Sentence lesson',
   grammar_detail: 'Grammar detail',
   grammar_noticing: 'Notice grammar',
   shadow: 'Shadow',
