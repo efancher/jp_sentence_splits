@@ -52,7 +52,7 @@ const TARGET_INSTRUCTIONS = [
 
 const TARGET_SHAPE = {
   kind: 'vocabulary | grammar | expression',
-  ref: 'V3 or G2 when it is one of the lists above; omit for a new expression',
+  ref: 'V3 or G2 only when it is in one of the lists above; otherwise omit ref (kind may still be vocabulary or grammar)',
   label: 'the target as written in the episode',
   treatment: 'recall | phrase | gloss_only',
   reason: 'one plain-English sentence on why it matters in this episode',

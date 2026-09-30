@@ -89,7 +89,7 @@ export function buildPreparationPrompt(context: PreparationContext): string {
         targets: [
           {
             kind: 'vocabulary | grammar | expression',
-            ref: 'V3 or G2 when it is one of the lists above; omit for a new expression',
+            ref: 'V3 or G2 only when it is in one of the lists above; otherwise omit ref (kind may still be vocabulary or grammar)',
             label: 'the target as written in the episode',
             treatment: 'recall | phrase | gloss_only',
             reason: 'one plain-English sentence on why it matters in this episode',
@@ -196,13 +196,16 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
     let vocabularyItemId: string | undefined;
     let grammarPatternId: string | undefined;
     if (kind === 'vocabulary' || kind === 'grammar') {
-      if (!ref) return reject(`A ${kind} target needs a ref from the supplied list.`);
-      const found = kind === 'vocabulary' ? vocabularyByRef.get(ref) : grammarByRef.get(ref);
-      if (!found) return reject(`Unknown ${kind} ref "${ref}".`);
-      if (seenRefs.has(ref)) return reject(`Duplicate ref "${ref}".`);
-      seenRefs.add(ref);
-      if (kind === 'vocabulary') vocabularyItemId = found.id;
-      else grammarPatternId = found.id;
+      // No ref is fine: the word or pattern just is not in the learner's saved
+      // lists yet, so the target stays unlinked. A ref that is given must be real.
+      if (ref) {
+        const found = kind === 'vocabulary' ? vocabularyByRef.get(ref) : grammarByRef.get(ref);
+        if (!found) return reject(`Unknown ${kind} ref "${ref}".`);
+        if (seenRefs.has(ref)) return reject(`Duplicate ref "${ref}".`);
+        seenRefs.add(ref);
+        if (kind === 'vocabulary') vocabularyItemId = found.id;
+        else grammarPatternId = found.id;
+      }
     } else if (ref) {
       return reject('An expression target must not carry a ref.');
     }

@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Unlisted vocabulary/grammar targets are accepted.** In the
+  user's first real reply, 5 of 8 targets were rejected ("A grammar target needs
+  a ref…"): the AI correctly labelled 〜時に, 〜たり, 〜すぎる, 〜ように as grammar
+  and 取る as vocabulary, but none is in the learner's saved lists, so there was
+  no ref to give. A `vocabulary`/`grammar` target with no ref is now kept
+  unlinked (its stable key is `expression:<label>`); a ref that is given must
+  still exist in the matching list, and an expression must not carry one. Both
+  prompts now say to omit `ref` for anything not listed.
+
 - **2026-09-30 — Pasted AI replies with curly quotes now work.** The user's
   first real paste failed ("Unrecognized token “"): a phone/chat app had curly-
   ised the JSON's quotes. `extractJson` still tries strict `JSON.parse` first,

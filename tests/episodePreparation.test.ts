@@ -85,7 +85,6 @@ describe('parsePreparationReply', () => {
         { kind: 'vocabulary', ref: 'V9', label: '幻', occurrences: [{ sentence: 'S1', text: '本' }] },
         { kind: 'expression', label: '存在しない', occurrences: [{ sentence: 'S1', text: '存在しない' }] },
         { kind: 'expression', label: '別文', occurrences: [{ sentence: 'S99', text: '本' }] },
-        { kind: 'grammar', label: '〜ました', occurrences: [{ sentence: 'S2', text: 'ました' }] },
         { kind: 'expression', ref: 'V1', label: '本を', occurrences: [{ sentence: 'S1', text: '本を' }] },
       ],
     });
@@ -96,8 +95,24 @@ describe('parsePreparationReply', () => {
       'Unknown vocabulary ref "V9".',
       'No quoted occurrence matched a real sentence.',
       'No quoted occurrence matched a real sentence.',
-      'A grammar target needs a ref from the supplied list.',
       'An expression target must not carry a ref.',
+    ]);
+  });
+
+  it('accepts vocabulary and grammar targets that are not in the saved lists (no ref)', () => {
+    const reply = JSON.stringify({
+      version: 1,
+      targets: [
+        { kind: 'grammar', label: '〜ました', occurrences: [{ sentence: 'S2', text: 'ました' }] },
+        { kind: 'vocabulary', label: '読む', occurrences: [{ sentence: 'S1', text: '読み' }] },
+      ],
+    });
+    const result = parsePreparationReply(reply, context, NOW);
+    expect(result.status).toBe('ready');
+    expect(result.rejected).toEqual([]);
+    expect(result.targets.map((t) => [t.kind, t.vocabularyItemId, t.grammarPatternId])).toEqual([
+      ['grammar', undefined, undefined],
+      ['vocabulary', undefined, undefined],
     ]);
   });
 
