@@ -10,6 +10,27 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 1 slice: ungated sentence walkthrough in the Reader.**
+  On `feat/chapter-review`; not merged or deployed. Each Reader row has a
+  "Walk through" button opening `SentenceWalkthrough`
+  (`src/components/SentenceWalkthrough.tsx`): engine chunk first, then the rest
+  in source order, one chunk per step with its role, generic role-guide text,
+  and the puzzle strip revealing progressively; finishing shows the sentence
+  with an optional natural translation. It uses the learner's saved analysis
+  only when its chunks (sorted by `order`, zero-が skipped) concatenate to the
+  sentence text; otherwise a labelled "Automatic draft" from
+  `previewHeuristicChunks`. It never waits on vocabulary or analysis, and
+  writes no study items or reviews. Native audio (with the existing Adjust
+  editor when the clip has data) and a "Can't speak right now" toggle bound to
+  `settings.quietMode` sit in the panel; with no native audio it says so
+  (no TTS fallback). The six-stage journey is listed with only "Understand"
+  marked as guided; the rest read "not assessed yet". Episode-focus targets
+  that occur in the sentence are noted. Tests: `tests/sentenceWalkthrough.test.ts`,
+  `tests/readerPage.test.tsx` (the unit test cannot see Adjust because
+  fake-indexeddb drops Blob size; Adjust is unchanged NativeAudioButton). Not
+  done: Docker browser check for the walkthrough, AI-provided per-chunk
+  explanations, accessible secondary-controls sheet, a more prominent focus
+  surface. `npm run check`: 2199 passed / 12 skipped.
 - **2026-09-30 — Phase 0 slice: review-presentation evidence + episode focus
   draft.** On `feat/chapter-review`; not merged or deployed.
   - **Presentation evidence.** `Review.presentation` (`layout`,

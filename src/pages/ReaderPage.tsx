@@ -4,7 +4,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
-import { getDb, getEpisodeFocus, readSettings } from '../db/repository';
+import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
+import { getDb, getEpisodeFocus, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -33,6 +34,7 @@ export function ReaderPage() {
   const [revealedStructures, setRevealedStructures] = useState<Set<string>>(
     () => new Set(),
   );
+  const [walkthroughId, setWalkthroughId] = useState<string>();
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
@@ -65,7 +67,11 @@ export function ReaderPage() {
     const chapter = chapterId
       ? book.chapters.find((item) => item.id === chapterId) ?? null
       : null;
-    return { book, chapter, rows, audioRows };
+    const analyses = await db.analyses.bulkGet(rows.map((row) => row.sentence.id));
+    const chunksBySentence = new Map(
+      analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
+    );
+    return { book, chapter, rows, audioRows, chunksBySentence };
   }, [bookId, chapterId]);
 
   const focus = useLiveQuery(
@@ -299,11 +305,29 @@ export function ReaderPage() {
                     )}
                     <button
                       type="button"
+                      aria-expanded={walkthroughId === row.sentence.id}
+                      onClick={() => setWalkthroughId(walkthroughId === row.sentence.id ? undefined : row.sentence.id)}
+                    >
+                      Walk through
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => toggleStructure(row.sentence.id)}
                     >
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
                   </div>
+                  {walkthroughId === row.sentence.id ? (
+                    <SentenceWalkthrough
+                      sentence={row.sentence}
+                      savedChunks={data.chunksBySentence.get(row.sentence.id)}
+                      audio={audio}
+                      focusTargets={focus?.focus ?? []}
+                      quietMode={settings?.quietMode ?? false}
+                      onQuietModeChange={(quiet) => void updateSettings({ quietMode: quiet })}
+                      onClose={() => setWalkthroughId(undefined)}
+                    />
+                  ) : null}
                   {revealedStructures.has(row.sentence.id)
                     ? (() => {
                         const preview = previewHeuristicChunks(row.sentence.japanese);

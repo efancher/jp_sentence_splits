@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
-import { getDb } from '../src/db/repository';
+import { getDb, readSettings } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
@@ -143,6 +143,40 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     expect(summary.closest('details')).toHaveTextContent('図書館');
     expect(summary.closest('details')).toHaveTextContent('Appears in 2 sentences');
     expect(await db.studyItems.count()).toBe(0);
+  });
+
+  it('walks through a sentence with no vocabulary, analysis or gating, keeping audio adjust and quiet mode reachable', async () => {
+    await seedBook();
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('本を読みます。');
+    await user.click(screen.getAllByRole('button', { name: 'Walk through' })[0]!);
+
+    const panel = await screen.findByRole('region', { name: 'Sentence walkthrough' });
+    expect(panel).toHaveTextContent('Automatic draft');
+    expect(panel).toHaveTextContent('Step 1 of');
+    expect(panel).toHaveTextContent('not assessed yet');
+    // Adjust itself needs a real Blob size, which fake-indexeddb drops; the walkthrough mounts the same NativeAudioButton.
+    expect(within(panel).getByRole('button', { name: /Play native sentence recording/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(panel).toHaveTextContent('Step 2 of');
+
+    await user.click(screen.getByLabelText(/Can.t speak right now/));
+    await waitFor(async () => expect((await readSettings()).quietMode).toBe(true));
+
+    await user.click(screen.getByRole('button', { name: 'Back to reading' }));
+    expect(screen.queryByRole('region', { name: 'Sentence walkthrough' })).not.toBeInTheDocument();
+    expect(await getDb().studyItems.count()).toBe(0);
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('says so when a walked-through sentence has no native audio', async () => {
+    await seedBook();
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('電気を消しました。');
+    await user.click(screen.getAllByRole('button', { name: 'Walk through' })[1]!);
+    expect(await screen.findByText(/No native audio for this sentence/)).toBeInTheDocument();
   });
 
   it('shows no focus panel when nothing recurs', async () => {
