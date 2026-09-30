@@ -622,6 +622,26 @@ strong.jp {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
 }
 
+.reader-book.stack {
+  width: 100%;
+  max-width: 44rem;
+  margin-inline: auto;
+  gap: 0;
+}
+
+.reader-book > .panel {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 1rem 0.25rem;
+}
+
+.reader-book > .reader-row-active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
 .karaoke-gloss {
   position: absolute;
   z-index: 5;

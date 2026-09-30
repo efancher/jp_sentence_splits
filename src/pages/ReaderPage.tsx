@@ -351,7 +351,7 @@ export function ReaderPage() {
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}
-      <div className="stack">
+      <div className="stack reader-book">
         {rows.map((row, index) => {
           const audio = audioByRow[index];
           const isActive = index === activeIndex;

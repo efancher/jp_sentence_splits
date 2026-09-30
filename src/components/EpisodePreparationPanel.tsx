@@ -122,15 +122,15 @@ export function EpisodePreparationPanel({
           </>
         )}
         {preparation && preparation.targets.length > 0 ? (
-          <label className="row" style={{ gap: '0.35rem' }}>
+          <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
             <input type="checkbox" checked={forceTargets} onChange={(event) => setForceTargets(event.target.checked)} />
             Ask for focus targets again
           </label>
         ) : null}
         {loaded.needsStructureIds.length > 0 ? (
-          <label className="row" style={{ gap: '0.35rem' }}>
+          <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
             <input type="checkbox" checked={wantStructure} onChange={(event) => setWantStructure(event.target.checked)} />
-            Also ask for sentence structure ({loaded.needsStructureIds.length} without an analysis) so walkthrough roles are not generic
+            <span>Also ask for sentence structure ({loaded.needsStructureIds.length} without an analysis) so walkthrough roles are not generic</span>
           </label>
         ) : null}
         <label className="stack" style={{ gap: '0.25rem' }}>
