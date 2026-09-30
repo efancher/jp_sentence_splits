@@ -82,7 +82,7 @@ export function buildPreparationPrompt(context: PreparationContext): string {
     'KNOWN GRAMMAR PATTERNS (optional refs):',
     ...(grammarLines.length ? grammarLines : ['(none)']),
     '',
-    'Reply with ONLY this JSON, nothing else:',
+    'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
     JSON.stringify(
       {
         version: EPISODE_PREPARATION_VERSION,
@@ -110,7 +110,24 @@ export function extractJson(reply: string): unknown {
   const start = candidate.indexOf('{');
   const end = candidate.lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('No JSON object found in the reply.');
-  return JSON.parse(candidate.slice(start, end + 1));
+  const json = candidate.slice(start, end + 1);
+  try {
+    return JSON.parse(json);
+  } catch (strictError) {
+    // Chat apps and phone keyboards often turn the JSON's straight quotes into
+    // curly ones, add non-breaking spaces, or leave trailing commas. Repair only
+    // after a strict parse fails, so a valid reply is never altered.
+    const repaired = json
+      .replace(/[\u201c\u201d\u201e\u201f\u00ab\u00bb]/g, '"')
+      .replace(/\u00a0/g, ' ')
+      .replace(/,(\s*[}\]])/g, '$1');
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      const detail = strictError instanceof Error ? strictError.message : 'parse error';
+      throw new Error(`The reply is not valid JSON (${detail}). Ask the AI to answer again with only the JSON, using plain straight quotes.`);
+    }
+  }
 }
 
 const KINDS: PreparedTargetKind[] = ['vocabulary', 'grammar', 'expression'];

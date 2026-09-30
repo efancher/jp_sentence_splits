@@ -122,7 +122,7 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
     if (batch.length > 0) shape.translations = { [batch[0]!]: 'English translation' };
     lines.push(
       '',
-      'Reply with ONLY this JSON, nothing else:',
+      'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
       JSON.stringify(shape, null, 2),
     );
     if (includeTargets) {

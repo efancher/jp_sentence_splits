@@ -114,6 +114,20 @@ describe('parsePreparationReply', () => {
     expect(result.targets[0]!.droppedOccurrences).toBe(1);
   });
 
+  it('accepts a reply whose quotes were curly-ised and that has trailing commas or nbsp', () => {
+    const straight = JSON.stringify({
+      version: 1,
+      targets: [{ kind: 'vocabulary', ref: 'V1', label: '本', occurrences: [{ sentence: 'S1', text: '本' }] }],
+    });
+    const curly = straight.replace(/"/g, (_m, offset: number) => (offset % 2 ? '\u201d' : '\u201c'));
+    const messy = straight.replace(/"/g, '\u201c').replace('}]}', '},]},').replace(':', ':\u00a0');
+    for (const reply of [curly, messy, `Here you go:\n\`\`\`json\n${messy}\n\`\`\``]) {
+      const result = parsePreparationReply(reply, context, NOW);
+      expect(result.error).toBeUndefined();
+      expect(result.targets).toHaveLength(1);
+    }
+  });
+
   it('fails cleanly on unparseable, wrong-shaped or all-invalid replies', () => {
     expect(parsePreparationReply('I cannot help with that.', context, NOW)).toMatchObject({ status: 'failed', targets: [] });
     expect(parsePreparationReply('{"foo": 1}', context, NOW).error).toMatch(/targets/);

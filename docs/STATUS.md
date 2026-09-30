@@ -10,6 +10,14 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Pasted AI replies with curly quotes now work.** The user's
+  first real paste failed ("Unrecognized token “"): a phone/chat app had curly-
+  ised the JSON's quotes. `extractJson` still tries strict `JSON.parse` first,
+  then retries after normalising curly/guillemet quotes, non-breaking spaces and
+  trailing commas; a remaining failure says the reply is not valid JSON and to
+  ask for plain straight quotes. Both prompts now ask for straight quotes.
+  Quotes inside a string value that are themselves curly still can't be repaired.
+
 - **2026-09-30 — Real-chapter trial (with the user's OK): Teppei #1461 "箸
   (はし) について！".** Read-only export via the main checkout's existing script
   login (credentials stay in its `.env`; nothing copied into the preview or the
