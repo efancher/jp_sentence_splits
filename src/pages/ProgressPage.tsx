@@ -12,7 +12,9 @@ import {
   getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
+  getOpenContentReports,
   getSentenceLessonReport,
+  resolveContentReport,
   getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
@@ -174,6 +176,7 @@ export function ProgressPage() {
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
   const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
+  const openReports = useLiveQuery(() => getOpenContentReports(), []);
   const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
   const leechList = useLiveQuery(() => getLeechList(), []);
   const masteryOverview = useLiveQuery(() => getSentenceMasteryOverview(), []);
@@ -237,6 +240,34 @@ export function ProgressPage() {
             value={`${lessonReport.quality.contentReports} on ${lessonReport.quality.reportedSentences} sentences`}
             hint={`Out of ${lessonReport.quality.practicedTargets} target practices. A high share means the prompts need repair.`}
           />
+          {openReports && openReports.length > 0 ? (
+            <div className="stack" style={{ gap: '0.4rem' }} aria-label="Flagged prompts to review">
+              <strong style={{ fontSize: '0.9rem' }}>Flagged prompts to look at ({openReports.length})</strong>
+              <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                Open the sentence to see the prompt again. "Mark fixed" and "Dismiss" only tidy this list — they
+                never change the sentence or your progress.
+              </p>
+              {openReports.map((item) => (
+                <div key={item.reportEventId} className="stack" style={{ gap: '0.15rem' }}>
+                  <span className="jp">{item.japanese}</span>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {item.targetLabel ? `${item.targetLabel} · ` : ''}
+                    {item.report === 'poor_question' ? 'poor question' : 'another answer works'}
+                    {item.learnerAnswer ? ` · you answered: ${item.learnerAnswer}` : ''}
+                  </span>
+                  <div className="row" style={{ gap: '0.5rem' }}>
+                    <Link to={`/books/${item.bookId}/learn/${item.sentenceId}`}>Open sentence</Link>
+                    <button type="button" onClick={() => void resolveContentReport(item, 'fixed')}>
+                      Mark fixed
+                    </button>
+                    <button type="button" onClick={() => void resolveContentReport(item, 'dismissed')}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

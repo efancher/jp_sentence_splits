@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Repair workflow for flagged prompts.** `/progress` "Sentence
+  lessons" panel lists open flagged prompts (sentence, target, report type, your
+  answer) with "Open sentence" (lesson route), "Mark fixed" and "Dismiss". These
+  log a new `report_resolved` event (`resolution: fixed|dismissed`, same
+  sentence+target key); a report is open until a later resolution, and a newer
+  report reopens it (`openContentReports`, derived). Triage only: no sentence,
+  analysis, FSRS or Review writes. Migration (unapplied) gained the
+  `report_resolved` action and `resolution` column. Not built: editing the
+  prompt itself — the fix happens wherever you already edit sentences/targets.
 - **2026-09-30 — Help level recorded on lesson events.** Every
   `SentenceLearningEvent` from the walkthrough (including the expression card)
   now carries `helpLevel` ('full'|'less'|'minimal') — the Help level select's

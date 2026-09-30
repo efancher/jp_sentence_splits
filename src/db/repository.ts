@@ -1,3 +1,4 @@
+import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
@@ -8847,6 +8848,37 @@ export async function logSentenceLearningEvent(
   await db.sentenceLearningEvents.put(full);
   notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
   return full;
+}
+
+export interface OpenContentReportWithText extends OpenContentReport {
+  japanese: string;
+  translation?: string;
+}
+
+export async function getOpenContentReports(): Promise<OpenContentReportWithText[]> {
+  const db = getDb();
+  const open = openContentReports(await db.sentenceLearningEvents.toArray());
+  const sentences = await db.sentences.bulkGet(open.map((report) => report.sentenceId));
+  return open.map((report, index) => ({
+    ...report,
+    japanese: sentences[index]?.japanese ?? '',
+    translation: sentences[index]?.translation,
+  }));
+}
+
+/** Triage only: logs a `report_resolved` event. Never edits the sentence, its analysis or any study state. */
+export async function resolveContentReport(
+  report: OpenContentReport,
+  resolution: 'fixed' | 'dismissed',
+): Promise<void> {
+  await logSentenceLearningEvent({
+    visitId: createId('sl_visit'),
+    action: 'report_resolved',
+    bookId: report.bookId,
+    sentenceId: report.sentenceId,
+    ...(report.target ? { target: report.target } : {}),
+    resolution,
+  });
 }
 
 export async function getSentenceLessonReport(): Promise<SentenceLessonReport> {

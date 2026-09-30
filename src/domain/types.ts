@@ -1432,7 +1432,8 @@ export type SentenceLearningAction =
   | 'compare_uses_viewed'
   | 'content_report'
   | 'gist_check'
-  | 'expression_attempt';
+  | 'expression_attempt'
+  | 'report_resolved';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
@@ -1473,6 +1474,8 @@ export interface SentenceLearningEvent {
   unitsTotal?: number;
   /** The walkthrough's Help level when the event was logged (not per-channel support; that is `support`/`scaffold`). Absent on older events. */
   helpLevel?: 'full' | 'less' | 'minimal';
+  /** report_resolved only: the learner's triage of an earlier content_report for the same sentence+target. Changes no sentence data. */
+  resolution?: 'fixed' | 'dismissed';
   /** Compare uses: the other real occurrence that was shown. */
   exposedSentenceId?: string;
   quietMode?: boolean;

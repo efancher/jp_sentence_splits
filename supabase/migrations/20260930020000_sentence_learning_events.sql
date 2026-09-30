@@ -11,7 +11,7 @@ create table public.sentence_learning_events (
   "timestamp" timestamptz not null default now(),
   visit_id text not null,
   action text not null check (action in
-    ('walkthrough_opened', 'walkthrough_completed', 'target_practice', 'compare_uses_viewed', 'content_report', 'gist_check', 'expression_attempt')),
+    ('walkthrough_opened', 'walkthrough_completed', 'target_practice', 'compare_uses_viewed', 'content_report', 'gist_check', 'expression_attempt', 'report_resolved')),
   book_id text not null,
   chapter_id text,
   sentence_id text not null,
@@ -28,6 +28,7 @@ create table public.sentence_learning_events (
   units_expressed integer check (units_expressed >= 0),
   units_total integer check (units_total >= 0),
   help_level text check (help_level in ('full', 'less', 'minimal')),
+  resolution text check (resolution in ('fixed', 'dismissed')),
   exposed_sentence_id text,
   quiet_mode boolean,
   inventory_revision text,
