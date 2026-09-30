@@ -271,20 +271,26 @@ export function repairCurlyQuotes(json: string): string {
   const curly = /[\u201c\u201d\u201e\u201f\u00ab\u00bb]/;
   let out = '';
   let inString = false;
+  let openedCurly = false;
   for (let i = 0; i < json.length; i += 1) {
     const ch = json[i]!;
     if (ch === '\\' && inString) {
       out += ch + (json[i + 1] ?? '');
       i += 1;
     } else if (ch === '"') {
-      inString = !inString;
-      out += ch;
+      if (inString && openedCurly) out += "'";
+      else {
+        inString = !inString;
+        out += ch;
+      }
     } else if (curly.test(ch)) {
       if (!inString) {
         inString = true;
+        openedCurly = true;
         out += '"';
       } else if (/^\s*[,:}\]]/.test(json.slice(i + 1))) {
         inString = false;
+        openedCurly = false;
         out += '"';
       } else out += "'";
     } else out += ch;

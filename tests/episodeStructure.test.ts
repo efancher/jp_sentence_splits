@@ -63,3 +63,11 @@ describe('extractJson with curly quotes', () => {
     expect(parsed.structure.S1[0]!.gloss).toBe("the 'book' (object)");
   });
 });
+
+describe('extractJson with curly delimiters and straight quotes inside a value', () => {
+  it('keeps a straight-quoted phrase inside a curly-delimited gloss', () => {
+    const reply = '{\n“structure”: {\n“S1”: [\n{\n“text”: “本を”,\n“role”: “object”,\n“gloss”: “"that’s a bit…"”\n}\n]\n}\n}';
+    const parsed = extractJson(reply) as { structure: { S1: { gloss: string }[] } };
+    expect(parsed.structure.S1[0]!.gloss).toBe("'that’s a bit…'");
+  });
+});
