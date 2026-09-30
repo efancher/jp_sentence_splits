@@ -4,6 +4,15 @@ import type { SentenceLearningEvent } from '../domain/types';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { pickCompareUses, summariseTargetActivity, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
 import { createId } from '../lib/ids';
+import type { SentenceAudio } from '../domain/types';
+import { NativeAudioButton } from './NativeAudioButton';
+
+/** Optional per-sentence aids for an excerpt; missing pieces are simply not shown. */
+export interface CompareAids {
+  translation?: string;
+  words: { expression: string; reading: string; english: string }[];
+  audio?: SentenceAudio;
+}
 
 export type LessonEventInput = Omit<SentenceLearningEvent, 'timestamp' | 'bookId' | 'chapterId' | 'inventoryRevision'>;
 
@@ -19,6 +28,35 @@ function Highlighted({ excerpt }: { excerpt: CompareExcerpt }) {
   );
 }
 
+function ExcerptWithAids({ excerpt, aids }: { excerpt: CompareExcerpt; aids?: CompareAids }) {
+  const [showTranslation, setShowTranslation] = useState(false);
+  return (
+    <div className="stack" style={{ gap: '0.2rem' }}>
+      <Highlighted excerpt={excerpt} />
+      {aids && aids.words.length > 0 ? (
+        <ul className="muted" aria-label="Words in this sentence" style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85em' }}>
+          {aids.words.map((word) => (
+            <li key={word.expression}>
+              <span className="jp">{word.expression}</span>
+              {word.reading && word.reading !== word.expression ? <span className="jp"> ({word.reading})</span> : null} — {word.english}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {aids?.audio ? <NativeAudioButton audio={aids.audio} displayLabel="Native audio" hideAdjust /> : null}
+        {aids?.translation ? (
+          showTranslation ? (
+            <span className="muted">{aids.translation}</span>
+          ) : (
+            <button type="button" onClick={() => setShowTranslation(true)}>Show translation</button>
+          )
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Optional practice for one focus target inside the sentence walkthrough:
  * a self-checked "what does this do here?" and a look at another real
@@ -29,6 +67,7 @@ export function TargetLessonCard({
   sentenceId,
   visitId,
   episodeSentences,
+  compareAids,
   events,
   quietMode,
   onEvent,
@@ -37,6 +76,7 @@ export function TargetLessonCard({
   sentenceId: string;
   visitId: string;
   episodeSentences: CompareSentence[];
+  compareAids?: ReadonlyMap<string, CompareAids>;
   events: SentenceLearningEvent[];
   quietMode: boolean;
   onEvent: (event: LessonEventInput) => void;
@@ -143,9 +183,9 @@ export function TargetLessonCard({
       {pair ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Compare uses of ${target.label}`}>
           <div className="muted">This sentence:</div>
-          <Highlighted excerpt={pair.current} />
+          <ExcerptWithAids excerpt={pair.current} aids={compareAids?.get(pair.current.sentenceId)} />
           <div className="muted">Another use (sentence {pair.other.position} of this episode):</div>
-          <Highlighted excerpt={pair.other} />
+          <ExcerptWithAids excerpt={pair.other} aids={compareAids?.get(pair.other.sentenceId)} />
           <div>What stays the same? What changes here?</div>
           {pair.remainingUnseen > 0 ? (
             <button type="button" onClick={showCompare}>Show another example</button>

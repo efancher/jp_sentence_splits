@@ -209,7 +209,10 @@ Housekeeping owed:
   and the #1461 order fix (chapter has no `sourceId`).
 
 Suggested next slices (none confirmed by the user):
-1. Ask the user how Practise this / Compare uses felt on the real episode; adjust.
+1. DONE 2026-09-30: user said Practise this / Compare uses "both seem good" and
+   asked for vocabulary aids in Compare uses (glosses, audio, on-request
+   translation; see STATUS). Possible follow-up: same gloss list in the walkthrough
+   itself, and glosses for words with no `english` suggestion.
 2. Decide with the user whether `sentenceLearningEvents` should sync/back up
    (needs a Supabase migration) or stay device-local.
 3. Phase 1 leftover: move secondary controls into an accessible sheet. Verified

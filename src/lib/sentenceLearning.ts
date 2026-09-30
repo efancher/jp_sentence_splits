@@ -96,3 +96,18 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
   }
   return summary;
 }
+
+/** Content words with a gloss, deduplicated — the help shown beside a Compare uses excerpt. */
+export function glossableWords(
+  suggestions: { expression: string; reading: string; english?: string; selectedByDefault: boolean }[],
+): { expression: string; reading: string; english: string }[] {
+  const seen = new Set<string>();
+  const words: { expression: string; reading: string; english: string }[] = [];
+  for (const suggestion of suggestions) {
+    const english = suggestion.english?.trim();
+    if (!suggestion.selectedByDefault || !english || seen.has(suggestion.expression)) continue;
+    seen.add(suggestion.expression);
+    words.push({ expression: suggestion.expression, reading: suggestion.reading, english });
+  }
+  return words;
+}

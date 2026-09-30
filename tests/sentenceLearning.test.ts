@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { pickCompareUses, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { glossableWords, pickCompareUses, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -85,5 +85,21 @@ describe('logSentenceLearningEvent', () => {
     expect(await listSentenceLearningEvents('other')).toHaveLength(0);
     expect(await getDb().reviews.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
+  });
+});
+
+describe('glossableWords', () => {
+  it('keeps glossed content words once each and drops function words and unglossed ones', () => {
+    const suggestion = (expression: string, english: string | undefined, selectedByDefault = true) =>
+      ({ expression, reading: 'r', english, selectedByDefault });
+    expect(
+      glossableWords([
+        suggestion('読む', 'to read'),
+        suggestion('読む', 'to read (again)'),
+        suggestion('を', 'object marker', false),
+        suggestion('本', undefined),
+        suggestion('買う', '  to buy '),
+      ]).map((word) => `${word.expression}:${word.english}`),
+    ).toEqual(['読む:to read', '買う:to buy']);
   });
 });

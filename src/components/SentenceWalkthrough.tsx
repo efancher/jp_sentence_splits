@@ -10,7 +10,7 @@ import type { CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { NativeAudioButton } from './NativeAudioButton';
-import { TargetLessonCard, type LessonEventInput } from './TargetLessonCard';
+import { TargetLessonCard, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
 export interface WalkthroughChunk {
   id: string;
@@ -63,6 +63,7 @@ export function SentenceWalkthrough({
   audio,
   focusTargets,
   episodeSentences = [],
+  compareAids,
   events = [],
   onEvent,
   quietMode,
@@ -75,6 +76,8 @@ export function SentenceWalkthrough({
   focusTargets: EpisodeFocusTarget[];
   /** The whole episode, for "Compare uses" excerpts. */
   episodeSentences?: CompareSentence[];
+  /** Translation, word glosses and native audio per episode sentence, shown under Compare uses excerpts. */
+  compareAids?: ReadonlyMap<string, CompareAids>;
   /** Earlier lesson events for this book, to show what has been practised/compared. */
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
@@ -162,6 +165,7 @@ export function SentenceWalkthrough({
                 sentenceId={sentence.id}
                 visitId={visitId}
                 episodeSentences={episodeSentences}
+                compareAids={compareAids}
                 events={events}
                 quietMode={quietMode}
                 onEvent={(event) => onEvent?.(event)}

@@ -6,6 +6,7 @@ import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
+import type { CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
@@ -13,6 +14,7 @@ import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
+import { glossableWords } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -126,6 +128,18 @@ export function ReaderPage() {
       );
     });
   }, [data, matchingSourceId]);
+
+  const compareAids = useMemo(() => {
+    const map = new Map<string, CompareAids>();
+    data?.rows.forEach((row, index) => {
+      map.set(row.sentence.id, {
+        translation: row.sentence.translation || undefined,
+        words: glossableWords(row.sentence.vocabularySuggestions),
+        audio: audioByRow[index],
+      });
+    });
+    return map;
+  }, [data, audioByRow]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -389,6 +403,7 @@ export function ReaderPage() {
                       audio={audio}
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}
+                      compareAids={compareAids}
                       events={lessonEvents ?? []}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({

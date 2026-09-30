@@ -18,7 +18,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       ['本を読みます。', '本を買いました。'].forEach((japanese, index) => {
         const id = `s-${index}`;
         tx.objectStore('sentences').put({ id, normalizedKey: id, japanese, readingOnly: '', inlineReading: '',
-          translation: '', targetVocabulary: [], vocabularySuggestions: [], sourceReferences: [], conflicts: [],
+          translation: `Translation ${index}.`, targetVocabulary: [],
+          vocabularySuggestions: [{ id: `v-${index}`, surface: index ? '買い' : '読み', start: 2, end: 4,
+            expression: index ? '買う' : '読む', reading: index ? 'かう' : 'よむ', pos: '動詞',
+            english: index ? 'to buy' : 'to read', source: 'morphology', selectedByDefault: true }],
+          sourceReferences: [], conflicts: [],
           firstOccurrenceIndex: index, importBatchIds: [], createdAt: now, updatedAt: now });
         tx.objectStore('bookSentences').put({ id: `bs-${index}`, bookId: 'book', sentenceId: id,
           position: index, status: 'unstarted', addedAt: now, chapterId: 'chapter' });
@@ -50,6 +54,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     const compare = panel.getByLabel('Compare uses of 本を');
     await expect(compare).toContainText('本を買いました。');
     await expect(compare.locator('mark').first()).toHaveText('本を');
+    // Aids for sentences whose vocabulary may be unfamiliar: glosses shown, translation on request.
+    await expect(compare.getByLabel('Words in this sentence')).toHaveCount(2);
+    await expect(compare).toContainText('買う (かう) — to buy');
+    await expect(compare).not.toContainText('Translation 1.');
+    await compare.getByRole('button', { name: 'Show translation' }).last().click();
+    await expect(compare).toContainText('Translation 1.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 

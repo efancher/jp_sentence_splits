@@ -10,6 +10,19 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Compare uses now carries aids.** The user reviewed Practise this
+  / Compare uses ("both seem good") and noted they may not know most of the
+  vocabulary in the compared sentences. Each excerpt (this sentence and the
+  other use) now shows the sentence's glossed content words (reading + English,
+  from `vocabularySuggestions` via `glossableWords`), a native-audio button when
+  a clip exists, and a "Show translation" button (hidden until asked, so the
+  "what stays the same?" prompt isn't answered for the learner). Sentences with
+  no gloss/translation/audio simply omit that aid. No new events, reviews or
+  schema. Tests: unit (`glossableWords`), `e2e/sentence-lesson.spec.ts`
+  extended; `npm run check` and Docker e2e (Chromium+WebKit) pass. Not done:
+  glosses come from morphology suggestions, so a word missing `english` has no
+  gloss; the walkthrough's own sentence has no gloss list yet.
+
 - **2026-09-30 — Follow-up session: no code change.** Checked the "Adjust audio"
   claim against code: the walkthrough already offers Adjust (local trim) and
   Can't speak, so a tried second adjuster was reverted. Slice choice waits on
