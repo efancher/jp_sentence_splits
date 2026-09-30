@@ -329,7 +329,10 @@ export function ReaderPage() {
           transcripts against a fresh ASR pass.
         </p>
       ) : null}
-      {chapterId && chapter ? <EpisodePreparationPanel bookId={bookId} chapterId={chapterId} defaultOpen={searchParams.get('pack') === '1'} /> : null}
+      {(() => {
+        const packChapterId = chapterId && chapter ? chapterId : !chapterId && book.chapters.length === 1 ? book.chapters[0]!.id : undefined;
+        return packChapterId ? <EpisodePreparationPanel bookId={bookId} chapterId={packChapterId} defaultOpen={searchParams.get('pack') === '1'} /> : null;
+      })()}
       {!chapterId && book.chapters.length === 0 && rows.length > 0 ? (
         <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <button
