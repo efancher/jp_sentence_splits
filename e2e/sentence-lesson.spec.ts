@@ -79,6 +79,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await panel.getByLabel(/Your own answer/).fill('it marks the object');
     await panel.getByRole('button', { name: 'Another answer works' }).click();
     await expect(panel.getByText(/flagged for repair/)).toBeVisible();
+    await expect(page.getByLabel('Flagged prompts')).toContainText('it marks the object');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 

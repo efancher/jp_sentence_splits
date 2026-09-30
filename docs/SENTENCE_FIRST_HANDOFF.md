@@ -237,6 +237,24 @@ Suggested next slices (none confirmed by the user):
 Note: the derived (pre-preparation) focus strip favours generic verbs; consider
 prompting for preparation sooner or ranking better.
 
+## Decision note: promoting a practised target into durable tracking (2026-09-30)
+
+Not built, deliberately (user agreed with this reasoning). "Practise this" is
+one-off lesson evidence; promotion would be an explicit "Keep reviewing this"
+that creates StudyItems/cards. Why it waits: (1) the user's standing rule is that
+lesson events never create Reviews/StudyItems/FSRS state, so promotion is the one
+deliberate, user-pressed exception and needs a design the user reviews first;
+(2) `confirmSentenceVocabulary` treats its input as the full snapshot for a
+sentence and replaces its links, so calling it with one word erases earlier
+selections — a new merge ("add one link") operation with tests is required;
+(3) grammar/expression targets come from AI preparation and may have no
+vocabulary item or grammar pattern yet, so matching/creating is a separate
+problem; (4) undo must soft-delete (`deleted_at`), never raw DELETE, or synced
+clients never learn; (5) risk is silently growing the daily review load — show
+the card count before confirming. If built: vocabulary targets only first, merge
+operation + tests, preview "adds N cards", grammar later. The user can already
+add words to reviews through the normal vocabulary flow.
+
 ## Remaining work and suggested continuation
 
 Only the first review presentation slice is implemented. Guided sentence

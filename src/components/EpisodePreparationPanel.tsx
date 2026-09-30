@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   clearEpisodePreparation,
   getEpisodePreparationContext,
+  listSentenceLearningEvents,
   saveEpisodePackReply,
   updatePreparedTarget,
 } from '../db/repository';
@@ -27,6 +28,10 @@ export function EpisodePreparationPanel({
 }) {
   const loaded = useLiveQuery(
     () => getEpisodePreparationContext(bookId, chapterId).catch(() => null),
+    [bookId, chapterId],
+  );
+  const reports = useLiveQuery(
+    async () => (await listSentenceLearningEvents(bookId)).filter((event) => event.action === 'content_report' && (!event.chapterId || event.chapterId === chapterId)),
     [bookId, chapterId],
   );
   const [reply, setReply] = useState('');
@@ -143,6 +148,23 @@ export function EpisodePreparationPanel({
           </button>
         </div>
         {message ? <p role="status" style={{ margin: 0 }}>{message}</p> : null}
+        {reports && reports.length > 0 ? (
+          <div className="stack" style={{ gap: '0.2rem' }}>
+            <span className="muted">Prompts you flagged while practising ({reports.length}) — kept for content repair, never counted against you:</span>
+            <ul style={{ margin: 0 }} aria-label="Flagged prompts">
+              {reports.map((event) => (
+                <li key={event.id}>
+                  <strong className="jp">{event.target?.label ?? '(target)'}</strong>
+                  <span className="muted">
+                    {' '}— {event.report === 'poor_question' ? 'poor question' : 'another answer works'}
+                    {event.learnerAnswer ? `: “${event.learnerAnswer}”` : ''}
+                  </span>
+                  <div className="jp muted">{context.sentences.find((sentence) => sentence.id === event.sentenceId)?.japanese ?? ''}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {preparation ? (
           <div className="stack" style={{ gap: '0.35rem' }}>
