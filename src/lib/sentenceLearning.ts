@@ -97,10 +97,32 @@ export interface TargetActivitySummary {
   /** Own-sentence transfer attempts for this target, and those the learner judged as using it for a new meaning. Never mixed into `practised`/`independent`. */
   transferAttempts: number;
   transferSucceeded: number;
+  recheckAttempts: number;
+  recheckSucceeded: number;
+}
+
+const localDay = (iso: string) => {
+  const d = new Date(iso);
+  return Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86_400_000);
+};
+
+/** The most recent own-sentence attempt for a target that is at least a calendar day old and not yet re-checked. */
+export function findDueTransferRecheck(
+  events: SentenceLearningEvent[],
+  targetKey: string,
+  now: Date,
+): { answer: string; daysAgo: number } | undefined {
+  const own = events
+    .filter((event) => event.target?.key === targetKey && (event.action === 'transfer_attempt' || event.action === 'transfer_recheck') && event.timestamp)
+    .sort((a, b) => (a.timestamp! < b.timestamp! ? 1 : -1));
+  const latest = own[0];
+  if (!latest || latest.action !== 'transfer_attempt' || !latest.learnerAnswer) return undefined;
+  const daysAgo = localDay(now.toISOString()) - localDay(latest.timestamp!);
+  return daysAgo >= 1 ? { answer: latest.learnerAnswer, daysAgo } : undefined;
 }
 
 export function summariseTargetActivity(events: SentenceLearningEvent[], targetKey: string): TargetActivitySummary {
-  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set(), transferAttempts: 0, transferSucceeded: 0 };
+  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set(), transferAttempts: 0, transferSucceeded: 0, recheckAttempts: 0, recheckSucceeded: 0 };
   for (const event of events) {
     if (event.target?.key !== targetKey) continue;
     if (event.action === 'target_practice') {
@@ -111,6 +133,9 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
     } else if (event.action === 'transfer_attempt') {
       summary.transferAttempts += 1;
       if (event.outcome === 'got_it') summary.transferSucceeded += 1;
+    } else if (event.action === 'transfer_recheck') {
+      summary.recheckAttempts += 1;
+      if (event.outcome === 'got_it') summary.recheckSucceeded += 1;
     } else if (event.action === 'compare_uses_viewed' && event.exposedSentenceId) {
       summary.comparedSentenceIds.add(event.exposedSentenceId);
     }

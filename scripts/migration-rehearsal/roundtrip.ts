@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { remoteToSentenceLearningEvent, sentenceLearningEventToRemote } from '../../src/sync/mappers';
 const psql = (sql: string) => execFileSync('docker', ['exec', '-i', 'mig-rehearsal', 'psql', '-At', '-U', 'supabase_admin', '-h', '127.0.0.1', '-d', 'postgres'], { input: sql }).toString();
-const actions = ['walkthrough_opened','walkthrough_completed','target_practice','compare_uses_viewed','content_report','gist_check','expression_attempt','report_resolved','transfer_attempt'] as const;
+const actions = ['walkthrough_opened','walkthrough_completed','target_practice','compare_uses_viewed','content_report','gist_check','expression_attempt','report_resolved','transfer_attempt','transfer_recheck'] as const;
 let bad = 0;
 for (const action of actions) {
   const ev: any = { id: `rt_${action}`, timestamp: '2026-09-30T10:00:00.000Z', visitId: 'v', action, bookId: 'b', chapterId: 'c', sentenceId: 's',

@@ -10,6 +10,18 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 6: delayed re-check of own-sentence transfer.** When a
+  target's latest own-sentence attempt is at least one local calendar day old
+  and hasn't been re-checked, the button reads "Re-check: use it again from
+  memory" and the prompt shows what you wrote N days ago, asking for a different
+  sentence without looking back. Logged as a new `transfer_recheck` action (same
+  self-ticks), separate from same-day `transfer_attempt`; one re-check clears it
+  (`findDueTransferRecheck`, derived from events, nothing stored). Card activity
+  line and `/progress` ("Own sentences re-checked a day or more later") count it
+  separately. Lesson events only; no Reviews/FSRS. Migration (unapplied) action
+  check gained `transfer_recheck`; re-verified on the local Postgres rehearsal
+  (10 actions). Only one re-check per attempt, no expanding schedule; still
+  self-judged; held-back contexts and clause sequencing not built.
 - **2026-09-30 — Phase 6 first slice: "Use it in your own sentence"
   (transfer).** Target lesson cards gain a typed-only path (no audio/speech
   needed): write a new sentence using the target for a *different* meaning,

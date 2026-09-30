@@ -16,6 +16,8 @@ export interface SentenceLessonReport {
     spokenAttempts: number;
     transferAttempts: number;
     transferNewMeaning: number;
+    rechecks: number;
+    recheckNewMeaning: number;
   };
   quality: { contentReports: number; practicedTargets: number; reportedSentences: number };
   backlog: { readyToRevisit: number; oldestDays: number | null };
@@ -80,6 +82,8 @@ export function buildSentenceLessonReport(
       writtenAttempts: attempts.filter((event) => event.modality !== 'spoken').length,
       spokenAttempts: attempts.filter((event) => event.modality === 'spoken').length,
       transferAttempts: recent.filter((event) => event.action === 'transfer_attempt').length,
+      rechecks: recent.filter((event) => event.action === 'transfer_recheck').length,
+      recheckNewMeaning: recent.filter((event) => event.action === 'transfer_recheck' && event.outcome === 'got_it').length,
       transferNewMeaning: recent.filter((event) => event.action === 'transfer_attempt' && event.outcome === 'got_it').length,
     },
     quality: {

@@ -6,7 +6,7 @@ select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-00000000
 -- every action, with new columns
 insert into sentence_learning_events (id,owner_id,visit_id,action,book_id,sentence_id,help_level,resolution,outcome,modality,scaffold,assessment_source)
 select 'ok_'||a,'00000000-0000-0000-0000-00000000000a','v',a,'b','s','less',case when a='report_resolved' then 'fixed' end,'got_it','typed','none','self'
-from unnest(array['walkthrough_opened','walkthrough_completed','target_practice','compare_uses_viewed','content_report','gist_check','expression_attempt','report_resolved','transfer_attempt']) a;
+from unnest(array['walkthrough_opened','walkthrough_completed','target_practice','compare_uses_viewed','content_report','gist_check','expression_attempt','report_resolved','transfer_attempt','transfer_recheck']) a;
 select 'inserted_ok', count(*) from sentence_learning_events;
 -- rejected
 insert into sentence_learning_events (id,owner_id,visit_id,action,book_id,sentence_id) values ('bad1','00000000-0000-0000-0000-00000000000a','v','bogus','b','s');

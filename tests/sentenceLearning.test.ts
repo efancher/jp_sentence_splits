@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { describeSentenceProgress, summariseSentenceProgress, glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, findDueTransferRecheck, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -77,6 +77,27 @@ describe('summariseTargetActivity', () => {
     ];
     const summary = summariseTargetActivity(withTransfer, 'k');
     expect(summary).toMatchObject({ practised: 2, gotIt: 1, transferAttempts: 2, transferSucceeded: 1 });
+  });
+});
+
+describe('findDueTransferRecheck', () => {
+  const base = { visitId: 'v', bookId: 'b', sentenceId: 'a' } as const;
+  const target = { kind: 'vocabulary' as const, key: 'k', label: '本' };
+  const attempt: SentenceLearningEvent = { ...base, id: '1', action: 'transfer_attempt', target, timestamp: '2026-09-28T12:00:00', learnerAnswer: '本を読む' };
+  const now = new Date('2026-09-30T12:00:00');
+  it('is due once the attempt is a calendar day old, and not before', () => {
+    expect(findDueTransferRecheck([attempt], 'k', now)).toEqual({ answer: '本を読む', daysAgo: 2 });
+    expect(findDueTransferRecheck([attempt], 'k', new Date('2026-09-28T23:00:00'))).toBeUndefined();
+  });
+  it('stops being due after a re-check, other targets, or an attempt with no answer', () => {
+    const recheck: SentenceLearningEvent = { ...attempt, id: '2', action: 'transfer_recheck', timestamp: '2026-09-30T09:00:00' };
+    expect(findDueTransferRecheck([attempt, recheck], 'k', now)).toBeUndefined();
+    expect(findDueTransferRecheck([attempt], 'other', now)).toBeUndefined();
+    expect(findDueTransferRecheck([{ ...attempt, learnerAnswer: undefined }], 'k', now)).toBeUndefined();
+  });
+  it('counts re-checks apart from same-day attempts', () => {
+    const r = summariseTargetActivity([attempt, { ...attempt, id: '2', action: 'transfer_recheck', outcome: 'got_it' }], 'k');
+    expect(r).toMatchObject({ transferAttempts: 1, recheckAttempts: 1, recheckSucceeded: 1 });
   });
 });
 

@@ -233,6 +233,11 @@ export function ProgressPage() {
             hint="Using a pattern for a different meaning than the lesson sentence. Self-judged, and counted separately from saying the original meaning."
           />
           <StatRow
+            label="Own sentences re-checked a day or more later"
+            value={`${lessonReport.outcomes.recheckNewMeaning} of ${lessonReport.outcomes.rechecks}`}
+            hint="Written again from memory on a later day. Self-judged; counted separately from same-day attempts."
+          />
+          <StatRow
             label="Waiting for a fresh try"
             value={
               lessonReport.backlog.oldestDays === null

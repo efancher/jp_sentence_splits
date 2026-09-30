@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { SentenceLearningEvent } from '../domain/types';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
-import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
+import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, findDueTransferRecheck, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
 import { createId } from '../lib/ids';
 import type { SentenceAudio } from '../domain/types';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -107,6 +107,8 @@ export function TargetLessonCard({
     () => ({ key: target.id, label: target.label, sentenceIds: target.sentenceIds, occurrences: target.occurrences }),
     [target],
   );
+  const dueRecheck = useMemo(() => findDueTransferRecheck(events, target.id, new Date()), [events, target.id]);
+  const [rechecking, setRechecking] = useState(false);
   const canCompare = useMemo(
     () => pickCompareUses(compareTarget, episodeSentences, sentenceId, new Set()) !== undefined,
     [compareTarget, episodeSentences, sentenceId],
@@ -169,6 +171,7 @@ export function TargetLessonCard({
     setTransferText('');
     setTransferChecks({ usesTarget: false, newMeaning: false, sounds: false });
     setTransferModel(undefined);
+    setRechecking(dueRecheck !== undefined);
     setTransfer('writing');
   }
 
@@ -185,7 +188,7 @@ export function TargetLessonCard({
     onEvent({
       id: createId('sl_event'),
       visitId,
-      action: 'transfer_attempt',
+      action: rechecking ? 'transfer_recheck' : 'transfer_attempt',
       sentenceId,
       target: targetRef,
       // Success needs both: the target really used, and for a meaning other than this sentence's.
@@ -224,6 +227,7 @@ export function TargetLessonCard({
         {activity.practised > 0 || activity.comparedSentenceIds.size > 0 || activity.transferAttempts > 0 ? (
           <span className="muted">
             {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it${activity.independent > 0 ? `, ${activity.independent} with the word hidden` : ''})` : ''}
+            {activity.recheckAttempts > 0 ? ` · re-checked ${activity.recheckAttempts}× (${activity.recheckSucceeded} ok)` : ''}
             {activity.transferAttempts > 0 ? ` · own sentence ${activity.transferAttempts}× (${activity.transferSucceeded} new meaning)` : ''}
             {activity.comparedSentenceIds.size > 0 ? ` · compared with ${activity.comparedSentenceIds.size} other ${activity.comparedSentenceIds.size === 1 ? 'use' : 'uses'}` : ''}
           </span>
@@ -239,7 +243,7 @@ export function TargetLessonCard({
           </button>
         ) : null}
         <button type="button" onClick={() => (transfer === 'closed' || transfer === 'recorded' ? startTransfer() : setTransfer('closed'))}>
-          Use it in your own sentence
+          {dueRecheck ? 'Re-check: use it again from memory' : 'Use it in your own sentence'}
         </button>
         {canCompare ? (
           <button type="button" aria-expanded={!!pair} onClick={() => (pair ? setPair(undefined) : showCompare())}>
@@ -315,6 +319,12 @@ export function TargetLessonCard({
       ) : null}
       {transfer === 'writing' || transfer === 'checking' ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Use ${target.label} in your own sentence`} aria-live="polite">
+          {rechecking && dueRecheck ? (
+            <div>
+              {dueRecheck.daysAgo} {dueRecheck.daysAgo === 1 ? 'day' : 'days'} ago you wrote:{' '}
+              <span className="jp">{dueRecheck.answer}</span>. Without looking back, write a different one now.
+            </div>
+          ) : null}
           <div>
             Make up a new sentence that uses <span className="jp">{target.label}</span> for a <strong>different</strong> meaning from
             this one. Typing is enough — no audio or speaking needed.
@@ -347,7 +357,7 @@ export function TargetLessonCard({
         </div>
       ) : null}
       {transfer === 'recorded' ? (
-        <div className="muted" role="status">Noted as transfer practice (separate from saying the original meaning). Your review schedule is unchanged.</div>
+        <div className="muted" role="status">{rechecking ? 'Noted as a delayed re-check (separate from same-day practice).' : 'Noted as transfer practice (separate from saying the original meaning).'} Your review schedule is unchanged.</div>
       ) : null}
       {gap === 'recorded' ? (
         <div className="muted" role="status">Noted as gap practice. Your review schedule is unchanged.</div>

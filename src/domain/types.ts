@@ -1435,7 +1435,9 @@ export type SentenceLearningAction =
   | 'expression_attempt'
   | 'report_resolved'
   /** Learner wrote/said their own sentence using a target for a NEW meaning (not the original sentence's). Separate evidence from `expression_attempt`. */
-  | 'transfer_attempt';
+  | 'transfer_attempt'
+  /** A later-day repeat of `transfer_attempt` for the same target, written from memory. Separate evidence: delayed, not same-visit. */
+  | 'transfer_recheck';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
