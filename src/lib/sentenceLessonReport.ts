@@ -14,6 +14,8 @@ export interface SentenceLessonReport {
     sentencesSaidIndependently: number;
     writtenAttempts: number;
     spokenAttempts: number;
+    transferAttempts: number;
+    transferNewMeaning: number;
   };
   quality: { contentReports: number; practicedTargets: number; reportedSentences: number };
   backlog: { readyToRevisit: number; oldestDays: number | null };
@@ -77,6 +79,8 @@ export function buildSentenceLessonReport(
       sentencesSaidIndependently: independent.size,
       writtenAttempts: attempts.filter((event) => event.modality !== 'spoken').length,
       spokenAttempts: attempts.filter((event) => event.modality === 'spoken').length,
+      transferAttempts: recent.filter((event) => event.action === 'transfer_attempt').length,
+      transferNewMeaning: recent.filter((event) => event.action === 'transfer_attempt' && event.outcome === 'got_it').length,
     },
     quality: {
       contentReports: reports.length,

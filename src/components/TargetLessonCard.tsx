@@ -92,6 +92,10 @@ export function TargetLessonCard({
   const [pair, setPair] = useState<ReturnType<typeof pickCompareUses>>();
   const [reported, setReported] = useState<'another_answer_works' | 'poor_question'>();
   const [answerDraft, setAnswerDraft] = useState('');
+  const [transfer, setTransfer] = useState<'closed' | 'writing' | 'checking' | 'recorded'>('closed');
+  const [transferText, setTransferText] = useState('');
+  const [transferChecks, setTransferChecks] = useState({ usesTarget: false, newMeaning: false, sounds: false });
+  const [transferModel, setTransferModel] = useState<ReturnType<typeof pickCompareUses>>();
   const [seenNow, setSeenNow] = useState<Set<string>>(() => new Set());
 
   const targetRef = useMemo(
@@ -161,6 +165,43 @@ export function TargetLessonCard({
     setGapAnswer('');
   }
 
+  function startTransfer() {
+    setTransferText('');
+    setTransferChecks({ usesTarget: false, newMeaning: false, sounds: false });
+    setTransferModel(undefined);
+    setTransfer('writing');
+  }
+
+  // The model is another real occurrence, shown only after the attempt so it can't be copied;
+  // it is not counted as a Compare-uses exposure.
+  function checkTransfer() {
+    const exposed = new Set([...activity.comparedSentenceIds, ...seenNow]);
+    setTransferModel(pickCompareUses(compareTarget, episodeSentences, sentenceId, exposed));
+    setTransfer('checking');
+  }
+
+  function recordTransfer() {
+    const ticked = [transferChecks.usesTarget, transferChecks.newMeaning, transferChecks.sounds].filter(Boolean).length;
+    onEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'transfer_attempt',
+      sentenceId,
+      target: targetRef,
+      // Success needs both: the target really used, and for a meaning other than this sentence's.
+      outcome: transferChecks.usesTarget && transferChecks.newMeaning ? 'got_it' : 'needed_help',
+      assessmentSource: 'self',
+      modality: 'typed',
+      scaffold: 'none',
+      unitsExpressed: ticked,
+      unitsTotal: 3,
+      ...(transferText.trim() ? { learnerAnswer: transferText.trim().slice(0, 300) } : {}),
+      ...(transferModel ? { exposedSentenceId: transferModel.other.sentenceId } : {}),
+      quietMode,
+    });
+    setTransfer('recorded');
+  }
+
   function report(kind: 'another_answer_works' | 'poor_question') {
     onEvent({
       id: createId('sl_event'),
@@ -180,9 +221,10 @@ export function TargetLessonCard({
     <li className="stack" style={{ gap: '0.25rem' }}>
       <div>
         <strong className="jp">{target.label}</strong>
-        {activity.practised > 0 || activity.comparedSentenceIds.size > 0 ? (
+        {activity.practised > 0 || activity.comparedSentenceIds.size > 0 || activity.transferAttempts > 0 ? (
           <span className="muted">
             {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it${activity.independent > 0 ? `, ${activity.independent} with the word hidden` : ''})` : ''}
+            {activity.transferAttempts > 0 ? ` · own sentence ${activity.transferAttempts}× (${activity.transferSucceeded} new meaning)` : ''}
             {activity.comparedSentenceIds.size > 0 ? ` · compared with ${activity.comparedSentenceIds.size} other ${activity.comparedSentenceIds.size === 1 ? 'use' : 'uses'}` : ''}
           </span>
         ) : null}
@@ -196,6 +238,9 @@ export function TargetLessonCard({
             Fill the gap
           </button>
         ) : null}
+        <button type="button" onClick={() => (transfer === 'closed' || transfer === 'recorded' ? startTransfer() : setTransfer('closed'))}>
+          Use it in your own sentence
+        </button>
         {canCompare ? (
           <button type="button" aria-expanded={!!pair} onClick={() => (pair ? setPair(undefined) : showCompare())}>
             Compare uses
@@ -267,6 +312,42 @@ export function TargetLessonCard({
             </>
           )}
         </div>
+      ) : null}
+      {transfer === 'writing' || transfer === 'checking' ? (
+        <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Use ${target.label} in your own sentence`} aria-live="polite">
+          <div>
+            Make up a new sentence that uses <span className="jp">{target.label}</span> for a <strong>different</strong> meaning from
+            this one. Typing is enough — no audio or speaking needed.
+          </div>
+          <textarea lang="ja" aria-label="Your own sentence" rows={2} value={transferText} disabled={transfer === 'checking'} onChange={(event) => setTransferText(event.target.value)} />
+          {transfer === 'writing' ? (
+            <button type="button" onClick={checkTransfer}>Check it</button>
+          ) : (
+            <>
+              {transferModel ? (
+                <div className="stack" style={{ gap: '0.15rem' }}>
+                  <span className="muted">Another real use in this episode, for comparison:</span>
+                  <Highlighted excerpt={transferModel.other} />
+                </div>
+              ) : null}
+              <div className="muted">Judge it yourself — tick only what is true:</div>
+              {([
+                ['usesTarget', `It really uses ${target.label}`],
+                ['newMeaning', 'It says something different from the lesson sentence'],
+                ['sounds', 'It sounds natural as far as I can tell'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="row" style={{ gap: '0.4rem' }}>
+                  <input type="checkbox" checked={transferChecks[key]} onChange={(event) => setTransferChecks({ ...transferChecks, [key]: event.target.checked })} />
+                  {label}
+                </label>
+              ))}
+              <button type="button" onClick={recordTransfer}>Record this</button>
+            </>
+          )}
+        </div>
+      ) : null}
+      {transfer === 'recorded' ? (
+        <div className="muted" role="status">Noted as transfer practice (separate from saying the original meaning). Your review schedule is unchanged.</div>
       ) : null}
       {gap === 'recorded' ? (
         <div className="muted" role="status">Noted as gap practice. Your review schedule is unchanged.</div>

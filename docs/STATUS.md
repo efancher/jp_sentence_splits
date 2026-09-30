@@ -10,6 +10,28 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 6 first slice: "Use it in your own sentence"
+  (transfer).** Target lesson cards gain a typed-only path (no audio/speech
+  needed): write a new sentence using the target for a *different* meaning,
+  press "Check it" (an unseen real occurrence from the episode is then shown for
+  comparison, not counted as a Compare-uses exposure), self-tick "really uses
+  it" / "says something different" / "sounds natural". Logged as a new
+  `transfer_attempt` event (outcome got_it only when both of the first two are
+  ticked; `unitsExpressed/Total` = ticks of 3). It is deliberately separate from
+  `expression_attempt` and never feeds `practised`/`independent`;
+  `summariseTargetActivity` gained `transferAttempts/transferSucceeded` and
+  `/progress` shows "Own sentences with a new meaning". Lesson events only: no
+  Reviews/StudyItems/FSRS. Migration (unapplied) action check gained
+  `transfer_attempt`. Not built: delayed re-checks on later days, held-back
+  contexts, clause-sequencing, spoken transfer. Self-judged only.
+- **2026-09-30 — Migration rehearsal on a throwaway local Postgres.**
+  `scripts/migration-rehearsal/` (`apply.sh`, `behaviour.sql`, `roundtrip.ts`)
+  starts `supabase/postgres:15.8.1.060` in Docker (no production access; stubs
+  `auth.*` helpers and storage bucket columns the bare image lacks), applies all
+  36 migrations in order, checks every action/column constraint, RLS (other
+  users see/alter nothing, impersonated inserts rejected) and round-trips a fully
+  populated event per action through the real client mapper. All passed. It does
+  not test production data, audio files or the Supabase storage service.
 - **2026-09-30 — Repair workflow for flagged prompts.** `/progress` "Sentence
   lessons" panel lists open flagged prompts (sentence, target, report type, your
   answer) with "Open sentence" (lesson route), "Mark fixed" and "Dismiss". These

@@ -1433,7 +1433,9 @@ export type SentenceLearningAction =
   | 'content_report'
   | 'gist_check'
   | 'expression_attempt'
-  | 'report_resolved';
+  | 'report_resolved'
+  /** Learner wrote/said their own sentence using a target for a NEW meaning (not the original sentence's). Separate evidence from `expression_attempt`. */
+  | 'transfer_attempt';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).

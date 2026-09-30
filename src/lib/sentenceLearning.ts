@@ -94,10 +94,13 @@ export interface TargetActivitySummary {
   gotIt: number;
   neededHelp: number;
   comparedSentenceIds: Set<string>;
+  /** Own-sentence transfer attempts for this target, and those the learner judged as using it for a new meaning. Never mixed into `practised`/`independent`. */
+  transferAttempts: number;
+  transferSucceeded: number;
 }
 
 export function summariseTargetActivity(events: SentenceLearningEvent[], targetKey: string): TargetActivitySummary {
-  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set() };
+  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set(), transferAttempts: 0, transferSucceeded: 0 };
   for (const event of events) {
     if (event.target?.key !== targetKey) continue;
     if (event.action === 'target_practice') {
@@ -105,6 +108,9 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
       if (event.outcome === 'got_it') summary.gotIt += 1;
       if (event.outcome === 'got_it' && event.support === 'target_masked') summary.independent += 1;
       if (event.outcome === 'needed_help') summary.neededHelp += 1;
+    } else if (event.action === 'transfer_attempt') {
+      summary.transferAttempts += 1;
+      if (event.outcome === 'got_it') summary.transferSucceeded += 1;
     } else if (event.action === 'compare_uses_viewed' && event.exposedSentenceId) {
       summary.comparedSentenceIds.add(event.exposedSentenceId);
     }

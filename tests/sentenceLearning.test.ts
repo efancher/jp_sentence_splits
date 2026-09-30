@@ -68,6 +68,16 @@ describe('summariseTargetActivity', () => {
     expect(summary).toMatchObject({ practised: 2, gotIt: 1, neededHelp: 1 });
     expect([...summary.comparedSentenceIds]).toEqual(['b']);
   });
+
+  it('keeps own-sentence transfer separate from practice and independence', () => {
+    const withTransfer: SentenceLearningEvent[] = [
+      ...events,
+      { ...base, id: '7', action: 'transfer_attempt', target, outcome: 'got_it' },
+      { ...base, id: '8', action: 'transfer_attempt', target, outcome: 'needed_help' },
+    ];
+    const summary = summariseTargetActivity(withTransfer, 'k');
+    expect(summary).toMatchObject({ practised: 2, gotIt: 1, transferAttempts: 2, transferSucceeded: 1 });
+  });
 });
 
 describe('logSentenceLearningEvent', () => {

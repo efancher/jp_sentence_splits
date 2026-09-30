@@ -184,7 +184,7 @@ Phase 2 - activities inside the sentence + learning events (first slice done)
 - [ ] Contextual target selection; promote practised target into durable tracking; content-defect reports
 
 Phase 4 DONE 2026-09-30 ("Say it in Japanese", cue ladder, revisit list, shadowing link; see STATUS). Phase 3 DONE 2026-09-30 (journey strip, help levels; see STATUS). Earlier slices: targeted masking ("Fill the gap") a whole-sentence gist check (`gist_check`, no target) and a derived per-sentence progress line (see STATUS); remaining
-Phase 5 first slice DONE 2026-09-30 (flagged `sentence_learning` planner step; see STATUS). Phases 5 (remainder) and 6 remain.
+Phase 5 DONE 2026-09-30 (planner step, revisits, outcome report, pause, help-level recording, flagged-prompt triage; see STATUS). Phase 6 first slice DONE (own-sentence transfer, `transfer_attempt`); delayed re-checks, held-back contexts and clause sequencing remain.
 Phases 3-6 (mostly not started): support fading + sentence progress; supported/independent expression and
 shadowing; planner `sentence_learning`; transfer/compare uses. Also open:
 per-chunk source spans, long-chapter virtualization, browser test for the Reader

@@ -228,6 +228,11 @@ export function ProgressPage() {
             hint={`Attempts: written ${lessonReport.outcomes.writtenAttempts}, spoken ${lessonReport.outcomes.spokenAttempts}. Self-judged.`}
           />
           <StatRow
+            label="Own sentences with a new meaning"
+            value={`${lessonReport.outcomes.transferNewMeaning} of ${lessonReport.outcomes.transferAttempts}`}
+            hint="Using a pattern for a different meaning than the lesson sentence. Self-judged, and counted separately from saying the original meaning."
+          />
+          <StatRow
             label="Waiting for a fresh try"
             value={
               lessonReport.backlog.oldestDays === null
