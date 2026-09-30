@@ -123,6 +123,12 @@ npm run build
   dist/review-demo.json https://codex-dev.tailfbd89c.ts.net:8443
 ```
 
+To also offer the exported real episode (text only; needs `/tmp/real-chapter`,
+which is never committed), run after the demo step:
+`./node_modules/.bin/tsx scripts/generate-real-episode-backup.ts dist/real-episode.json https://codex-dev.tailfbd89c.ts.net:8443`
+and open `https://codex-dev.tailfbd89c.ts.net:8444/real-episode.html`. Delete
+`dist/real-episode.*` when the trial is done.
+
 The app's offline navigation fallback intercepts standalone HTML on its own
 origin. **Do not give the user the sample HTML on port 8443.** Port 8444 is the
 separate download origin, with links back to the app on 8443. Test with an
