@@ -432,6 +432,7 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     comprehension_check_chosen_index: review.comprehensionCheckChosenIndex ?? null,
     pitch_production_measured_count: review.pitchProductionMeasuredCount ?? null,
     pitch_production_mismatch_count: review.pitchProductionMismatchCount ?? null,
+    presentation: review.presentation ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -468,6 +469,7 @@ export function remoteToReview(row: Record<string, unknown>): Review {
       (row.pitch_production_measured_count as number | null) ?? undefined,
     pitchProductionMismatchCount:
       (row.pitch_production_mismatch_count as number | null) ?? undefined,
+    presentation: (row.presentation as Review['presentation'] | null) ?? undefined,
   };
 }
 

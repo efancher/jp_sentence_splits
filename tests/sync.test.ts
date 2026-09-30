@@ -867,6 +867,17 @@ describe('sync mappers', () => {
     expect(remoteToReview(withoutPrediction).predictedRetrievability).toBeUndefined();
   });
 
+  it('round-trips review presentation evidence and leaves it null when absent', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const base: Review = { id: 'review_p', studyItemId: 'study_1', timestamp: '2026-09-30T00:00:00.000Z', rating: 'good' };
+    const presentation = { layout: 'chapter' as const, documentSentenceCount: 8, layoutSwitched: true };
+    const remote = reviewToRemote({ ...base, presentation }, 'user-1', 1);
+    expect(remote.presentation).toEqual(presentation);
+    expect(remoteToReview(remote).presentation).toEqual(presentation);
+    expect(reviewToRemote(base, 'user-1', 1).presentation).toBeNull();
+    expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).presentation).toBeUndefined();
+  });
+
   it('round-trips comprehension-check and pitch-production evidence through remote shape', async () => {
     const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
     const review: Review = {

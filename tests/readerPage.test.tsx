@@ -128,6 +128,30 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     expect(screen.getByText(/No native audio for this chapter yet\./)).toBeInTheDocument();
   });
 
+  it('offers an optional whole-episode focus draft that never blocks reading', async () => {
+    await seedBook();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.vocabularyItems.add({ id: 'v-1', expression: '図書館', reading: 'としょかん', meaning: 'library', createdAt: now, updatedAt: now });
+    await db.sentenceVocabulary.bulkAdd(['sent-1', 'sent-2'].map((sentenceId) => ({
+      id: `sv-${sentenceId}`, sentenceId, vocabularyItemId: 'v-1', createdAt: now, updatedAt: now,
+    })));
+    renderReaderPage('/books/book-1/read');
+
+    await screen.findByText('本を読みます。');
+    const summary = await screen.findByText('Suggested focus for this book');
+    expect(summary.closest('details')).toHaveTextContent('図書館');
+    expect(summary.closest('details')).toHaveTextContent('Appears in 2 sentences');
+    expect(await db.studyItems.count()).toBe(0);
+  });
+
+  it('shows no focus panel when nothing recurs', async () => {
+    await seedBook();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('本を読みます。');
+    expect(screen.queryByText(/Suggested focus/)).not.toBeInTheDocument();
+  });
+
   it('does not offer a play button for a sentence with no native audio', async () => {
     await seedBook();
     renderReaderPage('/books/book-1/read');

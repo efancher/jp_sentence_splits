@@ -4,7 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
-import { getDb, readSettings } from '../db/repository';
+import { getDb, getEpisodeFocus, readSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -67,6 +67,11 @@ export function ReaderPage() {
       : null;
     return { book, chapter, rows, audioRows };
   }, [bookId, chapterId]);
+
+  const focus = useLiveQuery(
+    () => getEpisodeFocus(bookId, chapterId).catch(() => null),
+    [bookId, chapterId],
+  );
 
   const matchingSourceId =
     data?.chapter?.sourceId ??
@@ -227,6 +232,30 @@ export function ReaderPage() {
           </select>
         </label>
       </div>
+      {focus && (focus.focus.length > 0 || focus.glossOnly.length > 0) ? (
+        <details className="episode-focus">
+          <summary>Suggested focus for this {chapter ? 'episode' : 'book'}</summary>
+          <p className="muted">
+            A draft from what recurs across the whole {chapter ? 'episode' : 'book'}. Optional: nothing here gates
+            reading, and nothing is scheduled.
+          </p>
+          <ul>
+            {focus.focus.map((target) => (
+              <li key={`${target.kind}:${target.id}`}>
+                <strong className="jp">{target.label}</strong>
+                <span className="muted"> ({target.kind === 'grammar' ? 'grammar' : 'word'}) {target.detail}</span>
+                <div className="muted">{target.reasons.join(' · ')}</div>
+              </li>
+            ))}
+          </ul>
+          {focus.glossOnly.length > 0 ? (
+            <p className="muted">
+              Gloss only (interchangeable discourse wording):{' '}
+              <span className="jp">{focus.glossOnly.map((item) => item.label).join('、')}</span>
+            </p>
+          ) : null}
+        </details>
+      ) : null}
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}

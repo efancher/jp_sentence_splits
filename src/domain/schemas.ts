@@ -292,6 +292,12 @@ export const reviewAssistanceSchema = z.enum([
 
 export const reviewSourceSchema = z.enum(['scheduled_review', 'natural_encounter']);
 
+export const reviewPresentationSchema = z.object({
+  layout: z.enum(['chapter', 'sentence']),
+  documentSentenceCount: z.number().int().nonnegative().optional(),
+  layoutSwitched: z.boolean().optional(),
+});
+
 export const reviewSchema = z.object({
   id: z.string(),
   studyItemId: z.string(),
@@ -304,6 +310,7 @@ export const reviewSchema = z.object({
   assistance: z.array(reviewAssistanceSchema).optional(),
   source: reviewSourceSchema.optional(),
   contextSentenceId: z.string().optional(),
+  presentation: reviewPresentationSchema.optional(),
 });
 
 export const vocabularyConfusionTypeSchema = z.enum([

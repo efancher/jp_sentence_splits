@@ -10,6 +10,46 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 0 slice: review-presentation evidence + episode focus
+  draft.** On `feat/chapter-review`; not merged or deployed.
+  - **Presentation evidence.** `Review.presentation` (`layout`,
+    `documentSentenceCount`, `layoutSwitched`) is written on the *same* single
+    review row by `recordReview` for `reading_retrieval`, vocabulary `cloze` and
+    `grammar_recognition`; no second event table and no duplicate grade. It
+    records the layout in effect at grading, how many source sentences were
+    actually displayed (1 = fell back to the lone sentence) and whether the
+    learner switched layouts on that card. It never affects FSRS or eligibility.
+    Additive: Dexie needs no upgrade (unindexed), zod backup schema and sync
+    mappers updated, migration `20260930000000_review_presentation.sql` adds a
+    nullable `reviews.presentation jsonb` (applies with the merge to main, not
+    before). Other card types leave it unset.
+  - **Episode focus draft.** `src/lib/episodeFocus.ts` (`buildEpisodeFocus`) +
+    `getEpisodeFocus(bookId, chapterId?)` derive a bounded (6) focus set from
+    existing `SentenceVocabulary`/`SentenceGrammar` links: recurrence across
+    distinct sentences, extra credit for multiple surface forms, grammar
+    outranking an equally frequent word, retained items (review state,
+    stability >= 21 d) skipped, single-occurrence items not proposed, and short
+    kana interjections/connectives listed as gloss-only rather than recall
+    targets. Shown as an optional collapsed "Suggested focus" panel on the
+    Reader (`/books/:id/read[?chapter=]`); read-only, unscheduled, ungated,
+    nothing persisted. Explicitly a heuristic first pass: it has no
+    "needed to understand the episode" signal, contrast pairs or AI reasons.
+  - **Verified vs. assumed.** Read the import paths: `commitImport` dedupes
+    sentences by `normalizedKey`; `commitSeriesEpisodeImport` reuses the series
+    book and matches chapters by source id, so re-importing an episode is
+    designed to be idempotent (not re-tested here). No preparation
+    status/AI-output persistence was added, so the "failed preparation" state
+    does not exist yet. Found while inspecting: the backup `reviewSchema`
+    (`src/domain/schemas.ts`) omits several existing optional Review fields
+    (pitch shapes, `predictedRetrievability`, comprehension-check and
+    pitch-production counts), so a backup restore would drop them; only the
+    new field was added here. Worth its own fix.
+  - **Validation.** `npm run check` and the affected suites (review document,
+    review page, reader, sync, episode focus); Docker Playwright
+    (`e2e/review-document.spec.ts`, Chromium + WebKit, 390px/1280px) now also
+    asserts the persisted presentation (`layout: chapter`, `layoutSwitched`,
+    document size > 1). Preview `dist` rebuilt; sample assets regenerated.
+
 - **2026-09-30 — Handoff checkpoint.** The user tried the private preview and
   said “looks good.” The first review-layout slice is implemented and available
   privately, with the original layout retained for comparison; the broader

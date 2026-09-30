@@ -12,12 +12,15 @@ export function ReviewDocumentText({
   target,
   revealed,
   cloze,
+  onDocumentShown,
 }: {
   sentence: Sentence;
   bookId?: string;
   target?: ReviewTextSpan;
   revealed: boolean;
   cloze?: { vocabularyItemId: string; expression: string; surface: string };
+  /** Reports how many source sentences are visible (1 = fell back to the lone sentence). */
+  onDocumentShown?: (sentenceCount: number) => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const activeRow = useRef<HTMLParagraphElement>(null);
@@ -49,6 +52,11 @@ export function ReviewDocumentText({
     container.scrollTop += row.getBoundingClientRect().top - container.getBoundingClientRect().top
       - container.clientHeight / 2 + row.clientHeight / 2;
   }
+
+  const shownCount = result?.key === queryKey ? rows.length : undefined;
+  useEffect(() => {
+    if (shownCount !== undefined) onDocumentShown?.(shownCount);
+  }, [shownCount, queryKey]);
 
   useEffect(() => { returnToTarget(); }, [queryKey, document?.activeMembershipId]);
 

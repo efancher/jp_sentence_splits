@@ -794,6 +794,22 @@ export type ReviewAssistance =
  */
 export type ReviewSource = 'scheduled_review' | 'natural_encounter';
 
+/**
+ * How a review was presented (sentence-first plan, Phase 0 evidence). Purely
+ * informational: it never affects FSRS scheduling or the grade, and is stored
+ * on the one Review row rather than in a second event log, so there is no
+ * duplicate grade write. Absent on reviews from card types/versions that don't
+ * record it.
+ */
+export interface ReviewPresentation {
+  /** Layout selected when the card was graded. */
+  layout: 'chapter' | 'sentence';
+  /** Chapter layout only: sentences in the source document actually shown; 0 = fell back to the lone sentence. */
+  documentSentenceCount?: number;
+  /** True when the learner changed the layout while this card was open. */
+  layoutSwitched?: boolean;
+}
+
 /** Append-only — never updated after insert. Sync-conflict-free by construction. */
 export interface Review {
   id: string;
@@ -857,6 +873,7 @@ export interface Review {
    */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
+  presentation?: ReviewPresentation;
 }
 
 /**

@@ -136,6 +136,17 @@ uses a separate localhost preview on **4173**, not the user preview on 4174.
 The worktree's `node_modules` symlink points to the main checkout; Docker needs
 both mounts documented in the README. Use fresh synthetic browser data.
 
+## Phase 0 slice completed (2026-09-30, later)
+
+`Review.presentation` evidence and a derived, read-only episode focus panel on
+the Reader are implemented (see STATUS). Not done from Phase 0: persisted
+preparation status (pending/partial/ready/failed/stale), the AI episode-analysis
+round-trip and its span/ID validation, learner accept/edit/dismiss of
+suggestions, target-quality decisions beyond the gloss-only heuristic, the
+real-episode fixture set, and the backup-schema field gap noted in STATUS.
+Next: the ungated guided passage walkthrough (Phase 1), then persisted
+preparation records with the inspectable AI round-trip.
+
 ## Remaining work and suggested continuation
 
 Only the first review presentation slice is implemented. Guided sentence

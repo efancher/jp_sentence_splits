@@ -1,4 +1,5 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
+import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
 import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
@@ -36,6 +37,7 @@ import type {
   PlannerStepStatus,
   ReferenceAlignment,
   Review,
+  ReviewPresentation,
   ReviewAssistance,
   ReviewRating,
   ReviewSource,
@@ -5340,6 +5342,8 @@ export async function recordReview(input: {
   /** `pitch_accent_production` card only — see `Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`. */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
+  /** How the card was presented; informational only, never affects scheduling. */
+  presentation?: ReviewPresentation;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -5383,6 +5387,7 @@ export async function recordReview(input: {
     comprehensionCheckChosenIndex: input.comprehensionCheckChosenIndex,
     pitchProductionMeasuredCount: input.pitchProductionMeasuredCount,
     pitchProductionMismatchCount: input.pitchProductionMismatchCount,
+    presentation: input.presentation,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -8732,6 +8737,47 @@ export async function getReviewDocument(
     rows: documentRows,
     vocabularyForms: links.flatMap((link) => link.surfaceForm ? [link.surfaceForm] : []),
   };
+}
+
+/** Review-state stability (days) above which a word/pattern is treated as already retained. */
+const EPISODE_FOCUS_KNOWN_STABILITY_DAYS = 21;
+
+/**
+ * Derived whole-episode teaching priorities for a book chapter (or whole book).
+ * Read-only: no writes, no scheduling, no gating — see `buildEpisodeFocus`.
+ */
+export async function getEpisodeFocus(bookId: string, chapterId?: string): Promise<EpisodeFocus> {
+  const db = getDb();
+  const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
+    .filter((row) => !chapterId || row.chapterId === chapterId);
+  const sentenceIds = memberships.map((row) => row.sentenceId);
+  const [vocabularyLinks, grammarLinks] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const vocabularyIds = [...new Set(vocabularyLinks.map((link) => link.vocabularyItemId))];
+  const patternIds = [...new Set(grammarLinks.map((link) => link.grammarPatternId))];
+  const [vocabularyItems, grammarPatterns, vocabularyStudy, grammarStudy] = await Promise.all([
+    db.vocabularyItems.bulkGet(vocabularyIds),
+    db.grammarPatterns.bulkGet(patternIds),
+    db.studyItems.where('subjectType').equals('vocabularyItem').filter((item) => vocabularyIds.includes(item.subjectId)).toArray(),
+    db.studyItems.where('subjectType').equals('grammarPattern').filter((item) => patternIds.includes(item.subjectId)).toArray(),
+  ]);
+  const retained = (items: StudyItem[]) =>
+    new Set(
+      items
+        .filter((item) => item.fsrsState.state === 'review' && item.fsrsState.stability >= EPISODE_FOCUS_KNOWN_STABILITY_DAYS)
+        .map((item) => item.subjectId),
+    );
+  return buildEpisodeFocus({
+    sentenceIds,
+    vocabularyLinks,
+    vocabularyItems: vocabularyItems.filter((item): item is VocabularyItem => Boolean(item)),
+    grammarLinks,
+    grammarPatterns: grammarPatterns.filter((item): item is GrammarPattern => Boolean(item)),
+    knownVocabularyItemIds: retained(vocabularyStudy),
+    knownGrammarPatternIds: retained(grammarStudy),
+  });
 }
 
 async function getReadingContextForSentence(sentenceId: string): Promise<ReadingContext> {

@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ReviewDocumentText } from '../src/components/ReviewDocumentText';
 import { resetDbForTests } from '../src/db/database';
@@ -95,6 +95,15 @@ describe('chapter review documents', () => {
     rerender(<ReviewDocumentText {...props} revealed />);
     expect(within(source).getByText('読みます')).toBeInTheDocument();
     expect(within(source).getByText('昨日は読んだ。')).toBeInTheDocument();
+  });
+
+  it('reports how many source sentences were shown, falling back to one', async () => {
+    const target = await seedChapter();
+    const shown = vi.fn();
+    const { rerender } = render(<ReviewDocumentText sentence={target} revealed onDocumentShown={shown} />);
+    await waitFor(() => expect(shown).toHaveBeenLastCalledWith(8));
+    rerender(<ReviewDocumentText sentence={sentence('orphan', '新しい問題。')} revealed onDocumentShown={shown} />);
+    await waitFor(() => expect(shown).toHaveBeenLastCalledWith(1));
   });
 
   it('never displays the previous document while a different card loads', async () => {

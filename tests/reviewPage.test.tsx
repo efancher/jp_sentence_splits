@@ -637,6 +637,8 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await getDb().reviews.count()).toBe(1);
     });
+    // Sentence-level cards are not part of the chapter-layout comparison.
+    expect((await getDb().reviews.toArray())[0]?.presentation).toBeUndefined();
   });
 
   it('does not double-record a review on a rapid double-click', async () => {
@@ -1125,6 +1127,8 @@ describe('ReviewPage', () => {
     await waitFor(async () => expect(await db.reviews.count()).toBe(2));
     const reviews = await db.reviews.toArray();
     expect(reviews.map((review) => review.contextSentenceId)).toEqual(['sent-1', 'sent-1']);
+    expect(reviews.map((review) => review.presentation?.layout)).toEqual(['chapter', 'chapter']);
+    expect(reviews.every((review) => review.presentation?.layoutSwitched === undefined)).toBe(true);
   });
 
   it('offers a one-tap replay of a prior shadowing attempt on a cloze reveal (docs/ROADMAP.md "ambient connective tissue")', async () => {

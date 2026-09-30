@@ -92,5 +92,18 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
       return count;
     })).toBe(1);
+    // Presentation evidence is on that one review: final layout, document size, and the switch.
+    const presentation = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const request = indexedDB.open('satori-glossbook'); request.onsuccess = () => resolve(request.result);
+      });
+      const rows = await new Promise<Array<{ presentation?: unknown }>>((resolve) => {
+        const request = db.transaction('reviews').objectStore('reviews').getAll(); request.onsuccess = () => resolve(request.result);
+      });
+      db.close();
+      return rows[0]?.presentation;
+    });
+    expect(presentation).toMatchObject({ layout: 'chapter', layoutSwitched: true });
+    expect((presentation as { documentSentenceCount: number }).documentSentenceCount).toBeGreaterThan(1);
   });
 }

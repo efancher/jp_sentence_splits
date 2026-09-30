@@ -1101,8 +1101,13 @@ export function ReviewPage() {
     try { return localStorage.getItem('satori-glossbook:review-layout') !== 'original'; }
     catch { return true; }
   });
-  const changeReviewLayout = (chapter: boolean) => {
+  // Presentation evidence for the card being answered; reset when the card changes.
+  // Keyed by study item id so a child's report can't be wiped by the card-change reset effect.
+  const [documentShown, setDocumentShown] = useState<{ studyItemId: string; count: number }>();
+  const [layoutSwitchedFor, setLayoutSwitchedFor] = useState<string>();
+  const changeReviewLayout = (chapter: boolean, studyItemId?: string) => {
     setChapterView(chapter);
+    setLayoutSwitchedFor(studyItemId);
     try { localStorage.setItem('satori-glossbook:review-layout', chapter ? 'chapter' : 'original'); }
     catch { /* The view still works when browser storage is unavailable. */ }
   };
@@ -1822,6 +1827,16 @@ export function ReviewPage() {
         // miss can be traced back to a sentence — see "cross-activity error
         // routing" (docs/ROADMAP.md "Possibilities").
         contextSentenceId: current.sentence.id,
+        presentation: (['reading_retrieval', 'cloze', 'grammar_recognition'] as StudyActivityType[]).includes(current.studyItem.activityType)
+          ? {
+              layout: chapterView ? 'chapter' : 'sentence',
+              documentSentenceCount:
+                chapterView && documentShown?.studyItemId === current.studyItem.id
+                  ? documentShown.count
+                  : undefined,
+              layoutSwitched: layoutSwitchedFor === current.studyItem.id ? true : undefined,
+            }
+          : undefined,
       });
       setQueue((q) => q.slice(1));
 
@@ -2037,7 +2052,7 @@ export function ReviewPage() {
             {(['reading_retrieval', 'cloze', 'grammar_recognition'] as StudyActivityType[]).includes(current.studyItem.activityType) ? (
               <label className="row">
                 Review layout
-                <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter')}>
+                <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter', current.studyItem.id)}>
                   <option value="original">Original · sentence</option>
                   <option value="chapter">New · chapter</option>
                 </select>
@@ -2059,6 +2074,7 @@ export function ReviewPage() {
             ) : current.target ? (
               <VocabularyTargetCard
                 chapterView={chapterView}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 key={current.studyItem.id}
                 activityType={current.studyItem.activityType}
                 sentence={current.sentence}
@@ -2136,6 +2152,7 @@ export function ReviewPage() {
             ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
               <GrammarRecognitionCard
                 chapterView={chapterView}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 key={current.studyItem.id}
                 candidate={current.grammar}
                 revealed={revealed}
@@ -2420,6 +2437,7 @@ function VocabularyTargetCard({
   link,
   context,
   chapterView,
+  onDocumentShown,
   revealed,
   onReveal,
 }: {
@@ -2431,6 +2449,7 @@ function VocabularyTargetCard({
   link?: SentenceVocabulary;
   context: ReadingContext | undefined;
   chapterView: boolean;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onReveal: () => void;
 }) {
@@ -2472,6 +2491,7 @@ function VocabularyTargetCard({
           bookId={context?.bookId}
           target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
           revealed={revealed}
+          onDocumentShown={onDocumentShown}
           cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
         />
       ) : (
@@ -3595,11 +3615,13 @@ function ContrastivePairCard({
 function GrammarRecognitionCard({
   candidate,
   chapterView,
+  onDocumentShown,
   revealed,
   onReveal,
 }: {
   candidate: GrammarReviewCandidate;
   chapterView: boolean;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onReveal: () => void;
 }) {
@@ -3648,6 +3670,7 @@ function GrammarRecognitionCard({
           bookId={readingContext.bookId}
           target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
           revealed={revealed}
+          onDocumentShown={onDocumentShown}
         />
       ) : (
         <>
