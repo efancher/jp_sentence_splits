@@ -10,6 +10,12 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Session checkpoint.** The user pasted a real external-AI reply
+  for the real episode and it saved after the two fixes below. Everything is
+  pushed to draft PR #1 (no merge/deploy). Pick-up notes and owed housekeeping
+  (delete the real-episode copy from the preview; two unfixed production data
+  defects) are in `docs/SENTENCE_FIRST_HANDOFF.md` "Checkpoint 2026-09-30".
+
 - **2026-09-30 — Unlisted vocabulary/grammar targets are accepted.** In the
   user's first real reply, 5 of 8 targets were rejected ("A grammar target needs
   a ref…"): the AI correctly labelled 〜時に, 〜たり, 〜すぎる, 〜ように as grammar

@@ -10,7 +10,7 @@ learning redesign or authorization to merge/deploy to production.
 - Active implementation worktree: `/home/ed/projects/jp_sentence_splits-chapter-review`.
 - Branch: `feat/chapter-review`.
 - Draft PR: <https://github.com/efancher/jp_sentence_splits/pull/1>.
-- Implementation HEAD before this documentation checkpoint: `e039dad`.
+- Implementation HEAD at this checkpoint: `26741b4` plus the docs commit that follows it (see `git log`).
 - Read `CLAUDE.md`, `docs/STATUS.md`, `docs/ARCHITECTURE.md`,
   `docs/AI_OVERVIEW.md`, `docs/ROADMAP.md`, and especially
   `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. Follow local worktree instructions;
@@ -160,12 +160,12 @@ derived episode focus panel on the Reader.
 
 Phase 0 leftovers
 - [x] Persisted preparation status (ready/partial/failed; stale derived; pending = absent), separate from study progress — chapter-scoped only
-- [x] Inspectable AI episode-analysis round trip with ID/span validation and provenance (paste-back; not yet tried on a real episode)
+- [x] Inspectable AI episode-analysis round trip with ID/span validation and provenance (paste-back; tried by the user on a real episode 2026-09-30: worked after the curly-quote and unlisted-target fixes)
 - [x] One combined "episode pack" prompt (focus targets + missing translations; ordered parts for long episodes) landed on after series import, replacing the need for the AI API for those jobs; per-chunk why-notes still need a saved analysis
 - [x] Learner accept / note / dismiss of prepared targets (derived focus panel itself is not editable)
 - [x] Chapterless books: on-demand real "Whole book" chapter (Reader button)
 - [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
-- [~] Real-episode fixture set: one real episode tried locally (Teppei #1461, `e2e/real-chapter.spec.ts`, data kept out of git); still need repeated-filler / bad-alignment / very long cases and a real external-AI reply
+- [~] Real-episode fixture set: one real episode tried locally (Teppei #1461, `e2e/real-chapter.spec.ts`, data kept out of git); still need repeated-filler / bad-alignment / very long cases (a real external-AI reply has now worked once)
 - [x] Re-test idempotent re-import of the same episode (unit test; not against a real episode)
 - [x] Fix backup `reviewSchema` dropping existing optional Review fields
 
@@ -189,6 +189,35 @@ shadowing; planner `sentence_learning`; transfer/compare uses. Also open:
 per-chunk source spans, long-chapter virtualization, browser test for the Reader
 focus panel, live re-check of speech/mining services before relying on them.
 Constraints: no TTS, native audio preferred, no merge/deploy without approval.
+
+## Checkpoint 2026-09-30 (end of session): where to pick up
+
+State: everything is committed and pushed to the draft PR; working tree clean.
+The user imported the real episode (Teppei #1461, text only) into the private
+preview and successfully pasted a real external-AI reply after two fixes found
+by that trial. They have NOT reviewed the walkthrough's Practise this / Compare
+uses on their phone yet, and have not said whether the episode pack prompt felt
+right beyond "that worked".
+
+Housekeeping owed:
+- `dist/real-episode.*` in the preview holds a copy of the user's real episode.
+  Delete it (and `/tmp/real-chapter`) when the user is done trialling.
+- Production data defects found, deliberately NOT touched (need the user's OK
+  and a reviewed script): a live `book_sentences` row (position 421) whose
+  sentence was soft-deleted 2026-09-23, and the shared sign-off sentence at
+  position 420 rendering before the intro.
+
+Suggested next slices (none confirmed by the user):
+1. Ask the user how Practise this / Compare uses felt on the real episode; adjust.
+2. Decide with the user whether `sentenceLearningEvents` should sync/back up
+   (needs a Supabase migration) or stay device-local.
+3. Phase 1 leftover: move secondary controls into an accessible sheet.
+4. Phase 2 leftovers: contextual target selection, promoting a practised target
+   into durable tracking, "Another answer works"/"Poor question" reports.
+5. Saved chunk-level analysis so walkthrough roles are not generic.
+6. Phases 3-6 per `docs/SENTENCE_FIRST_LEARNING_PLAN.md`.
+Note: the derived (pre-preparation) focus strip favours generic verbs; consider
+prompting for preparation sooner or ranking better.
 
 ## Remaining work and suggested continuation
 
