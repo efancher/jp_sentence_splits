@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { glossableWords, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { glossableWords, locateTargetSpan, maskSpan, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -148,5 +148,27 @@ describe('selectSentenceTargets', () => {
     const { shown, hidden } = selectSentenceTargets(targets, events, 3);
     expect(shown.map((t) => t.id)).toEqual(['c', 'd', 'e']);
     expect(hidden.map((t) => t.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('gap practice', () => {
+  it('masks the validated occurrence, not the first text match', () => {
+    const sentence = { id: 's', japanese: '本を読んで、本を買う。', position: 1 };
+    const target = { key: 'k', label: '本を', sentenceIds: ['s'], occurrences: [{ sentenceId: 's', start: 6, end: 8 }] };
+    const span = locateTargetSpan(target, sentence)!;
+    expect(maskSpan(sentence.japanese, span)).toBe('本を読んで、＿＿＿買う。');
+    expect(locateTargetSpan({ ...target, occurrences: undefined }, sentence)).toEqual({ start: 0, end: 2 });
+    expect(locateTargetSpan({ ...target, label: '猫', occurrences: undefined }, sentence)).toBeUndefined();
+  });
+
+  it('only a masked got-it counts as independent; revealed-explanation practice never does', () => {
+    const base = { timestamp: 't', visitId: 'v', action: 'target_practice' as const, bookId: 'b', sentenceId: 's', target: { kind: 'vocabulary' as const, key: 'k', label: 'k' } };
+    const events: SentenceLearningEvent[] = [
+      { ...base, id: '1', support: 'explanation_hidden', outcome: 'got_it' },
+      { ...base, id: '2', support: 'target_masked', outcome: 'got_it' },
+      { ...base, id: '3', support: 'target_masked', outcome: 'needed_help' },
+    ];
+    const summary = summariseTargetActivity(events, 'k');
+    expect(summary).toMatchObject({ practised: 3, gotIt: 2, independent: 1, neededHelp: 1 });
   });
 });

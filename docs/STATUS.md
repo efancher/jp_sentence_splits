@@ -10,6 +10,20 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 3 first slice: "Fill the gap" (targeted masking).** Each
+  focus target whose span can be located gets a "Fill the gap" button in the
+  walkthrough: the sentence is shown with exactly that occurrence masked (the
+  validated span, so a repeated word masks the right one), the learner
+  thinks/types/says it, presses "Show the answer", then self-judges "I had it
+  before looking" or "I needed to see it". Logged as `target_practice` with new
+  `support: 'target_masked'` (migration check constraint edited in place; still
+  unapplied). Only a masked got-it counts as "with the word hidden" in the
+  per-target summary; revealed-explanation practice never does, and the typed
+  text is shown for comparison but never auto-rates. No Review/StudyItem/FSRS
+  effect. Translation is shown as the meaning cue while gapped, so this is
+  supported, not fully independent, recall. Not built from Phase 3: whole-sentence
+  comprehension checks, support presets, component coverage, sentence progress %.
+
 - **2026-09-30 — Flagged prompts are visible.** The Episode preparation panel lists this episode's `content_report` events (target, report type, your own answer, the sentence) under "Flagged prompts". Read-only; still no repair workflow. Why durable-tracking promotion is not built is in the handoff's decision note.
 
 - **2026-09-30 — Reader book-style restyle (light).** Sentence rows sit in a narrow centred column (`.reader-book`, 44rem) separated by hairlines instead of boxed cards; common controls (Play, Speed, Text) were already at the top. The preparation panel and suggested focus stay as native `<details>` disclosures rather than moving into a dialog: they are already keyboard/screen-reader accessible and the pack e2e depends on them. Checked via screenshots at 390px and 1280px (Chromium); the real episode not re-viewed.

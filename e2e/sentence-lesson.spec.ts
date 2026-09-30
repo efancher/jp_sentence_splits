@@ -73,6 +73,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(compare).not.toContainText('Translation 1.');
     await compare.getByRole('button', { name: 'Show translation' }).last().click();
     await expect(compare).toContainText('Translation 1.');
+    // Fill the gap: the occurrence is masked until the learner asks to see it.
+    await panel.getByRole('button', { name: 'Fill the gap' }).click();
+    const gapBox = panel.getByLabel('Fill the gap for 本を');
+    await expect(gapBox).toContainText('＿＿＿読みます。');
+    await expect(gapBox.getByText('本を', { exact: true })).toHaveCount(0);
+    await gapBox.getByLabel('Your answer for the gap').fill('本を');
+    await gapBox.getByRole('button', { name: 'Show the answer' }).click();
+    await expect(gapBox).toContainText('Answer:');
+    await gapBox.getByRole('button', { name: 'I had it before looking' }).click();
+    await expect(panel.getByText(/Noted as gap practice/)).toBeVisible();
     // Content reports: flagged for repair, never a failed practice.
     await panel.getByRole('button', { name: 'Practise this' }).click();
     await panel.getByRole('button', { name: 'Show explanation' }).click();
@@ -98,12 +108,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
       return result;
     });
-    expect(counts.events).toBe(4);
+    expect(counts.events).toBe(5);
     expect(counts.reviews).toBe(0);
     expect(counts.items).toBe(0);
 
     await page.reload();
     await page.getByRole('button', { name: 'Walk through' }).first().click();
-    await expect(page.getByRole('region', { name: 'Sentence walkthrough' })).toContainText(/practised 1× \(1 got it\) · compared with 1 other use/);
+    await expect(page.getByRole('region', { name: 'Sentence walkthrough' })).toContainText(/practised 2× \(2 got it, 1 with the word hidden\) · compared with 1 other use/);
   });
 }

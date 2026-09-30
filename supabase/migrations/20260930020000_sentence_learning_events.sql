@@ -18,7 +18,7 @@ create table public.sentence_learning_events (
   target_kind text,
   target_key text,
   target_label text,
-  support text check (support in ('explanation_hidden')),
+  support text check (support in ('explanation_hidden', 'target_masked')),
   outcome text check (outcome in ('got_it', 'needed_help')),
   assessment_source text check (assessment_source in ('self')),
   report text check (report in ('another_answer_works', 'poor_question')),

@@ -47,6 +47,18 @@ function excerpt(target: CompareTarget, sentence: CompareSentence): CompareExcer
   };
 }
 
+/** The span of this target in this sentence: its validated occurrence when known, else the first literal match. */
+export function locateTargetSpan(target: CompareTarget, sentence: CompareSentence): { start: number; end: number } | undefined {
+  return excerpt(target, sentence).span;
+}
+
+const GAP = '＿＿＿';
+
+/** The sentence with exactly the given occurrence replaced by a gap (not the first text match of a repeated word). */
+export function maskSpan(japanese: string, span: { start: number; end: number }): string {
+  return `${japanese.slice(0, span.start)}${GAP}${japanese.slice(span.end)}`;
+}
+
 /**
  * The current sentence next to another real occurrence of the same target.
  * Prefers an example the learner has not been shown yet, then the nearest one
@@ -76,6 +88,8 @@ export function pickCompareUses(
 }
 
 export interface TargetActivitySummary {
+  /** Self-reported got-it with the target masked and the answer not yet shown. Revealed-answer practice never counts. */
+  independent: number;
   practised: number;
   gotIt: number;
   neededHelp: number;
@@ -83,12 +97,13 @@ export interface TargetActivitySummary {
 }
 
 export function summariseTargetActivity(events: SentenceLearningEvent[], targetKey: string): TargetActivitySummary {
-  const summary: TargetActivitySummary = { practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set() };
+  const summary: TargetActivitySummary = { independent: 0, practised: 0, gotIt: 0, neededHelp: 0, comparedSentenceIds: new Set() };
   for (const event of events) {
     if (event.target?.key !== targetKey) continue;
     if (event.action === 'target_practice') {
       summary.practised += 1;
       if (event.outcome === 'got_it') summary.gotIt += 1;
+      if (event.outcome === 'got_it' && event.support === 'target_masked') summary.independent += 1;
       if (event.outcome === 'needed_help') summary.neededHelp += 1;
     } else if (event.action === 'compare_uses_viewed' && event.exposedSentenceId) {
       summary.comparedSentenceIds.add(event.exposedSentenceId);

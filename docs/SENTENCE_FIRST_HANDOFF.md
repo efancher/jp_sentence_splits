@@ -183,7 +183,9 @@ Phase 2 - activities inside the sentence + learning events (first slice done)
 - [ ] Decide on sync/backup/Supabase migration for the events
 - [ ] Contextual target selection; promote practised target into durable tracking; content-defect reports
 
-Phases 3-6 (not started): support fading + sentence progress; supported/independent expression and
+Phase 3 started 2026-09-30: targeted masking ("Fill the gap", see STATUS); remaining
+Phase 3 items below are not started.
+Phases 3-6 (mostly not started): support fading + sentence progress; supported/independent expression and
 shadowing; planner `sentence_learning`; transfer/compare uses. Also open:
 per-chunk source spans, long-chapter virtualization, browser test for the Reader
 focus panel, live re-check of speech/mining services before relying on them.

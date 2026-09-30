@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { SentenceLearningEvent } from '../domain/types';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
-import { pickCompareUses, summariseTargetActivity, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
+import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
 import { createId } from '../lib/ids';
 import type { SentenceAudio } from '../domain/types';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -86,6 +86,8 @@ export function TargetLessonCard({
   quietMode: boolean;
   onEvent: (event: LessonEventInput) => void;
 }) {
+  const [gap, setGap] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
+  const [gapAnswer, setGapAnswer] = useState('');
   const [practice, setPractice] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
   const [pair, setPair] = useState<ReturnType<typeof pickCompareUses>>();
   const [reported, setReported] = useState<'another_answer_works' | 'poor_question'>();
@@ -140,6 +142,25 @@ export function TargetLessonCard({
     setPractice('recorded');
   }
 
+  const currentSentence = episodeSentences.find((item) => item.id === sentenceId);
+  const gapSpan = currentSentence ? locateTargetSpan(compareTarget, currentSentence) : undefined;
+
+  function recordGap(outcome: 'got_it' | 'needed_help') {
+    onEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'target_practice',
+      sentenceId,
+      target: targetRef,
+      support: 'target_masked',
+      outcome,
+      assessmentSource: 'self',
+      quietMode,
+    });
+    setGap('recorded');
+    setGapAnswer('');
+  }
+
   function report(kind: 'another_answer_works' | 'poor_question') {
     onEvent({
       id: createId('sl_event'),
@@ -161,7 +182,7 @@ export function TargetLessonCard({
         <strong className="jp">{target.label}</strong>
         {activity.practised > 0 || activity.comparedSentenceIds.size > 0 ? (
           <span className="muted">
-            {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it)` : ''}
+            {activity.practised > 0 ? ` · practised ${activity.practised}× (${activity.gotIt} got it${activity.independent > 0 ? `, ${activity.independent} with the word hidden` : ''})` : ''}
             {activity.comparedSentenceIds.size > 0 ? ` · compared with ${activity.comparedSentenceIds.size} other ${activity.comparedSentenceIds.size === 1 ? 'use' : 'uses'}` : ''}
           </span>
         ) : null}
@@ -170,6 +191,11 @@ export function TargetLessonCard({
         <button type="button" onClick={() => setPractice(practice === 'closed' || practice === 'recorded' ? 'asking' : 'closed')}>
           Practise this
         </button>
+        {gapSpan ? (
+          <button type="button" onClick={() => setGap(gap === 'closed' || gap === 'recorded' ? 'asking' : 'closed')}>
+            Fill the gap
+          </button>
+        ) : null}
         {canCompare ? (
           <button type="button" aria-expanded={!!pair} onClick={() => (pair ? setPair(undefined) : showCompare())}>
             Compare uses
@@ -213,6 +239,37 @@ export function TargetLessonCard({
             </>
           )}
         </div>
+      ) : null}
+      {gap === 'asking' || gap === 'revealed' ? (
+        <div className="stack" style={{ gap: '0.25rem' }} aria-label={`Fill the gap for ${target.label}`} aria-live="polite">
+          <div className="jp jp-lg">{currentSentence && gapSpan ? maskSpan(currentSentence.japanese, gapSpan) : ''}</div>
+          {compareAids?.get(sentenceId)?.translation ? <div className="muted">{compareAids.get(sentenceId)!.translation}</div> : null}
+          {gap === 'asking' ? (
+            <>
+              <div>
+                What fits the gap?
+                {quietMode ? ' Type it or think it through — no speaking needed.' : ' Say it aloud, or type it.'}
+              </div>
+              <input type="text" lang="ja" aria-label="Your answer for the gap" value={gapAnswer} onChange={(event) => setGapAnswer(event.target.value)} />
+              <button type="button" onClick={() => setGap('revealed')}>Show the answer</button>
+            </>
+          ) : (
+            <>
+              <div>
+                Answer: <span className="jp"><mark>{currentSentence && gapSpan ? currentSentence.japanese.slice(gapSpan.start, gapSpan.end) : target.label}</mark></span>
+                {gapAnswer.trim() ? <span className="muted"> · you wrote <span className="jp">{gapAnswer.trim()}</span></span> : null}
+              </div>
+              <div className="muted">Judge yourself honestly: only count it if you had it before looking.</div>
+              <div className="row" style={{ gap: '0.35rem' }}>
+                <button type="button" onClick={() => recordGap('got_it')}>I had it before looking</button>
+                <button type="button" onClick={() => recordGap('needed_help')}>I needed to see it</button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+      {gap === 'recorded' ? (
+        <div className="muted" role="status">Noted as gap practice. Your review schedule is unchanged.</div>
       ) : null}
       {practice === 'recorded' ? (
         <div className="muted" role="status">Noted as practice. Your review schedule is unchanged.</div>

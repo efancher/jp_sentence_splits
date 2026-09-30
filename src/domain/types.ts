@@ -1431,7 +1431,7 @@ export interface SentenceLearningEvent {
   sentenceId: string;
   target?: { kind: PreparedTargetKind; key: string; label: string };
   /** What was visible when the learner answered (practice only). */
-  support?: 'explanation_hidden';
+  support?: 'explanation_hidden' | 'target_masked';
   outcome?: 'got_it' | 'needed_help';
   /** Practice outcomes are always the learner's own judgement here. */
   assessmentSource?: 'self';
