@@ -5,7 +5,10 @@ import { backupSchema } from '../src/domain/schemas';
 import { APP_VERSION, BACKUP_FORMAT_VERSION } from '../src/appConfig';
 
 const output = process.argv[2];
-if (!output) throw new Error('Usage: tsx scripts/generate-review-demo.ts OUTPUT.json');
+if (!output) throw new Error('Usage: tsx scripts/generate-review-demo.ts OUTPUT.json [APP_ORIGIN]');
+// Host the instructions outside the app's service-worker origin. Its navigation
+// fallback otherwise replaces this HTML with the app after the first visit.
+const appBase = process.argv[3] ? `${new URL(process.argv[3]).origin}/` : '/';
 const now = new Date().toISOString();
 const future = '2099-01-01T00:00:00.000Z';
 const due = '2020-01-01T00:00:00.000Z';
@@ -90,8 +93,8 @@ writeFileSync(`${dirname(output)}/review-demo.html`, `<!doctype html>
 <h1>Try the review layouts</h1>
 <p>A fictional 12-sentence chapter, with three vocabulary reviews and one grammar review ready to try. Text only, with no generated audio.</p>
 <ol><li><a href="review-demo.json" download="review-demo.json">Download the sample chapter</a>.</li>
-<li>Open <a href="/#/settings">Settings</a>, choose <strong>Import backup JSON</strong>, select the downloaded file, then choose <strong>Merge into existing data</strong>.</li>
-<li>Open <a href="/#/review">Review</a>. Use <strong>Review layout</strong> to switch between Original · sentence and New · chapter.</li></ol>
+<li>Open <a href="${appBase}#/settings">Settings</a>, choose <strong>Import backup JSON</strong>, select the downloaded file, then choose <strong>Merge into existing data</strong>.</li>
+<li>Open <a href="${appBase}#/review">Review</a>. Use <strong>Review layout</strong> to switch between Original · sentence and New · chapter.</li></ol>
 <p>The sample is for this preview. Keep cloud sync disconnected if you want trial progress to remain separate from your normal study history.</p>
 </html>`);
 console.log(`Created validated sample backup: ${output}`);

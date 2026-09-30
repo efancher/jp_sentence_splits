@@ -13,11 +13,16 @@ Last updated: 2026-09-30.
 - **2026-09-30 — Preview sample data.** Generate a validated, fictional
   12-sentence chapter plus three due vocabulary reviews and one grammar
   recognition review with `./node_modules/.bin/tsx scripts/generate-review-demo.ts
-  dist/review-demo.json`. This also writes `dist/review-demo.html` with download
+  dist/review-demo.json https://codex-dev.tailfbd89c.ts.net:8443`. This also writes `dist/review-demo.html` with download
   and merge instructions. Regenerate after a build clears `dist`. Verified the
   download, normal backup merge, both layouts and all four reviews through the
   private preview URL in Chromium and WebKit. Use the global Review page:
   existing book-scoped queues omit grammar patterns.
+  **Preview hosting fix:** serve the download page on port 8444 and link back
+  to the app on 8443. The app's service-worker navigation fallback intercepts
+  same-origin standalone HTML after the app has been visited. Reproduced this
+  failure with an active service worker; verified the separate-origin download,
+  import and review flow in Chromium and WebKit with the app already cached.
 
 - **2026-09-30 — Compare original and chapter review layouts.** The three
   affected review types now offer a **Review layout** selector: Original ·
