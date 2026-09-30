@@ -46,6 +46,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
     });
     await page.goto('/#/books/book/review');
+    const layout = page.getByRole('combobox', { name: 'Review layout' });
+    await layout.selectOption('original');
+    await expect(page.getByRole('region', { name: 'Chapter text' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Reveal word', exact: true })).toBeVisible();
+    await page.reload();
+    await expect(layout).toHaveValue('original');
+    await layout.selectOption('chapter');
     await expect(page.getByText('第一章', { exact: true })).toBeVisible();
     const chapter = page.getByRole('region', { name: 'Chapter text' });
     await expect(chapter.locator('p')).toHaveCount(30);
@@ -67,6 +74,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(page.getByText('Recall the missing word.', { exact: true })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('chapter-cloze.png'), fullPage: true });
     await page.getByRole('button', { name: 'Reveal word', exact: true }).click();
+    await expect(active).toContainText('図書館で本を読みました。');
+    await layout.selectOption('original');
+    await expect(page.getByRole('region', { name: 'Chapter text' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Reveal word', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Good', exact: true })).toBeVisible();
+    await layout.selectOption('chapter');
     await expect(active).toContainText('図書館で本を読みました。');
     await page.getByRole('button', { name: 'Good', exact: true }).click();
     await expect.poll(async () => page.evaluate(async () => {

@@ -1364,6 +1364,9 @@ activityType)` triple; multiple activity types can exist for the same
 subject. Vocabulary `reading_retrieval`/`cloze` and `grammar_recognition` now
 show the complete source chapter/episode through `ReviewDocumentText`, with
 the target highlighted/blanked and the existing response controls below.
+A Review layout selector also retains the original sentence/neighbor layout
+for these three activities. Its browser-local preference defaults to chapter;
+switching preserves reveal state and never writes a grade or resets the queue.
 The scrollable document keeps plain Japanese before and after reveal; target
 feedback/readings/audio still appear below on reveal. Cloze masks known target
 forms throughout the document and source titles. Source resolution preserves

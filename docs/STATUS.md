@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Compare original and chapter review layouts.** The three
+  affected review types now offer a **Review layout** selector: Original ·
+  sentence / New · chapter. New is the initial default; the browser remembers
+  the selection locally. Switching preserves the current reveal state and
+  uses the same queue and grading path. This compares presentation only,
+  not the future sentence-first learning model. Still on the draft PR, not
+  deployed. Build and 80 relevant unit tests pass; browser coverage exercises
+  preference persistence and switching before/after reveal with one grade.
+
 - **2026-09-30 — Chapter-based reviews, first implementation slice.**
   Implemented on `feat/chapter-review`; not deployed. `reading_retrieval`,
   vocabulary `cloze`, and `grammar_recognition` now use a scrollable source

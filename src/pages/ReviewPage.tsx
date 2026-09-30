@@ -1097,6 +1097,15 @@ function spaceOutPendingSeedBatches(seeds: PendingSeed[]): PendingSeed[] {
 }
 
 export function ReviewPage() {
+  const [chapterView, setChapterView] = useState(() => {
+    try { return localStorage.getItem('satori-glossbook:review-layout') !== 'original'; }
+    catch { return true; }
+  });
+  const changeReviewLayout = (chapter: boolean) => {
+    setChapterView(chapter);
+    try { localStorage.setItem('satori-glossbook:review-layout', chapter ? 'chapter' : 'original'); }
+    catch { /* The view still works when browser storage is unavailable. */ }
+  };
   const { bookId } = useParams();
   const navigate = useNavigate();
   const activeSession = useActiveSession();
@@ -2025,6 +2034,15 @@ export function ReviewPage() {
                 {issueReported ? <span className="muted">✓ Reported</span> : null}
               </div>
             )}
+            {(['reading_retrieval', 'cloze', 'grammar_recognition'] as StudyActivityType[]).includes(current.studyItem.activityType) ? (
+              <label className="row">
+                Review layout
+                <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter')}>
+                  <option value="original">Original · sentence</option>
+                  <option value="chapter">New · chapter</option>
+                </select>
+              </label>
+            ) : null}
             {current.target && current.studyItem.activityType === 'reading_production' ? (
               <ReadingProductionCard
                 key={current.studyItem.id}
@@ -2040,6 +2058,7 @@ export function ReviewPage() {
               />
             ) : current.target ? (
               <VocabularyTargetCard
+                chapterView={chapterView}
                 key={current.studyItem.id}
                 activityType={current.studyItem.activityType}
                 sentence={current.sentence}
@@ -2116,6 +2135,7 @@ export function ReviewPage() {
               />
             ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
               <GrammarRecognitionCard
+                chapterView={chapterView}
                 key={current.studyItem.id}
                 candidate={current.grammar}
                 revealed={revealed}
@@ -2399,6 +2419,7 @@ function VocabularyTargetCard({
   surfaceForm,
   link,
   context,
+  chapterView,
   revealed,
   onReveal,
 }: {
@@ -2409,10 +2430,33 @@ function VocabularyTargetCard({
   /** The occurrence link this candidate was chosen from — carries any manual word-audio range, forwarded to the reveal-side native audio. */
   link?: SentenceVocabulary;
   context: ReadingContext | undefined;
+  chapterView: boolean;
   revealed: boolean;
   onReveal: () => void;
 }) {
   const isCloze = activityType === 'cloze';
+  const precedes = (context?.before.length ?? 0) > 0;
+  const contextLines = precedes ? (context?.before ?? []) : (context?.after ?? []);
+  const hideTarget = isCloze && !revealed;
+  const contextText = (text: string): string => {
+    if (!hideTarget) return text;
+    let masked = text;
+    for (const word of new Set([surfaceForm, vocabularyItem.expression])) {
+      if (word) masked = masked.split(word).join('_____');
+    }
+    return masked;
+  };
+  const contextBlock = contextLines.length ? (
+    <div className="reading-context">
+      {contextLines.map((item) => (
+        <div key={item.id}>
+          <p className="jp jp-sm reading-context-line">{contextText(item.japanese)}</p>
+          <ContextSentenceReading sentence={item} revealed={revealed} />
+        </div>
+      ))}
+    </div>
+  ) : null;
+  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   // Only reading_retrieval names the dictionary form — cloze hides the word
   // itself pre-reveal, so spelling out its lemma would give the answer away.
   const showDictionaryForm =
@@ -2422,13 +2466,25 @@ function VocabularyTargetCard({
     surfaceForm !== vocabularyItem.expression;
   return (
     <>
-      <ReviewDocumentText
-        sentence={sentence}
-        bookId={context?.bookId}
-        target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
-        revealed={revealed}
-        cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
-      />
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={context?.bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
+        />
+      ) : (
+        <>
+          {precedes ? contextBlock : null}
+          <div className="jp jp-lg">
+            {before}
+            <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
+            {after}
+          </div>
+          {precedes ? null : contextBlock}
+        </>
+      )}
       <div>{isCloze ? 'Recall the missing word.' : showDictionaryForm ? 'Recall the dictionary reading of the highlighted word.' : 'How do you read the highlighted word?'}</div>
       {showDictionaryForm ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
@@ -3538,24 +3594,77 @@ function ContrastivePairCard({
  */
 function GrammarRecognitionCard({
   candidate,
+  chapterView,
   revealed,
   onReveal,
 }: {
   candidate: GrammarReviewCandidate;
+  chapterView: boolean;
   revealed: boolean;
   onReveal: () => void;
 }) {
   const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
   const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
 
+  const { before, after } = readingContext;
+
+  const passageBefore = readingContext.bookTitle ? (
+    <>
+      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+        In context · {readingContext.bookTitle}
+      </p>
+      {before.length ? (
+        <div className="reading-context">
+          {before.map((item) => (
+            <div key={item.id}>
+              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
+              <ContextSentenceReading sentence={item} revealed={revealed} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  ) : null;
+
+  const passageAfter = after.length ? (
+    <div className="reading-context">
+      {after.map((item) => (
+        <div key={item.id}>
+          <p className="reading-context-line">
+            <span className="jp jp-sm">{item.japanese}</span>
+            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
+          </p>
+          <ContextSentenceReading sentence={item} revealed={revealed} />
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <>
-      <ReviewDocumentText
-        sentence={sentence}
-        bookId={readingContext.bookId}
-        target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
-        revealed={revealed}
-      />
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={readingContext.bookId}
+          target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
+          revealed={revealed}
+        />
+      ) : (
+        <>
+          {passageBefore}
+          <div className="jp jp-lg">
+            {blank ? (
+              <>
+                {blank.before}
+                <mark>{blank.match}</mark>
+                {blank.after}
+              </>
+            ) : (
+              sentence.japanese
+            )}
+          </div>
+        </>
+      )}
       <div className="muted">
         What is <span className="jp">{pattern.canonicalName}</span> doing in this sentence?
       </div>
@@ -3578,6 +3687,7 @@ function GrammarRecognitionCard({
             <div className="muted">{pattern.structuralNotes}</div>
           ) : null}
           {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
+          {!chapterView ? passageAfter : null}
         </>
       )}
     </>

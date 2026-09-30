@@ -724,3 +724,11 @@ The passage-first direction, Cure Dolly style walkthrough, same-meaning natural-
 6. How much new reading should a session offer while several sentences remain partly learned? Start with a bounded revisit set and always permit continuing the passage.
 
 The smallest useful implementation is a passage whose active sentence opens into a clear structural walkthrough, invites one meaningful activity, and returns you to the story. Validate that loop early, then carry it through fading support and natural expression before declaring the learning redesign complete.
+
+### Trial layout switch (2026-09-30)
+
+The first implementation slice includes Original · sentence / New · chapter
+in the review page, sharing a single queue and learning history. It remembers
+the layout per browser and permits switching before or after reveal without
+resetting the card. This compares the two presentations; the broader guided
+learning stages remain planned. Implemented in draft PR #1, not deployed.
