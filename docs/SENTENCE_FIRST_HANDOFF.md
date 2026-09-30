@@ -157,6 +157,7 @@ Phase 0 leftovers
 - [x] Inspectable AI episode-analysis round trip with ID/span validation and provenance (paste-back; not yet tried on a real episode)
 - [x] One combined "episode pack" prompt (focus targets + missing translations; ordered parts for long episodes) landed on after series import, replacing the need for the AI API for those jobs; per-chunk why-notes still need a saved analysis
 - [x] Learner accept / note / dismiss of prepared targets (derived focus panel itself is not editable)
+- [x] Chapterless books: on-demand real "Whole book" chapter (Reader button)
 - [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
 - [ ] Real-episode fixture set (long transcript, repeated fillers, contrasting uses, bad alignment)
 - [x] Re-test idempotent re-import of the same episode (unit test; not against a real episode)
@@ -165,7 +166,8 @@ Phase 0 leftovers
 Phase 1 - guided sentence learning in the passage (in progress)
 - [x] Ungated expandable sentence walkthrough in the Reader (structure, literal/natural gloss) — heuristic/saved chunks, generic role text; no AI explanations yet
 - [x] Can't speak + Adjust audio reachable in the walkthrough (inline, not yet a sheet)
-- [ ] Surface episode focus more prominently; move secondary controls into an accessible sheet
+- [x] Surface episode focus more prominently (always-visible line + per-sentence marker)
+- [ ] Move secondary controls into an accessible sheet
 - [x] Docker Playwright check for the Reader walkthrough (Chromium + WebKit)
 - [x] Show the stage journey without claiming unbuilt stages are assessed
 

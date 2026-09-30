@@ -1,12 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
-import { getDb, getEpisodeFocus, readSettings, updateSettings } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -24,6 +24,7 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
 export function ReaderPage() {
   const { bookId = '' } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const chapterId = searchParams.get('chapter') || undefined;
   const native = useNativeAudio();
   const settings = useLiveQuery(() => readSettings(), []);
@@ -283,6 +284,12 @@ export function ReaderPage() {
           ) : null}
         </details>
       ) : null}
+      {walkthroughFocus.length > 0 ? (
+        <p style={{ margin: 0 }} aria-label="Episode focus">
+          <span className="muted">Worth noticing across this {chapter ? 'episode' : 'book'}: </span>
+          <span className="jp">{walkthroughFocus.map((target) => target.label).join('、')}</span>
+        </p>
+      ) : null}
       {searchParams.get('imported') === '1' ? (
         <p className="muted" role="note" style={{ margin: 0 }}>
           Just imported. Optional: run <code>npm run validate:sentence-transcripts -- --book {bookId}</code> to check these
@@ -290,6 +297,21 @@ export function ReaderPage() {
         </p>
       ) : null}
       {chapterId && chapter ? <EpisodePreparationPanel bookId={bookId} chapterId={chapterId} defaultOpen={searchParams.get('pack') === '1'} /> : null}
+      {!chapterId && book.chapters.length === 0 && rows.length > 0 ? (
+        <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() =>
+              void ensureDefaultBookChapter(bookId).then((id) => {
+                if (id) navigate(`/books/${bookId}/read?chapter=${encodeURIComponent(id)}&pack=1`);
+              })
+            }
+          >
+            Prepare this book (optional)
+          </button>
+          <span className="muted">Puts every sentence into one &ldquo;Whole book&rdquo; chapter so episode focus and translations can be prepared.</span>
+        </div>
+      ) : null}
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}
@@ -320,6 +342,14 @@ export function ReaderPage() {
                 ) : null}
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
                   {sentenceLine(row.sentence, isActive, audio)}
+                  {(() => {
+                    const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));
+                    return here.length > 0 ? (
+                      <span className="muted" style={{ fontSize: '0.85em' }}>
+                        Focus here: <span className="jp">{here.map((target) => target.label).join('、')}</span>
+                      </span>
+                    ) : null;
+                  })()}
                   <div className="row" style={{ gap: '0.5rem' }}>
                     {revealedTranslations.has(row.sentence.id) ? (
                       <div className="muted">{row.sentence.translation || '(no translation)'}</div>

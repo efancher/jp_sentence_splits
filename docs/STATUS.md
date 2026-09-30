@@ -10,6 +10,16 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Small follow-ups: default chapter + visible episode focus.**
+  A chapterless book gets a real "Whole book" chapter on demand (Reader button
+  "Prepare this book (optional)" -> `ensureDefaultBookChapter`, which reuses
+  `createBookChapter` + `assignBookSentencesToChapter`, syncs like any chapter
+  edit, and does nothing for a book that already has chapters), then opens the
+  pack panel. The Reader now shows an always-visible "Worth noticing across this
+  episode" line plus a per-sentence "Focus here" line (prepared, non-dismissed,
+  non-stale targets, else the derived draft) instead of only a collapsed panel.
+  Tests in `tests/readerPage.test.tsx`. Still open in Phase 1: moving secondary
+  controls into an accessible sheet.
 - **2026-09-30 — Episode pack: one paste-back prompt at import time instead of
   piecemeal AI calls (no API needed).** `src/lib/episodePack.ts` builds one
   prompt covering the whole-episode focus targets and English for any sentence

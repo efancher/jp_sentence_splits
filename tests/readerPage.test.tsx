@@ -118,6 +118,33 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     expect(screen.getByRole('button', { name: '▶ Play' })).toBeInTheDocument();
   });
 
+  it('gives a chapterless book a real "Whole book" chapter on request and opens preparation', async () => {
+    await seedBook();
+    const db = getDb();
+    await db.books.update('book-1', { chapters: [] });
+    await db.bookSentences.toCollection().modify((row) => { delete row.chapterId; });
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read');
+
+    await user.click(await screen.findByRole('button', { name: 'Prepare this book (optional)' }));
+
+    expect(await screen.findByText(/Episode preparation/)).toBeInTheDocument();
+    const book = await db.books.get('book-1');
+    expect(book?.chapters).toHaveLength(1);
+    expect(book?.chapters[0]?.title).toBe('Whole book');
+    const rows = await db.bookSentences.where('bookId').equals('book-1').toArray();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.chapterId === book?.chapters[0]?.id)).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Prepare this book (optional)' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer the default chapter when the book already has chapters', async () => {
+    await seedBook();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('本を読みます。');
+    expect(screen.queryByRole('button', { name: 'Prepare this book (optional)' })).not.toBeInTheDocument();
+  });
+
   it('scopes to a single chapter via the ?chapter= param', async () => {
     await seedBook();
     renderReaderPage('/books/book-1/read?chapter=ch-2');
@@ -190,6 +217,9 @@ describe('ReaderPage (always-available chapter read-along)', () => {
 
     expect(await screen.findByText(/some rejected, listed below/)).toBeInTheDocument();
     expect(await screen.findByText(/No quoted occurrence matched a real sentence/)).toBeInTheDocument();
+
+    expect(screen.getByLabelText('Episode focus')).toHaveTextContent('読みます');
+    expect(screen.getByText(/Focus here:/)).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: 'Walk through' })[0]!);
     const panel = await screen.findByRole('region', { name: 'Sentence walkthrough' });

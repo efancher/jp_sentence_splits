@@ -1792,6 +1792,24 @@ export async function createBookChapter(
   return chapter;
 }
 
+/**
+ * Give a chapterless book one real "Whole book" chapter and move every
+ * sentence into it, so episode preparation (which is chapter-scoped) works for
+ * it. Deliberately does nothing to a book that already has chapters — its
+ * unassigned sentences stay as the user left them.
+ */
+export async function ensureDefaultBookChapter(bookId: string): Promise<string | undefined> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  if ((book.chapters ?? []).length > 0) return undefined;
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+  if (memberships.length === 0) return undefined;
+  const chapter = await createBookChapter(bookId, 'Whole book');
+  await assignBookSentencesToChapter(bookId, memberships.map((item) => item.sentenceId), chapter.id);
+  return chapter.id;
+}
+
 export async function updateBookChapter(
   bookId: string,
   chapterId: string,
