@@ -1967,6 +1967,13 @@ export function ReviewPage() {
         ) : !current ? (
           <div className="empty-state">
             <strong>All caught up.</strong>
+            {settings?.legacyDrillsPaused ? (
+              <span className="muted">
+                Word &amp; grammar drills are paused in Settings, and sentence cards wait until
+                their words are proficient — so the queue can be empty. Turn the pause off to see
+                everything that's due.
+              </span>
+            ) : null}
             {newCardLimitReached ? (
               <span className="muted">
                 New-card limit reached for this session ({newCardsIntroduced} of{' '}
