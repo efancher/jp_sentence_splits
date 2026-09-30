@@ -155,6 +155,7 @@ derived episode focus panel on the Reader.
 Phase 0 leftovers
 - [x] Persisted preparation status (ready/partial/failed; stale derived; pending = absent), separate from study progress — chapter-scoped only
 - [x] Inspectable AI episode-analysis round trip with ID/span validation and provenance (paste-back; not yet tried on a real episode)
+- [x] One combined "episode pack" prompt (focus targets + missing translations; ordered parts for long episodes) landed on after series import, replacing the need for the AI API for those jobs; per-chunk why-notes still need a saved analysis
 - [x] Learner accept / note / dismiss of prepared targets (derived focus panel itself is not editable)
 - [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
 - [ ] Real-episode fixture set (long transcript, repeated fillers, contrasting uses, bad alignment)

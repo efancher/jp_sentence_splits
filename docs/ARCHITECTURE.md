@@ -240,6 +240,13 @@ validator: AI supplies only sentence/vocab/grammar handles and quoted text, the
 app resolves ids and offsets). It is separate from study progress: no
 `StudyItem`, `Review` or FSRS effect.
 
+**Episode pack (2026-09-30):** `src/lib/episodePack.ts` extends the preparation
+round trip into one resumable copy/paste flow (focus targets + missing
+translations, split into ordered parts for long episodes). Same trust boundary:
+the AI supplies handles and text only; `saveEpisodePackReply` resolves ids,
+fills only empty translations, and reuses the preparation merge. It replaces the
+need for a server-side AI call for these two jobs.
+
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —
 pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`

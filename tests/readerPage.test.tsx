@@ -177,7 +177,7 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     await screen.findByText('本を読みます。');
 
     await user.click(await screen.findByText(/Episode preparation/));
-    expect((screen.getByLabelText('Preparation prompt') as HTMLTextAreaElement).value).toContain('S1: 本を読みます。');
+    expect((screen.getByLabelText('Episode pack prompt') as HTMLTextAreaElement).value).toContain('S1: 本を読みます。');
     const reply = JSON.stringify({
       targets: [
         { kind: 'expression', label: '読みます', reason: 'Polite present.', occurrences: [{ sentence: 'S1', text: '読みます' }] },
@@ -188,7 +188,7 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     await user.paste(reply);
     await user.click(screen.getByRole('button', { name: 'Check and save reply' }));
 
-    expect(await screen.findByText(/some proposed targets were rejected/)).toBeInTheDocument();
+    expect(await screen.findByText(/some rejected, listed below/)).toBeInTheDocument();
     expect(await screen.findByText(/No quoted occurrence matched a real sentence/)).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: 'Walk through' })[0]!);

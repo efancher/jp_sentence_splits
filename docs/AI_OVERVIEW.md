@@ -1147,7 +1147,11 @@ locally, never taken from the AI) — then stored on the chapter
 sentence fingerprint, per-target accept/dismiss/note). A failed reply never
 replaces an earlier usable one and never blocks reading; non-dismissed targets
 feed the walkthrough's "Worth noticing here". `Review.presentation` records the
-layout/document size used at grading for chapter-context reviews.
+layout/document size used at grading for chapter-context reviews. The same panel
+is an "episode pack" (`src/lib/episodePack.ts`): one prompt (ordered parts for
+long episodes) asks for focus targets and English for sentences lacking a
+translation; the JSON reply is validated, translations only fill empty
+sentences, and series imports land on the Reader with the panel open.
 
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and

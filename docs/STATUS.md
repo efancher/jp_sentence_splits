@@ -10,6 +10,25 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Episode pack: one paste-back prompt at import time instead of
+  piecemeal AI calls (no API needed).** `src/lib/episodePack.ts` builds one
+  prompt covering the whole-episode focus targets and English for any sentence
+  with no translation; the JSON reply (`targets` and/or `translations` keyed by
+  handle S1…) is validated by `parseEpisodePackReply` and stored by
+  `saveEpisodePackReply`. Translations only fill empty sentences (re-checked
+  against the live row; never overwrite the learner's), unknown handles/empty
+  text are rejected with a reason, and an unparseable reply changes nothing.
+  Long episodes split into ordered parts of 60 translations (targets only in
+  part 1; the whole episode is listed only in the prompt that asks for targets);
+  prompts are rebuilt from current state, so the pack is resumable and shrinks
+  as replies land. The Reader's panel now shows the pack (copy, one reply box,
+  "Ask for focus targets again"); series imports (Quick mine, YouTube/podcast,
+  NHK Easy) land on the Reader for the new chapter with the panel open
+  (`?chapter=…&pack=1`; the transcript-validation reminder moved there as a note).
+  Not included: per-chunk "why" notes (`chunk-why-assist`) — they need a saved
+  chunk analysis, which does not exist at import time — and chapterless books.
+  Tests: `tests/episodePack.test.ts`, `tests/readerPage.test.tsx`; Docker e2e
+  `e2e/episode-preparation.spec.ts` updated for the new label/message.
 - **2026-09-30 — Phase 0: persisted episode preparation + inspectable AI
   round trip (paste-back).** On `feat/chapter-review`; not merged or deployed.
   `src/lib/episodePreparation.ts` builds a prompt from a chapter's sentences

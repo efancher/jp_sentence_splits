@@ -30,14 +30,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
 
     await page.goto('/#/books/book/read?chapter=chapter');
     await page.getByText(/Episode preparation/).click();
-    await expect(page.getByLabel('Preparation prompt')).toHaveValue(/S2: 本を買いました。/);
+    await expect(page.getByLabel('Episode pack prompt')).toHaveValue(/S2: 本を買いました。/);
     const reply = JSON.stringify({ targets: [
       { kind: 'expression', label: '本を', reason: 'Object marking.', occurrences: [{ sentence: 'S1', text: '本を' }, { sentence: 'S2', text: '本を' }] },
       { kind: 'expression', label: '作り話', reason: 'Invented.', occurrences: [{ sentence: 'S1', text: '作り話' }] },
     ] });
     await page.getByLabel('AI reply').fill(reply);
     await page.getByRole('button', { name: 'Check and save reply' }).click();
-    await expect(page.getByText(/some proposed targets were rejected/)).toBeVisible();
+    await expect(page.getByText(/some rejected, listed below/)).toBeVisible();
     await expect(page.getByText(/No quoted occurrence matched a real sentence/)).toBeVisible();
     await page.getByRole('button', { name: 'Dismiss' }).click();
     await expect(page.getByRole('button', { name: 'Restore' })).toBeVisible();

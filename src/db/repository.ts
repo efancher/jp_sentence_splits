@@ -1,5 +1,6 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
+import { parseEpisodePackReply, type PackReplyResult } from '../lib/episodePack';
 import {
   type PreparationContext,
   parsePreparationReply,
@@ -8799,7 +8800,7 @@ export async function getEpisodePreparationContext(
   const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
     .filter((row) => row.chapterId === chapterId);
   const sentenceRows = await db.sentences.bulkGet(memberships.map((row) => row.sentenceId));
-  const sentences = sentenceRows.flatMap((row) => (row ? [{ id: row.id, japanese: row.japanese }] : []));
+  const sentences = sentenceRows.flatMap((row) => (row ? [{ id: row.id, japanese: row.japanese, translation: row.translation ?? '' }] : []));
   const sentenceIds = sentences.map((row) => row.id);
   const [vocabularyLinks, grammarLinks] = await Promise.all([
     db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
@@ -8852,7 +8853,15 @@ export async function saveEpisodePreparationReply(
   reply: string,
 ): Promise<EpisodePreparation> {
   const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
-  const result = parsePreparationReply(reply, context, nowIso());
+  return storePreparationResult(bookId, chapterId, existing, parsePreparationReply(reply, context, nowIso()));
+}
+
+async function storePreparationResult(
+  bookId: string,
+  chapterId: string,
+  existing: EpisodePreparation | undefined,
+  result: EpisodePreparation,
+): Promise<EpisodePreparation> {
   if (result.status === 'failed' && existing && existing.targets.length > 0) return result;
   const keyOf = (target: PreparedTarget) => target.vocabularyItemId ?? target.grammarPatternId ?? `${target.kind}:${target.label}`;
   const previous = new Map((existing?.targets ?? []).map((target) => [keyOf(target), target]));
@@ -8865,6 +8874,47 @@ export async function saveEpisodePreparationReply(
   };
   await patchChapterPreparation(bookId, chapterId, () => merged);
   return merged;
+}
+
+export interface EpisodePackSaveResult {
+  error?: string;
+  preparation?: EpisodePreparation;
+  translationsSaved: number;
+  rejectedTranslations: PackReplyResult['rejectedTranslations'];
+}
+
+/**
+ * One pasted "episode pack" reply: focus targets and/or missing translations.
+ * Translations only ever fill empty sentences (re-checked here against the
+ * live row, not just the prompt-time snapshot). A reply that fails to parse
+ * changes nothing.
+ */
+export async function saveEpisodePackReply(
+  bookId: string,
+  chapterId: string,
+  reply: string,
+): Promise<EpisodePackSaveResult> {
+  const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
+  const parsed = parseEpisodePackReply(reply, context, nowIso());
+  if (parsed.error) {
+    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations };
+  }
+  const db = getDb();
+  let translationsSaved = 0;
+  const rejectedTranslations = [...parsed.rejectedTranslations];
+  for (const item of parsed.translations) {
+    const live = await db.sentences.get(item.sentenceId);
+    if (!live || live.translation?.trim()) {
+      rejectedTranslations.push({ handle: item.sentenceId, reason: 'Already has a translation; kept yours.' });
+      continue;
+    }
+    await updateSentenceText(item.sentenceId, { translation: item.translation });
+    translationsSaved += 1;
+  }
+  const preparation = parsed.preparation
+    ? await storePreparationResult(bookId, chapterId, existing, parsed.preparation)
+    : undefined;
+  return { preparation, translationsSaved, rejectedTranslations };
 }
 
 export async function updatePreparedTarget(

@@ -283,7 +283,13 @@ export function ReaderPage() {
           ) : null}
         </details>
       ) : null}
-      {chapterId && chapter ? <EpisodePreparationPanel bookId={bookId} chapterId={chapterId} /> : null}
+      {searchParams.get('imported') === '1' ? (
+        <p className="muted" role="note" style={{ margin: 0 }}>
+          Just imported. Optional: run <code>npm run validate:sentence-transcripts -- --book {bookId}</code> to check these
+          transcripts against a fresh ASR pass.
+        </p>
+      ) : null}
+      {chapterId && chapter ? <EpisodePreparationPanel bookId={bookId} chapterId={chapterId} defaultOpen={searchParams.get('pack') === '1'} /> : null}
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}

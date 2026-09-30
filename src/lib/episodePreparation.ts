@@ -20,6 +20,8 @@ export const MAX_PREPARED_TARGETS = 8;
 export interface PreparationSentence {
   id: string;
   japanese: string;
+  /** Present-but-empty means "still needs a translation"; never part of the fingerprint. */
+  translation?: string;
 }
 export interface PreparationVocabulary {
   id: string;
@@ -102,7 +104,7 @@ export function buildPreparationPrompt(context: PreparationContext): string {
   ].join('\n');
 }
 
-function extractJson(reply: string): unknown {
+export function extractJson(reply: string): unknown {
   const fenced = reply.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = (fenced?.[1] ?? reply).trim();
   const start = candidate.indexOf('{');
@@ -133,6 +135,21 @@ export function parsePreparationReply(reply: string, context: PreparationContext
   } catch (error) {
     return failed(error instanceof Error ? error.message : 'Could not read the reply as JSON.');
   }
+  return parsePreparationObject(raw, context, now);
+}
+
+export function parsePreparationObject(raw: unknown, context: PreparationContext, now: string): EpisodePreparation {
+  const fingerprint = episodeFingerprint(context.sentences);
+  const failed = (error: string): EpisodePreparation => ({
+    version: EPISODE_PREPARATION_VERSION,
+    status: 'failed',
+    preparedAt: now,
+    provenance: 'pasted_ai_reply',
+    sentenceFingerprint: fingerprint,
+    targets: [],
+    rejected: [],
+    error,
+  });
   const rawTargets = (raw as { targets?: unknown }).targets;
   if (!Array.isArray(rawTargets)) return failed('The reply has no "targets" list.');
 
