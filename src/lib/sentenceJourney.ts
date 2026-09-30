@@ -1,8 +1,7 @@
 /**
  * Staged sentence progress (sentence-first plan, Phase 3): a derived, read-only
- * view of lesson evidence. Only stages 1-4 (understanding) are measurable so
- * far; expression stages are reported as "not tried" and cap the headline, so
- * reading alone can never reach 100%. Nothing here is stored or scheduled.
+ * view of lesson evidence. Stages 1-4 are understanding; 5-6 need the learner's own
+ * Japanese attempts, so reading alone can never reach 100%. Nothing here is stored or scheduled.
  */
 import type { SentenceLearningEvent } from '../domain/types';
 
@@ -90,14 +89,27 @@ export function buildSentenceJourney(input: JourneyInput): SentenceJourney {
   const s3 = independentCoverage === null ? null : (independentCoverage + (afterGapDays.size >= 1 ? 1 : 0)) / 2;
   const s4 = afterGapDays.size >= 2 ? 1 : 0;
 
+  const attempts = mine.filter((event) => event.action === 'expression_attempt' && event.unitsTotal);
+  const s5 = attempts.reduce((best, event) => Math.max(best, (event.unitsExpressed ?? 0) / event.unitsTotal!), 0);
+  // Independent: no frame shown, every unit carried, and on a later day than the first walkthrough (not an immediate copy of the just-seen line).
+  const independentAttempt = attempts.some(
+    (event) =>
+      event.outcome === 'got_it' &&
+      event.scaffold !== 'frame' &&
+      firstExposureTime !== undefined &&
+      event.timestamp > firstExposureTime &&
+      day(event.timestamp) !== firstExposureDay,
+  );
+  const s6 = independentAttempt ? 1 : 0;
+
   const provisional = structure.supported.total === 0 || vocabulary.supported.total === 0;
   const stages: SentenceJourney['stages'] = [
     { id: 'guided', label: 'Guided understanding', fraction: s1, note: s1 ? 'Walkthrough finished' : 'Walk through the sentence' },
     { id: 'supported', label: 'Supported recognition', fraction: s2, note: s2 === null ? 'Not assessed: no targets identified' : 'Targets recognised with some support' },
     { id: 'independent', label: 'Independent comprehension', fraction: s3, note: s3 === null ? 'Not assessed: no targets identified' : 'Targets with the word hidden, plus a gist check on a later day' },
     { id: 'retained', label: 'Revisit and retain', fraction: s4, note: 'A second successful gist check on another day' },
-    { id: 'supported_expression', label: 'Supported expression', fraction: 0, note: 'Not tried yet' },
-    { id: 'independent_expression', label: 'Independent expression', fraction: 0, note: 'Not tried yet' },
+    { id: 'supported_expression', label: 'Supported expression', fraction: s5, note: attempts.length ? 'Best attempt: meaning parts you carried, frame or not' : 'Not tried yet' },
+    { id: 'independent_expression', label: 'Independent expression', fraction: s6, note: 'No frame, every part carried, on a later day than the first walkthrough' },
   ];
 
   const hasEvidence = mine.length > 0 || vocabulary.supported.done > 0;

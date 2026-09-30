@@ -1414,7 +1414,8 @@ export type SentenceLearningAction =
   | 'target_practice'
   | 'compare_uses_viewed'
   | 'content_report'
-  | 'gist_check';
+  | 'gist_check'
+  | 'expression_attempt';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
@@ -1443,6 +1444,16 @@ export interface SentenceLearningEvent {
   report?: 'another_answer_works' | 'poor_question';
   /** content_report: what the learner actually thought the answer was. */
   learnerAnswer?: string;
+  /**
+   * expression_attempt only: how the learner tried to say the sentence's meaning,
+   * what scaffold was shown before they answered, and how many of the sentence's
+   * meaning units they judged they had carried (their own checklist, not string
+   * equality). Typed text, when given, is in `learnerAnswer`.
+   */
+  modality?: 'typed' | 'spoken';
+  scaffold?: 'none' | 'frame';
+  unitsExpressed?: number;
+  unitsTotal?: number;
   /** Compare uses: the other real occurrence that was shown. */
   exposedSentenceId?: string;
   quietMode?: boolean;

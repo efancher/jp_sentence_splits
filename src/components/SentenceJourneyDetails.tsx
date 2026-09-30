@@ -22,7 +22,7 @@ export function SentenceJourneyDetails({ journey }: { journey: SentenceJourney }
       <div>{counts('Words', journey.vocabulary)}</div>
       <div>{counts('Structure', journey.structure)}</div>
       {journey.provisional ? <div>Provisional: some targets are not identified yet, so this is not a completion measure.</div> : null}
-      <div>Expression stages are not built yet, so reading alone cannot reach 100%.</div>
+      <div>Stages 5-6 need your own Japanese attempts, so reading alone cannot reach 100%.</div>
     </details>
   );
 }

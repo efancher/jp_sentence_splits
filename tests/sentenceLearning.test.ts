@@ -190,7 +190,7 @@ describe('sentence progress', () => {
       ev({ sentenceId: 's2', action: 'walkthrough_completed' }),
     ];
     const progress = summariseSentenceProgress(events, 's1');
-    expect(progress).toEqual({ walkedThrough: true, targetsPractised: 2, gist: 'got_it' });
+    expect(progress).toEqual({ walkedThrough: true, targetsPractised: 2, expressionAttempts: 0, gist: 'got_it' });
     expect(describeSentenceProgress(progress)).toBe('walked through · 2 targets practised · gist: had it');
   });
 

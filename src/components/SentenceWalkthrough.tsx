@@ -10,6 +10,7 @@ import { roleGuideBlurb } from '../lib/roleGuide';
 import { selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
+import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
 import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
@@ -126,6 +127,7 @@ export function SentenceWalkthrough({
   const [showAllTargets, setShowAllTargets] = useState(false);
   const [gist, setGist] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
   const [gistAnswer, setGistAnswer] = useState('');
+  const [expressing, setExpressing] = useState(false);
   const [preset, setPresetState] = useState<SupportPreset>(readPreset);
   const [askedFor, setAskedFor] = useState<{ role: Set<number>; gloss: Set<number>; why: Set<number> }>({ role: new Set(), gloss: new Set(), why: new Set() });
   const setPreset = (value: SupportPreset) => {
@@ -157,6 +159,20 @@ export function SentenceWalkthrough({
     if (done && ordered.length > 0) onEvent?.({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done]);
+
+  if (expressing) {
+    return (
+      <SentenceExpressionCard
+        sentence={sentence}
+        translation={sentence.translation ?? ''}
+        units={meaningUnits(chunks, sentence.translation ?? '')}
+        visitId={visitId}
+        quietMode={quietMode}
+        onEvent={(event) => onEvent?.(event)}
+        onClose={() => setExpressing(false)}
+      />
+    );
+  }
 
   return (
     <section className="panel stack sentence-walkthrough" aria-label="Sentence walkthrough" style={{ gap: '0.5rem' }}>
@@ -213,6 +229,9 @@ export function SentenceWalkthrough({
             ) : gist === 'closed' ? (
               <button type="button" onClick={() => setShowTranslation(true)}>Show natural translation</button>
             ) : null
+          ) : null}
+          {sentence.translation?.trim() ? (
+            <button type="button" onClick={() => setExpressing(true)}>Say it in Japanese</button>
           ) : null}
           <button type="button" onClick={() => setStep(0)}>Walk through again</button>
         </div>

@@ -59,6 +59,22 @@ describe('buildSentenceJourney', () => {
     expect(twice.stages[3]!.fraction).toBe(1);
   });
 
+  it('expression: frame attempts are supported only; independent needs no frame and a later day', () => {
+    const walk = ev({ action: 'walkthrough_completed', timestamp: '2026-09-01T10:00:00' });
+    const attempt = (over: Partial<SentenceLearningEvent>) =>
+      ev({ action: 'expression_attempt', outcome: 'got_it', unitsExpressed: 3, unitsTotal: 3, scaffold: 'none', ...over });
+    const framed = buildSentenceJourney({ ...base, events: [walk, attempt({ scaffold: 'frame', timestamp: '2026-09-05T10:00:00' })] });
+    expect(framed.stages[4]!.fraction).toBe(1);
+    expect(framed.stages[5]!.fraction).toBe(0);
+    const sameDay = buildSentenceJourney({ ...base, events: [walk, attempt({ timestamp: '2026-09-01T10:30:00' })] });
+    expect(sameDay.stages[5]!.fraction).toBe(0);
+    const later = buildSentenceJourney({ ...base, events: [walk, attempt({ timestamp: '2026-09-05T10:00:00' })] });
+    expect(later.stages[5]!.fraction).toBe(1);
+    const partial = buildSentenceJourney({ ...base, events: [walk, attempt({ outcome: 'needed_help', unitsExpressed: 1, timestamp: '2026-09-05T10:00:00' })] });
+    expect(partial.stages[4]!.fraction).toBeCloseTo(1 / 3);
+    expect(partial.stages[5]!.fraction).toBe(0);
+  });
+
   it('cannot reach 100% from understanding alone', () => {
     const events = [ev({ action: 'walkthrough_completed' }),
       ev({ action: 'gist_check', outcome: 'got_it', timestamp: '2026-09-03T11:00:00' }),

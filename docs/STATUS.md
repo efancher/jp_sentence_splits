@@ -10,6 +10,23 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 4 first slice: "Say it in Japanese" (supported and
+  independent expression).** After a walkthrough, "Say it in Japanese" swaps the
+  panel for a meaning cue (the translation) with the Japanese, glosses and
+  audio hidden. The learner types it, or says it aloud (disabled in quiet mode,
+  where typing is recorded as written practice), optionally asking for a
+  "frame" (the chunk glosses in order, which makes the attempt *supported*).
+  "Show the model and check" reveals the sentence, and the learner ticks which
+  meaning parts (chunk glosses, else the whole translation) their version
+  carried. Different Japanese is never rejected and no string comparison is
+  used; unticked parts stay listed as "still to carry". Logged as
+  `expression_attempt` (`modality`, `scaffold`, `unitsExpressed/unitsTotal`,
+  typed text in `learnerAnswer`, `assessmentSource: 'self'`); migration
+  edited in place (still unapplied). Journey stages 5-6 now read these: stage 5
+  is the best ticked fraction (any scaffold); stage 6 needs a no-frame attempt
+  carrying every part on a later day than the first walkthrough. Not built
+  yet: spoken attempts are an unrecorded self-report (no recording/pitch
+  bridge), cue ladder beyond "frame", later revisit scheduling.
 - **2026-09-30 — Phase 3 completed: staged sentence journey + help levels.**
   `buildSentenceJourney` (src/lib/sentenceJourney.ts, pure, read-only) derives
   the six-stage strip from lesson events: stage 1 walkthrough finished; 2

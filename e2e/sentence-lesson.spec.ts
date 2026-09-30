@@ -106,10 +106,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(panel.getByText('Translation 0.')).toBeVisible();
     await panel.getByRole('button', { name: 'I had the gist' }).click();
     await expect(panel.getByText(/says nothing about any single word/)).toBeVisible();
+    // Say it in Japanese: the Japanese stays hidden until the model is requested; the self-check is recorded, not graded.
+    await panel.getByRole('button', { name: 'Say it in Japanese' }).click();
+    const express = page.getByRole('region', { name: 'Say it in Japanese' });
+    await expect(express).toContainText('Translation 0.');
+    await expect(express).not.toContainText('本を読みます。');
+    await express.getByRole('button', { name: /Give me a frame/ }).click();
+    await express.getByLabel('Your Japanese').fill('本を読む');
+    await express.getByRole('button', { name: 'Show the model and check' }).click();
+    await expect(express).toContainText('本を読みます。');
+    await express.getByRole('button', { name: 'Record my attempt' }).click();
+    await expect(express).toContainText('Still to carry next time');
+    await express.getByRole('button', { name: 'Back to the walkthrough' }).click();
     await expect(page.getByLabel('Sentence journey').first()).toContainText('Sentence journey: 29%');
     await expect(page.getByLabel('Sentence journey').first()).toContainText('Structure: 1/1 independent, 1/1 with support');
-    await expect(page.getByLabel('Sentence journey').first()).toContainText('Expression stages are not built yet');
-    await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · gist: had it');
+    await expect(page.getByLabel('Sentence journey').first()).toContainText('reading alone cannot reach 100%');
+    await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · said in Japanese 1× · gist: had it');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 
@@ -128,7 +140,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
       return result;
     });
-    expect(counts.events).toBe(7);
+    expect(counts.events).toBe(8);
     expect(counts.reviews).toBe(0);
     expect(counts.items).toBe(0);
 
