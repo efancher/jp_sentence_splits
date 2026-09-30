@@ -247,6 +247,14 @@ the AI supplies handles and text only; `saveEpisodePackReply` resolves ids,
 fills only empty translations, and reuses the preparation merge. It replaces the
 need for a server-side AI call for these two jobs.
 
+**Sentence learning events (2026-09-30):** `SentenceLearningEvent` rows in the
+local-only Dexie table `sentenceLearningEvents` record in-walkthrough activity
+(opened, completed, target practice, compare uses viewed) with support used and a
+self-assessed outcome. They are deliberately separate from `Review`: they never
+create `StudyItem`s or touch FSRS, and are not yet synced or in backups (same
+precedent as `gameRounds`; adding either needs a migration decision).
+`src/lib/sentenceLearning.ts` picks compare-use examples and summarises events.
+
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —
 pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`

@@ -10,6 +10,32 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 2 first slice: practise + compare uses inside the
+  sentence walkthrough.** Each "Worth noticing here" target is now a
+  `TargetLessonCard`: **Practise this** asks "Before you look…", reveals the
+  explanation on demand and records a self-assessed "I had it" / "I needed the
+  explanation"; **Compare uses** shows the current sentence next to another
+  real occurrence of the same target in the episode (prefers unseen, nearest by
+  position; validated occurrence span else literal match) with "What stays the
+  same? What changes here?" and "Show another example". New local-only Dexie
+  table `sentenceLearningEvents` (v22; `SentenceLearningEvent` in
+  `domain/types.ts`) logs `walkthrough_opened`, `walkthrough_completed`,
+  `target_practice`, `compare_uses_viewed` with a per-visit id, target
+  kind/key/label, support used, outcome, `assessmentSource: 'self'`, quiet mode
+  and the preparation fingerprint. Events are idempotent on id and **never create
+  a `Review`, `StudyItem` or FSRS state**; the card says "Your review schedule is
+  unchanged". A per-target summary ("practised 2x (1 got it) - compared with 1
+  other use") shows on later visits. Files: `src/lib/sentenceLearning.ts`,
+  `src/components/TargetLessonCard.tsx`, `SentenceWalkthrough.tsx`,
+  `ReaderPage.tsx`, `repository.ts` (`logSentenceLearningEvent`,
+  `listSentenceLearningEvents`). Tests: `tests/sentenceLearning.test.ts`,
+  `tests/readerPage.test.tsx`, Docker e2e `e2e/sentence-lesson.spec.ts`.
+  **Deferred (needs a user decision):** cloud sync, backup-schema inclusion and a
+  Supabase migration for the events (they are device-local like `gameRounds`);
+  events orphan rather than cascade when a sentence is deleted; contextual
+  target selection; wiring `treatment` to card creation; promoting a practised
+  target into durable tracking; "Another answer works"/"Poor question" reports.
+
 - **2026-09-30 — Small follow-ups: default chapter + visible episode focus.**
   A chapterless book gets a real "Whole book" chapter on demand (Reader button
   "Prepare this book (optional)" -> `ensureDefaultBookChapter`, which reuses

@@ -11,6 +11,7 @@ import type {
   AlignmentResult,
   EffectiveGameSignal,
   GameRound,
+  SentenceLearningEvent,
   GameRoundItem,
   AnalysisChunk,
   AppSettings,
@@ -8807,6 +8808,30 @@ export async function getEpisodeFocus(bookId: string, chapterId?: string): Promi
 }
 
 /** Sentences + linked vocabulary/grammar of one episode, in the shape the preparation prompt/validator use. */
+/**
+ * Append one in-passage lesson event. Idempotent on `event.id` (a retried or
+ * double-fired write is a no-op) and deliberately writes no Review, StudyItem
+ * or FSRS state: explanation and assisted practice must leave scheduling alone.
+ */
+export async function logSentenceLearningEvent(
+  event: Omit<SentenceLearningEvent, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
+): Promise<SentenceLearningEvent> {
+  const db = getDb();
+  const full: SentenceLearningEvent = {
+    ...event,
+    id: event.id ?? createId('sl_event'),
+    timestamp: event.timestamp ?? nowIso(),
+  };
+  const existing = await db.sentenceLearningEvents.get(full.id);
+  if (existing) return existing;
+  await db.sentenceLearningEvents.put(full);
+  return full;
+}
+
+export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {
+  return getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp');
+}
+
 export async function getEpisodePreparationContext(
   bookId: string,
   chapterId: string,

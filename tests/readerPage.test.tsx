@@ -233,6 +233,55 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     expect(await getDb().reviews.count()).toBe(0);
   });
 
+  it('practises a focus target and compares real uses inside the walkthrough without touching FSRS', async () => {
+    await seedBook();
+    const db = getDb();
+    await db.bookSentences.update('bs-2', { chapterId: 'ch-1' });
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read?chapter=ch-1');
+    await screen.findByText('電気を消しました。');
+
+    await user.click(await screen.findByText(/Episode preparation/));
+    await user.click(screen.getByLabelText('AI reply'));
+    await user.paste(JSON.stringify({
+      targets: [{
+        kind: 'expression', label: 'を', reason: 'Marks the object.',
+        occurrences: [{ sentence: 'S1', text: 'を' }, { sentence: 'S2', text: 'を' }],
+      }],
+    }));
+    await user.click(screen.getByRole('button', { name: 'Check and save reply' }));
+    await screen.findByLabelText('Episode focus');
+
+    await user.click(screen.getAllByRole('button', { name: 'Walk through' })[0]!);
+    const panel = await screen.findByRole('region', { name: 'Sentence walkthrough' });
+
+    await user.click(within(panel).getByRole('button', { name: 'Practise this' }));
+    expect(within(panel).getByText(/Before you look/)).toBeInTheDocument();
+    expect(within(panel).queryByText('Marks the object.')).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Show explanation' }));
+    expect(within(panel).getByText(/Marks the object\./)).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'I needed the explanation' }));
+    expect(within(panel).getByText(/review schedule is unchanged/)).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole('button', { name: 'Compare uses' }));
+    const compare = await within(panel).findByLabelText('Compare uses of を');
+    expect(compare).toHaveTextContent('電気を消しました。');
+    expect(compare.querySelector('mark')?.textContent).toBe('を');
+
+    await waitFor(async () => {
+      const events = await db.sentenceLearningEvents.toArray();
+      expect(events.map((event) => event.action).sort()).toEqual(
+        ['compare_uses_viewed', 'target_practice', 'walkthrough_opened'],
+      );
+    });
+    const events = await db.sentenceLearningEvents.toArray();
+    const practice = events.find((event) => event.action === 'target_practice')!;
+    expect(practice).toMatchObject({ outcome: 'needed_help', assessmentSource: 'self', support: 'explanation_hidden', sentenceId: 'sent-1', bookId: 'book-1', chapterId: 'ch-1' });
+    expect(events.find((event) => event.action === 'compare_uses_viewed')?.exposedSentenceId).toBe('sent-2');
+    expect(await db.reviews.count()).toBe(0);
+    expect(await db.studyItems.count()).toBe(0);
+  });
+
   it('shows a failed reply without blocking reading', async () => {
     await seedBook();
     const user = userEvent.setup();

@@ -54,6 +54,10 @@ export interface EpisodeFocusTarget {
   detail: string;
   sentenceIds: string[];
   reasons: string[];
+  /** Exact spans, when the target came from a validated preparation (not the derived draft). */
+  occurrences?: { sentenceId: string; start: number; end: number }[];
+  /** Preparation kind when it differs from the vocabulary/grammar split (e.g. multi-word expressions). */
+  preparedKind?: 'vocabulary' | 'grammar' | 'expression';
 }
 
 export interface EpisodeGlossOnlyTarget {

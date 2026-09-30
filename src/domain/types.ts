@@ -1392,3 +1392,36 @@ export interface WordBoundaryLabel {
   elapsedMs: number;
   createdAt: string;
 }
+
+export type SentenceLearningAction =
+  | 'walkthrough_opened'
+  | 'walkthrough_completed'
+  | 'target_practice'
+  | 'compare_uses_viewed';
+
+/**
+ * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
+ * Device-local for now (not synced, not in backups) and never a `Review`: no
+ * FSRS effect. `id` is the idempotency key, so a retried write is a no-op.
+ */
+export interface SentenceLearningEvent {
+  id: string;
+  timestamp: string;
+  /** One walkthrough opening; groups the events of a single visit. */
+  visitId: string;
+  action: SentenceLearningAction;
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  target?: { kind: PreparedTargetKind; key: string; label: string };
+  /** What was visible when the learner answered (practice only). */
+  support?: 'explanation_hidden';
+  outcome?: 'got_it' | 'needed_help';
+  /** Practice outcomes are always the learner's own judgement here. */
+  assessmentSource?: 'self';
+  /** Compare uses: the other real occurrence that was shown. */
+  exposedSentenceId?: string;
+  quietMode?: boolean;
+  /** Episode sentence fingerprint the focus was chosen against, when known. */
+  inventoryRevision?: string;
+}

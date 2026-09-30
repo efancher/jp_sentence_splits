@@ -6,7 +6,7 @@ import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, readSettings, updateSettings } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -83,6 +83,11 @@ export function ReaderPage() {
     [bookId, chapterId],
   );
 
+  const lessonEvents = useLiveQuery(() => listSentenceLearningEvents(bookId), [bookId]);
+  const episodeSentences = useMemo(
+    () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, position: index + 1 })) : []),
+    [data],
+  );
   const preparation = data?.chapter?.preparation;
   const walkthroughFocus: EpisodeFocusTarget[] = useMemo(() => {
     if (!data || !preparation || preparation.targets.length === 0) return focus?.focus ?? [];
@@ -93,11 +98,13 @@ export function ReaderPage() {
       .filter((target) => target.decision !== 'dismissed')
       .map((target) => ({
         kind: target.kind === 'grammar' ? ('grammar' as const) : ('vocabulary' as const),
-        id: target.id,
+        id: target.vocabularyItemId ?? target.grammarPatternId ?? `expression:${target.label}`,
         label: target.label,
         detail: target.learnerNote || target.reason,
         sentenceIds: [...new Set(target.occurrences.map((occurrence) => occurrence.sentenceId))],
         reasons: [target.reason],
+        occurrences: target.occurrences.map(({ sentenceId, start, end }) => ({ sentenceId, start, end })),
+        preparedKind: target.kind,
       }));
   }, [data, preparation, focus]);
 
@@ -381,6 +388,16 @@ export function ReaderPage() {
                       savedChunks={data.chunksBySentence.get(row.sentence.id)}
                       audio={audio}
                       focusTargets={walkthroughFocus}
+                      episodeSentences={episodeSentences}
+                      events={lessonEvents ?? []}
+                      onEvent={(event) =>
+                        void logSentenceLearningEvent({
+                          ...event,
+                          bookId,
+                          chapterId,
+                          inventoryRevision: preparation?.sentenceFingerprint,
+                        })
+                      }
                       quietMode={settings?.quietMode ?? false}
                       onQuietModeChange={(quiet) => void updateSettings({ quietMode: quiet })}
                       onClose={() => setWalkthroughId(undefined)}

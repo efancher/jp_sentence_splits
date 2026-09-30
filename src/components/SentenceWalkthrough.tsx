@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import type { AnalysisChunk, Sentence, SentenceAudio } from '../domain/types';
+import type { AnalysisChunk, Sentence, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
+import { createId } from '../lib/ids';
 import { roleGuideBlurb } from '../lib/roleGuide';
+import type { CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { NativeAudioButton } from './NativeAudioButton';
+import { TargetLessonCard, type LessonEventInput } from './TargetLessonCard';
 
 export interface WalkthroughChunk {
   id: string;
@@ -59,6 +62,9 @@ export function SentenceWalkthrough({
   savedChunks,
   audio,
   focusTargets,
+  episodeSentences = [],
+  events = [],
+  onEvent,
   quietMode,
   onQuietModeChange,
   onClose,
@@ -67,6 +73,11 @@ export function SentenceWalkthrough({
   savedChunks?: AnalysisChunk[];
   audio?: SentenceAudio;
   focusTargets: EpisodeFocusTarget[];
+  /** The whole episode, for "Compare uses" excerpts. */
+  episodeSentences?: CompareSentence[];
+  /** Earlier lesson events for this book, to show what has been practised/compared. */
+  events?: SentenceLearningEvent[];
+  onEvent?: (event: LessonEventInput) => void;
   quietMode: boolean;
   onQuietModeChange: (quiet: boolean) => void;
   onClose: () => void;
@@ -80,6 +91,18 @@ export function SentenceWalkthrough({
   const revealedIds = new Set(ordered.slice(0, step + 1).map((item) => item.id));
   const here = focusTargets.filter((target) => target.sentenceIds.includes(sentence.id));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
+  const visitId = useMemo(() => createId('visit'), []);
+
+  useEffect(() => {
+    onEvent?.({ id: `${visitId}:opened`, visitId, action: 'walkthrough_opened', sentenceId: sentence.id, quietMode });
+    // Once per opening; quietMode at that moment is what is recorded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitId, sentence.id]);
+
+  useEffect(() => {
+    if (done && ordered.length > 0) onEvent?.({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
 
   return (
     <section className="panel stack sentence-walkthrough" aria-label="Sentence walkthrough" style={{ gap: '0.5rem' }}>
@@ -129,9 +152,22 @@ export function SentenceWalkthrough({
           : 'Automatic draft: roles are generic, not verified for this sentence. Correct it on Analyze.'}
       </p>
       {here.length > 0 ? (
-        <div>
-          <span className="muted">Worth noticing here (recurs in this episode): </span>
-          <span className="jp">{here.map((target) => target.label).join('、')}</span>
+        <div className="stack" style={{ gap: '0.25rem' }}>
+          <span className="muted">Worth noticing here (recurs in this episode). Practice is optional and never changes your review schedule.</span>
+          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+            {here.map((target) => (
+              <TargetLessonCard
+                key={target.id}
+                target={target}
+                sentenceId={sentence.id}
+                visitId={visitId}
+                episodeSentences={episodeSentences}
+                events={events}
+                quietMode={quietMode}
+                onEvent={(event) => onEvent?.(event)}
+              />
+            ))}
+          </ul>
         </div>
       ) : null}
       <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>

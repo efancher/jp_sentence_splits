@@ -171,8 +171,14 @@ Phase 1 - guided sentence learning in the passage (in progress)
 - [x] Docker Playwright check for the Reader walkthrough (Chromium + WebKit)
 - [x] Show the stage journey without claiming unbuilt stages are assessed
 
-Phases 2-6 (not started): activities inside the sentence + learning events;
-support fading + sentence progress; supported/independent expression and
+Phase 2 - activities inside the sentence + learning events (first slice done)
+- [x] Practise this (self-assessed, explanation hidden first) and Compare uses (two real occurrences) per target in the walkthrough
+- [x] Local-only `sentenceLearningEvents` (Dexie v22); no Review/StudyItem/FSRS effect
+- [x] Docker Playwright check (`e2e/sentence-lesson.spec.ts`, Chromium + WebKit)
+- [ ] Decide on sync/backup/Supabase migration for the events
+- [ ] Contextual target selection; promote practised target into durable tracking; content-defect reports
+
+Phases 3-6 (not started): support fading + sentence progress; supported/independent expression and
 shadowing; planner `sentence_learning`; transfer/compare uses. Also open:
 per-chunk source spans, long-chapter virtualization, browser test for the Reader
 focus panel, live re-check of speech/mining services before relying on them.

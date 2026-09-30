@@ -12,6 +12,7 @@ import type {
   CardIssueReport,
   GameRound,
   WordBoundaryLabel,
+  SentenceLearningEvent,
   GrammarPattern,
   GrammarRelationship,
   ImportBatch,
@@ -138,6 +139,8 @@ export class GlossbookDatabase extends Dexie {
   // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
   // device-local; exported to a file with the labelling page's "Save labels" button, never synced.
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
+  // Sentence-first lesson evidence (Phase 2): append-only, device-local, never a Review.
+  sentenceLearningEvents!: EntityTable<SentenceLearningEvent, 'id'>;
   // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
   // sessions — a small per-user preference list, not learning content.
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
@@ -684,6 +687,11 @@ export class GlossbookDatabase extends Dexie {
     // Named podcast feeds — purely additive, every store above unchanged.
     this.version(21).stores({
       namedPodcastFeeds: 'id, name, updatedAt',
+    });
+
+    // Sentence-first lesson events — purely additive.
+    this.version(22).stores({
+      sentenceLearningEvents: 'id, timestamp, bookId, sentenceId',
     });
   }
 }
