@@ -53,6 +53,8 @@
     "issues:list": "tsx scripts/list-card-issues.ts",
     "issues:list-sync": "tsx scripts/list-sync-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts",
+    "check:sentence-integrity": "tsx scripts/check-sentence-integrity.ts",
+    "repair:dangling-sentence-rows": "tsx scripts/repair-dangling-sentence-rows.ts",
     "check:migrations-applied": "tsx scripts/check-migrations-applied.ts",
     "replay:pitch-drill-takes": "tsx scripts/replay-pitch-drill-takes.ts",
     "report:new-card-backlog": "tsx scripts/report-new-card-backlog.ts",

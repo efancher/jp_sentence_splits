@@ -1455,6 +1455,39 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-09-30 — Sentence-membership integrity: root causes of the two
+  Teppei #1461 glitches found, detector + guards added (no production data
+  changed).** Read-only prod scan (`npm run check:sentence-integrity`) finds
+  exactly 4 dangling live `book_sentences` rows (Slow Japanese x3, Teppei x1)
+  and 4 live `reference_audio` clips for deleted sentences, plus 1
+  out-of-order chapter (Teppei #1461); nothing else. Causes:
+  (1) **Dangling memberships / orphan clips.** All three sentences were
+  deleted 2026-09-23 via the new review-card delete button. The cascade
+  (`cascadeRetireSentenceLocal`) queues one delete op per child row, but the
+  cloud rows survived: a child delete op that hits `version_conflict` becomes
+  a conflict card and is dropped from the queue, a device that never pulled
+  the row queues nothing, and `reference_audio` deletes are skipped when that
+  device has audio sync off. Two of the four rows predate the deletion (which
+  of those mechanisms hit them is unconfirmed). The other two were *created*
+  2026-09-26 by the `repair-episode-sentence-order` backfill, which built
+  missing memberships from live clips without checking the sentence was still
+  live. (2) **Sign-off before the intro.** #1461's chapter has no `sourceId`
+  (the repair script skips those), so its order came from the stale
+  `firstOccurrenceIndex` of the shared "それでは、またね。" (spoken at 276 s in
+  #1467, 364 s in #1461). Guards: `src/lib/sentenceIntegrity.ts` + tests
+  (detects dangling/orphan/duplicate-position/out-of-recording-order, infers a
+  chapter's recording from its sentences' clips so it needs no `sourceId`);
+  `check:sentence-integrity` (exit 1 on findings); migration
+  `20260930010000_cascade_sentence_soft_delete.sql` (trigger soft-deletes live
+  memberships and clips when a sentence is soft-deleted, so the cascade no
+  longer depends on client ops; not applied until merge, no backfill);
+  `repair-episode-sentence-order` backfill now skips deleted sentences;
+  `repair:dangling-sentence-rows` (dry-run by default, soft-deletes only).
+  **Not done, needs the user's OK:** running the repair (`--apply`), and
+  fixing #1461's order (set the chapter's `sourceId` then re-run
+  `repair:episode-sentence-order`, or hand-fix). Still open: whether a
+  dropped delete-op conflict should retry instead of raising a card.
+
 - **2026-09-27 — Four fixes off a real-data weakness scan: biased pitch-
   drill practice, best-effort auto-play on the miss contrast, a long-word
   scaffold on the `pitch_accent` card, and a named fix in the new-card

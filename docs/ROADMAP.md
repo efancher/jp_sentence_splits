@@ -349,6 +349,14 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## In progress
 
+- [~] **Sentence-membership integrity (class of bug).** Detector, guards and
+  a dry-run repair landed on `feat/chapter-review` (STATUS 2026-09-30). Left:
+  user OK to run `repair:dangling-sentence-rows --apply` and fix Teppei #1461's
+  order; merge applies the cascade-soft-delete migration; decide whether a
+  dropped delete-op conflict should auto-retry; consider running
+  `check:sentence-integrity` in CI or a scheduled workflow like
+  `check:duplicate-books`.
+
 - [~] **Passage-first learning and reviews.** Plan in
   `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. First slice implemented on
   `feat/chapter-review` (not deployed): full-chapter vocabulary reading/cloze

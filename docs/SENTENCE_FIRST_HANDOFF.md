@@ -126,8 +126,7 @@ npm run build
 To also offer the exported real episode (text only; needs `/tmp/real-chapter`,
 which is never committed), run after the demo step:
 `./node_modules/.bin/tsx scripts/generate-real-episode-backup.ts dist/real-episode.json https://codex-dev.tailfbd89c.ts.net:8443`
-and open `https://codex-dev.tailfbd89c.ts.net:8444/real-episode.html`. Delete
-`dist/real-episode.*` when the trial is done.
+and open `https://codex-dev.tailfbd89c.ts.net:8444/real-episode.html`. `dist/real-episode.*` has since been deleted; regenerate it only if needed.
 
 The app's offline navigation fallback intercepts standalone HTML on its own
 origin. **Do not give the user the sample HTML on port 8443.** Port 8444 is the
@@ -200,12 +199,14 @@ uses on their phone yet, and have not said whether the episode pack prompt felt
 right beyond "that worked".
 
 Housekeeping owed:
-- `dist/real-episode.*` in the preview holds a copy of the user's real episode.
-  Delete it (and `/tmp/real-chapter`) when the user is done trialling.
-- Production data defects found, deliberately NOT touched (need the user's OK
-  and a reviewed script): a live `book_sentences` row (position 421) whose
-  sentence was soft-deleted 2026-09-23, and the shared sign-off sentence at
-  position 420 rendering before the intro.
+- `dist/real-episode.*` was removed from the preview (2026-09-30); delete
+  `/tmp/real-chapter` when the investigation is finished. Never commit it.
+- Production data defects (root causes and guards in STATUS 2026-09-30
+  "Sentence-membership integrity"): dangling `book_sentences` rows/clips for
+  deleted sentences, and #1461's shared sign-off ordered before the intro.
+  Run `npm run check:sentence-integrity` to see them. Repairs need the
+  user's explicit OK: `npm run repair:dangling-sentence-rows -- --apply`,
+  and the #1461 order fix (chapter has no `sourceId`).
 
 Suggested next slices (none confirmed by the user):
 1. Ask the user how Practise this / Compare uses felt on the real episode; adjust.

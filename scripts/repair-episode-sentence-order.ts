@@ -106,6 +106,24 @@ async function fetchAllReferenceAudio(
   return out;
 }
 
+async function fetchLiveSentenceIds(supabase: SupabaseClient, ownerId: string): Promise<Set<string>> {
+  const pageSize = 1000;
+  const ids = new Set<string>();
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('sentences')
+      .select('id')
+      .eq('owner_id', ownerId)
+      .is('deleted_at', null)
+      .order('id')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(`Failed to fetch sentences: ${error.message}`);
+    for (const row of data ?? []) ids.add(String(row.id));
+    if (!data || data.length < pageSize) break;
+  }
+  return ids;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const apply = parseApplyFlag(argv);
@@ -140,7 +158,12 @@ async function main() {
   if (memErr) throw new Error(`Failed to fetch book_sentences: ${memErr.message}`);
   const memberships = (membershipsRaw ?? []) as MembershipRow[];
 
-  const allAudio = await fetchAllReferenceAudio(supabase, user.id);
+  // A live clip can outlive its sentence (see check:sentence-integrity), so
+  // never backfill a membership for a sentence that has been deleted.
+  const liveSentenceIds = await fetchLiveSentenceIds(supabase, user.id);
+  const allAudio = (await fetchAllReferenceAudio(supabase, user.id)).filter((row) =>
+    liveSentenceIds.has(row.sentence_id),
+  );
   const timestamp = new Date().toISOString();
 
   const orderedRowsForBook: { id: string; chapter_id: string | null }[] = [];
