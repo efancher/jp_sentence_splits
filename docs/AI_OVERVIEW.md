@@ -1361,15 +1361,24 @@ The unified FSRS-based SRS, at `/review` (global) and
 content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
 rating). One `StudyItem` exists per `(subjectType, subjectId,
 activityType)` triple; multiple activity types can exist for the same
-subject. Any card that frames its target sentence with passage context
+subject. Vocabulary `reading_retrieval`/`cloze` and `grammar_recognition` now
+show the complete source chapter/episode through `ReviewDocumentText`, with
+the target highlighted/blanked and the existing response controls below.
+The scrollable document keeps plain Japanese before and after reveal; target
+feedback/readings/audio still appear below on reveal. Cloze masks known target
+forms throughout the document and source titles. Source resolution preserves
+book identity and chapter boundaries, falling back to the queued sentence.
+No whole-chapter proficiency gate is introduced. Grammar completion and other
+card layouts retain their prior presentation.
+
+Cards that still frame their target sentence with limited passage context
 (preceding/following neighbour sentences, not the sentence under test)
 shows each context sentence's hiragana reading (`sentence.readingOnly`) on
 its own line underneath, once `revealed` — withheld pre-reveal so a
 passage line the card shows up front doesn't hand over reading practice
 before the learner has attempted it. Shared `ContextSentenceReading`
-helper in `ReviewPage.tsx`, used by `ReadingInContextCard`,
-`VocabularyTargetCard` (`cloze`/`reading_retrieval`),
-`GrammarRecognitionCard`, and `GrammarCompletionCard` (2026-09-27).
+helper in `ReviewPage.tsx`, used by `ReadingInContextCard` and
+`GrammarCompletionCard` (introduced 2026-09-27).
 Activity types currently wired, grouped by subject/eligibility:
 - **Sentence subject**: `reading_in_context` (JP framed by its
   reading-order neighbours — preceding sentences shown untranslated above

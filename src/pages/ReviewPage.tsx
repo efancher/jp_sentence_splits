@@ -13,6 +13,7 @@ import { WordPitchContour } from '../components/WordPitchContour';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { RecordToggleButton } from '../components/RecordToggleButton';
+import { ReviewDocumentText } from '../components/ReviewDocumentText';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
@@ -91,6 +92,7 @@ import {
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
+import { uniqueReviewSpan } from '../lib/reviewDocument';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
 import { pickQuotaSubjects, quotaRemaining, VOCABULARY_DESCRIPTOR_KEY } from '../lib/newWordQuota';
@@ -1906,7 +1908,8 @@ export function ReviewPage() {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">
-              {scope?.book ? `${scope.book.title} · Review` : 'Review'}
+              {scope?.book && !(current?.studyItem.activityType === 'cloze' && !revealed)
+                ? `${scope.book.title} · Review` : 'Review'}
             </div>
           </div>
           {bookId ? (
@@ -2037,6 +2040,7 @@ export function ReviewPage() {
               />
             ) : current.target ? (
               <VocabularyTargetCard
+                key={current.studyItem.id}
                 activityType={current.studyItem.activityType}
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
@@ -2409,28 +2413,6 @@ function VocabularyTargetCard({
   onReveal: () => void;
 }) {
   const isCloze = activityType === 'cloze';
-  const precedes = (context?.before.length ?? 0) > 0;
-  const contextLines = precedes ? (context?.before ?? []) : (context?.after ?? []);
-  const hideTarget = isCloze && !revealed;
-  const contextText = (text: string): string => {
-    if (!hideTarget) return text;
-    let masked = text;
-    for (const word of new Set([surfaceForm, vocabularyItem.expression])) {
-      if (word) masked = masked.split(word).join('_____');
-    }
-    return masked;
-  };
-  const contextBlock = contextLines.length ? (
-    <div className="reading-context">
-      {contextLines.map((item) => (
-        <div key={item.id}>
-          <p className="jp jp-sm reading-context-line">{contextText(item.japanese)}</p>
-          <ContextSentenceReading sentence={item} revealed={revealed} />
-        </div>
-      ))}
-    </div>
-  ) : null;
-  const [before, target, after] = splitOnSurfaceForm(sentence.japanese, surfaceForm);
   // Only reading_retrieval names the dictionary form — cloze hides the word
   // itself pre-reveal, so spelling out its lemma would give the answer away.
   const showDictionaryForm =
@@ -2440,13 +2422,14 @@ function VocabularyTargetCard({
     surfaceForm !== vocabularyItem.expression;
   return (
     <>
-      {precedes ? contextBlock : null}
-      <div className="jp jp-lg">
-        {before}
-        <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
-        {after}
-      </div>
-      {precedes ? null : contextBlock}
+      <ReviewDocumentText
+        sentence={sentence}
+        bookId={context?.bookId}
+        target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+        revealed={revealed}
+        cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
+      />
+      <div>{isCloze ? 'Recall the missing word.' : showDictionaryForm ? 'Recall the dictionary reading of the highlighted word.' : 'How do you read the highlighted word?'}</div>
       {showDictionaryForm ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}
@@ -3564,54 +3547,15 @@ function GrammarRecognitionCard({
 }) {
   const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
   const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
-  const { before, after } = readingContext;
-
-  const passageBefore = readingContext.bookTitle ? (
-    <>
-      <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-        In context · {readingContext.bookTitle}
-      </p>
-      {before.length ? (
-        <div className="reading-context">
-          {before.map((item) => (
-            <div key={item.id}>
-              <p className="jp jp-sm reading-context-line">{item.japanese}</p>
-              <ContextSentenceReading sentence={item} revealed={revealed} />
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </>
-  ) : null;
-
-  const passageAfter = after.length ? (
-    <div className="reading-context">
-      {after.map((item) => (
-        <div key={item.id}>
-          <p className="reading-context-line">
-            <span className="jp jp-sm">{item.japanese}</span>
-            {item.translation ? <span className="muted"> — {item.translation}</span> : null}
-          </p>
-          <ContextSentenceReading sentence={item} revealed={revealed} />
-        </div>
-      ))}
-    </div>
-  ) : null;
 
   return (
     <>
-      {passageBefore}
-      <div className="jp jp-lg">
-        {blank ? (
-          <>
-            {blank.before}
-            <mark>{blank.match}</mark>
-            {blank.after}
-          </>
-        ) : (
-          sentence.japanese
-        )}
-      </div>
+      <ReviewDocumentText
+        sentence={sentence}
+        bookId={readingContext.bookId}
+        target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
+        revealed={revealed}
+      />
       <div className="muted">
         What is <span className="jp">{pattern.canonicalName}</span> doing in this sentence?
       </div>
@@ -3634,7 +3578,6 @@ function GrammarRecognitionCard({
             <div className="muted">{pattern.structuralNotes}</div>
           ) : null}
           {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-          {passageAfter}
         </>
       )}
     </>

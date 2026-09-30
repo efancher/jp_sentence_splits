@@ -3,10 +3,17 @@
 Date: 2026-09-29  
 Revised: 2026-09-30 — episode preparation, speech practice, target quality, transfer and measurement.
 
-Status: Design proposal; no application changes implemented.  
+Status: Design proposal with the first review-interface slice implemented on `feat/chapter-review`; not deployed.
 Starting point: [Roadmap: sentence glossing accessibility](ROADMAP.md#possibilities-sentence-glossing-accessibility), the guided walkthrough, and the sentence mastery/deep-dive work.
 
 ## Intent
+
+Implementation checkpoint (2026-09-30): chapter/episode display is now implemented
+for vocabulary reading/cloze and grammar recognition, with source selection,
+known-form masking, target navigation and unchanged grading. Build and full
+unit/integration tests pass; Chromium/WebKit phone/desktop tests pass in Docker
+(`e2e/README.md`). This does not implement the remaining card types, new event
+scheme, episode preparation, lesson progression or production design below.
 
 Make the sentence and an explanation of how it works the first learning experience. Vocabulary and grammar become things the sentence invites you to learn, and progress in those things makes the sentence progressively more understandable with less help.
 

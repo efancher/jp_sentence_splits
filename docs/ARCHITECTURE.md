@@ -220,6 +220,16 @@ decisions worth knowing before adding one:
 
 ## Scheduling
 
+**Chapter review presentation (2026-09-30):** `ReviewDocumentText` loads a
+read-only document through `repository.ts#getReviewDocument` for vocabulary
+reading/cloze and grammar recognition. `ReadingContext.bookId` carries the
+selected source identity; document rows stay within that membership's chapter
+(or the unassigned group). This display scope does not widen readiness gates
+or change FSRS. Source-less cards use the queued sentence. Cloze masking uses
+literal target/lemma forms plus known linked/tokenizer forms; no hidden ruby,
+gloss or audio representation is rendered inside the document. Other activity
+types retain their existing context presentation pending subsequent slices.
+
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —
 pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`

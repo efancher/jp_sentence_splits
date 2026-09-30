@@ -349,6 +349,13 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## In progress
 
+- [~] **Passage-first learning and reviews.** Plan in
+  `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. First slice implemented on
+  `feat/chapter-review` (not deployed): full-chapter vocabulary reading/cloze
+  and grammar-recognition display, verified by unit/integration and container
+  browser tests. Other activities and the learning/preparation model remain.
+  Browser test instructions: `e2e/README.md`.
+
 - [ ] **Mining pipeline v2.** Staged, re-runnable YouTube mining
   (transcript → segment → translate → commit, audio at every stage) fixing
   the auto-caption-as-source-of-truth quality issue. Slices A (ASR

@@ -17,6 +17,11 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: 'review-document.spec.ts',
+    },
+    {
       name: 'webkit',
       use: { ...devices['iPhone 13'] },
     },

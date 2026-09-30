@@ -1,4 +1,5 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
+import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
@@ -8690,6 +8691,49 @@ export async function listGrammarRelationshipsForPattern(
  * deferUnreadyReadingInContextReviews uses (fine for an occasional
  * maintenance pass over the whole corpus) would not scale here.
  */
+/** Read-only presentation scope. Never applies study-readiness gates to the chapter. */
+export async function getReviewDocument(
+  sentenceId: string,
+  preferredBookId?: string,
+  vocabularyItemId?: string,
+): Promise<ReviewDocument | null> {
+  const db = getDb();
+  const memberships = await db.bookSentences.where('sentenceId').equals(sentenceId).toArray();
+  const books = await db.books.bulkGet([...new Set(memberships.map((row) => row.bookId))]);
+  const bookById = new Map(books.filter((book): book is Book => Boolean(book)).map((book) => [book.id, book]));
+  const candidates = memberships.filter((row) => bookById.has(row.bookId));
+  candidates.sort((a, b) => {
+    const preferred = Number(b.bookId === preferredBookId) - Number(a.bookId === preferredBookId);
+    if (preferred) return preferred;
+    const opened = (id: string) => Date.parse(bookById.get(id)?.lastOpenedAt ?? '') || 0;
+    return opened(b.bookId) - opened(a.bookId);
+  });
+  const home = candidates[0];
+  if (!home) return null;
+  const book = bookById.get(home.bookId)!;
+  const membershipsInBook = await db.bookSentences.where('bookId').equals(home.bookId).sortBy('position');
+  // Unassigned rows stay together; they must not pull in unrelated episode chapters.
+  const rows = membershipsInBook.filter((row) => row.chapterId === home.chapterId);
+  const sentences = await db.sentences.bulkGet(rows.map((row) => row.sentenceId));
+  const documentRows = rows.flatMap((row, index) => {
+    const sentence = sentences[index];
+    return sentence ? [{ membershipId: row.id, sentence }] : [];
+  });
+  if (!documentRows.some((row) => row.membershipId === home.id)) return null;
+  const links = vocabularyItemId
+    ? await db.sentenceVocabulary.where('vocabularyItemId').equals(vocabularyItemId).toArray()
+    : [];
+  return {
+    bookId: home.bookId,
+    bookTitle: book.title,
+    chapterTitle: book.chapters.find((chapter) => chapter.id === home.chapterId)?.title
+      ?? (book.chapters.length && !home.chapterId ? 'Unassigned sentences' : undefined),
+    activeMembershipId: home.id,
+    rows: documentRows,
+    vocabularyForms: links.flatMap((link) => link.surfaceForm ? [link.surfaceForm] : []),
+  };
+}
+
 async function getReadingContextForSentence(sentenceId: string): Promise<ReadingContext> {
   const db = getDb();
   const memberships = await db.bookSentences.where('sentenceId').equals(sentenceId).toArray();
@@ -8724,6 +8768,7 @@ async function getReadingContextForSentence(sentenceId: string): Promise<Reading
       .map((row) => sentenceById.get(row.sentenceId))
       .filter((s): s is Sentence => Boolean(s)),
     bookTitle: bookById.get(home.bookId)?.title,
+    bookId: home.bookId,
   };
 }
 

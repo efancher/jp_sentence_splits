@@ -6,9 +6,33 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-28.
+Last updated: 2026-09-30.
 
 ## Where things stand
+
+- **2026-09-30 — Chapter-based reviews, first implementation slice.**
+  Implemented on `feat/chapter-review`; not deployed. `reading_retrieval`,
+  vocabulary `cloze`, and `grammar_recognition` now use a scrollable source
+  chapter/episode with the target marked in place and existing question,
+  reveal and self-rating controls below. `ReviewDocumentText` and the read-only
+  `getReviewDocument` query preserve book identity, chapter boundaries and
+  unassigned-row grouping; source-less cards fall back to the sentence.
+  Cloze conceals exact/known inflected forms throughout the document and source
+  titles. Plain Japanese prevents ruby/gloss/audio widgets from exposing answers;
+  a stale previous document is withheld while the next source loads. No new
+  chapter-wide readiness gate, FSRS changes, schema migration or service changes.
+  Existing audio/adjustment controls remain on the review reveal.
+  - Validation: production build; full Vitest suite **2184 passed, 12 skipped**;
+    four Playwright checks (Chromium/WebKit × 390px/1280px), with screenshots,
+    synthetic IndexedDB data, scrolling/masking and one-review-per-grade checks.
+    **Browser tests run in the cached Playwright Docker image**, not the bare
+    host: see `e2e/README.md` for the repeatable command. Host browser launches
+    fail on missing shared libraries; neither host packages nor services changed.
+  - Scope remaining: grammar completion and other card layouts, robust semantic
+    variant handling/occurrence alignment, preparation/lesson progress and new
+    telemetry from `SENTENCE_FIRST_LEARNING_PLAN.md`. Known-form masking is not
+    semantic detection of every paraphrase or unannotated inflection. Very long
+    chapters use plain DOM rows, not virtualization yet.
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,

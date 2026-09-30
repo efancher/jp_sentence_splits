@@ -138,6 +138,54 @@ strong.jp {
   color: var(--text-muted);
 }
 
+.review-document {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.review-document-heading,
+.review-document-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.review-document-viewport {
+  max-height: 42vh;
+  max-height: 42dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--border);
+  padding: 0.5rem;
+}
+
+.review-document-line {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid transparent;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.review-document-active {
+  border-left-color: var(--accent);
+  background: var(--bg-muted);
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+
+.review-document-active mark {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.1em 0.15em;
+  border-radius: 0.2em;
+}
+
 .reading-context-reading {
   margin: 0;
   font-style: italic;
