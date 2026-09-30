@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
+import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
 import { getDb, getEpisodeFocus, readSettings, updateSettings } from '../db/repository';
@@ -10,6 +11,8 @@ import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
+import type { EpisodeFocusTarget } from '../lib/episodeFocus';
+import { isPreparationStale } from '../lib/episodePreparation';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -78,6 +81,24 @@ export function ReaderPage() {
     () => getEpisodeFocus(bookId, chapterId).catch(() => null),
     [bookId, chapterId],
   );
+
+  const preparation = data?.chapter?.preparation;
+  const walkthroughFocus: EpisodeFocusTarget[] = useMemo(() => {
+    if (!data || !preparation || preparation.targets.length === 0) return focus?.focus ?? [];
+    if (isPreparationStale(preparation, data.rows.map((row) => ({ id: row.sentence.id, japanese: row.sentence.japanese })))) {
+      return focus?.focus ?? [];
+    }
+    return preparation.targets
+      .filter((target) => target.decision !== 'dismissed')
+      .map((target) => ({
+        kind: target.kind === 'grammar' ? ('grammar' as const) : ('vocabulary' as const),
+        id: target.id,
+        label: target.label,
+        detail: target.learnerNote || target.reason,
+        sentenceIds: [...new Set(target.occurrences.map((occurrence) => occurrence.sentenceId))],
+        reasons: [target.reason],
+      }));
+  }, [data, preparation, focus]);
 
   const matchingSourceId =
     data?.chapter?.sourceId ??
@@ -262,6 +283,7 @@ export function ReaderPage() {
           ) : null}
         </details>
       ) : null}
+      {chapterId && chapter ? <EpisodePreparationPanel bookId={bookId} chapterId={chapterId} /> : null}
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}
@@ -322,7 +344,7 @@ export function ReaderPage() {
                       sentence={row.sentence}
                       savedChunks={data.chunksBySentence.get(row.sentence.id)}
                       audio={audio}
-                      focusTargets={focus?.focus ?? []}
+                      focusTargets={walkthroughFocus}
                       quietMode={settings?.quietMode ?? false}
                       onQuietModeChange={(quiet) => void updateSettings({ quietMode: quiet })}
                       onClose={() => setWalkthroughId(undefined)}

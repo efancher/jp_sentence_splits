@@ -1,5 +1,9 @@
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
+import {
+  type PreparationContext,
+  parsePreparationReply,
+} from '../lib/episodePreparation';
 import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
@@ -60,6 +64,9 @@ import type {
   VocabularyReviewStatus,
   VocabularySelection,
   VocabularySuggestion,
+  EpisodePreparation,
+  PreparedTarget,
+  PreparedTargetDecision,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import {
@@ -8778,6 +8785,116 @@ export async function getEpisodeFocus(bookId: string, chapterId?: string): Promi
     knownVocabularyItemIds: retained(vocabularyStudy),
     knownGrammarPatternIds: retained(grammarStudy),
   });
+}
+
+/** Sentences + linked vocabulary/grammar of one episode, in the shape the preparation prompt/validator use. */
+export async function getEpisodePreparationContext(
+  bookId: string,
+  chapterId: string,
+): Promise<{ context: PreparationContext; preparation?: EpisodePreparation }> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  const chapter = book?.chapters.find((item) => item.id === chapterId);
+  if (!book || !chapter) throw new Error('Chapter not found');
+  const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
+    .filter((row) => row.chapterId === chapterId);
+  const sentenceRows = await db.sentences.bulkGet(memberships.map((row) => row.sentenceId));
+  const sentences = sentenceRows.flatMap((row) => (row ? [{ id: row.id, japanese: row.japanese }] : []));
+  const sentenceIds = sentences.map((row) => row.id);
+  const [vocabularyLinks, grammarLinks] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const [vocabulary, grammar] = await Promise.all([
+    db.vocabularyItems.bulkGet([...new Set(vocabularyLinks.map((link) => link.vocabularyItemId))]),
+    db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]),
+  ]);
+  return {
+    context: {
+      title: chapter.title,
+      sentences,
+      vocabulary: vocabulary.flatMap((item) => (item ? [{ id: item.id, expression: item.expression, reading: item.reading, meaning: item.meaning }] : [])),
+      grammar: grammar.flatMap((item) => (item ? [{ id: item.id, canonicalName: item.canonicalName, shortMeaning: item.shortMeaning }] : [])),
+    },
+    preparation: chapter.preparation,
+  };
+}
+
+async function patchChapterPreparation(
+  bookId: string,
+  chapterId: string,
+  change: (current: EpisodePreparation | undefined) => EpisodePreparation | undefined,
+): Promise<void> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  if (!book.chapters.some((chapter) => chapter.id === chapterId)) throw new Error('Chapter not found');
+  const updated: Book = {
+    ...book,
+    chapters: book.chapters.map((chapter) =>
+      chapter.id === chapterId ? { ...chapter, preparation: change(chapter.preparation) } : chapter,
+    ),
+    updatedAt: nowIso(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
+}
+
+/**
+ * Validate a pasted AI reply against the episode and store the result. A
+ * failed reply never replaces an earlier usable preparation (it is returned
+ * to the caller instead), and never blocks reading. A new usable result keeps
+ * the learner's earlier decisions for targets that recur.
+ */
+export async function saveEpisodePreparationReply(
+  bookId: string,
+  chapterId: string,
+  reply: string,
+): Promise<EpisodePreparation> {
+  const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
+  const result = parsePreparationReply(reply, context, nowIso());
+  if (result.status === 'failed' && existing && existing.targets.length > 0) return result;
+  const keyOf = (target: PreparedTarget) => target.vocabularyItemId ?? target.grammarPatternId ?? `${target.kind}:${target.label}`;
+  const previous = new Map((existing?.targets ?? []).map((target) => [keyOf(target), target]));
+  const merged: EpisodePreparation = {
+    ...result,
+    targets: result.targets.map((target) => {
+      const before = previous.get(keyOf(target));
+      return before ? { ...target, decision: before.decision, learnerNote: before.learnerNote } : target;
+    }),
+  };
+  await patchChapterPreparation(bookId, chapterId, () => merged);
+  return merged;
+}
+
+export async function updatePreparedTarget(
+  bookId: string,
+  chapterId: string,
+  targetId: string,
+  patch: { decision?: PreparedTargetDecision; learnerNote?: string },
+): Promise<void> {
+  await patchChapterPreparation(bookId, chapterId, (current) =>
+    current
+      ? {
+          ...current,
+          targets: current.targets.map((target) =>
+            target.id === targetId
+              ? {
+                  ...target,
+                  ...(patch.decision ? { decision: patch.decision } : {}),
+                  ...(patch.learnerNote !== undefined
+                    ? { learnerNote: patch.learnerNote.trim() || undefined }
+                    : {}),
+                }
+              : target,
+          ),
+        }
+      : current,
+  );
+}
+
+export async function clearEpisodePreparation(bookId: string, chapterId: string): Promise<void> {
+  await patchChapterPreparation(bookId, chapterId, () => undefined);
 }
 
 async function getReadingContextForSentence(sentenceId: string): Promise<ReadingContext> {

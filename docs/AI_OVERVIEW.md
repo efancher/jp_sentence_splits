@@ -1128,6 +1128,27 @@ analysis) rendered via `ChunkPuzzleStrip`, so a sentence too new/unfamiliar
 to have cleared `continue_book`'s gate can still get a rough structural
 glance here.
 
+Sentence-first additions (2026-09-30, branch `feat/chapter-review`, not yet on
+main): a per-sentence "Walk through" (`SentenceWalkthrough`) steps through the
+sentence's structure engine-first — the learner's saved analysis when its chunks
+reproduce the sentence text, otherwise a labelled heuristic draft — with generic
+role guidance, native audio (+ Adjust), a "Can't speak" (`quietMode`) toggle and
+the six-stage journey (only "Understand" is guided; nothing else is claimed as
+assessed). It writes no study items or reviews. A collapsed "Suggested focus"
+panel derives recurring vocabulary/grammar across the episode
+(`buildEpisodeFocus`, read-only). For chaptered reading an optional "Episode
+preparation" panel (`EpisodePreparationPanel`, `src/lib/episodePreparation.ts`)
+runs an inspectable paste-back AI round trip: the app shows a prompt built from
+the episode (sentences by handle S1…, known vocabulary/grammar by V1…/G1…), the
+learner pastes the JSON reply, and it is validated — unknown handles/refs and
+quoted text that isn't in the named sentence are rejected (offsets are computed
+locally, never taken from the AI) — then stored on the chapter
+(`BookChapter.preparation`, status ready/partial/failed, staleness derived from a
+sentence fingerprint, per-target accept/dismiss/note). A failed reply never
+replaces an earlier usable one and never blocks reading; non-dismissed targets
+feed the walkthrough's "Worth noticing here". `Review.presentation` records the
+layout/document size used at grading for chapter-context reviews.
+
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home

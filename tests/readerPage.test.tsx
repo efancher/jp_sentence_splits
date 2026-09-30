@@ -170,6 +170,51 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     expect(await getDb().reviews.count()).toBe(0);
   });
 
+  it('validates a pasted preparation reply, lets the learner dismiss a target, and feeds the walkthrough', async () => {
+    await seedBook();
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read?chapter=ch-1');
+    await screen.findByText('本を読みます。');
+
+    await user.click(await screen.findByText(/Episode preparation/));
+    expect((screen.getByLabelText('Preparation prompt') as HTMLTextAreaElement).value).toContain('S1: 本を読みます。');
+    const reply = JSON.stringify({
+      targets: [
+        { kind: 'expression', label: '読みます', reason: 'Polite present.', occurrences: [{ sentence: 'S1', text: '読みます' }] },
+        { kind: 'expression', label: '幻', reason: 'Invented.', occurrences: [{ sentence: 'S1', text: '幻' }] },
+      ],
+    });
+    await user.click(screen.getByLabelText('AI reply'));
+    await user.paste(reply);
+    await user.click(screen.getByRole('button', { name: 'Check and save reply' }));
+
+    expect(await screen.findByText(/some proposed targets were rejected/)).toBeInTheDocument();
+    expect(await screen.findByText(/No quoted occurrence matched a real sentence/)).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Walk through' })[0]!);
+    const panel = await screen.findByRole('region', { name: 'Sentence walkthrough' });
+    expect(panel).toHaveTextContent('読みます');
+    expect(panel).toHaveTextContent('Worth noticing here');
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Worth noticing here/)).not.toBeInTheDocument());
+    expect(await getDb().studyItems.count()).toBe(0);
+    expect(await getDb().reviews.count()).toBe(0);
+  });
+
+  it('shows a failed reply without blocking reading', async () => {
+    await seedBook();
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read?chapter=ch-1');
+    await user.click(await screen.findByText(/Episode preparation/));
+    await user.click(screen.getByLabelText('AI reply'));
+    await user.paste('sorry, no');
+    await user.click(screen.getByRole('button', { name: 'Check and save reply' }));
+    expect(await screen.findByText(/Could not use that reply/)).toBeInTheDocument();
+    expect(screen.getByText('本を読みます。')).toBeInTheDocument();
+  });
+
   it('says so when a walked-through sentence has no native audio', async () => {
     await seedBook();
     const user = userEvent.setup();

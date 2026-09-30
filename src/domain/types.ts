@@ -312,6 +312,55 @@ export interface BookChapter {
    * `src/lib/suspendedBooks.ts`.
    */
   suspendedAt?: string;
+  /** Inspectable whole-episode teaching-priority proposal (sentence-first plan, Phase 0). */
+  preparation?: EpisodePreparation;
+}
+
+export type PreparedTargetKind = 'vocabulary' | 'grammar' | 'expression';
+export type PreparedTargetTreatment = 'recall' | 'phrase' | 'gloss_only';
+export type PreparedTargetDecision = 'suggested' | 'accepted' | 'dismissed';
+
+export interface PreparedTargetOccurrence {
+  sentenceId: string;
+  /** Character offsets into `Sentence.japanese`, computed locally from the AI's quoted text. */
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface PreparedTarget {
+  id: string;
+  kind: PreparedTargetKind;
+  label: string;
+  vocabularyItemId?: string;
+  grammarPatternId?: string;
+  occurrences: PreparedTargetOccurrence[];
+  reason: string;
+  treatment: PreparedTargetTreatment;
+  decision: PreparedTargetDecision;
+  /** The learner's own edit of the reason/why; the AI's `reason` is preserved. */
+  learnerNote?: string;
+}
+
+export interface RejectedPreparedTarget {
+  label: string;
+  reason: string;
+}
+
+/**
+ * Persisted result of the episode preparation round trip. `stale` is never
+ * stored: it is derived by comparing `sentenceFingerprint` with the episode's
+ * current sentences. A failed attempt never blocks reading.
+ */
+export interface EpisodePreparation {
+  version: number;
+  status: 'ready' | 'partial' | 'failed';
+  preparedAt: string;
+  provenance: 'pasted_ai_reply';
+  sentenceFingerprint: string;
+  targets: PreparedTarget[];
+  rejected: RejectedPreparedTarget[];
+  error?: string;
 }
 
 export interface BookSentence {

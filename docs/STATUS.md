@@ -10,6 +10,31 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 0: persisted episode preparation + inspectable AI
+  round trip (paste-back).** On `feat/chapter-review`; not merged or deployed.
+  `src/lib/episodePreparation.ts` builds a prompt from a chapter's sentences
+  (handles S1…) and linked vocabulary/grammar (V1…/G1…) and strictly validates
+  the pasted JSON reply: unknown handles/refs, missing/duplicate refs, unknown
+  kind/treatment, over-limit (8) targets and quoted text that is not a
+  substring of the named sentence are rejected with a visible reason; offsets
+  are computed locally. Result is stored as `BookChapter.preparation`
+  (`ready`/`partial`/`failed`, provenance `pasted_ai_reply`, version, sentence
+  fingerprint; `stale` derived). It rides the book's `chapters` jsonb, so no
+  Supabase migration; zod backup schema extended (round trip tested). A failed
+  reply is stored only when nothing usable exists and never replaces a usable
+  result; a re-paste keeps the learner's accept/dismiss/note on targets that
+  recur. Reader (`?chapter=`) has a collapsed "Episode preparation" panel
+  (prompt + copy, paste, save, status, accept/dismiss/restore/note, rejected
+  list, clear); non-dismissed targets feed the walkthrough's "Worth noticing
+  here" when the preparation is current. Reading never waits on it; no
+  study items, reviews or FSRS effect. Design choice: paste-back rather than an
+  Edge Function so nothing needs deploying or new secrets; a server-side call
+  can later produce the same reply shape. Tests: `tests/episodePreparation.test.ts`,
+  `tests/readerPage.test.tsx`, `tests/sync.test.ts`. `npm run check`: 2218
+  passed / 12 skipped. Not done: browser test of the panel, chapterless-book
+  support (Book has no preparation field; would need a migration), wiring
+  `treatment: phrase|gloss_only` into card creation (stored only), real-episode
+  fixtures, and no AI reply has been run against a real episode yet.
 - **2026-09-30 — Phase 1 slice: ungated sentence walkthrough in the Reader.**
   On `feat/chapter-review`; not merged or deployed. Each Reader row has a
   "Walk through" button opening `SentenceWalkthrough`

@@ -230,6 +230,16 @@ literal target/lemma forms plus known linked/tokenizer forms; no hidden ruby,
 gloss or audio representation is rendered inside the document. Other activity
 types retain their existing context presentation pending subsequent slices.
 
+**Episode preparation (2026-09-30):** `BookChapter.preparation`
+(`EpisodePreparation`) is an inspectable, versioned record of a validated
+paste-back AI proposal for a chapter's teaching priorities. It lives inside the
+book's `chapters` jsonb, so it syncs and backs up with the book without a
+Supabase migration; staleness is derived (`sentenceFingerprint`), never stored.
+`src/lib/episodePreparation.ts` is pure (prompt builder + strict reply
+validator: AI supplies only sentence/vocab/grammar handles and quoted text, the
+app resolves ids and offsets). It is separate from study progress: no
+`StudyItem`, `Review` or FSRS effect.
+
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —
 pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`
