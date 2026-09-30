@@ -158,7 +158,7 @@ Phase 0 leftovers
 - [ ] Learner accept / edit / dismiss of focus suggestions
 - [ ] Target-quality decisions beyond the gloss-only heuristic (larger-phrase / alternate task)
 - [ ] Real-episode fixture set (long transcript, repeated fillers, contrasting uses, bad alignment)
-- [ ] Re-test idempotent re-import of the same episode
+- [x] Re-test idempotent re-import of the same episode (unit test; not against a real episode)
 - [x] Fix backup `reviewSchema` dropping existing optional Review fields
 
 Phase 1 - guided sentence learning in the passage (in progress)

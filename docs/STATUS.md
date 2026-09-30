@@ -62,7 +62,9 @@ Last updated: 2026-09-30.
   - **Verified vs. assumed.** Read the import paths: `commitImport` dedupes
     sentences by `normalizedKey`; `commitSeriesEpisodeImport` reuses the series
     book and matches chapters by source id, so re-importing an episode is
-    designed to be idempotent (not re-tested here). No preparation
+    designed to be idempotent (now tested: `tests/commitSeriesEpisodeImport.test.ts`
+    re-imports an identical episode after learner analysis, vocab link and
+    in-progress status were added — no new rows, learner data intact). No preparation
     status/AI-output persistence was added, so the "failed preparation" state
     does not exist yet. Found while inspecting: the backup `reviewSchema`
     (`src/domain/schemas.ts`) omits several existing optional Review fields
