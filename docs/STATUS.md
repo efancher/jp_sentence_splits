@@ -10,6 +10,13 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 5: joined lesson report.** `/progress` has a "Sentence
+  lessons (last 14 days)" panel (`buildSentenceLessonReport`, derived, nothing
+  stored) joining supply (lessons planned/done/skipped, plan days with no
+  lesson = starvation), outcomes (walked, gist had-it, independent sayings,
+  written vs spoken), backlog (waiting for a fresh try, oldest age) and quality
+  (flagged prompts vs target practices). Still open: charging embedded due
+  reviews once; any reset of legacy vocabulary/grammar.
 - **2026-09-30 — Phase 5: revisits ahead of new lessons.** With sentence-first
   planning on, sentences walked through on an earlier day and not yet said
   cue-free (`sentencesReadyToRevisit`, max 2 per book) are drafted first as

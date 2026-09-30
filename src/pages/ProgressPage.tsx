@@ -12,6 +12,7 @@ import {
   getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
+  getSentenceLessonReport,
   getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
@@ -172,6 +173,7 @@ export function ProgressPage() {
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
+  const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
   const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
   const leechList = useLiveQuery(() => getLeechList(), []);
   const masteryOverview = useLiveQuery(() => getSentenceMasteryOverview(), []);
@@ -198,6 +200,45 @@ export function ProgressPage() {
           </p>
         )}
       </section>
+
+      {lessonReport?.hasData ? (
+        <section className="panel stack" aria-label="Sentence lessons">
+          <h3 style={{ margin: 0 }}>Sentence lessons (last {lessonReport.windowDays} days)</h3>
+          <StatRow
+            label="Lessons planned"
+            value={`${lessonReport.planned.lessons} (${lessonReport.planned.completed} done, ${lessonReport.planned.skipped} skipped)`}
+            hint="Skipping a lot means the lessons may be too long or off-target."
+          />
+          <StatRow
+            label="Days with no lesson in the plan"
+            value={`${lessonReport.planDaysWithoutLessons} of ${lessonReport.planDays}`}
+            hint="Only meaningful with 'Plan sentence lessons' on; otherwise expected."
+          />
+          <StatRow label="Sentences walked through" value={String(lessonReport.outcomes.sentencesWalked)} />
+          <StatRow
+            label="Gist checks"
+            value={`${lessonReport.outcomes.gistHad} of ${lessonReport.outcomes.gistChecks} had it`}
+          />
+          <StatRow
+            label="Said in Japanese without cues"
+            value={String(lessonReport.outcomes.sentencesSaidIndependently)}
+            hint={`Attempts: written ${lessonReport.outcomes.writtenAttempts}, spoken ${lessonReport.outcomes.spokenAttempts}. Self-judged.`}
+          />
+          <StatRow
+            label="Waiting for a fresh try"
+            value={
+              lessonReport.backlog.oldestDays === null
+                ? '0'
+                : `${lessonReport.backlog.readyToRevisit} (oldest ${lessonReport.backlog.oldestDays} days)`
+            }
+          />
+          <StatRow
+            label="Flagged prompts"
+            value={`${lessonReport.quality.contentReports} on ${lessonReport.quality.reportedSentences} sentences`}
+            hint={`Out of ${lessonReport.quality.practicedTargets} target practices. A high share means the prompts need repair.`}
+          />
+        </section>
+      ) : null}
 
       {report?.hasData || errorMix?.hasData ? (
       <section className="panel stack">

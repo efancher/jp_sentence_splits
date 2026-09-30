@@ -1,3 +1,4 @@
+import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -8845,6 +8846,15 @@ export async function logSentenceLearningEvent(
   await db.sentenceLearningEvents.put(full);
   notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
   return full;
+}
+
+export async function getSentenceLessonReport(): Promise<SentenceLessonReport> {
+  const db = getDb();
+  const [events, sessions] = await Promise.all([
+    db.sentenceLearningEvents.toArray(),
+    db.plannerSessions.toArray(),
+  ]);
+  return buildSentenceLessonReport(events, sessions);
 }
 
 export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {
