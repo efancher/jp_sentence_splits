@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Preview sample data.** Generate a validated, fictional
+  12-sentence chapter plus three due vocabulary reviews and one grammar
+  recognition review with `./node_modules/.bin/tsx scripts/generate-review-demo.ts
+  dist/review-demo.json`. This also writes `dist/review-demo.html` with download
+  and merge instructions. Regenerate after a build clears `dist`. Verified the
+  download, normal backup merge, both layouts and all four reviews through the
+  private preview URL in Chromium and WebKit. Use the global Review page:
+  existing book-scoped queues omit grammar patterns.
+
 - **2026-09-30 — Compare original and chapter review layouts.** The three
   affected review types now offer a **Review layout** selector: Original ·
   sentence / New · chapter. New is the initial default; the browser remembers
