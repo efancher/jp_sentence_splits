@@ -1451,7 +1451,7 @@ export interface SentenceLearningEvent {
    * equality). Typed text, when given, is in `learnerAnswer`.
    */
   modality?: 'typed' | 'spoken';
-  scaffold?: 'none' | 'frame';
+  scaffold?: 'none' | 'words' | 'frame' | 'words_and_frame';
   unitsExpressed?: number;
   unitsTotal?: number;
   /** Compare uses: the other real occurrence that was shown. */

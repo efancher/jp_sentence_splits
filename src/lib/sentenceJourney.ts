@@ -91,11 +91,11 @@ export function buildSentenceJourney(input: JourneyInput): SentenceJourney {
 
   const attempts = mine.filter((event) => event.action === 'expression_attempt' && event.unitsTotal);
   const s5 = attempts.reduce((best, event) => Math.max(best, (event.unitsExpressed ?? 0) / event.unitsTotal!), 0);
-  // Independent: no frame shown, every unit carried, and on a later day than the first walkthrough (not an immediate copy of the just-seen line).
+  // Independent: no cue shown, every unit carried, and on a later day than the first walkthrough (not an immediate copy of the just-seen line).
   const independentAttempt = attempts.some(
     (event) =>
       event.outcome === 'got_it' &&
-      event.scaffold !== 'frame' &&
+      (event.scaffold ?? 'none') === 'none' &&
       firstExposureTime !== undefined &&
       event.timestamp > firstExposureTime &&
       day(event.timestamp) !== firstExposureDay,
@@ -109,7 +109,7 @@ export function buildSentenceJourney(input: JourneyInput): SentenceJourney {
     { id: 'independent', label: 'Independent comprehension', fraction: s3, note: s3 === null ? 'Not assessed: no targets identified' : 'Targets with the word hidden, plus a gist check on a later day' },
     { id: 'retained', label: 'Revisit and retain', fraction: s4, note: 'A second successful gist check on another day' },
     { id: 'supported_expression', label: 'Supported expression', fraction: s5, note: attempts.length ? 'Best attempt: meaning parts you carried, frame or not' : 'Not tried yet' },
-    { id: 'independent_expression', label: 'Independent expression', fraction: s6, note: 'No frame, every part carried, on a later day than the first walkthrough' },
+    { id: 'independent_expression', label: 'Independent expression', fraction: s6, note: 'No cues, every part carried, on a later day than the first walkthrough' },
   ];
 
   const hasEvidence = mine.length > 0 || vocabulary.supported.done > 0;
@@ -118,4 +118,27 @@ export function buildSentenceJourney(input: JourneyInput): SentenceJourney {
     : undefined;
 
   return { stages, vocabulary, structure, provisional, percent, gist: { checkedAfterGap: afterGapDays.size, hasAny: gistGotIt.length > 0 } };
+}
+
+/**
+ * Sentences walked through on an earlier day with no independent (cue-free,
+ * complete) expression attempt yet. A suggestion, not a schedule: nothing is
+ * stored, and it never competes with the review queue.
+ */
+export function sentencesReadyToRevisit(events: SentenceLearningEvent[], now: Date = new Date()): string[] {
+  const today = now.toDateString();
+  const firstWalk = new Map<string, string>();
+  const independent = new Set<string>();
+  for (const event of events) {
+    if (event.action === 'walkthrough_completed') {
+      const seen = firstWalk.get(event.sentenceId);
+      if (seen === undefined || event.timestamp < seen) firstWalk.set(event.sentenceId, event.timestamp);
+    } else if (event.action === 'expression_attempt' && event.outcome === 'got_it' && (event.scaffold ?? 'none') === 'none') {
+      independent.add(event.sentenceId);
+    }
+  }
+  return [...firstWalk.entries()]
+    .filter(([id, at]) => !independent.has(id) && day(at) !== today)
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id]) => id);
 }

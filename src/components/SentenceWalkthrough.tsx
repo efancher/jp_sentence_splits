@@ -97,6 +97,7 @@ export function SentenceWalkthrough({
   events = [],
   onEvent,
   quietMode,
+  shadowHref,
   onQuietModeChange,
   onClose,
 }: {
@@ -113,6 +114,7 @@ export function SentenceWalkthrough({
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
   quietMode: boolean;
+  shadowHref?: string;
   onQuietModeChange: (quiet: boolean) => void;
   onClose: () => void;
 }) {
@@ -168,6 +170,8 @@ export function SentenceWalkthrough({
         units={meaningUnits(chunks, sentence.translation ?? '')}
         visitId={visitId}
         quietMode={quietMode}
+        wordBank={[...new Set(sentence.vocabularySuggestions.filter((item) => item.selectedByDefault).map((item) => item.expression))]}
+        shadowHref={audio ? shadowHref : undefined}
         onEvent={(event) => onEvent?.(event)}
         onClose={() => setExpressing(false)}
       />

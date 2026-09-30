@@ -112,6 +112,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(express).toContainText('Translation 0.');
     await expect(express).not.toContainText('本を読みます。');
     await express.getByRole('button', { name: /Give me a frame/ }).click();
+    await express.getByRole('button', { name: /Show the words/ }).click();
+    await expect(express.getByLabel('Word bank')).toContainText('読む');
     await express.getByLabel('Your Japanese').fill('本を読む');
     await express.getByRole('button', { name: 'Show the model and check' }).click();
     await expect(express).toContainText('本を読みます。');
@@ -121,7 +123,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(page.getByLabel('Sentence journey').first()).toContainText('Sentence journey: 29%');
     await expect(page.getByLabel('Sentence journey').first()).toContainText('Structure: 1/1 independent, 1/1 with support');
     await expect(page.getByLabel('Sentence journey').first()).toContainText('reading alone cannot reach 100%');
-    await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · said in Japanese 1× · gist: had it');
+    await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · written 1× · gist: had it');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 

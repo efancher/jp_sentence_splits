@@ -15,7 +15,7 @@ import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
 import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
-import { buildSentenceJourney } from '../lib/sentenceJourney';
+import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
@@ -325,6 +325,35 @@ export function ReaderPage() {
           <span className="jp">{walkthroughFocus.map((target) => target.label).join('、')}</span>
         </p>
       ) : null}
+      {(() => {
+        const inThis = new Set(data.rows.map((row) => row.sentence.id));
+        const ready = sentencesReadyToRevisit(lessonEvents ?? []).filter((id) => inThis.has(id));
+        return ready.length > 0 ? (
+          <div className="stack" style={{ gap: '0.25rem' }} aria-label="Ready for a fresh try">
+            <span className="muted">
+              Ready for a fresh try ({ready.length}): you walked through {ready.length === 1 ? 'this sentence' : 'these sentences'} on an earlier day.
+              Try saying {ready.length === 1 ? 'it' : 'them'} from the meaning alone, with no cues. A suggestion, not a schedule.
+            </span>
+            <div className="row" style={{ gap: '0.35rem', flexWrap: 'wrap' }}>
+              {ready.slice(0, 5).map((id) => {
+                const index = data.rows.findIndex((row) => row.sentence.id === id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setWalkthroughId(id);
+                      rowRefs.current[index]?.scrollIntoView({ block: 'center' });
+                    }}
+                  >
+                    Sentence {index + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null;
+      })()}
       {searchParams.get('imported') === '1' ? (
         <p className="muted" role="note" style={{ margin: 0 }}>
           Just imported. Optional: run <code>npm run validate:sentence-transcripts -- --book {bookId}</code> to check these
@@ -492,6 +521,7 @@ export function ReaderPage() {
                           inventoryRevision: preparation?.sentenceFingerprint,
                         })
                       }
+                      shadowHref={`#/books/${bookId}/shadow/${row.sentence.id}`}
                       quietMode={settings?.quietMode ?? false}
                       onQuietModeChange={(quiet) => void updateSettings({ quietMode: quiet })}
                       onClose={() => setWalkthroughId(undefined)}

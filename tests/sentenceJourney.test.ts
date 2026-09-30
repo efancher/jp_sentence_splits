@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { buildSentenceJourney } from '../src/lib/sentenceJourney';
+import { buildSentenceJourney, sentencesReadyToRevisit } from '../src/lib/sentenceJourney';
 
 let n = 0;
 const ev = (over: Partial<SentenceLearningEvent>): SentenceLearningEvent => ({
@@ -83,5 +83,25 @@ describe('buildSentenceJourney', () => {
       ev({ outcome: 'got_it', support: 'target_masked', target: { kind: 'vocabulary', key: 'v', label: '読む' } }),
       ev({ outcome: 'got_it', support: 'target_masked', target: { kind: 'vocabulary', key: 'w', label: '本' } })];
     expect(buildSentenceJourney({ ...base, events }).percent).toBe(67);
+  });
+});
+
+describe('sentencesReadyToRevisit', () => {
+  const now = new Date('2026-09-10T12:00:00');
+  const walk = (sentenceId: string, timestamp: string) => ev({ action: 'walkthrough_completed', sentenceId, timestamp });
+  it('suggests earlier-day walkthroughs without an independent attempt, oldest first', () => {
+    const events = [
+      walk('a', '2026-09-05T10:00:00'), walk('b', '2026-09-02T10:00:00'), walk('today', '2026-09-10T08:00:00'),
+      walk('done', '2026-09-01T10:00:00'),
+      ev({ action: 'expression_attempt', sentenceId: 'done', outcome: 'got_it', scaffold: 'none', unitsExpressed: 1, unitsTotal: 1 }),
+      walk('cued', '2026-09-03T10:00:00'),
+      ev({ action: 'expression_attempt', sentenceId: 'cued', outcome: 'got_it', scaffold: 'words', unitsExpressed: 1, unitsTotal: 1 }),
+    ];
+    expect(sentencesReadyToRevisit(events, now)).toEqual(['b', 'cued', 'a']);
+  });
+  it('treats a word-bank attempt as supported, not independent', () => {
+    const walked = ev({ action: 'walkthrough_completed', timestamp: '2026-09-01T10:00:00' });
+    const journey = buildSentenceJourney({ ...base, events: [walked, ev({ action: 'expression_attempt', outcome: 'got_it', scaffold: 'words', unitsExpressed: 2, unitsTotal: 2, timestamp: '2026-09-05T10:00:00' })] });
+    expect(journey.stages[5]!.fraction).toBe(0);
   });
 });

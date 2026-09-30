@@ -25,6 +25,8 @@ export function SentenceExpressionCard({
   units,
   visitId,
   quietMode,
+  wordBank,
+  shadowHref,
   onEvent,
   onClose,
 }: {
@@ -33,11 +35,17 @@ export function SentenceExpressionCard({
   units: MeaningUnit[];
   visitId: string;
   quietMode: boolean;
+  /** Japanese content words of the sentence, offered as an optional (supported) cue. */
+  wordBank: string[];
+  /** Where to practise saying the line with native audio, when this sentence has any. */
+  shadowHref?: string;
   onEvent: (event: LessonEventInput) => void;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>('cue');
   const [frame, setFrame] = useState(false);
+  const [words, setWords] = useState(false);
+  const scaffold = frame && words ? 'words_and_frame' : frame ? 'frame' : words ? 'words' : 'none';
   const [modality, setModality] = useState<'typed' | 'spoken'>('typed');
   const [answer, setAnswer] = useState('');
   const [carried, setCarried] = useState<Set<string>>(new Set());
@@ -53,7 +61,7 @@ export function SentenceExpressionCard({
       outcome: missing.length === 0 ? 'got_it' : 'needed_help',
       assessmentSource: 'self',
       modality: effectiveModality,
-      scaffold: frame ? 'frame' : 'none',
+      scaffold,
       unitsExpressed: units.length - missing.length,
       unitsTotal: units.length,
       learnerAnswer: effectiveModality === 'typed' && answer.trim() ? answer.trim() : undefined,
@@ -74,6 +82,11 @@ export function SentenceExpressionCard({
           <p className="muted" style={{ margin: 0 }}>
             The Japanese and its glosses are hidden. Say or type your own version. Different wording is fine if it carries the meaning.
           </p>
+          {words ? (
+            <div aria-label="Word bank"><span className="muted">Words you might use: </span><span className="jp">{wordBank.join('、')}</span></div>
+          ) : wordBank.length > 0 ? (
+            <button type="button" onClick={() => setWords(true)}>Show the words (counts as supported)</button>
+          ) : null}
           {frame ? (
             <ol aria-label="Frame" style={{ margin: 0, paddingLeft: '1.2rem' }}>
               {units.map((unit) => <li key={unit.id}>{unit.text}</li>)}
@@ -125,7 +138,7 @@ export function SentenceExpressionCard({
           ) : (
             <div role="status" className="stack" style={{ gap: '0.2rem' }}>
               {missing.length === 0 ? (
-                <div>Recorded as carrying the whole meaning{frame ? ', with a frame' : ''}. Your review schedule is unchanged.</div>
+                <div>Recorded as carrying the whole meaning{scaffold !== 'none' ? ', with cues shown' : ''}. Your review schedule is unchanged.</div>
               ) : (
                 <>
                   <div>Recorded. Still to carry next time:</div>
@@ -133,6 +146,7 @@ export function SentenceExpressionCard({
                 </>
               )}
               <div className="muted">A self-check, not a grade; it says nothing about any single word or pattern.</div>
+              {shadowHref ? <a href={shadowHref}>Practise saying it with the native audio</a> : null}
             </div>
           )}
         </>

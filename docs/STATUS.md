@@ -10,6 +10,21 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 4 completed: cue ladder, revisits, shadowing bridge.**
+  "Say it in Japanese" now has two separate optional cues, "Show the words"
+  (Japanese content-word bank) and "Give me a frame" (chunk glosses), logged as
+  `scaffold: none | words | frame | words_and_frame`; only `none` can earn
+  independent expression. After recording, a link opens the existing
+  close-shadow page for that sentence (only when it has native audio); that
+  practice keeps its own evidence and contributes nothing to these stages.
+  Progress lines label written and spoken attempts separately (one never
+  certifies the other; quiet mode forces typed). The Reader shows a derived
+  "Ready for a fresh try" list (`sentencesReadyToRevisit`): sentences walked
+  through on an earlier day with no cue-free complete attempt. A suggestion only:
+  nothing stored, no interval scheduler, no effect on the review queue.
+  Remaining Phase 4 caveats: spoken attempts are unrecorded self-report;
+  cue-free attempts still follow recent exposure of the model (later-day rule is
+  the only guard); migration still unapplied.
 - **2026-09-30 — Phase 4 first slice: "Say it in Japanese" (supported and
   independent expression).** After a walkthrough, "Say it in Japanese" swaps the
   panel for a meaning cue (the translation) with the Japanese, glosses and

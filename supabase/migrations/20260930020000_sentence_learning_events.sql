@@ -24,7 +24,7 @@ create table public.sentence_learning_events (
   report text check (report in ('another_answer_works', 'poor_question')),
   learner_answer text,
   modality text check (modality in ('typed', 'spoken')),
-  scaffold text check (scaffold in ('none', 'frame')),
+  scaffold text check (scaffold in ('none', 'words', 'frame', 'words_and_frame')),
   units_expressed integer check (units_expressed >= 0),
   units_total integer check (units_total >= 0),
   exposed_sentence_id text,
