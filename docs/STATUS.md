@@ -10,6 +10,8 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Flagged prompts are visible.** The Episode preparation panel lists this episode's `content_report` events (target, report type, your own answer, the sentence) under "Flagged prompts". Read-only; still no repair workflow. Why durable-tracking promotion is not built is in the handoff's decision note.
+
 - **2026-09-30 — Reader book-style restyle (light).** Sentence rows sit in a narrow centred column (`.reader-book`, 44rem) separated by hairlines instead of boxed cards; common controls (Play, Speed, Text) were already at the top. The preparation panel and suggested focus stay as native `<details>` disclosures rather than moving into a dialog: they are already keyboard/screen-reader accessible and the pack e2e depends on them. Checked via screenshots at 390px and 1280px (Chromium); the real episode not re-viewed.
 
 - **2026-09-30 — Phase 2 leftovers: content reports + contextual target order.**

@@ -228,8 +228,8 @@ Suggested next slices (none confirmed by the user):
 4. Phase 2 leftovers: DONE 2026-09-30 — contextual target order/cap and
    "Another answer works"/"Poor question" reports (see STATUS). STILL OPEN:
    promoting a practised target into durable tracking (creates StudyItems; needs
-   the user's explicit go-ahead + atomic vocabulary-link merge), and a view that
-   surfaces `content_report` events for repair.
+   the user's explicit go-ahead + atomic vocabulary-link merge), and a repair workflow
+   for `content_report` events (they are listed read-only in the preparation panel).
 5. DONE 2026-09-30 (unverified on a real reply): opt-in AI chunk structure in the
    episode pack -> `BookChapter.structureDrafts` -> walkthrough source `ai_draft`
    (see STATUS). Try it on the real episode via the pack's new checkbox.

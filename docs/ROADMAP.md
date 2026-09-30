@@ -1656,6 +1656,8 @@ roles all shipped (see STATUS.md). Ideas considered but not built:
   (why this is the を-car, why this modifier attaches here) has nothing to
   route through and still needs the mechanism that shipped.
 
+- Sentence-first: promote a practised target into durable tracking (explicit "Keep reviewing this"; vocabulary first, needs a merge-link operation). Parked with reasoning in `docs/SENTENCE_FIRST_HANDOFF.md`, awaiting the user's go-ahead.
+
 ## Not planned (deliberate)
 
 - **Dictionary H/L marks on conjugation (`sentence_transformation`)
