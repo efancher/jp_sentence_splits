@@ -10,6 +10,14 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 3: whole-sentence gist check.** When a walkthrough
+  finishes, "Check my understanding" asks the learner to say (or type) what the
+  whole sentence means with the translation hidden; "Reveal the translation"
+  shows it, then "I had the gist" / "I missed something" self-judges. Logged as
+  new `gist_check` event (no `target`, `assessmentSource: 'self'`), so it never
+  feeds any per-target summary and creates no Review/StudyItem/FSRS state.
+  Migration action check edited in place (still unapplied). The old plain
+  "Show natural translation" button remains for people who skip it.
 - **2026-09-30 — Phase 3 first slice: "Fill the gap" (targeted masking).** Each
   focus target whose span can be located gets a "Fill the gap" button in the
   walkthrough: the sentence is shown with exactly that occurrence masked (the

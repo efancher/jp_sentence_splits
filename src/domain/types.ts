@@ -1413,7 +1413,8 @@ export type SentenceLearningAction =
   | 'walkthrough_completed'
   | 'target_practice'
   | 'compare_uses_viewed'
-  | 'content_report';
+  | 'content_report'
+  | 'gist_check';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).

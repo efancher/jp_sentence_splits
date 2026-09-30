@@ -90,6 +90,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await panel.getByRole('button', { name: 'Another answer works' }).click();
     await expect(panel.getByText(/flagged for repair/)).toBeVisible();
     await expect(page.getByLabel('Flagged prompts')).toContainText('it marks the object');
+    // Gist check: translation stays hidden until asked; logged with no target.
+    const nextButton = panel.locator('button.primary');
+    for (let i = 0; i < 12 && !(await panel.getByRole('button', { name: 'Check my understanding' }).isVisible()); i++) await nextButton.click();
+    await panel.getByRole('button', { name: 'Check my understanding' }).click();
+    await expect(panel.getByText('Translation 0.')).toHaveCount(0);
+    await panel.getByLabel('Your understanding').fill('reading a book');
+    await panel.getByRole('button', { name: 'Reveal the translation' }).click();
+    await expect(panel.getByText('Translation 0.')).toBeVisible();
+    await panel.getByRole('button', { name: 'I had the gist' }).click();
+    await expect(panel.getByText(/says nothing about any single word/)).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 
@@ -108,7 +118,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
       return result;
     });
-    expect(counts.events).toBe(5);
+    expect(counts.events).toBe(7);
     expect(counts.reviews).toBe(0);
     expect(counts.items).toBe(0);
 

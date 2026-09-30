@@ -11,7 +11,7 @@ create table public.sentence_learning_events (
   "timestamp" timestamptz not null default now(),
   visit_id text not null,
   action text not null check (action in
-    ('walkthrough_opened', 'walkthrough_completed', 'target_practice', 'compare_uses_viewed', 'content_report')),
+    ('walkthrough_opened', 'walkthrough_completed', 'target_practice', 'compare_uses_viewed', 'content_report', 'gist_check')),
   book_id text not null,
   chapter_id text,
   sentence_id text not null,

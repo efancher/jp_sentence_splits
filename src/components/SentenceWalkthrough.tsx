@@ -107,10 +107,17 @@ export function SentenceWalkthrough({
   const revealedIds = new Set(ordered.slice(0, step + 1).map((item) => item.id));
   const here = focusTargets.filter((target) => target.sentenceIds.includes(sentence.id));
   const [showAllTargets, setShowAllTargets] = useState(false);
+  const [gist, setGist] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
+  const [gistAnswer, setGistAnswer] = useState('');
   // Chosen once per opening so practising a card doesn't reshuffle or hide it under the learner.
   const [{ shown: shownTargets, hidden: hiddenTargets }] = useState(() => selectSentenceTargets(here, events));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
   const visitId = useMemo(() => createId('visit'), []);
+
+  function recordGist(outcome: 'got_it' | 'needed_help') {
+    onEvent?.({ id: createId('sl_event'), visitId, action: 'gist_check', sentenceId: sentence.id, outcome, assessmentSource: 'self', quietMode });
+    setGist('recorded');
+  }
 
   useEffect(() => {
     onEvent?.({ id: `${visitId}:opened`, visitId, action: 'walkthrough_opened', sentenceId: sentence.id, quietMode });
@@ -143,11 +150,35 @@ export function SentenceWalkthrough({
       {done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
           <div className="jp jp-lg">{sentence.japanese}</div>
-          {showTranslation ? (
-            <div>{sentence.translation || '(no translation saved)'}</div>
-          ) : (
-            <button type="button" onClick={() => setShowTranslation(true)}>Show natural translation</button>
-          )}
+          {gist === 'closed' && !showTranslation && sentence.translation?.trim() ? (
+            <button type="button" onClick={() => setGist('asking')}>Check my understanding</button>
+          ) : null}
+          {gist === 'asking' ? (
+            <div className="stack" style={{ gap: '0.25rem' }} aria-label="Understanding check" aria-live="polite">
+              <div>In your own words, what does this whole sentence say? Translation stays hidden until you ask.</div>
+              <textarea rows={2} aria-label="Your understanding" value={gistAnswer} onChange={(event) => setGistAnswer(event.target.value)} />
+              <button type="button" onClick={() => { setShowTranslation(true); setGist('revealed'); }}>Reveal the translation</button>
+            </div>
+          ) : null}
+          {gist === 'revealed' ? (
+            <div className="stack" style={{ gap: '0.25rem' }} aria-label="Understanding check" aria-live="polite">
+              {gistAnswer.trim() ? <div className="muted">You wrote: {gistAnswer.trim()}</div> : null}
+              <div>{sentence.translation}</div>
+              <div className="muted">Your wording can differ. Count it only if you had the main meaning before looking.</div>
+              <div className="row" style={{ gap: '0.35rem' }}>
+                <button type="button" onClick={() => recordGist('got_it')}>I had the gist</button>
+                <button type="button" onClick={() => recordGist('needed_help')}>I missed something</button>
+              </div>
+            </div>
+          ) : null}
+          {gist === 'recorded' ? <div className="muted" role="status">Noted. This says nothing about any single word or pattern, and your review schedule is unchanged.</div> : null}
+          {gist === 'closed' || gist === 'asking' ? (
+            showTranslation ? (
+              <div>{sentence.translation || '(no translation saved)'}</div>
+            ) : gist === 'closed' ? (
+              <button type="button" onClick={() => setShowTranslation(true)}>Show natural translation</button>
+            ) : null
+          ) : null}
           <button type="button" onClick={() => setStep(0)}>Walk through again</button>
         </div>
       ) : chunk ? (
