@@ -13,7 +13,7 @@ Last updated: 2026-09-30.
 - **2026-09-30 — AI-drafted sentence structure for the walkthrough.** The episode
   pack has an opt-in "Also ask for sentence structure" checkbox (only sentences
   with no saved analysis and no valid draft). It adds separate prompt parts of 20
-  sentences; the reply key is `structure` (`{"S1":[{text,role,gloss}]}`). A draft
+  sentences; the reply is now one chunk per line, `S1 | 本を | object | book`, chosen for fault tolerance (chatter, fences, curly/straight quotes and table pipes are ignored; each sentence is judged alone, so a cut-off reply still saves the complete ones). The earlier JSON `structure` key is still accepted (with curly-quote repair). A draft
   is accepted only if its chunks rebuild the sentence exactly; it is stored on
   `BookChapter.structureDrafts` (syncs with the book row), never in `analyses`.
   `walkthroughChunks` ranks saved analysis > AI draft > automatic draft and labels

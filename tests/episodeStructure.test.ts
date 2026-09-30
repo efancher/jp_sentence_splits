@@ -31,6 +31,7 @@ describe('episode structure', () => {
   });
 
   it('is asked only when opted in, in its own prompt', () => {
+    // (prompt asks for lines, not JSON)
     const none = planEpisodePack(context, undefined, {});
     expect(buildEpisodePackPrompts(context, planEpisodePack(context, { targets: [{}] } as never, {})).length).toBeLessThanOrEqual(1);
     expect(none.structureHandles).toEqual([]);
@@ -69,5 +70,32 @@ describe('extractJson with curly delimiters and straight quotes inside a value',
     const reply = '{\n“structure”: {\n“S1”: [\n{\n“text”: “本を”,\n“role”: “object”,\n“gloss”: “"that’s a bit…"”\n}\n]\n}\n}';
     const parsed = extractJson(reply) as { structure: { S1: { gloss: string }[] } };
     expect(parsed.structure.S1[0]!.gloss).toBe("'that’s a bit…'");
+  });
+});
+
+describe('line-based structure replies', () => {
+  it('tolerates chatter, fences, quotes, table pipes, and a cut-off last sentence', () => {
+    const reply = [
+      'Sure! Here you go:',
+      '```',
+      '| S1 | 本を | object | book (“the” book) |',
+      '|---|---|---|---|',
+      '- S1: | 読みます。 | engine | read',
+      'S2 | 本を | object | "book"',
+      'S2 | 買い',
+      '```',
+    ].join('\n');
+    const parsed = parseEpisodePackReply(reply, context, '2026-09-30T00:00:00.000Z');
+    expect(parsed.error).toBeUndefined();
+    expect([...parsed.structure!.drafts.keys()]).toEqual(['s-a']);
+    expect(parsed.structure!.drafts.get('s-a')!.map((chunk) => chunk.japanese)).toEqual(['本を', '読みます。']);
+    expect(parsed.structure!.rejected.map((item) => item.handle)).toEqual(['S2']);
+  });
+
+  it('asks for lines, not JSON', () => {
+    const plan = planEpisodePack(context, { targets: [{}] } as never, { structureSentenceIds: new Set(['s-b']) });
+    const prompt = buildEpisodePackPrompts(context, plan).at(-1)!;
+    expect(prompt).toContain('handle | chunk text | role | short English gloss');
+    expect(prompt).not.toContain('"structure"');
   });
 });

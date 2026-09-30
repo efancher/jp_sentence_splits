@@ -11,7 +11,7 @@
  * translations are never overwritten.
  */
 import type { EpisodePreparation, StructureDraftChunk } from '../domain/types';
-import { STRUCTURE_SENTENCES_PER_PART, STRUCTURE_SHAPE, buildStructureInstructions, parseStructure } from './episodeStructure';
+import { STRUCTURE_LINE_EXAMPLE, STRUCTURE_SENTENCES_PER_PART, buildStructureInstructions, parseStructure, parseStructureLines } from './episodeStructure';
 import {
   EPISODE_PREPARATION_VERSION,
   MAX_PREPARED_TARGETS,
@@ -91,9 +91,10 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
       'STRUCTURE THESE:',
       ...batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`),
       '',
-      'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
-      JSON.stringify({ version: EPISODE_PREPARATION_VERSION, structure: STRUCTURE_SHAPE }, null, 2),
-      '"structure" must have one entry per handle listed under STRUCTURE THESE, keyed by that handle.',
+      'Reply with ONLY lines, one chunk per line, in this exact form: handle | chunk text | role | short English gloss',
+      'Example:',
+      STRUCTURE_LINE_EXAMPLE,
+      'Give every sentence listed under STRUCTURE THESE, its chunks in order, no other text.',
     ].join('\n'),
   );
 
@@ -181,6 +182,10 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
   try {
     raw = extractJson(reply);
   } catch (error) {
+    const lines = parseStructureLines(reply, context);
+    if (lines.drafts.size > 0 || lines.rejected.length > 0) {
+      return { translations: [], rejectedTranslations: [], structure: lines };
+    }
     return {
       error: error instanceof Error ? error.message : 'Could not read the reply as JSON.',
       translations: [],
