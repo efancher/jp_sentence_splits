@@ -10,6 +10,25 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 3 completed: staged sentence journey + help levels.**
+  `buildSentenceJourney` (src/lib/sentenceJourney.ts, pure, read-only) derives
+  the six-stage strip from lesson events: stage 1 walkthrough finished; 2
+  targets recognised with any support; 3 independent (masked got-it, or
+  vocabulary already retained from earlier reviews, labelled as older
+  evidence) averaged with a gist check on a *later day*; 4 a second such gist
+  check on another day; 5-6 "not tried" (Phase 4), so reading alone caps the
+  headline at 67%. Empty/unidentified inventories give "not assessed" and a
+  "provisional" flag, never 100%; a revealed-answer practice is supported,
+  never independent; same-day gist adds no independent credit. Shown on each
+  Reader sentence in a collapsible "Sentence journey: N%" with per-stage
+  notes and word/structure counts (independent vs with support). Also a
+  "Help level" select in the walkthrough (Full / Less / Minimal; per-device
+  localStorage) that hides role, gloss and explanation until asked. Known
+  limits: the help level is a preference and is not yet written onto events
+  (would need another migration edit); a gist check still follows a walkthrough
+  that showed glosses, so only later-day gists count as independent; structure
+  inventory is whatever prepared grammar/expression targets exist, so most
+  sentences read "provisional" until the AI pack has run.
 - **2026-09-30 — Phase 3: per-sentence progress line.** Each Reader sentence
   shows "Your progress here: walked through · N targets practised · gist: had
   it/needed help", derived read-only from `sentenceLearningEvents`

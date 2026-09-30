@@ -55,6 +55,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await page.getByRole('button', { name: 'Walk through' }).first().click();
     const panel = page.getByRole('region', { name: 'Sentence walkthrough' });
     await expect(panel.getByLabel('Words in this sentence').first()).toContainText('読む (よむ) — to read');
+    // Help level: minimal hides role/gloss/explanation until asked, and the choice persists.
+    await panel.getByLabel('Help level').selectOption('minimal');
+    await expect(panel.getByRole('button', { name: 'Show role' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Show role' }).click();
+    await expect(panel.getByRole('button', { name: 'Explain this role' })).toBeVisible();
+    await panel.getByLabel('Help level').selectOption('full');
     await panel.getByRole('button', { name: 'Practise this' }).click();
     await expect(panel.getByText(/Before you look/)).toBeVisible();
     await expect(panel.getByText('Marks the thing being read or bought.')).toHaveCount(0);
@@ -100,6 +106,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(panel.getByText('Translation 0.')).toBeVisible();
     await panel.getByRole('button', { name: 'I had the gist' }).click();
     await expect(panel.getByText(/says nothing about any single word/)).toBeVisible();
+    await expect(page.getByLabel('Sentence journey').first()).toContainText('Sentence journey: 29%');
+    await expect(page.getByLabel('Sentence journey').first()).toContainText('Structure: 1/1 independent, 1/1 with support');
+    await expect(page.getByLabel('Sentence journey').first()).toContainText('Expression stages are not built yet');
     await expect(page.getByLabel('Sentence progress').first()).toContainText('walked through · 1 target practised · gist: had it');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });

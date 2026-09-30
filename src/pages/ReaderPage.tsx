@@ -14,6 +14,8 @@ import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
+import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
+import { buildSentenceJourney } from '../lib/sentenceJourney';
 import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
@@ -453,7 +455,24 @@ export function ReaderPage() {
                   </div>
                   {(() => {
                     const progress = describeSentenceProgress(summariseSentenceProgress(lessonEvents ?? [], row.sentence.id));
-                    return progress ? <div className="muted" aria-label="Sentence progress">Your progress here: {progress}</div> : null;
+                    if (!progress) return null;
+                    const journey = buildSentenceJourney({
+                      sentenceId: row.sentence.id,
+                      events: lessonEvents ?? [],
+                      vocabulary: row.sentence.vocabularySuggestions
+                        .filter((item) => item.selectedByDefault)
+                        .map((item) => ({ expression: item.expression, surface: item.surface })),
+                      knownExpressions: data.knownExpressions,
+                      structure: walkthroughFocus
+                        .filter((target) => target.sentenceIds.includes(row.sentence.id) && (target.kind === 'grammar' || target.preparedKind === 'expression'))
+                        .map((target) => ({ key: target.id, label: target.label })),
+                    });
+                    return (
+                      <>
+                        <div className="muted" aria-label="Sentence progress">Your progress here: {progress}</div>
+                        <SentenceJourneyDetails journey={journey} />
+                      </>
+                    );
                   })()}
                   {walkthroughId === row.sentence.id ? (
                     <SentenceWalkthrough

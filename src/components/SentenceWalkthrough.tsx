@@ -13,6 +13,23 @@ import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { NativeAudioButton } from './NativeAudioButton';
 import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
+export type SupportPreset = 'full' | 'less' | 'minimal';
+const PRESET_KEY = 'glossbook.walkthroughSupport';
+const PRESET_LABELS: Record<SupportPreset, string> = {
+  full: 'Full help: role, gloss and explanation',
+  less: 'Less help: role and gloss, explanation on request',
+  minimal: 'Minimal: just the chunk, everything else on request',
+};
+
+function readPreset(): SupportPreset {
+  try {
+    const value = window.localStorage.getItem(PRESET_KEY);
+    return value === 'less' || value === 'minimal' ? value : 'full';
+  } catch {
+    return 'full';
+  }
+}
+
 export interface WalkthroughChunk {
   id: string;
   japanese: string;
@@ -109,6 +126,17 @@ export function SentenceWalkthrough({
   const [showAllTargets, setShowAllTargets] = useState(false);
   const [gist, setGist] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
   const [gistAnswer, setGistAnswer] = useState('');
+  const [preset, setPresetState] = useState<SupportPreset>(readPreset);
+  const [askedFor, setAskedFor] = useState<{ role: Set<number>; gloss: Set<number>; why: Set<number> }>({ role: new Set(), gloss: new Set(), why: new Set() });
+  const setPreset = (value: SupportPreset) => {
+    setPresetState(value);
+    try { window.localStorage.setItem(PRESET_KEY, value); } catch { /* preference is best-effort */ }
+  };
+  const ask = (kind: 'role' | 'gloss' | 'why') =>
+    setAskedFor((current) => ({ ...current, [kind]: new Set(current[kind]).add(step) }));
+  const showRole = preset !== 'minimal' || askedFor.role.has(step);
+  const showGloss = preset !== 'minimal' || askedFor.gloss.has(step);
+  const showWhy = preset === 'full' || askedFor.why.has(step);
   // Chosen once per opening so practising a card doesn't reshuffle or hide it under the learner.
   const [{ shown: shownTargets, hidden: hiddenTargets }] = useState(() => selectSentenceTargets(here, events));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
@@ -143,9 +171,16 @@ export function SentenceWalkthrough({
           </li>
         ))}
       </ol>
+      <label className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+        <span className="muted">Help level</span>
+        <select aria-label="Help level" value={preset} onChange={(event) => setPreset(event.target.value as SupportPreset)}>
+          {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
+        </select>
+      </label>
       <ChunkPuzzleStrip
         chunks={chunks.map(({ id, japanese, role }) => ({ id, japanese, role }))}
         revealedIds={done ? undefined : revealedIds}
+        revealRoles={preset !== 'minimal'}
       />
       {done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
@@ -184,9 +219,18 @@ export function SentenceWalkthrough({
       ) : chunk ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-live="polite">
           <div className="jp jp-lg">{chunk.japanese}</div>
-          <div><strong>{chunk.role || 'Unlabelled'}</strong>{chunk.literalEnglish ? <> · “{chunk.literalEnglish}”</> : null}</div>
-          {blurb ? <div className="muted">{blurb}</div> : <div className="muted">No guide text for this role yet.</div>}
-          {chunk.notes ? <div className="muted">{chunk.notes}</div> : null}
+          <div>
+            {showRole ? <strong>{chunk.role || 'Unlabelled'}</strong> : <button type="button" onClick={() => ask('role')}>Show role</button>}
+            {chunk.literalEnglish ? (showGloss ? <> · “{chunk.literalEnglish}”</> : <> <button type="button" onClick={() => ask('gloss')}>Show gloss</button></>) : null}
+          </div>
+          {showRole && showWhy ? (
+            <>
+              {blurb ? <div className="muted">{blurb}</div> : <div className="muted">No guide text for this role yet.</div>}
+              {chunk.notes ? <div className="muted">{chunk.notes}</div> : null}
+            </>
+          ) : showRole ? (
+            <button type="button" onClick={() => ask('why')}>Explain this role</button>
+          ) : null}
         </div>
       ) : null}
       {compareAids?.get(sentence.id)?.words.length ? (
