@@ -936,3 +936,29 @@ describe('sentence-first planning', () => {
     expect(session.steps.some((step) => step.targetKind === 'vocabulary_review')).toBe(true);
   });
 });
+
+describe('sentence-first revisits', () => {
+  it('puts a fresh-try revisit ahead of first lessons with a reason', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        sentenceFirst: true,
+        totalMinutes: 30,
+        exploreCandidates: [
+          {
+            bookId: 'b',
+            label: 'Book',
+            reason: 'Continue',
+            sentences: [
+              { sentenceId: 'new1', preview: 'a', vocabularyConfirmed: false, vocabularyIntroduced: false },
+              { sentenceId: 'old1', preview: 'b', vocabularyConfirmed: false, vocabularyIntroduced: false, revisit: true },
+            ],
+          },
+        ],
+      }),
+    );
+    const lessons = session.steps.filter((s) => s.targetKind === 'sentence_learning');
+    expect(lessons.map((s) => s.sentenceId)).toEqual(['old1', 'new1']);
+    expect(lessons[0]!.label).toMatch(/^Fresh try/);
+    expect(lessons[0]!.reason).toMatch(/earlier day/);
+  });
+});

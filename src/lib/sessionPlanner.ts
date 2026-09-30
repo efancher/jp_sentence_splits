@@ -379,6 +379,8 @@ export interface ExploreCandidate {
     vocabularyConfirmed: boolean;
     /** At least CONTINUE_BOOK_MIN_INTRODUCED_RATIO of this sentence's reviewable vocabulary items have a reading/meaning study item that's left FSRS's `new` state — see getSentenceReadingIntroducedReadiness/isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
     vocabularyIntroduced: boolean;
+    /** Sentence-first only: walked through on an earlier day and not yet said independently — a fresh try, not a first lesson. */
+    revisit?: boolean;
   }[];
 }
 
@@ -632,11 +634,16 @@ function classifyExploreSentences(
       // to the next sentence rather than blocking the book on it.
     }
   }
-  return entries;
+  // Revisits (a second look at something already walked through) come before first lessons.
+  return sentenceFirst
+    ? [...entries.filter((e) => e.sentence.revisit), ...entries.filter((e) => !e.sentence.revisit)]
+    : entries;
 }
 
 function exploreEntryCost(entry: ExploreSentenceEntry): number {
-  if (entry.kind === 'lesson') return EXPLORE_STEP_MINUTES.lesson;
+  if (entry.kind === 'lesson') {
+    return entry.sentence.revisit ? EXPLORE_STEP_MINUTES.revisit : EXPLORE_STEP_MINUTES.lesson;
+  }
   return entry.kind === 'vocabulary'
     ? EXPLORE_STEP_MINUTES.vocabulary
     : EXPLORE_STEP_MINUTES.analyze;
@@ -652,9 +659,11 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
       targetKind: 'sentence_learning',
       bookId: candidate.bookId,
       sentenceId: sentence.sentenceId,
-      label: `Learn this sentence: ${sentence.preview}`,
-      estimatedMinutes: EXPLORE_STEP_MINUTES.lesson,
-      reason: `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
+      label: `${sentence.revisit ? 'Fresh try' : 'Learn this sentence'}: ${sentence.preview}`,
+      estimatedMinutes: exploreEntryCost(entry),
+      reason: sentence.revisit
+        ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
+        : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
       status: 'pending',
     };
   }

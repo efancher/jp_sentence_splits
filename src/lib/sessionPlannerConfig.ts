@@ -130,7 +130,7 @@ export const MODE_ACTIVITY_ESTIMATE_MINUTES = {
 } as const;
 
 /** Per-sentence cost of a single glossing step — `vocabulary_review` (a not-yet-confirmed sentence) or `continue_book` (a sentence whose vocabulary is confirmed and proficient), never both in the same pass, see buildExploreSteps. */
-export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3 } as const;
+export const EXPLORE_STEP_MINUTES = { analyze: 1.5, vocabulary: 1, lesson: 3, revisit: 2 } as const;
 
 /**
  * Minimum share of the glossing bucket's minutes that vocabulary
@@ -198,6 +198,9 @@ export const EXPLORE_CANDIDATE_LIMIT = 5;
 
 /** Cap on how many of a book's next unstarted sentences findExploreCandidates previews per book — generous relative to any realistic single day's glossing budget (MODE_ACTIVITY_ESTIMATE_MINUTES.glossing is 2.5 min/item, so 20 covers 50 min of glossing alone). */
 export const EXPLORE_SENTENCE_PREVIEW_LIMIT = 20;
+
+/** Sentence-first: most "fresh try" revisits drafted per book in one plan, so revisits never crowd out new lessons. */
+export const EXPLORE_REVISITS_PER_BOOK = 2;
 
 /** How many not-yet-tracked grammar patterns to consider as candidates. */
 export const UNDERSTAND_CANDIDATE_LIMIT = 8;

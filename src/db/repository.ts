@@ -1,3 +1,4 @@
+import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
@@ -261,6 +262,7 @@ import {
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
+  EXPLORE_REVISITS_PER_BOOK,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
@@ -9528,13 +9530,17 @@ async function findExploreCandidates(
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
     // Sentence-first: a lesson never changes BookSentence.status, so a
     // sentence is "done" once its walkthrough was completed, not once it's marked complete.
+    const bookEvents = sentenceFirst ? await listSentenceLearningEvents(book.id) : [];
     const walked = sentenceFirst
       ? new Set(
-          (await listSentenceLearningEvents(book.id))
+          bookEvents
             .filter((event) => event.action === 'walkthrough_completed')
             .map((event) => event.sentenceId),
         )
       : undefined;
+    const revisitIds = sentenceFirst
+      ? sentencesReadyToRevisit(bookEvents).slice(0, EXPLORE_REVISITS_PER_BOOK)
+      : [];
     const unstarted = memberships
       .filter((item) =>
         walked
@@ -9542,8 +9548,10 @@ async function findExploreCandidates(
           : item.status === 'unstarted',
       )
       .sort((a, b) => a.position - b.position);
-    if (unstarted.length === 0) continue;
-    const preview = unstarted.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+    const revisitMemberships = memberships.filter((item) => revisitIds.includes(item.sentenceId));
+    if (unstarted.length === 0 && revisitMemberships.length === 0) continue;
+    const revisitSet = new Set(revisitMemberships.map((item) => item.sentenceId));
+    const preview = [...revisitMemberships, ...unstarted].slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
     const [sentenceRows, analysisRows] = await Promise.all([
       db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
       db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
@@ -9556,6 +9564,7 @@ async function findExploreCandidates(
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
+        ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
         // Patched below, once readiness is known for every candidate
         // sentence at once (batched, not N+1) — see classifyExploreSentences
         // in sessionPlanner.ts for why continue_book waits on this too.

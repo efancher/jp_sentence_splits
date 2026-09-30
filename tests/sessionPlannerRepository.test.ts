@@ -319,6 +319,28 @@ describe('Learning Orchestrator repository layer', () => {
     expect(await db.studyItems.count()).toBe(0);
   });
 
+  it('sentence-first: a sentence walked through on an earlier day comes back as a revisit, not a new lesson', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Revisit Book' });
+    const db = getDb();
+    const walked = makeSentence();
+    const fresh = makeSentence();
+    await db.sentences.bulkPut([walked, fresh]);
+    await addSentencesToBook(book.id, [walked.id, fresh.id]);
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'),
+      sentenceId: walked.id,
+      bookId: book.id,
+      action: 'walkthrough_completed',
+      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    } as never);
+
+    const session = await addMinutesToTodaySession(30);
+    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning');
+    expect(lessons.map((step) => step.sentenceId)).toEqual([walked.id, fresh.id]);
+    expect(lessons[0]!.label).toMatch(/^Fresh try/);
+  });
+
   it('ending a session early marks remaining steps skipped, never completed', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();

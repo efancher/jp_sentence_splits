@@ -10,6 +10,11 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 5: revisits ahead of new lessons.** With sentence-first
+  planning on, sentences walked through on an earlier day and not yet said
+  cue-free (`sentencesReadyToRevisit`, max 2 per book) are drafted first as
+  2-minute "Fresh try" `sentence_learning` steps, with the reason shown on the
+  step. Still open: charging embedded due reviews once, joined outcome report.
 - **2026-09-30 — Phase 5 first slice: `sentence_learning` planner step (behind a setting).**
   New target kind `sentence_learning` (types, zod schema, synthetic activity
   type, route `/books/:bookId/learn/:sentenceId` rendered by ReaderPage, which
