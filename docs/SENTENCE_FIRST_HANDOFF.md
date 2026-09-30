@@ -213,8 +213,12 @@ Suggested next slices (none confirmed by the user):
    asked for vocabulary aids in Compare uses (glosses, audio, on-request
    translation; see STATUS). The walkthrough itself now shows the gloss list too. Possible follow-up:
    glosses for words with no `english` suggestion.
-2. Decide with the user whether `sentenceLearningEvents` should sync/back up
-   (needs a Supabase migration) or stay device-local.
+2. DONE 2026-09-30: user chose sync. `sentence_learning_events` mapper/engine/
+   migration `20260930020000_sentence_learning_events.sql` written (append-only,
+   no FKs). The migration is NOT applied; applying it (merge triggers the
+   auto-apply) is the user's production decision. Until then pushes of these rows
+   would fail against a table that doesn't exist, so do not enable cloud sync in
+   a build from this branch against production.
 3. Phase 1 leftover: move secondary controls into an accessible sheet. Verified
    2026-09-30: "Adjust" (local clip trim, `NativeAudioButton`) and "Can't speak"
    are already in the walkthrough; do NOT add `SentenceAudioAdjuster` (a

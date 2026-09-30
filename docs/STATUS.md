@@ -10,6 +10,17 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — `sentenceLearningEvents` now sync (user chose sync over
+  device-local).** New `sentence_learning_events` entity (mapper pair, push tier 3,
+  full-pull, resync, clear-on-reset, conflict-diff created_at exemption) and
+  append-only migration `20260930020000_sentence_learning_events.sql` (insert/
+  select policies only; `book_id`/`chapter_id`/`sentence_id` intentionally not
+  foreign keys so evidence survives later deletions). `logSentenceLearningEvent`
+  now notifies sync. **Migration not applied and nothing deployed**: a client from
+  this branch with cloud sync connected would fail to push these rows until the
+  migration exists on the target project. Still not in backups. Test:
+  `src/sync/sentenceLearningEventMapper.test.ts`.
+
 - **2026-09-30 — Reader word help adapts to what the learner knows; glosses fall
   back to saved vocabulary.** Each Reader sentence now shows, by default, only
   the glossed content words the learner has not shown they can recall (a saved

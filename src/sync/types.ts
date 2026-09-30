@@ -21,6 +21,7 @@ export type SyncEntity =
   | 'planner_sessions'
   | 'sync_issue_reports'
   | 'pitch_drill_attempts'
+  | 'sentence_learning_events'
   | 'named_podcast_feeds';
 
 export type SyncOperationType = 'upsert' | 'delete';

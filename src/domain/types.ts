@@ -1403,8 +1403,8 @@ export type SentenceLearningAction =
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
- * Device-local for now (not synced, not in backups) and never a `Review`: no
- * FSRS effect. `id` is the idempotency key, so a retried write is a no-op.
+ * Synced as `sentence_learning_events` (append-only, not in backups) and never a
+ * `Review`: no FSRS effect. `id` is the idempotency key, so a retried write is a no-op.
  */
 export interface SentenceLearningEvent {
   id: string;

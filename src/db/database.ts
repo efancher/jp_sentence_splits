@@ -139,7 +139,7 @@ export class GlossbookDatabase extends Dexie {
   // Hand-labelled word-boundary checks (docs/ROADMAP.md "Word-audio ground truth") —
   // device-local; exported to a file with the labelling page's "Save labels" button, never synced.
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
-  // Sentence-first lesson evidence (Phase 2): append-only, device-local, never a Review.
+  // Sentence-first lesson evidence (Phase 2): append-only, synced (sentence_learning_events), never a Review.
   sentenceLearningEvents!: EntityTable<SentenceLearningEvent, 'id'>;
   // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
   // sessions — a small per-user preference list, not learning content.

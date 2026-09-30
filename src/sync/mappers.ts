@@ -9,6 +9,7 @@ import type {
   Kanji,
   NamedPodcastFeed,
   PitchDrillAttempt,
+  SentenceLearningEvent,
   PlannerSession,
   Review,
   Sentence,
@@ -46,6 +47,7 @@ export type LocalSyncPayload =
   | PlannerSession
   | SyncIssueReport
   | PitchDrillAttempt
+  | SentenceLearningEvent
   | NamedPodcastFeed;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
@@ -981,6 +983,59 @@ export function remoteToPitchDrillAttempt(
   };
 }
 
+export function sentenceLearningEventToRemote(event: SentenceLearningEvent, ownerId: string, version: number) {
+  return {
+    id: event.id,
+    owner_id: ownerId,
+    timestamp: event.timestamp,
+    visit_id: event.visitId,
+    action: event.action,
+    book_id: event.bookId,
+    chapter_id: event.chapterId ?? null,
+    sentence_id: event.sentenceId,
+    target_kind: event.target?.kind ?? null,
+    target_key: event.target?.key ?? null,
+    target_label: event.target?.label ?? null,
+    support: event.support ?? null,
+    outcome: event.outcome ?? null,
+    assessment_source: event.assessmentSource ?? null,
+    exposed_sentence_id: event.exposedSentenceId ?? null,
+    quiet_mode: event.quietMode ?? null,
+    inventory_revision: event.inventoryRevision ?? null,
+    created_at: event.timestamp,
+    updated_at: event.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSentenceLearningEvent(row: Record<string, unknown>): SentenceLearningEvent {
+  const optional = <T,>(value: unknown) => (value as T | null) ?? undefined;
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    visitId: String(row.visit_id),
+    action: row.action as SentenceLearningEvent['action'],
+    bookId: String(row.book_id),
+    chapterId: optional<string>(row.chapter_id),
+    sentenceId: String(row.sentence_id),
+    target:
+      row.target_key != null
+        ? {
+            kind: row.target_kind as NonNullable<SentenceLearningEvent['target']>['kind'],
+            key: String(row.target_key),
+            label: String(row.target_label ?? ''),
+          }
+        : undefined,
+    support: optional<SentenceLearningEvent['support']>(row.support),
+    outcome: optional<SentenceLearningEvent['outcome']>(row.outcome),
+    assessmentSource: optional<SentenceLearningEvent['assessmentSource']>(row.assessment_source),
+    exposedSentenceId: optional<string>(row.exposed_sentence_id),
+    quietMode: optional<boolean>(row.quiet_mode),
+    inventoryRevision: optional<string>(row.inventory_revision),
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -1046,6 +1101,8 @@ export function toRemoteRow(
       return syncIssueReportToRemote(payload as SyncIssueReport, ownerId, version);
     case 'pitch_drill_attempts':
       return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
+    case 'sentence_learning_events':
+      return sentenceLearningEventToRemote(payload as SentenceLearningEvent, ownerId, version);
     case 'named_podcast_feeds':
       return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
   }

@@ -8840,6 +8840,7 @@ export async function logSentenceLearningEvent(
   const existing = await db.sentenceLearningEvents.get(full.id);
   if (existing) return existing;
   await db.sentenceLearningEvents.put(full);
+  notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
   return full;
 }
 

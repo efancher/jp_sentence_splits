@@ -248,10 +248,10 @@ fills only empty translations, and reuses the preparation merge. It replaces the
 need for a server-side AI call for these two jobs.
 
 **Sentence learning events (2026-09-30):** `SentenceLearningEvent` rows in the
-local-only Dexie table `sentenceLearningEvents` record in-walkthrough activity
+Dexie table `sentenceLearningEvents` (synced as append-only `sentence_learning_events`, migration `20260930020000`, unapplied until merge) record in-walkthrough activity
 (opened, completed, target practice, compare uses viewed) with support used and a
 self-assessed outcome. They are deliberately separate from `Review`: they never
-create `StudyItem`s or touch FSRS, and are not yet synced or in backups (same
+create `StudyItem`s or touch FSRS, and and are not in backups (same
 precedent as `gameRounds`; adding either needs a migration decision).
 `src/lib/sentenceLearning.ts` picks compare-use examples and summarises events.
 

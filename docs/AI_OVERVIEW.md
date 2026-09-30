@@ -1155,8 +1155,8 @@ sentences, and series imports land on the Reader with the panel open.
 
 Inside the walkthrough each prepared target has **Practise this** (recall
 before the explanation is shown, self-rated) and **Compare uses** (another real
-occurrence in the episode, highlighted). These write local-only
-`sentenceLearningEvents` (not synced, not in backups) and never create Reviews,
+occurrence in the episode, highlighted). These write
+`sentenceLearningEvents` (synced as append-only `sentence_learning_events` once the migration is applied; not in backups) and never create Reviews,
 StudyItems or FSRS state.
 
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
