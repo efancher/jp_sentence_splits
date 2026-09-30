@@ -7,7 +7,7 @@ import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { chunksMatchSource } from '../lib/chunking';
 import { createId } from '../lib/ids';
 import { roleGuideBlurb } from '../lib/roleGuide';
-import type { CompareSentence } from '../lib/sentenceLearning';
+import { selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -106,6 +106,9 @@ export function SentenceWalkthrough({
   const done = step >= ordered.length;
   const revealedIds = new Set(ordered.slice(0, step + 1).map((item) => item.id));
   const here = focusTargets.filter((target) => target.sentenceIds.includes(sentence.id));
+  const [showAllTargets, setShowAllTargets] = useState(false);
+  // Chosen once per opening so practising a card doesn't reshuffle or hide it under the learner.
+  const [{ shown: shownTargets, hidden: hiddenTargets }] = useState(() => selectSentenceTargets(here, events));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
   const visitId = useMemo(() => createId('visit'), []);
 
@@ -179,7 +182,7 @@ export function SentenceWalkthrough({
         <div className="stack" style={{ gap: '0.25rem' }}>
           <span className="muted">Worth noticing here (recurs in this episode). Practice is optional and never changes your review schedule.</span>
           <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-            {here.map((target) => (
+            {(showAllTargets ? [...shownTargets, ...hiddenTargets] : shownTargets).map((target) => (
               <TargetLessonCard
                 key={target.id}
                 target={target}
@@ -193,6 +196,11 @@ export function SentenceWalkthrough({
               />
             ))}
           </ul>
+          {hiddenTargets.length > 0 && !showAllTargets ? (
+            <button type="button" onClick={() => setShowAllTargets(true)}>
+              Show {hiddenTargets.length} more {hiddenTargets.length === 1 ? 'target' : 'targets'}
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>

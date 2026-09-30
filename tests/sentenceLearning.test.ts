@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, listSentenceLearningEvents, logSentenceLearningEvent } from '../src/db/repository';
 import type { SentenceLearningEvent } from '../src/domain/types';
-import { glossableWords, pickCompareUses, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
+import { glossableWords, pickCompareUses, selectSentenceTargets, sentenceWordHelp, summariseTargetActivity, type CompareSentence } from '../src/lib/sentenceLearning';
 
 const sentences: CompareSentence[] = [
   { id: 'a', japanese: '本を読みます。', position: 1 },
@@ -134,5 +134,19 @@ describe('sentenceWordHelp', () => {
     const help = sentenceWordHelp([suggestion('本', 'book')], new Set(['本']));
     expect(help.newWords).toEqual([]);
     expect(help.unknownCount).toBe(0);
+  });
+});
+
+describe('selectSentenceTargets', () => {
+  const ev = (key: string, outcome: 'got_it' | 'needed_help', n: number): SentenceLearningEvent => ({
+    id: `${key}${outcome}${n}`, timestamp: 't', visitId: 'v', action: 'target_practice', bookId: 'b', sentenceId: 's',
+    target: { kind: 'vocabulary', key, label: key }, outcome,
+  });
+  it('orders unpractised, then still-struggling, then mostly-known; caps and keeps the rest', () => {
+    const targets = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+    const events = [ev('a', 'got_it', 1), ev('a', 'got_it', 2), ev('b', 'needed_help', 1)];
+    const { shown, hidden } = selectSentenceTargets(targets, events, 3);
+    expect(shown.map((t) => t.id)).toEqual(['c', 'd', 'e']);
+    expect(hidden.map((t) => t.id)).toEqual(['b', 'a']);
   });
 });

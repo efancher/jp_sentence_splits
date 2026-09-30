@@ -1412,7 +1412,8 @@ export type SentenceLearningAction =
   | 'walkthrough_opened'
   | 'walkthrough_completed'
   | 'target_practice'
-  | 'compare_uses_viewed';
+  | 'compare_uses_viewed'
+  | 'content_report';
 
 /**
  * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
@@ -1434,6 +1435,13 @@ export interface SentenceLearningEvent {
   outcome?: 'got_it' | 'needed_help';
   /** Practice outcomes are always the learner's own judgement here. */
   assessmentSource?: 'self';
+  /**
+   * content_report only: the learner judged the prompt itself defective. This is
+   * feedback for content repair, never a failed practice (no FSRS, no outcome).
+   */
+  report?: 'another_answer_works' | 'poor_question';
+  /** content_report: what the learner actually thought the answer was. */
+  learnerAnswer?: string;
   /** Compare uses: the other real occurrence that was shown. */
   exposedSentenceId?: string;
   quietMode?: boolean;

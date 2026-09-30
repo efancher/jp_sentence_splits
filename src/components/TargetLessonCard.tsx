@@ -88,6 +88,8 @@ export function TargetLessonCard({
 }) {
   const [practice, setPractice] = useState<'closed' | 'asking' | 'revealed' | 'recorded'>('closed');
   const [pair, setPair] = useState<ReturnType<typeof pickCompareUses>>();
+  const [reported, setReported] = useState<'another_answer_works' | 'poor_question'>();
+  const [answerDraft, setAnswerDraft] = useState('');
   const [seenNow, setSeenNow] = useState<Set<string>>(() => new Set());
 
   const targetRef = useMemo(
@@ -138,6 +140,21 @@ export function TargetLessonCard({
     setPractice('recorded');
   }
 
+  function report(kind: 'another_answer_works' | 'poor_question') {
+    onEvent({
+      id: createId('sl_event'),
+      visitId,
+      action: 'content_report',
+      sentenceId,
+      target: targetRef,
+      report: kind,
+      ...(kind === 'another_answer_works' && answerDraft.trim() ? { learnerAnswer: answerDraft.trim().slice(0, 300) } : {}),
+      assessmentSource: 'self',
+      quietMode,
+    });
+    setReported(kind);
+  }
+
   return (
     <li className="stack" style={{ gap: '0.25rem' }}>
       <div>
@@ -177,6 +194,22 @@ export function TargetLessonCard({
                 <button type="button" onClick={() => record('got_it')}>I had it</button>
                 <button type="button" onClick={() => record('needed_help')}>I needed the explanation</button>
               </div>
+              {reported ? (
+                <div className="muted" role="status">
+                  Thanks — flagged for repair ({reported === 'poor_question' ? 'poor question' : 'another answer works'}). It is not counted against you.
+                </div>
+              ) : (
+                <div className="stack" style={{ gap: '0.2rem' }}>
+                  <label className="stack" style={{ gap: '0.1rem' }}>
+                    <span className="muted">Your own answer, if it differs (optional)</span>
+                    <input type="text" value={answerDraft} maxLength={300} onChange={(event) => setAnswerDraft(event.target.value)} />
+                  </label>
+                  <div className="row" style={{ gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => report('another_answer_works')}>Another answer works</button>
+                    <button type="button" onClick={() => report('poor_question')}>Poor question</button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

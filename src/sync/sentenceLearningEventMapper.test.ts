@@ -16,6 +16,7 @@ describe('sentence learning event mapping', () => {
       target: { kind: 'grammar', key: 'expression:〜たり', label: '〜たり' },
       support: 'explanation_hidden', outcome: 'needed_help', assessmentSource: 'self',
       exposedSentenceId: 's2', quietMode: true, inventoryRevision: 'rev',
+      report: 'another_answer_works', learnerAnswer: 'it marks the topic',
     };
     expect(remoteToSentenceLearningEvent(sentenceLearningEventToRemote(full, 'owner', 1))).toEqual(full);
   });

@@ -225,8 +225,11 @@ Suggested next slices (none confirmed by the user):
    network source re-cut used on Analyze) there. Only Reader header controls
    (Speed/Text) and the focus/pack panels are candidates; needs the user's view
    on what counts as secondary.
-4. Phase 2 leftovers: contextual target selection, promoting a practised target
-   into durable tracking, "Another answer works"/"Poor question" reports.
+4. Phase 2 leftovers: DONE 2026-09-30 — contextual target order/cap and
+   "Another answer works"/"Poor question" reports (see STATUS). STILL OPEN:
+   promoting a practised target into durable tracking (creates StudyItems; needs
+   the user's explicit go-ahead + atomic vocabulary-link merge), and a view that
+   surfaces `content_report` events for repair.
 5. DONE 2026-09-30 (unverified on a real reply): opt-in AI chunk structure in the
    episode pack -> `BookChapter.structureDrafts` -> walkthrough source `ai_draft`
    (see STATUS). Try it on the real episode via the pack's new checkbox.

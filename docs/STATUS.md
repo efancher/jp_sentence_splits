@@ -10,6 +10,23 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — Phase 2 leftovers: content reports + contextual target order.**
+  At the revealed-explanation step of "Practise this" the learner can add their own
+  answer and press "Another answer works" or "Poor question"; this logs a new
+  `content_report` sentence-learning event (`report`, `learnerAnswer`) that is
+  feedback for content repair only — it never counts as practice or a miss and
+  touches no FSRS state. The still-unapplied migration was edited in place
+  (`content_report` action, `report`, `learner_answer` columns; mapper + test
+  updated). The walkthrough now orders a sentence's focus targets (never
+  practised, then still-needing-help, then mostly-known; episode priority breaks
+  ties), shows 3 and offers "Show N more"; the choice is fixed per opening so a card
+  doesn't move after practice (`selectSentenceTargets`). **Not built, by design:**
+  "promote a practised target into durable tracking" would create StudyItems, which
+  this branch's hard constraint forbids without your explicit go-ahead and a
+  design for merging vocabulary links safely (plan: don't call
+  `confirmSentenceVocabulary` with one word). Reports are not yet surfaced anywhere
+  for repair.
+
 - **2026-09-30 — Reader auto-shows the translation for mostly-unknown sentences** (user's call): when more than half a sentence's content words are new to the learner the translation is shown by default, with "Hide translation"; otherwise it stays behind "Show translation". The button flips whichever default applies. e2e updated.
 
 - **2026-09-30 — AI-drafted sentence structure for the walkthrough.** The episode

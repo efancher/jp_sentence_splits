@@ -73,6 +73,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(compare).not.toContainText('Translation 1.');
     await compare.getByRole('button', { name: 'Show translation' }).last().click();
     await expect(compare).toContainText('Translation 1.');
+    // Content reports: flagged for repair, never a failed practice.
+    await panel.getByRole('button', { name: 'Practise this' }).click();
+    await panel.getByRole('button', { name: 'Show explanation' }).click();
+    await panel.getByLabel(/Your own answer/).fill('it marks the object');
+    await panel.getByRole('button', { name: 'Another answer works' }).click();
+    await expect(panel.getByText(/flagged for repair/)).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath('lesson.png'), fullPage: true });
 
@@ -91,7 +97,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       db.close();
       return result;
     });
-    expect(counts.events).toBe(3);
+    expect(counts.events).toBe(4);
     expect(counts.reviews).toBe(0);
     expect(counts.items).toBe(0);
 

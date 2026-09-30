@@ -97,6 +97,31 @@ export function summariseTargetActivity(events: SentenceLearningEvent[], targetK
   return summary;
 }
 
+export const SENTENCE_TARGET_LIMIT = 3;
+
+/**
+ * Which of a sentence's focus targets to offer first: ones never practised,
+ * then ones the learner still needed help with, then ones they mostly had.
+ * Episode priority order breaks ties. Nothing is dropped — the rest stay one
+ * tap away — so this only orders and caps what a single sentence shows.
+ */
+export function selectSentenceTargets<T extends { id: string }>(
+  targets: T[],
+  events: SentenceLearningEvent[],
+  limit = SENTENCE_TARGET_LIMIT,
+): { shown: T[]; hidden: T[] } {
+  const rank = (target: T) => {
+    const activity = summariseTargetActivity(events, target.id);
+    if (activity.practised === 0) return 0;
+    return activity.neededHelp >= activity.gotIt ? 1 : 2;
+  };
+  const ordered = targets
+    .map((target, index) => ({ target, index, rank: rank(target) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((item) => item.target);
+  return { shown: ordered.slice(0, limit), hidden: ordered.slice(limit) };
+}
+
 /** Short gloss from a saved vocabulary meaning: first sense only, capped. */
 function shortMeaning(meaning: string): string {
   const first = meaning.split(/[;\n]/)[0]!.trim();
