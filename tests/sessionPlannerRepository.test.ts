@@ -858,3 +858,29 @@ describe('Learning Orchestrator repository layer', () => {
     expect(grammarInput?.crossActivityMissBoost).toBe(true);
   });
 });
+
+describe('pause word & grammar drills', () => {
+  beforeEach(() => {
+    resetDbForTests(`session-planner-${createId('db')}`);
+  });
+
+  it('withholds vocabulary due items from the planner input and keeps sentence cards', async () => {
+    const vocab = await ensureStudyItem('vocabularyItem', 'v1', 'reading_retrieval');
+    const sent = await ensureStudyItem('sentence', 's1', 'reading_in_context');
+    const past = new Date(Date.now() - 86400000).toISOString();
+    for (const item of [vocab, sent]) {
+      await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: past } });
+    }
+    const ids = async () => {
+      const input = await getSessionPlannerInput(30, new Date());
+      return [...input.retainDue, ...input.practiceDue].map((item) => item.studyItemId);
+    };
+    expect(await ids()).toContain(vocab.id);
+    await updateSettings({ legacyDrillsPaused: true });
+    const paused = await ids();
+    expect(paused).not.toContain(vocab.id);
+    expect(paused).toContain(sent.id);
+    await updateSettings({ legacyDrillsPaused: false });
+    expect(await ids()).toContain(vocab.id);
+  });
+});

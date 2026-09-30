@@ -601,6 +601,14 @@ export interface AppSettings {
    */
   sentenceFirstPlanning?: boolean;
   /**
+   * "Pause word & grammar drills": withholds vocabulary, vocabulary-confusion,
+   * word-listening/conjugation and grammar cards (and vocabulary/grammar
+   * planner steps) everywhere. Nothing is deleted or rescheduled; turning it
+   * off restores everything. Sentence cards, shadowing and lessons continue.
+   * Defaults to `false`.
+   */
+  legacyDrillsPaused?: boolean;
+  /**
    * Most-recently-used podcast RSS feed URLs (newest first), so
    * YouTubeMinePage's "Or import a podcast episode" input can offer them
    * back via a datalist instead of making the user re-paste/re-find the

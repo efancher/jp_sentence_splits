@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-09-30 — "Pause word & grammar drills" (`settings.legacyDrillsPaused`).**
+  The reversible alternative to resetting vocabulary/grammar (user chose it
+  over a reset). When on, vocabulary / vocabulary-confusion / word-listening /
+  conjugation / grammar cards are withheld from ReviewPage and from the
+  planner's due-review batch, the new-card backlog reservation is zeroed, and
+  grammar understand/noticing steps are not drafted. Nothing is deleted or
+  rescheduled; turning it off restores everything. Sentence cards, audio
+  listening, shadowing, pitch (own pause) and lessons continue. Settings page
+  checkbox. Games and the Vocabulary/Grammar pages themselves are unchanged.
 - **2026-09-30 — Phase 5: review charging settled (no code change).** A lesson
   embeds no review activity (events never create Reviews), so there is nothing
   to double-charge: lessons spend only the glossing bucket and review minutes

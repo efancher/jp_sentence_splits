@@ -286,6 +286,22 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.legacyDrillsPaused ?? false}
+            onChange={(event) => {
+              void updateSettings({ legacyDrillsPaused: event.target.checked });
+            }}
+          />
+          Pause word &amp; grammar drills
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Hides vocabulary and grammar review cards and their planner steps.
+          Nothing is deleted or rescheduled, so turning it off brings
+          everything back exactly as it was. Sentence cards, shadowing and
+          sentence lessons carry on.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.sentenceFirstPlanning ?? false}
             onChange={(event) => {
               void updateSettings({ sentenceFirstPlanning: event.target.checked });

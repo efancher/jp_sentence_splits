@@ -1456,30 +1456,40 @@ export function ReviewPage() {
       }
     });
 
+    // "Pause word & grammar drills" (settings.legacyDrillsPaused): empty the
+    // vocabulary/grammar candidate lists so neither due nor new cards of those
+    // kinds are queued. Sentence cards, audio and pitch (own pause) continue.
+    const paused = settings?.legacyDrillsPaused ?? false;
     return {
       book,
       sentences,
       existingSentenceItems,
       readingContextBySentenceId,
       comprehensionCheckBySentenceId,
-      vocabularyTargetCandidates,
-      existingVocabularyItems,
+      vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
+      existingVocabularyItems: paused ? [] : existingVocabularyItems,
       audioCandidates,
       existingAudioItems,
-      confusionPairCandidates,
-      existingConfusionItems,
-      sentenceConjugationCandidates,
-      existingConjugationItems,
-      wordListeningCandidates,
-      existingWordListeningItems,
+      confusionPairCandidates: paused ? [] : confusionPairCandidates,
+      existingConfusionItems: paused ? [] : existingConfusionItems,
+      sentenceConjugationCandidates: paused ? [] : sentenceConjugationCandidates,
+      existingConjugationItems: paused ? [] : existingConjugationItems,
+      wordListeningCandidates: paused ? [] : wordListeningCandidates,
+      existingWordListeningItems: paused ? [] : existingWordListeningItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
       pitchAccentProductionCandidates,
       existingPitchAccentProductionItems,
-      grammarCandidates,
-      existingGrammarItems,
+      grammarCandidates: paused ? [] : grammarCandidates,
+      existingGrammarItems: paused ? [] : existingGrammarItems,
     };
-  }, [bookId, deepDiveSentenceId, settings?.quietMode, settings?.pitchAccentPaused]);
+  }, [
+    bookId,
+    deepDiveSentenceId,
+    settings?.quietMode,
+    settings?.pitchAccentPaused,
+    settings?.legacyDrillsPaused,
+  ]);
 
   const descriptors = useMemo(
     () => (scope ? buildActivityDescriptors(scope) : []),

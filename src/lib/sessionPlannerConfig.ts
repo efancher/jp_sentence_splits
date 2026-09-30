@@ -71,6 +71,16 @@ export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'pitch_accent_production',
 ];
 
+/** StudyItem subjects withheld by settings.legacyDrillsPaused (word & grammar drills); sentence/chunk cards continue. */
+export function isPausedLegacyDrillSubject(subjectType: string): boolean {
+  return (
+    subjectType === 'vocabularyItem' ||
+    subjectType === 'vocabularyConfusion' ||
+    subjectType === 'grammarPattern' ||
+    subjectType === 'sentenceVocabulary'
+  );
+}
+
 /** Synthetic (non-StudyItem) activity labels the planner itself invents for glossing/grammar/shadowing steps. */
 export const SYNTHETIC_ACTIVITY_TYPES = {
   newSentence: 'new_sentence',

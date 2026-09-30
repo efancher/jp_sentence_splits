@@ -264,6 +264,7 @@ import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
+  isPausedLegacyDrillSubject,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
@@ -10051,12 +10052,16 @@ export async function getSessionPlannerInput(
   // candidate list, so it's filtered out here instead. "Pause pitch accent"
   // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
   // ReviewPage's pitchAccentProductionCandidates.
-  const practiceDueItemsForMode =
+  const legacyPaused = settings.legacyDrillsPaused ?? false;
+  const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
+    legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
+  const practiceDueItemsForMode = unlessLegacyPaused(
     settings.quietMode || settings.pitchAccentPaused
       ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
-      : practiceDueItems;
+      : practiceDueItems,
+  );
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(notSuspended(retainDueItems), suspendedIndex),
+    filterReadyGrammarDueItems(unlessLegacyPaused(notSuspended(retainDueItems)), suspendedIndex),
     filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
   ]);
 
@@ -10085,13 +10090,13 @@ export async function getSessionPlannerInput(
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
     .slice(0, EXPLORE_CANDIDATE_LIMIT);
-  const understandCandidates = understandCandidatesRaw
+  const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
-  const grammarNoticingCandidates = grammarNoticingCandidatesRaw
+  const grammarNoticingCandidates = (legacyPaused ? [] : grammarNoticingCandidatesRaw)
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);
 
@@ -10105,7 +10110,7 @@ export async function getSessionPlannerInput(
     understandCandidates,
     grammarNoticingCandidates,
     shadowCandidates,
-    newCardBacklogCount,
+    newCardBacklogCount: legacyPaused ? 0 : newCardBacklogCount,
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
