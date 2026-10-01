@@ -115,7 +115,7 @@ import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '..
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
 /** Card types that can show the whole chapter around the sentence (and carry the layout dropdown). */
-const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 'reading_production', 'cloze', 'grammar_recognition'];
+const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 'reading_production', 'cloze', 'grammar_recognition', 'sentence_transformation'];
 
 /**
  * Sentence-subject review: one activity type, `reading_in_context`. Shows
@@ -2143,6 +2143,9 @@ export function ReviewPage() {
               <SentenceConjugationCard
                 key={current.studyItem.id}
                 candidate={current.conjugation}
+                chapterView={chapterView}
+                bookId={current.readingContext?.bookId}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 revealed={revealed}
                 onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
@@ -2754,10 +2757,16 @@ function ReadingProductionCard({
  */
 function SentenceConjugationCard({
   candidate,
+  chapterView,
+  bookId,
+  onDocumentShown,
   revealed,
   onCheck,
 }: {
   candidate: SentenceConjugationCandidate;
+  chapterView: boolean;
+  bookId?: string;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onCheck: (typedReading: string, gradedAgainst: string) => void;
 }) {
@@ -2768,11 +2777,22 @@ function SentenceConjugationCard({
 
   return (
     <>
-      <div className="jp jp-lg">
-        {before}
-        <mark>{revealed ? surfaceForm : '_____'}</mark>
-        {after}
-      </div>
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+          cloze={{ vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm }}
+        />
+      ) : (
+        <div className="jp jp-lg">
+          {before}
+          <mark>{revealed ? surfaceForm : '_____'}</mark>
+          {after}
+        </div>
+      )}
       <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       <div className="muted">Produce: {form.label}</div>
       {!revealed ? (

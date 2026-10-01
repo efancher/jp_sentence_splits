@@ -10,6 +10,16 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Conjugation card gets the chapter layout.** The
+  `sentence_transformation` card now renders the plain chapter text with the
+  inflected form masked (`ReviewDocumentText` cloze mode, so other occurrences
+  of the word in the chapter are masked too) and joins
+  `CHAPTER_LAYOUT_ACTIVITIES` (layout dropdown + presentation evidence).
+  Deliberately left on the single-sentence layout: word listening and audio
+  comprehension (showing the text first defeats the listening task), pitch
+  cards (audio-first, drills paused), contrastive pair (two sentences),
+  grammar completion (already has its own passage context). e2e covers the
+  masked chapter and the layout switch.
 - **2026-10-01 — Reading production card gets the chapter layout.** The typed
   reading card (`reading_production`) was never converted when the cloze,
   reading-retrieval and grammar-recognition cards moved to the chapter view

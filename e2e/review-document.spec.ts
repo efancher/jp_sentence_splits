@@ -37,6 +37,16 @@ async function seedChapterReview(page: Page, dueActivities: string[]) {
         tx.objectStore('studyItems').put({ id: `word-${activityType}`, subjectType: 'vocabularyItem', subjectId: 'word', activityType,
           fsrsState: fsrs(dueActivities.includes(activityType) ? '2026-01-01T00:00:00.000Z' : future), createdAt: now, updatedAt: now });
       }
+      if (dueActivities.includes('sentence_transformation')) {
+        tx.objectStore('vocabularyItems').put({ id: 'verb', expression: '読む', reading: 'よむ', meaning: 'to read', partOfSpeech: 'v5m; vt', createdAt: now, updatedAt: now });
+        tx.objectStore('sentenceVocabulary').put({ id: 'sv-verb', sentenceId: 's-20', vocabularyItemId: 'verb', surfaceForm: '読みました', createdAt: now, updatedAt: now });
+        tx.objectStore('studyItems').put({ id: 'verb-conjugation', subjectType: 'sentenceVocabulary', subjectId: 'sv-verb', activityType: 'sentence_transformation',
+          fsrsState: fsrs('2026-01-01T00:00:00.000Z'), createdAt: now, updatedAt: now });
+        for (const activityType of ['reading_retrieval', 'cloze', 'reading_production']) {
+          tx.objectStore('studyItems').put({ id: `verb-${activityType}`, subjectType: 'vocabularyItem', subjectId: 'verb', activityType,
+            fsrsState: fsrs(future), createdAt: now, updatedAt: now });
+        }
+      }
       await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
       db.close();
   }, dueActivities);
@@ -127,4 +137,19 @@ test('typed-reading card uses the chapter layout, like the other word cards', as
   await layout.selectOption('original');
   await expect(page.getByRole('region', { name: 'Chapter text' })).toHaveCount(0);
   await expect(page.getByLabel('Type the reading')).toBeVisible();
+});
+
+test('conjugation card uses the chapter layout without leaking the inflected form', async ({ page }) => {
+  await page.goto('/#/settings');
+  await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+  await seedChapterReview(page, ['sentence_transformation']);
+  await page.goto('/#/books/book/review');
+  await expect(page.getByLabel(/Type the reading of the/)).toBeVisible();
+  const chapter = page.getByRole('region', { name: 'Chapter text' });
+  await expect(chapter.locator('p')).toHaveCount(30);
+  await expect(chapter.locator('mark')).toHaveText('_____');
+  await expect(chapter).not.toContainText('読みました');
+  await page.getByRole('combobox', { name: 'Review layout' }).selectOption('original');
+  await expect(chapter).toHaveCount(0);
+  await expect(page.getByLabel(/Type the reading of the/)).toBeVisible();
 });
