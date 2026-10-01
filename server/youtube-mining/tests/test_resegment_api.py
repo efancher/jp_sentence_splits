@@ -106,3 +106,21 @@ def test_resegment_reads_nihon_as_nihon_not_nippon() -> None:
     assert "にっぽん" not in cue["reading"]
     nihon = next(t for t in cue["tokens"] if t["surface"] == "日本")
     assert nihon["reading"] == "にほん"
+
+
+def test_resegment_reads_nani_before_ka_ga_wo_mo_but_nan_before_counter() -> None:
+    """unidic-lite always reads 何 as ナン; nani_override fixes 何か/何を etc."""
+    if not reading_engine_available():
+        return
+    resp = client.post(
+        "/resegment",
+        json={"sentences": [
+            {"japanese": "何かを書いたりする紙です。", "startMs": 0, "endMs": 1000},
+            {"japanese": "何歳ですか。", "startMs": 1000, "endMs": 2000},
+        ]},
+    )
+    assert resp.status_code == 200
+    first, second = resp.json()
+    assert next(t for t in first["tokens"] if t["surface"] == "何")["reading"] == "なに"
+    assert first["reading"].startswith("なにか")
+    assert next(t for t in second["tokens"] if t["surface"] == "何")["reading"] == "なん"

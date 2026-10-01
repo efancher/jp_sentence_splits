@@ -39,6 +39,18 @@ READING_OVERRIDES: dict[str, str] = {
 }
 
 
+# unidic-lite reads every standalone 何 as ナン. Before these particles/words
+# native speakers say なに (何か, 何が, 何を, 何も, 何より); before counters and
+# た/だ/な-row sounds it stays なん, which the default already covers.
+_NANI_FOLLOWERS = ("か", "が", "を", "も", "より")
+
+
+def nani_override(surface: str, next_surface: str) -> Optional[str]:
+    if surface == "何" and next_surface.startswith(_NANI_FOLLOWERS):
+        return "なに"
+    return None
+
+
 @lru_cache(maxsize=1)
 def _load_engine() -> Optional[tuple[object, Callable[[str], str]]]:
     try:
@@ -68,9 +80,11 @@ def generate_reading(text: str) -> Optional[str]:
     tagger, kata2hira = engine
 
     parts: list[str] = []
-    for word in tagger(text):
+    words = list(tagger(text))
+    for i, word in enumerate(words):
         surface = word.surface
-        override = READING_OVERRIDES.get(surface)
+        next_surface = words[i + 1].surface if i + 1 < len(words) else ""
+        override = nani_override(surface, next_surface) or READING_OVERRIDES.get(surface)
         if override:
             parts.append(override)
             continue
