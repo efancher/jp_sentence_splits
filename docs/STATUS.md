@@ -10,6 +10,12 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**
+  An AI reply that put a vocabulary handle on a grammar target (`V31` on
+  `～方が好き`) rejected the whole target as an unknown grammar ref. A ref from
+  the other list (`V…` on grammar, `G…` on vocabulary) is now ignored and the
+  target stays unlinked; refs unknown within the right list, and refs on
+  expression targets, are still rejected.
 - **2026-10-01 — Reader: per-sentence play + loop.** In the chapter layout the
   focused sentence's ▶ (and a new toolbar ▶) plays just that sentence and
   stops at its end instead of reading on into the next one; a new 🔁 toggle

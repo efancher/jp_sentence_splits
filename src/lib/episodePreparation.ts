@@ -197,7 +197,13 @@ export function parsePreparationObject(raw: unknown, context: PreparationContext
     const treatment = entry.treatment === undefined ? 'recall' : TREATMENTS.find((t) => t === entry.treatment);
     if (!treatment) return reject('Unknown treatment.');
 
-    const ref = typeof entry.ref === 'string' ? entry.ref.trim() : '';
+    const rawRef = typeof entry.ref === 'string' ? entry.ref.trim() : '';
+    // A handle from the other list (a "V" ref on a grammar target, or "G" on a
+    // word) is a mix-up, not an invention: ignore it and leave the target
+    // unlinked rather than discarding an otherwise valid target.
+    const wrongList =
+      (kind === 'grammar' && /^V\d+$/.test(rawRef)) || (kind === 'vocabulary' && /^G\d+$/.test(rawRef));
+    const ref = wrongList ? '' : rawRef;
     let vocabularyItemId: string | undefined;
     let grammarPatternId: string | undefined;
     if (kind === 'vocabulary' || kind === 'grammar') {

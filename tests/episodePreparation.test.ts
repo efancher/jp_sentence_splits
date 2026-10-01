@@ -99,6 +99,24 @@ describe('parsePreparationReply', () => {
     ]);
   });
 
+  it('keeps a target whose ref came from the other list, leaving it unlinked', () => {
+    const result = parsePreparationReply(
+      JSON.stringify({
+        targets: [
+          { kind: 'grammar', ref: 'V1', label: '～を', occurrences: [{ sentence: 'S1', text: '本を' }] },
+          { kind: 'vocabulary', ref: 'G1', label: '本', occurrences: [{ sentence: 'S1', text: '本' }] },
+        ],
+      }),
+      context,
+      NOW,
+    );
+    expect(result.rejected).toEqual([]);
+    expect(result.targets.map((t) => [t.vocabularyItemId, t.grammarPatternId])).toEqual([
+      [undefined, undefined],
+      [undefined, undefined],
+    ]);
+  });
+
   it('accepts vocabulary and grammar targets that are not in the saved lists (no ref)', () => {
     const reply = JSON.stringify({
       version: 1,
