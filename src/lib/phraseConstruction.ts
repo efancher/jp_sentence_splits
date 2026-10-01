@@ -173,6 +173,13 @@ export const CONSTRUCTION_CATALOG: Record<string, ConstructionRule> = {
     function: 'Gives representative examples of actions or states, implying there are others, or that they alternate.',
     caution: 'Unlike て-form listing, it is not a strict sequence and is not exhaustive. A single たり (…たりする) is also fine and hints at other unnamed examples.',
   },
+  hou_ga_comparison: {
+    name: 'AのほうがB (comparison)',
+    operation: 'unit',
+    formation: 'Noun or plain-form clause + の + 方(ほう) + が + predicate (本を読む方が好き). Often paired with より for the other side: AのほうがBより….',
+    function: 'Picks A out as the preferred or greater side of a two-way comparison.',
+    caution: 'The comparison can be implicit, with no より part. 方 here is “side/direction”, not a free-standing noun, and a verb before it needs plain form (書く方が), not a の-linked noun.',
+  },
   no_nominaliser: {
     name: 'clause + の',
     operation: 'role_change',
