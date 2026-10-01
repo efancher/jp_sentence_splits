@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { APP_NAME, APP_SHORT_NAME } from '../appConfig';
 import { MigrationModal } from '../components/MigrationModal';
+import { ReportIssueButton } from '../components/ReportIssueButton';
 import { SessionBar } from '../components/SessionBar';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { expireStalePlannerSessions } from '../db/repository';
@@ -83,7 +84,10 @@ export function AppShell() {
             </div>
           </div>
         </div>
-        <SyncStatusBadge />
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <ReportIssueButton />
+          <SyncStatusBadge />
+        </div>
       </header>
       <main className={showSessionBar ? 'app-main has-session-bar' : 'app-main'}>
         <Outlet />
