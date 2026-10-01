@@ -5,6 +5,7 @@ import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
 import { parseEpisodePackReply, type PackReplyResult } from '../lib/episodePack';
+import { validLayersFor } from '../lib/phraseConstruction';
 import {
   type PreparationContext,
   parsePreparationReply,
@@ -8897,7 +8898,7 @@ export async function listSentenceLearningEvents(bookId: string): Promise<Senten
 export async function getEpisodePreparationContext(
   bookId: string,
   chapterId: string,
-): Promise<{ context: PreparationContext; preparation?: EpisodePreparation; needsStructureIds: string[] }> {
+): Promise<{ context: PreparationContext; preparation?: EpisodePreparation; needsStructureIds: string[]; needsConstructionIds: string[] }> {
   const db = getDb();
   const book = await db.books.get(bookId);
   const chapter = book?.chapters.find((item) => item.id === chapterId);
@@ -8923,6 +8924,8 @@ export async function getEpisodePreparationContext(
       grammar: grammar.flatMap((item) => (item ? [{ id: item.id, canonicalName: item.canonicalName, shortMeaning: item.shortMeaning }] : [])),
     },
     preparation: chapter.preparation,
+    // Sentences with no usable construction draft yet (one that no longer matches the text does not count).
+    needsConstructionIds: sentences.filter((sentence) => validLayersFor(sentence.japanese, chapter.constructionDrafts?.[sentence.id]).length === 0).map((sentence) => sentence.id),
     // Sentences with neither a saved analysis nor an AI draft that still rebuilds the text.
     needsStructureIds: await (async () => {
       const analyses = await db.analyses.bulkGet(sentenceIds);
@@ -8997,6 +9000,8 @@ export interface EpisodePackSaveResult {
   rejectedTranslations: PackReplyResult['rejectedTranslations'];
   structureSaved: number;
   rejectedStructure: { handle: string; reason: string }[];
+  constructionsSaved: number;
+  rejectedConstructions: { handle: string; reason: string }[];
 }
 
 /**
@@ -9013,7 +9018,7 @@ export async function saveEpisodePackReply(
   const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
   const parsed = parseEpisodePackReply(reply, context, nowIso());
   if (parsed.error) {
-    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations, structureSaved: 0, rejectedStructure: [] };
+    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations, structureSaved: 0, rejectedStructure: [], constructionsSaved: 0, rejectedConstructions: [] };
   }
   const db = getDb();
   let translationsSaved = 0;
@@ -9049,7 +9054,34 @@ export async function saveEpisodePackReply(
       structureSaved = drafts.size;
     }
   }
-  return { preparation, translationsSaved, rejectedTranslations, structureSaved, rejectedStructure: parsed.structure?.rejected ?? [] };
+  let constructionsSaved = 0;
+  if (parsed.constructions && parsed.constructions.drafts.size > 0) {
+    const drafts = parsed.constructions.drafts;
+    const book = await db.books.get(bookId);
+    if (book) {
+      const updated: Book = {
+        ...book,
+        chapters: book.chapters.map((chapter) =>
+          chapter.id === chapterId
+            ? { ...chapter, constructionDrafts: { ...chapter.constructionDrafts, ...Object.fromEntries(drafts) } }
+            : chapter,
+        ),
+        updatedAt: nowIso(),
+      };
+      await db.books.put(updated);
+      notifySync('books', updated.id, updated);
+      constructionsSaved = drafts.size;
+    }
+  }
+  return {
+    preparation,
+    translationsSaved,
+    rejectedTranslations,
+    structureSaved,
+    rejectedStructure: parsed.structure?.rejected ?? [],
+    constructionsSaved,
+    rejectedConstructions: parsed.constructions?.rejected ?? [],
+  };
 }
 
 export async function updatePreparedTarget(

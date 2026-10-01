@@ -321,6 +321,38 @@ export interface BookChapter {
    * against the current sentence text before use.
    */
   structureDrafts?: Record<string, StructureDraftChunk[]>;
+  /**
+   * AI-drafted "how this phrase works" layers per sentence id, from a pasted episode-pack reply.
+   * Occurrence-specific only; the reusable rule for a known construction comes from
+   * `src/lib/phraseConstruction.ts`. Re-validated against the live sentence text before use.
+   */
+  constructionDrafts?: Record<string, ConstructionLayer[]>;
+}
+
+export type ConstructionOperation = 'inflection' | 'helper' | 'role_change' | 'unit';
+
+/** One layer of how a phrase is built, anchored to an exact span of one sentence. Layers may nest. */
+export interface ConstructionLayer {
+  /** Exact substring of the sentence. */
+  text: string;
+  /** Character offsets into `Sentence.japanese`, computed locally from `text`. */
+  start: number;
+  end: number;
+  operation: ConstructionOperation;
+  /** Reusable construction key (e.g. `te_form`, `te_iru`, `no_nominaliser`); a catalog key supplies the reusable rule. */
+  key: string;
+  /** The base or preceding form, e.g. 読む → 読んで. */
+  from?: string;
+  /** How the pieces attach here. */
+  attach: string;
+  /** What the operation contributes in this sentence. */
+  contribution: string;
+  /** What span it applies to, when that is not obvious (especially a whole clause). */
+  scope?: string;
+  /** Short label of the particular use, to tell apart similar-looking forms (e.g. "ongoing" vs "resulting state"). */
+  use?: string;
+  /** AI-drafted reusable rule, kept only for a key the catalog does not know. */
+  rule?: { formation: string; function: string; caution?: string };
 }
 
 export interface StructureDraftChunk {

@@ -39,14 +39,16 @@ export function EpisodePreparationPanel({
   const [copiedPart, setCopiedPart] = useState<number>();
   const [forceTargets, setForceTargets] = useState(true);
   const [wantStructure, setWantStructure] = useState(true);
+  const [wantConstructions, setWantConstructions] = useState(false);
   const prompts = useMemo(() => {
     if (!loaded) return [];
     const plan = planEpisodePack(loaded.context, loaded.preparation, {
       forceTargets,
       structureSentenceIds: wantStructure ? new Set(loaded.needsStructureIds) : undefined,
+      constructionSentenceIds: wantConstructions ? new Set(loaded.needsConstructionIds) : undefined,
     });
     return buildEpisodePackPrompts(loaded.context, plan);
-  }, [loaded, forceTargets, wantStructure]);
+  }, [loaded, forceTargets, wantStructure, wantConstructions]);
 
   if (!loaded) return null;
   const { context, preparation } = loaded;
@@ -80,6 +82,12 @@ export function EpisodePreparationPanel({
       bits.push(
         `${result.structureSaved} sentence structure${result.structureSaved === 1 ? '' : 's'} saved` +
           (result.rejectedStructure.length > 0 ? `, ${result.rejectedStructure.length} skipped (${result.rejectedStructure[0]!.reason})` : ''),
+      );
+    }
+    if (result.constructionsSaved > 0 || result.rejectedConstructions.length > 0) {
+      bits.push(
+        `${result.constructionsSaved} phrase explanation${result.constructionsSaved === 1 ? '' : 's'} saved` +
+          (result.rejectedConstructions.length > 0 ? `, ${result.rejectedConstructions.length} layer${result.rejectedConstructions.length === 1 ? '' : 's'} skipped (${result.rejectedConstructions[0]!.reason})` : ''),
       );
     }
     setMessage(`Saved: ${bits.join('; ') || 'nothing new'}.`);
@@ -136,6 +144,12 @@ export function EpisodePreparationPanel({
           <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
             <input type="checkbox" checked={wantStructure} onChange={(event) => setWantStructure(event.target.checked)} />
             <span>Also ask for sentence structure ({loaded.needsStructureIds.length} without an analysis) so walkthrough roles are not generic</span>
+          </label>
+        ) : null}
+        {loaded.needsConstructionIds.length > 0 ? (
+          <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+            <input type="checkbox" checked={wantConstructions} onChange={(event) => setWantConstructions(event.target.checked)} />
+            <span>Also ask how phrases are built ({loaded.needsConstructionIds.length} sentences without an explanation) for “How this phrase works”; asked in separate prompts</span>
           </label>
         ) : null}
         <label className="stack" style={{ gap: '0.25rem' }}>

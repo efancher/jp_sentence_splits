@@ -32,7 +32,7 @@ const context: PreparationContext = {
 describe('episode pack prompts', () => {
   it('asks for targets and only the missing translations in one prompt', () => {
     const plan = planEpisodePack(context, undefined);
-    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'], structureHandles: [] });
+    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [] });
     const prompts = buildEpisodePackPrompts(context, plan);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('S2: 本を買いました。');
@@ -55,8 +55,8 @@ describe('episode pack prompts', () => {
     // Empty targets never count as fresh targets.
     expect(planEpisodePack(context, preparation).wantsTargets).toBe(true);
     const done = { ...context, sentences: context.sentences.map((s) => ({ ...s, translation: 'x' })) };
-    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [], structureHandles: [] })).toEqual([]);
-    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'], structureHandles: [] });
+    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [], structureHandles: [], constructionHandles: [] })).toEqual([]);
+    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [] });
     expect(only[0]).not.toContain('"targets"');
     expect(only[0]).not.toContain('KNOWN VOCABULARY');
   });
@@ -171,6 +171,25 @@ describe('saveEpisodePackReply', () => {
     expect((await getEpisodePreparationContext(bookId, chapterId)).needsStructureIds).toEqual([sentenceIds[1]]);
     expect(await getDb().analyses.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
+  });
+
+  it('stores construction drafts without creating study items, and stops asking for them', async () => {
+    const { bookId, chapterId, sentenceIds } = await seedEpisode();
+    expect((await getEpisodePreparationContext(bookId, chapterId)).needsConstructionIds).toEqual(sentenceIds);
+    const good = { text: '買いました', key: 'masu_form', operation: 'inflection', attach: 'stem + ました', contribution: 'polite past' };
+    const result = await saveEpisodePackReply(
+      bookId,
+      chapterId,
+      JSON.stringify({ constructions: { S2: [good, { ...good, text: '存在しない' }], S9: [good] } }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.constructionsSaved).toBe(1);
+    expect(result.rejectedConstructions.length).toBe(2);
+    const book = await getDb().books.get(bookId);
+    expect(book!.chapters.find((chapter) => chapter.id === chapterId)!.constructionDrafts![sentenceIds[1]!]).toHaveLength(1);
+    expect((await getEpisodePreparationContext(bookId, chapterId)).needsConstructionIds).toEqual([sentenceIds[0]]);
+    expect(await getDb().studyItems.count()).toBe(0);
+    expect(await getDb().reviews.count()).toBe(0);
   });
 
   it('changes nothing when the reply cannot be parsed', async () => {

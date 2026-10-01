@@ -12,6 +12,13 @@
  */
 import type { EpisodePreparation, StructureDraftChunk } from '../domain/types';
 import {
+  CONSTRUCTION_SENTENCES_PER_PART,
+  CONSTRUCTION_SHAPE,
+  buildConstructionInstructions,
+  parseConstructions,
+  type ConstructionParse,
+} from './phraseConstruction';
+import {
   STRUCTURE_LINE_EXAMPLE,
   STRUCTURE_SENTENCES_PER_PART,
   buildStructureInstructions,
@@ -36,12 +43,14 @@ export interface EpisodePackPlan {
   missingTranslationHandles: string[];
   /** Handles whose chunk structure is wanted (opt-in); asked in separate parts after translations/targets. */
   structureHandles: string[];
+  /** Handles whose "how this phrase works" layers are wanted (opt-in); always asked in their own parts. */
+  constructionHandles: string[];
 }
 
 export function planEpisodePack(
   context: PreparationContext,
   preparation: EpisodePreparation | undefined,
-  options: { forceTargets?: boolean; structureSentenceIds?: ReadonlySet<string> } = {},
+  options: { forceTargets?: boolean; structureSentenceIds?: ReadonlySet<string>; constructionSentenceIds?: ReadonlySet<string> } = {},
 ): EpisodePackPlan {
   const hasFreshTargets =
     !!preparation && preparation.targets.length > 0 && !isPreparationStale(preparation, context.sentences);
@@ -52,6 +61,9 @@ export function planEpisodePack(
     ),
     structureHandles: context.sentences.flatMap((sentence, index) =>
       options.structureSentenceIds?.has(sentence.id) ? [`S${index + 1}`] : [],
+    ),
+    constructionHandles: context.sentences.flatMap((sentence, index) =>
+      options.constructionSentenceIds?.has(sentence.id) ? [`S${index + 1}`] : [],
     ),
   };
 }
@@ -82,14 +94,18 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
   for (let i = 0; i < plan.structureHandles.length; i += STRUCTURE_SENTENCES_PER_PART) {
     structureBatches.push(plan.structureHandles.slice(i, i + STRUCTURE_SENTENCES_PER_PART));
   }
-  if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0) return [];
+  const constructionBatches: string[][] = [];
+  for (let i = 0; i < plan.constructionHandles.length; i += CONSTRUCTION_SENTENCES_PER_PART) {
+    constructionBatches.push(plan.constructionHandles.slice(i, i + CONSTRUCTION_SENTENCES_PER_PART));
+  }
+  if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0 && constructionBatches.length === 0) return [];
   if (plan.wantsTargets && batches.length === 0) batches.push([]);
   // The first structure batch rides in the first main prompt so one paste covers
   // everything; any further batches (very long episodes) stay separate parts.
   const mergedStructure = batches.length > 0 ? structureBatches.shift() : undefined;
 
   const sentenceByHandle = new Map(context.sentences.map((s, i) => [`S${i + 1}`, s]));
-  const total = batches.length + structureBatches.length;
+  const total = batches.length + structureBatches.length + constructionBatches.length;
   const structureLines = (batch: string[]) => batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`);
 
   const structurePrompts = structureBatches.map((batch, index) =>
@@ -106,6 +122,22 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
       'Example:',
       STRUCTURE_LINE_EXAMPLE,
       'Give every sentence listed under STRUCTURE THESE, its chunks in order, no other text.',
+    ].join('\n'),
+  );
+
+  const constructionPrompts = constructionBatches.map((batch, index) =>
+    [
+      `You are helping a Japanese learner prepare one episode: "${context.title}".` +
+        (total > 1 ? ` This is part ${batches.length + structureBatches.length + index + 1} of ${total}; each part is answered separately.` : ''),
+      '',
+      ...buildConstructionInstructions(),
+      '',
+      'EXPLAIN THESE:',
+      ...batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`),
+      '',
+      'Reply with ONLY this JSON, nothing else, using plain straight quotes (omit a sentence that has nothing worth explaining):',
+      JSON.stringify({ version: EPISODE_PREPARATION_VERSION, constructions: CONSTRUCTION_SHAPE }, null, 2),
+      'Every "text" must be copied exactly from the sentence it names.',
     ].join('\n'),
   );
 
@@ -186,7 +218,7 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
     }
     return lines.join('\n');
   });
-  return [...mainPrompts, ...structurePrompts];
+  return [...mainPrompts, ...structurePrompts, ...constructionPrompts];
 }
 
 export interface PackTranslation {
@@ -201,6 +233,8 @@ export interface PackReplyResult {
   rejectedTranslations: { handle: string; reason: string }[];
   /** Present only when the reply had a "structure" object. */
   structure?: { drafts: Map<string, StructureDraftChunk[]>; rejected: { handle: string; reason: string }[] };
+  /** Present only when the reply had a "constructions" object. */
+  constructions?: ConstructionParse;
 }
 
 export function parseEpisodePackReply(reply: string, context: PreparationContext, now: string): PackReplyResult {
@@ -222,8 +256,9 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
   const hasTargets = 'targets' in object;
   const hasTranslations = 'translations' in object;
   const hasStructure = 'structure' in object;
-  if (!hasTargets && !hasTranslations && !hasStructure) {
-    return { error: 'The reply has none of "targets", "translations" or "structure".', translations: [], rejectedTranslations: [] };
+  const hasConstructions = 'constructions' in object;
+  if (!hasTargets && !hasTranslations && !hasStructure && !hasConstructions) {
+    return { error: 'The reply has none of "targets", "translations", "structure" or "constructions".', translations: [], rejectedTranslations: [] };
   }
 
   const translations: PackTranslation[] = [];
@@ -251,6 +286,7 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
     translations,
     rejectedTranslations,
     structure: hasStructure ? parseStructure(object.structure, context) : trailingStructure(reply, context),
+    ...(hasConstructions ? { constructions: parseConstructions(object.constructions, context) } : {}),
   };
 }
 
