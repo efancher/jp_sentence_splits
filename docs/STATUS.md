@@ -10,6 +10,11 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Reader: per-sentence play + loop.** In the chapter layout the
+  focused sentence's ▶ (and a new toolbar ▶) plays just that sentence and
+  stops at its end instead of reading on into the next one; a new 🔁 toggle
+  loops it (toggling mid-play restarts with the new setting). The header Play
+  and the original layout's "Play from here" still read on through the chapter.
 - **2026-10-01 — Episode pack: literal "dolly" glosses for every chunk.** The
   optional sentence-structure part of the preparation prompt now asks for a
   near word-for-word gloss on every chunk, explicitly including non-vocabulary

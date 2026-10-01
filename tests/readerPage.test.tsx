@@ -1,11 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb, readSettings } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
+import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
 
@@ -341,7 +342,29 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     renderReaderPage('/books/book-1/read');
 
     await screen.findByText('本を読みます。');
-    expect(screen.getAllByRole('button', { name: 'Play from here' })).toHaveLength(1);
+    // The focused sentence's own button plus the toolbar's.
+    expect(screen.getAllByRole('button', { name: 'Play sentence' })).toHaveLength(2);
+  });
+
+  it('plays a single sentence and stops at its end, looping only when asked', async () => {
+    await seedBook();
+    Element.prototype.scrollIntoView = vi.fn();
+    const play = vi.spyOn(nativeAudioController, 'play').mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('本を読みます。');
+    const toolbar = screen.getByRole('toolbar', { name: 'Sentence tools' });
+
+    await user.click(within(toolbar).getByRole('button', { name: 'Play sentence' }));
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0]![2]).toMatchObject({ loop: false });
+    play.mock.calls[0]![2]!.onEnded!();
+    expect(play).toHaveBeenCalledTimes(1);
+
+    await user.click(within(toolbar).getByRole('button', { name: 'Loop off' }));
+    await user.click(within(toolbar).getByRole('button', { name: 'Play sentence' }));
+    expect(play.mock.calls[1]![2]).toMatchObject({ loop: true });
+    play.mockRestore();
   });
 
   it('switches to furigana/reading-only text via the display-mode toggle', async () => {
