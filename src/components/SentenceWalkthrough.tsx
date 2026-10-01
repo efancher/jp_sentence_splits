@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AnalysisChunk, ConstructionLayer, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, ConstructionLayer, GlossDecision, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
@@ -11,6 +11,7 @@ import { layersOverlapping, validLayersFor, type LayerWithSentence } from '../li
 import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
+import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
 import { PhraseConstructionSection } from './PhraseConstructionSection';
@@ -117,6 +118,8 @@ export function SentenceWalkthrough({
   constructionDrafts,
   events = [],
   onEvent,
+  glossRecords,
+  onGlossDecision,
   quietMode,
   shadowHref,
   onQuietModeChange,
@@ -136,6 +139,9 @@ export function SentenceWalkthrough({
   /** Earlier lesson events for this book, to show what has been practised/compared. */
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
+  /** Earlier structural decisions (progressive glossing). With `onGlossDecision`, the walkthrough opens on a "try it first" check. */
+  glossRecords?: GlossDecision[];
+  onGlossDecision?: (decision: GlossDecisionInput) => void;
   quietMode: boolean;
   shadowHref?: string;
   onQuietModeChange: (quiet: boolean) => void;
@@ -146,6 +152,8 @@ export function SentenceWalkthrough({
   const clauseNumbers = useMemo(() => walkthroughClauseNumbers(chunks), [chunks]);
   const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
   const [step, setStep] = useState(0);
+  const [tryFirst, setTryFirst] = useState(() =>
+    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const chunk = ordered[step];
   const done = step >= ordered.length;
@@ -239,12 +247,24 @@ export function SentenceWalkthrough({
           {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
         </select>
       </label>
-      <ChunkPuzzleStrip
+      {tryFirst && onGlossDecision ? (
+        <GlossDecisionPanel
+          sentenceId={sentence.id}
+          visitId={visitId}
+          chunks={chunks.map(({ id, japanese, role }) => ({ id, japanese, role }))}
+          records={glossRecords ?? []}
+          translation={sentence.translation}
+          words={compareAids?.get(sentence.id)?.words ?? []}
+          onRecord={onGlossDecision}
+          onFinish={() => setTryFirst(false)}
+        />
+      ) : null}
+      {tryFirst ? null : <ChunkPuzzleStrip
         chunks={chunks.map(({ id, japanese, role }) => ({ id, japanese, role }))}
         revealedIds={done ? undefined : revealedIds}
         revealRoles={preset !== 'minimal'}
-      />
-      {done ? (
+      />}
+      {tryFirst ? <button type="button" onClick={() => setTryFirst(false)}>Skip the check, just walk through</button> : done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
           <div className="jp jp-lg">{sentence.japanese}</div>
           {gist === 'closed' && !showTranslation && sentence.translation?.trim() ? (

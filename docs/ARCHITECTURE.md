@@ -247,6 +247,8 @@ the AI supplies handles and text only; `saveEpisodePackReply` resolves ids,
 fills only empty translations, and reuses the preparation merge. It replaces the
 need for a server-side AI call for these two jobs.
 
+**Progressive glossing (2026-10-01):** `GlossDecision` rows (Dexie `glossDecisions`, synced append-only `gloss_decisions`, migration `20261001000000`) are observations of structural decisions (skill, level shown, first response, correctness where the reference is settled, hints, blocker, outcome). Learner support level per skill is never stored: `inferSkillState` (src/lib/glossSkill.ts) recomputes it from the log. References come from the chunker heuristic and are only graded when the stored role equals the freshly computed one. Separate from `SentenceLearningEvent` (self-assessed lesson events) and never a Review.
+
 **Sentence learning events (2026-09-30):** `SentenceLearningEvent` rows in the
 Dexie table `sentenceLearningEvents` (synced as append-only `sentence_learning_events`, migration `20260930020000`, unapplied until merge) record in-walkthrough activity
 (opened, completed, target practice, compare uses viewed) with support used and a

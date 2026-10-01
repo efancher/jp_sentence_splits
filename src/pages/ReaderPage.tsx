@@ -7,7 +7,7 @@ import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
-import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -159,6 +159,7 @@ export function ReaderPage() {
   );
 
   const lessonEvents = useLiveQuery(() => listSentenceLearningEvents(bookId), [bookId]);
+  const glossRecords = useLiveQuery(() => listGlossDecisions(), []);
   const episodeSentences = useMemo(
     () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, position: index + 1 })) : []),
     [data],
@@ -666,6 +667,8 @@ export function ReaderPage() {
                       compareAids={compareAids}
                       constructionDrafts={data.chapter?.constructionDrafts}
                       events={lessonEvents ?? []}
+                      glossRecords={glossRecords}
+                      onGlossDecision={(decision) => void logGlossDecision({ ...decision, bookId })}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({
                           ...event,
