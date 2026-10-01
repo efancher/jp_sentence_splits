@@ -43,7 +43,7 @@ export interface EpisodePackPlan {
   missingTranslationHandles: string[];
   /** Handles whose chunk structure is wanted (opt-in); asked in separate parts after translations/targets. */
   structureHandles: string[];
-  /** Handles whose "how this phrase works" layers are wanted (opt-in); always asked in their own parts. */
+  /** Handles whose "how this phrase works" layers are wanted (opt-in); the first batch rides in the main prompt like structure. */
   constructionHandles: string[];
 }
 
@@ -103,6 +103,8 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
   // The first structure batch rides in the first main prompt so one paste covers
   // everything; any further batches (very long episodes) stay separate parts.
   const mergedStructure = batches.length > 0 ? structureBatches.shift() : undefined;
+
+  const mergedConstruction = batches.length > 0 ? constructionBatches.shift() : undefined;
 
   const sentenceByHandle = new Map(context.sentences.map((s, i) => [`S${i + 1}`, s]));
   const total = batches.length + structureBatches.length + constructionBatches.length;
@@ -187,6 +189,11 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
       );
     }
 
+    const withConstruction = partIndex === 0 && mergedConstruction !== undefined;
+    if (withConstruction) {
+      lines.push('', ...buildConstructionInstructions(), '', 'EXPLAIN THESE:', ...structureLines(mergedConstruction));
+    }
+
     const withStructure = partIndex === 0 && mergedStructure !== undefined;
     if (withStructure) {
       lines.push('', ...buildStructureInstructions(), '', 'STRUCTURE THESE:', ...structureLines(mergedStructure));
@@ -195,6 +202,7 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
     const shape: Record<string, unknown> = { version: EPISODE_PREPARATION_VERSION };
     if (includeTargets) shape.targets = [TARGET_SHAPE];
     if (batch.length > 0) shape.translations = { [batch[0]!]: 'English translation' };
+    if (withConstruction) shape.constructions = CONSTRUCTION_SHAPE;
     lines.push(
       '',
       withStructure
@@ -209,6 +217,9 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
         STRUCTURE_LINE_EXAMPLE,
         'Give every sentence listed under STRUCTURE THESE, its chunks in order, and no other text after the JSON besides those lines.',
       );
+    }
+    if (withConstruction) {
+      lines.push('Every construction "text" must be copied exactly from the sentence it names; omit a sentence in EXPLAIN THESE that has nothing worth explaining.');
     }
     if (includeTargets) {
       lines.push('Every occurrence "text" must be copied exactly from the sentence it names, and name a real sentence handle.');

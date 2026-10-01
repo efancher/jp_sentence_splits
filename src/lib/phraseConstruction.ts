@@ -212,7 +212,7 @@ export function constructionRule(layer: Pick<ConstructionLayer, 'key' | 'rule' |
 
 export const CONSTRUCTION_KEYS = Object.keys(CONSTRUCTION_CATALOG);
 export const MAX_LAYERS_PER_SENTENCE = 6;
-export const CONSTRUCTION_SENTENCES_PER_PART = 25;
+export const CONSTRUCTION_SENTENCES_PER_PART = 60;
 const MAX_FIELD = 300;
 
 export function constructionLayerId(sentenceId: string, layer: Pick<ConstructionLayer, 'start' | 'end' | 'key'>): string {

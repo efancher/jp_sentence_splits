@@ -61,6 +61,16 @@ describe('episode pack prompts', () => {
     expect(only[0]).not.toContain('KNOWN VOCABULARY');
   });
 
+  it('keeps targets, translations, structure and constructions in one prompt', () => {
+    const all = new Set(context.sentences.map((x) => x.id));
+    const plan = planEpisodePack(context, undefined, { structureSentenceIds: all, constructionSentenceIds: all });
+    const prompts = buildEpisodePackPrompts(context, plan);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('EXPLAIN THESE:');
+    expect(prompts[0]).toContain('"constructions"');
+    expect(prompts[0]).toContain('STRUCTURE THESE:');
+  });
+
   it('splits a long episode into ordered parts, targets only in the first', () => {
     const sentences = Array.from({ length: PACK_TRANSLATIONS_PER_PART * 2 + 5 }, (_, i) => ({
       id: `s${i}`, japanese: `文${i}。`, translation: '',
