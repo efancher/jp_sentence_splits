@@ -86,6 +86,7 @@ const PARTICLE_LOOKAHEAD_BLOCK: Record<string, readonly string[]> = {
     '出来',
   ],
   て: ['ている', 'ています', 'てる', 'てしまう', 'ておく', 'てみる'],
+  や: ['やつ'],
 };
 
 const TE_KURU_CONTINUATIONS = [

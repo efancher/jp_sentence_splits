@@ -19,6 +19,18 @@ describe('chunkJapaneseSentence 紙 / 髪 passage', () => {
   });
 });
 
+describe('chunkJapaneseSentence やつ', () => {
+  it('keeps やつ whole instead of splitting off や as a particle', () => {
+    expect(chunkJapaneseSentence('もう一つは紙、何かを書いたりするやつですね。')).toEqual([
+      'もう一つは',
+      '紙、',
+      '何かを',
+      '書いたり',
+      'するやつですね。',
+    ]);
+  });
+});
+
 describe('chunkJapaneseSentence regressions', () => {
   it('does not false-split inside ひな / なる', () => {
     expect(chunkJapaneseSentence('ひなたちは、毎日少しずつ大きくなりました。')).toEqual([
