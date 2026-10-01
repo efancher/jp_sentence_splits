@@ -1531,3 +1531,74 @@ button.sync-retry {
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
   background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
 }
+
+.gloss-workbench {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.gloss-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.icon-button[aria-pressed='true'],
+.icon-button[data-state='dirty'] {
+  background: var(--bg-muted);
+  border-color: var(--accent);
+}
+
+.icon-button[data-state='failed'] {
+  border-color: var(--danger);
+}
+
+.gloss-rail .speak-button {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.gloss-reader-line {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  line-height: 1.9;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+@media (min-width: 700px) {
+  .gloss-workbench {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .gloss-rail {
+    position: sticky;
+    top: 0.75rem;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+}

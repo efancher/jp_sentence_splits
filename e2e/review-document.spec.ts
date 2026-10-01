@@ -153,3 +153,31 @@ test('conjugation card uses the chapter layout without leaking the inflected for
   await expect(chapter).toHaveCount(0);
   await expect(page.getByLabel(/Type the reading of the/)).toBeVisible();
 });
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`glossing page shows the chapter beside an icon toolbar at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/#/settings');
+    await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+    await seedChapterReview(page, []);
+    await page.goto('/#/books/book/analyze/s-20');
+    const chapter = page.getByRole('region', { name: 'Chapter text' });
+    await expect(chapter.locator('[aria-current="true"]')).toContainText('図書館で本を読みました。');
+    await expect(chapter.locator('p, div.review-document-line')).toHaveCount(30);
+    const toolbar = page.getByRole('toolbar', { name: 'Sentence tools' });
+    for (const name of ['Previous sentence', 'Next sentence', 'Show Satori English', 'Edit reading', 'Back to book']) {
+      const button = toolbar.getByRole(name === 'Back to book' ? 'link' : 'button', { name });
+      await expect(button).toBeVisible();
+      await expect(button).toHaveAttribute('title', name);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await toolbar.getByRole('button', { name: 'Next sentence' }).click();
+    await expect(page).toHaveURL(/analyze\/s-21/);
+    await expect(chapter.locator('[aria-current="true"]')).toContainText('21番目の文です。');
+    await chapter.getByRole('button', { name: '図書館で本を読みました。' }).click();
+    await expect(page).toHaveURL(/analyze\/s-20/);
+    await page.getByLabel('Layout').selectOption('original');
+    await expect(page.getByRole('toolbar', { name: 'Sentence tools' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
+  });
+}

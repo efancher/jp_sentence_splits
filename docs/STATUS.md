@@ -10,6 +10,19 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Glossing (Analyze) page: chapter reader + icon toolbar.**
+  The sentence panel now shows the whole chapter as plain text (neighbours are
+  tap-to-open, the active sentence keeps the Plain/Furigana/Reading display)
+  beside a "Sentence tools" toolbar of icon buttons with tooltips and accessible
+  names (prev/next, save with status, text mode cycle, English, edit reading,
+  native audio, device TTS, ichi.moe, vocabulary, book). Side rail at >=700px,
+  wrapping bar below. Layout dropdown ("Chapter + icons" default / "Original ·
+  sentence") persists in localStorage `satori-glossbook:gloss-layout`.
+  `SpeakButton`/`NativeAudioButton` gained `iconOnly`. Known gap: the clip
+  "Adjust" trim editor is hidden in the icon toolbar (the `SentenceAudioAdjuster`
+  below still works when the book has a source URL; otherwise use the Original
+  layout). Presentation only: no data, schema or evidence changes. Existing
+  ui.test now targets "Next sentence"/"Previous sentence".
 - **2026-10-01 — Conjugation card gets the chapter layout.** The
   `sentence_transformation` card now renders the plain chapter text with the
   inflected form masked (`ReviewDocumentText` cloze mode, so other occurrences
