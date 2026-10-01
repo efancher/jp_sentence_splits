@@ -15,7 +15,7 @@ async function main() {
   const analyses = await fetchAll(supabase, 'analyses', 'sentence_id, chunks', user.id, (r) => ({
     sentenceId: String(r.sentence_id),
     chunks: (r.chunks as { id: string; japanese: string; role: string }[] | null) ?? [],
-  }));
+  }), 'sentence_id');
   let withChunks = 0;
   let anySettled = 0;
   const bySkill = { predicate: 0, particle: 0, attachment: 0 };
