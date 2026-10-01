@@ -108,6 +108,15 @@ def tokenize_japanese(text: str) -> list[MorphemeToken]:
         reading = _reading_from_feature(feature, surface, kata2hira)
         next_surface = words[i + 1].surface if i + 1 < len(words) else ""
         reading = nani_override(surface, next_surface) or reading
+        # 人 as a suffix after a proper noun (イタリア人) is じん; after a
+        # numeral (三人) it stays にん, which UniDic already gives.
+        if (
+            surface == "人"
+            and pos.startswith("接尾辞")
+            and tokens
+            and "固有名詞" in tokens[-1].pos
+        ):
+            reading = "じん"
         lemma_reading = _lemma_reading_from_feature(feature, lemma, kata2hira)
         accent_type = _accent_type_from_feature(feature)
 

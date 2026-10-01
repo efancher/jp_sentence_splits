@@ -36,6 +36,9 @@ def has_kanji(text: str) -> bool:
 READING_OVERRIDES: dict[str, str] = {
     "私": "わたし",
     "日本": "にほん",
+    # unidic-lite reads these compound tokens as なにじん / なんどき.
+    "何人": "なんにん",
+    "何時": "なんじ",
 }
 
 
@@ -43,10 +46,16 @@ READING_OVERRIDES: dict[str, str] = {
 # native speakers say なに (何か, 何が, 何を, 何も, 何より); before counters and
 # た/だ/な-row sounds it stays なん, which the default already covers.
 _NANI_FOLLOWERS = ("か", "が", "を", "も", "より")
+# 何か月 / 何か所 / 何か国 are counters (なんかげつ), not 何か + noun.
+_NANI_COUNTER_FOLLOWERS = ("か月", "か所", "か国", "ヶ月", "ヶ所", "ヶ国", "カ月", "カ所", "カ国")
 
 
 def nani_override(surface: str, next_surface: str) -> Optional[str]:
-    if surface == "何" and next_surface.startswith(_NANI_FOLLOWERS):
+    if (
+        surface == "何"
+        and next_surface.startswith(_NANI_FOLLOWERS)
+        and not next_surface.startswith(_NANI_COUNTER_FOLLOWERS)
+    ):
         return "なに"
     return None
 

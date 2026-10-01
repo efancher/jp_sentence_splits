@@ -124,3 +124,19 @@ def test_resegment_reads_nani_before_ka_ga_wo_mo_but_nan_before_counter() -> Non
     assert next(t for t in first["tokens"] if t["surface"] == "何")["reading"] == "なに"
     assert first["reading"].startswith("なにか")
     assert next(t for t in second["tokens"] if t["surface"] == "何")["reading"] == "なん"
+
+
+def test_tokenize_context_readings_for_nani_counters_and_nationality() -> None:
+    """unidic-lite misreads these; see READING_OVERRIDES / morphology rules."""
+    if not reading_engine_available():
+        return
+    from app.morphology import tokenize_japanese
+
+    def reading_of(sentence: str, surface: str) -> str:
+        return next(t.reading for t in tokenize_japanese(sentence) if t.surface == surface)
+
+    assert reading_of("何人いますか。", "何人") == "なんにん"
+    assert reading_of("今何時ですか。", "何時") == "なんじ"
+    assert reading_of("何か月かかりますか。", "何") == "なん"
+    assert reading_of("何かありますか。", "何") == "なに"
+    assert reading_of("イタリア人の人は来た。", "人") == "じん"
