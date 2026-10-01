@@ -10,6 +10,7 @@ import type {
   NamedPodcastFeed,
   PitchDrillAttempt,
   SentenceLearningEvent,
+  GlossDecision,
   PlannerSession,
   Review,
   Sentence,
@@ -48,6 +49,7 @@ export type LocalSyncPayload =
   | SyncIssueReport
   | PitchDrillAttempt
   | SentenceLearningEvent
+  | GlossDecision
   | NamedPodcastFeed;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
@@ -1052,6 +1054,61 @@ export function remoteToSentenceLearningEvent(row: Record<string, unknown>): Sen
   };
 }
 
+export function glossDecisionToRemote(d: GlossDecision, ownerId: string, version: number) {
+  return {
+    id: d.id,
+    owner_id: ownerId,
+    timestamp: d.timestamp,
+    visit_id: d.visitId,
+    book_id: d.bookId,
+    sentence_id: d.sentenceId,
+    skill: d.skill,
+    subskill: d.subskill,
+    rule_key: d.ruleKey,
+    target_text: d.targetText,
+    level_shown: d.levelShown,
+    first_response: d.firstResponse ?? null,
+    first_correct: d.firstCorrect,
+    reference_value: d.referenceValue,
+    reference_confidence: d.referenceConfidence,
+    hint_max_step: d.hintMaxStep,
+    explanation_opened: d.explanationOpened,
+    blocker: d.blocker ?? null,
+    vocab_helped: d.vocabHelped,
+    translation_level: d.translationLevel,
+    outcome: d.outcome,
+    created_at: d.timestamp,
+    updated_at: d.timestamp,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToGlossDecision(row: Record<string, unknown>): GlossDecision {
+  return {
+    id: String(row.id),
+    timestamp: String(row.timestamp),
+    visitId: String(row.visit_id),
+    bookId: String(row.book_id),
+    sentenceId: String(row.sentence_id),
+    skill: row.skill as GlossDecision['skill'],
+    subskill: row.subskill as GlossDecision['subskill'],
+    ruleKey: String(row.rule_key),
+    targetText: String(row.target_text),
+    levelShown: Number(row.level_shown) as GlossDecision['levelShown'],
+    firstResponse: (row.first_response as string | null) ?? undefined,
+    firstCorrect: (row.first_correct as boolean | null) ?? null,
+    referenceValue: String(row.reference_value),
+    referenceConfidence: row.reference_confidence as GlossDecision['referenceConfidence'],
+    hintMaxStep: Number(row.hint_max_step) as GlossDecision['hintMaxStep'],
+    explanationOpened: Boolean(row.explanation_opened),
+    blocker: (row.blocker as GlossDecision['blocker'] | null) ?? undefined,
+    vocabHelped: Boolean(row.vocab_helped),
+    translationLevel: Number(row.translation_level) as GlossDecision['translationLevel'],
+    outcome: row.outcome as GlossDecision['outcome'],
+  };
+}
+
 export function toRemoteRow(
   entity: SyncEntity,
   payload: unknown,
@@ -1119,6 +1176,8 @@ export function toRemoteRow(
       return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
     case 'sentence_learning_events':
       return sentenceLearningEventToRemote(payload as SentenceLearningEvent, ownerId, version);
+    case 'gloss_decisions':
+      return glossDecisionToRemote(payload as GlossDecision, ownerId, version);
     case 'named_podcast_feeds':
       return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
   }

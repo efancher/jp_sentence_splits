@@ -17,6 +17,7 @@ import type {
   EffectiveGameSignal,
   GameRound,
   SentenceLearningEvent,
+  GlossDecision,
   GameRoundItem,
   AnalysisChunk,
   AppSettings,
@@ -8849,6 +8850,22 @@ export async function logSentenceLearningEvent(
   await db.sentenceLearningEvents.put(full);
   notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
   return full;
+}
+
+export async function logGlossDecision(
+  decision: Omit<GlossDecision, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
+): Promise<GlossDecision> {
+  const db = getDb();
+  const full: GlossDecision = { ...decision, id: decision.id ?? createId('gloss'), timestamp: decision.timestamp ?? nowIso() };
+  const existing = await db.glossDecisions.get(full.id);
+  if (existing) return existing;
+  await db.glossDecisions.put(full);
+  notifySyncMany([{ entity: 'gloss_decisions', recordId: full.id, payload: full }]);
+  return full;
+}
+
+export async function listGlossDecisions(): Promise<GlossDecision[]> {
+  return getDb().glossDecisions.orderBy('timestamp').toArray();
 }
 
 export interface OpenContentReportWithText extends OpenContentReport {

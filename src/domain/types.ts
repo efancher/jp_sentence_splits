@@ -1520,3 +1520,48 @@ export interface SentenceLearningEvent {
   /** Episode sentence fingerprint the focus was chosen against, when known. */
   inventoryRevision?: string;
 }
+
+export type GlossSkill = 'predicate' | 'particle';
+export type GlossOutcome =
+  | 'independent_correct'
+  | 'assisted_correct'
+  | 'unresolved'
+  | 'skipped'
+  | 'disputed'
+  | 'ungraded';
+
+/**
+ * One structural decision the learner made in the walkthrough (progressive
+ * glossing). Append-only and synced as `gloss_decisions`; holds observations
+ * only — the learner's per-skill support level is recomputed from these on read
+ * (`inferSkillState`), never stored. No response-time field by design.
+ */
+export interface GlossDecision {
+  id: string;
+  timestamp: string;
+  /** Walkthrough opening this decision belongs to (same as SentenceLearningEvent.visitId). */
+  visitId: string;
+  bookId: string;
+  sentenceId: string;
+  skill: GlossSkill;
+  /** Finer split inside a skill so it can be separated later (`case` vs `topic` particles). */
+  subskill: 'predicate' | 'case' | 'topic';
+  /** Stable key of the rule behind the reference, e.g. `particle:を`, for dispute accounting. */
+  ruleKey: string;
+  targetText: string;
+  /** Support level shown when the learner answered: 1 worked example … 4 independent. */
+  levelShown: 1 | 2 | 3 | 4;
+  /** The learner's first unaided answer, before any hint. */
+  firstResponse?: string;
+  /** null = not gradable (reference not settled). */
+  firstCorrect: boolean | null;
+  referenceValue: string;
+  referenceConfidence: 'settled' | 'alternative' | 'compare';
+  hintMaxStep: 0 | 1 | 2 | 3;
+  explanationOpened: boolean;
+  blocker?: 'word' | 'form' | 'structure' | 'unsure';
+  vocabHelped: boolean;
+  /** 0 hidden, 1 word glosses, 2 partial, 3 full. */
+  translationLevel: 0 | 1 | 2 | 3;
+  outcome: GlossOutcome;
+}

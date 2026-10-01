@@ -13,6 +13,7 @@ import type {
   GameRound,
   WordBoundaryLabel,
   SentenceLearningEvent,
+  GlossDecision,
   GrammarPattern,
   GrammarRelationship,
   ImportBatch,
@@ -141,6 +142,8 @@ export class GlossbookDatabase extends Dexie {
   wordBoundaryLabels!: EntityTable<WordBoundaryLabel, 'id'>;
   // Sentence-first lesson evidence (Phase 2): append-only, synced (sentence_learning_events), never a Review.
   sentenceLearningEvents!: EntityTable<SentenceLearningEvent, 'id'>;
+  // Progressive-glossing observations: append-only, synced (gloss_decisions), never a Review.
+  glossDecisions!: EntityTable<GlossDecision, 'id'>;
   // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
   // sessions — a small per-user preference list, not learning content.
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
@@ -692,6 +695,11 @@ export class GlossbookDatabase extends Dexie {
     // Sentence-first lesson events — purely additive.
     this.version(22).stores({
       sentenceLearningEvents: 'id, timestamp, bookId, sentenceId',
+    });
+
+    // Progressive glossing decisions — purely additive.
+    this.version(23).stores({
+      glossDecisions: 'id, timestamp, bookId, sentenceId, skill',
     });
   }
 }
