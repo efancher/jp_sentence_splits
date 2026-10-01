@@ -107,6 +107,31 @@ describe('ReaderPage (always-available chapter read-along)', () => {
   beforeEach(async () => {
     resetDbForTests(`reader-page-${createId('db')}`);
     await ensureSettings();
+    localStorage.setItem('satori-glossbook:reader-text-mode', 'plain');
+  });
+
+  it('defaults to furigana on words that are not learned yet and drops it once a word is known', async () => {
+    localStorage.removeItem('satori-glossbook:reader-text-mode');
+    await seedBook();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.update('sent-1', {
+      vocabularySuggestions: [
+        { id: 'sg-1', surface: '本', start: 0, end: 1, expression: '本', reading: 'ほん', pos: '名詞', source: 'morphology', selectedByDefault: true },
+        { id: 'sg-2', surface: '読み', start: 2, end: 4, expression: '読む', reading: 'よむ', pos: '動詞', source: 'morphology', selectedByDefault: true },
+      ],
+    });
+    await db.vocabularyItems.add({ id: 'v-hon', expression: '本', reading: 'ほん', meaning: 'book', partOfSpeech: 'noun', createdAt: now, updatedAt: now });
+    await db.studyItems.add({
+      id: 'si-hon', subjectType: 'vocabularyItem', subjectId: 'v-hon', activityType: 'reading_retrieval',
+      fsrsState: { due: now, stability: 30, difficulty: 5, elapsedDays: 0, scheduledDays: 30, learningSteps: 0, reps: 3, lapses: 0, state: 'review' },
+      createdAt: now, updatedAt: now,
+    });
+
+    renderReaderPage('/books/book-1/read?chapter=ch-1');
+
+    expect(await screen.findByText('よ')).toBeInTheDocument();
+    expect(screen.queryByText('ほん')).not.toBeInTheDocument();
   });
 
   it('renders every sentence in the whole book when no chapter is given, with a Play control', async () => {

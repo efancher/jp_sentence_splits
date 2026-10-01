@@ -11,6 +11,7 @@ import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, l
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
+import { newWordSegments } from '../lib/newWordFurigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
@@ -26,8 +27,25 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * `Review` row, no FSRS, no self-rating, same treatment as `ShadowPage`/`/play`.
  */
 const READER_LAYOUT_KEY = 'satori-glossbook:reader-layout';
-const TEXT_MODE_ORDER: TextDisplayMode[] = ['plain', 'furigana', 'reading'];
-const TEXT_MODE_LABELS: Record<TextDisplayMode, string> = { plain: 'Plain Japanese', furigana: 'Furigana', reading: 'Reading-only' };
+const READER_TEXT_MODE_KEY = 'satori-glossbook:reader-text-mode';
+type ReaderTextMode = TextDisplayMode | 'new';
+const TEXT_MODE_ORDER: ReaderTextMode[] = ['new', 'plain', 'furigana', 'reading'];
+const TEXT_MODE_LABELS: Record<ReaderTextMode, string> = {
+  new: 'Furigana on new words',
+  plain: 'Plain Japanese',
+  furigana: 'Furigana',
+  reading: 'Reading-only',
+};
+const TEXT_MODE_GLYPHS: Record<ReaderTextMode, string> = { new: 'ふ新', plain: '文', furigana: 'ふ', reading: 'あ' };
+
+function storedTextMode(): ReaderTextMode | undefined {
+  try {
+    const value = localStorage.getItem(READER_TEXT_MODE_KEY);
+    return TEXT_MODE_ORDER.find((mode) => mode === value);
+  } catch {
+    return undefined;
+  }
+}
 
 export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
@@ -45,7 +63,11 @@ export function ReaderPage() {
   const chapterId = searchParams.get('chapter') || lessonChapterId || undefined;
   const native = useNativeAudio();
   const settings = useLiveQuery(() => readSettings(), []);
-  const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
+  const [displayMode, setDisplayModeState] = useState<ReaderTextMode>(() => storedTextMode() ?? 'new');
+  function setDisplayMode(mode: ReaderTextMode) {
+    setDisplayModeState(mode);
+    try { localStorage.setItem(READER_TEXT_MODE_KEY, mode); } catch { /* storage unavailable */ }
+  }
   const [playbackRate, setPlaybackRate] = useState(1);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [revealedTranslations, setRevealedTranslations] = useState<Set<string>>(
@@ -69,7 +91,9 @@ export function ReaderPage() {
   }
 
   useEffect(() => {
-    if (settings) setDisplayMode(settings.textDisplayMode);
+    if (settings && !storedTextMode()) {
+      setDisplayModeState(settings.textDisplayMode === 'plain' ? 'new' : settings.textDisplayMode);
+    }
   }, [settings]);
 
   const data = useLiveQuery(async () => {
@@ -274,14 +298,37 @@ export function ReaderPage() {
   }
 
   function sentenceLine(sentence: Sentence, isActive: boolean, audio?: SentenceAudio) {
-    if (displayMode === 'plain' && isActive && audio) {
+    const newWordRuby =
+      displayMode === 'new'
+        ? newWordSegments(sentence.japanese, sentence.inlineReading, sentence.vocabularySuggestions, data?.knownExpressions ?? new Set())
+        : null;
+    if ((displayMode === 'plain' || displayMode === 'new') && isActive && audio) {
       return (
         <KaraokeSentenceText
           audio={audio}
           japanese={sentence.japanese}
           vocabularySuggestions={sentence.vocabularySuggestions}
           targetVocabulary={sentence.targetVocabulary}
+          rubySegments={newWordRuby ?? undefined}
         />
+      );
+    }
+    if (newWordRuby) {
+      return (
+        <div className="jp jp-lg" lang="ja">
+          {newWordRuby.map((segment, index) =>
+            segment.kind === 'ruby' && segment.reading ? (
+              <ruby key={index}>
+                {segment.base}
+                <rp>(</rp>
+                <rt>{segment.reading}</rt>
+                <rp>)</rp>
+              </ruby>
+            ) : (
+              <span key={index}>{segment.base}</span>
+            ),
+          )}
+        </div>
       );
     }
     if (displayMode === 'furigana') {
@@ -336,8 +383,9 @@ export function ReaderPage() {
           Text
           <select
             value={displayMode}
-            onChange={(event) => setDisplayMode(event.target.value as TextDisplayMode)}
+            onChange={(event) => setDisplayMode(event.target.value as ReaderTextMode)}
           >
+            <option value="new">Furigana on new words</option>
             <option value="plain">Plain Japanese</option>
             <option value="furigana">Furigana</option>
             <option value="reading">Reading-only</option>
@@ -670,7 +718,7 @@ export function ReaderPage() {
             <button type="button" className="icon-button" aria-label={`Text: ${TEXT_MODE_LABELS[displayMode]}. Switch display`}
               title={`Text: ${TEXT_MODE_LABELS[displayMode]} (tap for ${TEXT_MODE_LABELS[nextMode]})`}
               onClick={() => setDisplayMode(nextMode)}>
-              {displayMode === 'plain' ? '文' : displayMode === 'furigana' ? 'ふ' : 'あ'}
+              {TEXT_MODE_GLYPHS[displayMode]}
             </button>
             <Link className="icon-button" to={`/books/${bookId}`} aria-label="Back to book" title="Back to book">📖</Link>
           </div>

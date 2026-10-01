@@ -4,6 +4,7 @@ import { getReferenceAlignment, saveReferenceAlignment } from '../db/repository'
 import type { SentenceAudio, TargetVocabulary, VocabularySuggestion } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { loadOrComputeAlignment } from '../lib/alignmentCache';
+import { segmentsInRange, type PositionedSegment } from '../lib/newWordFurigana';
 
 export type SentenceToken = {
   text: string;
@@ -135,12 +136,15 @@ export function KaraokeSentenceText({
   readingOnly,
   vocabularySuggestions,
   targetVocabulary,
+  rubySegments,
 }: {
   audio: SentenceAudio;
   japanese: string;
   readingOnly?: string;
   vocabularySuggestions: VocabularySuggestion[];
   targetVocabulary?: TargetVocabulary[];
+  /** Furigana to draw over the tokens (e.g. only the words not yet learned). */
+  rubySegments?: PositionedSegment[];
 }) {
   const native = useNativeAudio();
   const [alignmentWords, setAlignmentWords] = useState<TimedWord[]>([]);
@@ -247,7 +251,20 @@ export function KaraokeSentenceText({
                 }
               : {})}
           >
-            {token.text}
+            {rubySegments
+              ? segmentsInRange(rubySegments, token.start, token.end).map((segment, segmentIndex) =>
+                  segment.kind === 'ruby' && segment.reading ? (
+                    <ruby key={segmentIndex}>
+                      {segment.base}
+                      <rp>(</rp>
+                      <rt>{segment.reading}</rt>
+                      <rp>)</rp>
+                    </ruby>
+                  ) : (
+                    <span key={segmentIndex}>{segment.base}</span>
+                  ),
+                )
+              : token.text}
           </span>
         ))}
         {glossPopup && (
