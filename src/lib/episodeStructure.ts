@@ -12,7 +12,7 @@ import { chunksMatchSource } from './chunking';
 import type { PreparationContext } from './episodePreparation';
 import { ROLE_GUIDE_GROUPS } from './roleGuide';
 
-export const STRUCTURE_SENTENCES_PER_PART = 20;
+export const STRUCTURE_SENTENCES_PER_PART = 60;
 const MAX_CHUNK_TEXT = 200;
 const MAX_ROLE_LENGTH = 40;
 const MAX_GLOSS_LENGTH = 120;
