@@ -10,6 +10,18 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Shadowing page: chapter lines + icon toolbar.** The shadow
+  page shows the chapter as plain lines (tap a neighbour to shadow it) with
+  the existing synced text on the active sentence, beside a "Shadowing tools"
+  toolbar (meaning instead, hide transcript, mark start/end, loop target, clear
+  target, back to Practice, delete with an inline confirm). Reference audio,
+  speed, Close shadow, Record (single toggle) and the attempt list are
+  unchanged and keep their labels; "Hide transcript" also hides the chapter
+  text. `ChapterReader` was extracted to `src/components/ChapterReader.tsx` and
+  is shared with Analyze. Layout dropdown (Chapter + icons default / Original ·
+  sentence) persists in localStorage `satori-glossbook:shadow-layout`.
+  Presentation only. Mark/loop icons are not e2e-covered (no audio seed in the
+  browser spec); unit tests cover the labelled controls in the original layout.
 - **2026-10-01 — Reader ("Learn this sentence") page: plain chapter lines + icon toolbar.**
   The Reader (also the planner's "Learn this sentence" lesson route) now shows
   the chapter as compact plain lines; tapping/Enter selects a sentence, which

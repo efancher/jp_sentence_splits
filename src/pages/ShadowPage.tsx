@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
+import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SpeedControl } from '../components/SpeedControl';
@@ -40,6 +41,8 @@ const RATINGS: { value: AttemptRating; label: string }[] = [
   { value: 'unsure', label: 'Unsure' },
 ];
 
+const SHADOW_LAYOUT_KEY = 'satori-glossbook:shadow-layout';
+
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -65,6 +68,13 @@ export function ShadowPage() {
   const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [analyzingAttemptId, setAnalyzingAttemptId] = useState<string | null>(null);
+  const [chapterMode, setChapterMode] = useState(() => {
+    try { return localStorage.getItem(SHADOW_LAYOUT_KEY) !== 'original'; } catch { return true; }
+  });
+  function changeLayout(chapter: boolean) {
+    setChapterMode(chapter);
+    try { localStorage.setItem(SHADOW_LAYOUT_KEY, chapter ? 'chapter' : 'original'); } catch { /* storage unavailable */ }
+  }
   const [hideTranscript, setHideTranscript] = useState(false);
   const [showMeaningInstead, setShowMeaningInstead] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
@@ -446,6 +456,28 @@ export function ShadowPage() {
   const isRequestingMic = shadowing.status === 'requesting-mic';
   const loopBusy = isLoopingReps || isRequestingMic;
 
+  const transcriptNode = (
+    hideTranscript ? (
+                <div className="muted" style={{ flex: 1 }}>
+                  Audio-only practice
+                </div>
+              ) : showMeaningInstead && sentence.translation ? (
+                <div style={{ flex: 1 }}>{sentence.translation}</div>
+              ) : (
+                <SyncedShadowText
+                  audioRef={referenceAudioRef}
+                  referenceAudio={referenceAudio}
+                  japanese={sentence.japanese}
+                  moraUnits={moraUnits}
+                  sentenceId={sentence.id}
+                  recordingElapsedMs={
+                    isRecording && !isLoopingReps ? shadowing.recordingElapsedMs : undefined
+                  }
+                  recordingSpeed={speed}
+                />
+              )
+  );
+
   return (
     <div className="stack">
       {quietMode ? (
@@ -472,6 +504,73 @@ export function ShadowPage() {
             <div className="muted">{book?.title} · Shadow</div>
           </div>
           <div className="row">
+            <label>
+              Layout
+              <select value={chapterMode ? 'chapter' : 'original'} onChange={(event) => changeLayout(event.target.value === 'chapter')}>
+                <option value="chapter">Chapter + icons</option>
+                <option value="original">Original · sentence</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        {chapterMode ? (
+          <>
+            <div className="gloss-workbench">
+              {hideTranscript ? (
+                <div className="muted">Audio-only practice</div>
+              ) : (
+                <ChapterReader
+                  sentenceId={sentenceId}
+                  bookId={bookId}
+                  showEnglish={false}
+                  onOpen={(id) => navigate(`/books/${bookId}/shadow/${id}`)}
+                  activeView={transcriptNode}
+                  fallbackContext={[]}
+                />
+              )}
+              <div className="gloss-rail" role="toolbar" aria-label="Shadowing tools" aria-orientation="vertical">
+                <button type="button" className="icon-button" aria-pressed={showMeaningInstead}
+                  aria-label={showMeaningInstead ? 'Show Japanese' : 'Show meaning instead'}
+                  title={showMeaningInstead ? 'Show Japanese' : 'Show meaning instead'}
+                  disabled={!sentence.translation} onClick={() => setShowMeaningInstead((value) => !value)}>意</button>
+                <button type="button" className="icon-button" aria-pressed={hideTranscript}
+                  aria-label={hideTranscript ? 'Show transcript' : 'Hide transcript'}
+                  title={hideTranscript ? 'Show transcript' : 'Hide transcript'}
+                  onClick={() => setHideTranscript((value) => !value)}>{hideTranscript ? '👁' : '🙈'}</button>
+                {referenceAudio && referenceUrl ? (
+                  <>
+                    <button type="button" className="icon-button" aria-label="Mark start" title="Mark start of the target range" onClick={handleMarkStart}>⟦</button>
+                    <button type="button" className="icon-button" aria-label="Mark end" title="Mark end of the target range" onClick={handleMarkEnd}>⟧</button>
+                    {targetRange ? (
+                      <>
+                        <button type="button" className="icon-button" aria-pressed={isLoopingTarget}
+                          aria-label={isLoopingTarget ? 'Stop loop' : 'Loop target'} title={isLoopingTarget ? 'Stop loop' : 'Loop target'}
+                          disabled={!isLoopingTarget && targetRange.endMs <= targetRange.startMs}
+                          onClick={() => void handleToggleTargetLoop()}>{isLoopingTarget ? '⏹' : '🔁'}</button>
+                        <button type="button" className="icon-button" aria-label="Clear target" title="Clear target" onClick={handleClearTarget}>✕</button>
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+                <Link className="icon-button" to={`/books/${bookId}/practice/${sentenceId}`} aria-label="Back to Practice" title="Back to Practice">←</Link>
+                <button type="button" className="icon-button danger" aria-label="Delete (ad / junk)" title="Delete (ad / junk)"
+                  disabled={confirmDeleteSentence} onClick={() => setConfirmDeleteSentence(true)}>🗑</button>
+              </div>
+            </div>
+            {confirmDeleteSentence ? (
+              <div className="row">
+                <span className="muted">Delete this sentence?</span>
+                <button type="button" className="danger"
+                  onClick={async () => { await deleteSentenceCascade(sentenceId); navigate(`/books/${bookId}`); }}>
+                  Confirm delete
+                </button>
+                <button type="button" onClick={() => setConfirmDeleteSentence(false)}>Cancel</button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button
               type="button"
               onClick={() => setShowMeaningInstead((value) => !value)}
@@ -511,29 +610,11 @@ export function ShadowPage() {
               </button>
             )}
           </div>
-        </div>
-
         <div className="row" style={{ alignItems: 'center' }}>
-          {hideTranscript ? (
-            <div className="muted" style={{ flex: 1 }}>
-              Audio-only practice
-            </div>
-          ) : showMeaningInstead && sentence.translation ? (
-            <div style={{ flex: 1 }}>{sentence.translation}</div>
-          ) : (
-            <SyncedShadowText
-              audioRef={referenceAudioRef}
-              referenceAudio={referenceAudio}
-              japanese={sentence.japanese}
-              moraUnits={moraUnits}
-              sentenceId={sentence.id}
-              recordingElapsedMs={
-                isRecording && !isLoopingReps ? shadowing.recordingElapsedMs : undefined
-              }
-              recordingSpeed={speed}
-            />
-          )}
+          {transcriptNode}
         </div>
+          </>
+        )}
 
         {!referenceAudio || !referenceUrl ? (
           <p className="muted">
@@ -554,28 +635,36 @@ export function ShadowPage() {
             {referenceError ? <p className="muted">{referenceError}</p> : null}
             <SpeedControl speed={speed} onChange={setSpeed} />
             <div className="row" style={{ alignItems: 'center' }} ref={targetControlsRef}>
-              <button type="button" onClick={handleMarkStart}>
-                Mark start
-              </button>
-              <button type="button" onClick={handleMarkEnd}>
-                Mark end
-              </button>
+              {chapterMode ? null : (
+                <>
+                  <button type="button" onClick={handleMarkStart}>
+                    Mark start
+                  </button>
+                  <button type="button" onClick={handleMarkEnd}>
+                    Mark end
+                  </button>
+                </>
+              )}
               {targetRange ? (
                 <>
                   <span className="muted">
                     Target: {formatDuration(targetRange.startMs)}–
                     {formatDuration(targetRange.endMs)}
                   </span>
-                  <button
-                    type="button"
-                    disabled={!isLoopingTarget && targetRange.endMs <= targetRange.startMs}
-                    onClick={() => void handleToggleTargetLoop()}
-                  >
-                    {isLoopingTarget ? 'Stop loop' : 'Loop target'}
-                  </button>
-                  <button type="button" onClick={handleClearTarget}>
-                    Clear target
-                  </button>
+                  {chapterMode ? null : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={!isLoopingTarget && targetRange.endMs <= targetRange.startMs}
+                        onClick={() => void handleToggleTargetLoop()}
+                      >
+                        {isLoopingTarget ? 'Stop loop' : 'Loop target'}
+                      </button>
+                      <button type="button" onClick={handleClearTarget}>
+                        Clear target
+                      </button>
+                    </>
+                  )}
                 </>
               ) : null}
             </div>

@@ -181,3 +181,33 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
   });
 }
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`shadowing page shows the chapter beside an icon toolbar at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/#/settings');
+    await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+    await seedChapterReview(page, []);
+    await page.goto('/#/books/book/shadow/s-20');
+    const chapter = page.getByRole('region', { name: 'Chapter text' });
+    await expect(chapter.locator('[aria-current="true"]')).toContainText('図書館で本を読みました。');
+    await expect(chapter.locator('.review-document-line')).toHaveCount(30);
+    const toolbar = page.getByRole('toolbar', { name: 'Shadowing tools' });
+    for (const name of ['Show meaning instead', 'Hide transcript', 'Delete (ad / junk)']) {
+      const button = toolbar.getByRole('button', { name });
+      await expect(button).toBeVisible();
+      await expect(button).toHaveAttribute('title', name);
+    }
+    await expect(toolbar.getByRole('link', { name: 'Back to Practice' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await toolbar.getByRole('button', { name: 'Hide transcript' }).click();
+    await expect(page.getByText('Audio-only practice')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Chapter text' })).toHaveCount(0);
+    await toolbar.getByRole('button', { name: 'Show transcript' }).click();
+    await page.getByRole('region', { name: 'Chapter text' }).getByRole('button', { name: '21番目の文です。' }).click();
+    await expect(page).toHaveURL(/shadow\/s-21/);
+    await page.getByLabel('Layout').selectOption('original');
+    await expect(page.getByRole('toolbar', { name: 'Shadowing tools' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Hide transcript' })).toBeVisible();
+  });
+}
