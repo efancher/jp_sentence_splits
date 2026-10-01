@@ -166,6 +166,13 @@ export const CONSTRUCTION_CATALOG: Record<string, ConstructionRule> = {
     function: 'Receives a favour: the receiver is the subject, the doer is marked with に or から.',
     caution: 'Same event as くれる seen from the receiver’s side, with a different subject.',
   },
+  tari_suru: {
+    name: 'たり…たり + する',
+    operation: 'helper',
+    formation: 'た-form of each verb/adjective + り, listed in a series, then する (書く → 書いたり, 読む → 読んだり, + する: 書いたり読んだりする). The final する carries tense and politeness.',
+    function: 'Gives representative examples of actions or states, implying there are others, or that they alternate.',
+    caution: 'Unlike て-form listing, it is not a strict sequence and is not exhaustive. A single たり (…たりする) is also fine and hints at other unnamed examples.',
+  },
   no_nominaliser: {
     name: 'clause + の',
     operation: 'role_change',
