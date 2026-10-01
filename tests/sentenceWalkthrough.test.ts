@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AnalysisChunk } from '../src/domain/types';
-import { walkthroughChunks, walkthroughOrder } from '../src/components/SentenceWalkthrough';
+import { walkthroughChunks, walkthroughClauseNumbers, walkthroughOrder } from '../src/components/SentenceWalkthrough';
 
 const sentence = { id: 's', japanese: '私は本を読みます。' };
 const chunk = (id: string, order: number, japanese: string, role: string, kind?: 'zero_ga'): AnalysisChunk =>
@@ -31,5 +31,28 @@ describe('walkthroughChunks', () => {
   it('teaches the engine first, then the rest in source order', () => {
     const ordered = walkthroughOrder([{ role: 'topic', id: 1 }, { role: 'engine', id: 2 }, { role: 'object', id: 3 }]);
     expect(ordered.map((item) => item.id)).toEqual([2, 1, 3]);
+  });
+
+  it('keeps each clause together: its engine, its parts, then the next clause', () => {
+    // 友だちが / 貸してくれた(engine) / 本を / 読みました(engine)
+    const ordered = walkthroughOrder([
+      { role: 'subject', id: 'tomodachi' }, { role: 'engine', id: 'kashite' }, { role: 'object', id: 'hon' }, { role: 'engine', id: 'yomimashita' },
+    ]);
+    expect(ordered.map((item) => item.id)).toEqual(['kashite', 'tomodachi', 'yomimashita', 'hon']);
+  });
+
+  it('puts a clause connector before the clause it leads into, ahead of that clause\'s engine', () => {
+    const ordered = walkthroughOrder([
+      { role: 'time', id: 'a' }, { role: 'engine', id: 'e1' }, { role: 'clause connector', id: 'c' }, { role: 'object', id: 'o' }, { role: 'engine', id: 'e2' },
+    ]);
+    expect(ordered.map((item) => item.id)).toEqual(['e1', 'a', 'c', 'e2', 'o']);
+  });
+
+  it('numbers clauses in source order and never drops or duplicates a chunk', () => {
+    const chunks = [{ role: 'subject' }, { role: 'engine' }, { role: 'object' }, { role: 'engine' }, { role: 'sentence ending' }];
+    expect(walkthroughOrder(chunks)).toHaveLength(chunks.length);
+    expect(new Set(walkthroughOrder(chunks)).size).toBe(chunks.length);
+    expect([...walkthroughClauseNumbers(chunks).values()]).toEqual([1, 1, 2, 2, 2]);
+    expect(walkthroughOrder([])).toEqual([]);
   });
 });

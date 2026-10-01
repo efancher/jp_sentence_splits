@@ -10,6 +10,15 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Phase 6: clause-local walkthrough order.** `walkthroughOrder`
+  no longer lists every clause's engine first. It uses the existing role banding
+  (`assignClauseIndices`) to walk clause by clause in source order: a leading
+  clause connector, then that clause's engine, then its other parts. Multi-clause
+  steps show "Clause N of M". One-clause sentences are unchanged (engine first,
+  then the rest). Example: 友だちが / 貸してくれた / 本を / 読みました now goes
+  貸してくれた → 友だちが → 読みました → 本を. Banding is role-based, not a parse:
+  it is only as good as the saved/AI/draft roles, and a relative clause is walked
+  in source order rather than main clause first. No new events, no migration.
 - **2026-09-30 — Phase 6: held-back context check.** Targets with another real
   occurrence you haven't met get "Try a sentence you haven't seen": that
   sentence with the target masked, no translation until you reveal, type or

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { AnalysisChunk, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
-import { isEngineRole } from '../lib/clauseBands';
+import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { chunksMatchSource } from '../lib/chunking';
 import { createId } from '../lib/ids';
@@ -79,9 +79,27 @@ export function walkthroughChunks(
   };
 }
 
-/** Engine chunk(s) first, then the rest in source order — the Cure Dolly sequence. */
+/**
+ * Clause-local Cure Dolly sequence: clauses in source order; within each, any leading connector
+ * (the link from the previous clause) first, then the engine, then the other parts in source order.
+ * A one-clause sentence is simply engine first, then the rest. Clauses come from role banding, not a
+ * full parse.
+ */
 export function walkthroughOrder<T extends { role: string }>(chunks: T[]): T[] {
-  return [...chunks.filter((chunk) => isEngineRole(chunk.role)), ...chunks.filter((chunk) => !isEngineRole(chunk.role))];
+  const clauseOf = assignClauseIndices(chunks);
+  const clauses: T[][] = [];
+  chunks.forEach((chunk, index) => (clauses[clauseOf[index]!] ??= []).push(chunk));
+  return clauses.flatMap((clause, index) => {
+    const connectors = index > 0 ? clause.filter((chunk, position) => position === 0 && isClauseConnectorRole(chunk.role)) : [];
+    const rest = clause.filter((chunk) => !connectors.includes(chunk));
+    return [...connectors, ...rest.filter((chunk) => isEngineRole(chunk.role)), ...rest.filter((chunk) => !isEngineRole(chunk.role))];
+  });
+}
+
+/** 1-based clause number per chunk, in source order; used only to label multi-clause steps. */
+export function walkthroughClauseNumbers<T extends { role: string }>(chunks: T[]): Map<T, number> {
+  const clauseOf = assignClauseIndices(chunks);
+  return new Map(chunks.map((chunk, index) => [chunk, clauseOf[index]! + 1]));
 }
 
 const STAGES = ['Understand', 'Recognise', 'Recall', 'Use', 'Say it', 'Express it your way'];
@@ -120,6 +138,8 @@ export function SentenceWalkthrough({
 }) {
   const { chunks, source } = useMemo(() => walkthroughChunks(sentence, savedChunks, structureDraft), [sentence, savedChunks, structureDraft]);
   const ordered = useMemo(() => walkthroughOrder(chunks), [chunks]);
+  const clauseNumbers = useMemo(() => walkthroughClauseNumbers(chunks), [chunks]);
+  const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
   const [step, setStep] = useState(0);
   const [showTranslation, setShowTranslation] = useState(false);
   const chunk = ordered[step];
@@ -242,6 +262,7 @@ export function SentenceWalkthrough({
         </div>
       ) : chunk ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-live="polite">
+          {clauseCount > 1 ? <div className="muted">Clause {clauseNumbers.get(chunk)} of {clauseCount}</div> : null}
           <div className="jp jp-lg">{chunk.japanese}</div>
           <div>
             {showRole ? <strong>{chunk.role || 'Unlabelled'}</strong> : <button type="button" onClick={() => ask('role')}>Show role</button>}
