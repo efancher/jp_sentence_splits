@@ -299,7 +299,8 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     const user = userEvent.setup();
     renderReaderPage('/books/book-1/read');
     await screen.findByText('電気を消しました。');
-    await user.click(screen.getAllByRole('button', { name: 'Walk through' })[1]!);
+    await user.click(screen.getByText('電気を消しました。'));
+    await user.click(screen.getByRole('button', { name: 'Walk through' }));
     expect(await screen.findByText(/No native audio for this sentence/)).toBeInTheDocument();
   });
 

@@ -97,7 +97,54 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
 
     // A sentence without native audio says so instead of offering a fallback voice.
     await page.getByRole('button', { name: 'Back to reading' }).click();
-    await page.getByRole('button', { name: 'Walk through' }).nth(2).click();
+    await page.getByText('電気を消しました。').click();
+    await page.getByRole('button', { name: 'Walk through' }).click();
     await expect(page.getByText(/No native audio for this sentence/)).toBeVisible();
+  });
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`reader shows plain chapter lines with an icon toolbar at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/#/settings');
+    await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+    await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('satori-glossbook');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const tx = db.transaction(['books', 'sentences', 'bookSentences'], 'readwrite');
+      const now = new Date().toISOString();
+      tx.objectStore('books').put({ id: 'book', title: '本の物語', archived: false, chapters: [], collapsedChapterIds: [], createdAt: now, updatedAt: now });
+      ['本を読みます。', '本を買いました。', '電気を消しました。'].forEach((japanese, index) => {
+        const id = `s-${index}`;
+        tx.objectStore('sentences').put({ id, normalizedKey: id, japanese, readingOnly: '', inlineReading: '', translation: `Translation ${index}.`,
+          targetVocabulary: [], vocabularySuggestions: [], sourceReferences: [], conflicts: [], firstOccurrenceIndex: index, importBatchIds: [], createdAt: now, updatedAt: now });
+        tx.objectStore('bookSentences').put({ id: `bs-${index}`, bookId: 'book', sentenceId: id, position: index, status: 'unstarted', addedAt: now });
+      });
+      await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+      db.close();
+    });
+    await page.goto('/#/books/book/read');
+    const toolbar = page.getByRole('toolbar', { name: 'Sentence tools' });
+    await expect(toolbar).toBeVisible();
+    for (const name of ['Previous sentence', 'Next sentence', 'Show translation', 'Walk through', 'Show structure', 'Back to book']) {
+      const control = toolbar.getByRole(name === 'Back to book' ? 'link' : 'button', { name });
+      await expect(control).toBeVisible();
+      await expect(control).toHaveAttribute('title', /.+/);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // Only the selected sentence carries per-sentence controls; others are plain lines.
+    await expect(page.getByRole('button', { name: 'Walk through' })).toHaveCount(1);
+    await page.getByText('電気を消しました。').click();
+    await toolbar.getByRole('button', { name: 'Show translation' }).click();
+    await expect(page.getByText('Translation 2.')).toBeVisible();
+    await expect(page.getByText('Translation 0.')).toHaveCount(0);
+    await toolbar.getByRole('button', { name: 'Walk through' }).click();
+    await expect(page.getByRole('region', { name: 'Sentence walkthrough' })).toContainText('Step 1 of');
+    await page.getByLabel('Layout').selectOption('original');
+    await expect(page.getByRole('toolbar', { name: 'Sentence tools' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Walk through' })).toHaveCount(3);
   });
 }

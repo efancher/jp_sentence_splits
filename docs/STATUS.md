@@ -10,6 +10,19 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Reader ("Learn this sentence") page: plain chapter lines + icon toolbar.**
+  The Reader (also the planner's "Learn this sentence" lesson route) now shows
+  the chapter as compact plain lines; tapping/Enter selects a sentence, which
+  expands inline into the existing panel (play-from-here, word help, progress,
+  walkthrough, structure). A "Sentence tools" toolbar (icon buttons with
+  tooltips + accessible names: previous/next sentence, translation, walk
+  through, structure, all-word help, text-mode cycle, back to book) acts on the
+  selected sentence; side rail >=700px, wrapping bar below. Playback and the
+  lesson route move the selection. The header keeps the labelled Play, Speed
+  and Text controls. "Layout" dropdown (Chapter + icons default / Original ·
+  rows) persists in localStorage `satori-glossbook:reader-layout`. Presentation
+  only: no events, schema or scheduling changes. Specs/tests updated for the
+  toolbar (one set of per-sentence controls instead of one per row).
 - **2026-10-01 — Glossing (Analyze) page: chapter reader + icon toolbar.**
   The sentence panel now shows the whole chapter as plain text (neighbours are
   tap-to-open, the active sentence keeps the Plain/Furigana/Reading display)

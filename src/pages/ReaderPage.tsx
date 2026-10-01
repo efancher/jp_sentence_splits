@@ -25,6 +25,10 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * unlock, just an occasional comprehension self-check). Not a card: no
  * `Review` row, no FSRS, no self-rating, same treatment as `ShadowPage`/`/play`.
  */
+const READER_LAYOUT_KEY = 'satori-glossbook:reader-layout';
+const TEXT_MODE_ORDER: TextDisplayMode[] = ['plain', 'furigana', 'reading'];
+const TEXT_MODE_LABELS: Record<TextDisplayMode, string> = { plain: 'Plain Japanese', furigana: 'Furigana', reading: 'Reading-only' };
+
 export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
@@ -55,6 +59,14 @@ export function ReaderPage() {
   /** Per-sentence override of the default word help: show every word, or none. */
   const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [chapterMode, setChapterMode] = useState(() => {
+    try { return localStorage.getItem(READER_LAYOUT_KEY) !== 'original'; } catch { return true; }
+  });
+  const [selectedId, setSelectedId] = useState<string>();
+  function changeLayout(chapter: boolean) {
+    setChapterMode(chapter);
+    try { localStorage.setItem(READER_LAYOUT_KEY, chapter ? 'chapter' : 'original'); } catch { /* storage unavailable */ }
+  }
 
   useEffect(() => {
     if (settings) setDisplayMode(settings.textDisplayMode);
@@ -111,6 +123,7 @@ export function ReaderPage() {
     if (index < 0) return;
     openedLessonRef.current = lessonSentenceId;
     setWalkthroughId(lessonSentenceId);
+    setSelectedId(lessonSentenceId);
     setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
   }, [lessonSentenceId, lessonChapterId, data]);
 
@@ -176,6 +189,11 @@ export function ReaderPage() {
   }, [data, audioByRow]);
 
   useEffect(() => {
+    const playing = data?.rows[activeIndex]?.sentence.id;
+    if (playing) setSelectedId(playing);
+  }, [activeIndex, data]);
+
+  useEffect(() => {
     if (activeIndex < 0) return;
     rowRefs.current[activeIndex]?.scrollIntoView({
       behavior: 'smooth',
@@ -187,6 +205,17 @@ export function ReaderPage() {
   if (data === null) return <p>Book not found.</p>;
 
   const { book, chapter, rows } = data;
+  const focusedId = rows.some((row) => row.sentence.id === selectedId) ? selectedId : rows[0]?.sentence.id;
+  const focusedIndex = rows.findIndex((row) => row.sentence.id === focusedId);
+  const focusedRow = rows[focusedIndex];
+  function selectLine(id: string) {
+    setSelectedId(id);
+    if (walkthroughId && walkthroughId !== id) setWalkthroughId(undefined);
+  }
+  function translationDefaultShown(sentence: Sentence) {
+    const help = sentenceWordHelp(sentence.vocabularySuggestions, data!.knownExpressions, data!.savedMeanings);
+    return help.total > 0 && help.unknownCount * 2 > help.total;
+  }
 
   function findNextPlayable(fromIndex: number): number {
     for (let i = fromIndex; i < audioByRow.length; i += 1) {
@@ -402,10 +431,43 @@ export function ReaderPage() {
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}
+      <div className="row" style={{ alignItems: 'center' }}>
+        <label>
+          Layout
+          <select value={chapterMode ? 'chapter' : 'original'} onChange={(event) => changeLayout(event.target.value === 'chapter')}>
+            <option value="chapter">Chapter + icons</option>
+            <option value="original">Original · rows</option>
+          </select>
+        </label>
+      </div>
+      <div className={chapterMode ? 'gloss-workbench' : undefined}>
       <div className="stack reader-book">
         {rows.map((row, index) => {
           const audio = audioByRow[index];
           const isActive = index === activeIndex;
+          if (chapterMode && row.sentence.id !== focusedId) {
+            return (
+              <div
+                key={row.membership.id}
+                ref={(el) => {
+                  rowRefs.current[index] = el;
+                }}
+                className={`reader-line${isActive ? ' reader-row-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                title="Select this sentence"
+                onClick={() => selectLine(row.sentence.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectLine(row.sentence.id);
+                  }
+                }}
+              >
+                {sentenceLine(row.sentence, isActive, audio)}
+              </div>
+            );
+          }
           return (
             <div
               key={row.membership.id}
@@ -482,12 +544,13 @@ export function ReaderPage() {
                       return shown ? (
                         <>
                           <div className="muted">{row.sentence.translation || '(no translation)'}</div>
-                          <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Hide translation</button>
+                          {chapterMode ? null : <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Hide translation</button>}
                         </>
-                      ) : (
+                      ) : chapterMode ? null : (
                         <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Show translation</button>
                       );
                     })()}
+                    {chapterMode ? null : (<>
                     <button
                       type="button"
                       aria-expanded={walkthroughId === row.sentence.id}
@@ -501,6 +564,7 @@ export function ReaderPage() {
                     >
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
+                    </>)}
                   </div>
                   {(() => {
                     const progress = describeSentenceProgress(summariseSentenceProgress(lessonEvents ?? [], row.sentence.id));
@@ -572,6 +636,46 @@ export function ReaderPage() {
             </div>
           );
         })}
+      </div>
+      {chapterMode && focusedRow ? (() => {
+        const translationOpen = translationDefaultShown(focusedRow.sentence) !== revealedTranslations.has(focusedRow.sentence.id);
+        const wordOverride = wordHelpOverride.get(focusedRow.sentence.id);
+        const walking = walkthroughId === focusedRow.sentence.id;
+        const nextMode = TEXT_MODE_ORDER[(TEXT_MODE_ORDER.indexOf(displayMode) + 1) % TEXT_MODE_ORDER.length]!;
+        return (
+          <div className="gloss-rail" role="toolbar" aria-label="Sentence tools" aria-orientation="vertical">
+            <button type="button" className="icon-button" aria-label="Previous sentence" title="Previous sentence" disabled={focusedIndex <= 0}
+              onClick={() => selectLine(rows[focusedIndex - 1]!.sentence.id)}>↑</button>
+            <button type="button" className="icon-button" aria-label="Next sentence" title="Next sentence" disabled={focusedIndex >= rows.length - 1}
+              onClick={() => selectLine(rows[focusedIndex + 1]!.sentence.id)}>↓</button>
+            <button type="button" className="icon-button" aria-pressed={translationOpen}
+              aria-label={translationOpen ? 'Hide translation' : 'Show translation'} title={translationOpen ? 'Hide translation' : 'Show translation'}
+              onClick={() => toggleTranslation(focusedRow.sentence.id)}>EN</button>
+            <button type="button" className="icon-button" aria-pressed={walking} aria-expanded={walking}
+              aria-label="Walk through" title="Walk through this sentence"
+              onClick={() => setWalkthroughId(walking ? undefined : focusedRow.sentence.id)}>🚶</button>
+            <button type="button" className="icon-button" aria-pressed={revealedStructures.has(focusedRow.sentence.id)}
+              aria-label={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
+              title={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
+              onClick={() => toggleStructure(focusedRow.sentence.id)}>🧱</button>
+            <button type="button" className="icon-button" aria-pressed={wordOverride === 'all'}
+              aria-label={wordOverride === 'all' ? 'Back to default word help' : 'Show all word help'}
+              title={wordOverride === 'all' ? 'Back to default word help' : 'Show all word help'}
+              onClick={() => setWordHelpOverride((prev) => {
+                const next = new Map(prev);
+                if (wordOverride === 'all') next.delete(focusedRow.sentence.id);
+                else next.set(focusedRow.sentence.id, 'all');
+                return next;
+              })}>語</button>
+            <button type="button" className="icon-button" aria-label={`Text: ${TEXT_MODE_LABELS[displayMode]}. Switch display`}
+              title={`Text: ${TEXT_MODE_LABELS[displayMode]} (tap for ${TEXT_MODE_LABELS[nextMode]})`}
+              onClick={() => setDisplayMode(nextMode)}>
+              {displayMode === 'plain' ? '文' : displayMode === 'furigana' ? 'ふ' : 'あ'}
+            </button>
+            <Link className="icon-button" to={`/books/${bookId}`} aria-label="Back to book" title="Back to book">📖</Link>
+          </div>
+        );
+      })() : null}
       </div>
     </div>
   );

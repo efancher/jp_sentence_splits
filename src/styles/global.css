@@ -1602,3 +1602,18 @@ button.sync-retry {
     flex-wrap: nowrap;
   }
 }
+
+.reader-line {
+  padding: 0.45rem 0.75rem;
+  border-left: 3px solid transparent;
+  line-height: 1.9;
+  cursor: pointer;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.reader-line:hover,
+.reader-line:focus-visible {
+  background: var(--bg-muted);
+  opacity: 1;
+}
