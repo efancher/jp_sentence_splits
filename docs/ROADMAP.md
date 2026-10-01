@@ -349,6 +349,21 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
 
 ## In progress
 
+- [~] **Sentence-membership integrity (class of bug).** Detector, guards and
+  a dry-run repair landed on `feat/chapter-review` (STATUS 2026-09-30). Left:
+  user OK to run `repair:dangling-sentence-rows --apply` and fix Teppei #1461's
+  order; merge applies the cascade-soft-delete migration; decide whether a
+  dropped delete-op conflict should auto-retry; consider running
+  `check:sentence-integrity` in CI or a scheduled workflow like
+  `check:duplicate-books`.
+
+- [~] **Passage-first learning and reviews.** Plan in
+  `docs/SENTENCE_FIRST_LEARNING_PLAN.md`. First slice implemented on
+  `feat/chapter-review` (not deployed): full-chapter vocabulary reading/cloze
+  and grammar-recognition display, verified by unit/integration and container
+  browser tests. Other activities and the learning/preparation model remain.
+  Browser test instructions: `e2e/README.md`.
+
 - [ ] **Mining pipeline v2.** Staged, re-runnable YouTube mining
   (transcript → segment → translate → commit, audio at every stage) fixing
   the auto-caption-as-source-of-truth quality issue. Slices A (ASR
@@ -1721,6 +1736,8 @@ this codebase's per-sentence readiness predicates are easy to get subtly
 wrong, and a second scheduler answering "is this sentence due for another
 look" independently of `reading_in_context` would eventually disagree
 with it.
+
+- Sentence-first: promote a practised target into durable tracking (explicit "Keep reviewing this"; vocabulary first, needs a merge-link operation). Parked with reasoning in `docs/SENTENCE_FIRST_HANDOFF.md`, awaiting the user's go-ahead.
 
 ## Not planned (deliberate)
 

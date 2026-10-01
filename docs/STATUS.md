@@ -6,9 +6,602 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-29.
+Last updated: 2026-10-01.
 
 ## Where things stand
+
+- **2026-10-01 — Shadowing page: chapter lines + icon toolbar.** The shadow
+  page shows the chapter as plain lines (tap a neighbour to shadow it) with
+  the existing synced text on the active sentence, beside a "Shadowing tools"
+  toolbar (meaning instead, hide transcript, mark start/end, loop target, clear
+  target, back to Practice, delete with an inline confirm). Reference audio,
+  speed, Close shadow, Record (single toggle) and the attempt list are
+  unchanged and keep their labels; "Hide transcript" also hides the chapter
+  text. `ChapterReader` was extracted to `src/components/ChapterReader.tsx` and
+  is shared with Analyze. Layout dropdown (Chapter + icons default / Original ·
+  sentence) persists in localStorage `satori-glossbook:shadow-layout`.
+  Presentation only. Mark/loop icons are not e2e-covered (no audio seed in the
+  browser spec); unit tests cover the labelled controls in the original layout.
+- **2026-10-01 — Reader ("Learn this sentence") page: plain chapter lines + icon toolbar.**
+  The Reader (also the planner's "Learn this sentence" lesson route) now shows
+  the chapter as compact plain lines; tapping/Enter selects a sentence, which
+  expands inline into the existing panel (play-from-here, word help, progress,
+  walkthrough, structure). A "Sentence tools" toolbar (icon buttons with
+  tooltips + accessible names: previous/next sentence, translation, walk
+  through, structure, all-word help, text-mode cycle, back to book) acts on the
+  selected sentence; side rail >=700px, wrapping bar below. Playback and the
+  lesson route move the selection. The header keeps the labelled Play, Speed
+  and Text controls. "Layout" dropdown (Chapter + icons default / Original ·
+  rows) persists in localStorage `satori-glossbook:reader-layout`. Presentation
+  only: no events, schema or scheduling changes. Specs/tests updated for the
+  toolbar (one set of per-sentence controls instead of one per row).
+- **2026-10-01 — Glossing (Analyze) page: chapter reader + icon toolbar.**
+  The sentence panel now shows the whole chapter as plain text (neighbours are
+  tap-to-open, the active sentence keeps the Plain/Furigana/Reading display)
+  beside a "Sentence tools" toolbar of icon buttons with tooltips and accessible
+  names (prev/next, save with status, text mode cycle, English, edit reading,
+  native audio, device TTS, ichi.moe, vocabulary, book). Side rail at >=700px,
+  wrapping bar below. Layout dropdown ("Chapter + icons" default / "Original ·
+  sentence") persists in localStorage `satori-glossbook:gloss-layout`.
+  `SpeakButton`/`NativeAudioButton` gained `iconOnly`. Known gap: the clip
+  "Adjust" trim editor is hidden in the icon toolbar (the `SentenceAudioAdjuster`
+  below still works when the book has a source URL; otherwise use the Original
+  layout). Presentation only: no data, schema or evidence changes. Existing
+  ui.test now targets "Next sentence"/"Previous sentence".
+- **2026-10-01 — Conjugation card gets the chapter layout.** The
+  `sentence_transformation` card now renders the plain chapter text with the
+  inflected form masked (`ReviewDocumentText` cloze mode, so other occurrences
+  of the word in the chapter are masked too) and joins
+  `CHAPTER_LAYOUT_ACTIVITIES` (layout dropdown + presentation evidence).
+  Deliberately left on the single-sentence layout: word listening and audio
+  comprehension (showing the text first defeats the listening task), pitch
+  cards (audio-first, drills paused), contrastive pair (two sentences),
+  grammar completion (already has its own passage context). e2e covers the
+  masked chapter and the layout switch.
+- **2026-10-01 — Reading production card gets the chapter layout.** The typed
+  reading card (`reading_production`) was never converted when the cloze,
+  reading-retrieval and grammar-recognition cards moved to the chapter view
+  (14acacd), so it always showed the lone sentence. It now renders
+  `ReviewDocumentText` under the same global "Review layout" setting, with the
+  dropdown and presentation evidence covering it (`CHAPTER_LAYOUT_ACTIVITIES`).
+  Plain Japanese only, so no reading leaks; the typed check is unchanged. Still
+  on the sentence layout by design/omission: conjugation, word-listening,
+  pitch and the sentence-level `reading_in_context` card (which uses its own
+  preceding-sentences context). New e2e in `e2e/review-document.spec.ts`
+  (the seed is now shared; the card appears only when it is the word's only due
+  item, since siblings are spaced apart).
+- **2026-10-01 — Phase 6: clause-local walkthrough order.** `walkthroughOrder`
+  no longer lists every clause's engine first. It uses the existing role banding
+  (`assignClauseIndices`) to walk clause by clause in source order: a leading
+  clause connector, then that clause's engine, then its other parts. Multi-clause
+  steps show "Clause N of M". One-clause sentences are unchanged (engine first,
+  then the rest). Example: 友だちが / 貸してくれた / 本を / 読みました now goes
+  貸してくれた → 友だちが → 読みました → 本を. Banding is role-based, not a parse:
+  it is only as good as the saved/AI/draft roles, and a relative clause is walked
+  in source order rather than main clause first. No new events, no migration.
+- **2026-09-30 — Phase 6: held-back context check.** Targets with another real
+  occurrence you haven't met get "Try a sentence you haven't seen": that
+  sentence with the target masked, no translation until you reveal, type or
+  think, then self-rate. `pickHeldBackContext` excludes the lesson sentence,
+  Compare-uses exposures, transfer models, earlier held-back sentences and any
+  sentence where you already practised that target, and requires a reliably
+  located span. Logged as `held_back_check` (`exposedSentenceId` = the sentence),
+  counted apart from `practised`/`independent`; shown on the card line and as
+  "Recalled in a sentence you hadn't seen" on `/progress`. Lesson events only; no
+  Reviews/FSRS. Migration (unapplied) action check gained `held_back_check`;
+  rehearsal re-verified (11 actions). Self-judged; typed only; no delay rule
+  (it is offered whenever an unmet occurrence exists); clause sequencing still
+  not built.
+- **2026-09-30 — Phase 6: delayed re-check of own-sentence transfer.** When a
+  target's latest own-sentence attempt is at least one local calendar day old
+  and hasn't been re-checked, the button reads "Re-check: use it again from
+  memory" and the prompt shows what you wrote N days ago, asking for a different
+  sentence without looking back. Logged as a new `transfer_recheck` action (same
+  self-ticks), separate from same-day `transfer_attempt`; one re-check clears it
+  (`findDueTransferRecheck`, derived from events, nothing stored). Card activity
+  line and `/progress` ("Own sentences re-checked a day or more later") count it
+  separately. Lesson events only; no Reviews/FSRS. Migration (unapplied) action
+  check gained `transfer_recheck`; re-verified on the local Postgres rehearsal
+  (10 actions). Only one re-check per attempt, no expanding schedule; still
+  self-judged; held-back contexts and clause sequencing not built.
+- **2026-09-30 — Phase 6 first slice: "Use it in your own sentence"
+  (transfer).** Target lesson cards gain a typed-only path (no audio/speech
+  needed): write a new sentence using the target for a *different* meaning,
+  press "Check it" (an unseen real occurrence from the episode is then shown for
+  comparison, not counted as a Compare-uses exposure), self-tick "really uses
+  it" / "says something different" / "sounds natural". Logged as a new
+  `transfer_attempt` event (outcome got_it only when both of the first two are
+  ticked; `unitsExpressed/Total` = ticks of 3). It is deliberately separate from
+  `expression_attempt` and never feeds `practised`/`independent`;
+  `summariseTargetActivity` gained `transferAttempts/transferSucceeded` and
+  `/progress` shows "Own sentences with a new meaning". Lesson events only: no
+  Reviews/StudyItems/FSRS. Migration (unapplied) action check gained
+  `transfer_attempt`. Not built: delayed re-checks on later days, held-back
+  contexts, clause-sequencing, spoken transfer. Self-judged only.
+- **2026-09-30 — Migration rehearsal on a throwaway local Postgres.**
+  `scripts/migration-rehearsal/` (`apply.sh`, `behaviour.sql`, `roundtrip.ts`)
+  starts `supabase/postgres:15.8.1.060` in Docker (no production access; stubs
+  `auth.*` helpers and storage bucket columns the bare image lacks), applies all
+  36 migrations in order, checks every action/column constraint, RLS (other
+  users see/alter nothing, impersonated inserts rejected) and round-trips a fully
+  populated event per action through the real client mapper. All passed. It does
+  not test production data, audio files or the Supabase storage service.
+- **2026-09-30 — Repair workflow for flagged prompts.** `/progress` "Sentence
+  lessons" panel lists open flagged prompts (sentence, target, report type, your
+  answer) with "Open sentence" (lesson route), "Mark fixed" and "Dismiss". These
+  log a new `report_resolved` event (`resolution: fixed|dismissed`, same
+  sentence+target key); a report is open until a later resolution, and a newer
+  report reopens it (`openContentReports`, derived). Triage only: no sentence,
+  analysis, FSRS or Review writes. Migration (unapplied) gained the
+  `report_resolved` action and `resolution` column. Not built: editing the
+  prompt itself — the fix happens wherever you already edit sentences/targets.
+- **2026-09-30 — Help level recorded on lesson events.** Every
+  `SentenceLearningEvent` from the walkthrough (including the expression card)
+  now carries `helpLevel` ('full'|'less'|'minimal') — the Help level select's
+  value when it was logged; absent on older events. New `help_level` column in
+  the still-unapplied migration (edited in place). Not yet used by the journey
+  or report scoring. The e2e asserts no event is unstamped (8/8 on chromium +
+  webkit).
+- **2026-09-30 — "Pause word & grammar drills" (`settings.legacyDrillsPaused`).**
+  The reversible alternative to resetting vocabulary/grammar (user chose it
+  over a reset). When on, vocabulary / vocabulary-confusion / word-listening /
+  conjugation / grammar cards are withheld from ReviewPage and from the
+  planner's due-review batch, the new-card backlog reservation is zeroed, and
+  grammar understand/noticing steps are not drafted. Nothing is deleted or
+  rescheduled; turning it off restores everything. Sentence cards, audio
+  listening, shadowing, pitch (own pause) and lessons continue. Settings page
+  checkbox. Games and the Vocabulary/Grammar pages themselves are unchanged.
+- **2026-09-30 — Phase 5: review charging settled (no code change).** A lesson
+  embeds no review activity (events never create Reviews), so there is nothing
+  to double-charge: lessons spend only the glossing bucket and review minutes
+  are allocated separately. Pinned by a planner test (review step minutes
+  identical with the flag on/off; total within budget).
+- **2026-09-30 — Phase 5: joined lesson report.** `/progress` has a "Sentence
+  lessons (last 14 days)" panel (`buildSentenceLessonReport`, derived, nothing
+  stored) joining supply (lessons planned/done/skipped, plan days with no
+  lesson = starvation), outcomes (walked, gist had-it, independent sayings,
+  written vs spoken), backlog (waiting for a fresh try, oldest age) and quality
+  (flagged prompts vs target practices). Still open: charging embedded due
+  reviews once; any reset of legacy vocabulary/grammar.
+- **2026-09-30 — Phase 5: revisits ahead of new lessons.** With sentence-first
+  planning on, sentences walked through on an earlier day and not yet said
+  cue-free (`sentencesReadyToRevisit`, max 2 per book) are drafted first as
+  2-minute "Fresh try" `sentence_learning` steps, with the reason shown on the
+  step. Still open: charging embedded due reviews once, joined outcome report.
+- **2026-09-30 — Phase 5 first slice: `sentence_learning` planner step (behind a setting).**
+  New target kind `sentence_learning` (types, zod schema, synthetic activity
+  type, route `/books/:bookId/learn/:sentenceId` rendered by ReaderPage, which
+  opens that sentence's walkthrough in its own chapter). Settings toggle "Plan
+  sentence lessons" (`settings.sentenceFirstPlanning`, default off): when on,
+  the glossing bucket drafts one 3-minute lesson per upcoming sentence with
+  zero vocabulary required and no vocabulary-confirmation reserve; a sentence
+  is "done" once its `walkthrough_completed` event exists (lessons never change
+  `BookSentence.status`). Settling the step has no side effects
+  (`advanceCompletedStepProgress` ignores it): no vocabulary confirmation, no
+  Reviews/StudyItems. Quiet mode, suspended books and in-progress sessions are
+  unaffected (existing gates). Legacy vocabulary/continue_book steps remain
+  when the flag is off. Not yet done: revisit-priority ordering
+  (`sentencesReadyToRevisit` into the plan), embedded-due-review charging,
+  joined outcome/quality report, any reset of legacy vocabulary/grammar
+  (needs a reviewed reversible script and explicit go-ahead).
+- **2026-09-30 — Phase 4 completed: cue ladder, revisits, shadowing bridge.**
+  "Say it in Japanese" now has two separate optional cues, "Show the words"
+  (Japanese content-word bank) and "Give me a frame" (chunk glosses), logged as
+  `scaffold: none | words | frame | words_and_frame`; only `none` can earn
+  independent expression. After recording, a link opens the existing
+  close-shadow page for that sentence (only when it has native audio); that
+  practice keeps its own evidence and contributes nothing to these stages.
+  Progress lines label written and spoken attempts separately (one never
+  certifies the other; quiet mode forces typed). The Reader shows a derived
+  "Ready for a fresh try" list (`sentencesReadyToRevisit`): sentences walked
+  through on an earlier day with no cue-free complete attempt. A suggestion only:
+  nothing stored, no interval scheduler, no effect on the review queue.
+  Remaining Phase 4 caveats: spoken attempts are unrecorded self-report;
+  cue-free attempts still follow recent exposure of the model (later-day rule is
+  the only guard); migration still unapplied.
+- **2026-09-30 — Phase 4 first slice: "Say it in Japanese" (supported and
+  independent expression).** After a walkthrough, "Say it in Japanese" swaps the
+  panel for a meaning cue (the translation) with the Japanese, glosses and
+  audio hidden. The learner types it, or says it aloud (disabled in quiet mode,
+  where typing is recorded as written practice), optionally asking for a
+  "frame" (the chunk glosses in order, which makes the attempt *supported*).
+  "Show the model and check" reveals the sentence, and the learner ticks which
+  meaning parts (chunk glosses, else the whole translation) their version
+  carried. Different Japanese is never rejected and no string comparison is
+  used; unticked parts stay listed as "still to carry". Logged as
+  `expression_attempt` (`modality`, `scaffold`, `unitsExpressed/unitsTotal`,
+  typed text in `learnerAnswer`, `assessmentSource: 'self'`); migration
+  edited in place (still unapplied). Journey stages 5-6 now read these: stage 5
+  is the best ticked fraction (any scaffold); stage 6 needs a no-frame attempt
+  carrying every part on a later day than the first walkthrough. Not built
+  yet: spoken attempts are an unrecorded self-report (no recording/pitch
+  bridge), cue ladder beyond "frame", later revisit scheduling.
+- **2026-09-30 — Phase 3 completed: staged sentence journey + help levels.**
+  `buildSentenceJourney` (src/lib/sentenceJourney.ts, pure, read-only) derives
+  the six-stage strip from lesson events: stage 1 walkthrough finished; 2
+  targets recognised with any support; 3 independent (masked got-it, or
+  vocabulary already retained from earlier reviews, labelled as older
+  evidence) averaged with a gist check on a *later day*; 4 a second such gist
+  check on another day; 5-6 "not tried" (Phase 4), so reading alone caps the
+  headline at 67%. Empty/unidentified inventories give "not assessed" and a
+  "provisional" flag, never 100%; a revealed-answer practice is supported,
+  never independent; same-day gist adds no independent credit. Shown on each
+  Reader sentence in a collapsible "Sentence journey: N%" with per-stage
+  notes and word/structure counts (independent vs with support). Also a
+  "Help level" select in the walkthrough (Full / Less / Minimal; per-device
+  localStorage) that hides role, gloss and explanation until asked. Known
+  limits: the help level is a preference and is not yet written onto events
+  (would need another migration edit); a gist check still follows a walkthrough
+  that showed glosses, so only later-day gists count as independent; structure
+  inventory is whatever prepared grammar/expression targets exist, so most
+  sentences read "provisional" until the AI pack has run.
+- **2026-09-30 — Phase 3: per-sentence progress line.** Each Reader sentence
+  shows "Your progress here: walked through · N targets practised · gist: had
+  it/needed help", derived read-only from `sentenceLearningEvents`
+  (`summariseSentenceProgress`). Distinct targets, latest gist; nothing is
+  stored or scheduled, and a sentence with no evidence shows no line.
+- **2026-09-30 — Phase 3: whole-sentence gist check.** When a walkthrough
+  finishes, "Check my understanding" asks the learner to say (or type) what the
+  whole sentence means with the translation hidden; "Reveal the translation"
+  shows it, then "I had the gist" / "I missed something" self-judges. Logged as
+  new `gist_check` event (no `target`, `assessmentSource: 'self'`), so it never
+  feeds any per-target summary and creates no Review/StudyItem/FSRS state.
+  Migration action check edited in place (still unapplied). The old plain
+  "Show natural translation" button remains for people who skip it.
+- **2026-09-30 — Phase 3 first slice: "Fill the gap" (targeted masking).** Each
+  focus target whose span can be located gets a "Fill the gap" button in the
+  walkthrough: the sentence is shown with exactly that occurrence masked (the
+  validated span, so a repeated word masks the right one), the learner
+  thinks/types/says it, presses "Show the answer", then self-judges "I had it
+  before looking" or "I needed to see it". Logged as `target_practice` with new
+  `support: 'target_masked'` (migration check constraint edited in place; still
+  unapplied). Only a masked got-it counts as "with the word hidden" in the
+  per-target summary; revealed-explanation practice never does, and the typed
+  text is shown for comparison but never auto-rates. No Review/StudyItem/FSRS
+  effect. Translation is shown as the meaning cue while gapped, so this is
+  supported, not fully independent, recall. Not built from Phase 3: whole-sentence
+  comprehension checks, support presets, component coverage, sentence progress %.
+
+- **2026-09-30 — Flagged prompts are visible.** The Episode preparation panel lists this episode's `content_report` events (target, report type, your own answer, the sentence) under "Flagged prompts". Read-only; still no repair workflow. Why durable-tracking promotion is not built is in the handoff's decision note.
+
+- **2026-09-30 — Reader book-style restyle (light).** Sentence rows sit in a narrow centred column (`.reader-book`, 44rem) separated by hairlines instead of boxed cards; common controls (Play, Speed, Text) were already at the top. The preparation panel and suggested focus stay as native `<details>` disclosures rather than moving into a dialog: they are already keyboard/screen-reader accessible and the pack e2e depends on them. Checked via screenshots at 390px and 1280px (Chromium); the real episode not re-viewed.
+
+- **2026-09-30 — Phase 2 leftovers: content reports + contextual target order.**
+  At the revealed-explanation step of "Practise this" the learner can add their own
+  answer and press "Another answer works" or "Poor question"; this logs a new
+  `content_report` sentence-learning event (`report`, `learnerAnswer`) that is
+  feedback for content repair only — it never counts as practice or a miss and
+  touches no FSRS state. The still-unapplied migration was edited in place
+  (`content_report` action, `report`, `learner_answer` columns; mapper + test
+  updated). The walkthrough now orders a sentence's focus targets (never
+  practised, then still-needing-help, then mostly-known; episode priority breaks
+  ties), shows 3 and offers "Show N more"; the choice is fixed per opening so a card
+  doesn't move after practice (`selectSentenceTargets`). **Not built, by design:**
+  "promote a practised target into durable tracking" would create StudyItems, which
+  this branch's hard constraint forbids without your explicit go-ahead and a
+  design for merging vocabulary links safely (plan: don't call
+  `confirmSentenceVocabulary` with one word). Reports are not yet surfaced anywhere
+  for repair.
+
+- **2026-09-30 — Reader auto-shows the translation for mostly-unknown sentences** (user's call): when more than half a sentence's content words are new to the learner the translation is shown by default, with "Hide translation"; otherwise it stays behind "Show translation". The button flips whichever default applies. e2e updated.
+
+- **2026-09-30 — AI-drafted sentence structure for the walkthrough.** The episode
+  pack has an opt-in "Also ask for sentence structure" checkbox (only sentences
+  with no saved analysis and no valid draft). It adds separate prompt parts of 20
+  sentences; the reply is now one chunk per line, `S1 | 本を | object | book`, chosen for fault tolerance (chatter, fences, curly/straight quotes and table pipes are ignored; each sentence is judged alone, so a cut-off reply still saves the complete ones). The earlier JSON `structure` key is still accepted (with curly-quote repair). A draft
+  is accepted only if its chunks rebuild the sentence exactly; it is stored on
+  `BookChapter.structureDrafts` (syncs with the book row), never in `analyses`.
+  `walkthroughChunks` ranks saved analysis > AI draft > automatic draft and labels
+  the AI one "From the AI reply you pasted, not verified by you". No Reviews,
+  StudyItems or FSRS state. `saveEpisodePackReply` now also returns
+  `structureSaved`/`rejectedStructure`; the plan shape gained `structureHandles`.
+  Code: `src/lib/episodeStructure.ts`; tests `tests/episodeStructure.test.ts`,
+  `tests/episodePack.test.ts`. Not yet exercised against a real AI reply or in
+  e2e beyond regression of the existing specs. Deferred from the Reader-controls
+  slice: book-style restyle and the accessible "More" dialog.
+
+- **2026-09-30 — `sentenceLearningEvents` now sync (user chose sync over
+  device-local).** New `sentence_learning_events` entity (mapper pair, push tier 3,
+  full-pull, resync, clear-on-reset, conflict-diff created_at exemption) and
+  append-only migration `20260930020000_sentence_learning_events.sql` (insert/
+  select policies only; `book_id`/`chapter_id`/`sentence_id` intentionally not
+  foreign keys so evidence survives later deletions). `logSentenceLearningEvent`
+  now notifies sync. **Migration not applied and nothing deployed**: a client from
+  this branch with cloud sync connected would fail to push these rows until the
+  migration exists on the target project. Still not in backups. Test:
+  `src/sync/sentenceLearningEventMapper.test.ts`.
+
+- **2026-09-30 — Reader word help adapts to what the learner knows; glosses fall
+  back to saved vocabulary.** Each Reader sentence now shows, by default, only
+  the glossed content words the learner has not shown they can recall (a saved
+  vocabulary item with that expression at FSRS review/relearning on a
+  reading/meaning card — `getSavedWordStatus`; pitch_accent reps don't count),
+  with a marker ("N of M words are new to you") and per-sentence overrides
+  (Show all words / Hide / Reset). Translation stays behind its button (the
+  user has not asked for it auto-shown). A suggestion with no English falls back
+  to the first sense of a saved vocabulary meaning (`glossableWords`). Read-only:
+  no events, reviews or schema. Not done from the agreed design: the book-style
+  restyle and the accessible "More" dialog for the pack panel/focus dropdown
+  (wrapping them would hide the pack panel the e2e and paste-back flow rely on;
+  needs its own pass). Tests: `tests/sentenceLearning.test.ts`,
+  `tests/savedWordStatus.test.ts`, e2e extended.
+
+- **2026-09-30 — Compare uses now carries aids.** The user reviewed Practise this
+  / Compare uses ("both seem good") and noted they may not know most of the
+  vocabulary in the compared sentences. Each excerpt (this sentence and the
+  other use) now shows the sentence's glossed content words (reading + English,
+  from `vocabularySuggestions` via `glossableWords`), a native-audio button when
+  a clip exists, and a "Show translation" button (hidden until asked, so the
+  "what stays the same?" prompt isn't answered for the learner). Sentences with
+  no gloss/translation/audio simply omit that aid. No new events, reviews or
+  schema. Tests: unit (`glossableWords`), `e2e/sentence-lesson.spec.ts`
+  extended; `npm run check` and Docker e2e (Chromium+WebKit) pass. Not done:
+  glosses come from morphology suggestions, so a word missing `english` has no
+  gloss. Follow-up same day: the walkthrough panel itself now shows the same
+  "Words in this sentence" list (`WordGlossList`) for the open sentence.
+
+- **2026-09-30 — Follow-up session: no code change.** Checked the "Adjust audio"
+  claim against code: the walkthrough already offers Adjust (local trim) and
+  Can't speak, so a tried second adjuster was reverted. Slice choice waits on
+  the user's feedback on Practise this / Compare uses (see handoff).
+
+- **2026-09-30 — Session checkpoint.** The user pasted a real external-AI reply
+  for the real episode and it saved after the two fixes below. Everything is
+  pushed to draft PR #1 (no merge/deploy). Pick-up notes and owed housekeeping
+  (delete the real-episode copy from the preview; two unfixed production data
+  defects) are in `docs/SENTENCE_FIRST_HANDOFF.md` "Checkpoint 2026-09-30".
+
+- **2026-09-30 — Unlisted vocabulary/grammar targets are accepted.** In the
+  user's first real reply, 5 of 8 targets were rejected ("A grammar target needs
+  a ref…"): the AI correctly labelled 〜時に, 〜たり, 〜すぎる, 〜ように as grammar
+  and 取る as vocabulary, but none is in the learner's saved lists, so there was
+  no ref to give. A `vocabulary`/`grammar` target with no ref is now kept
+  unlinked (its stable key is `expression:<label>`); a ref that is given must
+  still exist in the matching list, and an expression must not carry one. Both
+  prompts now say to omit `ref` for anything not listed.
+
+- **2026-09-30 — Pasted AI replies with curly quotes now work.** The user's
+  first real paste failed ("Unrecognized token “"): a phone/chat app had curly-
+  ised the JSON's quotes. `extractJson` still tries strict `JSON.parse` first,
+  then retries after normalising curly/guillemet quotes, non-breaking spaces and
+  trailing commas; a remaining failure says the reply is not valid JSON and to
+  ask for plain straight quotes. Both prompts now ask for straight quotes.
+  Quotes inside a string value that are themselves curly still can't be repaired.
+
+- **2026-09-30 — Real-chapter trial (with the user's OK): Teppei #1461 "箸
+  (はし) について！".** Read-only export via the main checkout's existing script
+  login (credentials stay in its `.env`; nothing copied into the preview or the
+  repo) to `/tmp/real-chapter` (outside git): 80 memberships / 79 live sentences,
+  all already translated, 82 native m4a clips, 43 vocabulary items. Loaded into
+  the Docker browser by the local-only `e2e/real-chapter.spec.ts` (skips unless
+  `/real-chapter` is mounted: add `-v /tmp/real-chapter:/real-chapter:ro`).
+  Findings: (1) the Reader, focus strip, pack panel, walkthrough, Compare uses
+  and native audio all worked on real data at 390/1280px; a real AAC clip played
+  to the end in Chromium (WebKit's ephemeral test context still refuses Blob
+  storage, so audio isn't exercised there). (2) The pack prompt is 4.1k chars
+  as-is and would split into two parts (5.8k + 0.9k) if untranslated. (3) I acted
+  as the AI on the real prompt (8 targets, one deliberately wrong quote): all
+  valid targets resolved, but a bad quoted occurrence was dropped **silently**;
+  fixed: `PreparedTarget.droppedOccurrences` (optional, in the backup schema)
+  makes the status `partial` and the panel says "N quoted place(s) … did not
+  match the episode text and were dropped". (4) Before preparation the derived
+  focus strip favours generic verbs (食べる、思う、使う); the prepared list (箸,
+  〜で, 〜たり, 取る, 便利, …) is clearly better. (5) Walkthrough chunk roles are
+  still generic (one "engine" chunk) without a saved chunk analysis. (6) The
+  lesson summary no longer says "practised 0×" when only compared.
+  **Data defects found, NOT fixed (production data, needs a decision):** a live
+  `book_sentences` row (position 421) points at the opening sentence
+  "ジャパニーズ！今日は箸について。", soft-deleted 2026-09-23 (a sentence-delete
+  orphan; the Reader skips it); and the shared sign-off "それでは、またね。"
+  (also in #1467) sits at position 420, so it renders **before** the intro
+  although its audio here is at 364 s.
+
+- **2026-09-30 — Phase 2 first slice: practise + compare uses inside the
+  sentence walkthrough.** Each "Worth noticing here" target is now a
+  `TargetLessonCard`: **Practise this** asks "Before you look…", reveals the
+  explanation on demand and records a self-assessed "I had it" / "I needed the
+  explanation"; **Compare uses** shows the current sentence next to another
+  real occurrence of the same target in the episode (prefers unseen, nearest by
+  position; validated occurrence span else literal match) with "What stays the
+  same? What changes here?" and "Show another example". New local-only Dexie
+  table `sentenceLearningEvents` (v22; `SentenceLearningEvent` in
+  `domain/types.ts`) logs `walkthrough_opened`, `walkthrough_completed`,
+  `target_practice`, `compare_uses_viewed` with a per-visit id, target
+  kind/key/label, support used, outcome, `assessmentSource: 'self'`, quiet mode
+  and the preparation fingerprint. Events are idempotent on id and **never create
+  a `Review`, `StudyItem` or FSRS state**; the card says "Your review schedule is
+  unchanged". A per-target summary ("practised 2x (1 got it) - compared with 1
+  other use") shows on later visits. Files: `src/lib/sentenceLearning.ts`,
+  `src/components/TargetLessonCard.tsx`, `SentenceWalkthrough.tsx`,
+  `ReaderPage.tsx`, `repository.ts` (`logSentenceLearningEvent`,
+  `listSentenceLearningEvents`). Tests: `tests/sentenceLearning.test.ts`,
+  `tests/readerPage.test.tsx`, Docker e2e `e2e/sentence-lesson.spec.ts`.
+  **Deferred (needs a user decision):** cloud sync, backup-schema inclusion and a
+  Supabase migration for the events (they are device-local like `gameRounds`);
+  events orphan rather than cascade when a sentence is deleted; contextual
+  target selection; wiring `treatment` to card creation; promoting a practised
+  target into durable tracking; "Another answer works"/"Poor question" reports.
+
+- **2026-09-30 — Small follow-ups: default chapter + visible episode focus.**
+  A chapterless book gets a real "Whole book" chapter on demand (Reader button
+  "Prepare this book (optional)" -> `ensureDefaultBookChapter`, which reuses
+  `createBookChapter` + `assignBookSentencesToChapter`, syncs like any chapter
+  edit, and does nothing for a book that already has chapters), then opens the
+  pack panel. The Reader now shows an always-visible "Worth noticing across this
+  episode" line plus a per-sentence "Focus here" line (prepared, non-dismissed,
+  non-stale targets, else the derived draft) instead of only a collapsed panel.
+  Tests in `tests/readerPage.test.tsx`. Still open in Phase 1: moving secondary
+  controls into an accessible sheet.
+- **2026-09-30 — Episode pack: one paste-back prompt at import time instead of
+  piecemeal AI calls (no API needed).** `src/lib/episodePack.ts` builds one
+  prompt covering the whole-episode focus targets and English for any sentence
+  with no translation; the JSON reply (`targets` and/or `translations` keyed by
+  handle S1…) is validated by `parseEpisodePackReply` and stored by
+  `saveEpisodePackReply`. Translations only fill empty sentences (re-checked
+  against the live row; never overwrite the learner's), unknown handles/empty
+  text are rejected with a reason, and an unparseable reply changes nothing.
+  Long episodes split into ordered parts of 60 translations (targets only in
+  part 1; the whole episode is listed only in the prompt that asks for targets);
+  prompts are rebuilt from current state, so the pack is resumable and shrinks
+  as replies land. The Reader's panel now shows the pack (copy, one reply box,
+  "Ask for focus targets again"); series imports (Quick mine, YouTube/podcast,
+  NHK Easy) land on the Reader for the new chapter with the panel open
+  (`?chapter=…&pack=1`; the transcript-validation reminder moved there as a note).
+  Not included: per-chunk "why" notes (`chunk-why-assist`) — they need a saved
+  chunk analysis, which does not exist at import time — and chapterless books.
+  Tests: `tests/episodePack.test.ts`, `tests/readerPage.test.tsx`; Docker e2e
+  `e2e/episode-preparation.spec.ts` updated for the new label/message.
+- **2026-09-30 — Phase 0: persisted episode preparation + inspectable AI
+  round trip (paste-back).** On `feat/chapter-review`; not merged or deployed.
+  `src/lib/episodePreparation.ts` builds a prompt from a chapter's sentences
+  (handles S1…) and linked vocabulary/grammar (V1…/G1…) and strictly validates
+  the pasted JSON reply: unknown handles/refs, missing/duplicate refs, unknown
+  kind/treatment, over-limit (8) targets and quoted text that is not a
+  substring of the named sentence are rejected with a visible reason; offsets
+  are computed locally. Result is stored as `BookChapter.preparation`
+  (`ready`/`partial`/`failed`, provenance `pasted_ai_reply`, version, sentence
+  fingerprint; `stale` derived). It rides the book's `chapters` jsonb, so no
+  Supabase migration; zod backup schema extended (round trip tested). A failed
+  reply is stored only when nothing usable exists and never replaces a usable
+  result; a re-paste keeps the learner's accept/dismiss/note on targets that
+  recur. Reader (`?chapter=`) has a collapsed "Episode preparation" panel
+  (prompt + copy, paste, save, status, accept/dismiss/restore/note, rejected
+  list, clear); non-dismissed targets feed the walkthrough's "Worth noticing
+  here" when the preparation is current. Reading never waits on it; no
+  study items, reviews or FSRS effect. Design choice: paste-back rather than an
+  Edge Function so nothing needs deploying or new secrets; a server-side call
+  can later produce the same reply shape. Tests: `tests/episodePreparation.test.ts`,
+  `tests/readerPage.test.tsx`, `tests/sync.test.ts`. `npm run check`: 2218
+  passed / 12 skipped. Docker Playwright `e2e/episode-preparation.spec.ts` passes in Chromium +
+  WebKit at 390/1280px (paste, partial rejection, dismiss, persists across
+  reload). Not done: chapterless-book
+  support (Book has no preparation field; would need a migration), wiring
+  `treatment: phrase|gloss_only` into card creation (stored only), real-episode
+  fixtures, and no AI reply has been run against a real episode yet.
+- **2026-09-30 — Phase 1 slice: ungated sentence walkthrough in the Reader.**
+  On `feat/chapter-review`; not merged or deployed. Each Reader row has a
+  "Walk through" button opening `SentenceWalkthrough`
+  (`src/components/SentenceWalkthrough.tsx`): engine chunk first, then the rest
+  in source order, one chunk per step with its role, generic role-guide text,
+  and the puzzle strip revealing progressively; finishing shows the sentence
+  with an optional natural translation. It uses the learner's saved analysis
+  only when its chunks (sorted by `order`, zero-が skipped) concatenate to the
+  sentence text; otherwise a labelled "Automatic draft" from
+  `previewHeuristicChunks`. It never waits on vocabulary or analysis, and
+  writes no study items or reviews. Native audio (with the existing Adjust
+  editor when the clip has data) and a "Can't speak right now" toggle bound to
+  `settings.quietMode` sit in the panel; with no native audio it says so
+  (no TTS fallback). The six-stage journey is listed with only "Understand"
+  marked as guided; the rest read "not assessed yet". Episode-focus targets
+  that occur in the sentence are noted. Tests: `tests/sentenceWalkthrough.test.ts`,
+  `tests/readerPage.test.tsx` (the unit test cannot see Adjust because
+  fake-indexeddb drops Blob size; Adjust is unchanged NativeAudioButton). Docker
+  Playwright `e2e/reader-walkthrough.spec.ts` passes in Chromium + WebKit at
+  390/1280px (ungated, draft label, focus note, quiet-mode persistence across
+  reload, no studyItems/reviews written, no-audio message; Adjust asserted in
+  Chromium only — WebKit's test context may refuse Blob storage, so it falls
+  back to the no-audio assertion). Not done: AI-provided per-chunk
+  explanations, accessible secondary-controls sheet, a more prominent focus
+  surface. `npm run check`: 2199 passed / 12 skipped.
+- **2026-09-30 — Phase 0 slice: review-presentation evidence + episode focus
+  draft.** On `feat/chapter-review`; not merged or deployed.
+  - **Presentation evidence.** `Review.presentation` (`layout`,
+    `documentSentenceCount`, `layoutSwitched`) is written on the *same* single
+    review row by `recordReview` for `reading_retrieval`, vocabulary `cloze` and
+    `grammar_recognition`; no second event table and no duplicate grade. It
+    records the layout in effect at grading, how many source sentences were
+    actually displayed (1 = fell back to the lone sentence) and whether the
+    learner switched layouts on that card. It never affects FSRS or eligibility.
+    Additive: Dexie needs no upgrade (unindexed), zod backup schema and sync
+    mappers updated, migration `20260930000000_review_presentation.sql` adds a
+    nullable `reviews.presentation jsonb` (applies with the merge to main, not
+    before). Other card types leave it unset.
+  - **Episode focus draft.** `src/lib/episodeFocus.ts` (`buildEpisodeFocus`) +
+    `getEpisodeFocus(bookId, chapterId?)` derive a bounded (6) focus set from
+    existing `SentenceVocabulary`/`SentenceGrammar` links: recurrence across
+    distinct sentences, extra credit for multiple surface forms, grammar
+    outranking an equally frequent word, retained items (review state,
+    stability >= 21 d) skipped, single-occurrence items not proposed, and short
+    kana interjections/connectives listed as gloss-only rather than recall
+    targets. Shown as an optional collapsed "Suggested focus" panel on the
+    Reader (`/books/:id/read[?chapter=]`); read-only, unscheduled, ungated,
+    nothing persisted. Explicitly a heuristic first pass: it has no
+    "needed to understand the episode" signal, contrast pairs or AI reasons.
+  - **Verified vs. assumed.** Read the import paths: `commitImport` dedupes
+    sentences by `normalizedKey`; `commitSeriesEpisodeImport` reuses the series
+    book and matches chapters by source id, so re-importing an episode is
+    designed to be idempotent (now tested: `tests/commitSeriesEpisodeImport.test.ts`
+    re-imports an identical episode after learner analysis, vocab link and
+    in-progress status were added — no new rows, learner data intact). No preparation
+    status/AI-output persistence was added, so the "failed preparation" state
+    does not exist yet. Found while inspecting: the backup `reviewSchema`
+    (`src/domain/schemas.ts`) omits several existing optional Review fields
+    (pitch shapes, `predictedRetrievability`, comprehension-check and
+    pitch-production counts), so a backup restore would drop them; only the
+    new field was added there. FIXED later the same day: all seven fields now in
+    `reviewSchema`, with a `tests/data.test.ts` round-trip test that fails without
+    the fix (sync mappers already carried them).
+  - **Validation.** `npm run check` and the affected suites (review document,
+    review page, reader, sync, episode focus); Docker Playwright
+    (`e2e/review-document.spec.ts`, Chromium + WebKit, 390px/1280px) now also
+    asserts the persisted presentation (`layout: chapter`, `layoutSwitched`,
+    document size > 1). Preview `dist` rebuilt; sample assets regenerated.
+
+- **2026-09-30 — Handoff checkpoint.** The user tried the private preview and
+  said “looks good.” The first review-layout slice is implemented and available
+  privately, with the original layout retained for comparison; the broader
+  sentence-first learning redesign remains planned. Draft PR:
+  <https://github.com/efancher/jp_sentence_splits/pull/1>. No production merge or
+  deployment. See [Sentence-first handoff](SENTENCE_FIRST_HANDOFF.md) for the
+  active worktree/branch, verified tests, preview service and sample links,
+  maintenance pitfalls, user preferences and suggested next steps.
+
+- **2026-09-30 — Preview sample data.** Generate a validated, fictional
+  12-sentence chapter plus three due vocabulary reviews and one grammar
+  recognition review with `./node_modules/.bin/tsx scripts/generate-review-demo.ts
+  dist/review-demo.json https://codex-dev.tailfbd89c.ts.net:8443`. This also writes `dist/review-demo.html` with download
+  and merge instructions. Regenerate after a build clears `dist`. Verified the
+  download, normal backup merge, both layouts and all four reviews through the
+  private preview URL in Chromium and WebKit. Use the global Review page:
+  existing book-scoped queues omit grammar patterns.
+  **Preview hosting fix:** serve the download page on port 8444 and link back
+  to the app on 8443. The app's service-worker navigation fallback intercepts
+  same-origin standalone HTML after the app has been visited. Reproduced this
+  failure with an active service worker; verified the separate-origin download,
+  import and review flow in Chromium and WebKit with the app already cached.
+
+- **2026-09-30 — Compare original and chapter review layouts.** The three
+  affected review types now offer a **Review layout** selector: Original ·
+  sentence / New · chapter. New is the initial default; the browser remembers
+  the selection locally. Switching preserves the current reveal state and
+  uses the same queue and grading path. This compares presentation only,
+  not the future sentence-first learning model. Still on the draft PR, not
+  deployed. Build and 80 relevant unit tests pass; browser coverage exercises
+  preference persistence and switching before/after reveal with one grade.
+
+- **2026-09-30 — Chapter-based reviews, first implementation slice.**
+  Implemented on `feat/chapter-review`; not deployed. `reading_retrieval`,
+  vocabulary `cloze`, and `grammar_recognition` now use a scrollable source
+  chapter/episode with the target marked in place and existing question,
+  reveal and self-rating controls below. `ReviewDocumentText` and the read-only
+  `getReviewDocument` query preserve book identity, chapter boundaries and
+  unassigned-row grouping; source-less cards fall back to the sentence.
+  Cloze conceals exact/known inflected forms throughout the document and source
+  titles. Plain Japanese prevents ruby/gloss/audio widgets from exposing answers;
+  a stale previous document is withheld while the next source loads. No new
+  chapter-wide readiness gate, FSRS changes, schema migration or service changes.
+  Existing audio/adjustment controls remain on the review reveal.
+  - Validation: production build; full Vitest suite **2184 passed, 12 skipped**;
+    four Playwright checks (Chromium/WebKit × 390px/1280px), with screenshots,
+    synthetic IndexedDB data, scrolling/masking and one-review-per-grade checks.
+    **Browser tests run in the cached Playwright Docker image**, not the bare
+    host: see `e2e/README.md` for the repeatable command. Host browser launches
+    fail on missing shared libraries; neither host packages nor services changed.
+  - Scope remaining: grammar completion and other card layouts, robust semantic
+    variant handling/occurrence alignment, preparation/lesson progress and new
+    telemetry from `SENTENCE_FIRST_LEARNING_PLAN.md`. Known-form masking is not
+    semantic detection of every paraphrase or unannotated inflection. Very long
+    chapters use plain DOM rows, not virtualization yet.
 
 The original roadmap (Phases 0–9) is complete. All numbered phases plus
 the later standalone efforts (Learning Orchestrator, re-segmentation,
@@ -1234,6 +1827,39 @@ what's left is one deferred durability item (below).
   flagged as approximate.
 
 ## Recent changes
+
+- **2026-09-30 — Sentence-membership integrity: root causes of the two
+  Teppei #1461 glitches found, detector + guards added (no production data
+  changed).** Read-only prod scan (`npm run check:sentence-integrity`) finds
+  exactly 4 dangling live `book_sentences` rows (Slow Japanese x3, Teppei x1)
+  and 4 live `reference_audio` clips for deleted sentences, plus 1
+  out-of-order chapter (Teppei #1461); nothing else. Causes:
+  (1) **Dangling memberships / orphan clips.** All three sentences were
+  deleted 2026-09-23 via the new review-card delete button. The cascade
+  (`cascadeRetireSentenceLocal`) queues one delete op per child row, but the
+  cloud rows survived: a child delete op that hits `version_conflict` becomes
+  a conflict card and is dropped from the queue, a device that never pulled
+  the row queues nothing, and `reference_audio` deletes are skipped when that
+  device has audio sync off. Two of the four rows predate the deletion (which
+  of those mechanisms hit them is unconfirmed). The other two were *created*
+  2026-09-26 by the `repair-episode-sentence-order` backfill, which built
+  missing memberships from live clips without checking the sentence was still
+  live. (2) **Sign-off before the intro.** #1461's chapter has no `sourceId`
+  (the repair script skips those), so its order came from the stale
+  `firstOccurrenceIndex` of the shared "それでは、またね。" (spoken at 276 s in
+  #1467, 364 s in #1461). Guards: `src/lib/sentenceIntegrity.ts` + tests
+  (detects dangling/orphan/duplicate-position/out-of-recording-order, infers a
+  chapter's recording from its sentences' clips so it needs no `sourceId`);
+  `check:sentence-integrity` (exit 1 on findings); migration
+  `20260930010000_cascade_sentence_soft_delete.sql` (trigger soft-deletes live
+  memberships and clips when a sentence is soft-deleted, so the cascade no
+  longer depends on client ops; not applied until merge, no backfill);
+  `repair-episode-sentence-order` backfill now skips deleted sentences;
+  `repair:dangling-sentence-rows` (dry-run by default, soft-deletes only).
+  **Not done, needs the user's OK:** running the repair (`--apply`), and
+  fixing #1461's order (set the chapter's `sourceId` then re-run
+  `repair:episode-sentence-order`, or hand-fix). Still open: whether a
+  dropped delete-op conflict should retry instead of raising a card.
 
 - **2026-09-27 — Four fixes off a real-data weakness scan: biased pitch-
   drill practice, best-effort auto-play on the miss contrast, a long-word

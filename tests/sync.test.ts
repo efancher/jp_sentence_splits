@@ -618,6 +618,19 @@ describe('sync mappers', () => {
     );
   });
 
+  it('carries a chapter\'s episode preparation through the book row', async () => {
+    const { bookToRemote, remoteToBook } = await import('../src/sync/mappers');
+    const book = await createBook({ title: 'Prepared' });
+    const preparation = {
+      version: 1, status: 'ready' as const, preparedAt: '2026-09-30T00:00:00.000Z', provenance: 'pasted_ai_reply' as const,
+      sentenceFingerprint: 'abc', rejected: [],
+      targets: [{ id: 't', kind: 'expression' as const, label: 'x', occurrences: [{ sentenceId: 's', start: 0, end: 1, text: 'x' }],
+        reason: 'r', treatment: 'recall' as const, decision: 'accepted' as const, learnerNote: 'n' }],
+    };
+    const withPrep = { ...book, chapters: [{ id: 'c', title: 'C', position: 0, preparation }] };
+    expect(remoteToBook(bookToRemote(withPrep, 'user-1', 1)).chapters[0]?.preparation).toEqual(preparation);
+  });
+
   it('round-trips a vocabulary item through remote shape', async () => {
     const { vocabularyItemToRemote, remoteToVocabularyItem } = await import(
       '../src/sync/mappers'
@@ -865,6 +878,17 @@ describe('sync mappers', () => {
     );
     expect(withoutPrediction.predicted_retrievability).toBeNull();
     expect(remoteToReview(withoutPrediction).predictedRetrievability).toBeUndefined();
+  });
+
+  it('round-trips review presentation evidence and leaves it null when absent', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const base: Review = { id: 'review_p', studyItemId: 'study_1', timestamp: '2026-09-30T00:00:00.000Z', rating: 'good' };
+    const presentation = { layout: 'chapter' as const, documentSentenceCount: 8, layoutSwitched: true };
+    const remote = reviewToRemote({ ...base, presentation }, 'user-1', 1);
+    expect(remote.presentation).toEqual(presentation);
+    expect(remoteToReview(remote).presentation).toEqual(presentation);
+    expect(reviewToRemote(base, 'user-1', 1).presentation).toBeNull();
+    expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).presentation).toBeUndefined();
   });
 
   it('round-trips comprehension-check and pitch-production evidence through remote shape', async () => {

@@ -84,6 +84,33 @@ export const sentenceSchema = z.object({
   updatedAt: z.string(),
 });
 
+const preparedTargetSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['vocabulary', 'grammar', 'expression']),
+  label: z.string(),
+  vocabularyItemId: z.string().optional(),
+  grammarPatternId: z.string().optional(),
+  occurrences: z.array(
+    z.object({ sentenceId: z.string(), start: z.number().int().nonnegative(), end: z.number().int().nonnegative(), text: z.string() }),
+  ),
+  reason: z.string(),
+  treatment: z.enum(['recall', 'phrase', 'gloss_only']),
+  decision: z.enum(['suggested', 'accepted', 'dismissed']),
+  droppedOccurrences: z.number().int().nonnegative().optional(),
+  learnerNote: z.string().optional(),
+});
+
+export const episodePreparationSchema = z.object({
+  version: z.number().int(),
+  status: z.enum(['ready', 'partial', 'failed']),
+  preparedAt: z.string(),
+  provenance: z.literal('pasted_ai_reply'),
+  sentenceFingerprint: z.string(),
+  targets: z.array(preparedTargetSchema),
+  rejected: z.array(z.object({ label: z.string(), reason: z.string() })),
+  error: z.string().optional(),
+});
+
 export const bookSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -105,6 +132,7 @@ export const bookSchema = z.object({
         sourceDate: z.string().optional(),
         sourceId: z.string().optional(),
         suspendedAt: z.string().optional(),
+        preparation: episodePreparationSchema.optional(),
       }),
     )
     .default([]),
@@ -292,6 +320,12 @@ export const reviewAssistanceSchema = z.enum([
 
 export const reviewSourceSchema = z.enum(['scheduled_review', 'natural_encounter']);
 
+export const reviewPresentationSchema = z.object({
+  layout: z.enum(['chapter', 'sentence']),
+  documentSentenceCount: z.number().int().nonnegative().optional(),
+  layoutSwitched: z.boolean().optional(),
+});
+
 export const reviewSchema = z.object({
   id: z.string(),
   studyItemId: z.string(),
@@ -304,6 +338,14 @@ export const reviewSchema = z.object({
   assistance: z.array(reviewAssistanceSchema).optional(),
   source: reviewSourceSchema.optional(),
   contextSentenceId: z.string().optional(),
+  pitchExpectedShape: z.string().optional(),
+  pitchChosenShape: z.string().optional(),
+  predictedRetrievability: z.number().optional(),
+  comprehensionCheckCorrect: z.boolean().optional(),
+  comprehensionCheckChosenIndex: z.number().int().nonnegative().optional(),
+  pitchProductionMeasuredCount: z.number().int().nonnegative().optional(),
+  pitchProductionMismatchCount: z.number().int().nonnegative().optional(),
+  presentation: reviewPresentationSchema.optional(),
 });
 
 export const vocabularyConfusionTypeSchema = z.enum([
@@ -474,6 +516,7 @@ export const plannerStepTargetKindSchema = z.enum([
   'review',
   'vocabulary_detail',
   'vocabulary_review',
+  'sentence_learning',
   'game',
 ]);
 

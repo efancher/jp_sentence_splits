@@ -138,6 +138,54 @@ strong.jp {
   color: var(--text-muted);
 }
 
+.review-document {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.review-document-heading,
+.review-document-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.review-document-viewport {
+  max-height: 42vh;
+  max-height: 42dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--border);
+  padding: 0.5rem;
+}
+
+.review-document-line {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid transparent;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.review-document-active {
+  border-left-color: var(--accent);
+  background: var(--bg-muted);
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+
+.review-document-active mark {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.1em 0.15em;
+  border-radius: 0.2em;
+}
+
 .reading-context-reading {
   margin: 0;
   font-style: italic;
@@ -572,6 +620,26 @@ strong.jp {
 .reader-row-active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
+.reader-book.stack {
+  width: 100%;
+  max-width: 44rem;
+  margin-inline: auto;
+  gap: 0;
+}
+
+.reader-book > .panel {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 1rem 0.25rem;
+}
+
+.reader-book > .reader-row-active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .karaoke-gloss {
@@ -1462,4 +1530,90 @@ button.sync-retry {
   color: var(--warning);
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
   background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
+}
+
+.gloss-workbench {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.gloss-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.icon-button[aria-pressed='true'],
+.icon-button[data-state='dirty'] {
+  background: var(--bg-muted);
+  border-color: var(--accent);
+}
+
+.icon-button[data-state='failed'] {
+  border-color: var(--danger);
+}
+
+.gloss-rail .speak-button {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.gloss-reader-line {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  line-height: 1.9;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+@media (min-width: 700px) {
+  .gloss-workbench {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .gloss-rail {
+    position: sticky;
+    top: 0.75rem;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+}
+
+.reader-line {
+  padding: 0.45rem 0.75rem;
+  border-left: 3px solid transparent;
+  line-height: 1.9;
+  cursor: pointer;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.reader-line:hover,
+.reader-line:focus-visible {
+  background: var(--bg-muted);
+  opacity: 1;
 }

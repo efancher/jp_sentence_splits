@@ -638,6 +638,8 @@ describe('ReviewPage', () => {
     await waitFor(async () => {
       expect(await getDb().reviews.count()).toBe(1);
     });
+    // Sentence-level cards are not part of the chapter-layout comparison.
+    expect((await getDb().reviews.toArray())[0]?.presentation).toBeUndefined();
   });
 
   it('does not double-record a review on a rapid double-click', async () => {
@@ -1112,14 +1114,22 @@ describe('ReviewPage', () => {
 
     // reading_retrieval: the preceding sentence is shown as-is.
     await screen.findByText('Reveal dictionary reading');
-    expect(screen.getByText('昨日も本を読みます。')).toBeInTheDocument();
+    expect(await screen.findByText('昨日も本を読みます。')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Reveal dictionary reading' }));
     await user.click(screen.getByRole('button', { name: 'Good' }));
 
     // cloze: the same neighbour, but the answer is masked out of it.
     await screen.findByText('Reveal word');
-    expect(screen.getByText('昨日も本を_____。')).toBeInTheDocument();
+    expect(await screen.findByText('昨日も本を_____。')).toBeInTheDocument();
     expect(screen.queryByText('昨日も本を読みます。')).not.toBeInTheDocument();
+    expect(await db.reviews.count()).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Reveal word' }));
+    await user.click(screen.getByRole('button', { name: 'Good' }));
+    await waitFor(async () => expect(await db.reviews.count()).toBe(2));
+    const reviews = await db.reviews.toArray();
+    expect(reviews.map((review) => review.contextSentenceId)).toEqual(['sent-1', 'sent-1']);
+    expect(reviews.map((review) => review.presentation?.layout)).toEqual(['chapter', 'chapter']);
+    expect(reviews.every((review) => review.presentation?.layoutSwitched === undefined)).toBe(true);
   });
 
   it('offers a one-tap replay of a prior shadowing attempt on a cloze reveal (docs/ROADMAP.md "ambient connective tissue")', async () => {

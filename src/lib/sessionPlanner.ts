@@ -379,6 +379,8 @@ export interface ExploreCandidate {
     vocabularyConfirmed: boolean;
     /** At least CONTINUE_BOOK_MIN_INTRODUCED_RATIO of this sentence's reviewable vocabulary items have a reading/meaning study item that's left FSRS's `new` state — see getSentenceReadingIntroducedReadiness/isVocabularyItemIntroduced. Pitch-accent-only progress doesn't count. */
     vocabularyIntroduced: boolean;
+    /** Sentence-first only: walked through on an earlier day and not yet said independently — a fresh try, not a first lesson. */
+    revisit?: boolean;
   }[];
 }
 
@@ -436,6 +438,8 @@ export interface SessionPlannerInput {
   /** Due StudyItems costed at the slower "practice" per-item rate (cloze/reading_production/sentence_transformation/contrastive/grammar_completion/grammar_contrast) — merged with retainDue into one ranked `review` batch. */
   practiceDue: ReviewPriorityInput[];
   exploreCandidates: ExploreCandidate[];
+  /** Sentence-first planning (settings.sentenceFirstPlanning): explore sentences become `sentence_learning` lessons with no vocabulary gate or reserve. */
+  sentenceFirst?: boolean;
   understandCandidates: UnderstandCandidate[];
   /** Worked-through sentences whose grammar-noticing pass isn't done — see GrammarNoticingCandidate. Shares the `grammar` bucket with understandCandidates. */
   grammarNoticingCandidates: GrammarNoticingCandidate[];
@@ -604,17 +608,23 @@ function buildReviewBatchSteps(
 }
 
 interface ExploreSentenceEntry {
-  kind: 'vocabulary' | 'analyze';
+  kind: 'vocabulary' | 'analyze' | 'lesson';
   candidate: ExploreCandidate;
   sentence: ExploreCandidate['sentences'][number];
 }
 
 /** Classifies every candidate sentence into the one glossing step it's eligible for right now (or none), preserving book-then-position reading order. */
-function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSentenceEntry[] {
+function classifyExploreSentences(
+  candidates: ExploreCandidate[],
+  sentenceFirst = false,
+): ExploreSentenceEntry[] {
   const entries: ExploreSentenceEntry[] = [];
   for (const candidate of candidates) {
     for (const sentence of candidate.sentences) {
-      if (!sentence.vocabularyConfirmed) {
+      if (sentenceFirst) {
+        // Sentence-first: every next sentence is a lesson, whatever its vocabulary state.
+        entries.push({ kind: 'lesson', candidate, sentence });
+      } else if (!sentence.vocabularyConfirmed) {
         entries.push({ kind: 'vocabulary', candidate, sentence });
       } else if (sentence.vocabularyIntroduced) {
         entries.push({ kind: 'analyze', candidate, sentence });
@@ -624,10 +634,16 @@ function classifyExploreSentences(candidates: ExploreCandidate[]): ExploreSenten
       // to the next sentence rather than blocking the book on it.
     }
   }
-  return entries;
+  // Revisits (a second look at something already walked through) come before first lessons.
+  return sentenceFirst
+    ? [...entries.filter((e) => e.sentence.revisit), ...entries.filter((e) => !e.sentence.revisit)]
+    : entries;
 }
 
 function exploreEntryCost(entry: ExploreSentenceEntry): number {
+  if (entry.kind === 'lesson') {
+    return entry.sentence.revisit ? EXPLORE_STEP_MINUTES.revisit : EXPLORE_STEP_MINUTES.lesson;
+  }
   return entry.kind === 'vocabulary'
     ? EXPLORE_STEP_MINUTES.vocabulary
     : EXPLORE_STEP_MINUTES.analyze;
@@ -635,6 +651,22 @@ function exploreEntryCost(entry: ExploreSentenceEntry): number {
 
 function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
   const { candidate, sentence } = entry;
+  if (entry.kind === 'lesson') {
+    return {
+      id: draftStepId(),
+      bucket: 'glossing',
+      activityType: SYNTHETIC_ACTIVITY_TYPES.sentenceLearning,
+      targetKind: 'sentence_learning',
+      bookId: candidate.bookId,
+      sentenceId: sentence.sentenceId,
+      label: `${sentence.revisit ? 'Fresh try' : 'Learn this sentence'}: ${sentence.preview}`,
+      estimatedMinutes: exploreEntryCost(entry),
+      reason: sentence.revisit
+        ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
+        : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
+      status: 'pending',
+    };
+  }
   if (entry.kind === 'vocabulary') {
     return {
       id: draftStepId(),
@@ -706,8 +738,9 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
 function buildExploreSteps(
   candidates: ExploreCandidate[],
   budgetMinutes: number,
+  sentenceFirst = false,
 ): PlannerStepDraft[] {
-  const entries = classifyExploreSentences(candidates);
+  const entries = classifyExploreSentences(candidates, sentenceFirst);
   const steps: PlannerStepDraft[] = [];
   const consumed = new Set<ExploreSentenceEntry>();
   let remaining = budgetMinutes;
@@ -748,8 +781,8 @@ function buildExploreSteps(
  * allocateTimeAcrossModes' availableMinutesByMode so a thin candidate list
  * doesn't attract redistributed spillover minutes it can't spend.
  */
-function exploreCeilingMinutes(candidates: ExploreCandidate[]): number {
-  return classifyExploreSentences(candidates).reduce(
+function exploreCeilingMinutes(candidates: ExploreCandidate[], sentenceFirst = false): number {
+  return classifyExploreSentences(candidates, sentenceFirst).reduce(
     (total, entry) => total + exploreEntryCost(entry),
     0,
   );
@@ -1030,6 +1063,10 @@ export function sessionStepTargetPath(step: PlannerSessionStep): string | null {
       return step.bookId ? `/books/${step.bookId}/review` : '/review';
     case 'vocabulary_detail':
       return '/vocabulary';
+    case 'sentence_learning':
+      return step.bookId && step.sentenceId
+        ? `/books/${step.bookId}/learn/${step.sentenceId}`
+        : null;
     case 'game':
       // Query-free on purpose: useActiveSession matches a step's page by exact pathname.
       return step.gameId ? `/play/${step.gameId}/auto` : null;
@@ -1072,7 +1109,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     neglectScores,
     baseline: input.baseline,
     availableMinutesByMode: {
-      glossing: exploreCeilingMinutes(input.exploreCandidates),
+      glossing: exploreCeilingMinutes(input.exploreCandidates, input.sentenceFirst),
       grammar:
         (input.understandCandidates.length +
           Math.min(input.grammarNoticingCandidates.length, GRAMMAR_NOTICING_PER_SESSION_LIMIT)) *
@@ -1090,7 +1127,7 @@ export function buildRecommendedSession(input: SessionPlannerInput): Recommended
     MODE_ACTIVITY_ESTIMATE_MINUTES.shadowing,
   );
 
-  const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing);
+  const exploreSteps = buildExploreSteps(input.exploreCandidates, allocation.glossing, input.sentenceFirst);
   // The grammar bucket runs two passes over one shared budget: corpus-flagged
   // patterns "worth learning now" first (the corpus has already told the
   // learner they recur), then "notice the grammar in this worked-through

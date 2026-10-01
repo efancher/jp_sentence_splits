@@ -16,6 +16,8 @@ interface NativeAudioButtonProps {
   playbackRate?: number;
   /** Hide the "Adjust" trim editor — for tight/repeated layouts (e.g. a list row) that already offer it elsewhere for the same clip. */
   hideAdjust?: boolean;
+  /** Headphone glyph only; accessible name and tooltip still say what it plays. */
+  iconOnly?: boolean;
 }
 
 export function NativeAudioButton({
@@ -24,6 +26,7 @@ export function NativeAudioButton({
   onPlay,
   playbackRate,
   hideAdjust = false,
+  iconOnly = false,
 }: NativeAudioButtonProps) {
   const native = useNativeAudio();
   const speech = useJapaneseSpeech();
@@ -48,6 +51,7 @@ export function NativeAudioButton({
               : `Play native sentence recording from ${audio.sourceTitle}`
           }
           aria-pressed={active}
+          title={iconOnly ? (displayLabel === 'Native' ? 'Play native recording' : `Play native recording (${displayLabel})`) : undefined}
           onClick={() => {
             if (active) {
               native.stop();
@@ -58,7 +62,7 @@ export function NativeAudioButton({
             void native.play(audio, playbackRate);
           }}
         >
-          {active ? '🎧 Playing…' : `🎧 ${displayLabel}`}
+          {iconOnly ? '🎧' : active ? '🎧 Playing…' : `🎧 ${displayLabel}`}
         </button>
         {canAdjust ? (
           <button type="button" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>

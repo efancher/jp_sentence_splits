@@ -13,6 +13,7 @@ import { WordPitchContour } from '../components/WordPitchContour';
 import { PitchChoiceContour } from '../components/PitchChoiceContour';
 import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { RecordToggleButton } from '../components/RecordToggleButton';
+import { ReviewDocumentText } from '../components/ReviewDocumentText';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
@@ -92,6 +93,7 @@ import {
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
+import { uniqueReviewSpan } from '../lib/reviewDocument';
 import { AMBIGUITY_PRONE_ROLES } from '../lib/roleGuide';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
@@ -113,6 +115,9 @@ import {
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
+
+/** Card types that can show the whole chapter around the sentence (and carry the layout dropdown). */
+const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 'reading_production', 'cloze', 'grammar_recognition', 'sentence_transformation'];
 
 /**
  * Sentence-subject review: one activity type, `reading_in_context`. Shows
@@ -1102,6 +1107,20 @@ function spaceOutPendingSeedBatches(seeds: PendingSeed[]): PendingSeed[] {
 }
 
 export function ReviewPage() {
+  const [chapterView, setChapterView] = useState(() => {
+    try { return localStorage.getItem('satori-glossbook:review-layout') !== 'original'; }
+    catch { return true; }
+  });
+  // Presentation evidence for the card being answered; reset when the card changes.
+  // Keyed by study item id so a child's report can't be wiped by the card-change reset effect.
+  const [documentShown, setDocumentShown] = useState<{ studyItemId: string; count: number }>();
+  const [layoutSwitchedFor, setLayoutSwitchedFor] = useState<string>();
+  const changeReviewLayout = (chapter: boolean, studyItemId?: string) => {
+    setChapterView(chapter);
+    setLayoutSwitchedFor(studyItemId);
+    try { localStorage.setItem('satori-glossbook:review-layout', chapter ? 'chapter' : 'original'); }
+    catch { /* The view still works when browser storage is unavailable. */ }
+  };
   const { bookId } = useParams();
   const navigate = useNavigate();
   const activeSession = useActiveSession();
@@ -1451,6 +1470,10 @@ export function ReviewPage() {
       }
     });
 
+    // "Pause word & grammar drills" (settings.legacyDrillsPaused): empty the
+    // vocabulary/grammar candidate lists so neither due nor new cards of those
+    // kinds are queued. Sentence cards, audio and pitch (own pause) continue.
+    const paused = settings?.legacyDrillsPaused ?? false;
     return {
       book,
       sentences,
@@ -1458,24 +1481,30 @@ export function ReviewPage() {
       readingContextBySentenceId,
       comprehensionCheckBySentenceId,
       chunksBySentenceId,
-      vocabularyTargetCandidates,
-      existingVocabularyItems,
+      vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
+      existingVocabularyItems: paused ? [] : existingVocabularyItems,
       audioCandidates,
       existingAudioItems,
-      confusionPairCandidates,
-      existingConfusionItems,
-      sentenceConjugationCandidates,
-      existingConjugationItems,
-      wordListeningCandidates,
-      existingWordListeningItems,
+      confusionPairCandidates: paused ? [] : confusionPairCandidates,
+      existingConfusionItems: paused ? [] : existingConfusionItems,
+      sentenceConjugationCandidates: paused ? [] : sentenceConjugationCandidates,
+      existingConjugationItems: paused ? [] : existingConjugationItems,
+      wordListeningCandidates: paused ? [] : wordListeningCandidates,
+      existingWordListeningItems: paused ? [] : existingWordListeningItems,
       pitchAccentCandidates,
       existingPitchAccentItems,
       pitchAccentProductionCandidates,
       existingPitchAccentProductionItems,
-      grammarCandidates,
-      existingGrammarItems,
+      grammarCandidates: paused ? [] : grammarCandidates,
+      existingGrammarItems: paused ? [] : existingGrammarItems,
     };
-  }, [bookId, deepDiveSentenceId, settings?.quietMode, settings?.pitchAccentPaused]);
+  }, [
+    bookId,
+    deepDiveSentenceId,
+    settings?.quietMode,
+    settings?.pitchAccentPaused,
+    settings?.legacyDrillsPaused,
+  ]);
 
   const descriptors = useMemo(
     () => (scope ? buildActivityDescriptors(scope) : []),
@@ -1823,6 +1852,16 @@ export function ReviewPage() {
         // miss can be traced back to a sentence — see "cross-activity error
         // routing" (docs/ROADMAP.md "Possibilities").
         contextSentenceId: current.sentence.id,
+        presentation: CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType)
+          ? {
+              layout: chapterView ? 'chapter' : 'sentence',
+              documentSentenceCount:
+                chapterView && documentShown?.studyItemId === current.studyItem.id
+                  ? documentShown.count
+                  : undefined,
+              layoutSwitched: layoutSwitchedFor === current.studyItem.id ? true : undefined,
+            }
+          : undefined,
       });
       setQueue((q) => q.slice(1));
 
@@ -1918,7 +1957,8 @@ export function ReviewPage() {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">
-              {scope?.book ? `${scope.book.title} · Review` : 'Review'}
+              {scope?.book && !(current?.studyItem.activityType === 'cloze' && !revealed)
+                ? `${scope.book.title} · Review` : 'Review'}
             </div>
           </div>
           {bookId ? (
@@ -1942,6 +1982,13 @@ export function ReviewPage() {
         ) : !current ? (
           <div className="empty-state">
             <strong>All caught up.</strong>
+            {settings?.legacyDrillsPaused ? (
+              <span className="muted">
+                Word &amp; grammar drills are paused in Settings, and sentence cards wait until
+                their words are proficient — so the queue can be empty. Turn the pause off to see
+                everything that's due.
+              </span>
+            ) : null}
             {newCardLimitReached ? (
               <span className="muted">
                 New-card limit reached for this session ({newCardsIntroduced} of{' '}
@@ -2034,8 +2081,20 @@ export function ReviewPage() {
                 {issueReported ? <span className="muted">✓ Reported</span> : null}
               </div>
             )}
+            {CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType) ? (
+              <label className="row">
+                Review layout
+                <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter', current.studyItem.id)}>
+                  <option value="original">Original · sentence</option>
+                  <option value="chapter">New · chapter</option>
+                </select>
+              </label>
+            ) : null}
             {current.target && current.studyItem.activityType === 'reading_production' ? (
               <ReadingProductionCard
+                chapterView={chapterView}
+                bookId={current.readingContext?.bookId}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 key={current.studyItem.id}
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
@@ -2049,6 +2108,9 @@ export function ReviewPage() {
               />
             ) : current.target ? (
               <VocabularyTargetCard
+                chapterView={chapterView}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
+                key={current.studyItem.id}
                 activityType={current.studyItem.activityType}
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
@@ -2093,6 +2155,9 @@ export function ReviewPage() {
               <SentenceConjugationCard
                 key={current.studyItem.id}
                 candidate={current.conjugation}
+                chapterView={chapterView}
+                bookId={current.readingContext?.bookId}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 revealed={revealed}
                 onCheck={(value, gradedAgainst) => {
                   setTypedResponse(value);
@@ -2124,6 +2189,8 @@ export function ReviewPage() {
               />
             ) : current.grammar && current.studyItem.activityType === 'grammar_recognition' ? (
               <GrammarRecognitionCard
+                chapterView={chapterView}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 key={current.studyItem.id}
                 candidate={current.grammar}
                 revealed={revealed}
@@ -2516,6 +2583,8 @@ function VocabularyTargetCard({
   surfaceForm,
   link,
   context,
+  chapterView,
+  onDocumentShown,
   revealed,
   onReveal,
 }: {
@@ -2526,6 +2595,8 @@ function VocabularyTargetCard({
   /** The occurrence link this candidate was chosen from — carries any manual word-audio range, forwarded to the reveal-side native audio. */
   link?: SentenceVocabulary;
   context: ReadingContext | undefined;
+  chapterView: boolean;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onReveal: () => void;
 }) {
@@ -2561,13 +2632,27 @@ function VocabularyTargetCard({
     surfaceForm !== vocabularyItem.expression;
   return (
     <>
-      {precedes ? contextBlock : null}
-      <div className="jp jp-lg">
-        {before}
-        <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
-        {after}
-      </div>
-      {precedes ? null : contextBlock}
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={context?.bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+          cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
+        />
+      ) : (
+        <>
+          {precedes ? contextBlock : null}
+          <div className="jp jp-lg">
+            {before}
+            <mark>{isCloze && !revealed ? '_____' : target || surfaceForm}</mark>
+            {after}
+          </div>
+          {precedes ? null : contextBlock}
+        </>
+      )}
+      <div>{isCloze ? 'Recall the missing word.' : showDictionaryForm ? 'Recall the dictionary reading of the highlighted word.' : 'How do you read the highlighted word?'}</div>
       {showDictionaryForm ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}
@@ -2689,12 +2774,18 @@ function VocabularyTargetNativeAudio({
  * `Review.expectedAnswer` (see `typedResponseExpected`).
  */
 function ReadingProductionCard({
+  chapterView,
+  bookId,
+  onDocumentShown,
   sentence,
   vocabularyItem,
   surfaceForm,
   revealed,
   onCheck,
 }: {
+  chapterView: boolean;
+  bookId?: string;
+  onDocumentShown: (sentenceCount: number) => void;
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
@@ -2714,11 +2805,21 @@ function ReadingProductionCard({
 
   return (
     <>
-      <div className="jp jp-lg">
-        {before}
-        <mark>{target || surfaceForm}</mark>
-        {after}
-      </div>
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+        />
+      ) : (
+        <div className="jp jp-lg">
+          {before}
+          <mark>{target || surfaceForm}</mark>
+          {after}
+        </div>
+      )}
       {isInflected ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}
@@ -2777,10 +2878,16 @@ function ReadingProductionCard({
  */
 function SentenceConjugationCard({
   candidate,
+  chapterView,
+  bookId,
+  onDocumentShown,
   revealed,
   onCheck,
 }: {
   candidate: SentenceConjugationCandidate;
+  chapterView: boolean;
+  bookId?: string;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onCheck: (typedReading: string, gradedAgainst: string) => void;
 }) {
@@ -2791,11 +2898,22 @@ function SentenceConjugationCard({
 
   return (
     <>
-      <div className="jp jp-lg">
-        {before}
-        <mark>{revealed ? surfaceForm : '_____'}</mark>
-        {after}
-      </div>
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+          cloze={{ vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm }}
+        />
+      ) : (
+        <div className="jp jp-lg">
+          {before}
+          <mark>{revealed ? surfaceForm : '_____'}</mark>
+          {after}
+        </div>
+      )}
       <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       <div className="muted">Produce: {form.label}</div>
       {!revealed ? (
@@ -3676,15 +3794,20 @@ function ContrastivePairCard({
  */
 function GrammarRecognitionCard({
   candidate,
+  chapterView,
+  onDocumentShown,
   revealed,
   onReveal,
 }: {
   candidate: GrammarReviewCandidate;
+  chapterView: boolean;
+  onDocumentShown: (sentenceCount: number) => void;
   revealed: boolean;
   onReveal: () => void;
 }) {
   const { pattern, sentence, sentenceGrammar, readingContext } = candidate;
   const blank = blankSentenceGrammar(sentence.japanese, sentenceGrammar, pattern.canonicalName);
+
   const { before, after } = readingContext;
 
   const passageBefore = readingContext.bookTitle ? (
@@ -3721,18 +3844,30 @@ function GrammarRecognitionCard({
 
   return (
     <>
-      {passageBefore}
-      <div className="jp jp-lg">
-        {blank ? (
-          <>
-            {blank.before}
-            <mark>{blank.match}</mark>
-            {blank.after}
-          </>
-        ) : (
-          sentence.japanese
-        )}
-      </div>
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={readingContext.bookId}
+          target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+        />
+      ) : (
+        <>
+          {passageBefore}
+          <div className="jp jp-lg">
+            {blank ? (
+              <>
+                {blank.before}
+                <mark>{blank.match}</mark>
+                {blank.after}
+              </>
+            ) : (
+              sentence.japanese
+            )}
+          </div>
+        </>
+      )}
       <div className="muted">
         What is <span className="jp">{pattern.canonicalName}</span> doing in this sentence?
       </div>
@@ -3755,7 +3890,7 @@ function GrammarRecognitionCard({
             <div className="muted">{pattern.structuralNotes}</div>
           ) : null}
           {sentence.translation ? <div className="muted">{sentence.translation}</div> : null}
-          {passageAfter}
+          {!chapterView ? passageAfter : null}
         </>
       )}
     </>

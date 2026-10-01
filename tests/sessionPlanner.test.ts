@@ -902,3 +902,92 @@ describe('game breaks', () => {
     expect(bare.steps.map((s) => s.targetKind)).toEqual(['game']);
   });
 });
+
+describe('sentence-first planning', () => {
+  const exploreCandidates: ExploreCandidate[] = [
+    {
+      bookId: 'book_1',
+      label: 'Book',
+      reason: 'Continue',
+      sentences: [
+        { sentenceId: 's_new', preview: '新しい', vocabularyConfirmed: false, vocabularyIntroduced: false },
+        { sentenceId: 's_done', preview: '済み', vocabularyConfirmed: true, vocabularyIntroduced: true },
+      ],
+    },
+  ];
+
+  it('drafts sentence_learning lessons with zero confirmed vocabulary and no vocabulary steps', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({ exploreCandidates, sentenceFirst: true, totalMinutes: 30 }),
+    );
+    const kinds = session.steps.map((step) => step.targetKind);
+    expect(kinds).toContain('sentence_learning');
+    expect(kinds).not.toContain('vocabulary_review');
+    expect(kinds).not.toContain('continue_book');
+    const lesson = session.steps.find((step) => step.sentenceId === 's_new');
+    expect(lesson?.targetKind).toBe('sentence_learning');
+    expect(lesson?.reason.length).toBeGreaterThan(0);
+    expect(sessionStepTargetPath({ ...lesson!, status: 'pending' })).toBe('/books/book_1/learn/s_new');
+  });
+
+  it('leaves the legacy vocabulary-first behaviour unchanged when the flag is off', () => {
+    const session = buildRecommendedSession(emptyPlannerInput({ exploreCandidates, totalMinutes: 30 }));
+    expect(session.steps.some((step) => step.targetKind === 'sentence_learning')).toBe(false);
+    expect(session.steps.some((step) => step.targetKind === 'vocabulary_review')).toBe(true);
+  });
+});
+
+describe('sentence-first revisits', () => {
+  it('puts a fresh-try revisit ahead of first lessons with a reason', () => {
+    const session = buildRecommendedSession(
+      emptyPlannerInput({
+        sentenceFirst: true,
+        totalMinutes: 30,
+        exploreCandidates: [
+          {
+            bookId: 'b',
+            label: 'Book',
+            reason: 'Continue',
+            sentences: [
+              { sentenceId: 'new1', preview: 'a', vocabularyConfirmed: false, vocabularyIntroduced: false },
+              { sentenceId: 'old1', preview: 'b', vocabularyConfirmed: false, vocabularyIntroduced: false, revisit: true },
+            ],
+          },
+        ],
+      }),
+    );
+    const lessons = session.steps.filter((s) => s.targetKind === 'sentence_learning');
+    expect(lessons.map((s) => s.sentenceId)).toEqual(['old1', 'new1']);
+    expect(lessons[0]!.label).toMatch(/^Fresh try/);
+    expect(lessons[0]!.reason).toMatch(/earlier day/);
+  });
+});
+
+describe('sentence-first planning and due-review time', () => {
+  it('lessons spend only the glossing bucket; review steps and their minutes are unchanged by the flag', () => {
+    const base = {
+      totalMinutes: 40,
+      retainDue: Array.from({ length: 6 }, () => dueCandidate()),
+      exploreCandidates: [
+        {
+          bookId: 'b',
+          label: 'Book',
+          reason: 'Continue',
+          sentences: Array.from({ length: 6 }, (_, i) => ({
+            sentenceId: `s${i}`,
+            preview: 'x',
+            vocabularyConfirmed: false,
+            vocabularyIntroduced: false,
+          })),
+        },
+      ],
+    };
+    const off = buildRecommendedSession(emptyPlannerInput(base));
+    const on = buildRecommendedSession(emptyPlannerInput({ ...base, sentenceFirst: true }));
+    const minutes = (s: typeof on, kind: string) =>
+      s.steps.filter((step) => step.targetKind === kind).reduce((t, step) => t + step.estimatedMinutes, 0);
+    expect(minutes(on, 'review')).toBe(minutes(off, 'review'));
+    const total = on.steps.reduce((t, step) => t + step.estimatedMinutes, 0);
+    expect(total).toBeLessThanOrEqual(40 + 0.001);
+  });
+});

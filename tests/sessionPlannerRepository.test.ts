@@ -294,6 +294,53 @@ describe('Learning Orchestrator repository layer', () => {
     expect(vocabStep!.sentenceId).toBe(backlogSentence.id);
   });
 
+  it('sentence-first planning drafts a lesson at zero vocabulary, and settling it confirms nothing', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Lesson Book' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+
+    const session = await addMinutesToTodaySession(30);
+    const lesson = session.steps.find((step) => step.targetKind === 'sentence_learning');
+    expect(lesson?.sentenceId).toBe(sentence.id);
+    expect(session.steps.some((step) => step.targetKind === 'vocabulary_review')).toBe(false);
+
+    await updatePlannerSessionStep(session.id, lesson!.id, { status: 'completed' });
+    const analysis = await db.analyses.get(sentence.id);
+    expect(analysis?.vocabularyReviewStatus).not.toBe('confirmed');
+    const membership = await db.bookSentences
+      .where('[bookId+sentenceId]')
+      .equals([book.id, sentence.id])
+      .first();
+    expect(membership?.status).toBe('unstarted');
+    expect(await db.reviews.count()).toBe(0);
+    expect(await db.studyItems.count()).toBe(0);
+  });
+
+  it('sentence-first: a sentence walked through on an earlier day comes back as a revisit, not a new lesson', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Revisit Book' });
+    const db = getDb();
+    const walked = makeSentence();
+    const fresh = makeSentence();
+    await db.sentences.bulkPut([walked, fresh]);
+    await addSentencesToBook(book.id, [walked.id, fresh.id]);
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'),
+      sentenceId: walked.id,
+      bookId: book.id,
+      action: 'walkthrough_completed',
+      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    } as never);
+
+    const session = await addMinutesToTodaySession(30);
+    const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning');
+    expect(lessons.map((step) => step.sentenceId)).toEqual([walked.id, fresh.id]);
+    expect(lessons[0]!.label).toMatch(/^Fresh try/);
+  });
+
   it('ending a session early marks remaining steps skipped, never completed', async () => {
     const book = await createBook({ title: 'Continue Me' });
     const db = getDb();
@@ -809,5 +856,31 @@ describe('Learning Orchestrator repository layer', () => {
     const input = await getSessionPlannerInput(60);
     const grammarInput = input.practiceDue.find((item) => item.subjectType === 'grammarPattern');
     expect(grammarInput?.crossActivityMissBoost).toBe(true);
+  });
+});
+
+describe('pause word & grammar drills', () => {
+  beforeEach(() => {
+    resetDbForTests(`session-planner-${createId('db')}`);
+  });
+
+  it('withholds vocabulary due items from the planner input and keeps sentence cards', async () => {
+    const vocab = await ensureStudyItem('vocabularyItem', 'v1', 'reading_retrieval');
+    const sent = await ensureStudyItem('sentence', 's1', 'reading_in_context');
+    const past = new Date(Date.now() - 86400000).toISOString();
+    for (const item of [vocab, sent]) {
+      await getDb().studyItems.update(item.id, { fsrsState: { ...item.fsrsState, due: past } });
+    }
+    const ids = async () => {
+      const input = await getSessionPlannerInput(30, new Date());
+      return [...input.retainDue, ...input.practiceDue].map((item) => item.studyItemId);
+    };
+    expect(await ids()).toContain(vocab.id);
+    await updateSettings({ legacyDrillsPaused: true });
+    const paused = await ids();
+    expect(paused).not.toContain(vocab.id);
+    expect(paused).toContain(sent.id);
+    await updateSettings({ legacyDrillsPaused: false });
+    expect(await ids()).toContain(vocab.id);
   });
 });

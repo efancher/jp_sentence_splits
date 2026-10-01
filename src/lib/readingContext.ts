@@ -16,6 +16,8 @@ export interface ReadingContext {
   after: Sentence[];
   /** Title of the book the context was drawn from, for a caption. */
   bookTitle?: string;
+  /** Preserve source identity when a sentence belongs to several books. */
+  bookId?: string;
 }
 
 const EMPTY_CONTEXT: ReadingContext = { before: [], after: [] };
@@ -90,6 +92,7 @@ export function buildReadingContextMap({
       before: pick(ordered.slice(Math.max(0, index - before), index)),
       after: pick(ordered.slice(index + 1, index + 1 + after)),
       bookTitle: bookById.get(home.bookId)?.title,
+      bookId: home.bookId,
     });
   }
   return result;

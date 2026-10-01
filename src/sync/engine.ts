@@ -28,6 +28,7 @@ import {
   remoteToKanji,
   remoteToNamedPodcastFeed,
   remoteToPitchDrillAttempt,
+  remoteToSentenceLearningEvent,
   remoteToPlannerSession,
   remoteToReferenceAudio,
   remoteToReview,
@@ -139,6 +140,7 @@ const PUSH_TIER: Partial<Record<SyncEntity, number>> = {
   study_items: 2,
   reviews: 3,
   pitch_drill_attempts: 3,
+  sentence_learning_events: 3,
   card_issue_reports: 3,
 };
 
@@ -1166,6 +1168,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.syncIssueReports.get(recordId)) != null;
     case 'pitch_drill_attempts':
       return (await db.pitchDrillAttempts.get(recordId)) != null;
+    case 'sentence_learning_events':
+      return (await db.sentenceLearningEvents.get(recordId)) != null;
     case 'named_podcast_feeds':
       return (await db.namedPodcastFeeds.get(recordId)) != null;
     default:
@@ -1368,6 +1372,9 @@ async function applyRemoteDelete(
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.delete(recordId);
       break;
+    case 'sentence_learning_events':
+      await db.sentenceLearningEvents.delete(recordId);
+      break;
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.delete(recordId);
       break;
@@ -1495,6 +1502,9 @@ export async function applyRemoteUpsert(
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.put(remoteToPitchDrillAttempt(remote));
       break;
+    case 'sentence_learning_events':
+      await db.sentenceLearningEvents.put(remoteToSentenceLearningEvent(remote));
+      break;
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.put(remoteToNamedPodcastFeed(remote));
       break;
@@ -1535,6 +1545,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const plannerSessions = await db.plannerSessions.toArray();
   const syncIssueReports = await db.syncIssueReports.toArray();
   const pitchDrillAttempts = await db.pitchDrillAttempts.toArray();
+  const sentenceLearningEvents = await db.sentenceLearningEvents.toArray();
   const namedPodcastFeeds = await db.namedPodcastFeeds.toArray();
 
   for (const book of books) {
@@ -1600,6 +1611,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const attempt of pitchDrillAttempts) {
     await trackAndEnqueue('pitch_drill_attempts', attempt.id, attempt);
   }
+  for (const event of sentenceLearningEvents) {
+    await trackAndEnqueue('sentence_learning_events', event.id, event);
+  }
   for (const feed of namedPodcastFeeds) {
     await trackAndEnqueue('named_podcast_feeds', feed.id, feed);
   }
@@ -1659,6 +1673,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.plannerSessions,
       db.syncIssueReports,
       db.pitchDrillAttempts,
+      db.sentenceLearningEvents,
       db.namedPodcastFeeds,
       db.syncQueue,
       db.syncRecordMeta,
@@ -1685,6 +1700,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.plannerSessions.clear();
       await db.syncIssueReports.clear();
       await db.pitchDrillAttempts.clear();
+      await db.sentenceLearningEvents.clear();
       await db.namedPodcastFeeds.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
@@ -1760,6 +1776,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('pitch_drill_attempts', userId, async (rows) => {
     await db.pitchDrillAttempts.bulkPut(rows.map((r) => remoteToPitchDrillAttempt(r)));
+  });
+  await pullFullTable('sentence_learning_events', userId, async (rows) => {
+    await db.sentenceLearningEvents.bulkPut(rows.map((r) => remoteToSentenceLearningEvent(r)));
   });
   await pullFullTable('named_podcast_feeds', userId, async (rows) => {
     await db.namedPodcastFeeds.bulkPut(rows.map((r) => remoteToNamedPodcastFeed(r)));

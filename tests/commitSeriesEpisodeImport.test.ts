@@ -243,6 +243,54 @@ describe('commitSeriesEpisodeImport', () => {
   });
 });
 
+describe('commitSeriesEpisodeImport idempotence', () => {
+  beforeEach(() => {
+    resetDbForTests(`series-idem-${createId('db')}`);
+  });
+
+  it('re-importing an identical episode adds no rows and preserves learner data', async () => {
+    const options = {
+      seriesId: 'podcast-idem',
+      seriesTitle: 'Idem Podcast',
+      episodeTitle: 'Episode 1',
+      sourceId: 'https://example.com/ep-idem.mp3',
+      sourceDate: '2026-09-01T00:00:00Z',
+    };
+    const lines = ['本を読みます。', '本を買いました。', '電気を消しました。'];
+    const first = await commitSeriesEpisodeImport({ ...options, preview: episodePreview('ep-idem', 'Episode 1', lines) });
+
+    const db = getDb();
+    const memberships = await db.bookSentences.where('bookId').equals(first.bookId).toArray();
+    const sentenceId = memberships.sort((a, b) => a.position - b.position)[0]!.sentenceId;
+    const now = new Date().toISOString();
+    await db.analyses.put({
+      sentenceId, chunks: [], notes: 'learner note', status: 'empty', formatVersion: 2,
+      vocabularyReviewStatus: 'confirmed', vocabularySelections: [], createdAt: now, updatedAt: now,
+    } as never);
+    await db.vocabularyItems.put({ id: 'w', expression: '本', reading: 'ほん', meaning: 'book', createdAt: now, updatedAt: now });
+    await db.sentenceVocabulary.put({ id: 'sv', sentenceId, vocabularyItemId: 'w', surfaceForm: '本', createdAt: now, updatedAt: now });
+    await db.bookSentences.update(memberships.find((m) => m.sentenceId === sentenceId)!.id, { status: 'in_progress' });
+
+    const before = {
+      sentences: await db.sentences.count(),
+      bookSentences: await db.bookSentences.count(),
+      books: await db.books.count(),
+    };
+    const second = await commitSeriesEpisodeImport({ ...options, preview: episodePreview('ep-idem', 'Episode 1', lines) });
+
+    expect(second).toEqual(first);
+    expect({
+      sentences: await db.sentences.count(),
+      bookSentences: await db.bookSentences.count(),
+      books: await db.books.count(),
+    }).toEqual(before);
+    expect((await db.books.get(first.bookId))?.chapters).toHaveLength(1);
+    expect((await db.analyses.get(sentenceId))?.notes).toBe('learner note');
+    expect(await db.sentenceVocabulary.count()).toBe(1);
+    expect((await db.bookSentences.where('sentenceId').equals(sentenceId).first())?.status).toBe('in_progress');
+  });
+});
+
 describe('getSeriesImportedSourceIds', () => {
   beforeEach(() => {
     resetDbForTests(`series-import-${createId('db')}`);

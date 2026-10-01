@@ -908,7 +908,11 @@ export function QuickMinePage() {
             onImported={(result) => {
               if (jobId) void deleteMiningJob(jobId);
               clearActiveJob();
-              navigate(`/books/${result.bookId}?imported=1`);
+              navigate(
+                result.chapterId
+                  ? `/books/${result.bookId}/read?chapter=${encodeURIComponent(result.chapterId)}&pack=1&imported=1`
+                  : `/books/${result.bookId}?imported=1`,
+              );
             }}
             onCancel={() => setStage('review')}
           />

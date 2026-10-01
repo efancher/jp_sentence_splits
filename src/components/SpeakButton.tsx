@@ -10,6 +10,8 @@ interface SpeakButtonProps {
   label: string;
   compact?: boolean;
   displayLabel?: string;
+  /** Speaker glyph only; the accessible name and tooltip still carry the label. */
+  iconOnly?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function SpeakButton({
   label,
   compact,
   displayLabel,
+  iconOnly,
 }: SpeakButtonProps) {
   const { supported, isSpeaking, activeItemId, speak, stop } = useJapaneseSpeech();
   const nativeAudio = useNativeAudio();
@@ -36,7 +39,7 @@ export function SpeakButton({
       aria-pressed={active}
       disabled={!supported || !text.trim()}
       title={
-        supported ? undefined : 'Speech synthesis is not supported by this browser.'
+        supported ? (iconOnly ? label : undefined) : 'Speech synthesis is not supported by this browser.'
       }
       onClick={() => {
         if (active) {
@@ -47,7 +50,7 @@ export function SpeakButton({
         }
       }}
     >
-      {active ? '🔊 Speaking…' : `🔊${displayLabel ? ` ${displayLabel}` : ''}`}
+      {iconOnly ? '🔊' : active ? '🔊 Speaking…' : `🔊${displayLabel ? ` ${displayLabel}` : ''}`}
     </button>
   );
 }

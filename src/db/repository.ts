@@ -1,9 +1,21 @@
+import { openContentReports, type OpenContentReport } from '../lib/contentReports';
+import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
+import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
+import { chunksMatchSource } from '../lib/chunking';
+import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
+import { parseEpisodePackReply, type PackReplyResult } from '../lib/episodePack';
+import {
+  type PreparationContext,
+  parsePreparationReply,
+} from '../lib/episodePreparation';
+import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
   EffectiveGameSignal,
   GameRound,
+  SentenceLearningEvent,
   GameRoundItem,
   AnalysisChunk,
   AppSettings,
@@ -35,6 +47,7 @@ import type {
   PlannerStepStatus,
   ReferenceAlignment,
   Review,
+  ReviewPresentation,
   ReviewAssistance,
   ReviewRating,
   ReviewSource,
@@ -57,6 +70,9 @@ import type {
   VocabularyReviewStatus,
   VocabularySelection,
   VocabularySuggestion,
+  EpisodePreparation,
+  PreparedTarget,
+  PreparedTargetDecision,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import {
@@ -248,6 +264,8 @@ import {
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
+  EXPLORE_REVISITS_PER_BOOK,
+  isPausedLegacyDrillSubject,
   EXPLORE_SENTENCE_PREVIEW_LIMIT,
   GRAMMAR_NOTICING_CANDIDATE_LIMIT,
   NEGLECT_WINDOW_DAYS,
@@ -1779,6 +1797,24 @@ export async function createBookChapter(
   const updated = await db.books.get(bookId);
   if (updated) notifySync('books', updated.id, updated);
   return chapter;
+}
+
+/**
+ * Give a chapterless book one real "Whole book" chapter and move every
+ * sentence into it, so episode preparation (which is chapter-scoped) works for
+ * it. Deliberately does nothing to a book that already has chapters — its
+ * unassigned sentences stay as the user left them.
+ */
+export async function ensureDefaultBookChapter(bookId: string): Promise<string | undefined> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  if ((book.chapters ?? []).length > 0) return undefined;
+  const memberships = await db.bookSentences.where('bookId').equals(bookId).toArray();
+  if (memberships.length === 0) return undefined;
+  const chapter = await createBookChapter(bookId, 'Whole book');
+  await assignBookSentencesToChapter(bookId, memberships.map((item) => item.sentenceId), chapter.id);
+  return chapter.id;
 }
 
 export async function updateBookChapter(
@@ -4406,6 +4442,21 @@ export async function getProficientVocabularyItemIds(
 }
 
 /**
+ * Saved meanings and "known" status for surface expressions: an expression is
+ * known when a saved vocabulary item with it is reading-proficient. Read-only;
+ * used to decide how much word help the Reader shows.
+ */
+export async function getSavedWordStatus(
+  expressions: string[],
+): Promise<{ savedMeanings: Map<string, string>; knownExpressions: Set<string> }> {
+  const items = expressions.length ? await getDb().vocabularyItems.where('expression').anyOf(expressions).toArray() : [];
+  const savedMeanings = new Map<string, string>();
+  for (const item of items) if (item.meaning.trim() && !savedMeanings.has(item.expression)) savedMeanings.set(item.expression, item.meaning);
+  const proficientIds = await getProficientReadingVocabularyItemIds(items.map((item) => item.id));
+  return { savedMeanings, knownExpressions: new Set(items.filter((item) => proficientIds.has(item.id)).map((item) => item.expression)) };
+}
+
+/**
  * Reading/meaning vocabulary cards (subjectType `vocabularyItem`) — the
  * activity types that actually test recalling a word's reading or meaning,
  * as opposed to `pitch_accent` on the same subject, a different skill (see
@@ -5339,6 +5390,8 @@ export async function recordReview(input: {
   /** `pitch_accent_production` card only — see `Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`. */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
+  /** How the card was presented; informational only, never affects scheduling. */
+  presentation?: ReviewPresentation;
 }): Promise<{ review: Review; studyItem: StudyItem }> {
   const db = getDb();
   const studyItem = await db.studyItems.get(input.studyItemId);
@@ -5382,6 +5435,7 @@ export async function recordReview(input: {
     comprehensionCheckChosenIndex: input.comprehensionCheckChosenIndex,
     pitchProductionMeasuredCount: input.pitchProductionMeasuredCount,
     pitchProductionMismatchCount: input.pitchProductionMismatchCount,
+    presentation: input.presentation,
   };
   await db.transaction('rw', db.studyItems, db.reviews, async () => {
     await db.studyItems.put(updatedStudyItem);
@@ -8690,6 +8744,344 @@ export async function listGrammarRelationshipsForPattern(
  * deferUnreadyReadingInContextReviews uses (fine for an occasional
  * maintenance pass over the whole corpus) would not scale here.
  */
+/** Read-only presentation scope. Never applies study-readiness gates to the chapter. */
+export async function getReviewDocument(
+  sentenceId: string,
+  preferredBookId?: string,
+  vocabularyItemId?: string,
+): Promise<ReviewDocument | null> {
+  const db = getDb();
+  const memberships = await db.bookSentences.where('sentenceId').equals(sentenceId).toArray();
+  const books = await db.books.bulkGet([...new Set(memberships.map((row) => row.bookId))]);
+  const bookById = new Map(books.filter((book): book is Book => Boolean(book)).map((book) => [book.id, book]));
+  const candidates = memberships.filter((row) => bookById.has(row.bookId));
+  candidates.sort((a, b) => {
+    const preferred = Number(b.bookId === preferredBookId) - Number(a.bookId === preferredBookId);
+    if (preferred) return preferred;
+    const opened = (id: string) => Date.parse(bookById.get(id)?.lastOpenedAt ?? '') || 0;
+    return opened(b.bookId) - opened(a.bookId);
+  });
+  const home = candidates[0];
+  if (!home) return null;
+  const book = bookById.get(home.bookId)!;
+  const membershipsInBook = await db.bookSentences.where('bookId').equals(home.bookId).sortBy('position');
+  // Unassigned rows stay together; they must not pull in unrelated episode chapters.
+  const rows = membershipsInBook.filter((row) => row.chapterId === home.chapterId);
+  const sentences = await db.sentences.bulkGet(rows.map((row) => row.sentenceId));
+  const documentRows = rows.flatMap((row, index) => {
+    const sentence = sentences[index];
+    return sentence ? [{ membershipId: row.id, sentence }] : [];
+  });
+  if (!documentRows.some((row) => row.membershipId === home.id)) return null;
+  const links = vocabularyItemId
+    ? await db.sentenceVocabulary.where('vocabularyItemId').equals(vocabularyItemId).toArray()
+    : [];
+  return {
+    bookId: home.bookId,
+    bookTitle: book.title,
+    chapterTitle: book.chapters.find((chapter) => chapter.id === home.chapterId)?.title
+      ?? (book.chapters.length && !home.chapterId ? 'Unassigned sentences' : undefined),
+    activeMembershipId: home.id,
+    rows: documentRows,
+    vocabularyForms: links.flatMap((link) => link.surfaceForm ? [link.surfaceForm] : []),
+  };
+}
+
+/** Review-state stability (days) above which a word/pattern is treated as already retained. */
+const EPISODE_FOCUS_KNOWN_STABILITY_DAYS = 21;
+
+/**
+ * Derived whole-episode teaching priorities for a book chapter (or whole book).
+ * Read-only: no writes, no scheduling, no gating — see `buildEpisodeFocus`.
+ */
+export async function getEpisodeFocus(bookId: string, chapterId?: string): Promise<EpisodeFocus> {
+  const db = getDb();
+  const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
+    .filter((row) => !chapterId || row.chapterId === chapterId);
+  const sentenceIds = memberships.map((row) => row.sentenceId);
+  const [vocabularyLinks, grammarLinks] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const vocabularyIds = [...new Set(vocabularyLinks.map((link) => link.vocabularyItemId))];
+  const patternIds = [...new Set(grammarLinks.map((link) => link.grammarPatternId))];
+  const [vocabularyItems, grammarPatterns, vocabularyStudy, grammarStudy] = await Promise.all([
+    db.vocabularyItems.bulkGet(vocabularyIds),
+    db.grammarPatterns.bulkGet(patternIds),
+    db.studyItems.where('subjectType').equals('vocabularyItem').filter((item) => vocabularyIds.includes(item.subjectId)).toArray(),
+    db.studyItems.where('subjectType').equals('grammarPattern').filter((item) => patternIds.includes(item.subjectId)).toArray(),
+  ]);
+  const retained = (items: StudyItem[]) =>
+    new Set(
+      items
+        .filter((item) => item.fsrsState.state === 'review' && item.fsrsState.stability >= EPISODE_FOCUS_KNOWN_STABILITY_DAYS)
+        .map((item) => item.subjectId),
+    );
+  return buildEpisodeFocus({
+    sentenceIds,
+    vocabularyLinks,
+    vocabularyItems: vocabularyItems.filter((item): item is VocabularyItem => Boolean(item)),
+    grammarLinks,
+    grammarPatterns: grammarPatterns.filter((item): item is GrammarPattern => Boolean(item)),
+    knownVocabularyItemIds: retained(vocabularyStudy),
+    knownGrammarPatternIds: retained(grammarStudy),
+  });
+}
+
+/** Sentences + linked vocabulary/grammar of one episode, in the shape the preparation prompt/validator use. */
+/**
+ * Append one in-passage lesson event. Idempotent on `event.id` (a retried or
+ * double-fired write is a no-op) and deliberately writes no Review, StudyItem
+ * or FSRS state: explanation and assisted practice must leave scheduling alone.
+ */
+export async function logSentenceLearningEvent(
+  event: Omit<SentenceLearningEvent, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
+): Promise<SentenceLearningEvent> {
+  const db = getDb();
+  const full: SentenceLearningEvent = {
+    ...event,
+    id: event.id ?? createId('sl_event'),
+    timestamp: event.timestamp ?? nowIso(),
+  };
+  const existing = await db.sentenceLearningEvents.get(full.id);
+  if (existing) return existing;
+  await db.sentenceLearningEvents.put(full);
+  notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
+  return full;
+}
+
+export interface OpenContentReportWithText extends OpenContentReport {
+  japanese: string;
+  translation?: string;
+}
+
+export async function getOpenContentReports(): Promise<OpenContentReportWithText[]> {
+  const db = getDb();
+  const open = openContentReports(await db.sentenceLearningEvents.toArray());
+  const sentences = await db.sentences.bulkGet(open.map((report) => report.sentenceId));
+  return open.map((report, index) => ({
+    ...report,
+    japanese: sentences[index]?.japanese ?? '',
+    translation: sentences[index]?.translation,
+  }));
+}
+
+/** Triage only: logs a `report_resolved` event. Never edits the sentence, its analysis or any study state. */
+export async function resolveContentReport(
+  report: OpenContentReport,
+  resolution: 'fixed' | 'dismissed',
+): Promise<void> {
+  await logSentenceLearningEvent({
+    visitId: createId('sl_visit'),
+    action: 'report_resolved',
+    bookId: report.bookId,
+    sentenceId: report.sentenceId,
+    ...(report.target ? { target: report.target } : {}),
+    resolution,
+  });
+}
+
+export async function getSentenceLessonReport(): Promise<SentenceLessonReport> {
+  const db = getDb();
+  const [events, sessions] = await Promise.all([
+    db.sentenceLearningEvents.toArray(),
+    db.plannerSessions.toArray(),
+  ]);
+  return buildSentenceLessonReport(events, sessions);
+}
+
+export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {
+  return getDb().sentenceLearningEvents.where('bookId').equals(bookId).sortBy('timestamp');
+}
+
+export async function getEpisodePreparationContext(
+  bookId: string,
+  chapterId: string,
+): Promise<{ context: PreparationContext; preparation?: EpisodePreparation; needsStructureIds: string[] }> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  const chapter = book?.chapters.find((item) => item.id === chapterId);
+  if (!book || !chapter) throw new Error('Chapter not found');
+  const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
+    .filter((row) => row.chapterId === chapterId);
+  const sentenceRows = await db.sentences.bulkGet(memberships.map((row) => row.sentenceId));
+  const sentences = sentenceRows.flatMap((row) => (row ? [{ id: row.id, japanese: row.japanese, translation: row.translation ?? '' }] : []));
+  const sentenceIds = sentences.map((row) => row.id);
+  const [vocabularyLinks, grammarLinks] = await Promise.all([
+    db.sentenceVocabulary.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.sentenceGrammar.where('sentenceId').anyOf(sentenceIds).toArray(),
+  ]);
+  const [vocabulary, grammar] = await Promise.all([
+    db.vocabularyItems.bulkGet([...new Set(vocabularyLinks.map((link) => link.vocabularyItemId))]),
+    db.grammarPatterns.bulkGet([...new Set(grammarLinks.map((link) => link.grammarPatternId))]),
+  ]);
+  return {
+    context: {
+      title: chapter.title,
+      sentences,
+      vocabulary: vocabulary.flatMap((item) => (item ? [{ id: item.id, expression: item.expression, reading: item.reading, meaning: item.meaning }] : [])),
+      grammar: grammar.flatMap((item) => (item ? [{ id: item.id, canonicalName: item.canonicalName, shortMeaning: item.shortMeaning }] : [])),
+    },
+    preparation: chapter.preparation,
+    // Sentences with neither a saved analysis nor an AI draft that still rebuilds the text.
+    needsStructureIds: await (async () => {
+      const analyses = await db.analyses.bulkGet(sentenceIds);
+      return sentences.flatMap((sentence, index) => {
+        if (analyses[index]?.chunks?.length) return [];
+        const draft = chapter.structureDrafts?.[sentence.id];
+        return draft && chunksMatchSource(draft.map((chunk) => chunk.japanese), sentence.japanese) ? [] : [sentence.id];
+      });
+    })(),
+  };
+}
+
+async function patchChapterPreparation(
+  bookId: string,
+  chapterId: string,
+  change: (current: EpisodePreparation | undefined) => EpisodePreparation | undefined,
+): Promise<void> {
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  if (!book.chapters.some((chapter) => chapter.id === chapterId)) throw new Error('Chapter not found');
+  const updated: Book = {
+    ...book,
+    chapters: book.chapters.map((chapter) =>
+      chapter.id === chapterId ? { ...chapter, preparation: change(chapter.preparation) } : chapter,
+    ),
+    updatedAt: nowIso(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
+}
+
+/**
+ * Validate a pasted AI reply against the episode and store the result. A
+ * failed reply never replaces an earlier usable preparation (it is returned
+ * to the caller instead), and never blocks reading. A new usable result keeps
+ * the learner's earlier decisions for targets that recur.
+ */
+export async function saveEpisodePreparationReply(
+  bookId: string,
+  chapterId: string,
+  reply: string,
+): Promise<EpisodePreparation> {
+  const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
+  return storePreparationResult(bookId, chapterId, existing, parsePreparationReply(reply, context, nowIso()));
+}
+
+async function storePreparationResult(
+  bookId: string,
+  chapterId: string,
+  existing: EpisodePreparation | undefined,
+  result: EpisodePreparation,
+): Promise<EpisodePreparation> {
+  if (result.status === 'failed' && existing && existing.targets.length > 0) return result;
+  const keyOf = (target: PreparedTarget) => target.vocabularyItemId ?? target.grammarPatternId ?? `${target.kind}:${target.label}`;
+  const previous = new Map((existing?.targets ?? []).map((target) => [keyOf(target), target]));
+  const merged: EpisodePreparation = {
+    ...result,
+    targets: result.targets.map((target) => {
+      const before = previous.get(keyOf(target));
+      return before ? { ...target, decision: before.decision, learnerNote: before.learnerNote } : target;
+    }),
+  };
+  await patchChapterPreparation(bookId, chapterId, () => merged);
+  return merged;
+}
+
+export interface EpisodePackSaveResult {
+  error?: string;
+  preparation?: EpisodePreparation;
+  translationsSaved: number;
+  rejectedTranslations: PackReplyResult['rejectedTranslations'];
+  structureSaved: number;
+  rejectedStructure: { handle: string; reason: string }[];
+}
+
+/**
+ * One pasted "episode pack" reply: focus targets and/or missing translations.
+ * Translations only ever fill empty sentences (re-checked here against the
+ * live row, not just the prompt-time snapshot). A reply that fails to parse
+ * changes nothing.
+ */
+export async function saveEpisodePackReply(
+  bookId: string,
+  chapterId: string,
+  reply: string,
+): Promise<EpisodePackSaveResult> {
+  const { context, preparation: existing } = await getEpisodePreparationContext(bookId, chapterId);
+  const parsed = parseEpisodePackReply(reply, context, nowIso());
+  if (parsed.error) {
+    return { error: parsed.error, translationsSaved: 0, rejectedTranslations: parsed.rejectedTranslations, structureSaved: 0, rejectedStructure: [] };
+  }
+  const db = getDb();
+  let translationsSaved = 0;
+  const rejectedTranslations = [...parsed.rejectedTranslations];
+  for (const item of parsed.translations) {
+    const live = await db.sentences.get(item.sentenceId);
+    if (!live || live.translation?.trim()) {
+      rejectedTranslations.push({ handle: item.sentenceId, reason: 'Already has a translation; kept yours.' });
+      continue;
+    }
+    await updateSentenceText(item.sentenceId, { translation: item.translation });
+    translationsSaved += 1;
+  }
+  const preparation = parsed.preparation
+    ? await storePreparationResult(bookId, chapterId, existing, parsed.preparation)
+    : undefined;
+  let structureSaved = 0;
+  if (parsed.structure && parsed.structure.drafts.size > 0) {
+    const drafts = parsed.structure.drafts;
+    const book = await db.books.get(bookId);
+    if (book) {
+      const updated: Book = {
+        ...book,
+        chapters: book.chapters.map((chapter) =>
+          chapter.id === chapterId
+            ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...Object.fromEntries(drafts) } }
+            : chapter,
+        ),
+        updatedAt: nowIso(),
+      };
+      await db.books.put(updated);
+      notifySync('books', updated.id, updated);
+      structureSaved = drafts.size;
+    }
+  }
+  return { preparation, translationsSaved, rejectedTranslations, structureSaved, rejectedStructure: parsed.structure?.rejected ?? [] };
+}
+
+export async function updatePreparedTarget(
+  bookId: string,
+  chapterId: string,
+  targetId: string,
+  patch: { decision?: PreparedTargetDecision; learnerNote?: string },
+): Promise<void> {
+  await patchChapterPreparation(bookId, chapterId, (current) =>
+    current
+      ? {
+          ...current,
+          targets: current.targets.map((target) =>
+            target.id === targetId
+              ? {
+                  ...target,
+                  ...(patch.decision ? { decision: patch.decision } : {}),
+                  ...(patch.learnerNote !== undefined
+                    ? { learnerNote: patch.learnerNote.trim() || undefined }
+                    : {}),
+                }
+              : target,
+          ),
+        }
+      : current,
+  );
+}
+
+export async function clearEpisodePreparation(bookId: string, chapterId: string): Promise<void> {
+  await patchChapterPreparation(bookId, chapterId, () => undefined);
+}
+
 async function getReadingContextForSentence(sentenceId: string): Promise<ReadingContext> {
   const db = getDb();
   const memberships = await db.bookSentences.where('sentenceId').equals(sentenceId).toArray();
@@ -8724,6 +9116,7 @@ async function getReadingContextForSentence(sentenceId: string): Promise<Reading
       .map((row) => sentenceById.get(row.sentenceId))
       .filter((s): s is Sentence => Boolean(s)),
     bookTitle: bookById.get(home.bookId)?.title,
+    bookId: home.bookId,
   };
 }
 
@@ -9161,7 +9554,10 @@ async function buildReviewPriorityInputs(
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
-async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]> {
+async function findExploreCandidates(
+  limit: number,
+  sentenceFirst = false,
+): Promise<ExploreCandidate[]> {
   const db = getDb();
   const [allBooks, coverageByBookId] = await Promise.all([
     db.books.toArray(),
@@ -9175,11 +9571,30 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    // Sentence-first: a lesson never changes BookSentence.status, so a
+    // sentence is "done" once its walkthrough was completed, not once it's marked complete.
+    const bookEvents = sentenceFirst ? await listSentenceLearningEvents(book.id) : [];
+    const walked = sentenceFirst
+      ? new Set(
+          bookEvents
+            .filter((event) => event.action === 'walkthrough_completed')
+            .map((event) => event.sentenceId),
+        )
+      : undefined;
+    const revisitIds = sentenceFirst
+      ? sentencesReadyToRevisit(bookEvents).slice(0, EXPLORE_REVISITS_PER_BOOK)
+      : [];
     const unstarted = memberships
-      .filter((item) => item.status === 'unstarted')
+      .filter((item) =>
+        walked
+          ? item.status !== 'complete' && !walked.has(item.sentenceId)
+          : item.status === 'unstarted',
+      )
       .sort((a, b) => a.position - b.position);
-    if (unstarted.length === 0) continue;
-    const preview = unstarted.slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
+    const revisitMemberships = memberships.filter((item) => revisitIds.includes(item.sentenceId));
+    if (unstarted.length === 0 && revisitMemberships.length === 0) continue;
+    const revisitSet = new Set(revisitMemberships.map((item) => item.sentenceId));
+    const preview = [...revisitMemberships, ...unstarted].slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
     const [sentenceRows, analysisRows] = await Promise.all([
       db.sentences.bulkGet(preview.map((item) => item.sentenceId)),
       db.analyses.bulkGet(preview.map((item) => item.sentenceId)),
@@ -9192,6 +9607,7 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
         sentenceId: item.sentenceId,
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
+        ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
         // Patched below, once readiness is known for every candidate
         // sentence at once (batched, not N+1) — see classifyExploreSentences
         // in sessionPlanner.ts for why continue_book waits on this too.
@@ -9208,7 +9624,7 @@ async function findExploreCandidates(limit: number): Promise<ExploreCandidate[]>
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => {
       const rank = (c: ExploreCandidate) =>
-        c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
+        !sentenceFirst && c.sentences.some((sentence) => !sentence.vocabularyConfirmed) ? 0 : 1;
       const rankA = rank(a.candidate);
       const rankB = rank(b.candidate);
       if (rankA !== rankB) return rankA - rankB;
@@ -9552,7 +9968,7 @@ function exclusionsFromSteps(steps: PlannerSessionStep[]): SessionPlannerExclusi
   for (const step of steps) {
     if (step.sentenceId) sentenceIds.add(step.sentenceId);
     for (const id of step.sentenceIds ?? []) sentenceIds.add(id);
-    if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review')) {
+    if (step.bookId && (step.targetKind === 'continue_book' || step.targetKind === 'vocabulary_review' || step.targetKind === 'sentence_learning')) {
       bookIds.add(step.bookId);
     }
     if (step.grammarPatternId) grammarPatternIds.add(step.grammarPatternId);
@@ -9634,7 +10050,10 @@ export async function getSessionPlannerInput(
       graduationMinScheduledDays: settings.graduationMinScheduledDays,
     }),
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
-    findExploreCandidates(EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size),
+    findExploreCandidates(
+      EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
+      settings.sentenceFirstPlanning ?? false,
+    ),
     findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
     // NOTE: not filtered for suspended books — a word only met in a suspended
@@ -9665,12 +10084,16 @@ export async function getSessionPlannerInput(
   // candidate list, so it's filtered out here instead. "Pause pitch accent"
   // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
   // ReviewPage's pitchAccentProductionCandidates.
-  const practiceDueItemsForMode =
+  const legacyPaused = settings.legacyDrillsPaused ?? false;
+  const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
+    legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
+  const practiceDueItemsForMode = unlessLegacyPaused(
     settings.quietMode || settings.pitchAccentPaused
       ? practiceDueItems.filter((item) => item.activityType !== 'pitch_accent_production')
-      : practiceDueItems;
+      : practiceDueItems,
+  );
   const [retainDueReady, practiceDueReady] = await Promise.all([
-    filterReadyGrammarDueItems(notSuspended(retainDueItems), suspendedIndex),
+    filterReadyGrammarDueItems(unlessLegacyPaused(notSuspended(retainDueItems)), suspendedIndex),
     filterReadyGrammarDueItems(notSuspended(practiceDueItemsForMode), suspendedIndex),
   ]);
 
@@ -9699,13 +10122,13 @@ export async function getSessionPlannerInput(
   const exploreCandidates = exploreCandidatesRaw
     .filter((candidate) => !exclude.bookIds.has(candidate.bookId))
     .slice(0, EXPLORE_CANDIDATE_LIMIT);
-  const understandCandidates = understandCandidatesRaw
+  const understandCandidates = (legacyPaused ? [] : understandCandidatesRaw)
     .filter((candidate) => !exclude.grammarPatternIds.has(candidate.grammarPatternId))
     .slice(0, UNDERSTAND_CANDIDATE_LIMIT);
   const shadowCandidates = shadowCandidatesRaw
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, SHADOW_CANDIDATE_LIMIT);
-  const grammarNoticingCandidates = grammarNoticingCandidatesRaw
+  const grammarNoticingCandidates = (legacyPaused ? [] : grammarNoticingCandidatesRaw)
     .filter((candidate) => !exclude.sentenceIds.has(candidate.sentenceId))
     .slice(0, GRAMMAR_NOTICING_CANDIDATE_LIMIT);
 
@@ -9719,10 +10142,11 @@ export async function getSessionPlannerInput(
     understandCandidates,
     grammarNoticingCandidates,
     shadowCandidates,
-    newCardBacklogCount,
+    newCardBacklogCount: legacyPaused ? 0 : newCardBacklogCount,
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
+    sentenceFirst: settings.sentenceFirstPlanning ?? false,
     gameBreakCandidates,
   };
 }

@@ -312,6 +312,70 @@ export interface BookChapter {
    * `src/lib/suspendedBooks.ts`.
    */
   suspendedAt?: string;
+  /** Inspectable whole-episode teaching-priority proposal (sentence-first plan, Phase 0). */
+  preparation?: EpisodePreparation;
+  /**
+   * AI-proposed chunk structure per sentence id, from a pasted episode-pack reply.
+   * A draft beside — never instead of — the learner's saved `analyses`; the
+   * walkthrough uses it only when no saved analysis exists, and re-checks it
+   * against the current sentence text before use.
+   */
+  structureDrafts?: Record<string, StructureDraftChunk[]>;
+}
+
+export interface StructureDraftChunk {
+  japanese: string;
+  role: string;
+  literalEnglish?: string;
+}
+
+export type PreparedTargetKind = 'vocabulary' | 'grammar' | 'expression';
+export type PreparedTargetTreatment = 'recall' | 'phrase' | 'gloss_only';
+export type PreparedTargetDecision = 'suggested' | 'accepted' | 'dismissed';
+
+export interface PreparedTargetOccurrence {
+  sentenceId: string;
+  /** Character offsets into `Sentence.japanese`, computed locally from the AI's quoted text. */
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface PreparedTarget {
+  id: string;
+  kind: PreparedTargetKind;
+  label: string;
+  vocabularyItemId?: string;
+  grammarPatternId?: string;
+  occurrences: PreparedTargetOccurrence[];
+  reason: string;
+  treatment: PreparedTargetTreatment;
+  decision: PreparedTargetDecision;
+  /** Quoted occurrences the reply named that did not match a real sentence and were dropped. */
+  droppedOccurrences?: number;
+  /** The learner's own edit of the reason/why; the AI's `reason` is preserved. */
+  learnerNote?: string;
+}
+
+export interface RejectedPreparedTarget {
+  label: string;
+  reason: string;
+}
+
+/**
+ * Persisted result of the episode preparation round trip. `stale` is never
+ * stored: it is derived by comparing `sentenceFingerprint` with the episode's
+ * current sentences. A failed attempt never blocks reading.
+ */
+export interface EpisodePreparation {
+  version: number;
+  status: 'ready' | 'partial' | 'failed';
+  preparedAt: string;
+  provenance: 'pasted_ai_reply';
+  sentenceFingerprint: string;
+  targets: PreparedTarget[];
+  rejected: RejectedPreparedTarget[];
+  error?: string;
 }
 
 export interface BookSentence {
@@ -529,6 +593,21 @@ export interface AppSettings {
    * Defaults to `false`.
    */
   pitchAccentPaused?: boolean;
+  /**
+   * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
+   * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
+   * instead of vocabulary_review/continue_book. Existing in-progress sessions
+   * are never rewritten. Defaults to `false`.
+   */
+  sentenceFirstPlanning?: boolean;
+  /**
+   * "Pause word & grammar drills": withholds vocabulary, vocabulary-confusion,
+   * word-listening/conjugation and grammar cards (and vocabulary/grammar
+   * planner steps) everywhere. Nothing is deleted or rescheduled; turning it
+   * off restores everything. Sentence cards, shadowing and lessons continue.
+   * Defaults to `false`.
+   */
+  legacyDrillsPaused?: boolean;
   /**
    * Most-recently-used podcast RSS feed URLs (newest first), so
    * YouTubeMinePage's "Or import a podcast episode" input can offer them
@@ -794,6 +873,22 @@ export type ReviewAssistance =
  */
 export type ReviewSource = 'scheduled_review' | 'natural_encounter';
 
+/**
+ * How a review was presented (sentence-first plan, Phase 0 evidence). Purely
+ * informational: it never affects FSRS scheduling or the grade, and is stored
+ * on the one Review row rather than in a second event log, so there is no
+ * duplicate grade write. Absent on reviews from card types/versions that don't
+ * record it.
+ */
+export interface ReviewPresentation {
+  /** Layout selected when the card was graded. */
+  layout: 'chapter' | 'sentence';
+  /** Chapter layout only: sentences in the source document actually shown; 0 = fell back to the lone sentence. */
+  documentSentenceCount?: number;
+  /** True when the learner changed the layout while this card was open. */
+  layoutSwitched?: boolean;
+}
+
 /** Append-only — never updated after insert. Sync-conflict-free by construction. */
 export interface Review {
   id: string;
@@ -857,6 +952,7 @@ export interface Review {
    */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
+  presentation?: ReviewPresentation;
 }
 
 /**
@@ -1198,6 +1294,8 @@ export type PlannerStepTargetKind =
   | 'review'
   | 'vocabulary_detail'
   | 'vocabulary_review'
+  /** Sentence-first lesson (`/books/:bookId/learn/:sentenceId`) — the Reader's walkthrough, no vocabulary gate. Logs only SentenceLearningEvents; settling it never confirms vocabulary or changes BookSentence status. */
+  | 'sentence_learning'
   /** A short `/play` game break (`gameId`). Settled only by "Mark complete"/Skip, like every other step. */
   | 'game';
 
@@ -1325,4 +1423,68 @@ export interface WordBoundaryLabel {
   spanVersion: string;
   elapsedMs: number;
   createdAt: string;
+}
+
+export type SentenceLearningAction =
+  | 'walkthrough_opened'
+  | 'walkthrough_completed'
+  | 'target_practice'
+  | 'compare_uses_viewed'
+  | 'content_report'
+  | 'gist_check'
+  | 'expression_attempt'
+  | 'report_resolved'
+  /** Learner wrote/said their own sentence using a target for a NEW meaning (not the original sentence's). Separate evidence from `expression_attempt`. */
+  | 'transfer_attempt'
+  /** A later-day repeat of `transfer_attempt` for the same target, written from memory. Separate evidence: delayed, not same-visit. */
+  | 'transfer_recheck'
+  /** Masked recall of a target in a real occurrence the learner has never met in this target's lesson (`exposedSentenceId`). Separate from same-sentence practice. */
+  | 'held_back_check';
+
+/**
+ * Append-only lesson evidence from inside a passage (sentence-first plan, Phase 2).
+ * Synced as `sentence_learning_events` (append-only, not in backups) and never a
+ * `Review`: no FSRS effect. `id` is the idempotency key, so a retried write is a no-op.
+ */
+export interface SentenceLearningEvent {
+  id: string;
+  timestamp: string;
+  /** One walkthrough opening; groups the events of a single visit. */
+  visitId: string;
+  action: SentenceLearningAction;
+  bookId: string;
+  chapterId?: string;
+  sentenceId: string;
+  target?: { kind: PreparedTargetKind; key: string; label: string };
+  /** What was visible when the learner answered (practice only). */
+  support?: 'explanation_hidden' | 'target_masked';
+  outcome?: 'got_it' | 'needed_help';
+  /** Practice outcomes are always the learner's own judgement here. */
+  assessmentSource?: 'self';
+  /**
+   * content_report only: the learner judged the prompt itself defective. This is
+   * feedback for content repair, never a failed practice (no FSRS, no outcome).
+   */
+  report?: 'another_answer_works' | 'poor_question';
+  /** content_report: what the learner actually thought the answer was. */
+  learnerAnswer?: string;
+  /**
+   * expression_attempt only: how the learner tried to say the sentence's meaning,
+   * what scaffold was shown before they answered, and how many of the sentence's
+   * meaning units they judged they had carried (their own checklist, not string
+   * equality). Typed text, when given, is in `learnerAnswer`.
+   */
+  modality?: 'typed' | 'spoken';
+  scaffold?: 'none' | 'words' | 'frame' | 'words_and_frame';
+  unitsExpressed?: number;
+  unitsTotal?: number;
+  /** The walkthrough's Help level when the event was logged (not per-channel support; that is `support`/`scaffold`). Absent on older events. */
+  helpLevel?: 'full' | 'less' | 'minimal';
+  /** report_resolved only: the learner's triage of an earlier content_report for the same sentence+target. Changes no sentence data. */
+  resolution?: 'fixed' | 'dismissed';
+  /** Compare uses: the other real occurrence that was shown. */
+  exposedSentenceId?: string;
+  quietMode?: boolean;
+  /** Episode sentence fingerprint the focus was chosen against, when known. */
+  inventoryRevision?: string;
 }

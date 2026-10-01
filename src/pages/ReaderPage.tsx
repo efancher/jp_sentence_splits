@@ -1,14 +1,22 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
+import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
-import { getDb, readSettings } from '../db/repository';
+import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
+import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
+import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listSentenceLearningEvents, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
+import type { EpisodeFocusTarget } from '../lib/episodeFocus';
+import { isPreparationStale } from '../lib/episodePreparation';
+import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
+import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJourney';
+import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
 
 /**
@@ -17,10 +25,24 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * unlock, just an occasional comprehension self-check). Not a card: no
  * `Review` row, no FSRS, no self-rating, same treatment as `ShadowPage`/`/play`.
  */
+const READER_LAYOUT_KEY = 'satori-glossbook:reader-layout';
+const TEXT_MODE_ORDER: TextDisplayMode[] = ['plain', 'furigana', 'reading'];
+const TEXT_MODE_LABELS: Record<TextDisplayMode, string> = { plain: 'Plain Japanese', furigana: 'Furigana', reading: 'Reading-only' };
+
 export function ReaderPage() {
-  const { bookId = '' } = useParams();
+  const { bookId = '', sentenceId: lessonSentenceId } = useParams();
   const [searchParams] = useSearchParams();
-  const chapterId = searchParams.get('chapter') || undefined;
+  const navigate = useNavigate();
+  // /books/:bookId/learn/:sentenceId (planner lesson step) shows the sentence's own chapter.
+  const lessonChapterId = useLiveQuery(
+    async () =>
+      lessonSentenceId
+        ? (await getDb().bookSentences.where('[bookId+sentenceId]').equals([bookId, lessonSentenceId]).first())
+            ?.chapterId ?? null
+        : null,
+    [bookId, lessonSentenceId],
+  );
+  const chapterId = searchParams.get('chapter') || lessonChapterId || undefined;
   const native = useNativeAudio();
   const settings = useLiveQuery(() => readSettings(), []);
   const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
@@ -33,7 +55,18 @@ export function ReaderPage() {
   const [revealedStructures, setRevealedStructures] = useState<Set<string>>(
     () => new Set(),
   );
+  const [walkthroughId, setWalkthroughId] = useState<string>();
+  /** Per-sentence override of the default word help: show every word, or none. */
+  const [wordHelpOverride, setWordHelpOverride] = useState<Map<string, 'all' | 'none'>>(() => new Map());
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [chapterMode, setChapterMode] = useState(() => {
+    try { return localStorage.getItem(READER_LAYOUT_KEY) !== 'original'; } catch { return true; }
+  });
+  const [selectedId, setSelectedId] = useState<string>();
+  function changeLayout(chapter: boolean) {
+    setChapterMode(chapter);
+    try { localStorage.setItem(READER_LAYOUT_KEY, chapter ? 'chapter' : 'original'); } catch { /* storage unavailable */ }
+  }
 
   useEffect(() => {
     if (settings) setDisplayMode(settings.textDisplayMode);
@@ -65,8 +98,64 @@ export function ReaderPage() {
     const chapter = chapterId
       ? book.chapters.find((item) => item.id === chapterId) ?? null
       : null;
-    return { book, chapter, rows, audioRows };
+    const analyses = await db.analyses.bulkGet(rows.map((row) => row.sentence.id));
+    const chunksBySentence = new Map(
+      analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
+    );
+    const contentExpressions = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.sentence.vocabularySuggestions
+            .filter((suggestion) => suggestion.selectedByDefault)
+            .map((suggestion) => suggestion.expression),
+        ),
+      ),
+    ];
+    const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
+    return { book, chapter, rows, audioRows, chunksBySentence, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
+
+  const openedLessonRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!lessonSentenceId || !data || openedLessonRef.current === lessonSentenceId) return;
+    if (lessonChapterId === undefined) return;
+    const index = data.rows.findIndex((row) => row.sentence.id === lessonSentenceId);
+    if (index < 0) return;
+    openedLessonRef.current = lessonSentenceId;
+    setWalkthroughId(lessonSentenceId);
+    setSelectedId(lessonSentenceId);
+    setTimeout(() => rowRefs.current[index]?.scrollIntoView({ block: 'center' }), 0);
+  }, [lessonSentenceId, lessonChapterId, data]);
+
+  const focus = useLiveQuery(
+    () => getEpisodeFocus(bookId, chapterId).catch(() => null),
+    [bookId, chapterId],
+  );
+
+  const lessonEvents = useLiveQuery(() => listSentenceLearningEvents(bookId), [bookId]);
+  const episodeSentences = useMemo(
+    () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, position: index + 1 })) : []),
+    [data],
+  );
+  const preparation = data?.chapter?.preparation;
+  const walkthroughFocus: EpisodeFocusTarget[] = useMemo(() => {
+    if (!data || !preparation || preparation.targets.length === 0) return focus?.focus ?? [];
+    if (isPreparationStale(preparation, data.rows.map((row) => ({ id: row.sentence.id, japanese: row.sentence.japanese })))) {
+      return focus?.focus ?? [];
+    }
+    return preparation.targets
+      .filter((target) => target.decision !== 'dismissed')
+      .map((target) => ({
+        kind: target.kind === 'grammar' ? ('grammar' as const) : ('vocabulary' as const),
+        id: target.vocabularyItemId ?? target.grammarPatternId ?? `expression:${target.label}`,
+        label: target.label,
+        detail: target.learnerNote || target.reason,
+        sentenceIds: [...new Set(target.occurrences.map((occurrence) => occurrence.sentenceId))],
+        reasons: [target.reason],
+        occurrences: target.occurrences.map(({ sentenceId, start, end }) => ({ sentenceId, start, end })),
+        preparedKind: target.kind,
+      }));
+  }, [data, preparation, focus]);
 
   const matchingSourceId =
     data?.chapter?.sourceId ??
@@ -87,6 +176,23 @@ export function ReaderPage() {
     });
   }, [data, matchingSourceId]);
 
+  const compareAids = useMemo(() => {
+    const map = new Map<string, CompareAids>();
+    data?.rows.forEach((row, index) => {
+      map.set(row.sentence.id, {
+        translation: row.sentence.translation || undefined,
+        words: glossableWords(row.sentence.vocabularySuggestions, data.savedMeanings),
+        audio: audioByRow[index],
+      });
+    });
+    return map;
+  }, [data, audioByRow]);
+
+  useEffect(() => {
+    const playing = data?.rows[activeIndex]?.sentence.id;
+    if (playing) setSelectedId(playing);
+  }, [activeIndex, data]);
+
   useEffect(() => {
     if (activeIndex < 0) return;
     rowRefs.current[activeIndex]?.scrollIntoView({
@@ -99,6 +205,17 @@ export function ReaderPage() {
   if (data === null) return <p>Book not found.</p>;
 
   const { book, chapter, rows } = data;
+  const focusedId = rows.some((row) => row.sentence.id === selectedId) ? selectedId : rows[0]?.sentence.id;
+  const focusedIndex = rows.findIndex((row) => row.sentence.id === focusedId);
+  const focusedRow = rows[focusedIndex];
+  function selectLine(id: string) {
+    setSelectedId(id);
+    if (walkthroughId && walkthroughId !== id) setWalkthroughId(undefined);
+  }
+  function translationDefaultShown(sentence: Sentence) {
+    const help = sentenceWordHelp(sentence.vocabularySuggestions, data!.knownExpressions, data!.savedMeanings);
+    return help.total > 0 && help.unknownCount * 2 > help.total;
+  }
 
   function findNextPlayable(fromIndex: number): number {
     for (let i = fromIndex; i < audioByRow.length; i += 1) {
@@ -227,13 +344,130 @@ export function ReaderPage() {
           </select>
         </label>
       </div>
+      {focus && (focus.focus.length > 0 || focus.glossOnly.length > 0) ? (
+        <details className="episode-focus">
+          <summary>Suggested focus for this {chapter ? 'episode' : 'book'}</summary>
+          <p className="muted">
+            A draft from what recurs across the whole {chapter ? 'episode' : 'book'}. Optional: nothing here gates
+            reading, and nothing is scheduled.
+          </p>
+          <ul>
+            {focus.focus.map((target) => (
+              <li key={`${target.kind}:${target.id}`}>
+                <strong className="jp">{target.label}</strong>
+                <span className="muted"> ({target.kind === 'grammar' ? 'grammar' : 'word'}) {target.detail}</span>
+                <div className="muted">{target.reasons.join(' · ')}</div>
+              </li>
+            ))}
+          </ul>
+          {focus.glossOnly.length > 0 ? (
+            <p className="muted">
+              Gloss only (interchangeable discourse wording):{' '}
+              <span className="jp">{focus.glossOnly.map((item) => item.label).join('、')}</span>
+            </p>
+          ) : null}
+        </details>
+      ) : null}
+      {walkthroughFocus.length > 0 ? (
+        <p style={{ margin: 0 }} aria-label="Episode focus">
+          <span className="muted">Worth noticing across this {chapter ? 'episode' : 'book'}: </span>
+          <span className="jp">{walkthroughFocus.map((target) => target.label).join('、')}</span>
+        </p>
+      ) : null}
+      {(() => {
+        const inThis = new Set(data.rows.map((row) => row.sentence.id));
+        const ready = sentencesReadyToRevisit(lessonEvents ?? []).filter((id) => inThis.has(id));
+        return ready.length > 0 ? (
+          <div className="stack" style={{ gap: '0.25rem' }} aria-label="Ready for a fresh try">
+            <span className="muted">
+              Ready for a fresh try ({ready.length}): you walked through {ready.length === 1 ? 'this sentence' : 'these sentences'} on an earlier day.
+              Try saying {ready.length === 1 ? 'it' : 'them'} from the meaning alone, with no cues. A suggestion, not a schedule.
+            </span>
+            <div className="row" style={{ gap: '0.35rem', flexWrap: 'wrap' }}>
+              {ready.slice(0, 5).map((id) => {
+                const index = data.rows.findIndex((row) => row.sentence.id === id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setWalkthroughId(id);
+                      rowRefs.current[index]?.scrollIntoView({ block: 'center' });
+                    }}
+                  >
+                    Sentence {index + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null;
+      })()}
+      {searchParams.get('imported') === '1' ? (
+        <p className="muted" role="note" style={{ margin: 0 }}>
+          Just imported. Optional: run <code>npm run validate:sentence-transcripts -- --book {bookId}</code> to check these
+          transcripts against a fresh ASR pass.
+        </p>
+      ) : null}
+      {(() => {
+        const packChapterId = chapterId && chapter ? chapterId : !chapterId && book.chapters.length === 1 ? book.chapters[0]!.id : undefined;
+        return packChapterId ? <EpisodePreparationPanel bookId={bookId} chapterId={packChapterId} defaultOpen={searchParams.get('pack') === '1'} /> : null;
+      })()}
+      {!chapterId && book.chapters.length === 0 && rows.length > 0 ? (
+        <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() =>
+              void ensureDefaultBookChapter(bookId).then((id) => {
+                if (id) navigate(`/books/${bookId}/read?chapter=${encodeURIComponent(id)}&pack=1`);
+              })
+            }
+          >
+            Prepare this book (optional)
+          </button>
+          <span className="muted">Puts every sentence into one &ldquo;Whole book&rdquo; chapter so episode focus and translations can be prepared.</span>
+        </div>
+      ) : null}
       {firstPlayable === -1 ? (
         <p className="muted">No native audio for this {chapter ? 'chapter' : 'book'} yet.</p>
       ) : null}
-      <div className="stack">
+      <div className="row" style={{ alignItems: 'center' }}>
+        <label>
+          Layout
+          <select value={chapterMode ? 'chapter' : 'original'} onChange={(event) => changeLayout(event.target.value === 'chapter')}>
+            <option value="chapter">Chapter + icons</option>
+            <option value="original">Original · rows</option>
+          </select>
+        </label>
+      </div>
+      <div className={chapterMode ? 'gloss-workbench' : undefined}>
+      <div className="stack reader-book">
         {rows.map((row, index) => {
           const audio = audioByRow[index];
           const isActive = index === activeIndex;
+          if (chapterMode && row.sentence.id !== focusedId) {
+            return (
+              <div
+                key={row.membership.id}
+                ref={(el) => {
+                  rowRefs.current[index] = el;
+                }}
+                className={`reader-line${isActive ? ' reader-row-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                title="Select this sentence"
+                onClick={() => selectLine(row.sentence.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectLine(row.sentence.id);
+                  }
+                }}
+              >
+                {sentenceLine(row.sentence, isActive, audio)}
+              </div>
+            );
+          }
           return (
             <div
               key={row.membership.id}
@@ -257,24 +491,126 @@ export function ReaderPage() {
                 ) : null}
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
                   {sentenceLine(row.sentence, isActive, audio)}
+                  {(() => {
+                    const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));
+                    return here.length > 0 ? (
+                      <span className="muted" style={{ fontSize: '0.85em' }}>
+                        Focus here: <span className="jp">{here.map((target) => target.label).join('、')}</span>
+                      </span>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
+                    const override = wordHelpOverride.get(row.sentence.id);
+                    const shown = override === 'all' ? help.allWords : override === 'none' ? [] : help.newWords;
+                    const setOverride = (value: 'all' | 'none' | undefined) =>
+                      setWordHelpOverride((prev) => {
+                        const next = new Map(prev);
+                        if (value) next.set(row.sentence.id, value);
+                        else next.delete(row.sentence.id);
+                        return next;
+                      });
+                    if (help.allWords.length === 0) return null;
+                    return (
+                      <div className="stack" style={{ gap: '0.15rem' }}>
+                        {shown.length > 0 ? <WordGlossList words={shown} /> : null}
+                        <span className="muted" style={{ fontSize: '0.8em' }}>
+                          {override === 'all'
+                            ? 'Showing every word. '
+                            : override === 'none'
+                              ? 'Word help hidden. '
+                              : help.newWords.length > 0
+                                ? `${help.unknownCount} of ${help.total} words are new to you. `
+                                : 'You know these words. '}
+                          {override !== 'all' && help.allWords.length > shown.length ? (
+                            <button type="button" onClick={() => setOverride('all')}>Show all words</button>
+                          ) : null}{' '}
+                          {shown.length > 0 && override !== 'none' ? (
+                            <button type="button" onClick={() => setOverride('none')}>Hide</button>
+                          ) : null}
+                          {override ? (
+                            <button type="button" onClick={() => setOverride(undefined)}>Reset</button>
+                          ) : null}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   <div className="row" style={{ gap: '0.5rem' }}>
-                    {revealedTranslations.has(row.sentence.id) ? (
-                      <div className="muted">{row.sentence.translation || '(no translation)'}</div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => toggleTranslation(row.sentence.id)}
-                      >
-                        Show translation
-                      </button>
-                    )}
+                    {(() => {
+                      const help = sentenceWordHelp(row.sentence.vocabularySuggestions, data.knownExpressions, data.savedMeanings);
+                      // Mostly-unknown sentences show their translation by default; the toggle flips the default either way.
+                      const mostlyUnknown = help.total > 0 && help.unknownCount * 2 > help.total;
+                      const shown = mostlyUnknown !== revealedTranslations.has(row.sentence.id);
+                      return shown ? (
+                        <>
+                          <div className="muted">{row.sentence.translation || '(no translation)'}</div>
+                          {chapterMode ? null : <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Hide translation</button>}
+                        </>
+                      ) : chapterMode ? null : (
+                        <button type="button" onClick={() => toggleTranslation(row.sentence.id)}>Show translation</button>
+                      );
+                    })()}
+                    {chapterMode ? null : (<>
+                    <button
+                      type="button"
+                      aria-expanded={walkthroughId === row.sentence.id}
+                      onClick={() => setWalkthroughId(walkthroughId === row.sentence.id ? undefined : row.sentence.id)}
+                    >
+                      Walk through
+                    </button>
                     <button
                       type="button"
                       onClick={() => toggleStructure(row.sentence.id)}
                     >
                       {revealedStructures.has(row.sentence.id) ? 'Hide structure' : 'Show structure'}
                     </button>
+                    </>)}
                   </div>
+                  {(() => {
+                    const progress = describeSentenceProgress(summariseSentenceProgress(lessonEvents ?? [], row.sentence.id));
+                    if (!progress) return null;
+                    const journey = buildSentenceJourney({
+                      sentenceId: row.sentence.id,
+                      events: lessonEvents ?? [],
+                      vocabulary: row.sentence.vocabularySuggestions
+                        .filter((item) => item.selectedByDefault)
+                        .map((item) => ({ expression: item.expression, surface: item.surface })),
+                      knownExpressions: data.knownExpressions,
+                      structure: walkthroughFocus
+                        .filter((target) => target.sentenceIds.includes(row.sentence.id) && (target.kind === 'grammar' || target.preparedKind === 'expression'))
+                        .map((target) => ({ key: target.id, label: target.label })),
+                    });
+                    return (
+                      <>
+                        <div className="muted" aria-label="Sentence progress">Your progress here: {progress}</div>
+                        <SentenceJourneyDetails journey={journey} />
+                      </>
+                    );
+                  })()}
+                  {walkthroughId === row.sentence.id ? (
+                    <SentenceWalkthrough
+                      sentence={row.sentence}
+                      savedChunks={data.chunksBySentence.get(row.sentence.id)}
+                      structureDraft={data.chapter?.structureDrafts?.[row.sentence.id]}
+                      audio={audio}
+                      focusTargets={walkthroughFocus}
+                      episodeSentences={episodeSentences}
+                      compareAids={compareAids}
+                      events={lessonEvents ?? []}
+                      onEvent={(event) =>
+                        void logSentenceLearningEvent({
+                          ...event,
+                          bookId,
+                          chapterId,
+                          inventoryRevision: preparation?.sentenceFingerprint,
+                        })
+                      }
+                      shadowHref={`#/books/${bookId}/shadow/${row.sentence.id}`}
+                      quietMode={settings?.quietMode ?? false}
+                      onQuietModeChange={(quiet) => void updateSettings({ quietMode: quiet })}
+                      onClose={() => setWalkthroughId(undefined)}
+                    />
+                  ) : null}
                   {revealedStructures.has(row.sentence.id)
                     ? (() => {
                         const preview = previewHeuristicChunks(row.sentence.japanese);
@@ -300,6 +636,46 @@ export function ReaderPage() {
             </div>
           );
         })}
+      </div>
+      {chapterMode && focusedRow ? (() => {
+        const translationOpen = translationDefaultShown(focusedRow.sentence) !== revealedTranslations.has(focusedRow.sentence.id);
+        const wordOverride = wordHelpOverride.get(focusedRow.sentence.id);
+        const walking = walkthroughId === focusedRow.sentence.id;
+        const nextMode = TEXT_MODE_ORDER[(TEXT_MODE_ORDER.indexOf(displayMode) + 1) % TEXT_MODE_ORDER.length]!;
+        return (
+          <div className="gloss-rail" role="toolbar" aria-label="Sentence tools" aria-orientation="vertical">
+            <button type="button" className="icon-button" aria-label="Previous sentence" title="Previous sentence" disabled={focusedIndex <= 0}
+              onClick={() => selectLine(rows[focusedIndex - 1]!.sentence.id)}>↑</button>
+            <button type="button" className="icon-button" aria-label="Next sentence" title="Next sentence" disabled={focusedIndex >= rows.length - 1}
+              onClick={() => selectLine(rows[focusedIndex + 1]!.sentence.id)}>↓</button>
+            <button type="button" className="icon-button" aria-pressed={translationOpen}
+              aria-label={translationOpen ? 'Hide translation' : 'Show translation'} title={translationOpen ? 'Hide translation' : 'Show translation'}
+              onClick={() => toggleTranslation(focusedRow.sentence.id)}>EN</button>
+            <button type="button" className="icon-button" aria-pressed={walking} aria-expanded={walking}
+              aria-label="Walk through" title="Walk through this sentence"
+              onClick={() => setWalkthroughId(walking ? undefined : focusedRow.sentence.id)}>🚶</button>
+            <button type="button" className="icon-button" aria-pressed={revealedStructures.has(focusedRow.sentence.id)}
+              aria-label={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
+              title={revealedStructures.has(focusedRow.sentence.id) ? 'Hide structure' : 'Show structure'}
+              onClick={() => toggleStructure(focusedRow.sentence.id)}>🧱</button>
+            <button type="button" className="icon-button" aria-pressed={wordOverride === 'all'}
+              aria-label={wordOverride === 'all' ? 'Back to default word help' : 'Show all word help'}
+              title={wordOverride === 'all' ? 'Back to default word help' : 'Show all word help'}
+              onClick={() => setWordHelpOverride((prev) => {
+                const next = new Map(prev);
+                if (wordOverride === 'all') next.delete(focusedRow.sentence.id);
+                else next.set(focusedRow.sentence.id, 'all');
+                return next;
+              })}>語</button>
+            <button type="button" className="icon-button" aria-label={`Text: ${TEXT_MODE_LABELS[displayMode]}. Switch display`}
+              title={`Text: ${TEXT_MODE_LABELS[displayMode]} (tap for ${TEXT_MODE_LABELS[nextMode]})`}
+              onClick={() => setDisplayMode(nextMode)}>
+              {displayMode === 'plain' ? '文' : displayMode === 'furigana' ? 'ふ' : 'あ'}
+            </button>
+            <Link className="icon-button" to={`/books/${bookId}`} aria-label="Back to book" title="Back to book">📖</Link>
+          </div>
+        );
+      })() : null}
       </div>
     </div>
   );

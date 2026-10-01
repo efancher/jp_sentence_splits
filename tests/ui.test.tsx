@@ -140,7 +140,7 @@ describe('UI flows', () => {
       expect(screen.getByText('Saved')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: 'Next sentence' }));
     // Loading sentence B's chunks/notes into state is itself a `value`
     // change for the autosave hook, scheduling its own (redundant,
     // self-)save — clicking Previous immediately after, with no wait,
@@ -150,7 +150,7 @@ describe('UI flows', () => {
     await waitFor(() => {
       expect(screen.getByText('Saved')).toBeInTheDocument();
     });
-    await user.click(screen.getByRole('button', { name: 'Previous' }));
+    await user.click(screen.getByRole('button', { name: 'Previous sentence' }));
     await waitFor(() => {
       expect(screen.getByDisplayValue('modifier/content')).toBeInTheDocument();
       expect(screen.getByDisplayValue('counter expression')).toBeInTheDocument();

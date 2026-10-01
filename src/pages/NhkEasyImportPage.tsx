@@ -394,7 +394,13 @@ export function NhkEasyImportPage() {
                 preview: p,
               })
             }
-            onImported={(result) => navigate(`/books/${result.bookId}`)}
+            onImported={(result) =>
+              navigate(
+                result.chapterId
+                  ? `/books/${result.bookId}/read?chapter=${encodeURIComponent(result.chapterId)}&pack=1`
+                  : `/books/${result.bookId}`,
+              )
+            }
             onCancel={() => setStage('imported')}
             retentionNote="Audio was clipped from the article's real narration — there's no source ZIP to keep."
           />

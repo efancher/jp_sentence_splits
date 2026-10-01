@@ -259,6 +259,7 @@ export default function App() {
             />
             <Route path="books/:bookId/review" element={<ReviewPage />} />
             <Route path="books/:bookId/read" element={<ReaderPage />} />
+            <Route path="books/:bookId/learn/:sentenceId" element={<ReaderPage />} />
             <Route
               path="books/:bookId/resegment"
               element={<ResegmentSourcePage />}

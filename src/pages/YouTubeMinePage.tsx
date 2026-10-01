@@ -1207,7 +1207,11 @@ export function YouTubeMinePage() {
               clearActiveJob();
               // ?imported=1 -> BookDetailPage's one-time transcript-
               // validation reminder (docs/STATUS.md 2026-09-12).
-              navigate(`/books/${result.bookId}?imported=1`);
+              navigate(
+                result.chapterId
+                  ? `/books/${result.bookId}/read?chapter=${encodeURIComponent(result.chapterId)}&pack=1&imported=1`
+                  : `/books/${result.bookId}?imported=1`,
+              );
             }}
             onCancel={() => setStage('translate')}
           />

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
+import { ChapterReader } from '../components/ChapterReader';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { ComprehensionCheckPicker } from '../components/ComprehensionCheckPicker';
 import { GrammarPicker } from '../components/GrammarPicker';
@@ -104,12 +105,23 @@ function roleGuideCallout(
   );
 }
 
+const GLOSS_LAYOUT_KEY = 'satori-glossbook:gloss-layout';
+const TEXT_MODE_ORDER: TextDisplayMode[] = ['plain', 'furigana', 'reading'];
+const TEXT_MODE_LABELS: Record<TextDisplayMode, string> = { plain: 'Plain Japanese', furigana: 'Furigana', reading: 'Reading-only' };
+
 export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
   const settings = useLiveQuery(() => readSettings(), []);
   const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
   const [showEnglish, setShowEnglish] = useState(false);
+  const [chapterLayout, setChapterLayout] = useState(() => {
+    try { return localStorage.getItem(GLOSS_LAYOUT_KEY) !== 'original'; } catch { return true; }
+  });
+  function changeChapterLayout(chapter: boolean) {
+    setChapterLayout(chapter);
+    try { localStorage.setItem(GLOSS_LAYOUT_KEY, chapter ? 'chapter' : 'original'); } catch { /* storage unavailable */ }
+  }
   const [spaced, setSpaced] = useState('');
   const [chunks, setChunks] = useState<AnalysisChunk[]>([]);
   /** Guided walkthrough (Cure Dolly style): engine-first, one chunk at a time. Undefined outside a walkthrough. */
@@ -463,6 +475,14 @@ export function AnalyzePage() {
             </strong>
           </div>
           <div className="row">
+            <label>
+              Layout
+              <select value={chapterLayout ? 'chapter' : 'original'} onChange={(event) => changeChapterLayout(event.target.value === 'chapter')}>
+                <option value="chapter">Chapter + icons</option>
+                <option value="original">Original · sentence</option>
+              </select>
+            </label>
+            {chapterLayout ? null : (<>
             <button
               type="button"
               disabled={!prev}
@@ -493,8 +513,58 @@ export function AnalyzePage() {
                 Book
               </button>
             </Link>
+            </>)}
           </div>
         </div>
+        {chapterLayout ? (
+          <>
+        <div className="gloss-workbench">
+          <ChapterReader
+            sentenceId={sentenceId}
+            bookId={bookId}
+            showEnglish={showEnglish}
+            onOpen={(id) => navigate(`/books/${bookId}/analyze/${id}`)}
+            activeView={japaneseView()}
+            fallbackContext={contextSentences}
+          />
+          <div className="gloss-rail" role="toolbar" aria-label="Sentence tools" aria-orientation="vertical">
+            <button type="button" className="icon-button" aria-label="Previous sentence" title="Previous sentence" disabled={!prev}
+              onClick={() => prev && navigate(`/books/${bookId}/analyze/${prev.sentenceId}`)}>←</button>
+            <button type="button" className="icon-button" aria-label="Next sentence" title="Next sentence" disabled={!next}
+              onClick={() => next && navigate(`/books/${bookId}/analyze/${next.sentenceId}`)}>→</button>
+            <button type="button" className="icon-button" aria-label={`Save (${saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : saveState === 'failed' ? 'save failed' : saveState === 'dirty' ? 'unsaved changes' : 'ready'})`}
+              title={saveState === 'dirty' ? 'Save (unsaved changes)' : saveState === 'failed' ? 'Save failed — try again' : saveState === 'saving' ? 'Saving…' : 'Save'}
+              data-state={saveState} onClick={() => void saveNow()}>{saveState === 'saved' ? '✓' : '💾'}</button>
+            <span className="sr-only" role="status">
+              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'failed' ? 'Save failed' : saveState === 'dirty' ? 'Unsaved' : 'Ready'}
+            </span>
+            <button type="button" className="icon-button" aria-label={`Text: ${TEXT_MODE_LABELS[displayMode]}. Switch display`}
+              title={`Text: ${TEXT_MODE_LABELS[displayMode]} (tap for ${TEXT_MODE_LABELS[TEXT_MODE_ORDER[(TEXT_MODE_ORDER.indexOf(displayMode) + 1) % TEXT_MODE_ORDER.length]!]})`}
+              onClick={() => setDisplayMode(TEXT_MODE_ORDER[(TEXT_MODE_ORDER.indexOf(displayMode) + 1) % TEXT_MODE_ORDER.length]!)}>
+              {displayMode === 'plain' ? '文' : displayMode === 'furigana' ? 'ふ' : 'あ'}
+            </button>
+            <button type="button" className="icon-button" aria-pressed={showEnglish}
+              aria-label={`${showEnglish ? 'Hide' : 'Show'} Satori English`} title={`${showEnglish ? 'Hide' : 'Show'} Satori English`}
+              onClick={() => setShowEnglish((value) => !value)}>EN</button>
+            <button type="button" className="icon-button" aria-pressed={showReadingEdit}
+              aria-label={`${showReadingEdit ? 'Hide' : 'Edit'} reading`} title={`${showReadingEdit ? 'Hide' : 'Edit'} reading`}
+              onClick={() => setShowReadingEdit((value) => !value)}>✎</button>
+            {orderedAudio.map((audio, audioIndex) => (
+              <NativeAudioButton key={audio.id} audio={audio} iconOnly hideAdjust
+                displayLabel={orderedAudio.length > 1 ? `Native ${audioIndex + 1}` : undefined} />
+            ))}
+            <SpeakButton text={sentence.japanese} itemId={`sentence-${sentence.id}`}
+              label="Play Japanese sentence with device TTS" iconOnly />
+            <a className="icon-button" href={ichiMoeUrl(sentence.japanese)} target="_blank" rel="noreferrer"
+              aria-label="Open in ichi.moe" title="Open in ichi.moe">🔍</a>
+            <Link className="icon-button" to={`/books/${bookId}/vocabulary/${sentenceId}`}
+              aria-label="Vocabulary for this sentence" title="Vocabulary for this sentence">語</Link>
+            <Link className="icon-button" to={`/books/${bookId}`} aria-label="Back to book" title="Back to book">📖</Link>
+          </div>
+        </div>
+          </>
+        ) : (
+          <>
         {contextSentences.length > 0 ? (
           <div
             className="stack"
@@ -573,6 +643,8 @@ export function AnalyzePage() {
             Save
           </button>
         </div>
+          </>
+        )}
         {!speech.supported ? (
           <p className="muted" style={{ margin: 0 }}>
             Device TTS is unavailable: this browser does not support speech

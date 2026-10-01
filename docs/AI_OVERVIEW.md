@@ -1128,6 +1128,37 @@ analysis) rendered via `ChunkPuzzleStrip`, so a sentence too new/unfamiliar
 to have cleared `continue_book`'s gate can still get a rough structural
 glance here.
 
+Sentence-first additions (2026-09-30, branch `feat/chapter-review`, not yet on
+main): a per-sentence "Walk through" (`SentenceWalkthrough`) steps through the
+sentence's structure engine-first — the learner's saved analysis when its chunks
+reproduce the sentence text, otherwise a labelled heuristic draft — with generic
+role guidance, native audio (+ Adjust), a "Can't speak" (`quietMode`) toggle and
+the six-stage journey (only "Understand" is guided; nothing else is claimed as
+assessed). It writes no study items or reviews. A collapsed "Suggested focus"
+panel derives recurring vocabulary/grammar across the episode
+(`buildEpisodeFocus`, read-only). For chaptered reading an optional "Episode
+preparation" panel (`EpisodePreparationPanel`, `src/lib/episodePreparation.ts`)
+runs an inspectable paste-back AI round trip: the app shows a prompt built from
+the episode (sentences by handle S1…, known vocabulary/grammar by V1…/G1…), the
+learner pastes the JSON reply, and it is validated — unknown handles/refs and
+quoted text that isn't in the named sentence are rejected (offsets are computed
+locally, never taken from the AI) — then stored on the chapter
+(`BookChapter.preparation`, status ready/partial/failed, staleness derived from a
+sentence fingerprint, per-target accept/dismiss/note). A failed reply never
+replaces an earlier usable one and never blocks reading; non-dismissed targets
+feed the walkthrough's "Worth noticing here". `Review.presentation` records the
+layout/document size used at grading for chapter-context reviews. The same panel
+is an "episode pack" (`src/lib/episodePack.ts`): one prompt (ordered parts for
+long episodes) asks for focus targets and English for sentences lacking a
+translation; the JSON reply is validated, translations only fill empty
+sentences, and series imports land on the Reader with the panel open. An opt-in extra part asks for chunk structure (line-per-chunk reply `S1 | text | role | gloss`, JSON `structure` also accepted; `src/lib/episodeStructure.ts`); validated drafts live on `BookChapter.structureDrafts` and the walkthrough uses them only when no saved analysis exists, labelled as unverified.
+
+Inside the walkthrough each prepared target has **Practise this** (recall
+before the explanation is shown, self-rated) and **Compare uses** (another real
+occurrence in the episode, highlighted). These write
+`sentenceLearningEvents` (synced as append-only `sentence_learning_events` once the migration is applied; not in backups) and never create Reviews,
+StudyItems or FSRS state.
+
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and
 history, meant as a break that still trains a skill. Reachable from a Home
@@ -1361,15 +1392,27 @@ The unified FSRS-based SRS, at `/review` (global) and
 content-agnostic wrapper (`scheduling.ts` only ever sees `FsrsState` + a
 rating). One `StudyItem` exists per `(subjectType, subjectId,
 activityType)` triple; multiple activity types can exist for the same
-subject. Any card that frames its target sentence with passage context
+subject. Vocabulary `reading_retrieval`/`cloze` and `grammar_recognition` now
+show the complete source chapter/episode through `ReviewDocumentText`, with
+the target highlighted/blanked and the existing response controls below.
+A Review layout selector also retains the original sentence/neighbor layout
+for these three activities. Its browser-local preference defaults to chapter;
+switching preserves reveal state and never writes a grade or resets the queue.
+The scrollable document keeps plain Japanese before and after reveal; target
+feedback/readings/audio still appear below on reveal. Cloze masks known target
+forms throughout the document and source titles. Source resolution preserves
+book identity and chapter boundaries, falling back to the queued sentence.
+No whole-chapter proficiency gate is introduced. Grammar completion and other
+card layouts retain their prior presentation.
+
+Cards that still frame their target sentence with limited passage context
 (preceding/following neighbour sentences, not the sentence under test)
 shows each context sentence's hiragana reading (`sentence.readingOnly`) on
 its own line underneath, once `revealed` — withheld pre-reveal so a
 passage line the card shows up front doesn't hand over reading practice
 before the learner has attempted it. Shared `ContextSentenceReading`
-helper in `ReviewPage.tsx`, used by `ReadingInContextCard`,
-`VocabularyTargetCard` (`cloze`/`reading_retrieval`),
-`GrammarRecognitionCard`, and `GrammarCompletionCard` (2026-09-27).
+helper in `ReviewPage.tsx`, used by `ReadingInContextCard` and
+`GrammarCompletionCard` (introduced 2026-09-27).
 Activity types currently wired, grouped by subject/eligibility:
 - **Sentence subject**: `reading_in_context` (JP framed by its
   reading-order neighbours — preceding sentences shown untranslated above

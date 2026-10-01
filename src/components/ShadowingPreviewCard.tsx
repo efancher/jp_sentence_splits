@@ -18,7 +18,7 @@ const CONFLICT_FIELD_LABELS: Record<string, string> = {
 
 interface ShadowingPreviewCardProps {
   preview: ShadowingImportPreview;
-  onImported: (result: { bookId: string }) => void;
+  onImported: (result: { bookId: string; chapterId?: string }) => void;
   onCancel: () => void;
   /** Overrides the default "keep the ZIP to restore it" note — the
    * YouTube-mining flow has no ZIP to keep, so it needs different text. */
@@ -27,7 +27,7 @@ interface ShadowingPreviewCardProps {
    * (`commitShadowingPackageImport`) — the podcast/NHK-Easy series flows
    * pass one that adds this preview as a new chapter in one shared
    * per-series book instead. */
-  onCommit?: (preview: ShadowingImportPreview) => Promise<{ bookId: string }>;
+  onCommit?: (preview: ShadowingImportPreview) => Promise<{ bookId: string; chapterId?: string }>;
   /** Overrides the default "Import complete project" button label. */
   commitLabel?: string;
 }

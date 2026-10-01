@@ -12,6 +12,9 @@ import {
   getLeechList,
   getProgressReport,
   getSelfRatingCalibration,
+  getOpenContentReports,
+  getSentenceLessonReport,
+  resolveContentReport,
   getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
@@ -151,6 +154,7 @@ const ERROR_WINDOWS = [
 
 const TARGET_KIND_LABELS: Record<string, string> = {
   continue_book: 'Analyze',
+  sentence_learning: 'Sentence lesson',
   grammar_detail: 'Grammar detail',
   grammar_noticing: 'Notice grammar',
   shadow: 'Shadow',
@@ -171,6 +175,8 @@ export function ProgressPage() {
   const fsrsConfidence = useLiveQuery(() => getFsrsConfidenceSnapshot(), []);
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
+  const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
+  const openReports = useLiveQuery(() => getOpenContentReports(), []);
   const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
   const leechList = useLiveQuery(() => getLeechList(), []);
   const masteryOverview = useLiveQuery(() => getSentenceMasteryOverview(), []);
@@ -197,6 +203,88 @@ export function ProgressPage() {
           </p>
         )}
       </section>
+
+      {lessonReport?.hasData ? (
+        <section className="panel stack" aria-label="Sentence lessons">
+          <h3 style={{ margin: 0 }}>Sentence lessons (last {lessonReport.windowDays} days)</h3>
+          <StatRow
+            label="Lessons planned"
+            value={`${lessonReport.planned.lessons} (${lessonReport.planned.completed} done, ${lessonReport.planned.skipped} skipped)`}
+            hint="Skipping a lot means the lessons may be too long or off-target."
+          />
+          <StatRow
+            label="Days with no lesson in the plan"
+            value={`${lessonReport.planDaysWithoutLessons} of ${lessonReport.planDays}`}
+            hint="Only meaningful with 'Plan sentence lessons' on; otherwise expected."
+          />
+          <StatRow label="Sentences walked through" value={String(lessonReport.outcomes.sentencesWalked)} />
+          <StatRow
+            label="Gist checks"
+            value={`${lessonReport.outcomes.gistHad} of ${lessonReport.outcomes.gistChecks} had it`}
+          />
+          <StatRow
+            label="Said in Japanese without cues"
+            value={String(lessonReport.outcomes.sentencesSaidIndependently)}
+            hint={`Attempts: written ${lessonReport.outcomes.writtenAttempts}, spoken ${lessonReport.outcomes.spokenAttempts}. Self-judged.`}
+          />
+          <StatRow
+            label="Own sentences with a new meaning"
+            value={`${lessonReport.outcomes.transferNewMeaning} of ${lessonReport.outcomes.transferAttempts}`}
+            hint="Using a pattern for a different meaning than the lesson sentence. Self-judged, and counted separately from saying the original meaning."
+          />
+          <StatRow
+            label="Recalled in a sentence you hadn't seen"
+            value={`${lessonReport.outcomes.heldBackGotIt} of ${lessonReport.outcomes.heldBackChecks}`}
+            hint="Masked recall of a target in a different real sentence from the episode. Self-judged; counted separately from practice on the lesson sentence."
+          />
+          <StatRow
+            label="Own sentences re-checked a day or more later"
+            value={`${lessonReport.outcomes.recheckNewMeaning} of ${lessonReport.outcomes.rechecks}`}
+            hint="Written again from memory on a later day. Self-judged; counted separately from same-day attempts."
+          />
+          <StatRow
+            label="Waiting for a fresh try"
+            value={
+              lessonReport.backlog.oldestDays === null
+                ? '0'
+                : `${lessonReport.backlog.readyToRevisit} (oldest ${lessonReport.backlog.oldestDays} days)`
+            }
+          />
+          <StatRow
+            label="Flagged prompts"
+            value={`${lessonReport.quality.contentReports} on ${lessonReport.quality.reportedSentences} sentences`}
+            hint={`Out of ${lessonReport.quality.practicedTargets} target practices. A high share means the prompts need repair.`}
+          />
+          {openReports && openReports.length > 0 ? (
+            <div className="stack" style={{ gap: '0.4rem' }} aria-label="Flagged prompts to review">
+              <strong style={{ fontSize: '0.9rem' }}>Flagged prompts to look at ({openReports.length})</strong>
+              <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                Open the sentence to see the prompt again. "Mark fixed" and "Dismiss" only tidy this list — they
+                never change the sentence or your progress.
+              </p>
+              {openReports.map((item) => (
+                <div key={item.reportEventId} className="stack" style={{ gap: '0.15rem' }}>
+                  <span className="jp">{item.japanese}</span>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {item.targetLabel ? `${item.targetLabel} · ` : ''}
+                    {item.report === 'poor_question' ? 'poor question' : 'another answer works'}
+                    {item.learnerAnswer ? ` · you answered: ${item.learnerAnswer}` : ''}
+                  </span>
+                  <div className="row" style={{ gap: '0.5rem' }}>
+                    <Link to={`/books/${item.bookId}/learn/${item.sentenceId}`}>Open sentence</Link>
+                    <button type="button" onClick={() => void resolveContentReport(item, 'fixed')}>
+                      Mark fixed
+                    </button>
+                    <button type="button" onClick={() => void resolveContentReport(item, 'dismissed')}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {report?.hasData || errorMix?.hasData ? (
       <section className="panel stack">

@@ -220,6 +220,41 @@ decisions worth knowing before adding one:
 
 ## Scheduling
 
+**Chapter review presentation (2026-09-30):** `ReviewDocumentText` loads a
+read-only document through `repository.ts#getReviewDocument` for vocabulary
+reading/cloze and grammar recognition. `ReadingContext.bookId` carries the
+selected source identity; document rows stay within that membership's chapter
+(or the unassigned group). This display scope does not widen readiness gates
+or change FSRS. Source-less cards use the queued sentence. Cloze masking uses
+literal target/lemma forms plus known linked/tokenizer forms; no hidden ruby,
+gloss or audio representation is rendered inside the document. Other activity
+types retain their existing context presentation pending subsequent slices.
+
+**Episode preparation (2026-09-30):** `BookChapter.preparation`
+(`EpisodePreparation`) is an inspectable, versioned record of a validated
+paste-back AI proposal for a chapter's teaching priorities. It lives inside the
+book's `chapters` jsonb, so it syncs and backs up with the book without a
+Supabase migration; staleness is derived (`sentenceFingerprint`), never stored.
+`src/lib/episodePreparation.ts` is pure (prompt builder + strict reply
+validator: AI supplies only sentence/vocab/grammar handles and quoted text, the
+app resolves ids and offsets). It is separate from study progress: no
+`StudyItem`, `Review` or FSRS effect.
+
+**Episode pack (2026-09-30):** `src/lib/episodePack.ts` extends the preparation
+round trip into one resumable copy/paste flow (focus targets + missing
+translations, split into ordered parts for long episodes). Same trust boundary:
+the AI supplies handles and text only; `saveEpisodePackReply` resolves ids,
+fills only empty translations, and reuses the preparation merge. It replaces the
+need for a server-side AI call for these two jobs.
+
+**Sentence learning events (2026-09-30):** `SentenceLearningEvent` rows in the
+Dexie table `sentenceLearningEvents` (synced as append-only `sentence_learning_events`, migration `20260930020000`, unapplied until merge) record in-walkthrough activity
+(opened, completed, target practice, compare uses viewed) with support used and a
+self-assessed outcome. They are deliberately separate from `Review`: they never
+create `StudyItem`s or touch FSRS, and and are not in backups (same
+precedent as `gameRounds`; adding either needs a migration decision).
+`src/lib/sentenceLearning.ts` picks compare-use examples and summarises events.
+
 FSRS via [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) —
 pure TypeScript, no runtime deps, actively maintained by the same org that
 maintains Anki's own reference FSRS implementation. `src/lib/scheduling.ts`
