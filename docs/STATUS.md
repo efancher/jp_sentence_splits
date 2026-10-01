@@ -10,6 +10,12 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Episode pack: literal "dolly" glosses for every chunk.** The
+  optional sentence-structure part of the preparation prompt now asks for a
+  near word-for-word gloss on every chunk, explicitly including non-vocabulary
+  connectives and fixed expressions (もう一つは → "another one, as for"), with a
+  worked example. Glosses still land in `structureDrafts` and show in the Reader
+  walkthrough ("Show gloss"), unverified, and only when no saved analysis exists.
 - **2026-10-01 — Reader: furigana only on words not learned yet.** The Text
   control gains a default "Furigana on new words" mode (`ふ新`): ruby is drawn
   over every kanji word except those whose vocabulary item is reading-proficient

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildEpisodePackPrompts, parseEpisodePackReply, planEpisodePack } from '../src/lib/episodePack';
 import type { PreparationContext } from '../src/lib/episodePreparation';
-import { parseStructure } from '../src/lib/episodeStructure';
+import { buildStructureInstructions, STRUCTURE_LINE_EXAMPLE, parseStructure } from '../src/lib/episodeStructure';
 import { walkthroughChunks } from '../src/components/SentenceWalkthrough';
 
 const context: PreparationContext = {
@@ -97,5 +97,14 @@ describe('line-based structure replies', () => {
     const prompt = buildEpisodePackPrompts(context, plan).at(-1)!;
     expect(prompt).toContain('handle | chunk text | role | short English gloss');
     expect(prompt).not.toContain('"structure"');
+  });
+});
+
+describe('structure prompt glosses', () => {
+  it('asks for literal glosses on every chunk, including non-vocabulary expressions', () => {
+    const text = buildStructureInstructions().join('\n');
+    expect(text).toContain('dolly');
+    expect(text).toContain('EVERY chunk');
+    expect(STRUCTURE_LINE_EXAMPLE).toContain('もう一つは | topic は | another one, as for');
   });
 });

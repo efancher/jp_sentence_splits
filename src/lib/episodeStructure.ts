@@ -25,11 +25,16 @@ export function buildStructureInstructions(): string[] {
     'a verb phrase, a clause). For every chunk give its role and a short literal English gloss. Prefer these role names exactly:',
     STRUCTURE_ROLES.join(' | '),
     'Chunks must be in sentence order and, joined together, must rebuild the sentence exactly (punctuation may sit on the chunk before it).',
+    'GLOSSES: write each gloss as a plain, almost word-for-word "dolly" translation of that chunk in context, not a polished rendering. Cover',
+    'EVERY chunk, including ones that are not vocabulary words: connectives, fixed expressions, counters and particles ("もう一つは" =',
+    '"another one, as for"; "何かを" = "something (object)"). Keep the Japanese word order of the idea (e.g. "writing-or-so thing, right"),',
+    'show what a particle contributes, and prefer a short fragment over a full sentence.',
     'Do not use quotation marks inside a gloss.',
   ];
 }
 
-export const STRUCTURE_LINE_EXAMPLE = 'S4 | 私は | topic は | as for me\nS4 | 読みます。 | engine: verb | read';
+export const STRUCTURE_LINE_EXAMPLE =
+  'S4 | 私は | topic は | as for me\nS4 | もう一つは | topic は | another one, as for\nS4 | 読みます。 | engine: verb | read';
 
 export function parseStructure(
   raw: unknown,
