@@ -84,20 +84,38 @@ const TARGET_SHAPE = {
   occurrences: [{ sentence: 'S4', text: 'exact substring quoted from that sentence' }],
 };
 
+/** Past this many sentences in one section, a single AI reply risks being cut off. */
+export const LONG_REPLY_SENTENCES = 60;
+
+/** A warning when one combined prompt asks for a lot, so the reply may be truncated; undefined otherwise. */
+export function longReplyWarning(plan: EpisodePackPlan): string | undefined {
+  const heavy = [
+    plan.missingTranslationHandles.length,
+    plan.structureHandles.length,
+    plan.constructionHandles.length,
+  ].some((count) => count > LONG_REPLY_SENTENCES);
+  return heavy
+    ? `This prompt asks for more than ${LONG_REPLY_SENTENCES} sentences in one section, so the AI's reply may be cut off. If that happens, turn on "Split into several prompts".`
+    : undefined;
+}
+
 /** Ordered prompts; paste the reply to each into the same box, one at a time. */
-export function buildEpisodePackPrompts(context: PreparationContext, plan: EpisodePackPlan): string[] {
-  const batches: string[][] = [];
-  for (let i = 0; i < plan.missingTranslationHandles.length; i += PACK_TRANSLATIONS_PER_PART) {
-    batches.push(plan.missingTranslationHandles.slice(i, i + PACK_TRANSLATIONS_PER_PART));
-  }
-  const structureBatches: string[][] = [];
-  for (let i = 0; i < plan.structureHandles.length; i += STRUCTURE_SENTENCES_PER_PART) {
-    structureBatches.push(plan.structureHandles.slice(i, i + STRUCTURE_SENTENCES_PER_PART));
-  }
-  const constructionBatches: string[][] = [];
-  for (let i = 0; i < plan.constructionHandles.length; i += CONSTRUCTION_SENTENCES_PER_PART) {
-    constructionBatches.push(plan.constructionHandles.slice(i, i + CONSTRUCTION_SENTENCES_PER_PART));
-  }
+export function buildEpisodePackPrompts(
+  context: PreparationContext,
+  plan: EpisodePackPlan,
+  options: { splitIntoParts?: boolean } = {},
+): string[] {
+  // Default: one prompt, however long. Splitting into parts is opt-in (a very long reply can be cut off).
+  const split = !!options.splitIntoParts;
+  const chunk = (handles: string[], size: number) => {
+    const out: string[][] = [];
+    const step = split ? size : Math.max(handles.length, 1);
+    for (let i = 0; i < handles.length; i += step) out.push(handles.slice(i, i + step));
+    return out;
+  };
+  const batches = chunk(plan.missingTranslationHandles, PACK_TRANSLATIONS_PER_PART);
+  const structureBatches = chunk(plan.structureHandles, STRUCTURE_SENTENCES_PER_PART);
+  const constructionBatches = chunk(plan.constructionHandles, CONSTRUCTION_SENTENCES_PER_PART);
   if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0 && constructionBatches.length === 0) return [];
   if (plan.wantsTargets && batches.length === 0) batches.push([]);
   // The first structure batch rides in the first main prompt so one paste covers

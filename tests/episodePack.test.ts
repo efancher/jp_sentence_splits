@@ -9,6 +9,7 @@ import {
 } from '../src/db/repository';
 import {
   buildEpisodePackPrompts,
+  longReplyWarning,
   PACK_TRANSLATIONS_PER_PART,
   parseEpisodePackReply,
   planEpisodePack,
@@ -71,12 +72,21 @@ describe('episode pack prompts', () => {
     expect(prompts[0]).toContain('STRUCTURE THESE:');
   });
 
+  it('stays a single prompt for a long episode unless splitting is on, and warns', () => {
+    const sentences = Array.from({ length: PACK_TRANSLATIONS_PER_PART * 2 + 5 }, (_, i) => ({ id: `s${i}`, japanese: `文${i}。`, translation: '' }));
+    const long = { ...context, sentences };
+    const plan = planEpisodePack(long, undefined);
+    expect(buildEpisodePackPrompts(long, plan)).toHaveLength(1);
+    expect(longReplyWarning(plan)).toMatch(/cut off/);
+    expect(longReplyWarning(planEpisodePack(context, undefined))).toBeUndefined();
+  });
+
   it('splits a long episode into ordered parts, targets only in the first', () => {
     const sentences = Array.from({ length: PACK_TRANSLATIONS_PER_PART * 2 + 5 }, (_, i) => ({
       id: `s${i}`, japanese: `文${i}。`, translation: '',
     }));
     const long = { ...context, sentences };
-    const prompts = buildEpisodePackPrompts(long, planEpisodePack(long, undefined));
+    const prompts = buildEpisodePackPrompts(long, planEpisodePack(long, undefined), { splitIntoParts: true });
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toContain('part 1 of 3');
     expect(prompts[0]).toContain('"targets"');

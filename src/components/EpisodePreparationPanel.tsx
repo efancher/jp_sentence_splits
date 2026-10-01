@@ -8,7 +8,7 @@ import {
   saveEpisodePackReply,
   updatePreparedTarget,
 } from '../db/repository';
-import { buildEpisodePackPrompts, planEpisodePack } from '../lib/episodePack';
+import { buildEpisodePackPrompts, longReplyWarning, planEpisodePack } from '../lib/episodePack';
 import { isPreparationStale } from '../lib/episodePreparation';
 
 /**
@@ -40,15 +40,19 @@ export function EpisodePreparationPanel({
   const [forceTargets, setForceTargets] = useState(true);
   const [wantStructure, setWantStructure] = useState(true);
   const [wantConstructions, setWantConstructions] = useState(false);
-  const prompts = useMemo(() => {
-    if (!loaded) return [];
+  const [splitIntoParts, setSplitIntoParts] = useState(false);
+  const { prompts, warning } = useMemo(() => {
+    if (!loaded) return { prompts: [] as string[], warning: undefined };
     const plan = planEpisodePack(loaded.context, loaded.preparation, {
       forceTargets,
       structureSentenceIds: wantStructure ? new Set(loaded.needsStructureIds) : undefined,
       constructionSentenceIds: wantConstructions ? new Set(loaded.needsConstructionIds) : undefined,
     });
-    return buildEpisodePackPrompts(loaded.context, plan);
-  }, [loaded, forceTargets, wantStructure, wantConstructions]);
+    return {
+      prompts: buildEpisodePackPrompts(loaded.context, plan, { splitIntoParts }),
+      warning: splitIntoParts ? undefined : longReplyWarning(plan),
+    };
+  }, [loaded, forceTargets, wantStructure, wantConstructions, splitIntoParts]);
 
   if (!loaded) return null;
   const { context, preparation } = loaded;
@@ -149,9 +153,14 @@ export function EpisodePreparationPanel({
         {loaded.needsConstructionIds.length > 0 ? (
           <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
             <input type="checkbox" checked={wantConstructions} onChange={(event) => setWantConstructions(event.target.checked)} />
-            <span>Also ask how phrases are built ({loaded.needsConstructionIds.length} sentences without an explanation) for “How this phrase works”; asked in separate prompts</span>
+            <span>Also ask how phrases are built ({loaded.needsConstructionIds.length} sentences without an explanation) for “How this phrase works”</span>
           </label>
         ) : null}
+        <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+          <input type="checkbox" checked={splitIntoParts} onChange={(event) => setSplitIntoParts(event.target.checked)} />
+          <span>Split into several prompts (for a very long episode; each reply is pasted separately)</span>
+        </label>
+        {warning ? <p role="alert" className="muted" style={{ margin: 0 }}>{warning}</p> : null}
         <label className="stack" style={{ gap: '0.25rem' }}>
           <span>Paste the AI reply</span>
           <textarea rows={4} value={reply} onChange={(event) => setReply(event.target.value)} aria-label="AI reply" />
