@@ -30,15 +30,36 @@ describe('episode structure', () => {
     expect(rejected.map((item) => item.handle).sort()).toEqual(['S2', 'S9']);
   });
 
-  it('is asked only when opted in, in its own prompt', () => {
-    // (prompt asks for lines, not JSON)
+  it('is asked only when opted in, and rides in the same single prompt as targets/translations', () => {
     const none = planEpisodePack(context, undefined, {});
-    expect(buildEpisodePackPrompts(context, planEpisodePack(context, { targets: [{}] } as never, {})).length).toBeLessThanOrEqual(1);
     expect(none.structureHandles).toEqual([]);
-    const plan = planEpisodePack(context, { targets: [{}] } as never, { structureSentenceIds: new Set(['s-b']) });
+    const plan = planEpisodePack(context, undefined, { structureSentenceIds: new Set(['s-b']) });
     const prompts = buildEpisodePackPrompts(context, plan);
-    expect(prompts.at(-1)).toContain('S2: 本を買いました。');
-    expect(prompts.at(-1)).not.toContain('S1:');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('FOCUS TARGETS');
+    expect(prompts[0]).toContain('STRUCTURE THESE:\nS2: 本を買いました。');
+    expect(prompts[0]!.split('STRUCTURE THESE:\n')[1]!.split('\n\n')[0]).toBe('S2: 本を買いました。');
+    expect(prompts[0]).toContain('Reply in two parts');
+  });
+
+  it('keeps a structure-only prompt when nothing else is needed', () => {
+    const plan = planEpisodePack(context, undefined, { structureSentenceIds: new Set(['s-b']), forceTargets: false });
+    const prompts = buildEpisodePackPrompts(context, { ...plan, wantsTargets: false, missingTranslationHandles: [] });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).not.toContain('FOCUS TARGETS');
+  });
+
+  it('parses JSON plus trailing structure lines from one reply', () => {
+    const reply = [
+      '```json',
+      JSON.stringify({ version: 1, translations: { S1: 'I read.' } }),
+      '```',
+      'S1 | 本を | object | book (object)',
+      'S1 | 読みます。 | engine: verb | read',
+    ].join('\n');
+    const parsed = parseEpisodePackReply(reply, context, '2026-09-30T00:00:00.000Z');
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.structure?.drafts.get('s-a')).toHaveLength(2);
   });
 
   it('a structure-only reply parses', () => {

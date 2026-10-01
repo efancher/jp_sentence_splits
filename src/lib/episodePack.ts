@@ -11,7 +11,14 @@
  * translations are never overwritten.
  */
 import type { EpisodePreparation, StructureDraftChunk } from '../domain/types';
-import { STRUCTURE_LINE_EXAMPLE, STRUCTURE_SENTENCES_PER_PART, buildStructureInstructions, parseStructure, parseStructureLines } from './episodeStructure';
+import {
+  STRUCTURE_LINE_EXAMPLE,
+  STRUCTURE_SENTENCES_PER_PART,
+  buildStructureInstructions,
+  parseStructure,
+  parseStructureLines,
+  type StructureParse,
+} from './episodeStructure';
 import {
   EPISODE_PREPARATION_VERSION,
   MAX_PREPARED_TARGETS,
@@ -77,9 +84,13 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
   }
   if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0) return [];
   if (plan.wantsTargets && batches.length === 0) batches.push([]);
+  // The first structure batch rides in the first main prompt so one paste covers
+  // everything; any further batches (very long episodes) stay separate parts.
+  const mergedStructure = batches.length > 0 ? structureBatches.shift() : undefined;
 
   const sentenceByHandle = new Map(context.sentences.map((s, i) => [`S${i + 1}`, s]));
   const total = batches.length + structureBatches.length;
+  const structureLines = (batch: string[]) => batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`);
 
   const structurePrompts = structureBatches.map((batch, index) =>
     [
@@ -144,14 +155,29 @@ export function buildEpisodePackPrompts(context: PreparationContext, plan: Episo
       );
     }
 
+    const withStructure = partIndex === 0 && mergedStructure !== undefined;
+    if (withStructure) {
+      lines.push('', ...buildStructureInstructions(), '', 'STRUCTURE THESE:', ...structureLines(mergedStructure));
+    }
+
     const shape: Record<string, unknown> = { version: EPISODE_PREPARATION_VERSION };
     if (includeTargets) shape.targets = [TARGET_SHAPE];
     if (batch.length > 0) shape.translations = { [batch[0]!]: 'English translation' };
     lines.push(
       '',
-      'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
+      withStructure
+        ? 'Reply in two parts. First, this JSON (plain straight quotes), covering everything except structure:'
+        : 'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
       JSON.stringify(shape, null, 2),
     );
+    if (withStructure) {
+      lines.push(
+        'Then, right after the JSON, the STRUCTURE lines, one chunk per line, in this exact form: handle | chunk text | role | short English gloss',
+        'Example:',
+        STRUCTURE_LINE_EXAMPLE,
+        'Give every sentence listed under STRUCTURE THESE, its chunks in order, and no other text after the JSON besides those lines.',
+      );
+    }
     if (includeTargets) {
       lines.push('Every occurrence "text" must be copied exactly from the sentence it names, and name a real sentence handle.');
     }
@@ -224,6 +250,12 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
     preparation: hasTargets ? parsePreparationObject(raw, context, now) : undefined,
     translations,
     rejectedTranslations,
-    structure: hasStructure ? parseStructure(object.structure, context) : undefined,
+    structure: hasStructure ? parseStructure(object.structure, context) : trailingStructure(reply, context),
   };
+}
+
+/** Structure lines that follow the JSON in a single combined reply; undefined when there are none. */
+function trailingStructure(reply: string, context: PreparationContext): StructureParse | undefined {
+  const lines = parseStructureLines(reply, context);
+  return lines.drafts.size > 0 || lines.rejected.length > 0 ? lines : undefined;
 }

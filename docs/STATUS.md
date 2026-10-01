@@ -10,6 +10,13 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Episode pack: one prompt, one paste.** When sentence structure
+  is requested, its first batch (now up to 60 sentences) rides in the main
+  prompt: the AI replies with the JSON (targets/translations) and then the
+  `S1 | chunk | role | gloss` lines in the same message. `parseEpisodePackReply`
+  reads the JSON and the trailing structure lines from the one paste; JSON
+  `structure` and a lines-only reply still parse. Only episodes with more than
+  60 sentences to structure get extra separate parts.
 - **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**
   An AI reply that put a vocabulary handle on a grammar target (`V31` on
   `～方が好き`) rejected the whole target as an unknown grammar ref. A ref from
