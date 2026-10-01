@@ -668,6 +668,10 @@ export function ReaderPage() {
                       constructionDrafts={data.chapter?.constructionDrafts}
                       events={lessonEvents ?? []}
                       glossRecords={glossRecords}
+                      knownRatio={(() => {
+                        const content = row.sentence.vocabularySuggestions.filter((suggestion) => suggestion.selectedByDefault);
+                        return content.length === 0 ? undefined : content.filter((suggestion) => data.knownExpressions.has(suggestion.expression)).length / content.length;
+                      })()}
                       onGlossDecision={(decision) => void logGlossDecision({ ...decision, bookId })}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({

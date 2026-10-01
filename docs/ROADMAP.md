@@ -376,7 +376,7 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     service; recommendation on file is box-level backups of the cache dir
     instead).
 
-- [~] **Progressive glossing.** Slice 1 shipped 2026-10-01 (STATUS). Left: feasibility script (share of real sentences yielding settled decisions), "try unaided" at any level, partial translation (level 2), "too easy / right / too hard" one-tap, park-and-prepare for bigger gaps, readiness tiers, progress panel, attachment/clause skills with an AI-verified reference, planner revisit step.
+- [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills; run `diagnose:gloss-reference` to size them.
 
 ## Planned
 

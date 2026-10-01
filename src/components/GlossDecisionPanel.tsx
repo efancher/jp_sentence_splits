@@ -8,6 +8,9 @@ import {
   hintLadder,
   inferSkillState,
   outcomeFor,
+  glossReadinessTier,
+  parkedDecisionKeys,
+  partialTranslation,
   translationLevelFor,
   type Blocker,
   type GlossChunk,
@@ -31,21 +34,28 @@ const HELP: { blocker: Blocker; label: string }[] = [
 ];
 
 /** Decisions this sentence offers, each with the learner's support level for its skill frozen at open. */
-export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[], now: Date = new Date()) {
+export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[], now: Date = new Date(), sentenceId?: string) {
   const specs = buildDecisions(chunks);
-  const ordered = [
-    ...specs.filter((s) => s.skill === 'predicate'),
-    ...specs.filter((s) => s.skill === 'particle' && s.confidence === 'settled'),
-    ...specs.filter((s) => s.skill === 'particle' && s.confidence !== 'settled'),
-  ].slice(0, MAX_DECISIONS_PER_SENTENCE);
+  // Reopening a sentence with parked checks asks only those, so the return visit is the retry.
+  const parked = sentenceId ? parkedDecisionKeys(records).get(sentenceId) : undefined;
+  const parkedSpecs = parked ? specs.filter((s) => parked.has(`${s.ruleKey}|${s.targetText}`)) : [];
+  const ordered = parkedSpecs.length > 0
+    ? parkedSpecs.slice(0, MAX_DECISIONS_PER_SENTENCE)
+    : [
+        ...specs.filter((s) => s.skill === 'predicate'),
+        ...specs.filter((s) => s.skill === 'particle' && s.confidence === 'settled'),
+        ...specs.filter((s) => s.skill === 'attachment'),
+        ...specs.filter((s) => s.skill === 'particle' && s.confidence !== 'settled'),
+      ].slice(0, MAX_DECISIONS_PER_SENTENCE);
   const states: Record<string, SkillState> = {
     predicate: inferSkillState(records, 'predicate', now),
     particle: inferSkillState(records, 'particle', now),
+    attachment: inferSkillState(records, 'attachment', now),
   };
   return ordered.map((spec) => {
     const state = states[spec.skill]!;
     const level: SupportLevel = state.needsIntro ? 1 : state.level;
-    return { spec, state, level };
+    return { spec, state, level, parked: parkedSpecs.length > 0 };
   });
 }
 
@@ -70,6 +80,7 @@ export function GlossDecisionPanel({
   records,
   translation,
   words,
+  knownRatio,
   onRecord,
   onFinish,
 }: {
@@ -79,10 +90,12 @@ export function GlossDecisionPanel({
   records: GlossDecision[];
   translation?: string;
   words: CompareAids['words'];
+  /** Share of the sentence's content words the learner already knows (advisory; thin opens the glosses). */
+  knownRatio?: number;
   onRecord: (decision: GlossDecisionInput) => void;
   onFinish: () => void;
 }) {
-  const [plan] = useState(() => planGlossDecisions(chunks, records));
+  const [plan] = useState(() => planGlossDecisions(chunks, records, new Date(), sentenceId));
   const [index, setIndex] = useState(0);
   const current = plan[index];
 
@@ -105,6 +118,8 @@ export function GlossDecisionPanel({
       chunks={chunks}
       translation={translation}
       words={words}
+      thin={glossReadinessTier(knownRatio) === 'thin'}
+      parked={current.parked}
       position={`${index + 1} of ${plan.length}`}
       isLast={index === plan.length - 1}
       onRecord={onRecord}
@@ -114,7 +129,7 @@ export function GlossDecisionPanel({
 }
 
 function DecisionCard({
-  sentenceId, visitId, spec, level, state, chunks, translation, words, position, isLast, onRecord, onNext,
+  sentenceId, visitId, spec, level: baseLevel, state, chunks, translation, words, thin, parked, position, isLast, onRecord, onNext,
 }: {
   sentenceId: string;
   visitId: string;
@@ -124,25 +139,43 @@ function DecisionCard({
   chunks: GlossChunk[];
   translation?: string;
   words: CompareAids['words'];
+  thin: boolean;
+  parked: boolean;
   position: string;
   isLast: boolean;
   onRecord: (decision: GlossDecisionInput) => void;
   onNext: () => void;
 }) {
+  function onFelt(felt: NonNullable<GlossDecision['felt']>) {
+    onRecord({
+      visitId, sentenceId, skill: spec.skill, subskill: spec.subskill, ruleKey: spec.ruleKey, targetText: spec.targetText,
+      levelShown: level, firstCorrect: null, referenceValue: spec.referenceValue, referenceConfidence: 'compare',
+      hintMaxStep: 0, explanationOpened: false, vocabHelped: false, translationLevel: 0, outcome: 'self_report', felt,
+    });
+  }
   const [attempt, setAttempt] = useState<Attempt>(freshAttempt);
-  const [glossesOpen, setGlossesOpen] = useState(false);
+  const [glossesOpen, setGlossesOpen] = useState(thin);
+  const [unaided, setUnaided] = useState(false);
+  const [feltSent, setFeltSent] = useState(false);
+  const level: SupportLevel = unaided ? 4 : baseLevel;
   const ladder = useMemo(() => hintLadder(spec, attempt.blocker), [spec, attempt.blocker]);
   const isWorkedExample = level === 1;
   const translationLevel = translationLevelFor(level);
-  const showGlosses = translationLevel >= 1 || glossesOpen;
-  const showTranslation = translationLevel === 3 && !!translation?.trim();
+  const partial = translationLevel === 2 ? partialTranslation(chunks, spec.chunkId) : undefined;
+  // Partial needs the learner's own glosses for every other chunk; otherwise show the full line.
+  const effectiveTranslationLevel = translationLevel === 2 && !partial ? 3 : translationLevel;
+  const showGlosses = (effectiveTranslationLevel >= 1 && !unaided) || glossesOpen;
+  const showTranslation = effectiveTranslationLevel === 3 && !!translation?.trim();
   const referenceLabel = spec.options.find((o) => o.id === spec.referenceValue)?.label ?? spec.referenceValue;
-  const narrowed = level === 2 ? ladder[1]!.keepOptions : attempt.hintStep >= 2 ? ladder[1]!.keepOptions : undefined;
+  const narrowed = level === 2 && !unaided ? ladder[1]!.keepOptions : attempt.hintStep >= 2 ? ladder[1]!.keepOptions : undefined;
   const visibleOptions = narrowed ? spec.options.filter((o) => narrowed.includes(o.id)) : spec.options;
   const question = spec.skill === 'predicate'
     ? 'Which chunk is the main predicate — the one that closes the sentence?'
-    : `What is ${spec.targetText} to the rest of the sentence?`;
+    : spec.skill === 'attachment'
+      ? `${spec.targetText} describes which chunk?`
+      : `What is ${spec.targetText} to the rest of the sentence?`;
   const done = attempt.finished !== undefined;
+  const canTryUnaided = (baseLevel === 2 || baseLevel === 3) && !unaided && attempt.first === undefined && attempt.hintStep === 0 && !glossesOpen && !done;
 
   function finish(next: Attempt, outcome: GlossDecision['outcome'], responseOverride?: string) {
     const record: GlossDecisionInput = {
@@ -150,7 +183,7 @@ function DecisionCard({
       levelShown: level, firstResponse: responseOverride ?? next.first, firstCorrect: next.firstCorrect,
       referenceValue: spec.referenceValue, referenceConfidence: spec.confidence, hintMaxStep: next.hintStep,
       explanationOpened: next.explanationOpened, blocker: next.blocker, vocabHelped: next.vocabHelped,
-      translationLevel, outcome,
+      translationLevel: effectiveTranslationLevel, outcome,
     };
     onRecord(record);
     setAttempt({ ...next, finished: outcome });
@@ -193,7 +226,7 @@ function DecisionCard({
   return (
     <div className="stack gloss-decision" style={{ gap: '0.4rem' }} aria-label="Structure check" aria-live="polite">
       <div className="muted" style={{ fontSize: '0.85rem' }}>
-        Check {position} · {spec.skill === 'predicate' ? 'Main predicate' : 'Particle roles'}:{' '}
+        Check {position} · {spec.skill === 'predicate' ? 'Main predicate' : spec.skill === 'attachment' ? 'Noun links' : 'Particle roles'}:{' '}
         <strong>{isWorkedExample ? 'Worked example' : LEVEL_NAMES[level]}</strong> — {state.reason}
       </div>
       <div className="row jp jp-lg" style={{ flexWrap: 'wrap', gap: '0.4rem' }} aria-label="Sentence chunks">
@@ -203,12 +236,18 @@ function DecisionCard({
           </span>
         ))}
       </div>
+      {parked ? <div className="muted" role="status">You parked this earlier — here it is again.</div> : null}
+      {thin ? <div className="muted" role="status">A lot of words here are new, so the glosses are open to start.</div> : null}
       {showTranslation ? <div>{translation}</div> : null}
+      {partial && !showTranslation ? <div aria-label="Partial translation">{partial}</div> : null}
       {showGlosses && words.length > 0 ? <WordGlossList words={words} /> : null}
       {!showGlosses && words.length > 0 ? (
         <button type="button" onClick={() => { setGlossesOpen(true); setAttempt({ ...attempt, vocabHelped: true }); }}>Show word glosses</button>
       ) : null}
       <div>{question}</div>
+      {canTryUnaided && !isWorkedExample ? (
+        <button type="button" onClick={() => setUnaided(true)}>Try unaided</button>
+      ) : null}
 
       {isWorkedExample ? (
         <div className="stack" style={{ gap: '0.3rem' }}>
@@ -216,7 +255,9 @@ function DecisionCard({
             <strong>{spec.skill === 'predicate' ? spec.targetText : referenceLabel}</strong>
             {spec.skill === 'predicate'
               ? ' — Japanese closes on its verb, adjective or です/だ, so start there and hang everything else off it.'
-              : ` — ${spec.targetText} is marked by ${spec.particle}: ${referenceLabel}.`}
+              : spec.skill === 'attachment'
+                ? ` — ${spec.targetText} describes ${referenceLabel}: ${spec.particle} links the noun before it to the noun after it.`
+                : ` — ${spec.targetText} is marked by ${spec.particle}: ${referenceLabel}.`}
           </div>
           <button type="button" className="primary" disabled={done} onClick={() => { finish({ ...attempt, resolved: true }, 'ungraded'); }}>
             Got it
@@ -257,7 +298,17 @@ function DecisionCard({
       {done && !isWorkedExample ? <DecisionFeedback attempt={attempt} spec={spec} referenceLabel={referenceLabel} /> : null}
       <div className="row" style={{ flexWrap: 'wrap', gap: '0.35rem' }}>
         {done ? (
-          <button type="button" className="primary" onClick={onNext}>{isLast ? 'Continue to the walkthrough' : 'Next check'}</button>
+          <>
+            {isLast && !isWorkedExample && !feltSent ? (
+              <span className="row" style={{ gap: '0.35rem', flexWrap: 'wrap' }} role="group" aria-label="How was that">
+                <span className="muted">How did these feel?</span>
+                {([['too_easy', 'Too easy'], ['right', 'About right'], ['too_hard', 'Too hard']] as const).map(([felt, label]) => (
+                  <button key={felt} type="button" onClick={() => { setFeltSent(true); onFelt(felt); }}>{label}</button>
+                ))}
+              </span>
+            ) : null}
+            <button type="button" className="primary" onClick={onNext}>{isLast ? 'Continue to the walkthrough' : 'Next check'}</button>
+          </>
         ) : (
           <>
             {stuck ? (

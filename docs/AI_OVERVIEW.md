@@ -1163,7 +1163,7 @@ occurrence in the episode, highlighted). These write
 `sentenceLearningEvents` (synced as append-only `sentence_learning_events` once the migration is applied; not in backups) and never create Reviews,
 StudyItems or FSRS state.
 
-Progressive glossing: before the chunk-by-chunk walkthrough, the learner makes up to three structural decisions (main predicate, particle relations) at a per-skill support level (worked example / partial / guided / independent), recomputed from the synced `gloss_decisions` log. Help is typed (word / form / connection / unsure) and climbs a hint ladder; wrong first answers can retry; disputes are not failures; word/form gaps do not lower structural support. No FSRS.
+Progressive glossing: before the chunk-by-chunk walkthrough, the learner makes up to three structural decisions (main predicate, particle relations) at a per-skill support level (worked example / partial / guided / independent), recomputed from the synced `gloss_decisions` log. Help is typed (word / form / connection / unsure) and climbs a hint ladder; wrong first answers can retry; disputes are not failures; word/form gaps do not lower structural support. Also: try-unaided, partial translation at level 2, a noun-link (の) skill, one-tap too-easy/right/too-hard self-report (never graded), parked checks re-asked first on the next visit and surfaced by the planner revisit step, advisory known-word readiness (thin opens glosses), and a Progress panel. Not built: AI-verified dependency reference, clause skills. No FSRS.
 
 ### 3a. Short games — `PlayHubPage.tsx` / `PlayGamePage.tsx` (`/play`, `/play/:gameId/:signal`)
 Short (60–180 s), non-arcade rounds built from the learner's own books and

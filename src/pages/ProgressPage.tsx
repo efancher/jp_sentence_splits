@@ -22,7 +22,9 @@ import {
 import type { ErrorCategory } from '../lib/errorMix';
 import type { TrendDirection } from '../lib/pronunciationProfile';
 import type { WeekBucket } from '../lib/progressReport';
+import { LEVEL_NAMES, summariseGloss } from '../lib/glossSkill';
 import { buildVelocityReport } from '../lib/velocity';
+import { listGlossDecisions } from '../db/repository';
 import { findGame } from '../games/registry';
 import { SIGNAL_LABELS } from '../lib/gamePicker';
 
@@ -167,6 +169,7 @@ const TARGET_KIND_LABELS: Record<string, string> = {
 export function ProgressPage() {
   const [errorWindow, setErrorWindow] = useState(30);
   const report = useLiveQuery(() => getProgressReport(), []);
+  const glossSummary = useLiveQuery(async () => summariseGloss(await listGlossDecisions()), []);
   const blindSpots = useLiveQuery(() => getBlindSpots(), []);
   const errorMix = useLiveQuery(() => getErrorMix({ windowDays: errorWindow }), [errorWindow]);
   const calibration = useLiveQuery(() => getSelfRatingCalibration(), []);
@@ -438,6 +441,24 @@ export function ProgressPage() {
 
       {report && report.hasData ? (
         <>
+          {glossSummary && glossSummary.decisions > 0 ? (
+            <section className="panel stack" aria-label="Structure checks">
+              <h3 style={{ margin: 0 }}>Structure checks</h3>
+              {glossSummary.skills.map((skill) => (
+                <StatRow key={skill.skill} label={skill.skill} value={`${LEVEL_NAMES[skill.level]} (${skill.gradable} graded)`} hint={skill.reason} />
+              ))}
+              <StatRow label="Parked sentences" value={String(glossSummary.parkedSentences)} hint="asked again on the next visit" />
+              <StatRow label="Word / form gaps" value={`${glossSummary.blockers.word} / ${glossSummary.blockers.form}`} hint="counted apart from structure" />
+              <StatRow label="Felt too easy / right / too hard" value={`${glossSummary.felt.too_easy} / ${glossSummary.felt.right} / ${glossSummary.felt.too_hard}`} />
+              {glossSummary.hintRate ? (
+                <StatRow label="Hint use, earlier → recent" value={`${Math.round(glossSummary.hintRate.earlier * 100)}% → ${Math.round(glossSummary.hintRate.recent * 100)}%`} />
+              ) : null}
+              {Object.entries(glossSummary.disputes).map(([rule, count]) => (
+                <StatRow key={rule} label={`Disputed ${rule}`} value={String(count)} hint="rule flagged for review" />
+              ))}
+            </section>
+          ) : null}
+
           <section className="panel stack">
             <h3 style={{ margin: 0 }}>Vocabulary</h3>
             <StatRow label="Tracked words" value={String(report.vocabulary.tracked)} />

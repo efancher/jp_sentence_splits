@@ -30,6 +30,7 @@ export interface GlossChunk {
   id: string;
   japanese: string;
   role: string;
+  literalEnglish?: string;
 }
 
 export interface RelationOption {
@@ -139,6 +140,26 @@ export function buildDecisions(chunks: GlossChunk[]): GlossDecisionSpec[] {
       confidence: settled ? 'settled' : 'alternative',
     });
   });
+
+  // Noun modifier: Aの + B — A describes the chunk right after it. High precision, so settled;
+  // skipped when the next chunk is the predicate (explanatory のだ) or the role was edited.
+  chunks.forEach((chunk, index) => {
+    const next = chunks[index + 1];
+    if (!next || isEngineRole(next.role) || index === predicateIndex) return;
+    const [, particle] = splitTrailingParticle(bare(chunk.japanese));
+    if (particle !== 'の' || chunk.role !== PARTICLE_ROLE['の']) return;
+    specs.push({
+      skill: 'attachment',
+      subskill: 'noun_modifier',
+      ruleKey: 'attachment:の',
+      chunkId: chunk.id,
+      targetText: chunk.japanese,
+      particle,
+      options: chunks.filter((c) => c.id !== chunk.id).map((c) => ({ id: c.id, label: c.japanese })),
+      referenceValue: next.id,
+      confidence: 'settled',
+    });
+  });
   return specs;
 }
 
@@ -174,6 +195,14 @@ export function hintLadder(spec: GlossDecisionSpec, blocker: Blocker = 'unsure')
     ];
   }
   const particle = spec.particle ?? '';
+  if (spec.skill === 'attachment') {
+    const keep = [spec.referenceValue, ...(wrong ? [wrong] : [])];
+    return [
+      { step: 1, text: `${particle} links two nouns: the thing before ${particle} describes or owns the thing that comes right after it.` },
+      { step: 2, text: 'Narrowed to two chunks.', keepOptions: keep },
+      { step: 3, text: `${spec.targetText} describes ${spec.options.find((o) => o.id === spec.referenceValue)?.label ?? 'the next chunk'}.` },
+    ];
+  }
   return [
     { step: 1, text: `Look at what ${particle} attaches to and what the predicate does with it: is it the thing acted on, the one acting, or something else?` },
     { step: 2, text: `Narrowed to two readings of ${particle}.`, keepOptions: narrowed },
@@ -187,10 +216,29 @@ export function outcomeFor(args: { graded: boolean | null; hintMaxStep: number; 
   return args.resolved ? 'assisted_correct' : 'unresolved';
 }
 
-export function translationLevelFor(level: SupportLevel): 0 | 1 | 3 {
+/** 0 hidden, 1 word glosses, 2 partial (target masked), 3 full. Level 2 falls back to full when a partial can't be built. */
+export function translationLevelFor(level: SupportLevel): 0 | 1 | 2 | 3 {
   if (level >= 4) return 0;
   if (level === 3) return 1;
-  return 3;
+  return level === 2 ? 2 : 3;
+}
+
+/**
+ * Literal English of every chunk except the target (masked as ___), only from the learner's
+ * own saved glosses — never machine-written. Undefined when any other chunk has none.
+ */
+export function partialTranslation(chunks: GlossChunk[], targetChunkId: string): string | undefined {
+  const parts: string[] = [];
+  for (const chunk of chunks) {
+    if (chunk.id === targetChunkId) {
+      parts.push('___');
+    } else if (chunk.literalEnglish?.trim()) {
+      parts.push(chunk.literalEnglish.trim());
+    } else {
+      return undefined;
+    }
+  }
+  return parts.join(' ');
 }
 
 export interface SkillState {
@@ -269,4 +317,68 @@ export function blockerCounts(records: GlossDecision[]): Record<Blocker, number>
   const counts: Record<Blocker, number> = { word: 0, form: 0, structure: 0, unsure: 0 };
   for (const record of records) if (record.blocker) counts[record.blocker] += 1;
   return counts;
+}
+
+export type GlossReadinessTier = 'ready' | 'workable' | 'thin';
+
+/** Advisory only: never blocks, only decides whether the word strip opens up front. */
+export function glossReadinessTier(knownRatio: number | undefined): GlossReadinessTier {
+  if (knownRatio === undefined || knownRatio >= 0.8) return 'ready';
+  return knownRatio >= 0.5 ? 'workable' : 'thin';
+}
+
+const isDecisionRow = (record: GlossDecision) => record.outcome !== 'self_report';
+
+/** Sentences with a decision whose latest attempt stayed unresolved, excluding ones touched today. */
+export function parkedDecisionKeys(records: GlossDecision[]): Map<string, Set<string>> {
+  const latest = new Map<string, GlossDecision>();
+  for (const record of [...records].filter(isDecisionRow).sort((a, b) => a.timestamp.localeCompare(b.timestamp))) {
+    if (record.outcome === 'skipped' || record.outcome === 'disputed') continue;
+    latest.set(`${record.sentenceId}|${record.ruleKey}|${record.targetText}`, record);
+  }
+  const parked = new Map<string, Set<string>>();
+  for (const record of latest.values()) {
+    if (record.outcome !== 'unresolved') continue;
+    const keys = parked.get(record.sentenceId) ?? new Set<string>();
+    keys.add(`${record.ruleKey}|${record.targetText}`);
+    parked.set(record.sentenceId, keys);
+  }
+  return parked;
+}
+
+export function parkedSentenceIds(records: GlossDecision[], now: Date = new Date()): string[] {
+  const today = now.toDateString();
+  const touchedToday = new Set(records.filter((r) => new Date(r.timestamp).toDateString() === today).map((r) => r.sentenceId));
+  return [...parkedDecisionKeys(records).keys()].filter((id) => !touchedToday.has(id));
+}
+
+export interface GlossSummary {
+  skills: SkillState[];
+  decisions: number;
+  blockers: Record<Blocker, number>;
+  disputes: Record<string, number>;
+  felt: Record<'too_easy' | 'right' | 'too_hard', number>;
+  skipRate: number | null;
+  /** Hint use in the latest 15 decisions vs the 15 before; null until there are enough. */
+  hintRate: { recent: number; earlier: number } | null;
+  parkedSentences: number;
+}
+
+export function summariseGloss(records: GlossDecision[], now: Date = new Date()): GlossSummary {
+  const rows = records.filter(isDecisionRow).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const felt = { too_easy: 0, right: 0, too_hard: 0 };
+  for (const record of records) if (record.felt) felt[record.felt] += 1;
+  const asked = rows.filter((r) => r.levelShown > 1);
+  const rate = (list: GlossDecision[]) => list.filter((r) => r.hintMaxStep > 0).length / list.length;
+  const hintRate = asked.length >= 30 ? { recent: rate(asked.slice(-15)), earlier: rate(asked.slice(-30, -15)) } : null;
+  return {
+    skills: (['predicate', 'particle', 'attachment'] as const).map((skill) => inferSkillState(rows, skill, now)),
+    decisions: rows.length,
+    blockers: blockerCounts(rows),
+    disputes: disputeCounts(rows),
+    felt,
+    skipRate: rows.length ? rows.filter((r) => r.outcome === 'skipped').length / rows.length : null,
+    hintRate,
+    parkedSentences: parkedDecisionKeys(rows).size,
+  };
 }

@@ -72,6 +72,26 @@ describe('GlossDecisionPanel', () => {
     expect(onRecord).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'disputed' }));
   });
 
+  it('"Try unaided" records the independent level and hides glosses', async () => {
+    const records = [settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' }), settled({ skill: 'predicate', outcome: 'assisted_correct' })];
+    const { onRecord } = setup(records);
+    expect(screen.getByText(/to eat/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Try unaided' }));
+    expect(screen.queryByText(/to eat/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    expect(onRecord).toHaveBeenCalledWith(expect.objectContaining({ levelShown: 4, translationLevel: 0 }));
+  });
+
+  it('logs a self-report row from the too easy / right / too hard prompt without touching grading', async () => {
+    const records = (['predicate', 'particle'] as const).flatMap((skill) => [1, 2, 3].map(() => settled({ skill, outcome: 'assisted_correct' })));
+    const { onRecord } = setup(records);
+    await userEvent.click(screen.getByRole('button', { name: '食べた。' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next check' }));
+    await userEvent.click(screen.getByRole('button', { name: 'what the action is done to' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Too easy' }));
+    expect(onRecord).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'self_report', felt: 'too_easy', firstCorrect: null }));
+  });
+
   it('after three independent successes the next sentence hides the translation (support later changes)', () => {
     const records = [settled({ skill: 'predicate' }), settled({ skill: 'predicate' }), settled({ skill: 'predicate' })];
     setup(records);

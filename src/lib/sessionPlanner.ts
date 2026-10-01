@@ -381,6 +381,8 @@ export interface ExploreCandidate {
     vocabularyIntroduced: boolean;
     /** Sentence-first only: walked through on an earlier day and not yet said independently — a fresh try, not a first lesson. */
     revisit?: boolean;
+    /** A structure check was parked in this sentence; the revisit re-asks only that. */
+    parkedGloss?: true;
   }[];
 }
 
@@ -661,7 +663,9 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
       sentenceId: sentence.sentenceId,
       label: `${sentence.revisit ? 'Fresh try' : 'Learn this sentence'}: ${sentence.preview}`,
       estimatedMinutes: exploreEntryCost(entry),
-      reason: sentence.revisit
+      reason: sentence.parkedGloss
+        ? `You parked a structure check in this sentence in ${candidate.label} — try it again`
+        : sentence.revisit
         ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
         : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
       status: 'pending',

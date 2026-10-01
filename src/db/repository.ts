@@ -1,5 +1,6 @@
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
+import { parkedSentenceIds } from '../lib/glossSkill';
 import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -9630,9 +9631,13 @@ async function findExploreCandidates(
             .map((event) => event.sentenceId),
         )
       : undefined;
-    const revisitIds = sentenceFirst
-      ? sentencesReadyToRevisit(bookEvents).slice(0, EXPLORE_REVISITS_PER_BOOK)
+    const parkedGlossIds = sentenceFirst
+      ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
       : [];
+    const revisitIds = sentenceFirst
+      ? [...new Set([...parkedGlossIds, ...sentencesReadyToRevisit(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      : [];
+    const parkedGlossSet = new Set(parkedGlossIds);
     const unstarted = memberships
       .filter((item) =>
         walked
@@ -9657,6 +9662,7 @@ async function findExploreCandidates(
         preview: sentenceRows[index]?.japanese.slice(0, 24) ?? '',
         vocabularyConfirmed: analysisRows[index]?.vocabularyReviewStatus === 'confirmed',
         ...(revisitSet.has(item.sentenceId) ? { revisit: true } : {}),
+        ...(parkedGlossSet.has(item.sentenceId) ? { parkedGloss: true } : {}),
         // Patched below, once readiness is known for every candidate
         // sentence at once (batched, not N+1) — see classifyExploreSentences
         // in sessionPlanner.ts for why continue_book waits on this too.

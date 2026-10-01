@@ -1521,14 +1521,16 @@ export interface SentenceLearningEvent {
   inventoryRevision?: string;
 }
 
-export type GlossSkill = 'predicate' | 'particle';
+export type GlossSkill = 'predicate' | 'particle' | 'attachment';
 export type GlossOutcome =
   | 'independent_correct'
   | 'assisted_correct'
   | 'unresolved'
   | 'skipped'
   | 'disputed'
-  | 'ungraded';
+  | 'ungraded'
+  /** A "too easy / right / too hard" tap, not a decision; excluded from inference. */
+  | 'self_report';
 
 /**
  * One structural decision the learner made in the walkthrough (progressive
@@ -1545,7 +1547,7 @@ export interface GlossDecision {
   sentenceId: string;
   skill: GlossSkill;
   /** Finer split inside a skill so it can be separated later (`case` vs `topic` particles). */
-  subskill: 'predicate' | 'case' | 'topic';
+  subskill: 'predicate' | 'case' | 'topic' | 'noun_modifier';
   /** Stable key of the rule behind the reference, e.g. `particle:を`, for dispute accounting. */
   ruleKey: string;
   targetText: string;
@@ -1564,4 +1566,6 @@ export interface GlossDecision {
   /** 0 hidden, 1 word glosses, 2 partial, 3 full. */
   translationLevel: 0 | 1 | 2 | 3;
   outcome: GlossOutcome;
+  /** Only on `self_report` rows. */
+  felt?: 'too_easy' | 'right' | 'too_hard';
 }

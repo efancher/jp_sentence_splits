@@ -120,6 +120,7 @@ export function SentenceWalkthrough({
   onEvent,
   glossRecords,
   onGlossDecision,
+  knownRatio,
   quietMode,
   shadowHref,
   onQuietModeChange,
@@ -142,6 +143,8 @@ export function SentenceWalkthrough({
   /** Earlier structural decisions (progressive glossing). With `onGlossDecision`, the walkthrough opens on a "try it first" check. */
   glossRecords?: GlossDecision[];
   onGlossDecision?: (decision: GlossDecisionInput) => void;
+  /** Share of this sentence's content words already known (advisory readiness; thin opens the glosses). */
+  knownRatio?: number;
   quietMode: boolean;
   shadowHref?: string;
   onQuietModeChange: (quiet: boolean) => void;
@@ -153,7 +156,7 @@ export function SentenceWalkthrough({
   const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
   const [step, setStep] = useState(0);
   const [tryFirst, setTryFirst] = useState(() =>
-    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords).length > 0);
+    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const chunk = ordered[step];
   const done = step >= ordered.length;
@@ -251,10 +254,11 @@ export function SentenceWalkthrough({
         <GlossDecisionPanel
           sentenceId={sentence.id}
           visitId={visitId}
-          chunks={chunks.map(({ id, japanese, role }) => ({ id, japanese, role }))}
+          chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, literalEnglish }))}
           records={glossRecords ?? []}
           translation={sentence.translation}
           words={compareAids?.get(sentence.id)?.words ?? []}
+          knownRatio={knownRatio}
           onRecord={onGlossDecision}
           onFinish={() => setTryFirst(false)}
         />

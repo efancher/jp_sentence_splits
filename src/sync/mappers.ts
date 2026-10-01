@@ -1077,6 +1077,7 @@ export function glossDecisionToRemote(d: GlossDecision, ownerId: string, version
     vocab_helped: d.vocabHelped,
     translation_level: d.translationLevel,
     outcome: d.outcome,
+    felt: d.felt ?? null,
     created_at: d.timestamp,
     updated_at: d.timestamp,
     deleted_at: null,
@@ -1106,6 +1107,7 @@ export function remoteToGlossDecision(row: Record<string, unknown>): GlossDecisi
     vocabHelped: Boolean(row.vocab_helped),
     translationLevel: Number(row.translation_level) as GlossDecision['translationLevel'],
     outcome: row.outcome as GlossDecision['outcome'],
+    felt: (row.felt as GlossDecision['felt'] | null) ?? undefined,
   };
 }
 
