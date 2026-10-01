@@ -664,6 +664,7 @@ export function ReaderPage() {
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}
                       compareAids={compareAids}
+                      constructionDrafts={data.chapter?.constructionDrafts}
                       events={lessonEvents ?? []}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({

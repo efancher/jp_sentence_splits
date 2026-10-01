@@ -4,63 +4,14 @@ import type { SentenceLearningEvent } from '../domain/types';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { locateTargetSpan, maskSpan, pickCompareUses, summariseTargetActivity, findDueTransferRecheck, pickHeldBackContext, type CompareExcerpt, type CompareSentence } from '../lib/sentenceLearning';
 import { createId } from '../lib/ids';
-import type { SentenceAudio } from '../domain/types';
-import { NativeAudioButton } from './NativeAudioButton';
+import { Highlighted, ExcerptWithAids, WordGlossList, type CompareAids } from './CompareExcerptView';
+import { PhraseConstructionSection } from './PhraseConstructionSection';
+import type { ConstructionLayer } from '../domain/types';
+import type { LayerWithSentence } from '../lib/phraseConstruction';
 
-/** Optional per-sentence aids for an excerpt; missing pieces are simply not shown. */
-export interface CompareAids {
-  translation?: string;
-  words: { expression: string; reading: string; english: string }[];
-  audio?: SentenceAudio;
-}
+export { WordGlossList, type CompareAids };
 
 export type LessonEventInput = Omit<SentenceLearningEvent, 'timestamp' | 'bookId' | 'chapterId' | 'inventoryRevision'>;
-
-function Highlighted({ excerpt }: { excerpt: CompareExcerpt }) {
-  const { japanese, span } = excerpt;
-  if (!span) return <span className="jp">{japanese}</span>;
-  return (
-    <span className="jp">
-      {japanese.slice(0, span.start)}
-      <mark>{japanese.slice(span.start, span.end)}</mark>
-      {japanese.slice(span.end)}
-    </span>
-  );
-}
-
-export function WordGlossList({ words }: { words: CompareAids['words'] }) {
-  if (words.length === 0) return null;
-  return (
-    <ul className="muted" aria-label="Words in this sentence" style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85em' }}>
-      {words.map((word) => (
-        <li key={word.expression}>
-          <span className="jp">{word.expression}</span>
-          {word.reading && word.reading !== word.expression ? <span className="jp"> ({word.reading})</span> : null} — {word.english}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ExcerptWithAids({ excerpt, aids }: { excerpt: CompareExcerpt; aids?: CompareAids }) {
-  const [showTranslation, setShowTranslation] = useState(false);
-  return (
-    <div className="stack" style={{ gap: '0.2rem' }}>
-      <Highlighted excerpt={excerpt} />
-      {aids ? <WordGlossList words={aids.words} /> : null}
-      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        {aids?.audio ? <NativeAudioButton audio={aids.audio} displayLabel="Native audio" hideAdjust /> : null}
-        {aids?.translation ? (
-          showTranslation ? (
-            <span className="muted">{aids.translation}</span>
-          ) : (
-            <button type="button" onClick={() => setShowTranslation(true)}>Show translation</button>
-          )
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Optional practice for one focus target inside the sentence walkthrough:
@@ -73,6 +24,7 @@ export function TargetLessonCard({
   visitId,
   episodeSentences,
   compareAids,
+  constructions,
   events,
   quietMode,
   onEvent,
@@ -82,6 +34,7 @@ export function TargetLessonCard({
   visitId: string;
   episodeSentences: CompareSentence[];
   compareAids?: ReadonlyMap<string, CompareAids>;
+  constructions?: { sentenceLayers: ConstructionLayer[]; allLayers: LayerWithSentence[] };
   events: SentenceLearningEvent[];
   quietMode: boolean;
   onEvent: (event: LessonEventInput) => void;
@@ -430,6 +383,21 @@ export function TargetLessonCard({
       ) : null}
       {practice === 'recorded' ? (
         <div className="muted" role="status">Noted as practice. Your review schedule is unchanged.</div>
+      ) : null}
+
+      {constructions && currentSentence && constructions.sentenceLayers.length > 0 ? (
+        <PhraseConstructionSection
+          sentence={currentSentence}
+          layers={constructions.sentenceLayers}
+          allLayers={constructions.allLayers}
+          startSpan={gapSpan}
+          episodeSentences={episodeSentences}
+          compareAids={compareAids}
+          events={events}
+          visitId={visitId}
+          quietMode={quietMode}
+          onEvent={onEvent}
+        />
       ) : null}
 
       {pair ? (

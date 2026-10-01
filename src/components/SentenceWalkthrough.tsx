@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AnalysisChunk, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, ConstructionLayer, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { chunksMatchSource } from '../lib/chunking';
 import { createId } from '../lib/ids';
 import { roleGuideBlurb } from '../lib/roleGuide';
-import { selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
+import { layersOverlapping, validLayersFor, type LayerWithSentence } from '../lib/phraseConstruction';
+import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
+import { PhraseConstructionSection } from './PhraseConstructionSection';
 import { TargetLessonCard, WordGlossList, type CompareAids, type LessonEventInput } from './TargetLessonCard';
 
 export type SupportPreset = 'full' | 'less' | 'minimal';
@@ -112,6 +114,7 @@ export function SentenceWalkthrough({
   focusTargets,
   episodeSentences = [],
   compareAids,
+  constructionDrafts,
   events = [],
   onEvent,
   quietMode,
@@ -128,6 +131,8 @@ export function SentenceWalkthrough({
   episodeSentences?: CompareSentence[];
   /** Translation, word glosses and native audio per episode sentence, shown under Compare uses excerpts. */
   compareAids?: ReadonlyMap<string, CompareAids>;
+  /** AI-drafted construction layers per sentence id (validated against the live text here). */
+  constructionDrafts?: Record<string, ConstructionLayer[]>;
   /** Earlier lesson events for this book, to show what has been practised/compared. */
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
@@ -166,6 +171,22 @@ export function SentenceWalkthrough({
   const [{ shown: shownTargets, hidden: hiddenTargets }] = useState(() => selectSentenceTargets(here, events));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
   const visitId = useMemo(() => createId('visit'), []);
+  const constructions = useMemo(() => {
+    const sentenceLayers = validLayersFor(sentence.japanese, constructionDrafts?.[sentence.id]);
+    const allLayers: LayerWithSentence[] = [];
+    for (const item of episodeSentences) {
+      for (const layer of validLayersFor(item.japanese, constructionDrafts?.[item.id])) allLayers.push({ ...layer, sentenceId: item.id });
+    }
+    return { sentenceLayers, allLayers };
+  }, [constructionDrafts, episodeSentences, sentence.id, sentence.japanese]);
+  const currentCompareSentence = episodeSentences.find((item) => item.id === sentence.id);
+  const targetsWithLayers = new Set<string>();
+  for (const target of [...shownTargets, ...hiddenTargets]) {
+    const span = currentCompareSentence
+      ? locateTargetSpan({ key: target.id, label: target.label, sentenceIds: target.sentenceIds, occurrences: target.occurrences }, currentCompareSentence)
+      : undefined;
+    if (span && layersOverlapping(constructions.sentenceLayers, span).length > 0) targetsWithLayers.add(target.id);
+  }
 
   function recordGist(outcome: 'got_it' | 'needed_help') {
     emit({ id: createId('sl_event'), visitId, action: 'gist_check', sentenceId: sentence.id, outcome, assessmentSource: 'self', quietMode });
@@ -310,6 +331,7 @@ export function SentenceWalkthrough({
                 visitId={visitId}
                 episodeSentences={episodeSentences}
                 compareAids={compareAids}
+                constructions={targetsWithLayers.has(target.id) ? constructions : undefined}
                 events={events}
                 quietMode={quietMode}
                 onEvent={emit}
@@ -322,6 +344,19 @@ export function SentenceWalkthrough({
             </button>
           ) : null}
         </div>
+      ) : null}
+      {targetsWithLayers.size === 0 && currentCompareSentence && constructions.sentenceLayers.length > 0 ? (
+        <PhraseConstructionSection
+          sentence={currentCompareSentence}
+          layers={constructions.sentenceLayers}
+          allLayers={constructions.allLayers}
+          episodeSentences={episodeSentences}
+          compareAids={compareAids}
+          events={events}
+          visitId={visitId}
+          quietMode={quietMode}
+          onEvent={emit}
+        />
       ) : null}
       <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
         {audio ? (

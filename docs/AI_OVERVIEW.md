@@ -1155,6 +1155,8 @@ long episodes) asks for focus targets and English for sentences lacking a
 translation; the JSON reply is validated, translations only fill empty
 sentences, and series imports land on the Reader with the panel open. An opt-in extra part asks for chunk structure (line-per-chunk reply `S1 | text | role | gloss`, JSON `structure` also accepted; `src/lib/episodeStructure.ts`); validated drafts live on `BookChapter.structureDrafts` and the walkthrough uses them only when no saved analysis exists, labelled as unverified.
 
+A further opt-in pack part asks for **phrase construction** layers (`src/lib/phraseConstruction.ts`; JSON `constructions`, AI supplies quoted text, key, operation, attach/contribution notes; spans are computed locally and bad layers dropped individually), saved as drafts on `Chapter.constructionDrafts`. The walkthrough's collapsed "How this phrase works" section (`PhraseConstructionSection`) shows inflection / helper / role-change layers one at a time with a separate reusable "Use this elsewhere" rule and a Compare-uses link to other occurrences of the same construction. It is supported exposure only: no Review, no FSRS; it reuses `compare_uses_viewed` and `content_report` events.
+
 Inside the walkthrough each prepared target has **Practise this** (recall
 before the explanation is shown, self-rated) and **Compare uses** (another real
 occurrence in the episode, highlighted). These write

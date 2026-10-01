@@ -10,6 +10,24 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Reader: "How this phrase works".** A collapsed-by-default
+  section in the sentence walkthrough (under the matching focus target, or at
+  sentence level when no target overlaps a layer) explains a phrase one layer
+  at a time: inflection, helper constructions (～ている…) and role changes
+  (clause + の/こと), nested and inner-first, starting at the layer overlapping
+  the current target. Each layer shows the form here, its base, how it attaches,
+  what it contributes, and the span it covers, plus a separate reusable "Use
+  this elsewhere" rule (from `CONSTRUCTION_CATALOG`, or the AI's own rule marked
+  as unchecked). Compare uses matches by construction key across the episode
+  (`pickConstructionCompare`), preferring unseen examples on different words;
+  omitted when no reliable second occurrence exists. Data: an opt-in
+  "constructions" part of the episode pack (JSON `constructions`, quoted text →
+  spans computed locally, ambiguous/overlapping/stale layers dropped) saved to
+  `Chapter.constructionDrafts`; no new table or migration. Opening logs nothing
+  and creates no Review/FSRS state; Compare reuses `compare_uses_viewed`, "This
+  explanation looks wrong" reuses `content_report`. Limits: drafts exist only
+  after a pasted AI reply; catalog covers common forms only; no conjugation
+  tables; flagged layers are hidden per learner but not auto-regenerated.
 - **2026-10-01 — Episode pack: one prompt, one paste.** When sentence structure
   is requested, its first batch (now up to 60 sentences) rides in the main
   prompt: the AI replies with the JSON (targets/translations) and then the
