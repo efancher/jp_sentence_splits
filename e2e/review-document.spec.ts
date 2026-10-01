@@ -1,12 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
-  test(`chapter cloze stays navigable and grades once at ${viewport.width}px`, async ({ page }) => {
-    await page.setViewportSize(viewport);
-    await page.goto('/#/settings');
-    await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
-    // Seed an isolated browser DB, never production/synced data.
-    await page.evaluate(async () => {
+async function seedChapterReview(page: Page, dueActivities: string[]) {
+  await page.evaluate(async (dueActivities: string[]) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open('satori-glossbook');
         request.onsuccess = () => resolve(request.result);
@@ -40,11 +35,21 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       tx.objectStore('sentenceVocabulary').put({ id: 'sv', sentenceId: 's-20', vocabularyItemId: 'word', surfaceForm: '本', createdAt: now, updatedAt: now });
       for (const activityType of ['reading_retrieval', 'cloze', 'reading_production']) {
         tx.objectStore('studyItems').put({ id: `word-${activityType}`, subjectType: 'vocabularyItem', subjectId: 'word', activityType,
-          fsrsState: fsrs(activityType === 'cloze' ? '2026-01-01T00:00:00.000Z' : future), createdAt: now, updatedAt: now });
+          fsrsState: fsrs(dueActivities.includes(activityType) ? '2026-01-01T00:00:00.000Z' : future), createdAt: now, updatedAt: now });
       }
       await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
       db.close();
-    });
+  }, dueActivities);
+}
+
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+  test(`chapter cloze stays navigable and grades once at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/#/settings');
+    await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+    // Seed an isolated browser DB, never production/synced data.
+    await seedChapterReview(page, ['cloze']);
     await page.goto('/#/books/book/review');
     const layout = page.getByRole('combobox', { name: 'Review layout' });
     await layout.selectOption('original');
@@ -107,3 +112,19 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     expect((presentation as { documentSentenceCount: number }).documentSentenceCount).toBeGreaterThan(1);
   });
 }
+
+test('typed-reading card uses the chapter layout, like the other word cards', async ({ page }) => {
+  await page.goto('/#/settings');
+  await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
+  await seedChapterReview(page, ['reading_production']);
+  await page.goto('/#/books/book/review');
+  await expect(page.getByLabel('Type the reading')).toBeVisible();
+  const chapter = page.getByRole('region', { name: 'Chapter text' });
+  await expect(chapter.locator('p')).toHaveCount(30);
+  await expect(chapter).not.toContainText('secret reading');
+  await expect(chapter.locator('[aria-current="true"]')).toContainText('図書館で本を読みました。');
+  const layout = page.getByRole('combobox', { name: 'Review layout' });
+  await layout.selectOption('original');
+  await expect(page.getByRole('region', { name: 'Chapter text' })).toHaveCount(0);
+  await expect(page.getByLabel('Type the reading')).toBeVisible();
+});

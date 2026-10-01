@@ -114,6 +114,9 @@ import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/reading
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
 
+/** Card types that can show the whole chapter around the sentence (and carry the layout dropdown). */
+const CHAPTER_LAYOUT_ACTIVITIES: StudyActivityType[] = ['reading_retrieval', 'reading_production', 'cloze', 'grammar_recognition'];
+
 /**
  * Sentence-subject review: one activity type, `reading_in_context`. Shows
  * the Japanese sentence framed by its reading-order neighbours (preceding
@@ -1837,7 +1840,7 @@ export function ReviewPage() {
         // miss can be traced back to a sentence — see "cross-activity error
         // routing" (docs/ROADMAP.md "Possibilities").
         contextSentenceId: current.sentence.id,
-        presentation: (['reading_retrieval', 'cloze', 'grammar_recognition'] as StudyActivityType[]).includes(current.studyItem.activityType)
+        presentation: CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType)
           ? {
               layout: chapterView ? 'chapter' : 'sentence',
               documentSentenceCount:
@@ -2066,7 +2069,7 @@ export function ReviewPage() {
                 {issueReported ? <span className="muted">✓ Reported</span> : null}
               </div>
             )}
-            {(['reading_retrieval', 'cloze', 'grammar_recognition'] as StudyActivityType[]).includes(current.studyItem.activityType) ? (
+            {CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType) ? (
               <label className="row">
                 Review layout
                 <select value={chapterView ? 'chapter' : 'original'} onChange={(event) => changeReviewLayout(event.target.value === 'chapter', current.studyItem.id)}>
@@ -2077,6 +2080,9 @@ export function ReviewPage() {
             ) : null}
             {current.target && current.studyItem.activityType === 'reading_production' ? (
               <ReadingProductionCard
+                chapterView={chapterView}
+                bookId={current.readingContext?.bookId}
+                onDocumentShown={(count) => setDocumentShown({ studyItemId: current.studyItem.id, count })}
                 key={current.studyItem.id}
                 sentence={current.sentence}
                 vocabularyItem={current.target.vocabularyItem}
@@ -2644,12 +2650,18 @@ function VocabularyTargetNativeAudio({
  * `Review.expectedAnswer` (see `typedResponseExpected`).
  */
 function ReadingProductionCard({
+  chapterView,
+  bookId,
+  onDocumentShown,
   sentence,
   vocabularyItem,
   surfaceForm,
   revealed,
   onCheck,
 }: {
+  chapterView: boolean;
+  bookId?: string;
+  onDocumentShown: (sentenceCount: number) => void;
   sentence: Sentence;
   vocabularyItem: VocabularyItem;
   surfaceForm: string;
@@ -2669,11 +2681,21 @@ function ReadingProductionCard({
 
   return (
     <>
-      <div className="jp jp-lg">
-        {before}
-        <mark>{target || surfaceForm}</mark>
-        {after}
-      </div>
+      {chapterView ? (
+        <ReviewDocumentText
+          sentence={sentence}
+          bookId={bookId}
+          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          revealed={revealed}
+          onDocumentShown={onDocumentShown}
+        />
+      ) : (
+        <div className="jp jp-lg">
+          {before}
+          <mark>{target || surfaceForm}</mark>
+          {after}
+        </div>
+      )}
       {isInflected ? (
         <div className="muted">Dictionary form: {vocabularyItem.expression}</div>
       ) : null}

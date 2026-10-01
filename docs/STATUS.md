@@ -10,6 +10,18 @@ Last updated: 2026-09-30.
 
 ## Where things stand
 
+- **2026-10-01 — Reading production card gets the chapter layout.** The typed
+  reading card (`reading_production`) was never converted when the cloze,
+  reading-retrieval and grammar-recognition cards moved to the chapter view
+  (14acacd), so it always showed the lone sentence. It now renders
+  `ReviewDocumentText` under the same global "Review layout" setting, with the
+  dropdown and presentation evidence covering it (`CHAPTER_LAYOUT_ACTIVITIES`).
+  Plain Japanese only, so no reading leaks; the typed check is unchanged. Still
+  on the sentence layout by design/omission: conjugation, word-listening,
+  pitch and the sentence-level `reading_in_context` card (which uses its own
+  preceding-sentences context). New e2e in `e2e/review-document.spec.ts`
+  (the seed is now shared; the card appears only when it is the word's only due
+  item, since siblings are spaced apart).
 - **2026-10-01 — Phase 6: clause-local walkthrough order.** `walkthroughOrder`
   no longer lists every clause's engine first. It uses the existing role banding
   (`assignClauseIndices`) to walk clause by clause in source order: a leading
