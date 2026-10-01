@@ -52,7 +52,8 @@ import {
   applySuggestion,
   lintAnalysis,
 } from '../lib/analysisSuggestions';
-import { RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
+import { AMBIGUITY_PRONE_ROLES, RoleGuideContent, roleGuideBlurb } from '../lib/roleGuide';
+import { surfaceReadingFromInline } from '../lib/readingAnswer';
 import { explainChunkWhy } from '../lib/chunkWhyAssist';
 import { suggestStickyEnglish } from '../lib/stickyEnglish';
 import { FuriganaText } from '../lib/furigana';
@@ -87,15 +88,6 @@ const SENTENCE_STATUS_LABEL: Record<string, string> = {
  * whether it was read.
  */
 const ROLE_RECURRENCE_FADE_THRESHOLD = 5;
-
-/**
- * Roles worth an automatic AI "why" draft during the guided walkthrough
- * (chunk-why-assist) rather than every chunk — concentrates AI spend and
- * the learner's attention on the classic Cure-Dolly confusions (topic は
- * vs subject が, and the implied zero-が subject's referent) instead of
- * restating the obvious for a plain を-car or engine.
- */
-const CHUNK_WHY_AUTO_ROLES = new Set(['topic は', 'zero-が (∅ subject)', 'Aが']);
 
 function roleGuideCallout(
   role: string,
@@ -286,6 +278,11 @@ export function AnalyzePage() {
     }
     return results;
   }
+  /** A chunk's hiragana reading, pulled out of the sentence's inlineReading markup — null when it can't be derived unambiguously (no inlineReading yet, a zero-が synthetic chunk, or a split mid-furigana-group). */
+  function readingForChunk(chunk: AnalysisChunk): string | null {
+    if (chunk.kind === 'zero_ga' || !data?.sentence) return null;
+    return surfaceReadingFromInline(data.sentence.inlineReading, chunk.japanese);
+  }
   const roleStats = useLiveQuery(
     () => getRoleOccurrenceStats(sentenceId),
     [sentenceId],
@@ -340,7 +337,7 @@ export function AnalyzePage() {
   // a failure surfaces as a small inline note rather than failing silently.
   useEffect(() => {
     if (!hydrated || !wizardChunk || !data?.sentence) return;
-    if (!CHUNK_WHY_AUTO_ROLES.has(wizardChunk.role)) return;
+    if (!AMBIGUITY_PRONE_ROLES.has(wizardChunk.role)) return;
     if (wizardChunk.notes?.trim()) return;
     if (chunkWhyAttempted.current.has(wizardChunk.id)) return;
     chunkWhyAttempted.current.add(wizardChunk.id);
@@ -954,6 +951,9 @@ export function AnalyzePage() {
               </button>
             </div>
             <div className="jp jp-lg">{wizardChunk.japanese}</div>
+            {readingForChunk(wizardChunk) ? (
+              <div className="jp muted jp-sm">{readingForChunk(wizardChunk)}</div>
+            ) : null}
             {glossesForChunk(wizardChunk).length ? (
               <p className="muted" style={{ margin: 0 }}>
                 {glossesForChunk(wizardChunk)
@@ -1044,6 +1044,9 @@ export function AnalyzePage() {
                 <span className="muted">#{chunkIndex + 1}</span>
               </span>
             </div>
+            {readingForChunk(chunk) ? (
+              <div className="jp muted jp-sm">{readingForChunk(chunk)}</div>
+            ) : null}
             {zeroGa ? (
               <div className="status-pill">zero-が · not in source</div>
             ) : null}

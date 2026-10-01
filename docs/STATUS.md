@@ -6,7 +6,7 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-09-30.
+Last updated: 2026-10-01.
 
 ## Where things stand
 
@@ -624,6 +624,48 @@ remaining planned work: re-mine "After Work" (browser + human review).
 **Mining pipeline v2** — slices A/B/C + wizard W1–W6 landed 2026-08-31;
 what's left is one deferred durability item (below).
 
+- **2026-09-29 — `reading_in_context` structure-check on later reviews
+  (sentence-revisit repetition, follow-on to the guided-walkthrough pass
+  below).** User brainstorm (four parallel agents: trigger mechanics,
+  fading scaffolding, anti-boredom content variation, systems integration)
+  on repeating a sentence's structural lesson once more of its vocabulary
+  is familiar, without new scheduling machinery or feeling like a bored
+  rerun. Landed architecture (the integration agent's recommendation):
+  reuse `reading_in_context`'s existing FSRS due-schedule as the sole
+  "when" — it already recurs once the sentence's vocabulary hits full
+  proficiency (`isSentenceReadyForFullReview`), so no new bucket/step/
+  gate was added. What changed is *what the card asks* from the second
+  review onward (`fsrsState.reps >= 1`):
+  - New `pickStructureCheckChunk(chunks, inlineReading)` (`ReviewPage.tsx`)
+    finds the first chunk whose role is a classic Cure-Dolly confusion
+    (`AMBIGUITY_PRONE_ROLES` — topic は, zero-が, Aが — moved from
+    `AnalyzePage.tsx` into `roleGuide.tsx` so both features share one
+    list) and whose reading can be derived from the sentence's
+    `inlineReading` (`surfaceReadingFromInline`, already used elsewhere).
+  - `ReadingInContextCard` marks that chunk in the sentence and, before
+    the existing optional 4-option comprehension check and the Reveal
+    button, asks the learner to type its reading — genuine production,
+    not passive re-reading (the content-variation brainstorm's core
+    finding: less guidance should mean a harder task, not just a quieter
+    version of the same task). Graded via the same `isReadingAnswerCorrect`
+    every other reading-recall card uses, recorded through the *existing*
+    generic `responseRaw`/`expectedAnswer` (`typedResponse`/
+    `typedResponseExpected`) path — no new `Review` field.
+    `classifyReviewError` (scheduling.ts) now also classifies a missed
+    structure-check as `grammar_misunderstanding`.
+  - `ReviewScope`/`QueueCard` gained `chunksBySentenceId`/`analysisChunks`,
+    reusing the `db.analyses.bulkGet` call already made for
+    `comprehensionCheckBySentenceId` — no extra query.
+  Scoped down from the brainstorm on purpose (user: "just building #4 is
+  ok for now"): the other candidate handoff mechanics — extracting
+  `BuildPage`'s tile-reconstruction UI into the card, linking out to
+  `BuildPage` with return-to-rate plumbing, a passive read-only recap
+  card, and a more-prominent "Build this" nudge instead of touching
+  `ReviewPage` at all — are written up as ready-to-build designs in
+  ROADMAP.md's "Possibilities (sentence-revisit repetition)", not built.
+  New tests: `pickStructureCheckChunk` cases in `reviewPage.test.tsx`,
+  `classifyReviewError` reading_in_context cases in `scheduling.test.ts`.
+  Full suite green (2183 passed), typecheck/lint clean.
 - **2026-09-28 — AnalyzePage guided walkthrough, Cure-Dolly style.**
   Follow-on to the same-day glossing-accessibility pass below, from user
   brainstorm on making structural glossing feel like Cure Dolly's actual
@@ -687,11 +729,7 @@ what's left is one deferred durability item (below).
      inline note ("Couldn't get an AI explanation here…") — a deliberate,
      explicit user choice for this feature only, not a change to the other
      two functions' existing silent-degrade behavior.
-  **Not yet deployed**: `chunk-why-assist` needs a one-time
-  `supabase functions deploy chunk-why-assist` (+ confirm
-  `ANTHROPIC_API_KEY` secret is set, same as `grammar-assist`) before the
-  automatic drafting actually works in production — the client degrades to
-  the inline failure note until then, so nothing is broken meanwhile.
+  `chunk-why-assist` deployed 2026-09-28 (user).
   New tests: `tests/roleOccurrenceStats.test.ts`,
   `tests/roleGuide.test.ts` (incl. a guard that every `ROLE_PRESET_GROUPS`
   role has a matching `roleGuide.tsx` entry, and vice versa). Full suite
@@ -7313,3 +7351,5 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
   `shadowing` repo. Always soft-delete synced tables (`deleted_at`), never
   raw `DELETE`, or clients never learn of the change.
 - Edge Functions — `grammar-assist`, `vocab-assist` (Claude Haiku).
+
+- **2026-09-29 — Stale planner sessions auto-expire.** An `in_progress` PlannerSession with no activity (`updatedAt`) for 24h is now ended via `expireStalePlannerSessions` (repository.ts): remaining steps skipped, status `ended_early`, synced. Runs on AppShell mount and hourly, so a forgotten session stops showing in the SessionBar. Test plan: set an in_progress session's `updatedAt` >24h back in Dexie, reload — the SessionBar should vanish and the session shows as ended.

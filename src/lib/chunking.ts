@@ -46,6 +46,10 @@ const PARTICLE_TOKENS = [
 
 const SENTENCE_FINAL_PARTICLES = new Set(['な', 'ね', 'よ', 'か', 'ぞ', 'わ', 'さ']);
 
+const SENTENCE_END_CHARS = new Set(['。', '．', '！', '？', '!', '?', '…', '‥']);
+
+const LEXICAL_NO_COMPOUNDS = ['髪の毛', '目の前', '手の平', '手の甲', '耳の穴', '鼻の穴'] as const;
+
 const CLAUSE_END_CHARS = new Set([
   '。',
   '．',
@@ -166,8 +170,13 @@ function particleAt(text: string, index: number): string | null {
 
     if (SENTENCE_FINAL_PARTICLES.has(particle)) {
       const after = text.slice(index + particle.length);
-      if (after && ![...after].every((char) => CLAUSE_END_CHARS.has(char))) {
-        continue;
+      if (after) {
+        let run = 0;
+        while (run < after.length && CLAUSE_END_CHARS.has(after[run]!)) run += 1;
+        const closesSentence = [...after.slice(0, run)].some((char) =>
+          SENTENCE_END_CHARS.has(char),
+        );
+        if (!closesSentence) continue;
       }
     }
 
@@ -181,6 +190,17 @@ function particleAt(text: string, index: number): string | null {
     }
 
     if (particle === 'と' && index >= 1 && text.slice(index - 1, index + 1) === 'こと') {
+      continue;
+    }
+
+    if (particle === 'と' && text.startsWith('という', index)) {
+      continue;
+    }
+
+    if (
+      particle === 'の' &&
+      LEXICAL_NO_COMPOUNDS.some((word) => text.startsWith(word, index - word.indexOf('の')))
+    ) {
       continue;
     }
 
@@ -243,6 +263,13 @@ function peelLeadingAdverbs(chunks: string[]): string[] {
   return peeled;
 }
 
+function isSoftBoundary(text: string, index: number): boolean {
+  const prev = text[index - 1]!;
+  const next = text[index]!;
+  if (CLAUSE_END_CHARS.has(next)) return false;
+  return '、，,。．！？!?'.includes(prev);
+}
+
 export function chunkJapaneseSentence(japanese: string): string[] {
   const text = stripMarkup(japanese).replace(/\s+/g, '');
   if (!text) return [];
@@ -257,6 +284,11 @@ export function chunkJapaneseSentence(japanese: string): string[] {
       chunks.push(text.slice(start, end));
       start = end;
       index = end;
+      continue;
+    }
+    if (index > start && isSoftBoundary(text, index)) {
+      chunks.push(text.slice(start, index));
+      start = index;
       continue;
     }
     index += 1;

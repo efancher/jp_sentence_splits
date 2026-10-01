@@ -19,7 +19,8 @@ import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
-import { ReviewPage, spaceOutSiblingCards } from '../src/pages/ReviewPage';
+import { pickStructureCheckChunk, ReviewPage, spaceOutSiblingCards } from '../src/pages/ReviewPage';
+import type { AnalysisChunk } from '../src/domain/types';
 import { withAppProviders } from '../src/test/providers';
 
 /**
@@ -3857,5 +3858,60 @@ describe('spaceOutSiblingCards', () => {
     const readingIndex = subjectIds.indexOf('zettai-item');
     const listeningIndex = subjectIds.indexOf('zettai-link');
     expect(Math.abs(readingIndex - listeningIndex)).toBeGreaterThan(1);
+  });
+});
+
+describe('pickStructureCheckChunk', () => {
+  function chunk(overrides: Partial<AnalysisChunk>): AnalysisChunk {
+    return {
+      id: 'chunk-id',
+      order: 0,
+      japanese: '',
+      role: '',
+      literalEnglish: '',
+      ...overrides,
+    };
+  }
+
+  const inlineReading = '私[わたし]は猫[ねこ]が好[す]きです。';
+
+  it('picks the first ambiguity-prone chunk in array order and derives its reading', () => {
+    const chunks = [
+      chunk({ id: 'c1', japanese: '私は', role: 'topic は' }),
+      chunk({ id: 'c2', japanese: '猫が', role: 'Aが' }),
+      chunk({ id: 'c3', japanese: '好きです', role: 'engine' }),
+    ];
+    expect(pickStructureCheckChunk(chunks, inlineReading)).toEqual({
+      japanese: '私は',
+      expectedReading: 'わたしは',
+    });
+  });
+
+  it('skips a leading non-flagged chunk to find a later ambiguity-prone one', () => {
+    const chunks = [
+      chunk({ id: 'c1', japanese: '好きです', role: 'engine' }),
+      chunk({ id: 'c2', japanese: '猫が', role: 'Aが' }),
+    ];
+    expect(pickStructureCheckChunk(chunks, inlineReading)).toEqual({
+      japanese: '猫が',
+      expectedReading: 'ねこが',
+    });
+  });
+
+  it('returns undefined when no chunk has an ambiguity-prone role', () => {
+    const chunks = [
+      chunk({ id: 'c1', japanese: '好きです', role: 'engine' }),
+      chunk({ id: 'c2', japanese: 'とても', role: 'adverb' }),
+    ];
+    expect(pickStructureCheckChunk(chunks, inlineReading)).toBeUndefined();
+  });
+
+  it('returns undefined when the sentence has no inlineReading yet', () => {
+    const chunks = [chunk({ id: 'c1', japanese: '私は', role: 'topic は' })];
+    expect(pickStructureCheckChunk(chunks, '')).toBeUndefined();
+  });
+
+  it('returns undefined when chunks is undefined', () => {
+    expect(pickStructureCheckChunk(undefined, inlineReading)).toBeUndefined();
   });
 });

@@ -221,6 +221,17 @@ export function roleGuideBlurb(role: string): string | undefined {
   return ROLE_GUIDE_BLURB_BY_ROLE.get(role);
 }
 
+/**
+ * Roles worth extra attention as the classic Cure-Dolly confusions (topic は
+ * vs subject が, and the implied zero-が subject's referent) — used to (1)
+ * gate AnalyzePage's automatic AI "why" draft (`chunk-why-assist`) so it
+ * concentrates on chunks actually worth explaining rather than every plain
+ * を-car or engine, and (2) pick which chunk (if any) ReviewPage's
+ * `reading_in_context` card tests with a typed-recall production check on a
+ * sentence's later reviews (2026-09-29 repetition pass).
+ */
+export const AMBIGUITY_PRONE_ROLES = new Set(['topic は', 'zero-が (∅ subject)', 'Aが']);
+
 export function RoleGuideContent({
   compact = false,
   counts,

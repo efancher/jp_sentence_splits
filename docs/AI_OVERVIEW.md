@@ -1441,6 +1441,22 @@ Activity types currently wired, grouped by subject/eligibility:
   `classifyReviewError` → `incorrect_meaning` on a miss) — self-rating still
   decides the schedule, same as every other "objectively graded" card in
   this app. No authored check → unchanged plain reveal-and-rate.
+  **Structure check (2026-09-29)**: from the sentence's second
+  `reading_in_context` review onward (`fsrsState.reps >= 1` — the first
+  review stays exactly as above), if the sentence's saved structural
+  analysis has a chunk whose role is a classic Cure-Dolly confusion
+  (`AMBIGUITY_PRONE_ROLES` in `roleGuide.tsx` — topic は, zero-が, Aが —
+  shared with `AnalyzePage`'s guided walkthrough) with a derivable reading
+  (`pickStructureCheckChunk`, `surfaceReadingFromInline`), the card marks
+  that chunk and asks for its typed reading before the comprehension check/
+  Reveal — the app's answer to "repeat a sentence's lesson once vocab is
+  familiar, but as production, not a passive rerun" (see ROADMAP.md's
+  "Possibilities (sentence-revisit repetition)" for the fuller design and
+  the alternatives considered). Graded via the same generic
+  `responseRaw`/`expectedAnswer` path every typed-recall card uses — no new
+  `Review` field — and `classifyReviewError` now classifies a miss here as
+  `grammar_misunderstanding`. No flagged/readable chunk → the card is
+  unchanged from before this feature.
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
@@ -2668,8 +2684,7 @@ gap — new UI work should default to a real-browser check per CLAUDE.md.
   set of commonly-confused chunk roles during AnalyzePage's guided
   walkthrough; `vocab-assist` glosses vocabulary meanings in sentence
   context (both a just-in-time pass on `VocabularyReviewPage` and a
-  per-word "Suggest (AI)" button). **`chunk-why-assist` still needs its
-  one-time `supabase functions deploy chunk-why-assist`** — not yet run.
+  per-word "Suggest (AI)" button).
 - **`~/projects/shadowing-analysis-api`** — a self-hosted forced-alignment/
   ASR service (separate sibling git repo, not part of this codebase),
   running under `systemd --user` on the user's Hetzner box, exposed only

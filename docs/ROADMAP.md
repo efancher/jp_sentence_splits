@@ -1655,6 +1655,87 @@ roles all shipped (see STATUS.md). Ideas considered but not built:
   with a `GrammarPattern` to hang off; plain role-assignment reasoning
   (why this is the を-car, why this modifier attaches here) has nothing to
   route through and still needs the mechanism that shipped.
+- **Gloss-first sequencing (2026-09-29, user idea; big change, not
+  committed to).** Today the planner is vocab-first: an unconfirmed
+  sentence only gets `vocabulary_review`; `continue_book` (the Analyze
+  walkthrough) opens once ≥50% of its words are introduced
+  (`CONTINUE_BOOK_MIN_INTRODUCED_RATIO`); "Grammar noticed" comes after.
+  Proposal: make the guided walkthrough the *first exposure*, with the
+  English translation shown as the answer key, and pick up vocabulary
+  and grammar from inside it. The harder unaided gloss (translation and
+  role labels hidden) becomes a later, separate pass, so the
+  vocab-before-glossing rule still protects the unaided attempt. The
+  translation is what resolves the usual objection (glossing unknown
+  words means guessing). Low-risk first step: surface unconfirmed words
+  inline at the chunk where they appear and confirm them there, keeping
+  the current order otherwise. Before building, check that
+  vocab-suggestion and confirmed-vocab data are populated when the
+  picker is skipped, since the planner keys many downstream steps off
+  confirmed vocab, and that the walkthrough can show/hide the
+  translation (it's an editable field today, not an answer key).
+
+## Possibilities (sentence-revisit repetition)
+
+From a 2026-09-29 brainstorm (four parallel agents: trigger mechanics,
+fading scaffolding, anti-boredom content variation, systems integration)
+on repeating a sentence's structural lesson once more of its vocabulary
+is familiar, without new scheduling machinery or feeling like a bored
+rerun. Shipped (see STATUS.md/AI_OVERVIEW.md): reusing `reading_in_context`'s
+existing FSRS due-schedule as the trigger (no new bucket/step/gate), and
+from the sentence's second review onward, a typed-recall "type this
+chunk's reading" production check for one classic Cure-Dolly-confusion
+role, before the existing comprehension check/Reveal.
+
+The brainstorm considered five ways to handle the actual handoff — what a
+learner does once a revisit is triggered — and only one (the typed-recall
+check above) was built; the user asked for the rest to be written up
+rather than built "in case it doesn't work out":
+
+- **Full `BuildPage` embed** — extract `BuildPage`'s tile-reconstruction
+  UI (shuffle chunk tiles, place them in order, hint ladder) into a
+  shared component, use it as the `reading_in_context` card's body when
+  due. Most faithful to "revisit via production," but real work: that UI
+  was never split from the page, and a fundamentally different
+  interaction shape (multi-step tile placement) doesn't fit `ReviewPage`'s
+  established "front → reveal → rate" card shape without real effort to
+  keep the two copies in sync.
+- **Link out to `BuildPage`, then return to rate** — the review card
+  shows a button to `/books/:bookId/build/:sentenceId`, the learner does
+  the exercise there, then needs to come back to `ReviewPage` to actually
+  settle the FSRS card. Cheapest in UI code (zero duplication) but breaks
+  the single-page session flow this app otherwise keeps tight, and needs
+  new "return here to rate" plumbing that doesn't exist today.
+- **Passive read-only recap card** — reuse `ChunkPuzzleStrip`/
+  `roleGuideBlurb` read-only as the `reading_in_context` card body instead
+  of the typed check. Cheapest of all (fits the existing reveal/rate shape
+  trivially, no new interaction), but this is exactly what the
+  content-variation brainstorm flagged as risking "same thing, quieter" —
+  passive review, not production, is precisely the boredom failure mode
+  the user named up front.
+- **Prominent "Build this" nudge instead of touching `ReviewPage` at
+  all** — leave `reading_in_context` untouched; just make the existing
+  "Build this" link (already on `AnalyzePage`) more visible/suggested once
+  a sentence matures (e.g. full vocab proficiency). Smallest possible
+  change, most consistent with this app's "never forced" convention
+  (`BuildPage`'s own hint ladder, `ReaderPage` being ungated) — but
+  weakest on the "automatic" part of the original ask, since visiting
+  stays fully opt-in.
+- **A `ParticlePuzzle` round targeted at the sentence's flagged role**
+  (rather than the game's normal random weak-pool pick) as a rotation
+  option for a third/later visit, so repeated revisits of the same
+  sentence don't all ask the identical typed-reading question. Narrower
+  applicability than the others (only sentences with a blankable
+  particle), but cheap once `getParticlePuzzleData` exists to extend, and
+  makes a repeat feel earned rather than templated.
+
+Explicitly ruled out by the integration-brainstorm agent, not just
+deferred: a second, independent scheduling mechanism (new bucket/step
+with its own vocab-ratio eligibility check) — `continue_book`'s own
+history (four gate-tuning iterations in one week) was cited as evidence
+this codebase's per-sentence readiness predicates are easy to get subtly
+wrong, and a second scheduler answering "is this sentence due for another
+look" independently of `reading_in_context` would eventually disagree
+with it.
 
 - Sentence-first: promote a practised target into durable tracking (explicit "Keep reviewing this"; vocabulary first, needs a merge-link operation). Parked with reasoning in `docs/SENTENCE_FIRST_HANDOFF.md`, awaiting the user's go-ahead.
 
