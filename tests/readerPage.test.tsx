@@ -1,11 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb, readSettings } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
+import { nativeAudioController } from '../src/lib/nativeAudio';
 import { ReaderPage } from '../src/pages/ReaderPage';
 import { withAppProviders } from '../src/test/providers';
 
@@ -107,6 +108,31 @@ describe('ReaderPage (always-available chapter read-along)', () => {
   beforeEach(async () => {
     resetDbForTests(`reader-page-${createId('db')}`);
     await ensureSettings();
+    localStorage.setItem('satori-glossbook:reader-text-mode', 'plain');
+  });
+
+  it('defaults to furigana on words that are not learned yet and drops it once a word is known', async () => {
+    localStorage.removeItem('satori-glossbook:reader-text-mode');
+    await seedBook();
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.sentences.update('sent-1', {
+      vocabularySuggestions: [
+        { id: 'sg-1', surface: '本', start: 0, end: 1, expression: '本', reading: 'ほん', pos: '名詞', source: 'morphology', selectedByDefault: true },
+        { id: 'sg-2', surface: '読み', start: 2, end: 4, expression: '読む', reading: 'よむ', pos: '動詞', source: 'morphology', selectedByDefault: true },
+      ],
+    });
+    await db.vocabularyItems.add({ id: 'v-hon', expression: '本', reading: 'ほん', meaning: 'book', partOfSpeech: 'noun', createdAt: now, updatedAt: now });
+    await db.studyItems.add({
+      id: 'si-hon', subjectType: 'vocabularyItem', subjectId: 'v-hon', activityType: 'reading_retrieval',
+      fsrsState: { due: now, stability: 30, difficulty: 5, elapsedDays: 0, scheduledDays: 30, learningSteps: 0, reps: 3, lapses: 0, state: 'review' },
+      createdAt: now, updatedAt: now,
+    });
+
+    renderReaderPage('/books/book-1/read?chapter=ch-1');
+
+    expect(await screen.findByText('よ')).toBeInTheDocument();
+    expect(screen.queryByText('ほん')).not.toBeInTheDocument();
   });
 
   it('renders every sentence in the whole book when no chapter is given, with a Play control', async () => {
@@ -316,7 +342,29 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     renderReaderPage('/books/book-1/read');
 
     await screen.findByText('本を読みます。');
-    expect(screen.getAllByRole('button', { name: 'Play from here' })).toHaveLength(1);
+    // The focused sentence's own button plus the toolbar's.
+    expect(screen.getAllByRole('button', { name: 'Play sentence' })).toHaveLength(2);
+  });
+
+  it('plays a single sentence and stops at its end, looping only when asked', async () => {
+    await seedBook();
+    Element.prototype.scrollIntoView = vi.fn();
+    const play = vi.spyOn(nativeAudioController, 'play').mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderReaderPage('/books/book-1/read');
+    await screen.findByText('本を読みます。');
+    const toolbar = screen.getByRole('toolbar', { name: 'Sentence tools' });
+
+    await user.click(within(toolbar).getByRole('button', { name: 'Play sentence' }));
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0]![2]).toMatchObject({ loop: false });
+    play.mock.calls[0]![2]!.onEnded!();
+    expect(play).toHaveBeenCalledTimes(1);
+
+    await user.click(within(toolbar).getByRole('button', { name: 'Loop off' }));
+    await user.click(within(toolbar).getByRole('button', { name: 'Play sentence' }));
+    expect(play.mock.calls[1]![2]).toMatchObject({ loop: true });
+    play.mockRestore();
   });
 
   it('switches to furigana/reading-only text via the display-mode toggle', async () => {

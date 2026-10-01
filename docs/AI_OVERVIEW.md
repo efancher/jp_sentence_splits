@@ -1095,6 +1095,8 @@ below, framed in the README as "not a spaced-repetition system" for this
 original layer (the SRS layer was added later, additively).
 
 ### 3b. Chapter/book read-along — `ReaderPage.tsx` (`/books/:bookId/read`, optional `?chapter=<id>`)
+
+Reader text modes: default "Furigana on new words" (ruby only over words whose vocabulary item isn't reading-proficient; `src/lib/newWordFurigana.ts`), plus Plain, Furigana and Reading-only; the choice persists in `satori-glossbook:reader-text-mode`.
 An always-available (no unlock/gate), non-SRS comprehensible-input viewer —
 "try it from time to time to see how comprehension is doing," not a card:
 no `Review` row, no self-rating. Reachable from a "Read" button on

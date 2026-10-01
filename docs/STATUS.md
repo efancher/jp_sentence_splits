@@ -10,6 +10,26 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-01 — Reader: per-sentence play + loop.** In the chapter layout the
+  focused sentence's ▶ (and a new toolbar ▶) plays just that sentence and
+  stops at its end instead of reading on into the next one; a new 🔁 toggle
+  loops it (toggling mid-play restarts with the new setting). The header Play
+  and the original layout's "Play from here" still read on through the chapter.
+- **2026-10-01 — Episode pack: literal "dolly" glosses for every chunk.** The
+  optional sentence-structure part of the preparation prompt now asks for a
+  near word-for-word gloss on every chunk, explicitly including non-vocabulary
+  connectives and fixed expressions (もう一つは → "another one, as for"), with a
+  worked example. Glosses still land in `structureDrafts` and show in the Reader
+  walkthrough ("Show gloss"), unverified, and only when no saved analysis exists.
+- **2026-10-01 — Reader: furigana only on words not learned yet.** The Text
+  control gains a default "Furigana on new words" mode (`ふ新`): ruby is drawn
+  over every kanji word except those whose vocabulary item is reading-proficient
+  (the same `knownExpressions` the word help uses), so readings fade out word by
+  word as cards mature. Works inside the karaoke line during playback
+  (`KaraokeSentenceText` `rubySegments`); `src/lib/newWordFurigana.ts` positions
+  the inline-reading segments against the sentence and falls back to plain text
+  when they don't line up. The choice persists per device
+  (`satori-glossbook:reader-text-mode`); Plain/Furigana/Reading-only remain.
 - **2026-10-01 — Shadowing page: chapter lines + icon toolbar.** The shadow
   page shows the chapter as plain lines (tap a neighbour to shadow it) with
   the existing synced text on the active sentence, beside a "Shadowing tools"

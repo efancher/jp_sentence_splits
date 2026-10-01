@@ -11,6 +11,7 @@ import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, l
 import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
+import { newWordSegments } from '../lib/newWordFurigana';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
@@ -26,8 +27,25 @@ import { PLAYBACK_SPEEDS } from '../lib/recording';
  * `Review` row, no FSRS, no self-rating, same treatment as `ShadowPage`/`/play`.
  */
 const READER_LAYOUT_KEY = 'satori-glossbook:reader-layout';
-const TEXT_MODE_ORDER: TextDisplayMode[] = ['plain', 'furigana', 'reading'];
-const TEXT_MODE_LABELS: Record<TextDisplayMode, string> = { plain: 'Plain Japanese', furigana: 'Furigana', reading: 'Reading-only' };
+const READER_TEXT_MODE_KEY = 'satori-glossbook:reader-text-mode';
+type ReaderTextMode = TextDisplayMode | 'new';
+const TEXT_MODE_ORDER: ReaderTextMode[] = ['new', 'plain', 'furigana', 'reading'];
+const TEXT_MODE_LABELS: Record<ReaderTextMode, string> = {
+  new: 'Furigana on new words',
+  plain: 'Plain Japanese',
+  furigana: 'Furigana',
+  reading: 'Reading-only',
+};
+const TEXT_MODE_GLYPHS: Record<ReaderTextMode, string> = { new: 'ふ新', plain: '文', furigana: 'ふ', reading: 'あ' };
+
+function storedTextMode(): ReaderTextMode | undefined {
+  try {
+    const value = localStorage.getItem(READER_TEXT_MODE_KEY);
+    return TEXT_MODE_ORDER.find((mode) => mode === value);
+  } catch {
+    return undefined;
+  }
+}
 
 export function ReaderPage() {
   const { bookId = '', sentenceId: lessonSentenceId } = useParams();
@@ -45,9 +63,15 @@ export function ReaderPage() {
   const chapterId = searchParams.get('chapter') || lessonChapterId || undefined;
   const native = useNativeAudio();
   const settings = useLiveQuery(() => readSettings(), []);
-  const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
+  const [displayMode, setDisplayModeState] = useState<ReaderTextMode>(() => storedTextMode() ?? 'new');
+  function setDisplayMode(mode: ReaderTextMode) {
+    setDisplayModeState(mode);
+    try { localStorage.setItem(READER_TEXT_MODE_KEY, mode); } catch { /* storage unavailable */ }
+  }
   const [playbackRate, setPlaybackRate] = useState(1);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [loopSentence, setLoopSentence] = useState(false);
+  const singleIndexRef = useRef<number | null>(null);
   const [revealedTranslations, setRevealedTranslations] = useState<Set<string>>(
     () => new Set(),
   );
@@ -69,7 +93,9 @@ export function ReaderPage() {
   }
 
   useEffect(() => {
-    if (settings) setDisplayMode(settings.textDisplayMode);
+    if (settings && !storedTextMode()) {
+      setDisplayModeState(settings.textDisplayMode === 'plain' ? 'new' : settings.textDisplayMode);
+    }
   }, [settings]);
 
   const data = useLiveQuery(async () => {
@@ -224,12 +250,19 @@ export function ReaderPage() {
     return -1;
   }
 
-  function playFrom(index: number) {
+  /** `single` plays just this sentence (stopping, or looping, at its end) instead of reading on through the chapter. */
+  function playFrom(index: number, single = false, loop = loopSentence) {
     const audio = audioByRow[index];
     if (!audio) return;
     setActiveIndex(index);
+    singleIndexRef.current = single ? index : null;
     void native.play(audio, playbackRate, {
+      loop: single && loop,
       onEnded: () => {
+        if (single) {
+          setActiveIndex(-1);
+          return;
+        }
         const next = findNextPlayable(index + 1);
         if (next === -1) {
           setActiveIndex(-1);
@@ -244,6 +277,17 @@ export function ReaderPage() {
   const isSequencePlaying =
     native.isPlaying && !!currentAudio && native.activeItemId === currentAudio.id;
   const firstPlayable = findNextPlayable(0);
+
+  function toggleSentencePlay(index: number) {
+    if (activeIndex === index && isSequencePlaying) native.stop();
+    else playFrom(index, true);
+  }
+
+  function toggleLoop() {
+    const next = !loopSentence;
+    setLoopSentence(next);
+    if (isSequencePlaying && singleIndexRef.current === activeIndex) playFrom(activeIndex, true, next);
+  }
 
   function toggleSequence() {
     if (isSequencePlaying) {
@@ -274,14 +318,37 @@ export function ReaderPage() {
   }
 
   function sentenceLine(sentence: Sentence, isActive: boolean, audio?: SentenceAudio) {
-    if (displayMode === 'plain' && isActive && audio) {
+    const newWordRuby =
+      displayMode === 'new'
+        ? newWordSegments(sentence.japanese, sentence.inlineReading, sentence.vocabularySuggestions, data?.knownExpressions ?? new Set())
+        : null;
+    if ((displayMode === 'plain' || displayMode === 'new') && isActive && audio) {
       return (
         <KaraokeSentenceText
           audio={audio}
           japanese={sentence.japanese}
           vocabularySuggestions={sentence.vocabularySuggestions}
           targetVocabulary={sentence.targetVocabulary}
+          rubySegments={newWordRuby ?? undefined}
         />
+      );
+    }
+    if (newWordRuby) {
+      return (
+        <div className="jp jp-lg" lang="ja">
+          {newWordRuby.map((segment, index) =>
+            segment.kind === 'ruby' && segment.reading ? (
+              <ruby key={index}>
+                {segment.base}
+                <rp>(</rp>
+                <rt>{segment.reading}</rt>
+                <rp>)</rp>
+              </ruby>
+            ) : (
+              <span key={index}>{segment.base}</span>
+            ),
+          )}
+        </div>
       );
     }
     if (displayMode === 'furigana') {
@@ -336,8 +403,9 @@ export function ReaderPage() {
           Text
           <select
             value={displayMode}
-            onChange={(event) => setDisplayMode(event.target.value as TextDisplayMode)}
+            onChange={(event) => setDisplayMode(event.target.value as ReaderTextMode)}
           >
+            <option value="new">Furigana on new words</option>
             <option value="plain">Plain Japanese</option>
             <option value="furigana">Furigana</option>
             <option value="reading">Reading-only</option>
@@ -481,9 +549,9 @@ export function ReaderPage() {
                   <button
                     type="button"
                     className="speak-button compact"
-                    aria-label={isActive && isSequencePlaying ? 'Stop' : 'Play from here'}
+                    aria-label={isActive && isSequencePlaying ? 'Stop' : chapterMode ? 'Play sentence' : 'Play from here'}
                     onClick={() =>
-                      isActive && isSequencePlaying ? native.stop() : playFrom(index)
+                      isActive && isSequencePlaying ? native.stop() : playFrom(index, chapterMode)
                     }
                   >
                     {isActive && isSequencePlaying ? '⏸' : '▶'}
@@ -648,6 +716,14 @@ export function ReaderPage() {
               onClick={() => selectLine(rows[focusedIndex - 1]!.sentence.id)}>↑</button>
             <button type="button" className="icon-button" aria-label="Next sentence" title="Next sentence" disabled={focusedIndex >= rows.length - 1}
               onClick={() => selectLine(rows[focusedIndex + 1]!.sentence.id)}>↓</button>
+            <button type="button" className="icon-button" aria-pressed={isSequencePlaying && activeIndex === focusedIndex}
+              aria-label={isSequencePlaying && activeIndex === focusedIndex ? 'Stop' : 'Play sentence'}
+              title={isSequencePlaying && activeIndex === focusedIndex ? 'Stop' : 'Play this sentence'}
+              disabled={!audioByRow[focusedIndex]}
+              onClick={() => toggleSentencePlay(focusedIndex)}>{isSequencePlaying && activeIndex === focusedIndex ? '⏸' : '▶'}</button>
+            <button type="button" className="icon-button" aria-pressed={loopSentence}
+              aria-label={loopSentence ? 'Loop on' : 'Loop off'} title={loopSentence ? 'Loop this sentence: on' : 'Loop this sentence: off'}
+              onClick={toggleLoop}>🔁</button>
             <button type="button" className="icon-button" aria-pressed={translationOpen}
               aria-label={translationOpen ? 'Hide translation' : 'Show translation'} title={translationOpen ? 'Hide translation' : 'Show translation'}
               onClick={() => toggleTranslation(focusedRow.sentence.id)}>EN</button>
@@ -670,7 +746,7 @@ export function ReaderPage() {
             <button type="button" className="icon-button" aria-label={`Text: ${TEXT_MODE_LABELS[displayMode]}. Switch display`}
               title={`Text: ${TEXT_MODE_LABELS[displayMode]} (tap for ${TEXT_MODE_LABELS[nextMode]})`}
               onClick={() => setDisplayMode(nextMode)}>
-              {displayMode === 'plain' ? '文' : displayMode === 'furigana' ? 'ふ' : 'あ'}
+              {TEXT_MODE_GLYPHS[displayMode]}
             </button>
             <Link className="icon-button" to={`/books/${bookId}`} aria-label="Back to book" title="Back to book">📖</Link>
           </div>
