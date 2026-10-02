@@ -39,7 +39,6 @@ export interface MorphologyToken {
  */
 const CONTENT_POS_PREFIXES = [
   '名詞',
-  '代名詞',
   '動詞',
   '形容詞',
   '形容動詞',
