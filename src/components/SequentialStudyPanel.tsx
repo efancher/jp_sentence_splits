@@ -11,7 +11,7 @@ import type { SequentialSentenceStatus } from '../lib/sequentialStudy';
 
 function progressLine(status: SequentialSentenceStatus): string {
   const { progress } = status;
-  if (status.waived) return 'This sentence has no meaning check, so it never blocks the next one.';
+  if (status.waived) return 'This sentence has no meaning check, so once you have worked through it the next sentence opens.';
   if (progress.cleared) return 'Cleared — the next sentence is open.';
   if (progress.attempts < progress.windowSize) {
     return `${progress.attempts} of ${progress.windowSize} spaced first-try answers so far (${progress.correctInWindow} correct). Needs ${progress.required} of the last ${progress.windowSize} correct.`;

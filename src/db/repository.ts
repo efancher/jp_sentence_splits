@@ -6050,6 +6050,25 @@ export async function unlockSentenceManually(sentenceId: string): Promise<void> 
 }
 
 /**
+ * Drop persisted unlocks for sentences that are still unstarted, so the current
+ * rules decide again. Started sentences stay open on their own status.
+ * Returns how many were dropped.
+ */
+export async function resetUnstartedSequentialUnlocks(): Promise<number> {
+  const settings = await readSettings();
+  const overrides = settings.sequentialUnlockOverrides ?? [];
+  if (overrides.length === 0) return 0;
+  const db = getDb();
+  const memberships = await db.bookSentences.where('sentenceId').anyOf(overrides).toArray();
+  const started = new Set(memberships.filter((m) => m.status !== 'unstarted').map((m) => m.sentenceId));
+  const unstarted = new Set(memberships.filter((m) => m.status === 'unstarted').map((m) => m.sentenceId));
+  const keep = overrides.filter((id) => started.has(id) || !unstarted.has(id));
+  if (keep.length === overrides.length) return 0;
+  await updateSettings({ sequentialUnlockOverrides: keep });
+  return overrides.length - keep.length;
+}
+
+/**
  * Bridge from shadowing to the SRS: a close A/B-rated shadow of a sentence
  * ("better"/"same" vs the reference) is real evidence the learner can read
  * and parse that whole sentence, so it logs one `natural_encounter` review

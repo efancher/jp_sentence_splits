@@ -132,12 +132,16 @@ describe('sentence-led flow repository', () => {
     expect((await getSequentialBookStatus(book.id)).sentences[1]!.accessible).toBe(true);
   });
 
-  it('a sentence without a usable check never blocks the next one', async () => {
+  it('a sentence without a usable check blocks the next one until it has been worked on', async () => {
     const { book, ids } = await seedBook(3, false);
     await setSentenceComprehensionCheck(ids[0]!, undefined);
     const status = await getSequentialBookStatus(book.id);
     expect(status.sentences[0]!.waived).toBe(true);
-    expect(status.sentences[1]!.accessible).toBe(true);
+    expect(status.sentences[1]!.accessible).toBe(false);
+    await getDb().bookSentences.where('sentenceId').equals(ids[0]!).modify({ status: 'complete' });
+    const after = await getSequentialBookStatus(book.id);
+    expect(after.sentences[1]!.accessible).toBe(true);
+    expect(after.sentences[2]!.accessible).toBe(false);
   });
 
   it('legacy reviews without a meaningChoice record still count', async () => {

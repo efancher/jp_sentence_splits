@@ -90,7 +90,7 @@ export function unlockProgress(attempts: readonly MeaningAttempt[]): UnlockProgr
 export type UnlockReason =
   | 'first' // first sentence of the book
   | 'previous_cleared'
-  | 'previous_waived' // previous sentence has no usable meaning check, so it cannot gate
+  | 'previous_waived' // previous sentence has no usable meaning check and was already worked on, so it cannot gate
   | 'introduced' // already studied before the mode was on (grandfathered)
   | 'latched'; // was unlocked earlier (manual override or earlier computation)
 
@@ -149,10 +149,11 @@ export function computeSequentialStatus(
     else if (i === 0) reason = 'first';
     else if (prev?.accessible) {
       if (prev.progress.cleared) reason = 'previous_cleared';
-      else if (prev.waived) reason = 'previous_waived';
+      else if (prev.waived && ordered[i - 1]!.introduced) reason = 'previous_waived';
     }
     const accessible = reason !== undefined;
-    if (accessible && !latched.has(s.sentenceId)) newlyLatched.push(s.sentenceId);
+    // A waiver unlock is derived, not earned: leave it unlatched so it follows the rule.
+    if (accessible && reason !== 'previous_waived' && !latched.has(s.sentenceId)) newlyLatched.push(s.sentenceId);
     statuses.push({
       sentenceId: s.sentenceId,
       position: s.position,

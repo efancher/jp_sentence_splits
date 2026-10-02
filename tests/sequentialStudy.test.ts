@@ -108,13 +108,37 @@ describe('sequential status', () => {
     expect(s.newlyLatched).toEqual(['a', 'c']);
   });
 
-  it('waives a sentence with no usable meaning check so the learner is never stuck', () => {
+  it('waives a worked-through sentence with no usable meaning check so the learner is never stuck', () => {
     const s = computeSequentialStatus([
-      sentence('a', 1, [], { hasUsableCheck: false }),
+      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
       sentence('b', 2),
     ]);
     expect(s.sentences[1]!.accessible).toBe(true);
     expect(s.sentences[1]!.reason).toBe('previous_waived');
+  });
+
+  it('a waived sentence that has not been worked on yet does not unlock the next one', () => {
+    const s = computeSequentialStatus([
+      sentence('a', 1),
+      sentence('b', 2, [], { hasUsableCheck: false }),
+      sentence('c', 3, [], { hasUsableCheck: false }),
+    ]);
+    expect(s.sentences.map((x) => x.accessible)).toEqual([true, false, false]);
+    const worked = computeSequentialStatus([
+      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
+      sentence('b', 2, [], { hasUsableCheck: false }),
+      sentence('c', 3),
+    ]);
+    expect(worked.sentences.map((x) => x.accessible)).toEqual([true, true, false]);
+  });
+
+  it('does not latch a waiver unlock', () => {
+    const s = computeSequentialStatus([
+      sentence('a', 1, [], { hasUsableCheck: false, introduced: true }),
+      sentence('b', 2),
+    ]);
+    expect(s.sentences[1]!.accessible).toBe(true);
+    expect(s.newlyLatched).toEqual(['a']);
   });
 
   it('waiver does not chain past a locked sentence', () => {

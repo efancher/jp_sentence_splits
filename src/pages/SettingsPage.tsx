@@ -19,6 +19,7 @@ import { filterJapaneseVoices } from '../lib/speech';
 import {
   exportFullBackup,
   refreshVocabularySuggestionDefaults,
+  resetUnstartedSequentialUnlocks,
   restoreBackup,
   updateSettings,
 } from '../db/repository';
@@ -319,6 +320,16 @@ export function SettingsPage() {
           unlocked, sentences you&rsquo;ve already started stay open, and
           reading, playback and context are never locked.
         </p>
+        <div className="row">
+          <button
+            type="button"
+            onClick={() => {
+              void resetUnstartedSequentialUnlocks().then((count) => setMessage(`Re-locked ${count} sentences you haven't started.`));
+            }}
+          >
+            Re-lock sentences I haven&rsquo;t started
+          </button>
+        </div>
         <label className="row">
           <input
             type="checkbox"
