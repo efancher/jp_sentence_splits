@@ -231,7 +231,7 @@ function DecisionCard({
       </div>
       <div className="row jp jp-lg" style={{ flexWrap: 'wrap', gap: '0.4rem' }} aria-label="Sentence chunks">
         {chunks.map((chunk) => (
-          <span key={chunk.id} style={chunk.id === spec.chunkId ? { fontWeight: 700, borderBottom: '2px solid currentColor' } : undefined}>
+          <span key={chunk.id} style={chunk.id === spec.chunkId && (spec.skill !== 'predicate' || done) ? { fontWeight: 700, borderBottom: '2px solid currentColor' } : undefined}>
             {chunk.japanese}
           </span>
         ))}
