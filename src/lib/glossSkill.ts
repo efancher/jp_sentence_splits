@@ -128,7 +128,9 @@ export function buildDecisions(chunks: GlossChunk[], particleChecks?: readonly P
 
   chunks.forEach((chunk, index) => {
     if (index === predicateIndex) return;
-    const [, particle] = splitTrailingParticle(bare(chunk.japanese));
+    const [stem, particle] = splitTrailingParticle(bare(chunk.japanese));
+    // 〜ますが / 〜ですが is the clause-linking "but", not the subject marker.
+    if (particle === 'が' && /(?:ます|ません|ました|です|でした)$/.test(stem)) return;
     const relation = SETTLED[particle] ?? UNSETTLED[particle];
     const authored = particle ? matchParticleCheck(particleChecks, chunk.japanese, particle) : undefined;
     if (!particle || (!relation && !authored)) return;

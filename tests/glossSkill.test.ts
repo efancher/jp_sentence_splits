@@ -34,6 +34,11 @@ describe('buildDecisions', () => {
     ]);
   });
 
+  it('does not ask a case question for the clause-linking が in 〜ますが', () => {
+    const specs = buildDecisions(chunksOf('私は今ドイツに住んでいますが、私の両親は日本に住んでいます。'));
+    expect(specs.filter((s) => s.particle === 'が')).toEqual([]);
+  });
+
   it('records は/に/で as ungraded rather than guessing', () => {
     const specs = buildDecisions(chunksOf('私は学校で食べた。'));
     const byParticle = Object.fromEntries(specs.filter((s) => s.particle).map((s) => [s.particle, s]));
