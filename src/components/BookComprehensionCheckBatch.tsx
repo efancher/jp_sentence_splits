@@ -81,13 +81,13 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     setBatch(null);
   }
 
-  async function generateNow() {
+  async function generateNow(wholeBook = false) {
     setBusy(true);
-    setStatus('Generating…');
+    setStatus(wholeBook ? `Generating for all ${eligible} sentences… (this can take a while)` : 'Generating…');
     const summary = await autoGenerateMeaningChecks({
       mode,
       bookId,
-      limit: batchSize,
+      limit: wholeBook ? Math.max(eligible, 1) : batchSize,
       ignoreBackoff: true,
     });
     setBusy(false);
@@ -139,6 +139,18 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
             </button>
             <button type="button" disabled={busy} onClick={() => void generateNow()}>
               Generate with AI now
+            </button>
+            <button type="button" disabled={busy} onClick={() => void generateNow(true)}>
+              Generate whole book with AI ({eligible})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBatchSize(eligible);
+                setBatch(null);
+              }}
+            >
+              Set batch to whole book
             </button>
           </div>
         )}
