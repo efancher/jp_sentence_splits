@@ -36,11 +36,17 @@ export function SequentialStudyPanel({ bookId, sentenceId }: { bookId: string; s
   const { frontier, gatingSentence } = view.book;
   const total = view.book.sentences.length;
   const open = view.book.sentences.filter((s) => s.accessible).length;
+  const cleared = view.book.sentences.filter((s) => s.progress.cleared).length;
+  const working = gatingSentence && !gatingSentence.progress.cleared ? gatingSentence : undefined;
   return (
     <section className="panel stack" aria-label="Episode order progress">
       <strong>
-        Episode order · {open} of {total} sentences open
+        Episode order · {cleared} of {total} sentences comfortable
       </strong>
+      <progress value={cleared} max={Math.max(total, 1)} aria-label="Sentences cleared" style={{ width: '100%' }} />
+      <p className="muted" style={{ margin: 0 }}>
+        {open} open{working ? ` · working on sentence ${working.position + 1}` : ''}.
+      </p>
       {view.current ? (
         <p className="muted" style={{ margin: 0 }}>
           This sentence: {progressLine(view.current)}
