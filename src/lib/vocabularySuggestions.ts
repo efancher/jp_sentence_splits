@@ -361,6 +361,32 @@ function computeSelectedByDefault(
   );
 }
 
+/**
+ * Words that stay out of the vocabulary picker's defaults (or, for pronouns,
+ * never were content) but still need a meaning shown while reading help is
+ * high: pronouns (そっち, あなた), degree/discourse adverbs, kana-written
+ * formal nouns. Derived from the stored suggestion alone so it works on old
+ * sentences; never a study item, just a gloss.
+ */
+export function isGlossOnlySuggestion(
+  suggestion: Pick<VocabularySuggestion, 'surface' | 'expression' | 'reading' | 'pos' | 'selectedByDefault' | 'source'>,
+): boolean {
+  if (suggestion.selectedByDefault || suggestion.source !== 'morphology' || suggestion.pos.includes('+')) return false;
+  const token: MorphologyToken = {
+    surface: suggestion.surface,
+    start: 0,
+    end: suggestion.surface.length,
+    lemma: suggestion.expression,
+    reading: suggestion.reading,
+    pos: suggestion.pos,
+  };
+  return (
+    suggestion.pos.startsWith('代名詞') ||
+    isKanaWrittenFormalNoun(token, suggestion.reading) ||
+    (isContentPos(suggestion.pos) && isFunctionAdverb(token))
+  );
+}
+
 export function suggestionFromToken(
   token: MorphologyToken,
   japanese: string,

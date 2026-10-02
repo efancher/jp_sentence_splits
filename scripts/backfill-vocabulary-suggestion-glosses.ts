@@ -19,8 +19,10 @@
  * past confirms). This one improves the picker's UX for *future* confirms
  * by pre-filling the gloss before the word is even tapped.
  *
- * Scope: only `selectedByDefault: true` suggestions (content words — see
- * isContentPos in src/lib/vocabularySuggestions.ts). Particles/punctuation/
+ * Scope: `selectedByDefault: true` suggestions (content words — see
+ * isContentPos in src/lib/vocabularySuggestions.ts) plus gloss-only words
+ * (pronouns, function adverbs, kana formal nouns — isGlossOnlySuggestion).
+ * Particles/punctuation/
  * auxiliaries are skipped — JMDict has entries for many of them, but their
  * glosses aren't useful "vocabulary meanings," matching this codebase's
  * own existing definition of "worth studying."
@@ -33,6 +35,7 @@
  * Usage: npm run backfill:vocabulary-suggestion-glosses -- [--apply]
  */
 import type { VocabularySuggestion } from '../src/domain/types';
+import { isGlossOnlySuggestion } from '../src/lib/vocabularySuggestions';
 
 import { buildJmdictIndex, ensureJmdictFile, lookupJmdict } from './lib/jmdict';
 import { buildJmnedictIndex, ensureJmnedictFile, lookupJmnedict } from './lib/jmnedict';
@@ -45,7 +48,7 @@ interface SentenceRow {
 }
 
 function needsGloss(suggestion: VocabularySuggestion): boolean {
-  return suggestion.selectedByDefault && !suggestion.english?.trim();
+  return (suggestion.selectedByDefault || isGlossOnlySuggestion(suggestion)) && !suggestion.english?.trim();
 }
 
 async function fetchSentencesNeedingGlosses(

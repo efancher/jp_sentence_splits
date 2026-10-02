@@ -185,6 +185,31 @@ describe('sentenceWordHelp', () => {
   });
 });
 
+describe('gloss-only words', () => {
+  const morph = (surface: string, expression: string, pos: string, english: string, selectedByDefault = false) =>
+    ({ surface, expression, reading: surface, pos, english, selectedByDefault, source: 'morphology' });
+  const sentence = [
+    morph('そっち', 'そっち', '代名詞', 'that way', false),
+    morph('とても', '迚も', '副詞', 'very', false),
+    morph('つもり', 'つもり', '名詞/普通名詞', 'intention', false),
+    morph('事', '事', '名詞/普通名詞', 'thing', false),
+    morph('を', 'を', '助詞/格助詞', 'object marker', false),
+    morph('紙', '紙', '名詞/普通名詞', 'paper', true),
+  ];
+
+  it('glosses pronouns, function adverbs and kana formal nouns, but not particles or kanji-written nouns', () => {
+    expect(glossableWords(sentence).map((word) => word.expression)).toEqual(['そっち', '迚も', 'つもり', '紙']);
+  });
+
+  it('drops them from the default list once most of the sentence is known, keeps them under "show all"', () => {
+    const fresh = sentenceWordHelp(sentence, new Set());
+    expect(fresh.newWords.map((word) => word.expression)).toEqual(['そっち', '迚も', 'つもり', '紙']);
+    const known = sentenceWordHelp([...sentence, morph('本', '本', '名詞/普通名詞', 'book', true), morph('読む', '読む', '動詞/一般', 'read', true)], new Set(['紙', '本', '読む']));
+    expect(known.newWords).toEqual([]);
+    expect(known.allWords.map((word) => word.expression)).toContain('そっち');
+  });
+});
+
 describe('selectSentenceTargets', () => {
   const ev = (key: string, outcome: 'got_it' | 'needed_help', n: number): SentenceLearningEvent => ({
     id: `${key}${outcome}${n}`, timestamp: 't', visitId: 'v', action: 'target_practice', bookId: 'b', sentenceId: 's',

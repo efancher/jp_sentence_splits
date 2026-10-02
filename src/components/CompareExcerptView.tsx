@@ -7,7 +7,7 @@ import { NativeAudioButton } from './NativeAudioButton';
 /** Optional per-sentence aids for an excerpt; missing pieces are simply not shown. */
 export interface CompareAids {
   translation?: string;
-  words: { expression: string; reading: string; english: string }[];
+  words: { expression: string; reading: string; english: string; glossOnly?: boolean }[];
   audio?: SentenceAudio;
 }
 

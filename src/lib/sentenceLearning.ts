@@ -4,6 +4,7 @@
  * already been practised or shown. Nothing here touches FSRS.
  */
 import type { SentenceLearningEvent } from '../domain/types';
+import { isGlossOnlySuggestion } from './vocabularySuggestions';
 
 export interface CompareOccurrence {
   sentenceId: string;
@@ -254,19 +255,38 @@ function shortMeaning(meaning: string): string {
  * A suggestion with no English of its own falls back to the meaning of a saved
  * vocabulary item with the same expression, when there is one.
  */
+type GlossSuggestion = {
+  expression: string;
+  reading: string;
+  english?: string;
+  selectedByDefault: boolean;
+  surface?: string;
+  pos?: string;
+  source?: string;
+};
+type GlossWord = { expression: string; reading: string; english: string; glossOnly?: boolean };
+
+/** Pronouns, function adverbs and kana formal nouns: glossed while help is high, never study items. */
+function isGlossOnly(suggestion: GlossSuggestion): boolean {
+  const { surface, pos, source } = suggestion;
+  if (surface === undefined || pos === undefined || source !== 'morphology') return false;
+  return isGlossOnlySuggestion({ ...suggestion, surface, pos, source });
+}
+
 export function glossableWords(
-  suggestions: { expression: string; reading: string; english?: string; selectedByDefault: boolean }[],
+  suggestions: GlossSuggestion[],
   savedMeanings: ReadonlyMap<string, string> = new Map(),
-): { expression: string; reading: string; english: string }[] {
+): GlossWord[] {
   const seen = new Set<string>();
-  const words: { expression: string; reading: string; english: string }[] = [];
+  const words: GlossWord[] = [];
   for (const suggestion of suggestions) {
-    if (!suggestion.selectedByDefault || seen.has(suggestion.expression)) continue;
+    const glossOnly = isGlossOnly(suggestion);
+    if ((!suggestion.selectedByDefault && !glossOnly) || seen.has(suggestion.expression)) continue;
     const saved = savedMeanings.get(suggestion.expression);
     const english = suggestion.english?.trim() || (saved ? shortMeaning(saved) : '');
     if (!english) continue;
     seen.add(suggestion.expression);
-    words.push({ expression: suggestion.expression, reading: suggestion.reading, english });
+    words.push({ expression: suggestion.expression, reading: suggestion.reading, english, ...(glossOnly ? { glossOnly } : {}) });
   }
   return words;
 }
@@ -275,9 +295,9 @@ export interface SentenceWordHelp {
   /** Content words in the sentence (glossed or not). */
   total: number;
   /** Glossed words the learner does not yet know, shown by default. */
-  newWords: { expression: string; reading: string; english: string }[];
+  newWords: GlossWord[];
   /** Every glossed word, known or not, for "show all". */
-  allWords: { expression: string; reading: string; english: string }[];
+  allWords: GlossWord[];
   /** Unknown content words, including ones with no gloss available. */
   unknownCount: number;
 }
@@ -288,16 +308,19 @@ export interface SentenceWordHelp {
  * in `knownExpressions` (reading-proficient saved vocabulary).
  */
 export function sentenceWordHelp(
-  suggestions: { expression: string; reading: string; english?: string; selectedByDefault: boolean }[],
+  suggestions: GlossSuggestion[],
   knownExpressions: ReadonlySet<string>,
   savedMeanings: ReadonlyMap<string, string> = new Map(),
 ): SentenceWordHelp {
   const content = new Set(suggestions.filter((item) => item.selectedByDefault).map((item) => item.expression));
   const allWords = glossableWords(suggestions, savedMeanings);
+  const unknownCount = [...content].filter((expression) => !knownExpressions.has(expression)).length;
+  // Gloss-only words (pronouns etc.) fade out of the default list once most of the sentence is known.
+  const highHelp = unknownCount * 2 > content.size;
   return {
     total: content.size,
     allWords,
-    newWords: allWords.filter((word) => !knownExpressions.has(word.expression)),
-    unknownCount: [...content].filter((expression) => !knownExpressions.has(expression)).length,
+    newWords: allWords.filter((word) => !knownExpressions.has(word.expression) && (!word.glossOnly || highHelp)),
+    unknownCount,
   };
 }
