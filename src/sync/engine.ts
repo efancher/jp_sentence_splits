@@ -1874,6 +1874,8 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
 }
 
+const FULL_PULL_PAGE_SIZE = 1000;
+
 async function pullFullTable(
   table: SyncEntity,
   userId: string,
@@ -1881,27 +1883,33 @@ async function pullFullTable(
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
-  const { data, error } = await supabase
-    .from(table)
-    .select('*')
-    .eq('owner_id', userId)
-    .is('deleted_at', null);
-  if (error) throw new Error(error.message);
-  await apply((data ?? []) as Record<string, unknown>[]);
-  for (const row of data ?? []) {
-    const recordId =
-      table === 'analyses' || table === 'inbox'
-        ? String((row as { sentence_id: string }).sentence_id)
-        : String((row as { id: string }).id);
-    const version = Number((row as { version: number }).version ?? 1);
-    await putRecordMeta({
-      entity: table,
-      recordId,
-      version,
-      syncedVersion: version,
-      updatedAt: String(
-        (row as { updated_at: string }).updated_at ?? new Date().toISOString(),
-      ),
-    });
+  const keyColumn = table === 'analyses' || table === 'inbox' ? 'sentence_id' : 'id';
+  // PostgREST caps a single response (1000 rows by default), so page through
+  // the table — an unpaged select silently truncates larger tables.
+  for (let from = 0; ; from += FULL_PULL_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .eq('owner_id', userId)
+      .is('deleted_at', null)
+      .order(keyColumn, { ascending: true })
+      .range(from, from + FULL_PULL_PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    await apply(rows);
+    for (const row of rows) {
+      const recordId = String((row as Record<string, unknown>)[keyColumn]);
+      const version = Number((row as { version: number }).version ?? 1);
+      await putRecordMeta({
+        entity: table,
+        recordId,
+        version,
+        syncedVersion: version,
+        updatedAt: String(
+          (row as { updated_at: string }).updated_at ?? new Date().toISOString(),
+        ),
+      });
+    }
+    if (rows.length < FULL_PULL_PAGE_SIZE) break;
   }
 }
