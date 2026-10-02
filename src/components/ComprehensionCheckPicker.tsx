@@ -8,6 +8,14 @@ import {
   formatComprehensionPromptForAI,
   parseComprehensionCheckReply,
 } from '../lib/comprehensionCheck';
+import {
+  MEANING_BANK_TARGET_SIZE,
+  formatDistractorBankPromptForAI,
+  getMeaningBank,
+  mergeDistractors,
+  parseDistractorBankReply,
+  removeDistractor,
+} from '../lib/meaningChoices';
 
 /**
  * Authoring UI for a sentence's comprehension check
@@ -28,6 +36,8 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
   const [manualOpen, setManualOpen] = useState(false);
   const [manualOptions, setManualOptions] = useState(['', '', '', '']);
   const [manualCorrectIndex, setManualCorrectIndex] = useState(0);
+  const [bankCopied, setBankCopied] = useState(false);
+  const [bankPasted, setBankPasted] = useState('');
 
   const data = useLiveQuery(async () => {
     const db = getDb();
@@ -102,6 +112,52 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
     setManualCorrectIndex(0);
   }
 
+  const bank = getMeaningBank(check);
+  const bankPrompt =
+    check && bank
+      ? formatDistractorBankPromptForAI({
+          japanese: sentence.japanese,
+          correct: bank.correct,
+          context: before.map((s) => `${s.japanese} — ${s.translation ?? ''}`.trim()),
+          existing: bank.entries.map((entry) => entry.text),
+        })
+      : '';
+
+  async function copyBankPrompt() {
+    try {
+      await navigator.clipboard.writeText(bankPrompt);
+      setBankCopied(true);
+      setTimeout(() => setBankCopied(false), 2000);
+    } catch {
+      setStatus('Copy failed — select the text and copy it manually.');
+    }
+  }
+
+  async function applyBankReply() {
+    if (!check) return;
+    const incoming = parseDistractorBankReply(bankPasted);
+    if (incoming.length === 0) {
+      setStatus('No "- " lines found in the pasted reply.');
+      return;
+    }
+    const result = mergeDistractors(check, incoming);
+    if (result.added.length > 0) await setSentenceComprehensionCheck(sentenceId, result.check);
+    const skipped = result.rejected.map((r) => `"${r.text}" (${r.issues.join(', ')})`).join('; ');
+    setStatus(`Added ${result.added.length}.${skipped ? ` Rejected: ${skipped}` : ''}`);
+    setBankPasted('');
+  }
+
+  async function removeFromBank(text: string) {
+    if (!check) return;
+    const next = removeDistractor(check, text);
+    if (next === check) {
+      setStatus('That is one of the 3 original wrong options and no extra exists to replace it — add more first.');
+      return;
+    }
+    await setSentenceComprehensionCheck(sentenceId, next);
+    setStatus('Removed.');
+  }
+
   async function clearCheck() {
     await setSentenceComprehensionCheck(sentenceId, undefined);
     setStatus('Cleared.');
@@ -127,6 +183,47 @@ export function ComprehensionCheckPicker({ sentenceId }: { sentenceId: string })
             <div className="row">
               <button type="button" onClick={() => void clearCheck()}>
                 Clear
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {check && bank ? (
+          <div className="stack" style={{ gap: '0.25rem' }}>
+            <strong>
+              Wrong-meaning bank · {bank.distractors.length} usable (target ~{MEANING_BANK_TARGET_SIZE})
+            </strong>
+            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              Each review shows the correct meaning plus 3 of these, rotating. Remove any that
+              are actually right, ambiguous or nonsense.
+            </p>
+            {bank.entries.map((entry, i) => (
+              <div className="row" key={`${i}-${entry.text}`} style={{ alignItems: 'baseline' }}>
+                <span style={{ flex: 1, opacity: entry.usable ? 1 : 0.55 }}>
+                  {entry.text}
+                  {entry.issues.length > 0 ? (
+                    <span className="muted"> [{entry.issues.join(', ')}{entry.usable ? '' : ' — not used'}]</span>
+                  ) : null}
+                </span>
+                <button type="button" onClick={() => void removeFromBank(entry.text)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <textarea readOnly rows={5} value={bankPrompt} />
+            <div className="row">
+              <button type="button" onClick={() => void copyBankPrompt()}>
+                {bankCopied ? 'Copied ✓' : 'Copy "more wrong meanings" prompt'}
+              </button>
+            </div>
+            <textarea
+              rows={4}
+              placeholder='Paste the reply (one wrong meaning per line, starting with "- ")…'
+              value={bankPasted}
+              onChange={(event) => setBankPasted(event.target.value)}
+            />
+            <div className="row">
+              <button type="button" className="primary" disabled={!bankPasted.trim()} onClick={() => void applyBankReply()}>
+                Add to bank
               </button>
             </div>
           </div>

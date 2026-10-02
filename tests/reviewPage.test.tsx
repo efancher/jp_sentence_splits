@@ -355,6 +355,8 @@ describe('ReviewPage', () => {
   beforeEach(async () => {
     resetDbForTests(`review-page-${createId('db')}`);
     await ensureSettings();
+    // These cover the vocabulary-gated flow; the sentence-led flow has its own tests.
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   // nativeAudioController is a module-level singleton, shared across every
@@ -640,6 +642,48 @@ describe('ReviewPage', () => {
     });
     // Sentence-level cards are not part of the chapter-layout comparison.
     expect((await getDb().reviews.toArray())[0]?.presentation).toBeUndefined();
+  });
+
+  it('sentence-led flow: shows 4 rotating meaning choices, explains a wrong pick, and stores the choice record', async () => {
+    await updateSettings({ sentenceLedFlow: true });
+    await seedBookWithSentence();
+    const db = getDb();
+    await db.bookSentences.update('bs-1', { status: 'in_progress' });
+    await db.analyses.update('sent-1', {
+      comprehensionCheck: {
+        options: [
+          'I read a book.',
+          'I do not read a book.',
+          'I wrote a book.',
+          'I will read a book.',
+        ],
+        correctIndex: 0,
+        extraDistractors: ['I bought a book.', 'He reads a book.', 'I am reading a magazine.'],
+        source: 'manual',
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const user = userEvent.setup();
+    renderReviewPage('/books/book-1/review', 'books/:bookId/review');
+
+    await screen.findByText('本を読みます。');
+    const pickable = await screen.findAllByRole('button', { name: /^(I |He )/ });
+    expect(pickable).toHaveLength(4);
+    expect(screen.getAllByText('I read a book.')).toHaveLength(1);
+    const wrong = pickable.find((button) => button.textContent !== 'I read a book.')!;
+    await user.click(wrong);
+    expect(await screen.findByText(/It means:/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /guided gloss/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reveal' }));
+    await user.click(screen.getByRole('button', { name: 'Again' }));
+
+    await waitFor(async () => {
+      const review = (await getDb().reviews.toArray())[0];
+      expect(review?.meaningChoice?.correct).toBe(false);
+      expect(review?.meaningChoice?.chosenText).toBe(wrong.textContent);
+      expect(review?.meaningChoice?.shown).toHaveLength(4);
+      expect(review?.meaningChoice?.shown[review.meaningChoice.chosenIndex]).toBe(wrong.textContent);
+    });
   });
 
   it('does not double-record a review on a rapid double-click', async () => {

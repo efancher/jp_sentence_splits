@@ -6,6 +6,7 @@ import { ROLE_PRESET_GROUPS, ROLE_PRESETS } from '../appConfig';
 import { ChapterReader } from '../components/ChapterReader';
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { ComprehensionCheckPicker } from '../components/ComprehensionCheckPicker';
+import { LockedSentenceNotice, SequentialStudyPanel } from '../components/SequentialStudyPanel';
 import { GrammarPicker } from '../components/GrammarPicker';
 import { buildSentenceTokens } from '../components/KaraokeSentenceText';
 import { NativeAudioButton } from '../components/NativeAudioButton';
@@ -21,6 +22,7 @@ import {
   saveAnalysis,
   setBookSentenceStatus,
   updateSentenceText,
+  getSequentialSentenceView,
 } from '../db/repository';
 import type { RoleOccurrenceStats } from '../db/repository';
 import type {
@@ -113,6 +115,7 @@ export function AnalyzePage() {
   const { bookId = '', sentenceId = '' } = useParams();
   const navigate = useNavigate();
   const settings = useLiveQuery(() => readSettings(), []);
+  const sequentialView = useLiveQuery(() => getSequentialSentenceView(bookId, sentenceId), [bookId, sentenceId]);
   const [displayMode, setDisplayMode] = useState<TextDisplayMode>('plain');
   const [showEnglish, setShowEnglish] = useState(false);
   const [chapterLayout, setChapterLayout] = useState(() => {
@@ -459,8 +462,34 @@ export function AnalyzePage() {
     setHeuristicPreview(null);
   }
 
+  // Sequential study mode gates *study* only: a locked sentence shows its
+  // text, neighbours and the way to unlock it, but not the gloss tools.
+  if (sequentialView?.current && !sequentialView.current.accessible) {
+    return (
+      <div className="stack">
+        <section className="panel stack">
+          <div className="muted">{book.title}</div>
+          <strong>
+            {index + 1} of {memberships.length}
+          </strong>
+          <div className="jp jp-lg">{sentence.japanese}</div>
+          <div className="row">
+            <button type="button" disabled={!prev} onClick={() => prev && navigate(`/books/${bookId}/analyze/${prev.sentenceId}`)}>
+              ← Previous
+            </button>
+            <button type="button" disabled={!next} onClick={() => next && navigate(`/books/${bookId}/analyze/${next.sentenceId}`)}>
+              Next →
+            </button>
+          </div>
+        </section>
+        <LockedSentenceNotice bookId={bookId} sentenceId={sentenceId} />
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
+      <SequentialStudyPanel bookId={bookId} sentenceId={sentenceId} />
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>

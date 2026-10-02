@@ -33,6 +33,7 @@ import {
   getDb,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
+  getMeaningChoiceRecords,
   getPitchAccentDrillSentences,
   getReferencePitchTrack,
   loadSuspendedBookIndex,
@@ -58,6 +59,8 @@ import {
   type VocabularyTargetCandidate,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
+import { distractorHistoryFromRecords, sampleMeaningQuestion } from '../lib/meaningChoices';
+import { effectiveLegacyDrillsPaused, isSentenceLedFlow } from '../lib/sentenceLed';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
@@ -67,6 +70,7 @@ import type {
   AnalysisChunk,
   Book,
   ComprehensionCheck,
+  MeaningChoiceRecord,
   GrammarPattern,
   ReviewAssistance,
   ReviewRating,
@@ -651,6 +655,8 @@ interface QueueCard {
   comprehensionCheck?: ComprehensionCheck;
   /** Set for `reading_in_context` cards whose sentence has a saved structural analysis. */
   analysisChunks?: AnalysisChunk[];
+  /** Earlier meaning-choice attempts on this sentence, so the sampled distractors rotate. */
+  meaningHistory?: MeaningChoiceRecord[];
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -829,6 +835,16 @@ interface ReviewScope {
   comprehensionCheckBySentenceId: Map<string, ComprehensionCheck>;
   /** Saved structural-analysis chunks per in-scope sentence, for `reading_in_context`'s later-review structure check. */
   chunksBySentenceId: Map<string, AnalysisChunk[]>;
+  /** Stored meaning-choice records per sentence (oldest first). */
+  meaningHistoryBySentenceId: Map<string, MeaningChoiceRecord[]>;
+  /**
+   * Sentence-led flow only: sentences the learner has been introduced to
+   * (gloss walkthrough done, started/completed in a book, or already carrying a
+   * sentence card). Undefined = no restriction (legacy flow).
+   */
+  introducedSentenceIds: Set<string> | undefined;
+  /** Flow the scope was built under; the queue waits until it matches the loaded settings. */
+  ledFlow: boolean;
   vocabularyTargetCandidates: VocabularyTargetCandidate[];
   existingVocabularyItems: StudyItem[];
   audioCandidates: AudioCandidate[];
@@ -852,7 +868,9 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
     defineActivityDescriptor<Sentence>({
       key: 'sentence',
       activityTypes: SENTENCE_ACTIVITY_TYPES,
-      candidates: scope.sentences,
+      candidates: scope.introducedSentenceIds
+        ? scope.sentences.filter((sentence) => scope.introducedSentenceIds!.has(sentence.id))
+        : scope.sentences,
       existingItems: scope.existingSentenceItems,
       subjectId: (sentence) => sentence.id,
       buildCard: (studyItem, sentence) => ({
@@ -861,6 +879,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         readingContext: scope.readingContextBySentenceId.get(sentence.id),
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(sentence.id),
         analysisChunks: scope.chunksBySentenceId.get(sentence.id),
+        meaningHistory: scope.meaningHistoryBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
@@ -1178,7 +1197,7 @@ export function ReviewPage() {
   const [typedResponseExpected, setTypedResponseExpected] = useState<string | null>(null);
   /** `reading_in_context`/`listening`'s comprehension-check pick, when the sentence has one; recorded as supplementary Review evidence on rate. */
   const [comprehensionCheckAnswer, setComprehensionCheckAnswer] = useState<
-    { correct: boolean; chosenIndex: number } | null
+    { correct: boolean; chosenIndex: number; meaningChoice?: MeaningChoiceRecord } | null
   >(null);
   /** `pitch_accent_production`'s completed take, once scored; recorded as supplementary Review evidence on rate. */
   const [pitchProductionEvidence, setPitchProductionEvidence] = useState<
@@ -1470,10 +1489,26 @@ export function ReviewPage() {
       }
     });
 
-    // "Pause word & grammar drills" (settings.legacyDrillsPaused): empty the
+    const ledFlow = isSentenceLedFlow(settings);
+    const meaningHistoryBySentenceId = await getMeaningChoiceRecords(sentenceIds);
+    let introducedSentenceIds: Set<string> | undefined;
+    if (ledFlow) {
+      const walked = (await db.sentenceLearningEvents.toArray())
+        .filter((event) => event.action === 'walkthrough_completed')
+        .map((event) => event.sentenceId);
+      introducedSentenceIds = new Set([
+        ...walked,
+        ...contextBookSentences
+          .filter((membership) => membership.status !== 'unstarted')
+          .map((membership) => membership.sentenceId),
+        ...existingSentenceItems.map((item) => item.subjectId),
+      ]);
+    }
+
+    // "Pause word & grammar drills" (settings.legacyDrillsPaused, or the sentence-led flow): empty the
     // vocabulary/grammar candidate lists so neither due nor new cards of those
     // kinds are queued. Sentence cards, audio and pitch (own pause) continue.
-    const paused = settings?.legacyDrillsPaused ?? false;
+    const paused = effectiveLegacyDrillsPaused(settings);
     return {
       book,
       sentences,
@@ -1481,6 +1516,9 @@ export function ReviewPage() {
       readingContextBySentenceId,
       comprehensionCheckBySentenceId,
       chunksBySentenceId,
+      meaningHistoryBySentenceId,
+      introducedSentenceIds,
+      ledFlow,
       vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
       existingVocabularyItems: paused ? [] : existingVocabularyItems,
       audioCandidates,
@@ -1504,6 +1542,7 @@ export function ReviewPage() {
     settings?.quietMode,
     settings?.pitchAccentPaused,
     settings?.legacyDrillsPaused,
+    settings?.sentenceLedFlow,
   ]);
 
   const descriptors = useMemo(
@@ -1518,6 +1557,7 @@ export function ReviewPage() {
   // source of truth for "due" semantics (not reimplemented here too).
   useEffect(() => {
     if (!scope || initialized || !settings) return;
+    if (scope.ledFlow !== isSentenceLedFlow(settings)) return;
     let cancelled = false;
     void (async () => {
       // Full-sentence review gating (user request, 2026-08-16): before
@@ -1526,22 +1566,28 @@ export function ReviewPage() {
       // That only covers items that already exist; a sentence with no
       // reading_in_context study_item yet would otherwise bypass it
       // entirely via lazy seeding below — sentenceReadiness covers that path.
-      await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
+      // Sentence-led flow: sentence cards are gated by having been introduced
+      // through the gloss (scope.introducedSentenceIds), not by vocabulary
+      // proficiency, so the proficiency defers/gates are skipped entirely.
+      const ledFlow = isSentenceLedFlow(settings);
+      if (!ledFlow) await deferUnreadySentenceReviews(SENTENCE_ACTIVITY_TYPES);
       // reading_in_context also waits on its passage neighbours' vocab, on
       // top of its own sentence. deferUnreadySentenceReviews above only
       // checked each card's own target sentence; this pushes out any
       // already-due reading_in_context item whose surrounding passage isn't
       // ready yet (the isGatedOut filter below covers the not-yet-seeded
       // path, same split as the sentence gate).
-      await deferUnreadyReadingInContextReviews();
+      if (!ledFlow) await deferUnreadyReadingInContextReviews();
       // Same gate for tracked grammar patterns: a grammarPattern-subject card
       // (comprehension/completion/contrast/production) whose pattern has no
       // full-review-ready linked sentence is dropped from the queue below
       // anyway (pickContextSentenceForGrammarPattern → undefined) — push its
       // stored due date out too so it stops counting as due backlog.
-      await deferUnreadyGrammarReviews();
+      if (!ledFlow) await deferUnreadyGrammarReviews();
       const sentenceIds = scope.sentences.map((sentence) => sentence.id);
-      const sentenceReadiness = await getSentenceFullReviewReadiness(sentenceIds);
+      const sentenceReadiness = ledFlow
+        ? new Map<string, boolean>()
+        : await getSentenceFullReviewReadiness(sentenceIds);
 
       // Per-candidate gates (ActivityDescriptor.isReady). Listening ladder:
       // tier 1 (word_listening) waits on the word's reading proficiency; tier 2
@@ -1844,6 +1890,7 @@ export function ReviewPage() {
         pitchChosenShape: pitchAccentShapes?.pitchChosenShape,
         comprehensionCheckCorrect: comprehensionCheckAnswer?.correct,
         comprehensionCheckChosenIndex: comprehensionCheckAnswer?.chosenIndex,
+        meaningChoice: comprehensionCheckAnswer?.meaningChoice,
         pitchProductionMeasuredCount: pitchProductionEvidence?.measuredCount,
         pitchProductionMismatchCount: pitchProductionEvidence?.mismatchCount,
         // The sentence this card actually displayed — every QueueCard has
@@ -1982,7 +2029,13 @@ export function ReviewPage() {
         ) : !current ? (
           <div className="empty-state">
             <strong>All caught up.</strong>
-            {settings?.legacyDrillsPaused ? (
+            {isSentenceLedFlow(settings) ? (
+              <span className="muted">
+                Sentence-led flow: reviews are sentences you've already worked through in the
+                gloss. Introduce a new sentence from the book page or today's plan and it will
+                show up here.
+              </span>
+            ) : settings?.legacyDrillsPaused ? (
               <span className="muted">
                 Word &amp; grammar drills are paused in Settings, and sentence cards wait until
                 their words are proficient — so the queue can be empty. Turn the pause off to see
@@ -2224,8 +2277,10 @@ export function ReviewPage() {
                 }
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
-                onComprehensionAnswered={(correct, chosenIndex) =>
-                  setComprehensionCheckAnswer({ correct, chosenIndex })
+                history={current.meaningHistory ?? []}
+                bookId={current.readingContext?.bookId ?? bookId}
+                onComprehensionAnswered={(correct, chosenIndex, meaningChoice) =>
+                  setComprehensionCheckAnswer({ correct, chosenIndex, meaningChoice })
                 }
                 onStructureCheckAnswered={(typed, expected) => {
                   setTypedResponse(typed);
@@ -2364,6 +2419,8 @@ function ReadingInContextCard({
   structureCheck,
   revealed,
   onReveal,
+  history,
+  bookId,
   onComprehensionAnswered,
   onStructureCheckAnswered,
 }: {
@@ -2373,7 +2430,13 @@ function ReadingInContextCard({
   structureCheck: StructureCheckTarget | undefined;
   revealed: boolean;
   onReveal: () => void;
-  onComprehensionAnswered: (correct: boolean, chosenIndex: number) => void;
+  history: MeaningChoiceRecord[];
+  bookId: string | undefined;
+  onComprehensionAnswered: (
+    correct: boolean,
+    chosenIndex: number,
+    meaningChoice: MeaningChoiceRecord,
+  ) => void;
   onStructureCheckAnswered: (typed: string, expected: string) => void;
 }) {
   const before = context?.before ?? [];
@@ -2392,10 +2455,26 @@ function ReadingInContextCard({
     [contextKey],
   );
 
+  // Sampled once per card mount so the four choices (and their order) stay
+  // put while the learner reads them; `null` (no usable distractors) falls
+  // back to a plain reveal rather than inventing choices.
+  const [question] = useState(() =>
+    check ? sampleMeaningQuestion(check, distractorHistoryFromRecords(history)) : null,
+  );
+
   function choose(index: number) {
-    if (chosenIndex !== null || !check) return;
+    if (chosenIndex !== null || !question) return;
+    const choice = question.choices[index]!;
     setChosenIndex(index);
-    onComprehensionAnswered(index === check.correctIndex, index);
+    onComprehensionAnswered(choice.isCorrect, index, {
+      shown: question.choices.map((item) => item.text),
+      chosenIndex: index,
+      chosenText: choice.text,
+      correctText: question.correctText,
+      correct: choice.isCorrect,
+      // The only pick this card offers, made before any reveal/hint.
+      qualifying: true,
+    });
   }
 
   const [beforeChunk, targetChunk, afterChunk] = structureCheck
@@ -2454,7 +2533,7 @@ function ReadingInContextCard({
           </label>
           <button type="submit">Check</button>
         </form>
-      ) : !revealed && check && chosenIndex === null ? (
+      ) : !revealed && question && chosenIndex === null ? (
         <div className="stack">
           {structureAnswered ? (
             <p className="muted" style={{ margin: 0 }}>
@@ -2463,11 +2542,11 @@ function ReadingInContextCard({
             </p>
           ) : null}
           <p className="muted" style={{ margin: 0 }}>
-            Which English sentence best fits this sentence in context?
+            Which English sentence is the meaning of this sentence in context?
           </p>
-          {check.options.map((option, i) => (
-            <button key={i} type="button" onClick={() => choose(i)}>
-              {option}
+          {question.choices.map((choice, i) => (
+            <button key={choice.id} type="button" onClick={() => choose(i)}>
+              {choice.text}
             </button>
           ))}
         </div>
@@ -2479,10 +2558,28 @@ function ReadingInContextCard({
               <span className="jp">{structureCheck!.expectedReading}</span>
             </p>
           ) : null}
-          {check && chosenIndex !== null ? (
-            <p style={{ fontWeight: 600 }}>
-              {chosenIndex === check.correctIndex ? '✓ Correct' : '✗ Not quite'}
-            </p>
+          {question && chosenIndex !== null ? (
+            <div className="stack">
+              <p style={{ fontWeight: 600, margin: 0 }}>
+                {question.choices[chosenIndex]!.isCorrect ? '✓ Correct' : '✗ Not quite'}
+              </p>
+              {!question.choices[chosenIndex]!.isCorrect ? (
+                <>
+                  <p style={{ margin: 0 }}>
+                    It means: <strong>{question.correctText}</strong>
+                  </p>
+                  {bookId ? (
+                    <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+                      Want to see why? The{' '}
+                      <Link to={`/books/${bookId}/analyze/${sentence.id}`}>
+                        guided gloss for this sentence
+                      </Link>{' '}
+                      has its vocabulary and grammar — come back to Review after.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           ) : null}
           <button type="button" onClick={onReveal}>
             Reveal

@@ -286,6 +286,42 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.sentenceLedFlow ?? true}
+            onChange={(event) => {
+              void updateSettings({ sentenceLedFlow: event.target.checked });
+            }}
+          />
+          Sentence-led flow
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          Learn each sentence through its guided gloss (vocabulary and
+          grammar included), then review it by picking its English meaning.
+          Separate word and grammar drills are withheld and the old
+          &ldquo;words must be proficient first&rdquo; waits are skipped.
+          Nothing is deleted or rescheduled &mdash; turning it off restores
+          the previous flow exactly.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={settings.sequentialStudyMode ?? false}
+            onChange={(event) => {
+              void updateSettings({ sequentialStudyMode: event.target.checked });
+            }}
+          />
+          Introduce sentences in episode order
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          The next sentence of a book unlocks once you answer at least 4 of
+          the previous sentence&rsquo;s last 5 meaning checks correctly (5
+          spaced first-try answers are needed; retries after feedback and
+          answers after a hint don&rsquo;t count). Once unlocked it stays
+          unlocked, sentences you&rsquo;ve already started stay open, and
+          reading, playback and context are never locked.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.legacyDrillsPaused ?? false}
             onChange={(event) => {
               void updateSettings({ legacyDrillsPaused: event.target.checked });
