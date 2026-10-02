@@ -1,6 +1,8 @@
-import type { ParticleCheck } from '../domain/types';
+import type { AnalysisChunk, ParticleCheck } from '../domain/types';
 import { getDb } from '../db/database';
 import { setSentenceParticleChecks } from '../db/repository';
+import { previewHeuristicChunks } from './analysisHelpers';
+import { getMeaningBank } from './meaningChoices';
 
 // Contextual particle questions for the glossing "try it first" check. The
 // generic check asks "where to / when / to whom" for any に; this one asks
@@ -9,14 +11,16 @@ import { setSentenceParticleChecks } from '../db/repository';
 // book-wide prompt file (same copy/paste-or-file round trip as the meaning
 // choices), stored on `SentenceAnalysis.particleChecks`.
 
-/** Particles whose relation depends on the verb; the settled ones (を が から…) need no context. */
-export const CONTEXTUAL_PARTICLES = ['に', 'で', 'と'] as const;
-const PARTICLE_RE = /[にでと]/;
+/** Case/topic particles that can carry a sentence-specific question (longest first for suffix matching). */
+export const CONTEXTUAL_PARTICLES = ['から', 'まで', 'より', 'に', 'で', 'と', 'へ', 'を', 'が', 'は', 'も'] as const;
+const PARTICLE_RE = /[にでとへをがはも]|から|まで|より/;
 
 export interface ParticleCheckRequest {
   japanese: string;
   context: readonly string[];
   translation?: string;
+  /** The app's own chunking of the sentence, so the reply can name chunks exactly. */
+  chunks?: readonly string[];
 }
 
 export interface ParticleCheckCandidate {
@@ -24,12 +28,12 @@ export interface ParticleCheckCandidate {
   request: ParticleCheckRequest;
 }
 
-/** Book sentences with a に/で/と and no authored checks yet, in book order. */
+/** Book sentences with a case/topic particle and no authored checks yet, in book order. */
 export async function findParticleCheckCandidates(bookId: string): Promise<ParticleCheckCandidate[]> {
   const db = getDb();
   const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'));
   const ids = memberships.map((m) => m.sentenceId);
-  const [sentences, analyses] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids)]);
+  const [sentences, analyses, book] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids), db.books.get(bookId)]);
   const seen = new Set<string>();
   const out: ParticleCheckCandidate[] = [];
   ids.forEach((id, index) => {
@@ -37,32 +41,49 @@ export async function findParticleCheckCandidates(bookId: string): Promise<Parti
     if (!sentence || seen.has(id) || analyses[index]?.particleChecks) return;
     seen.add(id);
     if (!PARTICLE_RE.test(sentence.japanese)) return;
+    const draft = book?.chapters.find((chapter) => chapter.id === memberships[index]!.chapterId)?.structureDrafts?.[id];
+    const bank = getMeaningBank(analyses[index]?.comprehensionCheck);
     out.push({
       sentenceId: id,
       request: {
         japanese: sentence.japanese,
         context: sentences.slice(Math.max(0, index - 2), index).flatMap((prev) => (prev ? [prev.japanese] : [])),
-        translation: sentence.translation?.trim() || undefined,
+        translation: sentence.translation?.trim() || bank?.correct || undefined,
+        chunks: chunkSurfaces(sentence.japanese, analyses[index]?.chunks, draft?.map((chunk) => chunk.japanese)),
       },
     });
   });
   return out;
 }
 
+/** Saved chunks, else the chapter's AI draft, else the heuristic split — whichever the walkthrough would show. */
+function chunkSurfaces(japanese: string, saved: readonly AnalysisChunk[] | undefined, draft: readonly string[] | undefined): string[] {
+  const flat = japanese.replace(/\s+/g, '');
+  const fromSaved = (saved ?? [])
+    .filter((chunk) => chunk.kind !== 'zero_ga' && chunk.japanese)
+    .sort((a, b) => a.order - b.order)
+    .map((chunk) => chunk.japanese);
+  if (fromSaved.length > 0 && fromSaved.join('') === flat) return fromSaved;
+  if (draft && draft.length > 0 && draft.join('') === flat) return [...draft];
+  return previewHeuristicChunks(japanese).parts;
+}
+
 const HEADER = [
   'You are writing particle-meaning questions for a Japanese learner, one block per',
-  'numbered sentence below. For each sentence pick every に, で and と that marks a noun',
-  'phrase and whose role depends on the verb (skip quotative と, particles inside fixed',
-  'expressions, and ones whose role is obvious from the sentence). Ask about the role of',
-  'that phrase IN THIS SENTENCE, in plain English using the sentence\'s own words, e.g.',
-  '"What is the bin to the action of putting?" — not "what does に mean?".',
+  'numbered sentence below. Each sentence is shown with its English meaning (when known)',
+  'and its chunk boundaries. For each sentence pick the chunks that end in a case or topic',
+  'particle (に で と へ を が は も から まで より) whose role is worth a question — skip',
+  'chunks where the role is trivially obvious, quotative と, and particles inside fixed',
+  'expressions. Ask about the role of that phrase IN THIS SENTENCE, in plain English using',
+  'the sentence\'s own words, e.g. "What is the bin to the action of putting?" — not',
+  '"what does に mean?".',
   '',
   'Give exactly 4 options, each a concrete reading phrased with the sentence\'s own nouns',
   'and verb (e.g. "the bin is where the thing ends up", "the bin is where the putting',
   'happens", "the bin is who receives it", "the bin is what it is being put along with").',
   'One option is correct; the other three are readings a learner could plausibly pick for',
-  'a different verb but that are wrong here. Do not write grammar-category labels.',
-  'Use the English translation and context when given.',
+  'a different verb but that are wrong here. Do not write grammar-category labels. Use the',
+  'English meaning and context to be sure which reading is right.',
   '',
   'Reply with one section per sentence, keeping each "=== Sentence N ===" header. For each',
   'chosen particle write a block exactly like this (correct option starts with "*"):',
@@ -74,8 +95,8 @@ const HEADER = [
   '3. the bin is who receives it',
   '4. the bin is what it is compared to',
   '',
-  'If a sentence has nothing worth asking, write only "NONE" under its header.',
-  'CHUNK is the bunsetsu-style chunk ending in the particle (noun phrase + particle).',
+  'CHUNK must be copied exactly from that sentence\'s "chunks" line. If a sentence has',
+  'nothing worth asking, write only "NONE" under its header.',
 ].join('\n');
 
 export function formatBookParticlePromptForAI(items: readonly ParticleCheckRequest[]): string {
@@ -85,7 +106,8 @@ export function formatBookParticlePromptForAI(items: readonly ParticleCheckReque
       ...(item.context.length ? ['--- context (preceding sentences) ---', ...item.context] : []),
       '--- target sentence ---',
       item.japanese,
-      ...(item.translation ? ['--- English translation ---', item.translation] : []),
+      ...(item.chunks?.length ? ['--- chunks ---', item.chunks.join(' | ')] : []),
+      ...(item.translation ? ['--- English meaning ---', item.translation] : []),
     ].join('\n'),
   );
   return [HEADER, ...sections].join('\n\n');
@@ -108,8 +130,9 @@ function parseBlock(lines: string[]): ParticleCheck | null {
     }
   }
   if (!chunk || !question || options.size !== 4) return null;
-  const particle = [...chunk.replace(/[。、\s]/g, '')].pop() ?? '';
-  if (!(CONTEXTUAL_PARTICLES as readonly string[]).includes(particle)) return null;
+  const stem = chunk.replace(/[。、！？\s]/g, '');
+  const particle = CONTEXTUAL_PARTICLES.find((candidate) => stem.endsWith(candidate));
+  if (!particle) return null;
   const ordered = [1, 2, 3, 4].map((n) => options.get(n));
   if (ordered.some((entry) => !entry?.text)) return null;
   const correct = ordered.flatMap((entry, i) => (entry!.correct ? [i] : []));

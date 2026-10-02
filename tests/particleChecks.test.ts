@@ -49,11 +49,30 @@ describe('parseBookParticleReply', () => {
 describe('prompt', () => {
   it('numbers sentences and includes context and translation', () => {
     const prompt = formatBookParticlePromptForAI([
-      { japanese: 'ゴミ箱に入れた。', context: ['前の文。'], translation: 'I put it in the bin.' },
+      { japanese: 'ゴミ箱に入れた。', context: ['前の文。'], translation: 'I put it in the bin.', chunks: ['ゴミ箱に', '入れた。'] },
     ]);
+    expect(prompt).toContain('ゴミ箱に | 入れた。');
     expect(prompt).toContain('=== Sentence 1 ===');
     expect(prompt).toContain('前の文。');
     expect(prompt).toContain('I put it in the bin.');
+  });
+});
+
+describe('wider particle coverage', () => {
+  it('parses multi-character and topic/object particles', () => {
+    const reply = ['=== Sentence 1 ===', ...BLOCK.map((l) => l.replace('ゴミ箱に', '駅から'))].join('\n');
+    expect(parseBookParticleReply(reply, 1)[0]?.[0]?.particle).toBe('から');
+    const reply2 = ['=== Sentence 1 ===', ...BLOCK.map((l) => l.replace('ゴミ箱に', '本を'))].join('\n');
+    expect(parseBookParticleReply(reply2, 1)[0]?.[0]?.particle).toBe('を');
+  });
+
+  it('turns an authored を check into a contextual decision', () => {
+    const preview = previewHeuristicChunks('ケーキを食べた。');
+    const chunks: GlossChunk[] = preview.parts.map((part, index) => ({ id: `c${index}`, japanese: part, role: preview.roles[index] ?? '' }));
+    const check = { chunk: 'ケーキを', particle: 'を', question: 'What is the cake to the eating?', options: ['what gets eaten', 'who eats', 'where', 'when'], correctIndex: 0 };
+    const spec = buildDecisions(chunks, [check]).find((s) => s.particle === 'を');
+    expect(spec?.question).toBe(check.question);
+    expect(spec?.ruleKey).toBe('particle:を:ctx');
   });
 });
 

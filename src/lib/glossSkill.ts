@@ -130,11 +130,11 @@ export function buildDecisions(chunks: GlossChunk[], particleChecks?: readonly P
     if (index === predicateIndex) return;
     const [, particle] = splitTrailingParticle(bare(chunk.japanese));
     const relation = SETTLED[particle] ?? UNSETTLED[particle];
-    if (!particle || !relation) return;
+    const authored = particle ? matchParticleCheck(particleChecks, chunk.japanese, particle) : undefined;
+    if (!particle || (!relation && !authored)) return;
     // Compound roles (では, には…) are not a single relation, and a stored role that
     // disagrees with the fresh heuristic is not trusted.
     if (PARTICLE_ROLE[particle] !== chunk.role) return;
-    const authored = matchParticleCheck(particleChecks, chunk.japanese, particle);
     if (authored && authored.correctIndex < authored.options.length) {
       // Authored in-sentence readings replace the generic relation list and are gradable.
       const options = authored.options
@@ -154,6 +154,7 @@ export function buildDecisions(chunks: GlossChunk[], particleChecks?: readonly P
       });
       return;
     }
+    if (!relation) return;
     const settled = particle in SETTLED;
     const distractors = Object.values(RELATIONS)
       .filter((option) => option.id !== relation)
