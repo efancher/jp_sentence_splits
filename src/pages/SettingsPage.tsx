@@ -322,6 +322,24 @@ export function SettingsPage() {
         <label className="row">
           <input
             type="checkbox"
+            checked={settings.autoMeaningChoices ?? true}
+            onChange={(event) => {
+              void updateSettings({ autoMeaningChoices: event.target.checked });
+            }}
+          />
+          Auto-generate meaning choices for new sentences
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+          While the app is open and you&rsquo;re signed in, sentences with no
+          meaning check (for example after an import) get one written by AI:
+          your stored translation as the correct answer plus about 10 wrong
+          meanings. Needs the <code>meaning-assist</code> function deployed;
+          otherwise nothing happens. You can also generate them by copy/paste
+          from a book page.
+        </p>
+        <label className="row">
+          <input
+            type="checkbox"
             checked={settings.legacyDrillsPaused ?? false}
             onChange={(event) => {
               void updateSettings({ legacyDrillsPaused: event.target.checked });

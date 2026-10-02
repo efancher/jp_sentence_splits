@@ -2,67 +2,56 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 
 import {
-  getDb,
-  getSentenceFullReviewReadiness,
-  setSentenceComprehensionCheck,
-} from '../db/repository';
-import type { Sentence } from '../domain/types';
-import {
-  buildComprehensionCheck,
-  formatBatchComprehensionPromptForAI,
-  parseBatchComprehensionCheckReply,
-} from '../lib/comprehensionCheck';
+  TOPUP_BELOW,
+  applyMeaningBankResult,
+  autoGenerateMeaningChecks,
+  findMeaningBankCandidates,
+} from '../lib/meaningCheckAutogen';
+import type { MeaningBankCandidate, MeaningBankMode } from '../lib/meaningCheckAutogen';
+import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '../lib/meaningChoices';
 
 /**
- * Book-scoped batch authoring for comprehension checks — same AI
- * copy/paste round-trip as ComprehensionCheckPicker (single sentence),
- * but covers many eligible sentences (confirmed vocab, full-review-ready,
- * no check yet) in one prompt/reply, `batchSize` at a time. A sentence
- * drops out of the eligible list as soon as it gets a check (live query),
- * so repeated clicks work through the backlog without separate
- * "already generated" bookkeeping.
+ * Book-scoped bulk authoring of the meaning choices used by the sentence-led
+ * review (correct meaning + ~10 wrong meanings per sentence). Two modes:
+ * sentences with no check yet, and sentences whose bank is thin (legacy
+ * 3-option checks). The copy/paste round-trip matches the other bulk AI
+ * prompts; "Generate with AI now" does the same through the `meaning-assist`
+ * Edge Function when it is deployed and you are signed in. The correct
+ * meaning is the sentence's own stored translation whenever it has one.
+ * Candidates drop out of the list as they are filled (live query), so
+ * repeated clicks work through the backlog.
  */
 export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
+  const [mode, setMode] = useState<MeaningBankMode>('missing');
   const [batchSize, setBatchSize] = useState(15);
-  const [batch, setBatch] = useState<{ sentence: Sentence; before: Sentence[] }[] | null>(null);
+  const [batch, setBatch] = useState<MeaningBankCandidate[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [pasted, setPasted] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const eligible = useLiveQuery(async () => {
-    const db = getDb();
-    const memberships = await db.bookSentences.where('bookId').equals(bookId).sortBy('position');
-    const sentenceIds = memberships.map((m) => m.sentenceId);
-    const sentences = await db.sentences.bulkGet(sentenceIds);
-    const analyses = await db.analyses.bulkGet(sentenceIds);
-    const candidates: { sentence: Sentence; before: Sentence[] }[] = [];
-    sentences.forEach((sentence, index) => {
-      if (!sentence) return;
-      const analysis = analyses[index];
-      if (analysis?.vocabularyReviewStatus !== 'confirmed') return;
-      if (analysis.comprehensionCheck) return;
-      const before = sentences
-        .slice(Math.max(0, index - 2), index)
-        .filter((s): s is Sentence => Boolean(s));
-      candidates.push({ sentence, before });
-    });
-    if (candidates.length === 0) return [];
-    const readiness = await getSentenceFullReviewReadiness(candidates.map((c) => c.sentence.id));
-    return candidates.filter((c) => readiness.get(c.sentence.id));
+  const counts = useLiveQuery(async () => {
+    const [missing, topup] = await Promise.all([
+      findMeaningBankCandidates({ mode: 'missing', limit: 100000, bookId }),
+      findMeaningBankCandidates({ mode: 'topup', limit: 100000, bookId }),
+    ]);
+    return { missing: missing.length, topup: topup.length };
   }, [bookId]);
 
-  if (!eligible) return null;
+  if (!counts) return null;
+  const eligible = mode === 'missing' ? counts.missing : counts.topup;
 
-  function generateBatch() {
-    setBatch(eligible!.slice(0, batchSize));
+  async function generateBatch() {
+    setBatch(await findMeaningBankCandidates({ mode, limit: batchSize, bookId }));
     setPasted('');
     setStatus(null);
   }
 
+  const prompt = batch ? formatBatchMeaningBankPromptForAI(batch.map((item) => item.request)) : '';
+
   async function copyPrompt() {
-    if (!batch) return;
     try {
-      await navigator.clipboard.writeText(formatBatchComprehensionPromptForAI(batch));
+      await navigator.clipboard.writeText(prompt);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -72,92 +61,116 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
 
   async function applyPasted() {
     if (!batch) return;
-    const parsedResults = parseBatchComprehensionCheckReply(pasted, batch.length);
+    const parsed = parseBatchMeaningBankReply(pasted, batch.length);
     let saved = 0;
     const failed: number[] = [];
-    for (let i = 0; i < batch.length; i += 1) {
-      const parsed = parsedResults[i];
-      if (!parsed) {
-        failed.push(i + 1);
-        continue;
+    for (const [index, item] of batch.entries()) {
+      const entry = parsed[index];
+      if (!entry || !(await applyMeaningBankResult(item.sentenceId, mode, entry, 'ai_suggested'))) {
+        failed.push(index + 1);
+      } else {
+        saved += 1;
       }
-      await setSentenceComprehensionCheck(
-        batch[i]!.sentence.id,
-        buildComprehensionCheck(parsed, 'ai_suggested'),
-      );
-      saved += 1;
     }
     setStatus(
       failed.length === 0
-        ? `Saved ${saved} comprehension checks.`
-        : `Saved ${saved}; couldn't parse sentence ${failed.join(', ')} — make sure those sections still have their "=== Sentence N ===" header.`,
+        ? `Saved ${saved}.`
+        : `Saved ${saved}; nothing usable for sentence ${failed.join(', ')} (missing section, fewer than 3 valid wrong meanings, or a check already exists).`,
     );
     setPasted('');
     setBatch(null);
   }
 
-  const prompt = batch ? formatBatchComprehensionPromptForAI(batch) : '';
+  async function generateNow() {
+    setBusy(true);
+    setStatus('Generating…');
+    const summary = await autoGenerateMeaningChecks({
+      mode,
+      bookId,
+      limit: batchSize,
+      ignoreBackoff: true,
+    });
+    setBusy(false);
+    setStatus(
+      summary.unavailableReason
+        ? `${summary.unavailableReason} Use the copy/paste prompt instead.`
+        : `Saved ${summary.saved} of ${summary.attempted}.`,
+    );
+  }
 
   return (
     <details className="panel">
-      <summary>Comprehension checks: batch generate ({eligible.length} eligible, no check yet)</summary>
+      <summary>
+        Meaning choices: bulk generate ({counts.missing} without choices, {counts.topup} with a thin bank)
+      </summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
-          Confirmed-vocabulary, full-review-ready sentences with no comprehension
-          check yet. One AI copy/paste round-trip per batch, same format as the
-          single-sentence picker on AnalyzePage.
+          The sentence review shows the correct meaning plus 3 wrong ones drawn from a bank of about
+          10. New sentences are filled in automatically when AI is available (Settings); use this to
+          do a batch yourself. &ldquo;Thin&rdquo; means fewer than {TOPUP_BELOW} usable wrong
+          meanings.
         </p>
-        {eligible.length === 0 ? (
-          <div className="muted">Nothing eligible right now.</div>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <label>
+            Sentences{' '}
+            <select value={mode} onChange={(event) => setMode(event.target.value as MeaningBankMode)}>
+              <option value="missing">with no choices yet</option>
+              <option value="topup">with a thin bank (add more)</option>
+            </select>
+          </label>
+          <label>
+            Batch size{' '}
+            <input
+              type="number"
+              min={1}
+              max={Math.max(1, eligible)}
+              value={batchSize}
+              onChange={(event) => setBatchSize(Math.max(1, Number(event.target.value) || 1))}
+              style={{ width: '4rem' }}
+            />
+          </label>
+        </div>
+        {eligible === 0 ? (
+          <div className="muted">Nothing to do in this mode.</div>
         ) : (
+          <div className="row">
+            <button type="button" onClick={() => void generateBatch()}>
+              Generate prompt for next {Math.min(batchSize, eligible)}
+            </button>
+            <button type="button" disabled={busy} onClick={() => void generateNow()}>
+              Generate with AI now
+            </button>
+          </div>
+        )}
+        {batch ? (
           <>
-            <div className="row" style={{ alignItems: 'center' }}>
-              <label>
-                Batch size{' '}
-                <input
-                  type="number"
-                  min={1}
-                  max={eligible.length}
-                  value={batchSize}
-                  onChange={(event) => setBatchSize(Math.max(1, Number(event.target.value) || 1))}
-                  style={{ width: '4rem' }}
-                />
-              </label>
-              <button type="button" onClick={generateBatch}>
-                Generate prompt for next {Math.min(batchSize, eligible.length)}
+            <textarea readOnly className="jp" rows={10} value={prompt} />
+            <div className="row">
+              <button type="button" onClick={() => void copyPrompt()}>
+                {copied ? 'Copied ✓' : 'Copy prompt'}
               </button>
             </div>
-            {batch ? (
-              <>
-                <textarea readOnly className="jp" rows={10} value={prompt} />
-                <div className="row">
-                  <button type="button" onClick={() => void copyPrompt()}>
-                    {copied ? 'Copied ✓' : 'Copy prompt'}
-                  </button>
-                </div>
-                <textarea
-                  rows={8}
-                  placeholder={`Paste the assistant's reply here (${batch.length} "=== Sentence N ===" sections)…`}
-                  value={pasted}
-                  onChange={(event) => setPasted(event.target.value)}
-                />
-                <div className="row">
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={!pasted.trim()}
-                    onClick={() => void applyPasted()}
-                  >
-                    Apply pasted batch
-                  </button>
-                  <button type="button" onClick={() => setBatch(null)}>
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : null}
+            <textarea
+              rows={8}
+              placeholder={`Paste the assistant's reply here (${batch.length} "=== Sentence N ===" sections)…`}
+              value={pasted}
+              onChange={(event) => setPasted(event.target.value)}
+            />
+            <div className="row">
+              <button
+                type="button"
+                className="primary"
+                disabled={!pasted.trim()}
+                onClick={() => void applyPasted()}
+              >
+                Apply pasted batch
+              </button>
+              <button type="button" onClick={() => setBatch(null)}>
+                Cancel
+              </button>
+            </div>
           </>
-        )}
+        ) : null}
         {status ? (
           <div className="muted" style={{ fontSize: '0.85rem' }}>
             {status}

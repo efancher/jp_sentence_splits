@@ -8,6 +8,7 @@ import { SessionBar } from '../components/SessionBar';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { expireStalePlannerSessions } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
+import { autoGenerateMeaningChecks } from '../lib/meaningCheckAutogen';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -48,6 +49,16 @@ export function AppShell() {
     void expireStalePlannerSessions();
     const timer = window.setInterval(() => void expireStalePlannerSessions(), 60 * 60 * 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const run = () => void autoGenerateMeaningChecks().catch(() => undefined);
+    const first = window.setTimeout(run, 15 * 1000);
+    const timer = window.setInterval(run, 3 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
