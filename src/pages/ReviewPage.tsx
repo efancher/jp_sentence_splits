@@ -929,7 +929,11 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
     defineActivityDescriptor<AudioCandidate>({
       key: 'listening',
       activityTypes: AUDIO_ACTIVITY_TYPES,
-      candidates: scope.audioCandidates,
+      candidates: scope.introducedSentenceIds
+        ? scope.audioCandidates.filter((candidate) =>
+            scope.introducedSentenceIds!.has(candidate.sentence.id),
+          )
+        : scope.audioCandidates,
       existingItems: scope.existingAudioItems,
       subjectId: (candidate) => candidate.sentence.id,
       buildCard: (studyItem, candidate) => ({
