@@ -47,6 +47,7 @@ import { hydrateMissingReferenceAudio } from './audioSync';
 import { getSupabase } from './supabaseClient';
 import { conflictContentsMatch } from './conflictDiff';
 import { syncLog } from './logger';
+import { trackLocalMutation } from './track';
 import {
   beginSyncCycle,
   endSyncCycle,
@@ -198,6 +199,23 @@ function isTransportError(message: string): boolean {
   );
 }
 
+const AUTHORED_CHECKS_REQUEUE_KEY = 'authoredChecksRequeued:v1';
+
+/**
+ * Meaning-choice and particle checks were saved without being queued for sync
+ * (fixed 2026-10-02), so rows authored before then exist only on the device that
+ * wrote them. Their record meta looks synced, so queue them once per device.
+ */
+async function requeueAuthoredChecksOnce(): Promise<void> {
+  if (typeof localStorage === 'undefined' || localStorage.getItem(AUTHORED_CHECKS_REQUEUE_KEY)) return;
+  const rows = await getDb().analyses.filter((a) => a.particleChecks != null || a.comprehensionCheck != null).toArray();
+  for (const analysis of rows) {
+    await trackLocalMutation({ entity: 'analyses', recordId: analysis.sentenceId, operation: 'upsert', payload: analysis });
+  }
+  localStorage.setItem(AUTHORED_CHECKS_REQUEUE_KEY, '1');
+  if (rows.length > 0) syncLog('info', `Queued ${rows.length} analyses with authored checks`, 'REQUEUE_AUTHORED_CHECKS', { count: rows.length });
+}
+
 /** Returns a short failure summary when any queue item could not be pushed. Exported for tests. */
 export async function pushMutations(): Promise<string | undefined> {
   const supabase = getSupabase();
@@ -208,6 +226,7 @@ export async function pushMutations(): Promise<string | undefined> {
   const userId = session?.user?.id;
   if (!userId) return undefined;
 
+  await requeueAuthoredChecksOnce();
   const collapsed = await dedupeQueueRows();
   if (collapsed > 0) {
     syncLog('warn', `Collapsed ${collapsed} duplicate queue row(s)`, 'QUEUE_DEDUPE', { collapsed });

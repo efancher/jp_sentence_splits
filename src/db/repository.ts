@@ -5841,9 +5841,11 @@ export async function setSentenceComprehensionCheck(
       createdAt: timestamp,
       updatedAt: timestamp,
     });
+    notifySync('analyses', sentenceId, (await db.analyses.get(sentenceId))!);
     return;
   }
   await db.analyses.update(sentenceId, { comprehensionCheck: check, updatedAt: timestamp });
+  notifySync('analyses', sentenceId, (await db.analyses.get(sentenceId))!);
 }
 
 /** Save the authored contextual particle questions (`[]` = checked, nothing to ask). */
@@ -5869,9 +5871,11 @@ export async function setSentenceParticleChecks(
       createdAt: timestamp,
       updatedAt: timestamp,
     });
+    notifySync('analyses', sentenceId, (await db.analyses.get(sentenceId))!);
     return;
   }
   await db.analyses.update(sentenceId, { particleChecks: checks, updatedAt: timestamp });
+  notifySync('analyses', sentenceId, (await db.analyses.get(sentenceId))!);
 }
 
 // ---------------------------------------------------------------------------
