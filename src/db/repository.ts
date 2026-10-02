@@ -10312,14 +10312,14 @@ export async function getSessionPlannerInput(
     newCardBacklogCount,
   ] = await Promise.all([
     getRecentActivityEvents(now),
+    // Not capped here: the pool is trimmed after the suspended/paused/readiness
+    // filters below, or long-overdue paused-drill items crowd out live ones.
     getDueStudyItems(RETAIN_ACTIVITY_TYPES, {
       now,
-      limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
       graduationMinScheduledDays: settings.graduationMinScheduledDays,
     }),
     getDueStudyItems(PRACTICE_ACTIVITY_TYPES, {
       now,
-      limit: SESSION_PLANNER_CANDIDATE_POOL_SIZE,
       graduationMinScheduledDays: settings.graduationMinScheduledDays,
     }),
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
@@ -10377,8 +10377,18 @@ export async function getSessionPlannerInput(
   const recentlyMissedTransformationSentenceIds =
     await getRecentlyMissedSentenceTransformationSentenceIds();
   const [retainDue, practiceDue] = await Promise.all([
-    buildReviewPriorityInputs(retainDueReady, 'review', now, recentlyMissedTransformationSentenceIds),
-    buildReviewPriorityInputs(practiceDueReady, 'review', now, recentlyMissedTransformationSentenceIds),
+    buildReviewPriorityInputs(
+      retainDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
+      'review',
+      now,
+      recentlyMissedTransformationSentenceIds,
+    ),
+    buildReviewPriorityInputs(
+      practiceDueReady.slice(0, SESSION_PLANNER_CANDIDATE_POOL_SIZE),
+      'review',
+      now,
+      recentlyMissedTransformationSentenceIds,
+    ),
   ]);
 
   // Quiet mode (settings, per-device): the learner can't speak aloud, so
