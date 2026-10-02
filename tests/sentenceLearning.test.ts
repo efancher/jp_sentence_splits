@@ -210,6 +210,36 @@ describe('gloss-only words', () => {
   });
 });
 
+describe('set expressions', () => {
+  const tok = (surface: string, start: number, expression: string, pos: string, english: string, selectedByDefault: boolean) =>
+    ({ surface, start, end: start + surface.length, expression, reading: surface, pos, english, selectedByDefault, source: 'morphology' });
+
+  it('replaces the misleading pieces of について with one phrase gloss', () => {
+    const words = glossableWords([
+      tok('そっち', 0, 'そっち', '代名詞', 'that way', false),
+      tok('に', 3, 'に', '助詞/格助詞', 'in', false),
+      tok('つい', 4, 'つく', '動詞/一般', 'to attach', true),
+      tok('て', 6, 'て', '助詞/接続助詞', '', false),
+      tok('紙', 8, '紙', '名詞/普通名詞', 'paper', true),
+    ]);
+    expect(words.map((word) => `${word.expression}:${word.english}`)).toEqual([
+      'そっち:that way',
+      'について:about / concerning',
+      '紙:paper',
+    ]);
+    expect(words[1]!.glossOnly).toBe(true);
+  });
+
+  it('does not match across a gap, so a lone つく keeps its own gloss', () => {
+    const words = glossableWords([
+      tok('に', 0, 'に', '助詞/格助詞', 'in', false),
+      tok('つい', 3, 'つく', '動詞/一般', 'to attach', true),
+      tok('て', 5, 'て', '助詞/接続助詞', '', false),
+    ]);
+    expect(words.map((word) => word.expression)).toEqual(['つく']);
+  });
+});
+
 describe('selectSentenceTargets', () => {
   const ev = (key: string, outcome: 'got_it' | 'needed_help', n: number): SentenceLearningEvent => ({
     id: `${key}${outcome}${n}`, timestamp: 't', visitId: 'v', action: 'target_practice', bookId: 'b', sentenceId: 's',

@@ -4,6 +4,7 @@
  * already been practised or shown. Nothing here touches FSRS.
  */
 import type { SentenceLearningEvent } from '../domain/types';
+import { findSetExpressions, SET_EXPRESSIONS } from './setExpressions';
 import { isGlossOnlySuggestion } from './vocabularySuggestions';
 
 export interface CompareOccurrence {
@@ -261,6 +262,8 @@ type GlossSuggestion = {
   english?: string;
   selectedByDefault: boolean;
   surface?: string;
+  start?: number;
+  end?: number;
   pos?: string;
   source?: string;
 };
@@ -279,7 +282,18 @@ export function glossableWords(
 ): GlossWord[] {
   const seen = new Set<string>();
   const words: GlossWord[] = [];
-  for (const suggestion of suggestions) {
+  const phraseAt = new Map(findSetExpressions(suggestions).map((match) => [match.first, match]));
+  let skipUntil = -1;
+  for (const [index, suggestion] of suggestions.entries()) {
+    const phrase = phraseAt.get(index);
+    if (phrase) {
+      skipUntil = phrase.last;
+      if (!seen.has(phrase.key)) {
+        seen.add(phrase.key);
+        words.push({ expression: phrase.key, ...SET_EXPRESSIONS.get(phrase.key)!, glossOnly: true });
+      }
+    }
+    if (index <= skipUntil) continue;
     const glossOnly = isGlossOnly(suggestion);
     if ((!suggestion.selectedByDefault && !glossOnly) || seen.has(suggestion.expression)) continue;
     const saved = savedMeanings.get(suggestion.expression);

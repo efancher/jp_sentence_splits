@@ -1609,8 +1609,10 @@ kept here so the thinking isn't lost:
   support level in the structure-check panel and by "most of the sentence
   is known" in the Reader's default word list. Open: a per-word exposure
   count (show the first few times seen, then hide) so the fade is
-  per-word instead of per-sentence; extending the tier to other
-  card-less words (e.g. counters, set expressions); a Reader control that
+  per-word instead of per-sentence; a bigger set-expression table
+  (shipped 2026-10-02 with ~13 phrases in `src/lib/setExpressions.ts`;
+  counters need nothing, numeral+counter pairs are already checked
+  suggestions); a Reader control that
   steps help down tier by tier instead of the current all / none / default
   override.
 
