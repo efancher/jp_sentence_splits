@@ -97,6 +97,11 @@ const GRAMMATICALIZED_NOUN_READINGS = new Set([
   'こと', 'はず', 'つもり', 'わけ', 'ため', 'ところ', 'ほう', 'よう', 'まま', 'ふり',
 ]);
 
+/** Numerals and counters (UniDic 数詞 / 助数詞, and fused numeral+counter): gloss-only, not study items. */
+function isNumeralOrCounterPos(pos: string | undefined): boolean {
+  return !!pos && pos.includes('数詞');
+}
+
 function isKanaWrittenFormalNoun(token: MorphologyToken, dictionaryReading: string): boolean {
   return (
     !!token.pos?.startsWith('名詞') &&
@@ -357,6 +362,7 @@ function computeSelectedByDefault(
     !isNiMarkedSuruConstruction(token, prevToken) &&
     !isKotoGaDekiruConstruction(token, prevToken, prevPrevToken) &&
     !isKanaWrittenFormalNoun(token, reading) &&
+    !isNumeralOrCounterPos(token.pos) &&
     !isFunctionAdverb(token)
   );
 }
@@ -365,13 +371,14 @@ function computeSelectedByDefault(
  * Words that stay out of the vocabulary picker's defaults (or, for pronouns,
  * never were content) but still need a meaning shown while reading help is
  * high: pronouns (そっち, あなた), degree/discourse adverbs, kana-written
- * formal nouns. Derived from the stored suggestion alone so it works on old
+ * formal nouns, numerals and counters (二つ, 三人, 10月). Derived from the stored suggestion alone so it works on old
  * sentences; never a study item, just a gloss.
  */
 export function isGlossOnlySuggestion(
   suggestion: Pick<VocabularySuggestion, 'surface' | 'expression' | 'reading' | 'pos' | 'selectedByDefault' | 'source'>,
 ): boolean {
-  if (suggestion.selectedByDefault || suggestion.source !== 'morphology' || suggestion.pos.includes('+')) return false;
+  if (suggestion.selectedByDefault || suggestion.source !== 'morphology') return false;
+  if (suggestion.pos.includes('+')) return isNumeralOrCounterPos(suggestion.pos);
   const token: MorphologyToken = {
     surface: suggestion.surface,
     start: 0,
@@ -382,6 +389,7 @@ export function isGlossOnlySuggestion(
   };
   return (
     suggestion.pos.startsWith('代名詞') ||
+    isNumeralOrCounterPos(suggestion.pos) ||
     isKanaWrittenFormalNoun(token, suggestion.reading) ||
     (isContentPos(suggestion.pos) && isFunctionAdverb(token))
   );
@@ -456,8 +464,11 @@ export function recomputeSuggestionDefaults(
   suggestions: VocabularySuggestion[],
 ): VocabularySuggestion[] {
   return suggestions.map((suggestion, index) => {
-    if (suggestion.source !== 'morphology' || suggestion.pos.includes('+')) {
-      return suggestion;
+    if (suggestion.source !== 'morphology') return suggestion;
+    if (suggestion.pos.includes('+')) {
+      return isNumeralOrCounterPos(suggestion.pos) && suggestion.selectedByDefault
+        ? { ...suggestion, selectedByDefault: false }
+        : suggestion;
     }
     const prev = suggestions[index - 1];
     const prevPrev = suggestions[index - 2];
@@ -534,7 +545,7 @@ function numeralCounterSuggestion(
     reading,
     pos: [digitToken.pos, counterToken.pos].filter(Boolean).join('+'),
     source: 'morphology',
-    selectedByDefault: true,
+    selectedByDefault: false,
   };
 }
 

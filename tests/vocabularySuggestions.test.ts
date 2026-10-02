@@ -8,9 +8,11 @@ import {
   combinedExpressionWarning,
   defaultSelectionsFromSuggestions,
   isContentPos,
+  isGlossOnlySuggestion,
   mergeSelections,
   mergeSuggestionIntoSelection,
   mergeVocabularySuggestions,
+  recomputeSuggestionDefaults,
   selectionFromSuggestion,
   selectionNeedsMeaning,
   suggestionFromToken,
@@ -645,10 +647,27 @@ describe('vocabularySuggestions', () => {
       expect(fused?.reading).toBe('じゅうがつ');
       expect(fused?.start).toBe(0);
       expect(fused?.end).toBe(3);
-      expect(fused?.selectedByDefault).toBe(true);
+      // Counters are gloss-only now: visible, not checked, never a study item.
+      expect(fused?.selectedByDefault).toBe(false);
+      expect(fused && isGlossOnlySuggestion(fused)).toBe(true);
+      expect(recomputeSuggestionDefaults(suggestions).find((s) => s.surface === '10月')?.selectedByDefault).toBe(false);
       // No separate "10" or bare "月" suggestion left over.
       expect(suggestions.some((s) => s.surface === '10')).toBe(false);
       expect(suggestions.some((s) => s.surface === '月')).toBe(false);
+    });
+
+    it('recomputes an old checked fused counter to unchecked, and does not default-select a kana numeral', () => {
+      const old = {
+        id: 'v1', surface: '10月', start: 0, end: 3, expression: '10月', reading: 'じゅうがつ',
+        pos: '名詞/数詞+接尾辞/名詞的', source: 'morphology' as const, selectedByDefault: true,
+      };
+      expect(recomputeSuggestionDefaults([old])[0]?.selectedByDefault).toBe(false);
+      const numeral = suggestionFromToken(
+        { surface: '二つ', start: 0, end: 2, lemma: '二つ', reading: 'ふたつ', pos: '名詞/数詞' },
+        '二つある。',
+      );
+      expect(numeral?.selectedByDefault).toBe(false);
+      expect(numeral && isGlossOnlySuggestion(numeral)).toBe(true);
     });
 
     it('fuses irregular day-of-month and object-counter readings', () => {
