@@ -10087,11 +10087,11 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
 /**
  * Practice(shadowing) candidates: sentences with reference audio and the
  * fewest existing attempts, scoped to sentences actually in progress and
- * ready per getSentenceShadowingReadiness (user request, 2026-08-27;
- * pitch requirement layered on 2026-09-16) — vocabulary confirmed, every
- * linked word's reading/meaning proficient (so shadowing doesn't split
- * attention between recalling words and imitating pronunciation), and
- * every linked word's pitch pattern proficient too. A sentence with a just-
+ * ready per getSentenceShadowingReadiness (user request, 2026-08-27) —
+ * vocabulary confirmed and every linked word's reading/meaning introduced
+ * (seen once, not full proficiency; no pitch requirement since 2026-09-28),
+ * so shadowing doesn't split attention between recalling words and
+ * imitating pronunciation. A sentence with a just-
  * missed `cloze` card floats to the front of this otherwise fewest-attempts
  * order (`getRecentlyMissedClozeSentenceIds`, cross-activity error routing).
  */
