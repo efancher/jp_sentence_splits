@@ -1838,6 +1838,17 @@ export function ReviewPage() {
   }, [initialized, queue.length, pool, seeding, descriptors, settings, newCardsIntroduced]);
 
   const current = queue[0];
+  const currentSentenceId = current?.sentence.id;
+  const sourceBooks = useLiveQuery(async () => {
+    if (!currentSentenceId) return undefined;
+    const db = getDb();
+    const rows = await db.bookSentences.where('sentenceId').equals(currentSentenceId).toArray();
+    const books = await db.books.bulkGet(rows.map((row) => row.bookId));
+    return rows.map((row, index) => {
+      const book = books[index];
+      return `${book?.title ?? row.bookId} (${book?.suspendedAt ? 'suspended' : 'active'})`;
+    });
+  }, [currentSentenceId]);
 
   useEffect(() => {
     setRevealed(false);
@@ -2019,6 +2030,12 @@ export function ReviewPage() {
             </Link>
           ) : null}
         </div>
+
+        {sourceBooks && !bookId ? (
+          <div className="muted" style={{ fontSize: '0.85rem' }}>
+            From: {sourceBooks.length > 0 ? sourceBooks.join('; ') : 'no book'}
+          </div>
+        ) : null}
 
         {reviewStep?.targetCount ? (
           <div className="muted" style={{ fontSize: '0.85rem' }}>
