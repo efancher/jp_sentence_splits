@@ -1263,7 +1263,7 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
 ## Possibilities (sentence-led flow follow-ups)
 
 - **Reverse English -> Japanese exercise (not built, by design).** Would show an English meaning and ask the learner to pick/produce the Japanese. Constraints if ever built: the Japanese must be unchanged real source material (no generated Japanese distractors); candidates must pass an ambiguity check (an English sentence that several source sentences could translate is excluded); no auto-rating (house rule: self-rate).
-- Bank coverage: a book-level view of sentences whose bank has fewer than ~10 usable wrong meanings, with a batch "more wrong meanings" authoring flow (single-sentence flow shipped 2026-10-02).
+- Bank coverage: shipped 2026-10-02 (book-page "Meaning choices: bulk generate" panel with copy/paste and AI-now, plus background auto-generation for sentences with no check). Remaining: auto top-up of thin banks (manual only today) and wiring generation directly into each import commit instead of the background worker.
 - Sequential mode: latch from the planner too (it is read-only today) and expose a per-book "reset unlocks".
 
 ## Possibilities (analytics & cross-activity coherence)
