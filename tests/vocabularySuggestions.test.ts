@@ -42,6 +42,8 @@ describe('vocabularySuggestions', () => {
     // na-adjectives (modern UniDic tags them 形状詞); not the そう/よう stems.
     expect(isContentPos('形状詞/一般')).toBe(true);
     expect(isContentPos('形状詞/助動詞語幹')).toBe(false);
+    // pronouns/demonstratives (そっち, あなた) are words to learn, not grammar.
+    expect(isContentPos('代名詞')).toBe(true);
     const defaults = defaultSelectionsFromSuggestions(suggestions, japanese);
     expect(defaults.map((item) => item.expression)).toEqual(['世話', 'する']);
   });
