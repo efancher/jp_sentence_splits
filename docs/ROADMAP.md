@@ -1601,6 +1601,18 @@ kept here so the thinking isn't lost:
   infeasible: there's no lexical frequency-rank data anywhere in this
   codebase (only acoustic pitch Hz "frequency," an unrelated concept).
   Would need a new data source before this is buildable.
+- **Tiered word help in the episode reader (`ReaderPage`).** (2026-10-02
+  idea.) Gloss-only words (pronouns, function adverbs, kana formal nouns;
+  shipped as `isGlossOnlySuggestion`, see STATUS.md) are the first tier of a
+  broader idea: words that are not worth a card but need a meaning on first
+  sight get a gloss while help is high, then fade. Today they fade by
+  support level in the structure-check panel and by "most of the sentence
+  is known" in the Reader's default word list. Open: a per-word exposure
+  count (show the first few times seen, then hide) so the fade is
+  per-word instead of per-sentence; extending the tier to other
+  card-less words (e.g. counters, set expressions); a Reader control that
+  steps help down tier by tier instead of the current all / none / default
+  override.
 
 ## Possibilities (Cure Dolly pedagogy pass)
 
