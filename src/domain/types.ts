@@ -665,6 +665,12 @@ export interface AppSettings {
    * meaning checks are answered well enough. See `src/lib/sequentialStudy.ts`.
    */
   sequentialStudyMode?: boolean;
+  /**
+   * Background-generate the meaning choices (correct meaning + wrong-meaning
+   * bank) for sentences that have none, via the `meaning-assist` Edge
+   * Function (needs sign-in + deploy). Treated as on when undefined.
+   */
+  autoMeaningChoices?: boolean;
   /** Sentence ids the learner manually unlocked past the sequential gate. */
   sequentialUnlockOverrides?: string[];
   /**

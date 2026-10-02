@@ -659,7 +659,7 @@ describe('ReviewPage', () => {
         ],
         correctIndex: 0,
         extraDistractors: ['I bought a book.', 'He reads a book.', 'I am reading a magazine.'],
-        source: 'manual',
+        provenance: 'manual',
         createdAt: new Date().toISOString(),
       },
     });

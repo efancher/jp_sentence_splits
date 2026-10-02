@@ -46,7 +46,7 @@ const CHECK = {
     'The cat slept all day.',
   ],
   correctIndex: 0,
-  source: 'manual' as const,
+  provenance: 'manual' as const,
   createdAt: new Date().toISOString(),
 };
 
