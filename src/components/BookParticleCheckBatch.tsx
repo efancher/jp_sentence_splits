@@ -52,9 +52,11 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
       <summary>Particle checks: contextual questions ({pending.length} sentences pending)</summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
-          The glossing check asks about particles (に で と を は から …) in the sentence&rsquo;s own words (&ldquo;what is
-          the bin to the putting?&rdquo;) instead of generic roles. Without one, a sentence falls
-          back to the generic question.
+          Instead of a generic &ldquo;what does に mean?&rdquo;, the glossing check asks about the
+          particle using the sentence&rsquo;s own words. For ゴミ箱に入れた (&ldquo;put it in the
+          bin&rdquo;) it asks &ldquo;What role does the bin play?&rdquo; with choices like &ldquo;where
+          the thing ends up&rdquo; or &ldquo;who receives it&rdquo;. Sentences without one fall back
+          to the generic question.
         </p>
         {pending.length === 0 ? (
           <div className="muted">Nothing pending.</div>

@@ -6,7 +6,7 @@ import { getMeaningBank } from './meaningChoices';
 
 // Contextual particle questions for the glossing "try it first" check. The
 // generic check asks "where to / when / to whom" for any に; this one asks
-// about the sentence's own words ("what is the bin to the putting?") with four
+// about the sentence's own words ("what role does the bin play?") with four
 // concrete readings. Authored per sentence by an external AI through a
 // book-wide prompt file (same copy/paste-or-file round trip as the meaning
 // choices), stored on `SentenceAnalysis.particleChecks`.
@@ -75,7 +75,7 @@ const HEADER = [
   'particle (に で と へ を が は も から まで より) whose role is worth a question — skip',
   'chunks where the role is trivially obvious, quotative と, and particles inside fixed',
   'expressions. Ask about the role of that phrase IN THIS SENTENCE, in plain English using',
-  'the sentence\'s own words, e.g. "What is the bin to the action of putting?" — not',
+  'the sentence\'s own words, e.g. "What role does the bin play in putting it in?" — not',
   '"what does に mean?".',
   '',
   'Give exactly 4 options, each a concrete reading phrased with the sentence\'s own nouns',
@@ -89,7 +89,7 @@ const HEADER = [
   'chosen particle write a block exactly like this (correct option starts with "*"):',
   '=== Sentence 1 ===',
   'CHUNK: ゴミ箱に',
-  'Q: What is the bin to the action of putting?',
+  'Q: What role does the bin play in putting it in?',
   '1. the bin is where it happens',
   '*2. the bin is where the thing ends up',
   '3. the bin is who receives it',
