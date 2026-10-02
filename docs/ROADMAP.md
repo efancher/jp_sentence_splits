@@ -1260,6 +1260,12 @@ note below. Six items from the earlier list shipped 2026-08-31/09-01 — see
   — jump-and-continue covers the "hear that again" need without a second
   player implementation.
 
+## Possibilities (sentence-led flow follow-ups)
+
+- **Reverse English -> Japanese exercise (not built, by design).** Would show an English meaning and ask the learner to pick/produce the Japanese. Constraints if ever built: the Japanese must be unchanged real source material (no generated Japanese distractors); candidates must pass an ambiguity check (an English sentence that several source sentences could translate is excluded); no auto-rating (house rule: self-rate).
+- Bank coverage: a book-level view of sentences whose bank has fewer than ~10 usable wrong meanings, with a batch "more wrong meanings" authoring flow (single-sentence flow shipped 2026-10-02).
+- Sequential mode: latch from the planner too (it is read-only today) and expose a per-book "reset unlocks".
+
 ## Possibilities (analytics & cross-activity coherence)
 
 From a 2026-09-08 discussion on measuring performance, surfacing what to

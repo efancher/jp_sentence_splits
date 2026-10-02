@@ -1907,6 +1907,10 @@ response), and computed maturity level for vocabulary subjects.
 `/study-items` (`StudyItemsListPage.tsx`) is a top-level browsable list of
 every study item, sorted by due date.
 
+### 4a. Sentence-led flow & sequential study
+
+Main review activity is picking the English meaning of a Japanese sentence (`reading_in_context`). Each attempt shows the correct meaning plus 3 distractors sampled from the sentence's bank (the 3 original wrong options + `extraDistractors`, target ~10), shuffled and fixed for the attempt; `Review.meaningChoice` stores what was shown and chosen. Wrong answer -> correct meaning shown + link to the Analyze (gloss) page. Sentences are introduced via the guided gloss; word/grammar drill cards are out of the default flow (flag `sentenceLedFlow`, default on) but their data is kept. Optional sequential mode (`sequentialStudyMode`) opens sentences in episode order: next opens at >=4 of the last 5 first-pick (pre-hint, >=10 min apart) correct; unlocks are permanent; locked sentences hide only study tools. The bank is repaired/extended from the Analyze page's "Comprehension check" panel. Reverse English->Japanese is deliberately not implemented.
+
 ### 5. Vocabulary & kanji browsing — `VocabularyListPage.tsx`
 (`/vocabulary`), `KanjiDetailPage.tsx` (`/kanji/:character`)
 Lists every confirmed `VocabularyItem` across all books, with search-by-

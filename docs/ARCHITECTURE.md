@@ -218,6 +218,14 @@ decisions worth knowing before adding one:
 - Adding a game = a pure builder + a `GameDef` in `src/games/registry.tsx`
   whose `loadPools` applies its eligibility.
 
+## Sentence-led flow & sequential study
+
+`reading_in_context` ("pick the English meaning") is the main review; guided gloss on the Analyze page is where vocabulary/grammar are learned and wrong answers are revisited. Gated by `settings.sentenceLedFlow` (default on, `src/lib/sentenceLed.ts`), which implies legacy drills paused and sentence-first planning and makes ReviewPage skip the vocabulary-proficiency defers/gates, restricting sentence candidates to *introduced* sentences.
+
+- `src/lib/meaningChoices.ts` (pure): the bank is `ComprehensionCheck.options` + `extraDistractors`; `sampleMeaningQuestion` picks the correct meaning + <=3 least-used distractors, shuffled; validation/merge/removal for authoring. `Review.meaningChoice` records the shown choices and pick (synced as `reviews.meaning_choice`).
+- `src/lib/sequentialStudy.ts` (pure): `qualifyingAttempts`, `unlockProgress`, `computeSequentialStatus`. Repository glue: `getSequentialBookStatus`, `latchSequentialUnlocks` (persists to `settings.sequentialUnlockOverrides`), `getSequentialSentenceView`, `unlockSentenceManually`; `recordReview` latches after sentence reviews and `findExploreCandidates` filters to accessible sentences. UI: `SequentialStudyPanel`/`LockedSentenceNotice`.
+- Rule: unlock the next sentence when >=4 of the last 5 qualifying (first-pick, pre-hint, >=10 min apart) attempts are correct. Unlock state is monotonic (derived from history plus a persisted latch).
+
 ## Scheduling
 
 **Chapter review presentation (2026-09-30):** `ReviewDocumentText` loads a
