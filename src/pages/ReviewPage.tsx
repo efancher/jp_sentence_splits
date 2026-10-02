@@ -937,6 +937,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         sentence: candidate.sentence,
         audio: candidate.audio,
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(candidate.sentence.id),
+        meaningHistory: scope.meaningHistoryBySentenceId.get(candidate.sentence.id),
       }),
       ensure: (candidate, activityType) =>
         ensureStudyItem('sentence', candidate.sentence.id, activityType),
@@ -2179,13 +2180,14 @@ export function ReviewPage() {
                 sentence={current.sentence}
                 audio={current.audio}
                 check={current.comprehensionCheck}
+                history={current.meaningHistory ?? []}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 onReplay={() => markAssistance('audio_replayed')}
                 playbackRate={audioSpeed}
                 onPlaybackRateChange={setAudioSpeed}
-                onComprehensionAnswered={(correct, chosenIndex) =>
-                  setComprehensionCheckAnswer({ correct, chosenIndex })
+                onComprehensionAnswered={(correct, chosenIndex, meaningChoice) =>
+                  setComprehensionCheckAnswer({ correct, chosenIndex, meaningChoice })
                 }
               />
             ) : current.wordListening ? (
@@ -3584,6 +3586,7 @@ function AudioComprehensionCard({
   sentence,
   audio,
   check,
+  history,
   revealed,
   onReveal,
   onReplay,
@@ -3594,22 +3597,38 @@ function AudioComprehensionCard({
   sentence: Sentence;
   audio: SentenceAudio;
   check: ComprehensionCheck | undefined;
+  history: MeaningChoiceRecord[];
   revealed: boolean;
   onReveal: () => void;
   /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
   onReplay: () => void;
   playbackRate: number;
   onPlaybackRateChange: (value: number) => void;
-  onComprehensionAnswered: (correct: boolean, chosenIndex: number) => void;
+  onComprehensionAnswered: (
+    correct: boolean,
+    chosenIndex: number,
+    meaningChoice: MeaningChoiceRecord,
+  ) => void;
 }) {
   const playCountRef = useRef(0);
   const [textRevealed, setTextRevealed] = useState(false);
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+  const [question] = useState(() =>
+    check ? sampleMeaningQuestion(check, distractorHistoryFromRecords(history)) : null,
+  );
 
   function choose(index: number) {
-    if (chosenIndex !== null || !check) return;
+    if (chosenIndex !== null || !question) return;
+    const choice = question.choices[index]!;
     setChosenIndex(index);
-    onComprehensionAnswered(index === check.correctIndex, index);
+    onComprehensionAnswered(choice.isCorrect, index, {
+      shown: question.choices.map((item) => item.text),
+      chosenIndex: index,
+      chosenText: choice.text,
+      correctText: question.correctText,
+      correct: choice.isCorrect,
+      qualifying: true,
+    });
   }
 
   return (
@@ -3638,22 +3657,22 @@ function AudioComprehensionCard({
           </select>
         </label>
       </div>
-      {!textRevealed && check && chosenIndex === null ? (
+      {!textRevealed && question && chosenIndex === null ? (
         <div className="stack">
           <p className="muted" style={{ margin: 0 }}>
             Which English sentence best describes what you heard?
           </p>
-          {check.options.map((option, i) => (
-            <button key={i} type="button" onClick={() => choose(i)}>
-              {option}
+          {question.choices.map((choice, i) => (
+            <button key={choice.id} type="button" onClick={() => choose(i)}>
+              {choice.text}
             </button>
           ))}
         </div>
       ) : !textRevealed ? (
         <>
-          {check && chosenIndex !== null ? (
+          {question && chosenIndex !== null ? (
             <p style={{ fontWeight: 600 }}>
-              {chosenIndex === check.correctIndex ? '✓ Correct' : '✗ Not quite'}
+              {question.choices[chosenIndex]!.isCorrect ? '✓ Correct' : '✗ Not quite'}
             </p>
           ) : (
             <p className="muted">Listen and see how much you understand before revealing.</p>
