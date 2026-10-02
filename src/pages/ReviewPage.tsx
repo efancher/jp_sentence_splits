@@ -93,7 +93,7 @@ import {
 } from '../lib/grammarPatterns';
 import { containsKanji } from '../lib/kanji';
 import { buildReadingContextMap, type ReadingContext } from '../lib/readingContext';
-import { uniqueReviewSpan } from '../lib/reviewDocument';
+import { reviewSpans } from '../lib/reviewDocument';
 import { AMBIGUITY_PRONE_ROLES } from '../lib/roleGuide';
 import { sentenceIsSuspendedOnly } from '../lib/suspendedBooks';
 import { startOfLocalDayIso } from '../lib/dailyPractice';
@@ -2636,7 +2636,7 @@ function VocabularyTargetCard({
         <ReviewDocumentText
           sentence={sentence}
           bookId={context?.bookId}
-          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          target={reviewSpans(sentence.japanese, surfaceForm)}
           revealed={revealed}
           onDocumentShown={onDocumentShown}
           cloze={isCloze ? { vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm } : undefined}
@@ -2809,7 +2809,7 @@ function ReadingProductionCard({
         <ReviewDocumentText
           sentence={sentence}
           bookId={bookId}
-          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          target={reviewSpans(sentence.japanese, surfaceForm)}
           revealed={revealed}
           onDocumentShown={onDocumentShown}
         />
@@ -2902,7 +2902,7 @@ function SentenceConjugationCard({
         <ReviewDocumentText
           sentence={sentence}
           bookId={bookId}
-          target={uniqueReviewSpan(sentence.japanese, surfaceForm)}
+          target={reviewSpans(sentence.japanese, surfaceForm)}
           revealed={revealed}
           onDocumentShown={onDocumentShown}
           cloze={{ vocabularyItemId: vocabularyItem.id, expression: vocabularyItem.expression, surface: surfaceForm }}
@@ -3848,7 +3848,7 @@ function GrammarRecognitionCard({
         <ReviewDocumentText
           sentence={sentence}
           bookId={readingContext.bookId}
-          target={blank ? { start: blank.before.length, end: blank.before.length + blank.match.length } : undefined}
+          target={blank ? [{ start: blank.before.length, end: blank.before.length + blank.match.length }] : undefined}
           revealed={revealed}
           onDocumentShown={onDocumentShown}
         />

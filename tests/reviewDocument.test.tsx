@@ -5,7 +5,7 @@ import { ReviewDocumentText } from '../src/components/ReviewDocumentText';
 import { resetDbForTests } from '../src/db/database';
 import { getDb, getReviewDocument } from '../src/db/repository';
 import type { Book, BookSentence, Sentence } from '../src/domain/types';
-import { maskReviewText, uniqueReviewSpan } from '../src/lib/reviewDocument';
+import { maskReviewText, reviewSpans } from '../src/lib/reviewDocument';
 
 const now = '2026-09-30T00:00:00.000Z';
 const sentence = (id: string, japanese = `${id}の文。`): Sentence => ({
@@ -78,7 +78,7 @@ describe('chapter review documents', () => {
   it('masks cloze answers in distant sentences, inflections and titles, without ruby/gloss leakage', async () => {
     const target = await seedChapter();
     const props = {
-      sentence: target, bookId: 'original', target: uniqueReviewSpan(target.japanese, '読みます'),
+      sentence: target, bookId: 'original', target: reviewSpans(target.japanese, '読みます'),
       cloze: { vocabularyItemId: 'vocab', expression: '読む', surface: '読みます' },
     };
     const { rerender } = render(<ReviewDocumentText {...props} revealed={false} />);
@@ -134,9 +134,9 @@ describe('review text masking', () => {
     expect(maskReviewText('これは本。', [])).toBe('これは本。');
   });
 
-  it('does not invent a unique occurrence for repeated or absent text', () => {
-    expect(uniqueReviewSpan('本と本', '本')).toBeUndefined();
-    expect(uniqueReviewSpan('本', '読む')).toBeUndefined();
-    expect(uniqueReviewSpan('本を読む', '読む')).toEqual({ start: 2, end: 4 });
+  it('finds every occurrence of repeated text and none for absent text', () => {
+    expect(reviewSpans('本と本', '本')).toEqual([{ start: 0, end: 1 }, { start: 2, end: 3 }]);
+    expect(reviewSpans('本', '読む')).toEqual([]);
+    expect(reviewSpans('本を読む', '読む')).toEqual([{ start: 2, end: 4 }]);
   });
 });

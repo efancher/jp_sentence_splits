@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 
 import { getReviewDocument } from '../db/repository';
 import type { Sentence } from '../domain/types';
@@ -16,7 +16,7 @@ export function ReviewDocumentText({
 }: {
   sentence: Sentence;
   bookId?: string;
-  target?: ReviewTextSpan;
+  target?: ReviewTextSpan[];
   revealed: boolean;
   cloze?: { vocabularyItemId: string; expression: string; surface: string };
   /** Reports how many source sentences are visible (1 = fell back to the lone sentence). */
@@ -41,8 +41,9 @@ export function ReviewDocumentText({
     ? reviewDocumentMaskForms(rows.map((row) => row.sentence), cloze.expression, cloze.surface, document?.vocabularyForms)
     : [];
   const mask = (text: string) => maskReviewText(text, forms);
-  const validTarget = target && target.start >= 0 && target.end > target.start && target.end <= sentence.japanese.length
-    ? target : undefined;
+  const validTargets = (target ?? []).filter(
+    (span) => span.start >= 0 && span.end > span.start && span.end <= sentence.japanese.length,
+  );
 
   function returnToTarget() {
     const container = viewport.current;
@@ -78,11 +79,17 @@ export function ReviewDocumentText({
             <p key={row.membershipId} ref={active ? activeRow : undefined}
               className={`jp review-document-line${active ? ' review-document-active' : ''}`}
               aria-current={active ? 'true' : undefined}>
-              {active && validTarget ? <>
-                {mask(text.slice(0, validTarget.start))}
-                <mark>{cloze && !revealed ? '_____' : text.slice(validTarget.start, validTarget.end)}</mark>
-                {mask(text.slice(validTarget.end))}
-              </> : mask(text)}
+              {active && validTargets.length ? validTargets.map((span, index) => {
+                const previousEnd = index === 0 ? 0 : validTargets[index - 1].end;
+                const isLast = index === validTargets.length - 1;
+                return (
+                  <Fragment key={span.start}>
+                    {mask(text.slice(previousEnd, span.start))}
+                    <mark>{cloze && !revealed ? '_____' : text.slice(span.start, span.end)}</mark>
+                    {isLast ? mask(text.slice(span.end)) : null}
+                  </Fragment>
+                );
+              }) : mask(text)}
             </p>
           );
         })}

@@ -15,12 +15,16 @@ export interface ReviewTextSpan {
   end: number;
 }
 
-/** Without occurrence offsets, do not pretend the first repeated word is unique. */
-export function uniqueReviewSpan(text: string, surface: string): ReviewTextSpan | undefined {
-  if (!surface) return undefined;
-  const start = text.indexOf(surface);
-  if (start < 0 || text.indexOf(surface, start + 1) >= 0) return undefined;
-  return { start, end: start + surface.length };
+/** Every non-overlapping occurrence of the surface; without occurrence offsets on the link, all repeats of a word are highlighted rather than none. */
+export function reviewSpans(text: string, surface: string): ReviewTextSpan[] {
+  const spans: ReviewTextSpan[] = [];
+  if (!surface) return spans;
+  let start = text.indexOf(surface);
+  while (start >= 0) {
+    spans.push({ start, end: start + surface.length });
+    start = text.indexOf(surface, start + surface.length);
+  }
+  return spans;
 }
 
 /** Literal matching, with overlapping aliases merged and no answer in markup. */
