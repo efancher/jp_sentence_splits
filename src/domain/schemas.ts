@@ -174,6 +174,15 @@ export const grammarSuggestionSchema = z.object({
   source: z.enum(['ai', 'manual']),
 });
 
+export const comprehensionCheckSchema = z.object({
+  options: z.array(z.string()),
+  correctIndex: z.number().int().nonnegative(),
+  provenance: z.enum(['ai_suggested', 'manual']),
+  createdAt: z.string(),
+  extraDistractors: z.array(z.string()).optional(),
+  distractorsUpdatedAt: z.string().optional(),
+});
+
 export const sentenceAnalysisSchema = z.object({
   sentenceId: z.string(),
   chunks: z.array(analysisChunkSchema),
@@ -186,6 +195,7 @@ export const sentenceAnalysisSchema = z.object({
   // field existed.
   grammarSuggestions: z.array(grammarSuggestionSchema).default([]),
   grammarReviewStatus: grammarReviewStatusSchema.default('unreviewed'),
+  comprehensionCheck: comprehensionCheckSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -343,6 +353,16 @@ export const reviewSchema = z.object({
   predictedRetrievability: z.number().optional(),
   comprehensionCheckCorrect: z.boolean().optional(),
   comprehensionCheckChosenIndex: z.number().int().nonnegative().optional(),
+  meaningChoice: z
+    .object({
+      shown: z.array(z.string()),
+      chosenIndex: z.number().int().nonnegative(),
+      chosenText: z.string(),
+      correctText: z.string(),
+      correct: z.boolean(),
+      qualifying: z.boolean(),
+    })
+    .optional(),
   pitchProductionMeasuredCount: z.number().int().nonnegative().optional(),
   pitchProductionMismatchCount: z.number().int().nonnegative().optional(),
   presentation: reviewPresentationSchema.optional(),

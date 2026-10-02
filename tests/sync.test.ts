@@ -891,6 +891,24 @@ describe('sync mappers', () => {
     expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).presentation).toBeUndefined();
   });
 
+  it('round-trips the shown meaning choices and leaves them null for legacy reviews', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const base: Review = { id: 'review_m', studyItemId: 'study_1', timestamp: '2026-10-02T00:00:00.000Z', rating: 'good' };
+    const meaningChoice = {
+      shown: ['A', 'B', 'C', 'D'],
+      chosenIndex: 2,
+      chosenText: 'C',
+      correctText: 'A',
+      correct: false,
+      qualifying: true,
+    };
+    const remote = reviewToRemote({ ...base, meaningChoice }, 'user-1', 1);
+    expect(remote.meaning_choice).toEqual(meaningChoice);
+    expect(remoteToReview(remote).meaningChoice).toEqual(meaningChoice);
+    expect(reviewToRemote(base, 'user-1', 1).meaning_choice).toBeNull();
+    expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).meaningChoice).toBeUndefined();
+  });
+
   it('round-trips comprehension-check and pitch-production evidence through remote shape', async () => {
     const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
     const review: Review = {

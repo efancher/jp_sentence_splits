@@ -65,8 +65,10 @@ function makeSentence(overrides: Partial<Sentence> = {}): Sentence {
 }
 
 describe('Learning Orchestrator repository layer', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDbForTests(`session-planner-${createId('db')}`);
+    // These cover the earlier vocabulary-gated flow; the sentence-led flow (default on) has its own tests.
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('surfaces unstarted book sentences as an Explore step, with no retain minutes when nothing is due', async () => {
@@ -860,8 +862,10 @@ describe('Learning Orchestrator repository layer', () => {
 });
 
 describe('pause word & grammar drills', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDbForTests(`session-planner-${createId('db')}`);
+    // These cover the earlier vocabulary-gated flow; the sentence-led flow (default on) has its own tests.
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('withholds vocabulary due items from the planner input and keeps sentence cards', async () => {

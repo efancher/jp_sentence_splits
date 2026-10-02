@@ -514,6 +514,17 @@ export interface ComprehensionCheck {
   correctIndex: number;
   provenance: 'ai_suggested' | 'manual';
   createdAt: string;
+  /**
+   * Additional plausible wrong English meanings beyond the 3 in `options`
+   * (the "rotating meaning choices" bank, `src/lib/meaningChoices.ts`).
+   * Additive: absent on every check authored before the rotating bank
+   * existed, which then behaves as a bank of exactly its 3 original wrong
+   * options. Each review attempt shows the correct meaning plus 3 distractors
+   * sampled from `options` (minus the correct one) + this list.
+   */
+  extraDistractors?: string[];
+  /** When the extra distractors were last authored/edited. */
+  distractorsUpdatedAt?: string;
 }
 
 export interface ImportBatchCounts {
@@ -640,6 +651,22 @@ export interface AppSettings {
    * Defaults to `false`.
    */
   legacyDrillsPaused?: boolean;
+  /**
+   * Sentence-led learning flow: introduce a sentence through its guided gloss,
+   * review it by picking its English meaning, and withhold the separate
+   * vocabulary/grammar drills (and the vocabulary-proficiency readiness gates
+   * that fed them). Nothing is deleted; turning it off restores the previous
+   * gated flow. Treated as on when undefined. See `src/lib/sentenceLed.ts`.
+   */
+  sentenceLedFlow?: boolean;
+  /**
+   * Sequential study (opt-in, local to this device): a book's sentences are
+   * introduced in episode order, the next unlocking once the previous one's
+   * meaning checks are answered well enough. See `src/lib/sequentialStudy.ts`.
+   */
+  sequentialStudyMode?: boolean;
+  /** Sentence ids the learner manually unlocked past the sequential gate. */
+  sequentialUnlockOverrides?: string[];
   /**
    * Most-recently-used podcast RSS feed URLs (newest first), so
    * YouTubeMinePage's "Or import a podcast episode" input can offer them
@@ -921,6 +948,16 @@ export interface ReviewPresentation {
   layoutSwitched?: boolean;
 }
 
+export interface MeaningChoiceRecord {
+  /** Option texts in the order they were displayed. */
+  shown: string[];
+  chosenIndex: number;
+  chosenText: string;
+  correctText: string;
+  correct: boolean;
+  qualifying: boolean;
+}
+
 /** Append-only — never updated after insert. Sync-conflict-free by construction. */
 export interface Review {
   id: string;
@@ -973,6 +1010,17 @@ export interface Review {
    */
   comprehensionCheckCorrect?: boolean;
   comprehensionCheckChosenIndex?: number;
+  /**
+   * `reading_in_context` meaning pick, recorded with the choices exactly as
+   * they were displayed (shuffled, sampled from the sentence's distractor
+   * bank) so the selected answer stays identifiable even after the bank is
+   * edited or the positions change. `comprehensionCheckChosenIndex` indexes
+   * into `shown`. `qualifying` = the pick was the learner's first answer,
+   * made before any hint/translation/explanation was revealed — only these
+   * count toward sequential-study unlocking (`src/lib/sequentialStudy.ts`).
+   * Absent on reviews recorded before the rotating bank existed.
+   */
+  meaningChoice?: MeaningChoiceRecord;
   /**
    * `pitch_accent_production` card only: counts from the take's
    * `analyzeRecording` result (`src/lib/pitchAccentDrillAnalysis.ts`) —

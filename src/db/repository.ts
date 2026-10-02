@@ -1,6 +1,17 @@
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
+import { getMeaningBank } from '../lib/meaningChoices';
+import {
+  computeSequentialStatus,
+  type SequentialBookStatus,
+  type SequentialSentenceStatus,
+} from '../lib/sequentialStudy';
+import {
+  effectiveLegacyDrillsPaused,
+  effectiveSentenceFirstPlanning,
+  isSequentialStudyMode,
+} from '../lib/sentenceLed';
 import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -30,6 +41,7 @@ import type {
   Book,
   BookChapter,
   BookSentence,
+  MeaningChoiceRecord,
   CardIssueReport,
   CardIssueStatus,
   ComprehensionCheck,
@@ -5390,6 +5402,8 @@ export async function recordReview(input: {
   /** `reading_in_context` card only — see `Review.comprehensionCheckCorrect`/`comprehensionCheckChosenIndex`. */
   comprehensionCheckCorrect?: boolean;
   comprehensionCheckChosenIndex?: number;
+  /** `reading_in_context` card only — the choices as displayed plus the picked one, see `Review.meaningChoice`. */
+  meaningChoice?: MeaningChoiceRecord;
   /** `pitch_accent_production` card only — see `Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`. */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
@@ -5436,6 +5450,7 @@ export async function recordReview(input: {
     predictedRetrievability,
     comprehensionCheckCorrect: input.comprehensionCheckCorrect,
     comprehensionCheckChosenIndex: input.comprehensionCheckChosenIndex,
+    meaningChoice: input.meaningChoice,
     pitchProductionMeasuredCount: input.pitchProductionMeasuredCount,
     pitchProductionMismatchCount: input.pitchProductionMismatchCount,
     presentation: input.presentation,
@@ -5452,6 +5467,9 @@ export async function recordReview(input: {
     },
     { entity: 'reviews', recordId: review.id, payload: review },
   ]);
+  if (studyItem.subjectType === 'sentence' && studyItem.activityType === 'reading_in_context') {
+    await latchSequentialUnlocksForSentence(studyItem.subjectId).catch(() => undefined);
+  }
   return { review, studyItem: updatedStudyItem };
 }
 
@@ -5865,6 +5883,139 @@ export async function recordNaturalEncounter(input: {
     rating: input.rating,
     source: 'natural_encounter',
     contextSentenceId: input.sentenceId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sentence-led flow: meaning-choice history and sequential episode progression
+// (src/lib/meaningChoices.ts, src/lib/sequentialStudy.ts).
+// ---------------------------------------------------------------------------
+
+/** Stored meaning-choice records per sentence (oldest first), used to avoid repeating the same distractor set. */
+export async function getMeaningChoiceRecords(
+  sentenceIds: readonly string[],
+): Promise<Map<string, MeaningChoiceRecord[]>> {
+  const db = getDb();
+  const wanted = new Set(sentenceIds);
+  const items = await db.studyItems
+    .where('activityType')
+    .equals('reading_in_context')
+    .filter((item) => item.subjectType === 'sentence' && wanted.has(item.subjectId))
+    .toArray();
+  const out = new Map<string, MeaningChoiceRecord[]>();
+  if (items.length === 0) return out;
+  const sentenceByItem = new Map(items.map((item) => [item.id, item.subjectId]));
+  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceByItem.keys()]).toArray();
+  reviews.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  for (const review of reviews) {
+    if (!review.meaningChoice) continue;
+    const sentenceId = sentenceByItem.get(review.studyItemId)!;
+    const list = out.get(sentenceId);
+    if (list) list.push(review.meaningChoice);
+    else out.set(sentenceId, [review.meaningChoice]);
+  }
+  return out;
+}
+
+/**
+ * Per-sentence access for one book under sequential study mode, in episode
+ * order. Read-only (safe inside a live query); `latchSequentialUnlocks`
+ * persists the result so unlocks never revert.
+ */
+export async function getSequentialBookStatus(
+  bookId: string,
+  knownMemberships?: BookSentence[],
+): Promise<SequentialBookStatus> {
+  const db = getDb();
+  const memberships = knownMemberships ?? (await db.bookSentences.where('bookId').equals(bookId).toArray());
+  const sentenceIds = memberships.map((item) => item.sentenceId);
+  const [settings, analyses, events, studyItems] = await Promise.all([
+    readSettings(),
+    db.analyses.bulkGet(sentenceIds),
+    listSentenceLearningEvents(bookId),
+    db.studyItems
+      .where('activityType')
+      .equals('reading_in_context')
+      .filter((item) => item.subjectType === 'sentence')
+      .toArray(),
+  ]);
+  const itemBySentence = new Map(studyItems.map((item) => [item.subjectId, item]));
+  const reviewItemIds = sentenceIds.flatMap((id) => (itemBySentence.get(id) ? [itemBySentence.get(id)!.id] : []));
+  const reviews = reviewItemIds.length ? await db.reviews.where('studyItemId').anyOf(reviewItemIds).toArray() : [];
+  const reviewsByItem = new Map<string, Review[]>();
+  for (const review of reviews) {
+    const list = reviewsByItem.get(review.studyItemId);
+    if (list) list.push(review);
+    else reviewsByItem.set(review.studyItemId, [review]);
+  }
+  const walked = new Set(
+    events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
+  );
+  return computeSequentialStatus(
+    memberships.map((membership, index) => {
+      const item = itemBySentence.get(membership.sentenceId);
+      const bank = getMeaningBank(analyses[index]?.comprehensionCheck);
+      return {
+        sentenceId: membership.sentenceId,
+        position: membership.position,
+        hasUsableCheck: (bank?.distractors.length ?? 0) > 0,
+        reviews: item ? (reviewsByItem.get(item.id) ?? []) : [],
+        // Sentences already worked on before the mode was enabled stay open.
+        introduced: membership.status !== 'unstarted' || walked.has(membership.sentenceId),
+      };
+    }),
+    new Set(settings.sequentialUnlockOverrides ?? []),
+  );
+}
+
+/** Persist newly reached unlocks (settings.sequentialUnlockOverrides) so they can never revert. */
+export async function latchSequentialUnlocks(bookId: string): Promise<string[]> {
+  const settings = await readSettings();
+  if (!isSequentialStudyMode(settings)) return [];
+  const { newlyLatched } = await getSequentialBookStatus(bookId);
+  if (newlyLatched.length === 0) return [];
+  await updateSettings({
+    sequentialUnlockOverrides: [...new Set([...(settings.sequentialUnlockOverrides ?? []), ...newlyLatched])],
+  });
+  return newlyLatched;
+}
+
+export interface SequentialSentenceView {
+  book: SequentialBookStatus;
+  current?: SequentialSentenceStatus;
+  previous?: SequentialSentenceStatus;
+  next?: SequentialSentenceStatus;
+}
+
+/** Undefined when sequential study mode is off. Read-only, safe in a live query. */
+export async function getSequentialSentenceView(
+  bookId: string,
+  sentenceId?: string,
+): Promise<SequentialSentenceView | undefined> {
+  if (!isSequentialStudyMode(await readSettings())) return undefined;
+  const book = await getSequentialBookStatus(bookId);
+  const index = sentenceId ? book.sentences.findIndex((s) => s.sentenceId === sentenceId) : -1;
+  return {
+    book,
+    current: index >= 0 ? book.sentences[index] : undefined,
+    previous: index > 0 ? book.sentences[index - 1] : undefined,
+    next: index >= 0 ? book.sentences[index + 1] : undefined,
+  };
+}
+
+async function latchSequentialUnlocksForSentence(sentenceId: string): Promise<void> {
+  if (!isSequentialStudyMode(await readSettings())) return;
+  const memberships = await getDb().bookSentences.where('sentenceId').equals(sentenceId).toArray();
+  for (const bookId of new Set(memberships.map((membership) => membership.bookId))) {
+    await latchSequentialUnlocks(bookId);
+  }
+}
+
+/** Manual escape hatch: open one locked sentence (e.g. a check the learner finds unusable). */
+export async function unlockSentenceManually(sentenceId: string): Promise<void> {
+  const settings = await readSettings();
+  await updateSettings({
+    sequentialUnlockOverrides: [...new Set([...(settings.sequentialUnlockOverrides ?? []), sentenceId])],
   });
 }
 
@@ -9607,6 +9758,7 @@ async function buildReviewPriorityInputs(
 async function findExploreCandidates(
   limit: number,
   sentenceFirst = false,
+  sequential = false,
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
   const [allBooks, coverageByBookId] = await Promise.all([
@@ -9638,11 +9790,20 @@ async function findExploreCandidates(
       ? [...new Set([...parkedGlossIds, ...sentencesReadyToRevisit(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
+    // Sequential study mode gates *introduction* only: a locked sentence is
+    // simply not offered as new. Revisits (already-introduced) are unaffected.
+    const unlocked = sequential
+      ? new Set(
+          (await getSequentialBookStatus(book.id, memberships))
+            .sentences.filter((status) => status.accessible)
+            .map((status) => status.sentenceId),
+        )
+      : undefined;
     const unstarted = memberships
       .filter((item) =>
-        walked
+        (walked
           ? item.status !== 'complete' && !walked.has(item.sentenceId)
-          : item.status === 'unstarted',
+          : item.status === 'unstarted') && (!unlocked || unlocked.has(item.sentenceId)),
       )
       .sort((a, b) => a.position - b.position);
     const revisitMemberships = memberships.filter((item) => revisitIds.includes(item.sentenceId));
@@ -10107,7 +10268,8 @@ export async function getSessionPlannerInput(
     // Over-fetch by the exclusion count so filtering below still leaves a full page of candidates.
     findExploreCandidates(
       EXPLORE_CANDIDATE_LIMIT + exclude.bookIds.size,
-      settings.sentenceFirstPlanning ?? false,
+      effectiveSentenceFirstPlanning(settings),
+      isSequentialStudyMode(settings),
     ),
     findUnderstandCandidates(UNDERSTAND_CANDIDATE_LIMIT + exclude.grammarPatternIds.size),
     findGrammarNoticingCandidates(GRAMMAR_NOTICING_CANDIDATE_LIMIT + exclude.sentenceIds.size),
@@ -10139,7 +10301,7 @@ export async function getSessionPlannerInput(
   // candidate list, so it's filtered out here instead. "Pause pitch accent"
   // (settings.pitchAccentPaused, 2026-09-28) withholds it too, same as
   // ReviewPage's pitchAccentProductionCandidates.
-  const legacyPaused = settings.legacyDrillsPaused ?? false;
+  const legacyPaused = effectiveLegacyDrillsPaused(settings);
   const unlessLegacyPaused = (items: StudyItem[]): StudyItem[] =>
     legacyPaused ? items.filter((item) => !isPausedLegacyDrillSubject(item.subjectType)) : items;
   const practiceDueItemsForMode = unlessLegacyPaused(
@@ -10201,7 +10363,7 @@ export async function getSessionPlannerInput(
     newCardsPerSessionLimit: settings.newCardsPerSessionLimit,
     baseline: baselineOverride ?? settings.sessionAllocation,
     quietMode: settings.quietMode ?? false,
-    sentenceFirst: settings.sentenceFirstPlanning ?? false,
+    sentenceFirst: effectiveSentenceFirstPlanning(settings),
     gameBreakCandidates,
   };
 }

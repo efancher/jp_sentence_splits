@@ -11,6 +11,7 @@ import {
   createBook,
   getDb,
   getPlannerSession,
+  updateSettings,
 } from '../src/db/repository';
 import type { PlannerSession } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
@@ -63,6 +64,7 @@ describe('SessionBar', () => {
   beforeEach(async () => {
     resetDbForTests(`session-bar-${createId('db')}`);
     await ensureSettings();
+    await updateSettings({ sentenceLedFlow: false });
   });
 
   it('on a pending step\'s own page, names that step and "Mark complete" settles exactly it', async () => {
