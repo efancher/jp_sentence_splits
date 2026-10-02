@@ -45,6 +45,7 @@ import type {
   CardIssueReport,
   CardIssueStatus,
   ComprehensionCheck,
+  ParticleCheck,
   ErrorClassification,
   FsrsState,
   GrammarPattern,
@@ -2585,6 +2586,7 @@ export async function saveAnalysis(
     grammarReviewStatus:
       grammar?.reviewStatus ?? existing?.grammarReviewStatus ?? 'unreviewed',
     comprehensionCheck: existing?.comprehensionCheck,
+    particleChecks: existing?.particleChecks,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -5841,6 +5843,34 @@ export async function setSentenceComprehensionCheck(
     return;
   }
   await db.analyses.update(sentenceId, { comprehensionCheck: check, updatedAt: timestamp });
+}
+
+/** Save the authored contextual particle questions (`[]` = checked, nothing to ask). */
+export async function setSentenceParticleChecks(
+  sentenceId: string,
+  checks: ParticleCheck[] | undefined,
+): Promise<void> {
+  const db = getDb();
+  const existing = await db.analyses.get(sentenceId);
+  const timestamp = nowIso();
+  if (!existing) {
+    await db.analyses.put({
+      sentenceId,
+      chunks: [],
+      notes: '',
+      status: 'empty',
+      formatVersion: ANALYSIS_FORMAT_VERSION,
+      vocabularyReviewStatus: 'unreviewed',
+      vocabularySelections: [],
+      grammarSuggestions: [],
+      grammarReviewStatus: 'unreviewed',
+      particleChecks: checks,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+  await db.analyses.update(sentenceId, { particleChecks: checks, updatedAt: timestamp });
 }
 
 // ---------------------------------------------------------------------------

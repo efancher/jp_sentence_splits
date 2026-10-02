@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AnalysisChunk, ConstructionLayer, GlossDecision, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, ConstructionLayer, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
@@ -121,6 +121,7 @@ export function SentenceWalkthrough({
   glossRecords,
   onGlossDecision,
   knownRatio,
+  particleChecks,
   quietMode,
   shadowHref,
   onQuietModeChange,
@@ -145,6 +146,8 @@ export function SentenceWalkthrough({
   onGlossDecision?: (decision: GlossDecisionInput) => void;
   /** Share of this sentence's content words already known (advisory readiness; thin opens the glosses). */
   knownRatio?: number;
+  /** Authored contextual particle questions for this sentence (SentenceAnalysis.particleChecks). */
+  particleChecks?: ParticleCheck[];
   quietMode: boolean;
   shadowHref?: string;
   onQuietModeChange: (quiet: boolean) => void;
@@ -156,7 +159,7 @@ export function SentenceWalkthrough({
   const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
   const [step, setStep] = useState(0);
   const [tryFirst, setTryFirst] = useState(() =>
-    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id).length > 0);
+    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const chunk = ordered[step];
   const done = step >= ordered.length;
@@ -259,6 +262,7 @@ export function SentenceWalkthrough({
           translation={sentence.translation}
           words={compareAids?.get(sentence.id)?.words ?? []}
           knownRatio={knownRatio}
+          particleChecks={particleChecks}
           onRecord={onGlossDecision}
           onFinish={() => setTryFirst(false)}
         />

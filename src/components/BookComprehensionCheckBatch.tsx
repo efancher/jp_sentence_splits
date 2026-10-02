@@ -8,6 +8,7 @@ import {
   findMeaningBankCandidates,
 } from '../lib/meaningCheckAutogen';
 import type { MeaningBankCandidate, MeaningBankMode } from '../lib/meaningCheckAutogen';
+import { downloadTextFile } from '../lib/particleChecks';
 import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '../lib/meaningChoices';
 
 /**
@@ -161,7 +162,21 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
               <button type="button" onClick={() => void copyPrompt()}>
                 {copied ? 'Copied ✓' : 'Copy prompt'}
               </button>
+              <button type="button" onClick={() => downloadTextFile(`meaning-choices-${bookId}.txt`, prompt)}>
+                Download prompt (.txt)
+              </button>
             </div>
+            <label className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+              Reply file{' '}
+              <input
+                type="file"
+                accept=".txt,.md,text/plain"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void file.text().then(setPasted);
+                }}
+              />
+            </label>
             <textarea
               rows={8}
               placeholder={`Paste the assistant's reply here (${batch.length} "=== Sentence N ===" sections)…`}

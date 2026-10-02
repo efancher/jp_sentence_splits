@@ -183,6 +183,14 @@ export const comprehensionCheckSchema = z.object({
   distractorsUpdatedAt: z.string().optional(),
 });
 
+export const particleCheckSchema = z.object({
+  chunk: z.string(),
+  particle: z.string(),
+  question: z.string(),
+  options: z.array(z.string()),
+  correctIndex: z.number().int().nonnegative(),
+});
+
 export const sentenceAnalysisSchema = z.object({
   sentenceId: z.string(),
   chunks: z.array(analysisChunkSchema),
@@ -196,6 +204,7 @@ export const sentenceAnalysisSchema = z.object({
   grammarSuggestions: z.array(grammarSuggestionSchema).default([]),
   grammarReviewStatus: grammarReviewStatusSchema.default('unreviewed'),
   comprehensionCheck: comprehensionCheckSchema.optional(),
+  particleChecks: z.array(particleCheckSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

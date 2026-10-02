@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { GlossDecision } from '../domain/types';
+import type { GlossDecision, ParticleCheck } from '../domain/types';
 import {
   LEVEL_NAMES,
   buildDecisions,
@@ -34,8 +34,8 @@ const HELP: { blocker: Blocker; label: string }[] = [
 ];
 
 /** Decisions this sentence offers, each with the learner's support level for its skill frozen at open. */
-export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[], now: Date = new Date(), sentenceId?: string) {
-  const specs = buildDecisions(chunks);
+export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[], now: Date = new Date(), sentenceId?: string, particleChecks?: readonly ParticleCheck[]) {
+  const specs = buildDecisions(chunks, particleChecks);
   // Reopening a sentence with parked checks asks only those, so the return visit is the retry.
   const parked = sentenceId ? parkedDecisionKeys(records).get(sentenceId) : undefined;
   const parkedSpecs = parked ? specs.filter((s) => parked.has(`${s.ruleKey}|${s.targetText}`)) : [];
@@ -43,9 +43,10 @@ export function planGlossDecisions(chunks: GlossChunk[], records: GlossDecision[
     ? parkedSpecs.slice(0, MAX_DECISIONS_PER_SENTENCE)
     : [
         ...specs.filter((s) => s.skill === 'predicate'),
-        ...specs.filter((s) => s.skill === 'particle' && s.confidence === 'settled'),
+        ...specs.filter((s) => s.skill === 'particle' && s.question),
+        ...specs.filter((s) => s.skill === 'particle' && !s.question && s.confidence === 'settled'),
         ...specs.filter((s) => s.skill === 'attachment'),
-        ...specs.filter((s) => s.skill === 'particle' && s.confidence !== 'settled'),
+        ...specs.filter((s) => s.skill === 'particle' && !s.question && s.confidence !== 'settled'),
       ].slice(0, MAX_DECISIONS_PER_SENTENCE);
   const states: Record<string, SkillState> = {
     predicate: inferSkillState(records, 'predicate', now),
@@ -81,6 +82,7 @@ export function GlossDecisionPanel({
   translation,
   words,
   knownRatio,
+  particleChecks,
   onRecord,
   onFinish,
 }: {
@@ -92,10 +94,12 @@ export function GlossDecisionPanel({
   words: CompareAids['words'];
   /** Share of the sentence's content words the learner already knows (advisory; thin opens the glosses). */
   knownRatio?: number;
+  /** Authored sentence-specific particle questions; absent = generic relation wording. */
+  particleChecks?: readonly ParticleCheck[];
   onRecord: (decision: GlossDecisionInput) => void;
   onFinish: () => void;
 }) {
-  const [plan] = useState(() => planGlossDecisions(chunks, records, new Date(), sentenceId));
+  const [plan] = useState(() => planGlossDecisions(chunks, records, new Date(), sentenceId, particleChecks));
   const [index, setIndex] = useState(0);
   const current = plan[index];
 
@@ -173,7 +177,7 @@ function DecisionCard({
     ? 'Which chunk is the main predicate — the one that closes the sentence?'
     : spec.skill === 'attachment'
       ? `${spec.targetText} describes which chunk?`
-      : `What is ${spec.targetText} to the rest of the sentence?`;
+      : spec.question ?? `What is ${spec.targetText} to the rest of the sentence?`;
   const done = attempt.finished !== undefined;
   const canTryUnaided = (baseLevel === 2 || baseLevel === 3) && !unaided && attempt.first === undefined && attempt.hintStep === 0 && !glossesOpen && !done;
 

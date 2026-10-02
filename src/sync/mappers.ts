@@ -241,6 +241,7 @@ export function analysisToRemote(
     grammar_suggestions: analysis.grammarSuggestions ?? [],
     grammar_review_status: analysis.grammarReviewStatus ?? 'unreviewed',
     comprehension_check: analysis.comprehensionCheck ?? null,
+    particle_checks: analysis.particleChecks ?? null,
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
     deleted_at: null,
@@ -269,6 +270,8 @@ export function remoteToAnalysis(row: Record<string, unknown>): SentenceAnalysis
     comprehensionCheck:
       (row.comprehension_check as SentenceAnalysis['comprehensionCheck'] | null) ??
       undefined,
+    particleChecks:
+      (row.particle_checks as SentenceAnalysis['particleChecks'] | null) ?? undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

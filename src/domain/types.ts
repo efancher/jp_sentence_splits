@@ -496,8 +496,26 @@ export interface SentenceAnalysis {
    * reveal-and-rate behavior — never a blocking gate on missing content.
    */
   comprehensionCheck?: ComprehensionCheck;
+  /**
+   * Sentence-specific particle questions for the glossing "try it first"
+   * check (`src/lib/particleChecks.ts`). `[]` = authored, nothing to ask;
+   * absent = not authored yet (the check falls back to generic relations).
+   */
+  particleChecks?: ParticleCheck[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** One contextual particle question, e.g. 「ゴミ箱に」 → "the bin is where it ends up". */
+export interface ParticleCheck {
+  /** The chunk text the particle closes, e.g. `ゴミ箱に`. */
+  chunk: string;
+  particle: string;
+  /** English question phrased in the sentence's own words. */
+  question: string;
+  /** Four concrete in-sentence readings; exactly one is right. */
+  options: string[];
+  correctIndex: number;
 }
 
 /**

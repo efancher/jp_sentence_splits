@@ -7,7 +7,7 @@
  * recomputed on read, so changing a rule never needs a data migration.
  */
 
-import type { GlossDecision, GlossOutcome, GlossSkill } from '../domain/types';
+import type { GlossDecision, GlossOutcome, GlossSkill, ParticleCheck } from '../domain/types';
 
 import { PARTICLE_ROLE, roleForChunk, splitTrailingParticle } from './chunking';
 import { isEngineRole } from './clauseBands';
@@ -68,6 +68,8 @@ export interface GlossDecisionSpec {
   targetText: string;
   particle?: string;
   options: RelationOption[];
+  /** Sentence-specific question text (authored contextual particle check); absent = generic wording. */
+  question?: string;
   referenceValue: string;
   /** settled = auto-gradable; alternative = recorded ungraded; compare = reference not trusted, show it after the attempt. */
   confidence: GlossDecision['referenceConfidence'];
@@ -75,6 +77,16 @@ export interface GlossDecisionSpec {
 
 const bare = (text: string) => text.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
 const SENTENCE_FINAL = new Set(['ね', 'よ', 'な', 'ぞ', 'わ', 'さ', 'か', 'ぜ']);
+
+/** The authored check for a chunk, tolerating a chunk boundary that differs a little from the AI's. */
+export function matchParticleCheck(checks: readonly ParticleCheck[] | undefined, chunkText: string, particle: string): ParticleCheck | undefined {
+  const target = bare(chunkText);
+  return checks?.find((check) => {
+    if (check.particle !== particle) return false;
+    const mine = bare(check.chunk);
+    return mine === target || target.endsWith(mine) || mine.endsWith(target);
+  });
+}
 
 function hash(text: string): number {
   let h = 0;
@@ -87,7 +99,7 @@ function hash(text: string): number {
  * role the heuristic computes fresh from the chunk text — otherwise the learner
  * is shown "compare" mode and the answer never counts for or against them.
  */
-export function buildDecisions(chunks: GlossChunk[]): GlossDecisionSpec[] {
+export function buildDecisions(chunks: GlossChunk[], particleChecks?: readonly ParticleCheck[]): GlossDecisionSpec[] {
   const specs: GlossDecisionSpec[] = [];
   if (chunks.length === 0) return specs;
 
@@ -122,6 +134,26 @@ export function buildDecisions(chunks: GlossChunk[]): GlossDecisionSpec[] {
     // Compound roles (では, には…) are not a single relation, and a stored role that
     // disagrees with the fresh heuristic is not trusted.
     if (PARTICLE_ROLE[particle] !== chunk.role) return;
+    const authored = matchParticleCheck(particleChecks, chunk.japanese, particle);
+    if (authored && authored.correctIndex < authored.options.length) {
+      // Authored in-sentence readings replace the generic relation list and are gradable.
+      const options = authored.options
+        .map((label, i) => ({ id: String(i), label }))
+        .sort((a, b) => hash(chunk.id + a.label) - hash(chunk.id + b.label));
+      specs.push({
+        skill: 'particle',
+        subskill: 'case',
+        ruleKey: `particle:${particle}:ctx`,
+        chunkId: chunk.id,
+        targetText: chunk.japanese,
+        particle,
+        options,
+        question: authored.question,
+        referenceValue: String(authored.correctIndex),
+        confidence: 'settled',
+      });
+      return;
+    }
     const settled = particle in SETTLED;
     const distractors = Object.values(RELATIONS)
       .filter((option) => option.id !== relation)
@@ -206,7 +238,7 @@ export function hintLadder(spec: GlossDecisionSpec, blocker: Blocker = 'unsure')
   return [
     { step: 1, text: `Look at what ${particle} attaches to and what the predicate does with it: is it the thing acted on, the one acting, or something else?` },
     { step: 2, text: `Narrowed to two readings of ${particle}.`, keepOptions: narrowed },
-    { step: 3, text: `${spec.targetText}: ${RELATIONS[spec.referenceValue]?.label ?? spec.referenceValue}.` },
+    { step: 3, text: `${spec.targetText}: ${RELATIONS[spec.referenceValue]?.label ?? spec.options.find((o) => o.id === spec.referenceValue)?.label ?? spec.referenceValue}.` },
   ];
 }
 

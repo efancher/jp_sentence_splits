@@ -128,6 +128,9 @@ export function ReaderPage() {
     const chunksBySentence = new Map(
       analyses.flatMap((analysis) => (analysis ? [[analysis.sentenceId, analysis.chunks] as const] : [])),
     );
+    const particleChecksBySentence = new Map(
+      analyses.flatMap((analysis) => (analysis?.particleChecks ? [[analysis.sentenceId, analysis.particleChecks] as const] : [])),
+    );
     const contentExpressions = [
       ...new Set(
         rows.flatMap((row) =>
@@ -138,7 +141,7 @@ export function ReaderPage() {
       ),
     ];
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
-    return { book, chapter, rows, audioRows, chunksBySentence, savedMeanings, knownExpressions };
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -668,6 +671,7 @@ export function ReaderPage() {
                       constructionDrafts={data.chapter?.constructionDrafts}
                       events={lessonEvents ?? []}
                       glossRecords={glossRecords}
+                      particleChecks={data.particleChecksBySentence.get(row.sentence.id)}
                       knownRatio={(() => {
                         const content = row.sentence.vocabularySuggestions.filter((suggestion) => suggestion.selectedByDefault);
                         return content.length === 0 ? undefined : content.filter((suggestion) => data.knownExpressions.has(suggestion.expression)).length / content.length;
