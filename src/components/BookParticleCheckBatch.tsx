@@ -23,6 +23,8 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
   const [status, setStatus] = useState<string | null>(null);
 
   if (!pending) return null;
+  const withMeaning = pending.filter((item) => item.request.translation).length;
+  const meaningDone = pending.length > 0 && withMeaning === pending.length;
 
   function download() {
     const items = pending ?? [];
@@ -50,13 +52,28 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
       <summary>Particle checks: contextual questions ({pending.length} sentences pending)</summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
-          The glossing check asks about に / で / と in the sentence&rsquo;s own words (&ldquo;what is
+          The glossing check asks about particles (に で と を は から …) in the sentence&rsquo;s own words (&ldquo;what is
           the bin to the putting?&rdquo;) instead of generic roles. Without one, a sentence falls
           back to the generic question.
         </p>
         {pending.length === 0 ? (
           <div className="muted">Nothing pending.</div>
         ) : (
+          <div role="status" style={{ fontSize: '0.9rem' }}>
+            <strong>{meaningDone ? '✓' : '⚠'}</strong>{' '}
+            {withMeaning} of {pending.length} pending sentences have an English meaning.{' '}
+            {meaningDone ? (
+              'The prompt will include them.'
+            ) : (
+              <span className="muted">
+                Do translations / meaning choices first (the panel above): the prompt includes the
+                meaning when it exists, and answers are more reliable with it. Sentences you apply now
+                aren&rsquo;t redone later.
+              </span>
+            )}
+          </div>
+        )}
+        {pending.length === 0 ? null : (
           <div className="row">
             <button type="button" onClick={download}>Download prompt file ({pending.length})</button>
           </div>
