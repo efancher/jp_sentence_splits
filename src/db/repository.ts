@@ -1,4 +1,5 @@
 import { openContentReports, type OpenContentReport } from '../lib/contentReports';
+import { isSentenceLedFlow } from '../lib/sentenceLed';
 import { buildSentenceLessonReport, type SentenceLessonReport } from '../lib/sentenceLessonReport';
 import { parkedSentenceIds } from '../lib/glossSkill';
 import { getMeaningBank } from '../lib/meaningChoices';
@@ -9034,8 +9035,12 @@ export async function getEpisodeFocus(bookId: string, chapterId?: string): Promi
 /** Sentences + linked vocabulary/grammar of one episode, in the shape the preparation prompt/validator use. */
 /**
  * Append one in-passage lesson event. Idempotent on `event.id` (a retried or
- * double-fired write is a no-op) and deliberately writes no Review, StudyItem
- * or FSRS state: explanation and assisted practice must leave scheduling alone.
+ * double-fired write is a no-op) and writes no Review or FSRS history:
+ * explanation and assisted practice must leave scheduling alone. The one
+ * exception: under the sentence-led flow a completed walkthrough seeds the
+ * sentence's (still-new) reading_in_context study item, so the planner and
+ * review queue can see it — otherwise cards only appeared once a Review page
+ * happened to be opened, which the planner never schedules without due items.
  */
 export async function logSentenceLearningEvent(
   event: Omit<SentenceLearningEvent, 'id' | 'timestamp'> & { id?: string; timestamp?: string },
@@ -9050,6 +9055,9 @@ export async function logSentenceLearningEvent(
   if (existing) return existing;
   await db.sentenceLearningEvents.put(full);
   notifySyncMany([{ entity: 'sentence_learning_events', recordId: full.id, payload: full }]);
+  if (full.action === 'walkthrough_completed' && isSentenceLedFlow(await readSettings(db))) {
+    await ensureStudyItem('sentence', full.sentenceId, 'reading_in_context');
+  }
   return full;
 }
 
