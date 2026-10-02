@@ -15,6 +15,18 @@ export interface SyncLogEvent {
 
 const recentEvents: SyncLogEvent[] = [];
 const MAX_EVENTS = 100;
+const logListeners = new Set<() => void>();
+let logRev = 0;
+
+export function subscribeSyncLogs(listener: () => void): () => void {
+  logListeners.add(listener);
+  return () => logListeners.delete(listener);
+}
+
+/** Changes on every logged event; a stable snapshot for useSyncExternalStore. */
+export function getSyncLogRevision(): number {
+  return logRev;
+}
 
 function sanitizeDetails(
   details?: Record<string, unknown>,
@@ -53,6 +65,8 @@ export function syncLog(
   };
   recentEvents.push(event);
   if (recentEvents.length > MAX_EVENTS) recentEvents.shift();
+  logRev += 1;
+  for (const listener of logListeners) listener();
   if (!isDev && level === 'debug') return;
   const payload = { code, ...event.details };
   if (level === 'error') console.error('[sync]', message, payload);

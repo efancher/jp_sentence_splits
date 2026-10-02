@@ -6,6 +6,7 @@ import { useAuth } from '../sync/auth';
 import { replaceLocalWithCloud } from '../sync/engine';
 import { useSync } from '../sync/SyncProvider';
 import { ConflictPanel } from './ConflictPanel';
+import { SyncMonitor } from './SyncMonitor';
 import { isSupabaseConfigured } from '../sync/supabaseClient';
 
 type AuthMode = 'signin' | 'signup' | 'reset';
@@ -93,6 +94,7 @@ export function AuthAndSyncSettings() {
                 Sign out
               </button>
             </div>
+            <SyncMonitor />
             {reportingSyncIssue ? (
               <form
                 className="stack"

@@ -2,6 +2,7 @@ import { getDb } from '../db/database';
 import { ensureSyncMeta } from './queue';
 import { getSupabase } from './supabaseClient';
 import { syncLog } from './logger';
+import { setAudioProgress } from './progress';
 import { trackLocalMutation } from './track';
 import { sentenceAudioToReferenceMeta } from './mappers';
 import type { SentenceAudio } from '../domain/types';
@@ -339,6 +340,7 @@ async function hydrateOnce(): Promise<number> {
     while (next < missing.length) {
       const row = missing[next++]!;
       attempted += 1;
+      setAudioProgress(missing.length, attempted);
       const info = byId.get(row.id);
       if (info?.storage_path) {
         const blob = await fetchFromStorage(info.storage_path);
@@ -356,7 +358,9 @@ async function hydrateOnce(): Promise<number> {
       }
     }
   }
+  setAudioProgress(missing.length, 0);
   await Promise.all(Array.from({ length: HYDRATE_CONCURRENCY }, worker));
+  setAudioProgress(0, 0);
   syncLog('info', `Hydrated ${healed}/${missing.length} reference-audio blob(s)`, 'AUDIO_HYDRATE');
   return healed;
 }

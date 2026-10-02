@@ -47,6 +47,14 @@ import { hydrateMissingReferenceAudio } from './audioSync';
 import { getSupabase } from './supabaseClient';
 import { conflictContentsMatch } from './conflictDiff';
 import { syncLog } from './logger';
+import {
+  beginSyncCycle,
+  endSyncCycle,
+  notePullPage,
+  notePushed,
+  setPushPlan,
+  setSyncStage,
+} from './progress';
 import type { SyncEntity, SyncQueueItem } from './types';
 
 const PULL_PAGE_SIZE = 100;
@@ -61,6 +69,11 @@ let syncInFlight: Promise<void> | null = null;
 
 /** Where the running cycle is, for the stall watchdog and the diagnostics log. */
 let syncStage = 'idle';
+
+function enterStage(stage: string): void {
+  syncStage = stage;
+  setSyncStage(stage);
+}
 const SYNC_STALL_LOG_MS = 60_000;
 /** A save-triggered cycle skips the pull if one finished this recently. */
 const PULL_THROTTLE_MS = 20_000;
@@ -69,6 +82,8 @@ let lastPullAt = 0;
 export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Promise<void> {
   if (syncInFlight) return syncInFlight;
   syncInFlight = (async () => {
+    beginSyncCycle();
+    let cycleOk = true;
     // Log-only watchdog: says where a cycle is stuck without releasing the
     // in-flight guard (which would let two cycles push the same rows).
     const watchdog = setTimeout(() => {
@@ -80,24 +95,24 @@ export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Pr
       // Per-item push failures must surface as lastError. Previously they were
       // retried quietly while the cycle still cleared lastError, so the badge
       // stayed on "Pending N" forever (e.g. after a missing SQL migration).
-      syncStage = 'push';
+      enterStage('push');
       const pushFailure = await pushMutations();
       // Local edits only need their push; conflicts are caught by the version
       // check there. During a burst of edits a pull per save is pure overhead.
       // Explicit syncs (button, reconnect, app load) always pull.
       if (options.throttlePull && Date.now() - lastPullAt < PULL_THROTTLE_MS) {
-        syncStage = 'pull-skipped';
+        enterStage('pull-skipped');
       } else {
-        syncStage = 'pull';
+        enterStage('pull');
         await pullChanges();
         lastPullAt = Date.now();
       }
-      syncStage = 'sweep';
+      enterStage('sweep');
       const swept = await sweepNoopConflicts();
       if (swept > 0) {
         syncLog('debug', `Auto-resolved ${swept} stale no-diff conflict(s)`, 'CONFLICT_SWEEP');
       }
-      syncStage = 'finish';
+      enterStage('finish');
       // Best-effort, and deliberately NOT awaited: after a cleared cache this is
       // hundreds of downloads, and holding the cycle open kept the status on
       // "syncing" (and Sync now disabled) for minutes. Never fails the cycle.
@@ -111,12 +126,14 @@ export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Pr
         lastError: pushFailure,
       });
     } catch (error) {
+      cycleOk = false;
       const message = error instanceof Error ? error.message : String(error);
       syncLog('error', 'Sync cycle failed', 'SYNC_CYCLE', { message, stage: syncStage });
       await updateSyncMeta({ lastError: message });
     } finally {
       clearTimeout(watchdog);
       syncStage = 'idle';
+      endSyncCycle(cycleOk);
       syncInFlight = null;
     }
   })();
@@ -197,6 +214,7 @@ export async function pushMutations(): Promise<string | undefined> {
   }
   const pending = sortForPush(await listPendingMutations());
   syncLog('debug', `Pushing ${pending.length} mutations`);
+  setPushPlan(pending.length);
 
   const ctx: PushCtx = { userId, failures: { count: 0 } };
 
@@ -207,6 +225,7 @@ export async function pushMutations(): Promise<string | undefined> {
     const item = pending[i]!;
     if (item.operation !== 'upsert') {
       await pushSingle(item, ctx);
+      notePushed(1, item.entity);
       i += 1;
       continue;
     }
@@ -220,7 +239,9 @@ export async function pushMutations(): Promise<string | undefined> {
     }
     const run = pending.slice(i, j);
     for (let k = 0; k < run.length; k += PUSH_BATCH_SIZE) {
-      await pushUpsertBatch(run.slice(k, k + PUSH_BATCH_SIZE), ctx);
+      const batch = run.slice(k, k + PUSH_BATCH_SIZE);
+      await pushUpsertBatch(batch, ctx);
+      notePushed(batch.length, item.entity);
     }
     i = j;
   }
@@ -1069,6 +1090,7 @@ async function pullChanges(): Promise<void> {
     if (!events?.length) break;
 
     const { skipped } = await applyRemoteEventsBatch(events);
+    notePullPage(events.length, skipped.length);
     for (const id of skipped) deferred.add(id);
     cursor = Number(events[events.length - 1]!.id);
 
