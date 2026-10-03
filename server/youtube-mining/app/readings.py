@@ -60,6 +60,22 @@ def nani_override(surface: str, next_surface: str) -> Optional[str]:
     return None
 
 
+_MAE_PREV_POS = ("連体詞", "数詞", "接尾辞")
+
+
+def mae_override(surface: str, prev_pos: str, next_surface: str) -> Optional[str]:
+    """unidic-lite flips a standalone 前 between マエ and ゼン on neighbouring
+    words (bare この前 -> マエ, but この前スペイン / この前、 -> ゼン). ゼン is
+    right only as a prefix on a following kanji word (前社長) that doesn't
+    follow a demonstrative/numeral/counter (この前, 三日前); otherwise まえ."""
+    if surface != "前":
+        return None
+    is_prefix = bool(next_surface) and has_kanji(next_surface[0]) and not prev_pos.startswith(
+        _MAE_PREV_POS
+    )
+    return None if is_prefix else "まえ"
+
+
 @lru_cache(maxsize=1)
 def _load_engine() -> Optional[tuple[object, Callable[[str], str]]]:
     try:
@@ -93,7 +109,12 @@ def generate_reading(text: str) -> Optional[str]:
     for i, word in enumerate(words):
         surface = word.surface
         next_surface = words[i + 1].surface if i + 1 < len(words) else ""
-        override = nani_override(surface, next_surface) or READING_OVERRIDES.get(surface)
+        prev_pos = getattr(words[i - 1].feature, "pos1", "") or "" if i > 0 else ""
+        override = (
+            nani_override(surface, next_surface)
+            or mae_override(surface, prev_pos, next_surface)
+            or READING_OVERRIDES.get(surface)
+        )
         if override:
             parts.append(override)
             continue

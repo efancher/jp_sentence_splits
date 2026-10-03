@@ -140,3 +140,9 @@ def test_tokenize_context_readings_for_nani_counters_and_nationality() -> None:
     assert reading_of("何か月かかりますか。", "何") == "なん"
     assert reading_of("何かありますか。", "何") == "なに"
     assert reading_of("イタリア人の人は来た。", "人") == "じん"
+    # 前 flips マエ/ゼン on context in unidic-lite; ゼン only as a prefix (mae_override).
+    assert reading_of("例えばこの前スペインに行った時、", "前") == "まえ"
+    assert reading_of("例えばね、この前、押し入れ。", "前") == "まえ"
+    assert reading_of("三日前に会った。", "前") == "まえ"
+    assert reading_of("駅の前で待つ。", "前") == "まえ"
+    assert reading_of("前社長は来た。", "前") == "ぜん"

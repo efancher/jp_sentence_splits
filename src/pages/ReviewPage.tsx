@@ -2601,7 +2601,7 @@ function ReadingInContextCard({
                   {bookId ? (
                     <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
                       Want to see why? The{' '}
-                      <Link to={`/books/${bookId}/analyze/${sentence.id}`}>
+                      <Link to={`/books/${bookId}/learn/${sentence.id}`}>
                         guided gloss for this sentence
                       </Link>{' '}
                       has its vocabulary and grammar — come back to Review after.
