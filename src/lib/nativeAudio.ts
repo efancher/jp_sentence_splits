@@ -97,7 +97,15 @@ export class NativeAudioController {
     if (trim) audio.currentTime = trim.startMs / 1000;
     this.objectUrl = url;
     this.audio = audio;
-    audio.onended = () => this.finish(generation);
+    audio.onended = () => {
+      // A trimmed loop relies on `timeupdate` (~4Hz) to seek back, so a trim ending at/near the blob's end hits `ended` first.
+      if (trim && loop && generation === this.generation) {
+        audio.currentTime = trim.startMs / 1000;
+        void audio.play().catch(() => this.finish(generation));
+        return;
+      }
+      this.finish(generation);
+    };
     if (trim) {
       const endSec = trim.endMs / 1000;
       const startSec = trim.startMs / 1000;

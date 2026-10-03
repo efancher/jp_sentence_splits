@@ -260,6 +260,19 @@ describe('NativeAudioController', () => {
     expect(controller.getSnapshot().isPlaying).toBe(true);
   });
 
+  it('keeps looping a trimmed clip when playback reaches the natural end before timeupdate', async () => {
+    const controller = new NativeAudioController();
+    const trimmed = { ...audioRecord('audio-1'), trimStartMs: 200, trimEndMs: 1_000 };
+    await controller.play(trimmed, 1, { loop: true });
+    const audio = MockAudio.instances[0]!;
+
+    audio.currentTime = 1;
+    audio.onended?.();
+    expect(audio.currentTime).toBe(0.2);
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(controller.getSnapshot().isPlaying).toBe(true);
+  });
+
   it('ignores an inverted trim range and plays the whole clip', async () => {
     const controller = new NativeAudioController();
     const inverted = { ...audioRecord('audio-1'), trimStartMs: 800, trimEndMs: 200 };
