@@ -229,7 +229,7 @@ export function ReaderPage() {
   }, [activeIndex, data]);
 
   useEffect(() => {
-    if (activeIndex < 0 || spanRef.current) return;
+    if (activeIndex < 0 || singleIndexRef.current !== null) return;
     rowRefs.current[activeIndex]?.scrollIntoView({
       behavior: 'smooth',
       block: 'center',
