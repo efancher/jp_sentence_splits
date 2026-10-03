@@ -23,6 +23,7 @@ import { VocabChips } from '../components/VocabChips';
 import { BookSharingPanel } from '../components/BookSharingPanel';
 import { SequentialStudyPanel } from '../components/SequentialStudyPanel';
 import { BookComprehensionCheckBatch } from '../components/BookComprehensionCheckBatch';
+import { BookChunkingBatch } from '../components/BookChunkingBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
 import {
   assignBookSentencesToChapter,
@@ -579,6 +580,7 @@ export function BookDetailPage() {
           <BookSharingPanel bookId={bookId} />
         </section>
         <BookComprehensionCheckBatch bookId={bookId} />
+        <BookChunkingBatch bookId={bookId} />
         <BookParticleCheckBatch bookId={bookId} />
         {data.book.suspendedAt ? (
           <p className="muted" style={{ margin: 0 }}>

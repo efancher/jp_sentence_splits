@@ -91,6 +91,7 @@ import type {
   EpisodePreparation,
   PreparedTarget,
   PreparedTargetDecision,
+  StructureDraftChunk,
 } from '../domain/types';
 import { ALIGNMENT_VERSION, TRANSCRIPTION_VERSION } from '../lib/analysisApi';
 import {
@@ -9287,6 +9288,27 @@ export interface EpisodePackSaveResult {
   rejectedStructure: { handle: string; reason: string }[];
   constructionsSaved: number;
   rejectedConstructions: { handle: string; reason: string }[];
+}
+
+/** Merges AI chunk drafts into their chapters' `structureDrafts` (book-wide chunking batch). */
+export async function saveStructureDraftsByChapter(
+  bookId: string,
+  byChapter: ReadonlyMap<string, Record<string, StructureDraftChunk[]>>,
+): Promise<void> {
+  if (byChapter.size === 0) return;
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const updated: Book = {
+    ...book,
+    chapters: book.chapters.map((chapter) => {
+      const drafts = byChapter.get(chapter.id);
+      return drafts ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...drafts } } : chapter;
+    }),
+    updatedAt: nowIso(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
 }
 
 /**
