@@ -57,6 +57,24 @@ def test_store_get_roundtrip(tmp_path):
     assert size_bytes == stored.stat().st_size
 
 
+def test_ensure_resolves_podcast_url_to_cached_generic_id(tmp_path, monkeypatch):
+    url = "http://example.com/uploads/Episode-12.mp3"
+    src = tmp_path / "src.m4a"
+    _make_m4a(src, 2.0)
+    stored = source_cache.store("Episode-12", src)
+
+    monkeypatch.setattr(youtube, "inspect_url", lambda u: {"id": "Episode-12"})
+    monkeypatch.setattr(
+        youtube, "fetch_audio", lambda *a, **k: pytest.fail("should hit the cache")
+    )
+    assert source_cache.ensure(url) == stored
+
+
+def test_ensure_rejects_non_http_non_youtube_input():
+    with pytest.raises(ValueError):
+        source_cache.ensure("not a url")
+
+
 def test_store_is_smaller_than_source(tmp_path):
     src = tmp_path / "src.m4a"
     _make_m4a(src, 8.0)
