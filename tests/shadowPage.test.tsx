@@ -132,9 +132,9 @@ describe('ShadowPage', () => {
     expect(screen.getByLabelText('Playback speed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mark start' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mark end' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Record attempt' })).toBeInTheDocument();
 
-    // The close-shadow hands-free loop sits above the free-form recorder.
+    // The icon bar (loop, hear, compare, record) sits above the target sentence.
     expect(
       screen.getByRole('button', { name: /Loop shadow reps/ }),
     ).toBeInTheDocument();

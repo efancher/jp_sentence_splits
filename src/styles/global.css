@@ -119,6 +119,10 @@ strong.jp {
   font-size: clamp(1.55rem, 4.5vw, 2.1rem);
 }
 
+.shadow-compact .jp-lg {
+  font-size: clamp(1.05rem, 3vw, 1.4rem);
+}
+
 /* Target word on vocabulary review cards — explicit so it never depends on the UA's default mark colours. */
 .jp mark {
   background: color-mix(in srgb, var(--accent) 28%, transparent);

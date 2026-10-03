@@ -5,7 +5,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
-import { RecordToggleButton } from '../components/RecordToggleButton';
 import { SpeedControl } from '../components/SpeedControl';
 import { SyncedShadowText } from '../components/SyncedShadowText';
 import {
@@ -478,6 +477,56 @@ export function ShadowPage() {
               )
   );
 
+  const compareActive = shadowing.comparison?.attemptId === 'ephemeral-take';
+  const canHearTake = Boolean(ephemeralUrl) && !isLoopingReps;
+  const practiceBar = (
+    <div className="stack" style={{ gap: '0.4rem' }}>
+      <div className="gloss-rail" role="toolbar" aria-label="Shadow practice controls">
+      {referenceAudio ? (
+        <>
+          <button type="button" className="icon-button" aria-pressed={isLoopingReps}
+            aria-label={isLoopingReps ? 'Stop shadow loop' : 'Loop shadow reps (hands-free)'}
+            title={isLoopingReps ? 'Stop shadow loop' : 'Loop shadow reps (hands-free)'}
+            disabled={!isLoopingReps && (isRecording || isRequestingMic)}
+            onClick={handleToggleRepLoop}>{isLoopingReps ? '⏹' : '🔁'}</button>
+          <button type="button" className="icon-button"
+            aria-label="Hear that back" title="Hear that back"
+            disabled={!canHearTake} onClick={() => void handleHearEphemeral()}>🎧</button>
+          <button type="button" className="icon-button" aria-pressed={compareActive}
+            aria-label="Compare to native" title="Compare to native"
+            disabled={!canHearTake || Boolean(shadowing.comparison)}
+            onClick={() => void handleCompareEphemeral()}>⚖️</button>
+        </>
+      ) : null}
+      <button type="button" className={`icon-button${isRecording && !isLoopingReps ? ' danger' : ''}`}
+        aria-pressed={isRecording && !isLoopingReps}
+        aria-label={isRecording && !isLoopingReps ? 'Stop recording' : 'Record attempt'}
+        title={isRecording && !isLoopingReps ? 'Stop recording' : 'Record attempt'}
+        disabled={isRecording && !isLoopingReps ? false : loopBusy}
+        onClick={() => (isRecording ? void shadowing.stopRecording() : void shadowing.startRecording())}>
+        {isRecording && !isLoopingReps ? '⏺' : isRequestingMic && !isLoopingReps ? '…' : '🎙'}
+      </button>
+      {isLoopingReps ? <span className="muted">Rep {repCount}</span> : null}
+      {isRecording && !isLoopingReps ? (
+        <span className="muted">
+          {Math.ceil(shadowing.recordingElapsedMs / 1000)}s / {Math.round(MAX_RECORDING_DURATION_MS / 1000)}s
+        </span>
+      ) : null}
+      </div>
+      {referenceAudio && isLoopingReps && shadowing.shadowActive ? (
+        <LiveShadowWaveform
+          referenceBlob={referenceAudio.blob}
+          range={loopRange ?? undefined}
+          active={isLoopingReps && shadowing.shadowActive}
+          getMediaTime={shadowing.getShadowMediaTime}
+          analyser={shadowing.getShadowAnalyser()}
+          sampleRate={shadowing.getShadowSampleRate()}
+        />
+      ) : null}
+      {isLoopingReps && shadowing.error ? <p className="muted">{shadowing.error}</p> : null}
+    </div>
+  );
+
   return (
     <div className="stack">
       {quietMode ? (
@@ -498,7 +547,7 @@ export function ShadowPage() {
         </section>
       ) : null}
 
-      <section className="panel stack">
+      <section className="panel stack shadow-compact">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="muted">{book?.title} · Shadow</div>
@@ -513,6 +562,7 @@ export function ShadowPage() {
             </label>
           </div>
         </div>
+        {practiceBar}
         {chapterMode ? (
           <>
             <div className="gloss-workbench">
@@ -677,68 +727,6 @@ export function ShadowPage() {
         )}
       </section>
 
-      {referenceAudio ? (
-        <section className="panel stack">
-          <strong>Close shadow</strong>
-          <p className="muted" style={{ margin: 0 }}>
-            Play along and stay as close behind the speaker as you can. Loop it hands-free
-            and keep going — nothing here is saved.
-          </p>
-          <div className="stack" style={{ minHeight: '7rem' }}>
-            {isLoopingReps ? (
-              <div className="row" style={{ alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="primary"
-                  aria-pressed
-                  onClick={handleToggleRepLoop}
-                >
-                  ⏹ Stop loop
-                </button>
-                <span className="muted">Rep {repCount} — shadow along…</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={isRecording || isRequestingMic}
-                onClick={handleToggleRepLoop}
-              >
-                🔁 Loop shadow reps (hands-free)
-              </button>
-            )}
-            {isLoopingReps && shadowing.shadowActive ? (
-              <LiveShadowWaveform
-                referenceBlob={referenceAudio.blob}
-                range={loopRange ?? undefined}
-                active={isLoopingReps && shadowing.shadowActive}
-                getMediaTime={shadowing.getShadowMediaTime}
-                analyser={shadowing.getShadowAnalyser()}
-                sampleRate={shadowing.getShadowSampleRate()}
-              />
-            ) : null}
-            {ephemeralUrl && !isLoopingReps ? (
-              <div className="row" style={{ alignItems: 'center' }}>
-                <button type="button" onClick={() => void handleHearEphemeral()}>
-                  ▶ Hear that back
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(shadowing.comparison)}
-                  onClick={() => void handleCompareEphemeral()}
-                >
-                  {shadowing.comparison?.attemptId === 'ephemeral-take'
-                    ? 'Playing…'
-                    : '🔁 Compare to native'}
-                </button>
-              </div>
-            ) : null}
-          </div>
-          {isLoopingReps && shadowing.error ? (
-            <p className="muted">{shadowing.error}</p>
-          ) : null}
-        </section>
-      ) : null}
-
       <section className="panel stack">
         <strong>Record &amp; analyze</strong>
         <div className="row" style={{ alignItems: 'center' }}>
@@ -761,18 +749,6 @@ export function ShadowPage() {
         ) : null}
         {calibrationError ? <p className="muted">{calibrationError}</p> : null}
 
-        <div className="row" style={{ alignItems: 'center' }}>
-          <RecordToggleButton
-            isRecording={isRecording && !isLoopingReps}
-            isRequestingMic={isRequestingMic && !isLoopingReps}
-            elapsedMs={shadowing.recordingElapsedMs}
-            maxDurationMs={MAX_RECORDING_DURATION_MS}
-            disabled={loopBusy}
-            idleLabel="Record"
-            onStart={() => void shadowing.startRecording()}
-            onStop={() => void shadowing.stopRecording()}
-          />
-        </div>
         {shadowing.error && !isLoopingReps ? (
           <p className="muted">{shadowing.error}</p>
         ) : null}
