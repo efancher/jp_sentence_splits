@@ -19,6 +19,7 @@ import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
 import { buildSentenceJourney, sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { describeSentenceProgress, glossableWords, sentenceWordHelp, summariseSentenceProgress } from '../lib/sentenceLearning';
 import { PLAYBACK_SPEEDS } from '../lib/recording';
+import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 
 /**
  * Always-available, non-graded chapter/book read-along (2026-09-23 roadmap
@@ -72,6 +73,10 @@ export function ReaderPage() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loopSentence, setLoopSentence] = useState(false);
   const singleIndexRef = useRef<number | null>(null);
+  const spanRef = useRef<{ start: number; end: number } | null>(null);
+  const [contextBefore, setContextBefore] = useState(0);
+  const [contextAfter, setContextAfter] = useState(0);
+  const [barMenuOpen, setBarMenuOpen] = useState(false);
   const [revealedTranslations, setRevealedTranslations] = useState<Set<string>>(
     () => new Set(),
   );
@@ -220,11 +225,11 @@ export function ReaderPage() {
 
   useEffect(() => {
     const playing = data?.rows[activeIndex]?.sentence.id;
-    if (playing) setSelectedId(playing);
+    if (playing && !spanRef.current) setSelectedId(playing);
   }, [activeIndex, data]);
 
   useEffect(() => {
-    if (activeIndex < 0) return;
+    if (activeIndex < 0 || spanRef.current) return;
     rowRefs.current[activeIndex]?.scrollIntoView({
       behavior: 'smooth',
       block: 'center',
@@ -254,12 +259,13 @@ export function ReaderPage() {
     return -1;
   }
 
-  /** `single` plays just this sentence (stopping, or looping, at its end) instead of reading on through the chapter. */
-  function playFrom(index: number, single = false, loop = loopSentence) {
+  /** `single` plays just this sentence (stopping, or looping, at its end); `span` plays a sentence range while the focused sentence (and its controls) stays put. */
+  function playFrom(index: number, single = false, loop = loopSentence, span?: { start: number; end: number; focus: number }) {
     const audio = audioByRow[index];
     if (!audio) return;
     setActiveIndex(index);
-    singleIndexRef.current = single ? index : null;
+    singleIndexRef.current = single ? index : span ? span.focus : null;
+    spanRef.current = span ? { start: span.start, end: span.end } : null;
     void native.play(audio, playbackRate, {
       loop: single && loop,
       onEnded: () => {
@@ -268,6 +274,20 @@ export function ReaderPage() {
           return;
         }
         const next = findNextPlayable(index + 1);
+        if (span) {
+          if (next !== -1 && next <= span.end) {
+            playFrom(next, false, loop, span);
+            return;
+          }
+          const first = loop ? findNextPlayable(span.start) : -1;
+          if (first !== -1 && first <= span.end) {
+            playFrom(first, false, loop, span);
+            return;
+          }
+          spanRef.current = null;
+          setActiveIndex(-1);
+          return;
+        }
         if (next === -1) {
           setActiveIndex(-1);
           return;
@@ -277,20 +297,33 @@ export function ReaderPage() {
     });
   }
 
+  /** Plays one sentence plus the chosen number of neighbours before/after it. */
+  function playSentence(index: number, loop = loopSentence) {
+    const start = Math.max(0, index - contextBefore);
+    const end = Math.min(audioByRow.length - 1, index + contextAfter);
+    if (start === end) {
+      playFrom(index, true, loop);
+      return;
+    }
+    const first = findNextPlayable(start);
+    if (first === -1 || first > end) return;
+    playFrom(first, false, loop, { start, end, focus: index });
+  }
+
   const currentAudio = activeIndex >= 0 ? audioByRow[activeIndex] : undefined;
   const isSequencePlaying =
     native.isPlaying && !!currentAudio && native.activeItemId === currentAudio.id;
   const firstPlayable = findNextPlayable(0);
 
   function toggleSentencePlay(index: number) {
-    if (activeIndex === index && isSequencePlaying) native.stop();
-    else playFrom(index, true);
+    if (isSequencePlaying && singleIndexRef.current === index) native.stop();
+    else playSentence(index);
   }
 
   function toggleLoop() {
     const next = !loopSentence;
     setLoopSentence(next);
-    if (isSequencePlaying && singleIndexRef.current === activeIndex) playFrom(activeIndex, true, next);
+    if (isSequencePlaying && singleIndexRef.current !== null) playSentence(singleIndexRef.current, next);
   }
 
   function toggleSequence() {
@@ -366,6 +399,48 @@ export function ReaderPage() {
       return <div className="jp jp-lg">{sentence.readingOnly || sentence.japanese}</div>;
     }
     return <div className="jp jp-lg">{sentence.japanese}</div>;
+  }
+
+  function playbackBar(index: number, audio: SentenceAudio) {
+    const playing = isSequencePlaying && singleIndexRef.current === index;
+    const sourceUrl = audio.sourceUrl ?? book.sourceUrl;
+    const counts = [0, 1, 2, 3];
+    return (
+      <div className="stack" style={{ gap: '0.3rem' }}>
+        <div className="row" style={{ gap: '0.3rem', alignItems: 'center' }} role="toolbar" aria-label="Playback">
+          <button type="button" className="icon-button" aria-label={playing ? 'Stop' : 'Play sentence'}
+            title={playing ? 'Stop' : 'Play this sentence'} onClick={() => toggleSentencePlay(index)}>{playing ? '⏸' : '▶'}</button>
+          <button type="button" className="icon-button" aria-pressed={loopSentence}
+            aria-label={loopSentence ? 'Loop on' : 'Loop off'} title={loopSentence ? 'Loop: on' : 'Loop: off'}
+            onClick={toggleLoop}>🔁</button>
+          <button type="button" className="icon-button" aria-pressed={barMenuOpen} aria-expanded={barMenuOpen}
+            aria-label="More playback options" title="Context, adjust clip"
+            onClick={() => setBarMenuOpen((open) => !open)}>⋯</button>
+          {contextBefore > 0 || contextAfter > 0 ? (
+            <span className="muted" style={{ fontSize: '0.8em' }}>−{contextBefore} / +{contextAfter}</span>
+          ) : null}
+        </div>
+        {barMenuOpen ? (
+          <div className="stack" style={{ gap: '0.4rem' }}>
+            <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <label className="row" style={{ gap: '0.3rem' }}>
+                <span className="muted">Before</span>
+                <select aria-label="Sentences to play before" value={contextBefore} onChange={(event) => setContextBefore(Number(event.target.value))}>
+                  {counts.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="row" style={{ gap: '0.3rem' }}>
+                <span className="muted">After</span>
+                <select aria-label="Sentences to play after" value={contextAfter} onChange={(event) => setContextAfter(Number(event.target.value))}>
+                  {counts.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
+            {sourceUrl ? <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} /> : <span className="muted">No source video to re-cut from.</span>}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -549,7 +624,7 @@ export function ReaderPage() {
               className={`panel${isActive ? ' reader-row-active' : ''}`}
             >
               <div className="row" style={{ alignItems: 'flex-start' }}>
-                {audio ? (
+                {audio && !chapterMode ? (
                   <button
                     type="button"
                     className="speak-button compact"
@@ -562,6 +637,7 @@ export function ReaderPage() {
                   </button>
                 ) : null}
                 <div className="stack" style={{ flex: 1, gap: '0.35rem' }}>
+                  {chapterMode && audio ? playbackBar(index, audio) : null}
                   {sentenceLine(row.sentence, isActive, audio)}
                   {(() => {
                     const here = walkthroughFocus.filter((target) => target.sentenceIds.includes(row.sentence.id));
@@ -728,11 +804,11 @@ export function ReaderPage() {
               onClick={() => selectLine(rows[focusedIndex - 1]!.sentence.id)}>↑</button>
             <button type="button" className="icon-button" aria-label="Next sentence" title="Next sentence" disabled={focusedIndex >= rows.length - 1}
               onClick={() => selectLine(rows[focusedIndex + 1]!.sentence.id)}>↓</button>
-            <button type="button" className="icon-button" aria-pressed={isSequencePlaying && activeIndex === focusedIndex}
-              aria-label={isSequencePlaying && activeIndex === focusedIndex ? 'Stop' : 'Play sentence'}
-              title={isSequencePlaying && activeIndex === focusedIndex ? 'Stop' : 'Play this sentence'}
+            <button type="button" className="icon-button" aria-pressed={isSequencePlaying && singleIndexRef.current === focusedIndex}
+              aria-label={isSequencePlaying && singleIndexRef.current === focusedIndex ? 'Stop' : 'Play sentence'}
+              title={isSequencePlaying && singleIndexRef.current === focusedIndex ? 'Stop' : 'Play this sentence'}
               disabled={!audioByRow[focusedIndex]}
-              onClick={() => toggleSentencePlay(focusedIndex)}>{isSequencePlaying && activeIndex === focusedIndex ? '⏸' : '▶'}</button>
+              onClick={() => toggleSentencePlay(focusedIndex)}>{isSequencePlaying && singleIndexRef.current === focusedIndex ? '⏸' : '▶'}</button>
             <button type="button" className="icon-button" aria-pressed={loopSentence}
               aria-label={loopSentence ? 'Loop on' : 'Loop off'} title={loopSentence ? 'Loop this sentence: on' : 'Loop this sentence: off'}
               onClick={toggleLoop}>🔁</button>
