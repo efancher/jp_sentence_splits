@@ -8,7 +8,7 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
-import type { BookSentence, Sentence, SentenceAudio, TextDisplayMode } from '../domain/types';
+import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { newWordSegments } from '../lib/newWordFurigana';
@@ -146,7 +146,9 @@ export function ReaderPage() {
       ),
     ];
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, savedMeanings, knownExpressions };
+    // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
+    const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -739,7 +741,7 @@ export function ReaderPage() {
                     <SentenceWalkthrough
                       sentence={row.sentence}
                       savedChunks={data.chunksBySentence.get(row.sentence.id)}
-                      structureDraft={data.chapter?.structureDrafts?.[row.sentence.id]}
+                      structureDraft={data.structureDrafts[row.sentence.id]}
                       audio={audio}
                       focusTargets={walkthroughFocus}
                       episodeSentences={episodeSentences}
