@@ -5,7 +5,6 @@ import { saveStructureDraftsByChapter } from '../db/repository';
 import {
   findChunkingCandidates,
   formatBookChunkingPrompt,
-  nextChunkingBatch,
   parseBookChunkingReply,
   type ChunkingCandidate,
 } from '../lib/bookChunking';
@@ -25,7 +24,7 @@ export function BookChunkingBatch({ bookId }: { bookId: string }) {
   if (!pending) return null;
 
   function download() {
-    const items = nextChunkingBatch(pending ?? []);
+    const items = pending ?? [];
     setBatch(items);
     downloadTextFile(`chunking-${bookId}.txt`, formatBookChunkingPrompt(items));
     setStatus(`Downloaded a prompt for ${items.length} sentences. Upload the assistant's reply below.`);
@@ -59,7 +58,7 @@ export function BookChunkingBatch({ bookId }: { bookId: string }) {
         ) : (
           <div className="row">
             <button type="button" onClick={download}>
-              Download prompt file ({Math.min(pending.length, nextChunkingBatch(pending).length)} of {pending.length})
+              Download prompt file (all {pending.length})
             </button>
           </div>
         )}

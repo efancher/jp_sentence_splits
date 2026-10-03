@@ -1,7 +1,7 @@
 import { getDb } from '../db/database';
 import type { StructureDraftChunk } from '../domain/types';
 import { chunksMatchSource } from './chunking';
-import { buildStructureInstructions, parseStructureLines, STRUCTURE_LINE_EXAMPLE, STRUCTURE_SENTENCES_PER_PART } from './episodeStructure';
+import { buildStructureInstructions, parseStructureLines, STRUCTURE_LINE_EXAMPLE } from './episodeStructure';
 
 // Book-wide chunking by an external AI (same download-prompt / upload-reply
 // round trip as the particle checks). Results are stored as chapter
@@ -64,11 +64,6 @@ export function formatBookChunkingPrompt(items: readonly ChunkingCandidate[]): s
     ].join('\n'),
   );
   return [header, ...sections].join('\n\n');
-}
-
-/** The next batch to hand to the assistant; the rest stay pending for later rounds. */
-export function nextChunkingBatch(pending: readonly ChunkingCandidate[]): ChunkingCandidate[] {
-  return pending.slice(0, STRUCTURE_SENTENCES_PER_PART);
 }
 
 export function parseBookChunkingReply(reply: string, batch: readonly ChunkingCandidate[]) {
