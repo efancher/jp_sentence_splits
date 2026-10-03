@@ -26,10 +26,19 @@ export interface ParticleCheckRequest {
 export interface ParticleCheckCandidate {
   sentenceId: string;
   request: ParticleCheckRequest;
+  /** Existing checks no longer line up with the current chunks; a reply replaces them. */
+  replacing?: boolean;
 }
 
-/** Book sentences with a case/topic particle and no authored checks yet, in book order. */
-export async function findParticleCheckCandidates(bookId: string): Promise<ParticleCheckCandidate[]> {
+/**
+ * Book sentences with a case/topic particle and no authored checks yet, in book
+ * order. With `stale`, instead the sentences whose authored checks name a chunk
+ * that the current chunking (saved, AI draft or heuristic) no longer produces.
+ */
+export async function findParticleCheckCandidates(
+  bookId: string,
+  options: { stale?: boolean } = {},
+): Promise<ParticleCheckCandidate[]> {
   const db = getDb();
   const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'));
   const ids = memberships.map((m) => m.sentenceId);
@@ -38,18 +47,24 @@ export async function findParticleCheckCandidates(bookId: string): Promise<Parti
   const out: ParticleCheckCandidate[] = [];
   ids.forEach((id, index) => {
     const sentence = sentences[index];
-    if (!sentence || seen.has(id) || analyses[index]?.particleChecks) return;
+    if (!sentence || seen.has(id)) return;
     seen.add(id);
+    const existing = analyses[index]?.particleChecks;
+    if (!options.stale && existing) return;
+    if (options.stale && !existing?.length) return;
     if (!PARTICLE_RE.test(sentence.japanese)) return;
     const draft = book?.chapters.find((chapter) => chapter.id === memberships[index]!.chapterId)?.structureDrafts?.[id];
     const bank = getMeaningBank(analyses[index]?.comprehensionCheck);
+    const chunks = chunkSurfaces(sentence.japanese, analyses[index]?.chunks, draft?.map((chunk) => chunk.japanese));
+    if (options.stale && existing!.every((check) => chunks.includes(check.chunk))) return;
     out.push({
+      replacing: options.stale || undefined,
       sentenceId: id,
       request: {
         japanese: sentence.japanese,
         context: sentences.slice(Math.max(0, index - 2), index).flatMap((prev) => (prev ? [prev.japanese] : [])),
         translation: sentence.translation?.trim() || bank?.correct || undefined,
-        chunks: chunkSurfaces(sentence.japanese, analyses[index]?.chunks, draft?.map((chunk) => chunk.japanese)),
+        chunks,
       },
     });
   });
@@ -203,7 +218,7 @@ export function parseBookChunkIssues(reply: string, expectedCount: number): stri
   return out;
 }
 
-/** Apply a parsed reply; never overwrites checks that appeared meanwhile. Returns sentences saved. */
+/** Apply a parsed reply; only candidates marked `replacing` may overwrite checks, otherwise checks that appeared meanwhile are kept. Returns sentences saved. */
 export async function applyBookParticleReply(
   candidates: readonly ParticleCheckCandidate[],
   parsed: ReadonlyArray<ParticleCheck[] | null>,
@@ -213,7 +228,7 @@ export async function applyBookParticleReply(
   for (const [index, candidate] of candidates.entries()) {
     const checks = parsed[index];
     if (!checks) continue;
-    if ((await db.analyses.get(candidate.sentenceId))?.particleChecks) continue;
+    if (!candidate.replacing && (await db.analyses.get(candidate.sentenceId))?.particleChecks) continue;
     await setSentenceParticleChecks(candidate.sentenceId, checks);
     saved += 1;
   }

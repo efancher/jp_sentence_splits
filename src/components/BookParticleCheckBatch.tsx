@@ -19,7 +19,10 @@ import { reportChunkIssues } from '../db/repository';
  * matched by sentence number against the list captured at download time.
  */
 export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
-  const pending = useLiveQuery(() => findParticleCheckCandidates(bookId), [bookId]);
+  const [redo, setRedo] = useState(false);
+  const stale = useLiveQuery(() => findParticleCheckCandidates(bookId, { stale: true }), [bookId]);
+  const pendingNew = useLiveQuery(() => findParticleCheckCandidates(bookId), [bookId]);
+  const pending = redo ? stale : pendingNew;
   const [batch, setBatch] = useState<ParticleCheckCandidate[] | null>(null);
   const [pasted, setPasted] = useState('');
   const [status, setStatus] = useState<string | null>(null);
@@ -59,8 +62,19 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
 
   return (
     <details className="panel">
-      <summary>Particle checks: contextual questions ({pending.length} sentences pending)</summary>
+      <summary>Particle checks: contextual questions ({pendingNew?.length ?? 0} sentences pending)</summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
+        <label className="row muted" style={{ gap: '0.25rem' }}>
+          <input
+            type="checkbox"
+            checked={redo}
+            onChange={(event) => {
+              setRedo(event.target.checked);
+              setBatch(null);
+            }}
+          />
+          Redo checks whose chunk boundaries have changed ({stale?.length ?? 0}); replaces the old ones
+        </label>
         <p className="muted" style={{ margin: 0 }}>
           Instead of a generic &ldquo;what does に mean?&rdquo;, the glossing check asks about the
           particle using the sentence&rsquo;s own words. For ゴミ箱に入れた (&ldquo;put it in the
@@ -69,7 +83,7 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
           to the generic question.
         </p>
         {pending.length === 0 ? (
-          <div className="muted">Nothing pending.</div>
+          <div className="muted">{redo ? 'No outdated checks.' : 'Nothing pending.'}</div>
         ) : (
           <div role="status" style={{ fontSize: '0.9rem' }}>
             <strong>{meaningDone ? '✓' : '⚠'}</strong>{' '}
