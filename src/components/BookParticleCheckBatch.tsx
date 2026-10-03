@@ -47,7 +47,7 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
     const issues = parseBookChunkIssues(pasted, batch.length).flatMap((notes, i) =>
       notes.map((note) => ({ sentenceId: batch[i]!.sentenceId, chunks: batch[i]!.request.chunks ?? [], note })),
     );
-    const filed = await reportChunkIssues(issues);
+    const filed = await reportChunkIssues('particle_checks', issues);
     setStatus(
       `Saved ${saved} of ${batch.length} sentences${unusable ? `; ${unusable} had no usable section and stay pending` : ''}${
         filed ? `; filed ${filed} chunk issue${filed === 1 ? '' : 's'} for review` : ''

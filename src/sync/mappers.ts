@@ -920,6 +920,7 @@ export function chunkIssueReportToRemote(
   return {
     id: report.id,
     owner_id: ownerId,
+    source: report.source,
     sentence_id: report.sentenceId,
     chunks: report.chunks,
     note: report.note,
@@ -937,6 +938,7 @@ export function remoteToChunkIssueReport(
 ): ChunkIssueReport {
   return {
     id: String(row.id),
+    source: (row.source as ChunkIssueReport['source'] | null) ?? 'particle_checks',
     sentenceId: String(row.sentence_id),
     chunks: (row.chunks as string[] | null) ?? [],
     note: String(row.note),

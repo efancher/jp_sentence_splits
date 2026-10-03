@@ -82,6 +82,11 @@ describe('bulk meaning-bank prompt and parser', () => {
     expect(parsed[2]).toBeNull();
   });
 
+  it('ignores ISSUE lines when parsing wrong meanings', () => {
+    const reply = ['=== Sentence 1 ===', 'ISSUE: translation does not match', '- The dog sleeps.'].join('\n');
+    expect(parseBatchMeaningBankReply(reply, 1)).toEqual([{ correct: undefined, wrong: ['The dog sleeps.'] }]);
+  });
+
   it('builds a check: first 3 wrong become options, the rest the bank, bad ones rejected', () => {
     const { check, rejected } = buildCheckFromMeaningBank(
       'The cat is sleeping.',

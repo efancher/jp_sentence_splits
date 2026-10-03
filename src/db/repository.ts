@@ -8276,6 +8276,7 @@ export async function resolveCardIssueReport(id: string): Promise<CardIssueRepor
 // ---------------------------------------------------------------------------
 
 export async function reportChunkIssues(
+  source: ChunkIssueReport['source'],
   issues: ReadonlyArray<{ sentenceId: string; chunks: readonly string[]; note: string }>,
 ): Promise<number> {
   const db = getDb();
@@ -8283,10 +8284,11 @@ export async function reportChunkIssues(
   let filed = 0;
   for (const issue of issues) {
     const joined = issue.chunks.join(' | ');
-    if (open.some((r) => r.sentenceId === issue.sentenceId && r.chunks.join(' | ') === joined && r.note === issue.note)) continue;
+    if (open.some((r) => r.source === source && r.sentenceId === issue.sentenceId && r.chunks.join(' | ') === joined && r.note === issue.note)) continue;
     const timestamp = nowIso();
     const report: ChunkIssueReport = {
       id: createId('chunk_issue'),
+      source,
       sentenceId: issue.sentenceId,
       chunks: [...issue.chunks],
       note: issue.note,

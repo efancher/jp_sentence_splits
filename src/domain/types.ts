@@ -1223,6 +1223,8 @@ export type ChunkIssueStatus = 'open' | 'resolved';
  */
 export interface ChunkIssueReport {
   id: string;
+  /** Which authoring prompt raised it; meaning-check issues carry `chunks: []`. */
+  source: 'particle_checks' | 'meaning_checks';
   sentenceId: string;
   chunks: string[];
   note: string;

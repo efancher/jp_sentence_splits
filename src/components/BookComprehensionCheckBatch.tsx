@@ -8,7 +8,8 @@ import {
   findMeaningBankCandidates,
 } from '../lib/meaningCheckAutogen';
 import type { MeaningBankCandidate, MeaningBankMode } from '../lib/meaningCheckAutogen';
-import { downloadTextFile } from '../lib/particleChecks';
+import { reportChunkIssues } from '../db/repository';
+import { downloadTextFile, parseBookChunkIssues } from '../lib/particleChecks';
 import { formatBatchMeaningBankPromptForAI, parseBatchMeaningBankReply } from '../lib/meaningChoices';
 
 /**
@@ -73,10 +74,15 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
         saved += 1;
       }
     }
+    const issues = parseBookChunkIssues(pasted, batch.length).flatMap((notes, i) =>
+      notes.map((note) => ({ sentenceId: batch[i]!.sentenceId, chunks: [] as string[], note })),
+    );
+    const filed = await reportChunkIssues('meaning_checks', issues);
+    const filedNote = filed ? ` Filed ${filed} issue${filed === 1 ? '' : 's'} for review.` : '';
     setStatus(
       failed.length === 0
-        ? `Saved ${saved}.`
-        : `Saved ${saved}; nothing usable for sentence ${failed.join(', ')} (missing section, fewer than 3 valid wrong meanings, or a check already exists).`,
+        ? `Saved ${saved}.${filedNote}`
+        : `Saved ${saved}; nothing usable for sentence ${failed.join(', ')} (missing section, fewer than 3 valid wrong meanings, or a check already exists).${filedNote}`,
     );
     setPasted('');
     setBatch(null);

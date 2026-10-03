@@ -1,7 +1,8 @@
 /**
- * Lists open chunk-boundary issue reports (flagged by the assistant during
- * particle-check import) from Supabase, for a Claude session to triage —
- * typically by extending src/lib/chunking.ts. Read-only.
+ * Lists open issue reports flagged by the assistant during particle-check
+ * (chunk boundaries — typically fixed in src/lib/chunking.ts) and meaning-check
+ * (translation/transcription problems) import, for a Claude session to
+ * triage. Read-only.
  *
  * Usage: npm run issues:list-chunks
  */
@@ -16,7 +17,7 @@ async function main() {
 
   const { data: reports, error } = await supabase
     .from('chunk_issue_reports')
-    .select('id, sentence_id, chunks, note, created_at')
+    .select('id, source, sentence_id, chunks, note, created_at')
     .eq('owner_id', user.id)
     .eq('status', 'open')
     .is('deleted_at', null)
@@ -29,8 +30,9 @@ async function main() {
 
   console.log(`${reports.length} open chunk issue report(s):\n`);
   for (const report of reports) {
-    console.log(`- [${report.id}] sentence ${report.sentence_id} reported ${report.created_at}`);
-    console.log(`  chunks: ${(report.chunks as string[]).join(' | ')}`);
+    console.log(`- [${report.id}] (${report.source}) sentence ${report.sentence_id} reported ${report.created_at}`);
+    const chunks = report.chunks as string[];
+    if (chunks.length) console.log(`  chunks: ${chunks.join(' | ')}`);
     console.log(`  issue:  ${report.note}\n`);
   }
 }
