@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { glossesFromWords } from '../lib/chunkGlosses';
+
 import type { AnalysisChunk, ConstructionLayer, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
@@ -162,6 +164,10 @@ export function SentenceWalkthrough({
     onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
+  const wordGlosses = useMemo(
+    () => glossesFromWords(chunks, compareAids?.get(sentence.id)?.words ?? []),
+    [chunks, compareAids, sentence.id],
+  );
   const [glossUnderChunks, setGlossUnderChunks] = useState(false);
   const [englishBefore, setEnglishBefore] = useState(0);
   const [englishAfter, setEnglishAfter] = useState(0);
@@ -315,7 +321,7 @@ export function SentenceWalkthrough({
         />
       ) : null}
       {tryFirst ? null : <ChunkPuzzleStrip
-        chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, gloss: literalEnglish }))}
+        chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, gloss: literalEnglish || wordGlosses.get(id) }))}
         showGloss={glossUnderChunks}
         revealedIds={done ? undefined : revealedIds}
         revealRoles={preset !== 'minimal'}
