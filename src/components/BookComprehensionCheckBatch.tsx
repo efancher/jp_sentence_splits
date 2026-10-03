@@ -65,11 +65,19 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     if (!batch) return;
     const parsed = parseBatchMeaningBankReply(pasted, batch.length);
     let saved = 0;
-    const failed: number[] = [];
+    const failed: string[] = [];
     for (const [index, item] of batch.entries()) {
       const entry = parsed[index];
-      if (!entry || !(await applyMeaningBankResult(item.sentenceId, mode, entry, 'ai_suggested'))) {
-        failed.push(index + 1);
+      if (!entry) {
+        failed.push(`${index + 1} (no "- " lines under its header)`);
+      } else if (!(await applyMeaningBankResult(item.sentenceId, mode, entry, 'ai_suggested'))) {
+        const reason =
+          mode === 'missing' && !item.request.correct && !entry.correct
+            ? 'no correct meaning given — the reply needs a "CORRECT: ..." line'
+            : entry.wrong.length < 3
+              ? `only ${entry.wrong.length} wrong meaning${entry.wrong.length === 1 ? '' : 's'}, need at least 3`
+              : 'fewer than 3 survived validation, or a check already exists';
+        failed.push(`${index + 1} (${reason})`);
       } else {
         saved += 1;
       }
@@ -82,7 +90,7 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     setStatus(
       failed.length === 0
         ? `Saved ${saved}.${filedNote}`
-        : `Saved ${saved}; nothing usable for sentence ${failed.join(', ')} (missing section, fewer than 3 valid wrong meanings, or a check already exists).${filedNote}`,
+        : `Saved ${saved}; nothing usable for sentence ${failed.join('; ')}.${filedNote}`,
     );
     setPasted('');
     setBatch(null);
