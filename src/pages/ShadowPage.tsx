@@ -6,6 +6,7 @@ import { AnalysisPanel } from '../components/AnalysisPanel';
 import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { SpeedControl } from '../components/SpeedControl';
+import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SyncedShadowText } from '../components/SyncedShadowText';
 import {
   deleteAttempt,
@@ -683,6 +684,12 @@ export function ShadowPage() {
               onError={handleReferenceAudioError}
             />
             {referenceError ? <p className="muted">{referenceError}</p> : null}
+            {data?.referenceAudio && (data.referenceAudio.sourceUrl ?? book?.sourceUrl) ? (
+              <SentenceAudioAdjuster
+                audio={data.referenceAudio}
+                sourceUrl={(data.referenceAudio.sourceUrl ?? book?.sourceUrl)!}
+              />
+            ) : null}
             <SpeedControl speed={speed} onChange={setSpeed} />
             <div className="row" style={{ alignItems: 'center' }} ref={targetControlsRef}>
               {chapterMode ? null : (
