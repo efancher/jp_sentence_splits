@@ -54,6 +54,7 @@
     "db:query": "tsx scripts/db-query.ts",
     "issues:list": "tsx scripts/list-card-issues.ts",
     "issues:list-sync": "tsx scripts/list-sync-issues.ts",
+    "issues:list-chunks": "tsx scripts/list-chunk-issues.ts",
     "check:duplicate-books": "tsx scripts/check-duplicate-books.ts",
     "check:sentence-integrity": "tsx scripts/check-sentence-integrity.ts",
     "repair:dangling-sentence-rows": "tsx scripts/repair-dangling-sentence-rows.ts",

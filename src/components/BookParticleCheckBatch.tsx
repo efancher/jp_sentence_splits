@@ -6,9 +6,11 @@ import {
   downloadTextFile,
   findParticleCheckCandidates,
   formatBookParticlePromptForAI,
+  parseBookChunkIssues,
   parseBookParticleReply,
   type ParticleCheckCandidate,
 } from '../lib/particleChecks';
+import { reportChunkIssues } from '../db/repository';
 
 /**
  * Book-wide authoring of the sentence-specific particle questions used by the
@@ -42,7 +44,15 @@ export function BookParticleCheckBatch({ bookId }: { bookId: string }) {
     const parsed = parseBookParticleReply(pasted, batch.length);
     const saved = await applyBookParticleReply(batch, parsed);
     const unusable = parsed.filter((entry) => entry === null).length;
-    setStatus(`Saved ${saved} of ${batch.length} sentences${unusable ? `; ${unusable} had no usable section and stay pending` : ''}.`);
+    const issues = parseBookChunkIssues(pasted, batch.length).flatMap((notes, i) =>
+      notes.map((note) => ({ sentenceId: batch[i]!.sentenceId, chunks: batch[i]!.request.chunks ?? [], note })),
+    );
+    const filed = await reportChunkIssues(issues);
+    setStatus(
+      `Saved ${saved} of ${batch.length} sentences${unusable ? `; ${unusable} had no usable section and stay pending` : ''}${
+        filed ? `; filed ${filed} chunk issue${filed === 1 ? '' : 's'} for review` : ''
+      }.`,
+    );
     setPasted('');
     setBatch(null);
   }

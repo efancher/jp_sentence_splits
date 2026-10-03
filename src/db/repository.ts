@@ -78,6 +78,7 @@ import type {
   StudyItem,
   StudyStatus,
   StudySubjectType,
+  ChunkIssueReport,
   SyncIssueReport,
   SyncIssueStatus,
   VocabularyConfusion,
@@ -8273,6 +8274,32 @@ export async function resolveCardIssueReport(id: string): Promise<CardIssueRepor
 // (buildDiagnosticsSnapshot, src/sync/logger.ts) at report time so a later
 // session can triage without the reporter pasting anything by hand.
 // ---------------------------------------------------------------------------
+
+export async function reportChunkIssues(
+  issues: ReadonlyArray<{ sentenceId: string; chunks: readonly string[]; note: string }>,
+): Promise<number> {
+  const db = getDb();
+  const open = await db.chunkIssueReports.where('status').equals('open').toArray();
+  let filed = 0;
+  for (const issue of issues) {
+    const joined = issue.chunks.join(' | ');
+    if (open.some((r) => r.sentenceId === issue.sentenceId && r.chunks.join(' | ') === joined && r.note === issue.note)) continue;
+    const timestamp = nowIso();
+    const report: ChunkIssueReport = {
+      id: createId('chunk_issue'),
+      sentenceId: issue.sentenceId,
+      chunks: [...issue.chunks],
+      note: issue.note,
+      status: 'open',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await db.chunkIssueReports.put(report);
+    notifySync('chunk_issue_reports', report.id, report);
+    filed += 1;
+  }
+  return filed;
+}
 
 export async function reportSyncIssue(input: {
   note: string;

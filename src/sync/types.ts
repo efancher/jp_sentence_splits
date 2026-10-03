@@ -20,6 +20,7 @@ export type SyncEntity =
   | 'grammar_relationships'
   | 'planner_sessions'
   | 'sync_issue_reports'
+  | 'chunk_issue_reports'
   | 'pitch_drill_attempts'
   | 'sentence_learning_events'
   | 'gloss_decisions'

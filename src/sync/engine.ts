@@ -38,6 +38,7 @@ import {
   remoteToSentenceVocabulary,
   remoteToStudyItem,
   remoteToSyncIssueReport,
+  remoteToChunkIssueReport,
   remoteToVocabularyConfusion,
   remoteToVocabularyItem,
   remoteToVocabularyKanji,
@@ -1209,6 +1210,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.plannerSessions.get(recordId)) != null;
     case 'sync_issue_reports':
       return (await db.syncIssueReports.get(recordId)) != null;
+    case 'chunk_issue_reports':
+      return (await db.chunkIssueReports.get(recordId)) != null;
     case 'pitch_drill_attempts':
       return (await db.pitchDrillAttempts.get(recordId)) != null;
     case 'sentence_learning_events':
@@ -1414,6 +1417,9 @@ async function applyRemoteDelete(
     case 'sync_issue_reports':
       await db.syncIssueReports.delete(recordId);
       break;
+    case 'chunk_issue_reports':
+      await db.chunkIssueReports.delete(recordId);
+      break;
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.delete(recordId);
       break;
@@ -1547,6 +1553,9 @@ export async function applyRemoteUpsert(
     case 'sync_issue_reports':
       await db.syncIssueReports.put(remoteToSyncIssueReport(remote));
       break;
+    case 'chunk_issue_reports':
+      await db.chunkIssueReports.put(remoteToChunkIssueReport(remote));
+      break;
     case 'pitch_drill_attempts':
       await db.pitchDrillAttempts.put(remoteToPitchDrillAttempt(remote));
       break;
@@ -1595,6 +1604,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const grammarRelationships = await db.grammarRelationships.toArray();
   const plannerSessions = await db.plannerSessions.toArray();
   const syncIssueReports = await db.syncIssueReports.toArray();
+  const chunkIssueReports = await db.chunkIssueReports.toArray();
   const pitchDrillAttempts = await db.pitchDrillAttempts.toArray();
   const sentenceLearningEvents = await db.sentenceLearningEvents.toArray();
   const glossDecisions = await db.glossDecisions.toArray();
@@ -1659,6 +1669,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
   for (const report of syncIssueReports) {
     await trackAndEnqueue('sync_issue_reports', report.id, report);
+  }
+  for (const report of chunkIssueReports) {
+    await trackAndEnqueue('chunk_issue_reports', report.id, report);
   }
   for (const attempt of pitchDrillAttempts) {
     await trackAndEnqueue('pitch_drill_attempts', attempt.id, attempt);
@@ -1727,6 +1740,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.grammarRelationships,
       db.plannerSessions,
       db.syncIssueReports,
+      db.chunkIssueReports,
       db.pitchDrillAttempts,
       db.sentenceLearningEvents,
       db.glossDecisions,
@@ -1755,6 +1769,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.grammarRelationships.clear();
       await db.plannerSessions.clear();
       await db.syncIssueReports.clear();
+      await db.chunkIssueReports.clear();
       await db.pitchDrillAttempts.clear();
       await db.sentenceLearningEvents.clear();
       await db.glossDecisions.clear();
@@ -1830,6 +1845,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('sync_issue_reports', userId, async (rows) => {
     await db.syncIssueReports.bulkPut(rows.map((r) => remoteToSyncIssueReport(r)));
+  });
+  await pullFullTable('chunk_issue_reports', userId, async (rows) => {
+    await db.chunkIssueReports.bulkPut(rows.map((r) => remoteToChunkIssueReport(r)));
   });
   await pullFullTable('pitch_drill_attempts', userId, async (rows) => {
     await db.pitchDrillAttempts.bulkPut(rows.map((r) => remoteToPitchDrillAttempt(r)));

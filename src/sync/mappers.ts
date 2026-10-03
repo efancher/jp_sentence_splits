@@ -19,6 +19,7 @@ import type {
   SentenceGrammar,
   SentenceVocabulary,
   StudyItem,
+  ChunkIssueReport,
   SyncIssueReport,
   VocabularyConfusion,
   VocabularyItem,
@@ -47,6 +48,7 @@ export type LocalSyncPayload =
   | GrammarRelationship
   | PlannerSession
   | SyncIssueReport
+  | ChunkIssueReport
   | PitchDrillAttempt
   | SentenceLearningEvent
   | GlossDecision
@@ -910,6 +912,41 @@ export function remoteToSyncIssueReport(
   };
 }
 
+export function chunkIssueReportToRemote(
+  report: ChunkIssueReport,
+  ownerId: string,
+  version: number,
+) {
+  return {
+    id: report.id,
+    owner_id: ownerId,
+    sentence_id: report.sentenceId,
+    chunks: report.chunks,
+    note: report.note,
+    status: report.status,
+    resolved_at: report.resolvedAt ?? null,
+    created_at: report.createdAt,
+    updated_at: report.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToChunkIssueReport(
+  row: Record<string, unknown>,
+): ChunkIssueReport {
+  return {
+    id: String(row.id),
+    sentenceId: String(row.sentence_id),
+    chunks: (row.chunks as string[] | null) ?? [],
+    note: String(row.note),
+    status: row.status as ChunkIssueReport['status'],
+    resolvedAt: (row.resolved_at as string | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function namedPodcastFeedToRemote(
   feed: NamedPodcastFeed,
   ownerId: string,
@@ -1179,6 +1216,8 @@ export function toRemoteRow(
       return plannerSessionToRemote(payload as PlannerSession, ownerId, version);
     case 'sync_issue_reports':
       return syncIssueReportToRemote(payload as SyncIssueReport, ownerId, version);
+    case 'chunk_issue_reports':
+      return chunkIssueReportToRemote(payload as ChunkIssueReport, ownerId, version);
     case 'pitch_drill_attempts':
       return pitchDrillAttemptToRemote(payload as PitchDrillAttempt, ownerId, version);
     case 'sentence_learning_events':

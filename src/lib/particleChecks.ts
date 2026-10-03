@@ -97,6 +97,14 @@ const HEADER = [
   '',
   'CHUNK must be copied exactly from that sentence\'s "chunks" line. If a sentence has',
   'nothing worth asking, write only "NONE" under its header.',
+  '',
+  'Also check each sentence\'s chunk boundaries. The chunker is a heuristic and sometimes',
+  'splits inside a single word (e.g. "ありが | とう", "と | き", "朝ごは | ん") or leaves two',
+  'phrases glued together. For every such error add a line under that sentence\'s header:',
+  'ISSUE: ありが | とう → ありがとう',
+  '(the wrong boundary as shown, then → the correct form, plus a few words of explanation',
+  'if the fix is not obvious). Report only real errors, one ISSUE line each; a bad boundary',
+  'should not stop you writing questions for the other chunks.',
 ].join('\n');
 
 export function formatBookParticlePromptForAI(items: readonly ParticleCheckRequest[]): string {
@@ -176,6 +184,23 @@ export function parseBookParticleReply(reply: string, expectedCount: number): Ar
     results.push(blocks.length > 0 && checks.length === 0 ? null : checks);
   }
   return results;
+}
+
+/** `ISSUE:` lines per sentence (index = sentence number - 1); empty when none were flagged. */
+export function parseBookChunkIssues(reply: string, expectedCount: number): string[][] {
+  const out: string[][] = Array.from({ length: expectedCount }, () => []);
+  let current = -1;
+  for (const raw of reply.split('\n')) {
+    const line = raw.trim();
+    const section = SECTION_RE.exec(line);
+    if (section) {
+      current = Number(section[1]) - 1;
+      continue;
+    }
+    const issue = /^ISSUE\s*[:：]\s*(.+)$/i.exec(line);
+    if (issue && current >= 0 && current < expectedCount) out[current]!.push(issue[1]!.trim());
+  }
+  return out;
 }
 
 /** Apply a parsed reply; never overwrites checks that appeared meanwhile. Returns sentences saved. */

@@ -22,7 +22,7 @@ import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 const TABLES = new Set([
   'analyses', 'book_invites', 'book_members', 'books', 'book_sentences',
-  'card_issue_reports', 'gloss_decisions', 'grammar_patterns',
+  'card_issue_reports', 'chunk_issue_reports', 'gloss_decisions', 'grammar_patterns',
   'grammar_relationships', 'import_batches', 'inbox', 'kanji',
   'named_podcast_feeds', 'pitch_drill_attempts', 'pitch_drill_takes',
   'planner_sessions', 'profiles', 'reference_alignment', 'reference_audio',

@@ -1213,6 +1213,25 @@ export interface NamedPodcastFeed {
   updatedAt: string;
 }
 
+export type ChunkIssueStatus = 'open' | 'resolved';
+
+/**
+ * A chunk-boundary problem the external assistant flagged while writing
+ * particle checks (e.g. "ありが | とう" splits one word), filed on import so a
+ * later session can fix the chunker via `npm run issues:list-chunks`.
+ * `chunks` is the split the assistant was shown; `note` is its description.
+ */
+export interface ChunkIssueReport {
+  id: string;
+  sentenceId: string;
+  chunks: string[];
+  note: string;
+  status: ChunkIssueStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
 export type SyncIssueStatus = 'open' | 'resolved';
 
 /**

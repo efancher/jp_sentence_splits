@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { previewHeuristicChunks } from '../src/lib/analysisHelpers';
 import { buildDecisions, gradeResponse, matchParticleCheck, type GlossChunk } from '../src/lib/glossSkill';
-import { formatBookParticlePromptForAI, parseBookParticleReply } from '../src/lib/particleChecks';
+import { formatBookParticlePromptForAI, parseBookChunkIssues, parseBookParticleReply } from '../src/lib/particleChecks';
 
 const BLOCK = [
   'CHUNK: ゴミ箱に',
@@ -43,6 +43,28 @@ describe('parseBookParticleReply', () => {
   it('rejects blocks with zero or multiple correct marks', () => {
     const none = ['=== Sentence 1 ===', ...BLOCK.map((line) => line.replace('*', ''))].join('\n');
     expect(parseBookParticleReply(none, 1)).toEqual([null]);
+  });
+});
+
+describe('parseBookChunkIssues', () => {
+  it('collects ISSUE lines per sentence, including under NONE and alongside blocks', () => {
+    const reply = [
+      '=== Sentence 1 ===',
+      'ISSUE: ありが | とう → ありがとう',
+      'NONE',
+      '=== Sentence 2 ===',
+      ...BLOCK,
+      'ISSUE: と | き → とき',
+      'ISSUE: も | ちろん → もちろん',
+      '=== Sentence 3 ===',
+      'NONE',
+    ].join('\n');
+    expect(parseBookChunkIssues(reply, 3)).toEqual([
+      ['ありが | とう → ありがとう'],
+      ['と | き → とき', 'も | ちろん → もちろん'],
+      [],
+    ]);
+    expect(parseBookParticleReply(reply, 3)[1]).toHaveLength(1);
   });
 });
 

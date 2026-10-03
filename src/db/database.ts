@@ -31,6 +31,7 @@ import type {
   SentenceVocabulary,
   Source,
   StudyItem,
+  ChunkIssueReport,
   SyncIssueReport,
   VocabularyConfusion,
   VocabularyItem,
@@ -134,6 +135,7 @@ export class GlossbookDatabase extends Dexie {
   // like cardIssueReports so a future session can review a batch via
   // scripts/list-sync-issues.ts — see docs/STATUS.md.
   syncIssueReports!: EntityTable<SyncIssueReport, 'id'>;
+  chunkIssueReports!: EntityTable<ChunkIssueReport, 'id'>;
   // Free pitch-accent drill usage log (docs/STATUS.md), synced like reviews —
   // one row per scored target word per take on PitchAccentDrillPage.
   pitchDrillAttempts!: EntityTable<PitchDrillAttempt, 'id'>;
@@ -701,6 +703,11 @@ export class GlossbookDatabase extends Dexie {
     // Progressive glossing decisions — purely additive.
     this.version(23).stores({
       glossDecisions: 'id, timestamp, bookId, sentenceId, skill',
+    });
+
+    // Chunk-boundary issues flagged during particle-check import — purely additive.
+    this.version(24).stores({
+      chunkIssueReports: 'id, sentenceId, status, createdAt',
     });
   }
 }
