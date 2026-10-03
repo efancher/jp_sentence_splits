@@ -161,8 +161,39 @@ export const PARTICLE_ROLE: Record<string, string> = {
   って: 'って-car',
 };
 
+const LEXICAL_WORDS_WITH_PARTICLE_CHARS = [
+  'ひとりっ子',
+  'ありがとう',
+  'もちろん',
+  'お気に入り',
+  'どうやって',
+  '忘れがち',
+  'とりあえず',
+  'もともと',
+  'ものすごく',
+  'しながら',
+  'おでん',
+  'たいてい',
+  'ごはん',
+  'でしょう',
+  'とても',
+  'とき',
+  'はず',
+  'もう',
+] as const;
+
+function insideLexicalWord(text: string, index: number): boolean {
+  return LEXICAL_WORDS_WITH_PARTICLE_CHARS.some((word) => {
+    for (let start = Math.max(0, index - word.length + 1); start <= index; start += 1) {
+      if (text.startsWith(word, start)) return true;
+    }
+    return false;
+  });
+}
+
 function particleAt(text: string, index: number): string | null {
   if (index <= 0) return null;
+  if (insideLexicalWord(text, index)) return null;
   for (const particle of [...PARTICLE_TOKENS, ...SENTENCE_FINAL_PARTICLES]) {
     if (!text.startsWith(particle, index)) continue;
     const rest = text.slice(index);

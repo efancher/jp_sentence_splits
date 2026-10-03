@@ -116,3 +116,17 @@ describe('previewHeuristicChunks', () => {
     expect(preview.roles.some((role) => role === 'engine')).toBe(true);
   });
 });
+
+describe('chunkJapaneseSentence lexical words containing particle characters', () => {
+  it.each([
+    ['ひとりっ子です。', ['ひとりっ子です。']],
+    ['ありがとう。', ['ありがとう。']],
+    ['お気に入りの本。', ['お気に入りの', '本。']],
+    ['朝ごはんを食べる。', ['朝ごはんを', '食べる。']],
+    ['忘れがちです。', ['忘れがちです。']],
+    ['どうやって行く?', ['どうやって行く?']],
+    ['もともと行くとき、とても。', ['もともと行くとき、', 'とても。']],
+  ])('keeps %s intact', (input, expected) => {
+    expect(chunkJapaneseSentence(input)).toEqual(expected);
+  });
+});
