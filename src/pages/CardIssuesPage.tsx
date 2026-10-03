@@ -3,11 +3,16 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
+  getDb,
   listCardIssueReportsWithContext,
+  listChunkIssueReports,
   listSyncIssueReports,
   resolveCardIssueReport,
   resolveSyncIssueReport,
+  settleChunkIssueReports,
 } from '../db/repository';
+import type { ChunkIssueReport } from '../domain/types';
+import { chunkIssueKey } from '../lib/chunkIssues';
 
 /**
  * Lists issues reported from in-app "Report issue"/"Report sync issue"
@@ -17,6 +22,113 @@ import {
  * scripts/list-card-issues.ts / scripts/list-sync-issues.ts for a future
  * Claude session) until reviewed in one sitting.
  */
+interface ChunkIssueGroup {
+  key: string;
+  status: ChunkIssueReport['status'];
+  source: ChunkIssueReport['source'];
+  note: string;
+  reports: ChunkIssueReport[];
+  examples: { japanese: string; chunks: string[]; bookId?: string; sentenceId: string }[];
+}
+
+async function loadChunkIssueGroups(): Promise<ChunkIssueGroup[]> {
+  const reports = await listChunkIssueReports();
+  const groups = new Map<string, ChunkIssueGroup>();
+  for (const report of reports) {
+    const key = `${report.status}::${chunkIssueKey(report)}`;
+    const group = groups.get(key) ?? {
+      key,
+      status: report.status,
+      source: report.source,
+      note: report.note,
+      reports: [],
+      examples: [],
+    };
+    group.reports.push(report);
+    groups.set(key, group);
+  }
+  const db = getDb();
+  for (const group of groups.values()) {
+    for (const report of group.reports.slice(0, 3)) {
+      const sentence = await db.sentences.get(report.sentenceId);
+      const membership = await db.bookSentences.where('sentenceId').equals(report.sentenceId).first();
+      group.examples.push({
+        japanese: sentence?.japanese ?? '(sentence not found)',
+        chunks: report.chunks,
+        bookId: membership?.bookId,
+        sentenceId: report.sentenceId,
+      });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.reports.length - a.reports.length);
+}
+
+function ChunkIssuesSection() {
+  const [showSettled, setShowSettled] = useState(false);
+  const groups = useLiveQuery(() => loadChunkIssueGroups(), []);
+  const visible = groups?.filter((group) => showSettled || group.status === 'open');
+  return (
+    <section className="panel stack">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h2 style={{ margin: 0 }}>Authoring issues (chunks &amp; meanings)</h2>
+        <label className="row muted" style={{ gap: '0.25rem' }}>
+          <input type="checkbox" checked={showSettled} onChange={(event) => setShowSettled(event.target.checked)} />
+          Show settled
+        </label>
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Flagged by the assistant when importing particle checks / meaning choices, grouped by pattern.
+        &ldquo;Not an issue&rdquo; also stops the same pattern being filed on later imports.
+      </p>
+      {groups === undefined ? (
+        <p className="muted">Loading…</p>
+      ) : visible!.length === 0 ? (
+        <p className="muted">No {showSettled ? '' : 'open '}authoring issues.</p>
+      ) : (
+        <div className="stack" style={{ gap: '0.5rem' }}>
+          {visible!.map((group) => (
+            <div key={group.key} className="list-card stack">
+              <div className="muted">
+                {group.source === 'meaning_checks' ? 'meaning check' : 'particle check'} · {group.reports.length}{' '}
+                {group.reports.length === 1 ? 'sentence' : 'sentences'}
+              </div>
+              <div className="jp">{group.note}</div>
+              {group.examples.map((example) => (
+                <div key={example.sentenceId} className="muted" style={{ fontSize: '0.85rem' }}>
+                  {example.chunks.length ? example.chunks.join(' | ') : example.japanese}
+                  {example.bookId ? (
+                    <>
+                      {' '}
+                      <Link to={`/books/${example.bookId}/analyze/${example.sentenceId}`}>Open</Link>
+                    </>
+                  ) : null}
+                </div>
+              ))}
+              {group.reports.length > group.examples.length ? (
+                <div className="muted">+{group.reports.length - group.examples.length} more</div>
+              ) : null}
+              <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
+                {group.status === 'open' ? (
+                  <>
+                    <button type="button" onClick={() => void settleChunkIssueReports(group.reports.map((r) => r.id), 'dismissed')}>
+                      Not an issue
+                    </button>
+                    <button type="button" onClick={() => void settleChunkIssueReports(group.reports.map((r) => r.id), 'resolved')}>
+                      Mark resolved
+                    </button>
+                  </>
+                ) : (
+                  <span className="muted">{group.status === 'dismissed' ? 'Dismissed' : 'Resolved'}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function CardIssuesPage() {
   const [showResolved, setShowResolved] = useState(false);
   const [showResolvedSync, setShowResolvedSync] = useState(false);
@@ -31,6 +143,7 @@ export function CardIssuesPage() {
 
   return (
     <div className="stack">
+      <ChunkIssuesSection />
       <section className="panel stack">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>Sync &amp; analysis issues</h2>

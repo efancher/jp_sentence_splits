@@ -153,6 +153,7 @@ import {
   hashString,
   sentenceIdFromNormalizedKey,
 } from '../lib/ids';
+import { chunkIssueKey } from '../lib/chunkIssues';
 import { isHanCharacter } from '../lib/kanji';
 import {
   computeContextDiversity,
@@ -8280,10 +8281,13 @@ export async function reportChunkIssues(
   issues: ReadonlyArray<{ sentenceId: string; chunks: readonly string[]; note: string }>,
 ): Promise<number> {
   const db = getDb();
-  const open = await db.chunkIssueReports.where('status').equals('open').toArray();
+  const all = await db.chunkIssueReports.toArray();
+  const dismissed = new Set(all.filter((r) => r.status === 'dismissed').map(chunkIssueKey));
+  const open = all.filter((r) => r.status === 'open');
   let filed = 0;
   for (const issue of issues) {
     const joined = issue.chunks.join(' | ');
+    if (dismissed.has(chunkIssueKey({ source, ...issue }))) continue;
     if (open.some((r) => r.source === source && r.sentenceId === issue.sentenceId && r.chunks.join(' | ') === joined && r.note === issue.note)) continue;
     const timestamp = nowIso();
     const report: ChunkIssueReport = {
@@ -8298,9 +8302,31 @@ export async function reportChunkIssues(
     };
     await db.chunkIssueReports.put(report);
     notifySync('chunk_issue_reports', report.id, report);
+    open.push(report);
     filed += 1;
   }
   return filed;
+}
+
+export async function listChunkIssueReports(): Promise<ChunkIssueReport[]> {
+  const all = await getDb().chunkIssueReports.toArray();
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Settle reports (a UI group's ids) as resolved (fixed) or dismissed (not an issue; skipped on later imports). */
+export async function settleChunkIssueReports(
+  ids: readonly string[],
+  status: 'resolved' | 'dismissed',
+): Promise<void> {
+  const db = getDb();
+  const timestamp = nowIso();
+  for (const id of ids) {
+    const existing = await db.chunkIssueReports.get(id);
+    if (!existing || existing.status !== 'open') continue;
+    const updated: ChunkIssueReport = { ...existing, status, resolvedAt: timestamp, updatedAt: timestamp };
+    await db.chunkIssueReports.put(updated);
+    notifySync('chunk_issue_reports', updated.id, updated);
+  }
 }
 
 export async function reportSyncIssue(input: {

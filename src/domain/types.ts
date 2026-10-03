@@ -1213,7 +1213,7 @@ export interface NamedPodcastFeed {
   updatedAt: string;
 }
 
-export type ChunkIssueStatus = 'open' | 'resolved';
+export type ChunkIssueStatus = 'open' | 'resolved' | 'dismissed';
 
 /**
  * A chunk-boundary problem the external assistant flagged while writing
