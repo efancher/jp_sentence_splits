@@ -15,6 +15,7 @@ import { PitchWordPhraseWarmup } from '../components/PitchWordPhraseWarmup';
 import { RecordToggleButton } from '../components/RecordToggleButton';
 import { ReviewDocumentText } from '../components/ReviewDocumentText';
 import { SegmentLoopPlayer } from '../components/SegmentLoopPlayer';
+import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { SpeedControl } from '../components/SpeedControl';
@@ -2328,6 +2329,9 @@ export function ReviewPage() {
               </>
             )}
             {revealed ? <RevealedFurigana sentence={current.sentence} /> : null}
+            {(current.audio ?? current.wordListening?.audio) ? (
+              <ReviewClipAdjuster audioId={(current.audio ?? current.wordListening?.audio)!.id} />
+            ) : null}
             {revealed && (current.audio ?? current.wordListening?.audio) ? (
               // Measured pitch of the native clip — directly under the
               // sentence, above the dictionary H/L row. Only on the
@@ -2654,6 +2658,26 @@ function RevealedFurigana({ sentence }: { sentence: Sentence }) {
       <FuriganaText text={inlineReading} />
     </div>
   );
+}
+
+/** "Adjust clip" for a card's reference audio; needs a YouTube source URL on the clip or its book. */
+function ReviewClipAdjuster({ audioId }: { audioId: string }) {
+  const resolved = useLiveQuery(async () => {
+    const db = getDb();
+    const audio = await db.sentenceAudio.get(audioId);
+    if (!audio) return null;
+    let sourceUrl = audio.sourceUrl;
+    if (!sourceUrl) {
+      const links = await db.bookSentences.where('sentenceId').equals(audio.sentenceId).toArray();
+      for (const link of links) {
+        sourceUrl = (await db.books.get(link.bookId))?.sourceUrl;
+        if (sourceUrl) break;
+      }
+    }
+    return sourceUrl ? { audio, sourceUrl } : null;
+  }, [audioId]);
+  if (!resolved) return null;
+  return <SentenceAudioAdjuster audio={resolved.audio} sourceUrl={resolved.sourceUrl} />;
 }
 
 /**
