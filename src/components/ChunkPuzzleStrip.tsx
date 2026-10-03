@@ -28,6 +28,8 @@ export type PuzzleChunk = {
   id: string;
   japanese: string;
   role: string;
+  /** Short English shown under the Japanese when `showGloss` is on. */
+  gloss?: string;
 };
 
 type ChunkPuzzleStripProps = {
@@ -46,6 +48,8 @@ type ChunkPuzzleStripProps = {
    * `revealRoles` — undefined (the default) reveals every piece normally.
    */
   revealedIds?: Set<string>;
+  /** Interlinear English under each revealed piece that has a `gloss`. */
+  showGloss?: boolean;
 };
 
 const CLAUSE_TINT_COUNT = 4;
@@ -94,6 +98,7 @@ export function ChunkPuzzleStrip({
   revealRoles = true,
   showLegend = false,
   revealedIds,
+  showGloss = false,
 }: ChunkPuzzleStripProps) {
   if (!chunks.length) return null;
 
@@ -170,6 +175,9 @@ export function ChunkPuzzleStrip({
               </div>
               <div className="chunk-puzzle-body">
                 <div className="jp chunk-puzzle-japanese">{chunk.japanese}</div>
+                {showGloss && revealed && chunk.gloss?.trim() ? (
+                  <div className="chunk-puzzle-gloss">{chunk.gloss.trim()}</div>
+                ) : null}
                 {revealRoles && revealed ? (
                   <div className="chunk-puzzle-role muted">
                     {chunk.role.trim() || '—'}

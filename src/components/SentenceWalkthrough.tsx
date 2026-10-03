@@ -162,6 +162,7 @@ export function SentenceWalkthrough({
     onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
+  const [glossUnderChunks, setGlossUnderChunks] = useState(false);
   const [englishBefore, setEnglishBefore] = useState(0);
   const [englishAfter, setEnglishAfter] = useState(0);
   const chunk = ordered[step];
@@ -252,6 +253,9 @@ export function SentenceWalkthrough({
           <button type="button" aria-pressed={stickyEnglish} onClick={() => setStickyEnglish((on) => !on)}>
             {stickyEnglish ? 'Hide English' : 'Show English'}
           </button>
+          <button type="button" aria-pressed={glossUnderChunks} onClick={() => setGlossUnderChunks((on) => !on)}>
+            {glossUnderChunks ? 'Hide English under chunks' : 'English under chunks'}
+          </button>
           {stickyEnglish ? (
             <>
               <label className="row" style={{ gap: '0.3rem' }}>
@@ -311,7 +315,8 @@ export function SentenceWalkthrough({
         />
       ) : null}
       {tryFirst ? null : <ChunkPuzzleStrip
-        chunks={chunks.map(({ id, japanese, role }) => ({ id, japanese, role }))}
+        chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, gloss: literalEnglish }))}
+        showGloss={glossUnderChunks}
         revealedIds={done ? undefined : revealedIds}
         revealRoles={preset !== 'minimal'}
       />}
