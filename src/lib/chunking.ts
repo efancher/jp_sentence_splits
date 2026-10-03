@@ -6,6 +6,27 @@
 import { stripMarkup } from './normalize';
 
 const PARTICLE_TOKENS = [
+  'によると',
+  'によれば',
+  'について',
+  'にとって',
+  'だけに',
+  'だけを',
+  'だけが',
+  'だけは',
+  'だけの',
+  'などの',
+  'などが',
+  'などを',
+  'などと',
+  'などに',
+  'からの',
+  'までの',
+  'での',
+  'との',
+  'への',
+  'へと',
+  'ながら',
   'から',
   'まで',
   'より',
@@ -87,6 +108,7 @@ const PARTICLE_LOOKAHEAD_BLOCK: Record<string, readonly string[]> = {
   ],
   て: ['ている', 'ています', 'てる', 'てしまう', 'ておく', 'てみる'],
   や: ['やつ'],
+  での: ['でのん'],
 };
 
 const TE_KURU_CONTINUATIONS = [
@@ -171,7 +193,14 @@ const LEXICAL_WORDS_WITH_PARTICLE_CHARS = [
   'とりあえず',
   'もともと',
   'ものすごく',
-  'しながら',
+  'かもしれません',
+  'かもしれない',
+  '気になる',
+  'のでしょう',
+  'のではなく',
+  'のではない',
+  'ごと',
+  '初めて',
   'おでん',
   'たいてい',
   'ごはん',
@@ -191,9 +220,14 @@ function insideLexicalWord(text: string, index: number): boolean {
   });
 }
 
-function particleAt(text: string, index: number): string | null {
+const CHUNK_INITIAL_DEMONSTRATIVES = ['この', 'その', 'あの', 'どの'] as const;
+
+function particleAt(text: string, index: number, chunkStart = 0): string | null {
   if (index <= 0) return null;
   if (insideLexicalWord(text, index)) return null;
+  if (CHUNK_INITIAL_DEMONSTRATIVES.some((word) => text.startsWith(word, chunkStart) && index < chunkStart + word.length)) {
+    return null;
+  }
   for (const particle of [...PARTICLE_TOKENS, ...SENTENCE_FINAL_PARTICLES]) {
     if (!text.startsWith(particle, index)) continue;
     const rest = text.slice(index);
@@ -267,14 +301,37 @@ function particleAt(text: string, index: number): string | null {
   return null;
 }
 
+const PEEL_ADVERBS = [
+  ...STANDALONE_ADVERBS,
+  'とりあえず',
+  'どうやって',
+  'ときどき',
+  'たいてい',
+  'じゃあ',
+  'つまり',
+  '毎日',
+  '時々',
+  'よく',
+  'ぜひ',
+  'また',
+  '少し',
+] as const;
+
+const PEEL_BLOCK: Record<string, readonly string[]> = {
+  よく: ['よくない', 'よくなる', 'よくなっ', 'よくなり', 'よくて', 'よくでき'],
+  また: ['または', 'またぐ', 'またが'],
+  少し: ['少しずつ'],
+};
+
 function peelLeadingAdverbs(chunks: string[]): string[] {
   const peeled: string[] = [];
   for (const chunk of chunks) {
     let remainder = chunk;
     while (remainder) {
       let matched = false;
-      for (const adverb of STANDALONE_ADVERBS) {
+      for (const adverb of PEEL_ADVERBS) {
         if (!remainder.startsWith(adverb) || remainder.length <= adverb.length) continue;
+        if ((PEEL_BLOCK[adverb] ?? []).some((form) => remainder.startsWith(form))) continue;
         const rest = remainder.slice(adverb.length);
         if (rest && CLAUSE_END_CHARS.has(rest[0]!)) {
           peeled.push(adverb + rest[0]);
@@ -310,12 +367,18 @@ export function chunkJapaneseSentence(japanese: string): string[] {
   let start = 0;
   let index = 0;
   while (index < text.length) {
-    const particle = index > start ? particleAt(text, index) : null;
+    const particle = index > start ? particleAt(text, index, start) : null;
     if (particle) {
       const end = index + particle.length;
       chunks.push(text.slice(start, end));
       start = end;
       index = end;
+      continue;
+    }
+    if (index > start && (text[index] === '「' || text[index] === '『') && !'「『'.includes(text[index - 1]!)) {
+      chunks.push(text.slice(start, index));
+      start = index;
+      index += 1;
       continue;
     }
     if (index > start && isSoftBoundary(text, index)) {
