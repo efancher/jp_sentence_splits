@@ -2569,6 +2569,12 @@ function ReadingInContextCard({
             <p className="muted" style={{ margin: 0 }}>
               {structureCorrect ? '✓ Correct' : '✗ Not quite'} — reading:{' '}
               <span className="jp">{structureCheck!.expectedReading}</span>
+              {!structureCorrect ? (
+                <>
+                  {' '}
+                  (you typed: <span className="jp">{structureValue.trim() || '(blank)'}</span>)
+                </>
+              ) : null}
             </p>
           ) : null}
           <p className="muted" style={{ margin: 0 }}>
@@ -2586,6 +2592,12 @@ function ReadingInContextCard({
             <p className="muted" style={{ margin: 0 }}>
               {structureCorrect ? '✓ Correct' : '✗ Not quite'} — reading:{' '}
               <span className="jp">{structureCheck!.expectedReading}</span>
+              {!structureCorrect ? (
+                <>
+                  {' '}
+                  (you typed: <span className="jp">{structureValue.trim() || '(blank)'}</span>)
+                </>
+              ) : null}
             </p>
           ) : null}
           {question && chosenIndex !== null ? (

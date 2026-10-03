@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../src/lib/readingAnswer';
 
+describe('isReadingAnswerCorrect punctuation/katakana leniency', () => {
+  it('ignores punctuation and accepts hiragana or katakana for katakana words', () => {
+    const expected = 'ジャパニーズ！きょうは、';
+    expect(isReadingAnswerCorrect('じゃぱにーずきょうは', expected)).toBe(true);
+    expect(isReadingAnswerCorrect('じゃぱにーず！きょうは、', expected)).toBe(true);
+    expect(isReadingAnswerCorrect('ジャパニーズきょうは', expected)).toBe(true);
+  });
+});
+
 describe('isReadingAnswerCorrect', () => {
   it('matches a single expected reading, kana-form lenient', () => {
     expect(isReadingAnswerCorrect('がんばる', 'がんばる')).toBe(true);

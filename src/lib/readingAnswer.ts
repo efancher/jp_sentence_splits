@@ -32,15 +32,16 @@ export function isReadingAnswerCorrect(
   typed: string,
   expected: string | readonly string[],
 ): boolean {
-  const typedKeys = new Set([normalizeSentenceKey(typed)]);
+  const key = (text: string) => normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, '');
+  const typedKeys = new Set([key(typed)]);
   const typedAsHiragana = toHiragana(typed.trim());
   if (typedAsHiragana && isHiragana(typedAsHiragana)) {
-    typedKeys.add(normalizeSentenceKey(typedAsHiragana));
+    typedKeys.add(key(typedAsHiragana));
   }
   const expectedKeys = (typeof expected === 'string' ? [expected] : expected).flatMap(
     (value) => [
-      normalizeSentenceKey(value),
-      normalizeSentenceKey(toHiragana(value.trim())),
+      key(value),
+      key(toHiragana(value.trim(), { convertLongVowelMark: false })),
     ],
   );
   return [...typedKeys].some((key) => key.length > 0 && expectedKeys.includes(key));
