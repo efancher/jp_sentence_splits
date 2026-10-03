@@ -161,6 +161,9 @@ export function SentenceWalkthrough({
   const [tryFirst, setTryFirst] = useState(() =>
     onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
+  const [stickyEnglish, setStickyEnglish] = useState(false);
+  const [englishBefore, setEnglishBefore] = useState(0);
+  const [englishAfter, setEnglishAfter] = useState(0);
   const chunk = ordered[step];
   const done = step >= ordered.length;
   const revealedIds = new Set(ordered.slice(0, step + 1).map((item) => item.id));
@@ -239,6 +242,46 @@ export function SentenceWalkthrough({
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <strong>Walk through this sentence</strong>
         <button type="button" onClick={onClose}>Back to reading</button>
+      </div>
+      <div
+        className="stack"
+        style={{ gap: '0.25rem', position: 'sticky', top: 0, zIndex: 5, background: 'var(--surface, Canvas)', padding: '0.3rem 0', borderBottom: stickyEnglish ? '1px solid currentColor' : undefined }}
+        aria-label="Sticky English"
+      >
+        <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" aria-pressed={stickyEnglish} onClick={() => setStickyEnglish((on) => !on)}>
+            {stickyEnglish ? 'Hide English' : 'Show English'}
+          </button>
+          {stickyEnglish ? (
+            <>
+              <label className="row" style={{ gap: '0.3rem' }}>
+                <span className="muted">Before</span>
+                <select aria-label="Sentences of English before" value={englishBefore} onChange={(event) => setEnglishBefore(Number(event.target.value))}>
+                  {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="row" style={{ gap: '0.3rem' }}>
+                <span className="muted">After</span>
+                <select aria-label="Sentences of English after" value={englishAfter} onChange={(event) => setEnglishAfter(Number(event.target.value))}>
+                  {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </>
+          ) : null}
+        </div>
+        {stickyEnglish ? (() => {
+          const at = episodeSentences.findIndex((item) => item.id === sentence.id);
+          const lines = at < 0
+            ? [{ id: sentence.id, translation: sentence.translation, current: true }]
+            : episodeSentences
+                .slice(Math.max(0, at - englishBefore), at + englishAfter + 1)
+                .map((item) => ({ id: item.id, translation: item.translation, current: item.id === sentence.id }));
+          return lines.map((line) => (
+            <div key={line.id} className={line.current ? undefined : 'muted'} style={{ fontWeight: line.current ? 600 : undefined }}>
+              {line.translation?.trim() || '(no translation saved)'}
+            </div>
+          ));
+        })() : null}
       </div>
       <ol className="muted" aria-label="Learning stages" style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
         {STAGES.map((stage, index) => (

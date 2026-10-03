@@ -169,7 +169,7 @@ export function ReaderPage() {
   const lessonEvents = useLiveQuery(() => listSentenceLearningEvents(bookId), [bookId]);
   const glossRecords = useLiveQuery(() => listGlossDecisions(), []);
   const episodeSentences = useMemo(
-    () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, position: index + 1 })) : []),
+    () => (data ? data.rows.map((row, index) => ({ id: row.sentence.id, japanese: row.sentence.japanese, translation: row.sentence.translation, position: index + 1 })) : []),
     [data],
   );
   const preparation = data?.chapter?.preparation;

@@ -23,6 +23,8 @@ export interface CompareTarget {
 export interface CompareSentence {
   id: string;
   japanese: string;
+  /** Saved natural translation, for the walkthrough's sticky English bar. */
+  translation?: string;
   /** 1-based position in the episode, for a caption. */
   position: number;
 }
