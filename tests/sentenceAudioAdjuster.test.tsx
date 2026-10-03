@@ -5,14 +5,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SentenceAudioAdjuster } from '../src/components/SentenceAudioAdjuster';
 import type { SentenceAudio } from '../src/domain/types';
 
-const recutSentenceAudioFromSource = vi.fn(async () => ({ durationMs: 1200 }));
+const recutSentenceAudioFromSource = vi.fn(async (..._args: unknown[]) => ({ durationMs: 1200 }));
 vi.mock('../src/db/repository', () => ({
-  recutSentenceAudioFromSource: (...args: unknown[]) =>
-    (recutSentenceAudioFromSource as (...a: unknown[]) => unknown)(...args),
+  recutSentenceAudioFromSource: (...args: unknown[]) => recutSentenceAudioFromSource(...args),
 }));
+const fetchSourceAudioRange = vi.fn(async (..._args: unknown[]) => new Blob(['x'], { type: 'audio/mp4' }));
 vi.mock('../src/lib/miningApi', () => ({
-  fetchSourceWaveform: vi.fn(async () => ({ peaks: [], silenceMidsMs: [] })),
-  fetchSourceAudioRange: vi.fn(async () => new Blob(['x'], { type: 'audio/mp4' })),
+  fetchSourceAudioRange: (...args: unknown[]) => fetchSourceAudioRange(...args),
+}));
+// The real editor decodes audio and draws waveforms; here only its value/onSave contract matters.
+vi.mock('../src/components/ZoomedRangeEditor', () => ({
+  ZoomedRangeEditor: ({
+    value,
+    onSave,
+    onCancel,
+  }: {
+    value: { startMs: number; endMs: number };
+    onSave: (r: { startMs: number; endMs: number }) => void;
+    onCancel: () => void;
+  }) => (
+    <div>
+      <span>{`value ${value.startMs}-${value.endMs}`}</span>
+      <button onClick={() => onSave({ startMs: value.startMs - 500, endMs: value.endMs })}>Save</button>
+      <button onClick={onCancel}>Cancel</button>
+    </div>
+  ),
 }));
 
 const audio: SentenceAudio = {
@@ -30,23 +47,30 @@ const audio: SentenceAudio = {
   importedAt: new Date().toISOString(),
 };
 
-beforeEach(() => recutSentenceAudioFromSource.mockClear());
+beforeEach(() => {
+  recutSentenceAudioFromSource.mockClear();
+  fetchSourceAudioRange.mockClear();
+});
 
 describe('SentenceAudioAdjuster', () => {
-  it('opens the waveform editor on demand and gates Save on an edit', async () => {
+  it('loads padded source audio and re-cuts using absolute source times', async () => {
     const user = userEvent.setup();
     render(<SentenceAudioAdjuster audio={audio} sourceUrl="https://youtu.be/VID" />);
 
     await user.click(screen.getByRole('button', { name: /adjust clip/i }));
-    expect(
-      await screen.findByRole('img', { name: /sentence waveform/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('value 4000-5200')).toBeInTheDocument();
+    expect(fetchSourceAudioRange).toHaveBeenCalledWith('https://youtu.be/VID', 2000, 11200);
 
-    // No edit yet → Save & re-cut disabled, and no re-cut fired.
-    expect(screen.getByRole('button', { name: /save & re-cut/i })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(recutSentenceAudioFromSource).toHaveBeenCalledWith('ra-1', { startMs: 5500, endMs: 7200 });
+  });
 
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(screen.queryByRole('img', { name: /sentence waveform/i })).not.toBeInTheDocument();
+  it('cancel closes without re-cutting', async () => {
+    const user = userEvent.setup();
+    render(<SentenceAudioAdjuster audio={audio} sourceUrl="https://youtu.be/VID" />);
+    await user.click(screen.getByRole('button', { name: /adjust clip/i }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: /adjust clip/i })).toBeInTheDocument();
     expect(recutSentenceAudioFromSource).not.toHaveBeenCalled();
   });
 });

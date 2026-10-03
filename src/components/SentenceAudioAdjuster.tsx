@@ -1,20 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { recutSentenceAudioFromSource } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
-import { fetchSourceAudioRange, fetchSourceWaveform } from '../lib/miningApi';
+import { fetchSourceAudioRange } from '../lib/miningApi';
 
-import { BoundaryWaveform } from './BoundaryWaveform';
+import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
-/** Context shown either side of the clip so a nearby pause is visible. */
-const EDIT_PAD_MS = 6000;
+/** Source audio fetched either side of the clip so the edges can be moved outward. */
+const EDIT_PAD_MS = 4000;
 
 /**
  * Nudge one sentence's reference-clip boundaries and re-cut it from the
- * pristine YouTube source — the per-sentence timing fix on `AnalyzePage`,
- * for a mining boundary that's a touch off. Unlike "Re-segment captions"
+ * pristine YouTube source — the per-sentence timing fix for a mining boundary
+ * that's a touch off (e.g. a clipped-off front). Unlike "Re-segment captions"
  * this touches only this one `sentenceAudio` row: no text change, no lost
  * chunk/grammar analysis, no study-progress remap. Needs a `sourceUrl`.
+ * Uses the same zoomed edge editor as the clip trim, over a padded source span.
  */
 export function SentenceAudioAdjuster({
   audio,
@@ -26,76 +27,81 @@ export function SentenceAudioAdjuster({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({ startMs: audio.startMs, endMs: audio.endMs });
-  const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle');
+  const [state, setState] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
+  const [padded, setPadded] = useState<{ blob: Blob; padStartMs: number } | null>(null);
 
-  const dirty = draft.startMs !== audio.startMs || draft.endMs !== audio.endMs;
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setState('loading');
+    setPadded(null);
+    const padStartMs = Math.min(audio.startMs, EDIT_PAD_MS);
+    void fetchSourceAudioRange(sourceUrl, audio.startMs - padStartMs, audio.endMs + EDIT_PAD_MS)
+      .then((blob) => {
+        if (cancelled) return;
+        setPadded({ blob, padStartMs });
+        setState('ready');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setErrorMsg(error instanceof Error ? error.message : 'Could not load the source audio.');
+        setState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sourceUrl, audio.startMs, audio.endMs]);
 
-  const openEditor = () => {
-    setDraft({ startMs: audio.startMs, endMs: audio.endMs });
-    setState('idle');
-    setOpen(true);
-  };
-
-  async function save() {
+  async function save(range: { startMs: number; endMs: number }) {
+    if (!padded) return;
+    const base = audio.startMs - padded.padStartMs;
     setState('saving');
     setErrorMsg('');
     try {
-      await recutSentenceAudioFromSource(audio.id, draft);
-      setOpen(false); // the useLiveQuery-fed row updates; a reopen re-seeds from it
+      await recutSentenceAudioFromSource(audio.id, {
+        startMs: Math.round(base + range.startMs),
+        endMs: Math.round(base + range.endMs),
+      });
+      setOpen(false);
     } catch (error) {
-      setState('error');
       setErrorMsg(error instanceof Error ? error.message : 'Re-cut failed.');
+      setState('error');
     }
   }
 
   if (!open) {
     return (
-      <button type="button" onClick={openEditor}>
+      <button type="button" onClick={() => setOpen(true)}>
         {label}
       </button>
     );
   }
 
+  const cancel = () => setOpen(false);
+
   return (
     <div className="stack" style={{ gap: '0.4rem', width: '100%' }}>
-      <BoundaryWaveform
-        key={audio.id}
-        startMs={draft.startMs}
-        endMs={draft.endMs}
-        minStartMs={0}
-        maxEndMs={draft.endMs + 3_600_000}
-        padStartMs={Math.min(audio.startMs, EDIT_PAD_MS)}
-        padEndMs={EDIT_PAD_MS}
-        waveformForRange={(s, e) => fetchSourceWaveform(sourceUrl, s, e)}
-        audioForRange={(s, e) => fetchSourceAudioRange(sourceUrl, s, e)}
-        onStartChange={(ms) => setDraft((d) => ({ ...d, startMs: ms }))}
-        onEndChange={(ms) => setDraft((d) => ({ ...d, endMs: ms }))}
-        disabled={state === 'saving'}
-      />
-      <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className="primary"
-          disabled={!dirty || state === 'saving'}
-          onClick={() => void save()}
-        >
-          {state === 'saving' ? 'Re-cutting…' : 'Save & re-cut'}
-        </button>
-        <button
-          type="button"
-          disabled={state === 'saving'}
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </button>
-        {state === 'error' ? (
-          <span className="muted" style={{ color: 'var(--danger)' }}>
-            {errorMsg}
-          </span>
-        ) : null}
-      </div>
+      {state === 'loading' ? <p className="muted">Loading source audio…</p> : null}
+      {state === 'saving' ? <p className="muted">Re-cutting…</p> : null}
+      {state === 'error' ? (
+        <>
+          <p className="muted" style={{ color: 'var(--danger)' }}>{errorMsg}</p>
+          <button type="button" onClick={cancel}>Close</button>
+        </>
+      ) : null}
+      {padded && (state === 'ready' || state === 'saving') ? (
+        <ZoomedRangeEditor
+          blob={padded.blob}
+          audioId={audio.id}
+          value={{ startMs: padded.padStartMs, endMs: padded.padStartMs + (audio.endMs - audio.startMs) }}
+          hasOverride={false}
+          description="Move the start or end to recover audio cut off the clip (the waveform includes a few seconds either side), then Save to re-cut this sentence from the original video."
+          onSave={(range) => void save(range)}
+          onReset={cancel}
+          onCancel={cancel}
+        />
+      ) : null}
     </div>
   );
 }
