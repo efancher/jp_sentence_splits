@@ -1,5 +1,10 @@
 import { readSettings } from '../db/database';
-import { getDb, setSentenceComprehensionCheck } from '../db/repository';
+import {
+  getDb,
+  loadAlignmentsBulk,
+  setSentenceComprehensionCheck,
+  updateSentenceText,
+} from '../db/repository';
 import { generateMeaningBanks, MEANING_ASSIST_MAX_ITEMS_PER_CALL } from './meaningAssist';
 import type { MeaningAssistResponse } from './meaningAssist';
 import {
@@ -9,6 +14,15 @@ import {
   mergeDistractors,
 } from './meaningChoices';
 import type { MeaningBankRequest } from './meaningChoices';
+import { parseInlineReadings } from './parseInlineReadings';
+import {
+  applyReadingFixes,
+  audioSpanReadings,
+  inlineKana,
+  judgeSpan,
+  llmSpanReadings,
+} from './readingConsensus';
+import type { SpanReadings } from './readingConsensus';
 
 /**
  * Finds sentences that need wrong-meaning banks and fills them, either
@@ -120,6 +134,67 @@ export async function applyMeaningBankResult(
   if (merged.added.length === 0) return false;
   await setSentenceComprehensionCheck(sentenceId, merged.check);
   return true;
+}
+
+export interface ReadingCheckOutcome {
+  fixed: number;
+  /** Human-readable disagreements that were not auto-fixed. */
+  flagged: string[];
+}
+
+/**
+ * Check a sentence's stored furigana against the assistant's contextual
+ * whole-sentence reading and (when the clip is aligned) what was actually
+ * spoken. A span is rewritten only when both of those agree with each other
+ * and disagree with the tokenizer; any other disagreement is returned as a
+ * flag. Nothing is written when the markup can't be rebuilt exactly.
+ */
+export async function checkSentenceReading(
+  sentenceId: string,
+  llmReading: string,
+): Promise<ReadingCheckOutcome> {
+  const outcome: ReadingCheckOutcome = { fixed: 0, flagged: [] };
+  const db = getDb();
+  const sentence = await db.sentences.get(sentenceId);
+  const inline = sentence?.inlineReading;
+  if (!sentence || !inline) return outcome;
+
+  const llm = llmSpanReadings(inline, llmReading);
+  const audioRows = await db.sentenceAudio.where('sentenceId').equals(sentenceId).toArray();
+  const alignments = await loadAlignmentsBulk(audioRows.map((row) => row.id));
+  const firstAligned = audioRows.find((row) => alignments.has(row.id));
+  const audio = firstAligned
+    ? audioSpanReadings(inline, alignments.get(firstAligned.id)!.words)
+    : new Map<number, string>();
+
+  const fixes: SpanReadings = new Map();
+  parseInlineReadings(inline).forEach((seg, index) => {
+    if (seg.kind !== 'ruby' || !seg.reading) return;
+    const verdict = judgeSpan(seg.reading, audio.get(index), llm.get(index));
+    if (verdict.kind === 'fix') fixes.set(index, verdict.reading);
+    else if (verdict.kind === 'flag') {
+      const heard = [
+        verdict.audio ? `audio ${verdict.audio}` : '',
+        verdict.llm ? `assistant ${verdict.llm}` : '',
+      ].filter(Boolean);
+      outcome.flagged.push(`${seg.base}: furigana ${seg.reading}, ${heard.join(', ')}`);
+    }
+  });
+  if (fixes.size === 0) return outcome;
+
+  const rewritten = applyReadingFixes(inline, fixes);
+  if (!rewritten) {
+    outcome.flagged.push(`readings differ but the furigana markup can't be rebuilt safely`);
+    return outcome;
+  }
+  const oldKana = inlineKana(inline).kana.replace(/\s+/g, '');
+  const readingOnlyMatches = (sentence.readingOnly ?? '').replace(/\s+/g, '') === oldKana;
+  await updateSentenceText(sentenceId, {
+    inlineReading: rewritten,
+    ...(readingOnlyMatches ? { readingOnly: inlineKana(rewritten).kana } : {}),
+  });
+  outcome.fixed = fixes.size;
+  return outcome;
 }
 
 export interface AutogenSummary {

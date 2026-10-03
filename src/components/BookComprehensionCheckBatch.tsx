@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   TOPUP_BELOW,
   applyMeaningBankResult,
+  checkSentenceReading,
   autoGenerateMeaningChecks,
   findMeaningBankCandidates,
 } from '../lib/meaningCheckAutogen';
@@ -66,9 +67,18 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     const parsed = parseBatchMeaningBankReply(pasted, batch.length);
     let saved = 0;
     const failed: string[] = [];
+    let readingsFixed = 0;
+    const readingFlags: { sentenceId: string; chunks: string[]; note: string }[] = [];
     for (const [index, item] of batch.entries()) {
       const entry = parsed[index];
-      if (!entry) {
+      if (entry?.reading) {
+        const outcome = await checkSentenceReading(item.sentenceId, entry.reading);
+        readingsFixed += outcome.fixed;
+        for (const flag of outcome.flagged) {
+          readingFlags.push({ sentenceId: item.sentenceId, chunks: [], note: `Reading check — ${flag}` });
+        }
+      }
+      if (!entry || entry.wrong.length === 0) {
         failed.push(`${index + 1} (no "- " lines under its header)`);
       } else if (!(await applyMeaningBankResult(item.sentenceId, mode, entry, 'ai_suggested'))) {
         const reason =
@@ -85,8 +95,10 @@ export function BookComprehensionCheckBatch({ bookId }: { bookId: string }) {
     const issues = parseBookChunkIssues(pasted, batch.length).flatMap((notes, i) =>
       notes.map((note) => ({ sentenceId: batch[i]!.sentenceId, chunks: [] as string[], note })),
     );
-    const filed = await reportChunkIssues('meaning_checks', issues);
-    const filedNote = filed ? ` Filed ${filed} issue${filed === 1 ? '' : 's'} for review.` : '';
+    const filed = await reportChunkIssues('meaning_checks', [...issues, ...readingFlags]);
+    const filedNote =
+      (readingsFixed ? ` Corrected ${readingsFixed} furigana reading${readingsFixed === 1 ? '' : 's'}.` : '') +
+      (filed ? ` Filed ${filed} issue${filed === 1 ? '' : 's'} for review.` : '');
     setStatus(
       failed.length === 0
         ? `Saved ${saved}.${filedNote}`

@@ -1879,6 +1879,23 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-10-03 — Furigana confidence: contextual-reading cross-check.**
+  Review cards show furigana after reveal and an "Adjust clip" button; the
+  tokenizer's 前 misread (ぜん) is fixed at the root (`mae_override` in
+  `server/youtube-mining/app/readings.py`, mirrored in `morphology.py`).
+  Beyond one-off fixes, `src/lib/readingConsensus.ts` judges every ruby span
+  against two independent signals: the forced-alignment audio
+  (`audioSpanReadings`) and an assistant's contextual whole-sentence hiragana
+  (`llmSpanReadings`). A span is rewritten only when audio and assistant agree
+  with each other against the tokenizer (`judgeSpan`); any other disagreement
+  is filed as a `meaning_checks` chunk issue ("Reading check — ..."). The
+  assistant's reading is requested in the existing batch wrong-meanings prompt
+  (a `READING:` line per sentence, `BookComprehensionCheckBatch` ->
+  `checkSentenceReading` in `meaningCheckAutogen.ts`); `readingOnly` is
+  rebuilt only if it matched the old inline kana. Nothing new is stored. The
+  in-app AI path (`meaning-assist`) does not request readings yet. Unit tests:
+  `src/lib/readingConsensus.test.ts`.
+
 - **2026-09-30 — Sentence-membership integrity: root causes of the two
   Teppei #1461 glitches found, detector + guards added (no production data
   changed).** Read-only prod scan (`npm run check:sentence-integrity`) finds
