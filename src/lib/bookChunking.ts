@@ -54,6 +54,9 @@ export function formatBookChunkingPrompt(items: readonly ChunkingCandidate[]): s
     'Reply with one line per chunk, in the form "S<number> | chunk | role | gloss", for every sentence,',
     'and nothing else. Example:',
     STRUCTURE_LINE_EXAMPLE,
+    '',
+    'Save the complete reply to a plain-text file named chunking-reply.txt and give it to me to download',
+    '(if you cannot create files, put the whole reply in one code block instead).',
   ].join('\n');
   const sections = items.map((item, i) =>
     [
