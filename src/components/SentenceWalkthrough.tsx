@@ -123,6 +123,7 @@ export function SentenceWalkthrough({
   onEvent,
   glossRecords,
   onGlossDecision,
+  skipCheck = false,
   knownRatio,
   particleChecks,
   quietMode,
@@ -147,6 +148,8 @@ export function SentenceWalkthrough({
   /** Earlier structural decisions (progressive glossing). With `onGlossDecision`, the walkthrough opens on a "try it first" check. */
   glossRecords?: GlossDecision[];
   onGlossDecision?: (decision: GlossDecisionInput) => void;
+  /** Open past the "try it first" check with English under the chunks (arrived from a missed review card, so the answer is already seen). */
+  skipCheck?: boolean;
   /** Share of this sentence's content words already known (advisory readiness; thin opens the glosses). */
   knownRatio?: number;
   /** Authored contextual particle questions for this sentence (SentenceAnalysis.particleChecks). */
@@ -162,14 +165,14 @@ export function SentenceWalkthrough({
   const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
   const [step, setStep] = useState(0);
   const [tryFirst, setTryFirst] = useState(() =>
-    onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
+    !skipCheck && onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
   const [showTranslation, setShowTranslation] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
   const wordGlosses = useMemo(
     () => glossesFromWords(chunks, compareAids?.get(sentence.id)?.words ?? []),
     [chunks, compareAids, sentence.id],
   );
-  const [glossUnderChunks, setGlossUnderChunks] = useState(false);
+  const [glossUnderChunks, setGlossUnderChunks] = useState(skipCheck);
   const [englishBefore, setEnglishBefore] = useState(0);
   const [englishAfter, setEnglishAfter] = useState(0);
   const chunk = ordered[step];

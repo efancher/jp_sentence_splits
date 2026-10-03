@@ -772,6 +772,7 @@ export function ReaderPage() {
                         const content = row.sentence.vocabularySuggestions.filter((suggestion) => suggestion.selectedByDefault);
                         return content.length === 0 ? undefined : content.filter((suggestion) => data.knownExpressions.has(suggestion.expression)).length / content.length;
                       })()}
+                      skipCheck={searchParams.get('skipCheck') === '1'}
                       onGlossDecision={(decision) => void logGlossDecision({ ...decision, bookId })}
                       onEvent={(event) =>
                         void logSentenceLearningEvent({
