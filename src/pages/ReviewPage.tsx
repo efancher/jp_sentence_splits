@@ -19,6 +19,8 @@ import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { SpeedControl } from '../components/SpeedControl';
 import { VocabChips } from '../components/VocabChips';
+import { FuriganaText } from '../lib/furigana';
+import { parseInlineReadings } from '../lib/parseInlineReadings';
 import {
   countReviewsSince,
   deferUnreadyGrammarReviews,
@@ -2325,6 +2327,7 @@ export function ReviewPage() {
                 )}
               </>
             )}
+            {revealed ? <RevealedFurigana sentence={current.sentence} /> : null}
             {revealed && (current.audio ?? current.wordListening?.audio) ? (
               // Measured pitch of the native clip — directly under the
               // sentence, above the dictionary H/L row. Only on the
@@ -2632,6 +2635,24 @@ function ReadingInContextCard({
         </>
       )}
     </>
+  );
+}
+
+/**
+ * The sentence with furigana over its kanji, shown only after reveal so it
+ * never hands over the reading beforehand. Renders nothing when the stored
+ * inline reading is missing, has no ruby, or no longer matches the text.
+ */
+function RevealedFurigana({ sentence }: { sentence: Sentence }) {
+  const { inlineReading, japanese } = sentence;
+  if (!inlineReading) return null;
+  const segments = parseInlineReadings(inlineReading);
+  if (segments.map((segment) => segment.base).join('') !== japanese) return null;
+  if (!segments.some((segment) => segment.kind === 'ruby')) return null;
+  return (
+    <div className="jp jp-lg muted">
+      <FuriganaText text={inlineReading} />
+    </div>
   );
 }
 
