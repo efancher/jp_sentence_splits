@@ -252,7 +252,7 @@ export function SentenceWalkthrough({
       </div>
       <div
         className="stack"
-        style={{ gap: '0.25rem', position: 'sticky', top: 0, zIndex: 5, background: 'var(--surface, Canvas)', padding: '0.3rem 0', borderBottom: stickyEnglish ? '1px solid currentColor' : undefined }}
+        style={{ gap: '0.25rem', position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg-elevated)', padding: '0.3rem 0', borderBottom: stickyEnglish ? '1px solid currentColor' : undefined }}
         aria-label="Sticky English"
       >
         <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
