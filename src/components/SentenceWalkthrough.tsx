@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { glossesFromWords } from '../lib/chunkGlosses';
+import { registerReportContext } from '../lib/reportContext';
 
 import type { AnalysisChunk, ConstructionLayer, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
@@ -227,6 +228,21 @@ export function SentenceWalkthrough({
     if (done && ordered.length > 0) emit({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done]);
+
+  useEffect(() =>
+    registerReportContext('walkthrough', () => ({
+      sentenceId: sentence.id,
+      japanese: sentence.japanese,
+      chunkSource: source,
+      savedAnalysisChunkCount: savedChunks?.length ?? 0,
+      structureDraftReceived: structureDraft ? { chunkCount: structureDraft.length, rebuildsSentence: chunksMatchSource(structureDraft.map((chunk) => chunk.japanese), sentence.japanese) } : null,
+      chunks: chunks.map((item) => ({ japanese: item.japanese, role: item.role, literalEnglish: item.literalEnglish ?? null, wordListGloss: wordGlosses.get(item.id) ?? null })),
+      step,
+      tryFirst,
+      preset,
+      stickyEnglish,
+      glossUnderChunks,
+    })));
 
   if (expressing) {
     return (

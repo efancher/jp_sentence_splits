@@ -8,6 +8,7 @@ import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
+import { registerReportContext } from '../lib/reportContext';
 import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
@@ -237,6 +238,23 @@ export function ReaderPage() {
       block: 'center',
     });
   }, [activeIndex]);
+
+  useEffect(() =>
+    registerReportContext('reader', () => ({
+      bookId,
+      chapterIdFromUrl: chapterId ?? null,
+      chapterLoaded: data?.chapter?.id ?? null,
+      chapterDraftCounts: data?.book.chapters.map((item) => ({ id: item.id, structureDrafts: Object.keys(item.structureDrafts ?? {}).length })) ?? null,
+      sentenceCount: data?.rows.length ?? null,
+      selectedId,
+      walkthroughId: walkthroughId ?? null,
+      walkthroughSentenceLocal: walkthroughId && data
+        ? {
+            savedAnalysisChunks: data.chunksBySentence.get(walkthroughId)?.length ?? 0,
+            structureDraftChunks: data.structureDrafts[walkthroughId]?.length ?? 0,
+          }
+        : null,
+    })));
 
   if (data === undefined) return <p>Loading…</p>;
   if (data === null) return <p>Book not found.</p>;

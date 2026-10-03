@@ -4,6 +4,7 @@ import { matchPath, useLocation } from 'react-router-dom';
 import { APP_VERSION } from '../appConfig';
 import { getDb } from '../db/database';
 import { reportSyncIssue } from '../db/repository';
+import { collectReportContext } from '../lib/reportContext';
 
 const MAX_ERRORS = 10;
 const MAX_PAGE_TEXT = 4000;
@@ -45,6 +46,7 @@ async function buildPageSnapshot(pathname: string, search: string, selection: st
     {
       kind: 'page_report',
       appVersion: APP_VERSION,
+      buildId: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'unknown',
       route: pathname + search,
       title: main?.querySelector('h1, h2')?.textContent?.trim() ?? null,
       sentence,
@@ -53,6 +55,7 @@ async function buildPageSnapshot(pathname: string, search: string, selection: st
       viewport: `${window.innerWidth}x${window.innerHeight}`,
       userAgent: navigator.userAgent,
       recentErrors,
+      context: collectReportContext(),
       capturedAt: new Date().toISOString(),
     },
     null,
