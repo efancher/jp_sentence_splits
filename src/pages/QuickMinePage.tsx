@@ -28,8 +28,17 @@ import {
   type PodcastEpisode,
   type PodcastFeed,
 } from '../lib/miningApi';
-import { formatCombinedPromptForAI, parseAiCombinedReply } from '../lib/miningQuickImport';
+import {
+  COMBINED_PROMPT_FILENAME,
+  formatCombinedPromptForAI,
+  splitCombinedReply,
+  type CombinedPromptOptions,
+  type CombinedReplySections,
+} from '../lib/combinedImportPrompt';
+import { parseAiCombinedReply } from '../lib/miningQuickImport';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
+import { downloadTextFile } from '../lib/particleChecks';
+import { applyQuickImportExtras, hasQuickImportExtras } from '../lib/quickImportExtras';
 import { extractYouTubeId } from '../lib/youtubeUrl';
 import {
   buildShadowingPreview,
@@ -96,7 +105,18 @@ function transcriptFromJob(job: MiningJobStatus): WizardTranscriptSeg[] {
 
 type Stage = 'idle' | 'starting' | 'combine' | 'review' | 'commit';
 
+const EXTRA_OPTION_LABELS: { key: keyof CombinedPromptOptions; label: string }[] = [
+  { key: 'targets', label: 'Focus targets' },
+  { key: 'constructions', label: 'Phrase constructions' },
+  { key: 'structure', label: 'Chunk structure' },
+  { key: 'comprehension', label: 'Comprehension checks' },
+  { key: 'particles', label: 'Particle questions' },
+];
+const LONG_TRANSCRIPT_FRAGMENTS = 80;
+
 interface QuickRow {
+  /** The assistant's S-number for this sentence; extras in the reply are keyed by it. */
+  handle: number;
   japanese: string;
   translation: string;
   startMs: number;
@@ -144,6 +164,15 @@ export function QuickMinePage() {
   const [pasteStatus, setPasteStatus] = useState('');
   const [copied, setCopied] = useState(false);
   const [rows, setRows] = useState<QuickRow[]>([]);
+  const [promptOptions, setPromptOptions] = useState<Required<CombinedPromptOptions>>({
+    targets: true,
+    constructions: true,
+    structure: true,
+    comprehension: true,
+    particles: true,
+  });
+  const [extras, setExtras] = useState<CombinedReplySections | null>(null);
+  const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
   const [podcastFeedUrl, setPodcastFeedUrl] = useState('');
@@ -330,6 +359,8 @@ export function QuickMinePage() {
     setPasted('');
     setPasteStatus('');
     setRows([]);
+    setExtras(null);
+    setSentenceIdByHandle(new Map());
     setPreview(null);
     setPodcastFeedUrl('');
     setPodcastFeed(null);
@@ -386,7 +417,7 @@ export function QuickMinePage() {
 
   async function copyPrompt() {
     try {
-      await navigator.clipboard.writeText(formatCombinedPromptForAI(transcript));
+      await navigator.clipboard.writeText(formatCombinedPromptForAI(transcript, promptOptions));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -394,19 +425,38 @@ export function QuickMinePage() {
     }
   }
 
-  function applyPasted() {
+  function downloadPrompt() {
+    downloadTextFile(COMBINED_PROMPT_FILENAME, formatCombinedPromptForAI(transcript, promptOptions));
+  }
+
+  function applyReply(reply: string) {
     const fallbackEndMs = transcript.at(-1)?.endMs ?? 0;
-    const parsed = parseAiCombinedReply(pasted, fallbackEndMs);
+    const sections = splitCombinedReply(reply);
+    const parsed = parseAiCombinedReply(sections.sentences, fallbackEndMs);
     if (parsed.length === 0) {
       setPasteStatus(
-        "Couldn't read any \"[m:ss] japanese || english\" lines from that — paste the assistant's reply as-is.",
+        "Couldn't read any \"[m:ss] japanese || english\" lines from that — use the assistant's reply (or its file) as-is.",
       );
       return;
     }
-    setRows(parsed);
+    setRows(parsed.map((row, index) => ({ ...row, handle: index + 1 })));
+    setExtras(hasQuickImportExtras(sections) ? sections : null);
     setPasteStatus('');
     setPasted('');
     setStage('review');
+  }
+
+  function applyPasted() {
+    applyReply(pasted);
+  }
+
+  async function handleReplyFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      applyReply(await file.text());
+    } catch {
+      setPasteStatus('Could not read that file — upload the plain-text file the assistant generated.');
+    }
   }
 
   async function runApply(note: string, fn: () => Promise<void>) {
@@ -444,6 +494,11 @@ export function QuickMinePage() {
         );
         const sentences: ShadowingSentenceInput[] = [];
         const audio: ShadowingAudioDraft[] = [];
+        const idByHandle = new Map<number, string>();
+        if (clipped.length === rows.length) {
+          clipped.forEach(({ clip }, index) => idByHandle.set(rows[index]!.handle, clip.sentenceId));
+        }
+        setSentenceIdByHandle(idByHandle);
         for (const { clip, blob } of clipped) {
           const japanese = displayJapanese(clip.japanese);
           sentences.push({
@@ -777,13 +832,55 @@ export function QuickMinePage() {
         <section className="panel stack">
           <strong>{source?.title ?? 'Segment + translate with AI help'}</strong>
           <p className="muted" style={{ margin: 0 }}>
-            Copy this into ChatGPT / Claude, then paste its reply back below.
+            Copy or download this prompt for ChatGPT / Claude. It asks the assistant to
+            return one file; upload that file below (or paste its text).
           </p>
-          <textarea readOnly className="jp" rows={10} value={formatCombinedPromptForAI(transcript)} />
+          <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+            {EXTRA_OPTION_LABELS.map(({ key, label }) => (
+              <label key={key} className="row" style={{ gap: '0.3rem' }}>
+                <input
+                  type="checkbox"
+                  checked={promptOptions[key]}
+                  onChange={(event) =>
+                    setPromptOptions((current) => ({ ...current, [key]: event.target.checked }))
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          {transcript.length > LONG_TRANSCRIPT_FRAGMENTS &&
+          Object.values(promptOptions).some(Boolean) ? (
+            <div className="muted">
+              This is a long transcript — with every extra on, the assistant's reply may be cut
+              off. Untick some extras (the book page can ask for them later) if that happens.
+            </div>
+          ) : null}
+          <textarea
+            readOnly
+            className="jp"
+            rows={10}
+            value={formatCombinedPromptForAI(transcript, promptOptions)}
+          />
           <div className="row">
             <button type="button" onClick={() => void copyPrompt()}>
               {copied ? 'Copied ✓' : 'Copy prompt'}
             </button>
+            <button type="button" onClick={downloadPrompt}>
+              Download prompt file
+            </button>
+            <label className="button">
+              Upload reply file…
+              <input
+                type="file"
+                accept=".txt,.md,.text,text/plain,text/markdown"
+                style={{ display: 'none' }}
+                onChange={(event) => {
+                  void handleReplyFile(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </label>
           </div>
           <textarea
             className="jp"
@@ -905,7 +1002,16 @@ export function QuickMinePage() {
                     }),
                 }
               : {})}
-            onImported={(result) => {
+            onImported={async (result) => {
+              if (extras) {
+                const maxHandle = rows.reduce((max, row) => Math.max(max, row.handle), 0);
+                const byNumber = Array.from({ length: maxHandle }, (_, i) => sentenceIdByHandle.get(i + 1));
+                try {
+                  await applyQuickImportExtras(result.bookId, result.chapterId, extras, byNumber);
+                } catch (err) {
+                  console.error('Quick import extras failed', err);
+                }
+              }
               if (jobId) void deleteMiningJob(jobId);
               clearActiveJob();
               navigate(

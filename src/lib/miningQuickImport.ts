@@ -9,43 +9,14 @@
  */
 
 import { joinJapanese } from './resegmentPlan';
-import { formatWizardTimestamp, type WizardTranscriptSeg } from './miningTranscript';
+
+// The combined prompt itself lives in combinedImportPrompt.ts.
 
 export interface CombinedAiRow {
   startMs: number;
   endMs: number;
   japanese: string;
   translation: string;
-}
-
-const COMBINED_AI_PROMPT_HEADER = [
-  'You are helping prepare a Japanese transcript for shadowing practice —',
-  'segmenting it into clean sentences AND translating each one, in one pass.',
-  '',
-  'Below are timed fragments from automatic transcription. They often break',
-  'mid-sentence and may lack punctuation or contain small recognition errors.',
-  '',
-  'For each sentence:',
-  '- Add sentence-final punctuation (。！？) where it belongs.',
-  '- Fix obvious mis-recognitions, but keep the Japanese wording faithful — do not paraphrase it.',
-  '- Begin the line with the [m:ss] timestamp of the fragment where that sentence starts.',
-  '- Keep lines short enough to shadow: merge at most 2-3 source fragments into one line.',
-  '  Never combine a long run of fragments into one paragraph-length sentence, even if the',
-  '  original speech runs on without a clear break — split it at a natural pause instead.',
-  '- After the Japanese, add " || " followed by a natural, idiomatic English translation of',
-  '  that sentence only. Translate faithfully — do not paraphrase away nuance, and do not add',
-  '  explanation or notes.',
-  '- One sentence per line, formatted exactly as: [m:ss] 日本語文。 || English translation',
-  '- Output only those lines, nothing else.',
-  '',
-  '--- transcript ---',
-].join('\n');
-
-export function formatCombinedPromptForAI(segs: WizardTranscriptSeg[]): string {
-  const body = segs
-    .map((seg) => `[${formatWizardTimestamp(seg.startMs)}] ${seg.text.trim()}`)
-    .join('\n');
-  return `${COMBINED_AI_PROMPT_HEADER}\n${body}\n`;
 }
 
 /** `[2:03] text` or `[2:03.4] text` — tolerant of `00:03`, missing space. */

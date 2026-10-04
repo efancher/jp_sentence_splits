@@ -823,8 +823,12 @@ Targets are constants; no settings UI.
   alternative to the 4-step wizard above, for "just import it": same
   idle-screen URL/podcast-feed picker and job creation/polling, but instead
   of separate Segment and Translate stages, one **combined AI prompt**
-  (`formatCombinedPromptForAI` / `parseAiCombinedReply` in
-  `src/lib/miningQuickImport.ts`) asks the assistant to punctuate/segment
+  (`formatCombinedPromptForAI` in `src/lib/combinedImportPrompt.ts`,
+  `parseAiCombinedReply` in `src/lib/miningQuickImport.ts`; the prompt can also
+  fold in the book prompts — focus targets, constructions, chunk structure,
+  comprehension checks, particle questions — as `=== PART ===` sections of one
+  reply file the user uploads; extras are saved after commit by
+  `src/lib/quickImportExtras.ts`) asks the assistant to punctuate/segment
   *and* translate in a single reply — `[m:ss] 日本語文。 || English
   translation` per line. The parser reuses the same shared-timestamp
   proportional-time-split logic as `parseAiSegmentedTranscript` (a fragment

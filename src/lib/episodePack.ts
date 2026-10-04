@@ -68,14 +68,14 @@ export function planEpisodePack(
   };
 }
 
-const TARGET_INSTRUCTIONS = [
+export const TARGET_INSTRUCTIONS = [
   `FOCUS TARGETS: read the whole episode, then choose at most ${MAX_PREPARED_TARGETS} teaching targets — words, grammar patterns or`,
   'multi-word expressions that recur, contrast across uses, or are needed to follow the episode. Prefer few, well-justified',
   'targets. Do not pick a short interchangeable filler/connective as a recall target; use treatment "gloss_only" for it, or',
   '"phrase" if a longer stretch makes it fair.',
 ];
 
-const TARGET_SHAPE = {
+export const TARGET_SHAPE = {
   kind: 'vocabulary | grammar | expression',
   ref: 'V3 or G2 only when it is in one of the lists above; otherwise omit ref (kind may still be vocabulary or grammar)',
   label: 'the target as written in the episode',
