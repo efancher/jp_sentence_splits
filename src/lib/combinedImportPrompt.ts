@@ -45,8 +45,9 @@ const SENTENCE_RULES = [
   '  explanation or notes.',
   '- One sentence per line, formatted exactly as: [m:ss] 日本語文。 || English translation',
   '',
-  'Number your sentences S1, S2, S3… in the order they appear in PART 1. Every later part',
-  'refers to sentences ONLY by these numbers (S4, or "Sentence 4"), never by timestamp.',
+  'Count your sentences S1, S2, S3… in the order they appear in PART 1 — but do NOT write the S-number on the PART 1 lines',
+  '(each line starts with the [m:ss] timestamp). Every later part refers to sentences ONLY by these counts (S4, or',
+  '"Sentence 4"), never by timestamp.',
 ];
 
 function withDefaults(options: CombinedPromptOptions): Required<CombinedPromptOptions> {

@@ -54,6 +54,13 @@ describe('splitCombinedReply', () => {
     expect(parseAiCombinedReply(sections.sentences, 2000)).toHaveLength(1);
   });
 
+  it('accepts sentence lines prefixed with an S-number', () => {
+    const sections = splitCombinedReply('=== SENTENCES ===\nS1: [0:17] スロージャパニーズ。 || Slow Japanese.\nS2: [0:43] 家。 || Home.');
+    const rows = parseAiCombinedReply(sections.sentences, 60000);
+    expect(rows.map((row) => row.japanese)).toEqual(['スロージャパニーズ。', '家。']);
+    expect(rows[1]!.translation).toBe('Home.');
+  });
+
   it('treats a headerless reply as plain sentence lines', () => {
     const reply = '[0:00] こんにちは。 || Hello.';
     expect(splitCombinedReply(reply).sentences).toBe(reply);

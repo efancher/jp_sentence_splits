@@ -20,7 +20,7 @@ export interface CombinedAiRow {
 }
 
 /** `[2:03] text` or `[2:03.4] text` — tolerant of `00:03`, missing space. */
-const AI_LINE_RE = /^\[\s*(\d+):([0-5]?\d)(?:\.\d+)?\s*\]\s*(.*\S)?\s*$/;
+const AI_LINE_RE = /^(?:[SsＳ]\d+\s*[.):：]?\s*)?\[\s*(\d+):([0-5]?\d)(?:\.\d+)?\s*\]\s*(.*\S)?\s*$/;
 const SEPARATOR_RE = /\s*\|\|\s*/;
 
 /**
