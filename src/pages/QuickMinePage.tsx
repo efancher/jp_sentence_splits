@@ -494,11 +494,10 @@ export function QuickMinePage() {
         );
         const sentences: ShadowingSentenceInput[] = [];
         const audio: ShadowingAudioDraft[] = [];
-        const idByHandle = new Map<number, string>();
+        const clipIdByHandle = new Map<number, string>();
         if (clipped.length === rows.length) {
-          clipped.forEach(({ clip }, index) => idByHandle.set(rows[index]!.handle, clip.sentenceId));
+          clipped.forEach(({ clip }, index) => clipIdByHandle.set(rows[index]!.handle, clip.sentenceId));
         }
-        setSentenceIdByHandle(idByHandle);
         for (const { clip, blob } of clipped) {
           const japanese = displayJapanese(clip.japanese);
           sentences.push({
@@ -524,23 +523,33 @@ export function QuickMinePage() {
           });
         }
         const existing = await getDb().sentences.toArray();
-        setPreview(
-          buildShadowingPreview(
-            {
-              id: source.id,
-              type: 'youtube',
-              url: source.url,
-              videoId: source.videoId,
-              title: source.title,
-              channel: source.channel ?? undefined,
-              durationMs: source.durationMs ?? undefined,
-            },
-            { ...MANIFEST, createdAt: new Date().toISOString() },
-            sentences,
-            audio,
-            existing,
-          ),
+        const builtPreview = buildShadowingPreview(
+          {
+            id: source.id,
+            type: 'youtube',
+            url: source.url,
+            videoId: source.videoId,
+            title: source.title,
+            channel: source.channel ?? undefined,
+            durationMs: source.durationMs ?? undefined,
+          },
+          { ...MANIFEST, createdAt: new Date().toISOString() },
+          sentences,
+          audio,
+          existing,
         );
+        // The clip ids are temporary; the committed sentence id is the preview's proposedId.
+        const clipById = new Map(clipped.map(({ clip }) => [clip.sentenceId, clip]));
+        const idByHandle = new Map<number, string>();
+        clipIdByHandle.forEach((clipId, handle) => {
+          const clip = clipById.get(clipId);
+          if (!clip) return;
+          const key = normalizeSentenceKey(displayJapanese(clip.japanese));
+          const item = builtPreview.drafts.find((candidate) => candidate.draft.normalizedKey === key);
+          if (item?.proposedId) idByHandle.set(handle, item.proposedId);
+        });
+        setSentenceIdByHandle(idByHandle);
+        setPreview(builtPreview);
         setStage('commit');
       },
     );
