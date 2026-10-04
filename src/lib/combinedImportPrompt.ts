@@ -123,8 +123,13 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
     blocks.push({
       heading: 'PARTICLES',
       lines: [
-        'For each sentence pick the chunks that end in a case or topic particle (に で と へ を が は も から まで より) whose role',
-        'is worth a question — skip trivially obvious roles, quotative と, and particles inside fixed expressions. Ask about the',
+        'For each sentence pick the chunks that end in a CASE particle (に で と へ を が から まで より) whose role is worth a',
+        'question. Do NOT ask about the topic/contrast markers は and も (e.g. 将来は, 私は, ときも) or time clauses such as',
+        '〜ときは — their role is just "this is the topic/also" and makes a weak question. Also skip trivially obvious roles,',
+        'quotative と, listed items (や/と between nouns) and particles inside fixed expressions. Ask only when the question has',
+        'exactly ONE defensible answer given the sentence and its English meaning; if you would have to stretch to write three',
+        'wrong options, skip that chunk. Prefer a sentence with 0 questions over a forced one.',
+        'Ask about the',
         "role of that phrase IN THIS SENTENCE, in plain English using the sentence's own words (e.g. \"What role does the bin",
         "play in putting it in?\"), not \"what does に mean?\". Give exactly 4 concrete readings phrased with the sentence's own",
         'nouns and verb; one correct, three plausible-but-wrong for this sentence. No grammar-category labels.',
