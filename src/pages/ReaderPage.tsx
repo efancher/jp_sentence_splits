@@ -5,7 +5,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChunkPuzzleStrip } from '../components/ChunkPuzzleStrip';
 import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
-import { SentenceWalkthrough } from '../components/SentenceWalkthrough';
+import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
+import { glossesFromWords } from '../lib/chunkGlosses';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
@@ -13,7 +14,6 @@ import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDi
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { newWordSegments } from '../lib/newWordFurigana';
-import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
 import { isPreparationStale } from '../lib/episodePreparation';
 import { SentenceJourneyDetails } from '../components/SentenceJourneyDetails';
@@ -790,19 +790,29 @@ export function ReaderPage() {
                   ) : null}
                   {revealedStructures.has(row.sentence.id)
                     ? (() => {
-                        const preview = previewHeuristicChunks(row.sentence.japanese);
+                        const { chunks: shown, source } = walkthroughChunks(
+                          row.sentence,
+                          data.chunksBySentence.get(row.sentence.id),
+                          data.structureDrafts[row.sentence.id],
+                        );
+                        const wordGlosses = glossesFromWords(shown, compareAids?.get(row.sentence.id)?.words ?? []);
                         return (
                           <div className="stack" style={{ gap: '0.25rem' }}>
                             <ChunkPuzzleStrip
-                              chunks={preview.parts.map((japanese, partIndex) => ({
-                                id: `${row.sentence.id}-${partIndex}`,
-                                japanese,
-                                role: preview.roles[partIndex] ?? '',
+                              chunks={shown.map((chunk) => ({
+                                id: chunk.id,
+                                japanese: chunk.japanese,
+                                role: chunk.role,
+                                gloss: chunk.literalEnglish || wordGlosses.get(chunk.id),
                               }))}
+                              showGloss
                             />
                             <span className="muted" style={{ fontSize: '0.8em' }}>
-                              Rough automatic guess, not a saved analysis — a quick peek at
-                              structure, not a substitute for working through it on Analyze.
+                              {source === 'saved'
+                                ? 'From your saved analysis.'
+                                : source === 'ai_draft'
+                                  ? 'From the AI chunking you imported.'
+                                  : 'Rough automatic guess, not a saved analysis — a quick peek at structure, not a substitute for working through it on Analyze.'}
                             </span>
                           </div>
                         );
