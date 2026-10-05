@@ -1244,8 +1244,20 @@ export function ReviewPage() {
         .where('bookId')
         .equals(bookId)
         .sortBy('position');
+      // Session review steps route here for an *active* book, so a chapter the
+      // learner shelved inside it must still be held back. A suspended book's
+      // own review stays exempt (deliberate open).
+      const shelvedChapterIds = book?.suspendedAt
+        ? new Set<string>()
+        : new Set(
+            (book?.chapters ?? [])
+              .filter((chapter) => chapter.suspendedAt)
+              .map((chapter) => chapter.id),
+          );
       const found = await db.sentences.bulkGet(
-        memberships.map((item) => item.sentenceId),
+        memberships
+          .filter((item) => !item.chapterId || !shelvedChapterIds.has(item.chapterId))
+          .map((item) => item.sentenceId),
       );
       sentences = found.filter((item): item is Sentence => Boolean(item));
     } else {
