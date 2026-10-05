@@ -175,3 +175,19 @@ METRICS_UNITS = [
     ).split(",")
     if part.strip()
 ]
+
+# Text-assist (POST /assist): runs a prompt through the Codex CLI, falling
+# back to the Claude CLI, so the frontend can fill in segmentation/
+# translation without a copy/paste round trip. Paths default to PATH lookup;
+# the systemd user PATH lacks nvm, so set MINING_CODEX_PATH when installed
+# via nvm (app/assist.py also puts the binary's own dir on PATH, which is
+# where its `node` lives). MINING_ASSIST_BACKENDS is the try-order.
+CODEX_PATH = os.environ.get("MINING_CODEX_PATH") or None
+CLAUDE_PATH = os.environ.get("MINING_CLAUDE_PATH") or None
+ASSIST_BACKENDS = [
+    name.strip()
+    for name in os.environ.get("MINING_ASSIST_BACKENDS", "codex,claude").split(",")
+    if name.strip()
+]
+ASSIST_TIMEOUT_SECONDS = int(os.environ.get("MINING_ASSIST_TIMEOUT_SECONDS", "600"))
+ASSIST_MAX_PROMPT_CHARS = int(os.environ.get("MINING_ASSIST_MAX_PROMPT_CHARS", "200000"))

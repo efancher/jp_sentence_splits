@@ -28,6 +28,11 @@ Environment=MINING_ASR_TIMEOUT_SECONDS=3600
 # another — see app/jobs.py `_write_checkpoint`). Same tree as the source
 # cache. Swept on the idle / hard TTL regardless.
 Environment=MINING_JOBS_ROOT=%h/.cache/youtube-mining/jobs
+# "Send to assistant" (POST /assist) shells out to these CLIs; codex is an
+# nvm-installed node script, so give its full path (app/assist.py also puts the
+# binary's own dir on PATH for the node shebang).
+Environment=MINING_CODEX_PATH=%h/.nvm/versions/node/v24.19.0/bin/codex
+Environment=MINING_CLAUDE_PATH=%h/.local/bin/claude
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5

@@ -17,6 +17,7 @@ from starlette.background import BackgroundTask
 from app import (
     align_client,
     alignment_backfill,
+    assist,
     clip,
     config,
     difficulty,
@@ -38,6 +39,9 @@ from app.models import (
     AlignmentBackfillJobResponse,
     AlignmentBackfillRequest,
     AlignmentBackfillStatusResponse,
+    AssistCreateResponse,
+    AssistRequest,
+    AssistStatusResponse,
     ClipRequest,
     ClipResponse,
     CommitJobRequest,
@@ -112,6 +116,25 @@ async def status_json(days: int = 3):
 async def create_job(req: CreateJobRequest):
     job = jobs.create_job(req.url, title=req.title, source_type=req.sourceType)
     return CreateJobResponse(jobId=job.id)
+
+
+@app.post("/assist", response_model=AssistCreateResponse)
+async def create_assist(req: AssistRequest):
+    """Run a prompt through the Codex CLI (falling back to Claude) — see
+    app/assist.py. Poll GET /assist/{id}; one run at a time, no retries."""
+    if len(req.prompt) > config.ASSIST_MAX_PROMPT_CHARS:
+        raise HTTPException(status_code=413, detail="Prompt is too long.")
+    return AssistCreateResponse(assistId=assist.submit(req.prompt, req.backend).id)
+
+
+@app.get("/assist/{assist_id}", response_model=AssistStatusResponse)
+async def get_assist(assist_id: str):
+    job = assist.get(assist_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown assist request.")
+    return AssistStatusResponse(
+        status=job.status, backend=job.backend, reply=job.reply, error=job.error
+    )
 
 
 @app.post("/alignment-backfill/jobs", response_model=AlignmentBackfillJobResponse)

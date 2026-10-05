@@ -441,6 +441,26 @@ class CommitJobResponse(BaseModel):
     sentences: list[CommitSentence]
 
 
+AssistBackend = Literal["auto", "codex", "claude"]
+
+
+class AssistRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    backend: AssistBackend = "auto"
+
+
+class AssistCreateResponse(BaseModel):
+    assistId: str
+
+
+class AssistStatusResponse(BaseModel):
+    status: Literal["queued", "running", "done", "error"]
+    # Which CLI produced `reply` (or the last one tried, on error).
+    backend: str | None = None
+    reply: str | None = None
+    error: str | None = None
+
+
 AlignmentBackfillStatus = Literal["running", "done", "error"]
 
 
