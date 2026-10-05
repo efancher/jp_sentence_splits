@@ -10,7 +10,7 @@ import { glossesFromWords } from '../lib/chunkGlosses';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
-import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
+import type { BookSentence, ContextWalkthrough, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { newWordSegments } from '../lib/newWordFurigana';
@@ -149,7 +149,8 @@ export function ReaderPage() {
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
-    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, savedMeanings, knownExpressions };
+    const contextWalkthroughs = Object.assign({}, ...book.chapters.map((item) => item.contextWalkthroughs ?? {})) as Record<string, ContextWalkthrough>;
+    return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
   const openedLessonRef = useRef<string | undefined>(undefined);
@@ -765,6 +766,8 @@ export function ReaderPage() {
                       episodeSentences={episodeSentences}
                       compareAids={compareAids}
                       constructionDrafts={data.chapter?.constructionDrafts}
+                      contextWalkthrough={data.contextWalkthroughs[row.sentence.id]}
+                      importTarget={row.membership.chapterId ? { bookId, chapterId: row.membership.chapterId } : undefined}
                       events={lessonEvents ?? []}
                       glossRecords={glossRecords}
                       particleChecks={data.particleChecksBySentence.get(row.sentence.id)}

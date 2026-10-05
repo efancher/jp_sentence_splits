@@ -19,6 +19,14 @@ import {
   type ConstructionParse,
 } from './phraseConstruction';
 import {
+  WALKTHROUGH_SENTENCES_PER_PART,
+  WALKTHROUGH_SHAPE,
+  buildWalkthroughInstructions,
+  parseWalkthroughs,
+  walkthroughContextLines,
+  type WalkthroughParse,
+} from './contextWalkthrough';
+import {
   STRUCTURE_LINE_EXAMPLE,
   STRUCTURE_SENTENCES_PER_PART,
   buildStructureInstructions,
@@ -45,12 +53,14 @@ export interface EpisodePackPlan {
   structureHandles: string[];
   /** Handles whose "how this phrase works" layers are wanted (opt-in); the first batch rides in the main prompt like structure. */
   constructionHandles: string[];
+  /** Handles whose contextual walkthrough (with surrounding sentences) is wanted; always its own prompt part(s). */
+  walkthroughHandles: string[];
 }
 
 export function planEpisodePack(
   context: PreparationContext,
   preparation: EpisodePreparation | undefined,
-  options: { forceTargets?: boolean; structureSentenceIds?: ReadonlySet<string>; constructionSentenceIds?: ReadonlySet<string> } = {},
+  options: { forceTargets?: boolean; structureSentenceIds?: ReadonlySet<string>; constructionSentenceIds?: ReadonlySet<string>; walkthroughSentenceIds?: ReadonlySet<string> } = {},
 ): EpisodePackPlan {
   const hasFreshTargets =
     !!preparation && preparation.targets.length > 0 && !isPreparationStale(preparation, context.sentences);
@@ -64,6 +74,9 @@ export function planEpisodePack(
     ),
     constructionHandles: context.sentences.flatMap((sentence, index) =>
       options.constructionSentenceIds?.has(sentence.id) ? [`S${index + 1}`] : [],
+    ),
+    walkthroughHandles: context.sentences.flatMap((sentence, index) =>
+      options.walkthroughSentenceIds?.has(sentence.id) ? [`S${index + 1}`] : [],
     ),
   };
 }
@@ -93,6 +106,7 @@ export function longReplyWarning(plan: EpisodePackPlan): string | undefined {
     plan.missingTranslationHandles.length,
     plan.structureHandles.length,
     plan.constructionHandles.length,
+    plan.walkthroughHandles.length > WALKTHROUGH_SENTENCES_PER_PART ? plan.walkthroughHandles.length * 5 : 0,
   ].some((count) => count > LONG_REPLY_SENTENCES);
   return heavy
     ? `This prompt asks for more than ${LONG_REPLY_SENTENCES} sentences in one section, so the AI's reply may be cut off. If that happens, turn on "Split into several prompts".`
@@ -116,7 +130,8 @@ export function buildEpisodePackPrompts(
   const batches = chunk(plan.missingTranslationHandles, PACK_TRANSLATIONS_PER_PART);
   const structureBatches = chunk(plan.structureHandles, STRUCTURE_SENTENCES_PER_PART);
   const constructionBatches = chunk(plan.constructionHandles, CONSTRUCTION_SENTENCES_PER_PART);
-  if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0 && constructionBatches.length === 0) return [];
+  const walkthroughBatches = chunk(plan.walkthroughHandles, WALKTHROUGH_SENTENCES_PER_PART);
+  if (batches.length === 0 && !plan.wantsTargets && structureBatches.length === 0 && constructionBatches.length === 0 && walkthroughBatches.length === 0) return [];
   if (plan.wantsTargets && batches.length === 0) batches.push([]);
   // The first structure batch rides in the first main prompt so one paste covers
   // everything; any further batches (very long episodes) stay separate parts.
@@ -125,7 +140,7 @@ export function buildEpisodePackPrompts(
   const mergedConstruction = batches.length > 0 ? constructionBatches.shift() : undefined;
 
   const sentenceByHandle = new Map(context.sentences.map((s, i) => [`S${i + 1}`, s]));
-  const total = batches.length + structureBatches.length + constructionBatches.length;
+  const total = batches.length + structureBatches.length + constructionBatches.length + walkthroughBatches.length;
   const structureLines = (batch: string[]) => batch.map((handle) => `${handle}: ${sentenceByHandle.get(handle)!.japanese}`);
 
   const structurePrompts = structureBatches.map((batch, index) =>
@@ -158,6 +173,25 @@ export function buildEpisodePackPrompts(
       'Reply with ONLY this JSON, nothing else, using plain straight quotes (omit a sentence that has nothing worth explaining):',
       JSON.stringify({ version: EPISODE_PREPARATION_VERSION, constructions: CONSTRUCTION_SHAPE }, null, 2),
       'Every "text" must be copied exactly from the sentence it names.',
+    ].join('\n'),
+  );
+
+  const walkthroughPrompts = walkthroughBatches.map((batch, index) =>
+    [
+      `You are helping a Japanese learner prepare one episode: "${context.title}".` +
+        (total > 1 ? ` This is part ${batches.length + structureBatches.length + constructionBatches.length + index + 1} of ${total}; each part is answered separately.` : ''),
+      '',
+      ...buildWalkthroughInstructions(),
+      '',
+      'SURROUNDING SENTENCES (read-only context, in order; "..." marks a gap):',
+      ...walkthroughContextLines(context, batch),
+      '',
+      'EXPLAIN THESE:',
+      ...structureLines(batch),
+      '',
+      'Reply with ONLY this JSON, nothing else, using plain straight quotes:',
+      JSON.stringify({ version: EPISODE_PREPARATION_VERSION, walkthroughs: WALKTHROUGH_SHAPE }, null, 2),
+      'Every "text" and "to" must be copied exactly from the sentence it names. Give every sentence listed under EXPLAIN THESE.',
     ].join('\n'),
   );
 
@@ -247,7 +281,7 @@ export function buildEpisodePackPrompts(
     }
     return lines.join('\n');
   });
-  return [...mainPrompts, ...structurePrompts, ...constructionPrompts];
+  return [...mainPrompts, ...structurePrompts, ...constructionPrompts, ...walkthroughPrompts];
 }
 
 export interface PackTranslation {
@@ -264,6 +298,8 @@ export interface PackReplyResult {
   structure?: { drafts: Map<string, StructureDraftChunk[]>; rejected: { handle: string; reason: string }[] };
   /** Present only when the reply had a "constructions" object. */
   constructions?: ConstructionParse;
+  /** Present only when the reply had a "walkthroughs" object. */
+  walkthroughs?: WalkthroughParse;
 }
 
 export function parseEpisodePackReply(reply: string, context: PreparationContext, now: string): PackReplyResult {
@@ -286,8 +322,9 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
   const hasTranslations = 'translations' in object;
   const hasStructure = 'structure' in object;
   const hasConstructions = 'constructions' in object;
-  if (!hasTargets && !hasTranslations && !hasStructure && !hasConstructions) {
-    return { error: 'The reply has none of "targets", "translations", "structure" or "constructions".', translations: [], rejectedTranslations: [] };
+  const hasWalkthroughs = 'walkthroughs' in object;
+  if (!hasTargets && !hasTranslations && !hasStructure && !hasConstructions && !hasWalkthroughs) {
+    return { error: 'The reply has none of "targets", "translations", "structure", "constructions" or "walkthroughs".', translations: [], rejectedTranslations: [] };
   }
 
   const translations: PackTranslation[] = [];
@@ -316,6 +353,7 @@ export function parseEpisodePackReply(reply: string, context: PreparationContext
     rejectedTranslations,
     structure: hasStructure ? parseStructure(object.structure, context) : trailingStructure(reply, context),
     ...(hasConstructions ? { constructions: parseConstructions(object.constructions, context) } : {}),
+    ...(hasWalkthroughs ? { walkthroughs: parseWalkthroughs(object.walkthroughs, context) } : {}),
   };
 }
 

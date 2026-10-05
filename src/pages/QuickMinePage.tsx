@@ -108,6 +108,7 @@ type Stage = 'idle' | 'starting' | 'combine' | 'review' | 'commit';
 const EXTRA_OPTION_LABELS: { key: keyof CombinedPromptOptions; label: string }[] = [
   { key: 'targets', label: 'Focus targets' },
   { key: 'constructions', label: 'Phrase constructions' },
+  { key: 'walkthroughs', label: 'Sentence walkthroughs (how the parts make the meaning)' },
   { key: 'structure', label: 'Chunk structure' },
   { key: 'comprehension', label: 'Comprehension checks' },
   { key: 'particles', label: 'Particle questions' },
@@ -167,6 +168,7 @@ export function QuickMinePage() {
   const [promptOptions, setPromptOptions] = useState<Required<CombinedPromptOptions>>({
     targets: true,
     constructions: true,
+    walkthroughs: true,
     structure: true,
     comprehension: true,
     particles: true,

@@ -40,6 +40,7 @@ export function EpisodePreparationPanel({
   const [forceTargets, setForceTargets] = useState(true);
   const [wantStructure, setWantStructure] = useState(true);
   const [wantConstructions, setWantConstructions] = useState(false);
+  const [wantWalkthroughs, setWantWalkthroughs] = useState(true);
   const [splitIntoParts, setSplitIntoParts] = useState(false);
   const { prompts, warning } = useMemo(() => {
     if (!loaded) return { prompts: [] as string[], warning: undefined };
@@ -47,12 +48,13 @@ export function EpisodePreparationPanel({
       forceTargets,
       structureSentenceIds: wantStructure ? new Set(loaded.needsStructureIds) : undefined,
       constructionSentenceIds: wantConstructions ? new Set(loaded.needsConstructionIds) : undefined,
+      walkthroughSentenceIds: wantWalkthroughs ? new Set(loaded.needsWalkthroughIds) : undefined,
     });
     return {
       prompts: buildEpisodePackPrompts(loaded.context, plan, { splitIntoParts }),
       warning: splitIntoParts ? undefined : longReplyWarning(plan),
     };
-  }, [loaded, forceTargets, wantStructure, wantConstructions, splitIntoParts]);
+  }, [loaded, forceTargets, wantStructure, wantConstructions, wantWalkthroughs, splitIntoParts]);
 
   if (!loaded) return null;
   const { context, preparation } = loaded;
@@ -92,6 +94,12 @@ export function EpisodePreparationPanel({
       bits.push(
         `${result.constructionsSaved} phrase explanation${result.constructionsSaved === 1 ? '' : 's'} saved` +
           (result.rejectedConstructions.length > 0 ? `, ${result.rejectedConstructions.length} layer${result.rejectedConstructions.length === 1 ? '' : 's'} skipped (${result.rejectedConstructions[0]!.reason})` : ''),
+      );
+    }
+    if (result.walkthroughsSaved > 0 || result.rejectedWalkthroughs.length > 0) {
+      bits.push(
+        `${result.walkthroughsSaved} sentence walkthrough${result.walkthroughsSaved === 1 ? '' : 's'} saved` +
+          (result.rejectedWalkthroughs.length > 0 ? `, ${result.rejectedWalkthroughs.length} with skipped parts (${result.rejectedWalkthroughs[0]!.reason})` : ''),
       );
     }
     setMessage(`Saved: ${bits.join('; ') || 'nothing new'}.`);
@@ -154,6 +162,12 @@ export function EpisodePreparationPanel({
           <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
             <input type="checkbox" checked={wantConstructions} onChange={(event) => setWantConstructions(event.target.checked)} />
             <span>Also ask how phrases are built ({loaded.needsConstructionIds.length} sentences without an explanation) for “How this phrase works”</span>
+          </label>
+        ) : null}
+        {loaded.needsWalkthroughIds.length > 0 ? (
+          <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+            <input type="checkbox" checked={wantWalkthroughs} onChange={(event) => setWantWalkthroughs(event.target.checked)} />
+            <span>Also ask how each sentence&rsquo;s parts make its meaning, using the sentences around it ({loaded.needsWalkthroughIds.length} without one) for “Walk through this sentence”</span>
           </label>
         ) : null}
         <label className="row" style={{ gap: '0.35rem', alignItems: 'flex-start', flexWrap: 'nowrap' }}>

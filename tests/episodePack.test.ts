@@ -33,7 +33,7 @@ const context: PreparationContext = {
 describe('episode pack prompts', () => {
   it('asks for targets and only the missing translations in one prompt', () => {
     const plan = planEpisodePack(context, undefined);
-    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [] });
+    expect(plan).toEqual({ wantsTargets: true, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [], walkthroughHandles: [] });
     const prompts = buildEpisodePackPrompts(context, plan);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('S2: 本を買いました。');
@@ -56,8 +56,8 @@ describe('episode pack prompts', () => {
     // Empty targets never count as fresh targets.
     expect(planEpisodePack(context, preparation).wantsTargets).toBe(true);
     const done = { ...context, sentences: context.sentences.map((s) => ({ ...s, translation: 'x' })) };
-    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [], structureHandles: [], constructionHandles: [] })).toEqual([]);
-    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [] });
+    expect(buildEpisodePackPrompts(done, { wantsTargets: false, missingTranslationHandles: [], structureHandles: [], constructionHandles: [], walkthroughHandles: [] })).toEqual([]);
+    const only = buildEpisodePackPrompts(context, { wantsTargets: false, missingTranslationHandles: ['S1', 'S3'], structureHandles: [], constructionHandles: [], walkthroughHandles: [] });
     expect(only[0]).not.toContain('"targets"');
     expect(only[0]).not.toContain('KNOWN VOCABULARY');
   });

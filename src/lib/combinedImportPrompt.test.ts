@@ -27,6 +27,7 @@ describe('formatCombinedPromptForAI', () => {
       structure: false,
       comprehension: false,
       particles: false,
+      walkthroughs: false,
     });
     expect(prompt).toContain('=== SENTENCES ===');
     expect(prompt).not.toContain('=== EPISODE PACK ===');

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { registerReportContext } from '../lib/reportContext';
 
-import type { AnalysisChunk, ConstructionLayer, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import type { AnalysisChunk, ConstructionLayer, ContextWalkthrough, GlossDecision, ParticleCheck, Sentence, StructureDraftChunk, SentenceAudio, SentenceLearningEvent } from '../domain/types';
+import { validWalkthroughFor } from '../lib/contextWalkthrough';
 import { previewHeuristicChunks } from '../lib/analysisHelpers';
 import { assignClauseIndices, isClauseConnectorRole, isEngineRole } from '../lib/clauseBands';
 import type { EpisodeFocusTarget } from '../lib/episodeFocus';
@@ -14,6 +15,7 @@ import { layersOverlapping, validLayersFor, type LayerWithSentence } from '../li
 import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
+import { ContextStepCard, HighlightedSentence, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -119,6 +121,8 @@ export function SentenceWalkthrough({
   episodeSentences = [],
   compareAids,
   constructionDrafts,
+  contextWalkthrough,
+  importTarget,
   events = [],
   onEvent,
   glossRecords,
@@ -142,6 +146,10 @@ export function SentenceWalkthrough({
   compareAids?: ReadonlyMap<string, CompareAids>;
   /** AI-drafted construction layers per sentence id (validated against the live text here). */
   constructionDrafts?: Record<string, ConstructionLayer[]>;
+  /** AI-drafted contextual walkthrough for this sentence; the main content when it still matches the text. */
+  contextWalkthrough?: ContextWalkthrough;
+  /** Where to save a contextual walkthrough for this sentence (enables the "add one" panel on older sentences). */
+  importTarget?: { bookId: string; chapterId: string };
   /** Earlier lesson events for this book, to show what has been practised/compared. */
   events?: SentenceLearningEvent[];
   onEvent?: (event: LessonEventInput) => void;
@@ -163,6 +171,17 @@ export function SentenceWalkthrough({
   const ordered = useMemo(() => walkthroughOrder(chunks), [chunks]);
   const clauseNumbers = useMemo(() => walkthroughClauseNumbers(chunks), [chunks]);
   const clauseCount = useMemo(() => new Set(clauseNumbers.values()).size, [clauseNumbers]);
+  const contextual = useMemo(() => validWalkthroughFor(sentence.japanese, contextWalkthrough), [sentence.japanese, contextWalkthrough]);
+  const stepCount = contextual ? contextual.steps.length : ordered.length;
+  const chunkSpans = useMemo(() => {
+    if (chunks.map((item) => item.japanese).join('') !== sentence.japanese) return undefined;
+    let at = 0;
+    return chunks.map((item) => {
+      const span = { start: at, end: at + item.japanese.length };
+      at = span.end;
+      return { ...item, ...span };
+    });
+  }, [chunks, sentence.japanese]);
   const [step, setStep] = useState(0);
   const [tryFirst, setTryFirst] = useState(() =>
     !skipCheck && onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
@@ -175,8 +194,14 @@ export function SentenceWalkthrough({
   const [glossUnderChunks, setGlossUnderChunks] = useState(skipCheck);
   const [englishBefore, setEnglishBefore] = useState(0);
   const [englishAfter, setEnglishAfter] = useState(0);
-  const chunk = ordered[step];
-  const done = step >= ordered.length;
+  const contextStep = contextual?.steps[step];
+  const chunk = contextual ? undefined : ordered[step];
+  const done = step >= stepCount;
+  const roleHelp: RoleHelp[] = contextStep && chunkSpans
+    ? chunkSpans
+        .filter((item) => item.start < contextStep.end && contextStep.start < item.end)
+        .map((item) => ({ japanese: item.japanese, role: item.role, blurb: roleGuideBlurb(item.role) }))
+    : [];
   const revealedIds = new Set(ordered.slice(0, step + 1).map((item) => item.id));
   const here = focusTargets.filter((target) => target.sentenceIds.includes(sentence.id));
   const [showAllTargets, setShowAllTargets] = useState(false);
@@ -228,7 +253,7 @@ export function SentenceWalkthrough({
   }, [visitId, sentence.id]);
 
   useEffect(() => {
-    if (done && ordered.length > 0) emit({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
+    if (done && stepCount > 0) emit({ id: `${visitId}:completed`, visitId, action: 'walkthrough_completed', sentenceId: sentence.id, quietMode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done]);
 
@@ -237,6 +262,7 @@ export function SentenceWalkthrough({
       sentenceId: sentence.id,
       japanese: sentence.japanese,
       chunkSource: source,
+      contextualWalkthrough: contextual ? { steps: contextual.steps.length, savedSteps: contextWalkthrough?.steps.length ?? 0 } : contextWalkthrough ? 'saved but no longer matches the sentence' : null,
       savedAnalysisChunkCount: savedChunks?.length ?? 0,
       structureDraftReceived: structureDraft ? { chunkCount: structureDraft.length, rebuildsSentence: chunksMatchSource(structureDraft.map((chunk) => chunk.japanese), sentence.japanese) } : null,
       chunks: chunks.map((item) => ({ japanese: item.japanese, role: item.role, literalEnglish: item.literalEnglish ?? null, wordListGloss: wordGlosses.get(item.id) ?? null })),
@@ -339,7 +365,23 @@ export function SentenceWalkthrough({
           onFinish={() => setTryFirst(false)}
         />
       ) : null}
-      {tryFirst ? null : <ChunkPuzzleStrip
+      {tryFirst ? null : contextual ? (
+        <>
+          <HighlightedSentence
+            japanese={sentence.japanese}
+            main={contextStep}
+            connect={contextStep?.connects}
+          />
+          <details>
+            <summary className="muted">Chunk view (generic roles)</summary>
+            <ChunkPuzzleStrip
+              chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, gloss: literalEnglish || wordGlosses.get(id) }))}
+              showGloss={glossUnderChunks}
+              revealRoles={preset !== 'minimal'}
+            />
+          </details>
+        </>
+      ) : <ChunkPuzzleStrip
         chunks={chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, gloss: literalEnglish || wordGlosses.get(id) }))}
         showGloss={glossUnderChunks}
         revealedIds={done ? undefined : revealedIds}
@@ -347,7 +389,14 @@ export function SentenceWalkthrough({
       />}
       {tryFirst ? <button type="button" onClick={() => setTryFirst(false)}>Skip the check, just walk through</button> : done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
-          <div className="jp jp-lg">{sentence.japanese}</div>
+          {contextual ? null : <div className="jp jp-lg">{sentence.japanese}</div>}
+          {contextual && gist !== 'asking' ? (
+            <div className="stack" style={{ gap: '0.2rem' }} aria-label="Putting it together">
+              <strong>Putting it together</strong>
+              <div>{contextual.natural}</div>
+              {contextual.caveat ? <div className="muted"><strong>Depends on context: </strong>{contextual.caveat}</div> : null}
+            </div>
+          ) : null}
           {gist === 'closed' && !showTranslation && sentence.translation?.trim() ? (
             <button type="button" onClick={() => setGist('asking')}>Check my understanding</button>
           ) : null}
@@ -382,6 +431,17 @@ export function SentenceWalkthrough({
           ) : null}
           <button type="button" onClick={() => setStep(0)}>Walk through again</button>
         </div>
+      ) : contextStep ? (
+        <div aria-live="polite">
+          <ContextStepCard
+            step={contextStep}
+            roleHelp={roleHelp}
+            showGloss={showGloss}
+            showWhy={showWhy}
+            onAskGloss={() => ask('gloss')}
+            onAskWhy={() => ask('why')}
+          />
+        </div>
       ) : chunk ? (
         <div className="stack" style={{ gap: '0.25rem' }} aria-live="polite">
           {clauseCount > 1 ? <div className="muted">Clause {clauseNumbers.get(chunk)} of {clauseCount}</div> : null}
@@ -409,10 +469,21 @@ export function SentenceWalkthrough({
       <div className="row">
         <button type="button" disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>Back</button>
         <button type="button" className="primary" disabled={done} onClick={() => setStep((value) => value + 1)}>
-          {step >= ordered.length - 1 ? 'Finish' : 'Continue'}
+          {step >= stepCount - 1 ? 'Finish' : 'Continue'}
         </button>
-        <span className="muted">{done ? 'Done' : `Step ${step + 1} of ${ordered.length}`}</span>
+        <span className="muted">{done ? 'Done' : `Step ${step + 1} of ${stepCount}`}</span>
       </div>
+      {contextual ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+          Explanations were drafted by an AI from a pasted reply, using the sentences around this one; they are not verified by you.
+          Anything marked &ldquo;From context&rdquo; is inferred rather than stated.
+        </p>
+      ) : (
+        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+          No contextual explanation is saved for this sentence, so this walkthrough shows generic role guidance only.
+        </p>
+      )}
+      {!contextual && importTarget ? <WalkthroughContentImport bookId={importTarget.bookId} chapterId={importTarget.chapterId} sentenceId={sentence.id} /> : null}
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
         {source === 'saved'
           ? 'From your saved analysis of this sentence.'

@@ -12,11 +12,13 @@ import { EPISODE_PREPARATION_VERSION } from './episodePreparation';
 import { STRUCTURE_LINE_EXAMPLE, buildStructureInstructions } from './episodeStructure';
 import { formatWizardTimestamp, type WizardTranscriptSeg } from './miningTranscript';
 import { CONSTRUCTION_SHAPE, buildConstructionInstructions } from './phraseConstruction';
+import { WALKTHROUGH_SHAPE, buildWalkthroughInstructions } from './contextWalkthrough';
 
 export interface CombinedPromptOptions {
   targets?: boolean;
   structure?: boolean;
   constructions?: boolean;
+  walkthroughs?: boolean;
   comprehension?: boolean;
   particles?: boolean;
 }
@@ -55,6 +57,7 @@ function withDefaults(options: CombinedPromptOptions): Required<CombinedPromptOp
     targets: options.targets ?? true,
     structure: options.structure ?? true,
     constructions: options.constructions ?? true,
+    walkthroughs: options.walkthroughs ?? true,
     comprehension: options.comprehension ?? true,
     particles: options.particles ?? true,
   };
@@ -62,7 +65,7 @@ function withDefaults(options: CombinedPromptOptions): Required<CombinedPromptOp
 
 function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; lines: string[] }[] {
   const blocks: { heading: string; lines: string[] }[] = [];
-  if (opts.targets || opts.constructions) {
+  if (opts.targets || opts.constructions || opts.walkthroughs) {
     const shape: Record<string, unknown> = { version: EPISODE_PREPARATION_VERSION };
     const lines: string[] = [];
     if (opts.targets) {
@@ -80,6 +83,15 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
       lines.push(
         ...buildConstructionInstructions(),
         'Every construction "text" must be copied exactly from the sentence it names; omit a sentence that has nothing worth explaining.',
+        '',
+      );
+    }
+    if (opts.walkthroughs) {
+      shape.walkthroughs = WALKTHROUGH_SHAPE;
+      lines.push(
+        ...buildWalkthroughInstructions(),
+        'You have the whole transcript above, so use the sentences around each one as its context. Every walkthrough "text" and "to" must be copied',
+        'exactly from the sentence it names. Cover every sentence from PART 1 (a very short filler like はい may have a single step).',
         '',
       );
     }

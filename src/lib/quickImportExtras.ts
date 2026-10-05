@@ -22,6 +22,7 @@ export interface QuickImportExtrasResult {
   targets: number;
   structure: number;
   constructions: number;
+  walkthroughs: number;
   comprehension: number;
   particles: number;
   problems: string[];
@@ -42,6 +43,7 @@ export async function applyQuickImportExtras(
     targets: 0,
     structure: 0,
     constructions: 0,
+    walkthroughs: 0,
     comprehension: 0,
     particles: 0,
     problems: [],
@@ -92,8 +94,9 @@ export async function applyQuickImportExtras(
       result.targets = saved.preparation?.targets.length ?? 0;
       result.structure = saved.structureSaved;
       result.constructions = saved.constructionsSaved;
-      const rejected = saved.rejectedStructure.length + saved.rejectedConstructions.length;
-      if (rejected > 0) result.problems.push(`${rejected} structure/construction entries did not match their sentence and were skipped.`);
+      result.walkthroughs = saved.walkthroughsSaved;
+      const rejected = saved.rejectedStructure.length + saved.rejectedConstructions.length + saved.rejectedWalkthroughs.length;
+      if (rejected > 0) result.problems.push(`${rejected} structure/construction/walkthrough entries did not match their sentence (or were only partly kept) and were skipped.`);
     }
   }
   return result;

@@ -327,6 +327,47 @@ export interface BookChapter {
    * `src/lib/phraseConstruction.ts`. Re-validated against the live sentence text before use.
    */
   constructionDrafts?: Record<string, ConstructionLayer[]>;
+  /**
+   * AI-drafted, sentence-specific "how the parts make the meaning" walkthrough per sentence id, from a
+   * pasted episode-pack reply written with the surrounding sentences in view. Spans are computed locally
+   * and re-validated against the live sentence text before use.
+   */
+  contextWalkthroughs?: Record<string, ContextWalkthrough>;
+}
+
+/** A span of one sentence: `text` is an exact substring, offsets are computed locally. */
+export interface WalkthroughSpan {
+  text: string;
+  start: number;
+  end: number;
+}
+
+/** One meaningful word group, possibly crossing chunk boundaries, and what it does in this sentence. */
+export interface ContextWalkthroughStep extends WalkthroughSpan {
+  /** Short natural English for just this span in context. */
+  gloss: string;
+  /** What it means here and how it works, in plain English. */
+  explanation: string;
+  /** The other part of the sentence this attaches to, and how. */
+  connects?: WalkthroughSpan & { how: string };
+  /** What particles, conjugations or constructions contribute. */
+  mechanics?: string;
+  /** What Japanese leaves unsaid that English has to supply. */
+  implicit?: string;
+  /** Conversational nuance (tone, politeness, softening). */
+  nuance?: string;
+  /** The part of this step that rests on surrounding context rather than the sentence itself. */
+  inferred?: string;
+  /** Optional longer detail, collapsed by default. */
+  detail?: string;
+}
+
+export interface ContextWalkthrough {
+  /** Natural whole-sentence English. */
+  natural: string;
+  /** When the reading depends on context (e.g. what "the other one" refers to), or is ambiguous. */
+  caveat?: string;
+  steps: ContextWalkthroughStep[];
 }
 
 export type ConstructionOperation = 'inflection' | 'helper' | 'role_change' | 'unit';
