@@ -11,6 +11,7 @@ import { TranslateAiHelp } from '../components/TranslateAiHelp';
 import {
   commitSeriesEpisodeImport,
   getDb,
+  canonicalSourceId,
   getSeriesImportedSourceIds,
   rememberPodcastFeedUrl,
 } from '../db/repository';
@@ -714,7 +715,7 @@ export function YouTubeMinePage() {
   const visibleResumable = useMemo(
     () =>
       resumable.filter((job) => {
-        if (importedPodcastSourceIds?.has(job.url)) return false;
+        if (importedPodcastSourceIds?.has(canonicalSourceId(job.url))) return false;
         const videoId = extractYouTubeId(job.url);
         return !(videoId && minedVideos.has(videoId));
       }),
@@ -893,7 +894,7 @@ export function YouTubeMinePage() {
                   )}
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
                     {visiblePodcastEpisodes.map((episode) => {
-                      const imported = importedPodcastSourceIds?.has(episode.url);
+                      const imported = importedPodcastSourceIds?.has(canonicalSourceId(episode.url));
                       const publishedDate = episode.publishedAt
                         ? new Date(episode.publishedAt)
                         : null;

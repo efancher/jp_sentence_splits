@@ -8,6 +8,7 @@ import { SpanAudioButton } from '../components/SpanAudioButton';
 import {
   commitSeriesEpisodeImport,
   getDb,
+  canonicalSourceId,
   getSeriesImportedSourceIds,
   rememberPodcastFeedUrl,
 } from '../db/repository';
@@ -839,7 +840,7 @@ export function QuickMinePage() {
   const visibleResumable = useMemo(
     () =>
       resumable.filter((job) => {
-        if (importedPodcastSourceIds?.has(job.url)) return false;
+        if (importedPodcastSourceIds?.has(canonicalSourceId(job.url))) return false;
         const videoId = extractYouTubeId(job.url);
         return !(videoId && minedVideos.has(videoId));
       }),
@@ -1020,7 +1021,7 @@ export function QuickMinePage() {
                         setPodcastSelected((current) => {
                           const next = new Set(current);
                           for (const episode of visiblePodcastEpisodes) {
-                            if (!importedPodcastSourceIds?.has(episode.url)) next.add(episode.url);
+                            if (!importedPodcastSourceIds?.has(canonicalSourceId(episode.url))) next.add(episode.url);
                           }
                           return next;
                         })
@@ -1046,7 +1047,7 @@ export function QuickMinePage() {
                   </div>
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
                     {visiblePodcastEpisodes.map((episode) => {
-                      const imported = importedPodcastSourceIds?.has(episode.url);
+                      const imported = importedPodcastSourceIds?.has(canonicalSourceId(episode.url));
                       const publishedDate = episode.publishedAt ? new Date(episode.publishedAt) : null;
                       return (
                         <div key={episode.url} className="row" style={{ gap: '0.5rem' }}>

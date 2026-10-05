@@ -7,6 +7,7 @@ import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import {
   commitSeriesEpisodeImport,
   getDb,
+  canonicalSourceId,
   getSeriesImportedSourceIds,
   rememberNhkEasyFeedUrl,
 } from '../db/repository';
@@ -293,7 +294,7 @@ export function NhkEasyImportPage() {
                   {feed.title} — {feed.episodes.length} articles
                 </div>
                 {feed.episodes.map((episode) => {
-                  const imported = importedArticleSourceIds?.has(episode.url);
+                  const imported = importedArticleSourceIds?.has(canonicalSourceId(episode.url));
                   const publishedDate = episode.publishedAt
                     ? new Date(episode.publishedAt)
                     : null;

@@ -3002,7 +3002,9 @@ export async function commitSeriesEpisodeImport(options: {
   // be edited upstream or, rarely, collide between two different episodes;
   // sourceId is what actually identifies "this is the same episode again."
   const existingChapter = existingBook?.chapters.find(
-    (chapter) => chapter.sourceId === options.sourceId,
+    (chapter) =>
+      chapter.sourceId &&
+      canonicalSourceId(chapter.sourceId) === canonicalSourceId(options.sourceId),
   );
   const selectedIds = options.preview.drafts.map((item) => item.proposedId);
 
@@ -3071,7 +3073,22 @@ export async function commitSeriesEpisodeImport(options: {
 }
 
 /**
- * Every episode/article URL already imported under this series (see
+ * Host feeds (Anchor/Spotify) serve the same episode as either a bare media
+ * URL or a `.../podcast/play/<id>/<encoded media URL>` wrapper depending on
+ * the feed fetch, so compare episodes on the underlying media URL.
+ */
+export function canonicalSourceId(url: string): string {
+  const match = /\/podcast\/play\/\d+\/(https?%3A[^?#]+)/i.exec(url);
+  if (!match) return url;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Every episode/article URL (canonicalised via `canonicalSourceId`; look up with it) already imported under this series (see
  * `commitSeriesEpisodeImport`), or an empty set if the series has no book
  * yet — lets a feed's episode/article picker show "already imported"
  * against its own as-listed URLs without fetching anything.
@@ -3097,10 +3114,11 @@ export async function getSeriesImportedSourceIds(
   const sourceIds = new Set(
     (seriesBook?.chapters ?? [])
       .map((chapter) => chapter.sourceId)
-      .filter((sourceId): sourceId is string => Boolean(sourceId)),
+      .filter((sourceId): sourceId is string => Boolean(sourceId))
+      .map(canonicalSourceId),
   );
   for (const book of allBooks) {
-    if (book.sourceUrl) sourceIds.add(book.sourceUrl);
+    if (book.sourceUrl) sourceIds.add(canonicalSourceId(book.sourceUrl));
   }
   return sourceIds;
 }
