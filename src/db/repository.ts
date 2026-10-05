@@ -151,6 +151,7 @@ import {
   type GrammarPriorityBucket,
 } from '../lib/grammarPatterns';
 import {
+  canonicalSourceId,
   createId,
   deterministicId,
   hashString,
@@ -3070,21 +3071,6 @@ export async function commitSeriesEpisodeImport(options: {
   await applySentenceAudioForPreview(result.bookId, options.preview);
 
   return { bookId: result.bookId, chapterId: result.chapterId };
-}
-
-/**
- * Host feeds (Anchor/Spotify) serve the same episode as either a bare media
- * URL or a `.../podcast/play/<id>/<encoded media URL>` wrapper depending on
- * the feed fetch, so compare episodes on the underlying media URL.
- */
-export function canonicalSourceId(url: string): string {
-  const match = /\/podcast\/play\/\d+\/(https?%3A[^?#]+)/i.exec(url);
-  if (!match) return url;
-  try {
-    return decodeURIComponent(match[1]!);
-  } catch {
-    return url;
-  }
 }
 
 /**

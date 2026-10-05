@@ -8,11 +8,10 @@ import { SpanAudioButton } from '../components/SpanAudioButton';
 import {
   commitSeriesEpisodeImport,
   getDb,
-  canonicalSourceId,
   getSeriesImportedSourceIds,
   rememberPodcastFeedUrl,
 } from '../db/repository';
-import { hashString } from '../lib/ids';
+import { canonicalSourceId, hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
   commitMiningJob,

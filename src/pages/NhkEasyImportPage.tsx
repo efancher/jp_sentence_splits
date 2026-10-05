@@ -7,10 +7,10 @@ import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import {
   commitSeriesEpisodeImport,
   getDb,
-  canonicalSourceId,
   getSeriesImportedSourceIds,
   rememberNhkEasyFeedUrl,
 } from '../db/repository';
+import { canonicalSourceId } from '../lib/ids';
 import {
   base64ToBlob,
   fetchPodcastFeed,

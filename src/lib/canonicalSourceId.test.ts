@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalSourceId } from './repository';
+import { canonicalSourceId } from './ids';
 
 const mp3 = 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2021-8-9/abc.mp3';
 

@@ -57,3 +57,18 @@ export function deterministicId(prefix: string, ownerId: string, ...parts: strin
     .join('');
   return `${prefix}_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
+
+/**
+ * Host feeds (Anchor/Spotify) serve the same episode as either a bare media
+ * URL or a `.../podcast/play/<id>/<encoded media URL>` wrapper depending on
+ * the feed fetch, so compare episodes on the underlying media URL.
+ */
+export function canonicalSourceId(url: string): string {
+  const match = /\/podcast\/play\/\d+\/(https?%3A[^?#]+)/i.exec(url);
+  if (!match) return url;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return url;
+  }
+}
