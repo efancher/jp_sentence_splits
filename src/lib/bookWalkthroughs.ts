@@ -13,8 +13,6 @@ import { EPISODE_PREPARATION_VERSION, extractJson } from './episodePreparation';
 // sentence's position in the whole book (S1..Sn), so several prompt files and replies can be applied one
 // after another; each reply merges into the chapters and later replies never disturb earlier ones.
 
-export const BOOK_WALKTHROUGH_BATCH = 30;
-
 export interface BookWalkthroughPlan {
   title: string;
   /** Every distinct book sentence in order; the handle of index i is `S${i + 1}`. */

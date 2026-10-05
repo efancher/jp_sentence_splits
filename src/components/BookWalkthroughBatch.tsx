@@ -3,7 +3,6 @@ import { useState } from 'react';
 
 import { saveContextWalkthroughsByChapter } from '../db/repository';
 import {
-  BOOK_WALKTHROUGH_BATCH,
   formatBookWalkthroughPrompt,
   parseBookWalkthroughReply,
   planBookWalkthroughs,
@@ -25,7 +24,7 @@ export function BookWalkthroughBatch({ bookId }: { bookId: string }) {
 
   function download() {
     if (!plan) return;
-    const handles = plan.pending.slice(0, BOOK_WALKTHROUGH_BATCH);
+    const handles = plan.pending;
     setAsked(plan);
     downloadTextFile(`walkthroughs-${bookId}.txt`, formatBookWalkthroughPrompt(plan, handles));
     setStatus(`Downloaded a prompt for ${handles.length} sentences. Upload the assistant's reply below.`);
@@ -56,15 +55,15 @@ export function BookWalkthroughBatch({ bookId }: { bookId: string }) {
         <p className="muted" style={{ margin: 0 }}>
           Sentences prepared before contextual explanations existed only show generic role help in the walkthrough.
           An assistant can explain, from the surrounding sentences, what each part means here and how it connects.
-          Prompts cover {BOOK_WALKTHROUGH_BATCH} sentences at a time; each reply is merged in, and your saved analyses and
-          other drafts are never changed. Explanations are shown as unverified drafts.
+          The prompt file covers every sentence without one. Each reply is merged in, and your saved analyses and
+          other drafts are never changed; if the assistant's reply is cut off, apply it anyway and download again for what's left. Explanations are shown as unverified drafts.
         </p>
         {plan.pending.length === 0 ? (
           <div className="muted">Nothing pending.</div>
         ) : (
           <div className="row">
             <button type="button" onClick={download}>
-              Download prompt file (next {Math.min(BOOK_WALKTHROUGH_BATCH, plan.pending.length)} of {plan.pending.length})
+              Download prompt file (all {plan.pending.length})
             </button>
           </div>
         )}
