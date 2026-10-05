@@ -55,7 +55,7 @@ def _resolve(configured: str | None, name: str) -> str:
 
 def _env_for(binary: str) -> dict[str, str]:
     env = dict(os.environ)
-    env["PATH"] = f"{Path(binary).resolve().parent}{os.pathsep}{env.get('PATH', '')}"
+    env["PATH"] = f"{Path(binary).absolute().parent}{os.pathsep}{env.get('PATH', '')}"
     return env
 
 
