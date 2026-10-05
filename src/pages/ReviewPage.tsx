@@ -1861,7 +1861,9 @@ export function ReviewPage() {
     const books = await db.books.bulkGet(rows.map((row) => row.bookId));
     return rows.map((row, index) => {
       const book = books[index];
-      return `${book?.title ?? row.bookId} (${book?.suspendedAt ? 'suspended' : 'active'})`;
+      const chapter = row.chapterId ? book?.chapters?.find((c) => c.id === row.chapterId) : undefined;
+      const shelved = book?.suspendedAt || chapter?.suspendedAt;
+      return `${book?.title ?? row.bookId}${chapter ? ` › ${chapter.title}` : ''} (${shelved ? 'suspended' : 'active'})`;
     });
   }, [currentSentenceId]);
 
