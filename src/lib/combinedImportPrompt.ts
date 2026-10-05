@@ -164,6 +164,22 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
   return blocks;
 }
 
+export type ExtraKind = keyof CombinedPromptOptions;
+
+/** The instruction block for a single extra, as used inside the combined prompt. */
+export function singleExtraBlock(kind: ExtraKind): { heading: string; lines: string[] } {
+  const only: Required<CombinedPromptOptions> = {
+    targets: false,
+    structure: false,
+    constructions: false,
+    walkthroughs: false,
+    comprehension: false,
+    particles: false,
+    [kind]: true,
+  };
+  return extraBlocks(only)[0]!;
+}
+
 export function formatCombinedPromptForAI(
   segs: WizardTranscriptSeg[],
   options: CombinedPromptOptions = {},

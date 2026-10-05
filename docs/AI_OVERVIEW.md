@@ -848,7 +848,19 @@ Targets are constants; no settings UI.
   source URL (`commitShadowingPackageImport` for a plain video,
   `commitSeriesEpisodeImport` per-episode-as-chapter for a podcast feed).
   `ImportPage` links both this and the full wizard for YouTube/podcast
-  sources.
+  sources. Podcast episodes can be multi-selected and run as a queue (next
+  episode's mining job prefetched one ahead). Instead of copy/paste, a
+  **"Send to assistant"** button runs the work on the mining box through
+  `POST /assist` (`server/youtube-mining/app/assist.py`: the `codex` CLI, then
+  `claude -p` as backup, one run at a time, tailnet-only): segment+translate in
+  40-fragment parts (`src/lib/assistChunks.ts`), then, on the review step, the
+  ticked extras in ~25-sentence ranges with 3 sentences of context before and 2
+  after, focus targets in one whole-episode call (`src/lib/assistExtras.ts`).
+  Every piece is validated (cut-off checks) and stored in localStorage as it
+  lands; a piece gets two attempts, then the run stops and the button becomes
+  "Resume", so a misbehaving assistant never loops unattended. Replies that are
+  pasted manually are checked for truncation (`checkCombinedReply`, `=== END ===`
+  marker) and shown as warnings.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

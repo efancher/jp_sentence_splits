@@ -37,6 +37,7 @@ import {
   type CombinedPromptOptions,
   type CombinedReplySections,
 } from '../lib/combinedImportPrompt';
+import { mergeExtraReplies, planExtraTasks, runExtraTasks } from '../lib/assistExtras';
 import {
   MAX_ATTEMPTS_PER_CHUNK,
   NO_EXTRAS,
@@ -65,6 +66,7 @@ const PODCAST_PAGE_SIZE = 30;
  * which wizard stage) a job has reached. */
 const ACTIVE_JOB_KEY = 'quickmine.activeJob';
 const ASSIST_REPLIES_KEY_PREFIX = 'quickmine.assistReplies.';
+const ASSIST_EXTRAS_KEY_PREFIX = 'quickmine.assistExtras.';
 const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 function storeActiveJob(jobId: string): void {
@@ -194,6 +196,9 @@ export function QuickMinePage() {
   const [assistRunning, setAssistRunning] = useState(false);
   const [assistProgress, setAssistProgress] = useState('');
   const [assistFailure, setAssistFailure] = useState('');
+  const [extrasRunning, setExtrasRunning] = useState(false);
+  const [extrasProgress, setExtrasProgress] = useState('');
+  const [extrasFailure, setExtrasFailure] = useState('');
   const assistCancelRef = useRef(false);
   const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
@@ -399,6 +404,8 @@ export function QuickMinePage() {
     setReplyWarnings([]);
     setAssistFailure('');
     setAssistProgress('');
+    setExtrasFailure('');
+    setExtrasProgress('');
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPodcastFeedUrl('');
@@ -487,6 +494,8 @@ export function QuickMinePage() {
     setReplyWarnings([]);
     setAssistFailure('');
     setAssistProgress('');
+    setExtrasFailure('');
+    setExtrasProgress('');
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPasted('');
@@ -611,6 +620,63 @@ export function QuickMinePage() {
     }
     localStorage.removeItem(storageKey);
     applyReply(mergeChunkReplies(result.replies.filter((r): r is string => r !== null)), NO_EXTRAS);
+  }
+
+  async function generateExtras() {
+    if (!jobId || extrasRunning || rows.length === 0) return;
+    const sentences = rows.map((row) => ({
+      handle: row.handle,
+      japanese: row.japanese,
+      translation: row.translation,
+    }));
+    const tasks = planExtraTasks(sentences, promptOptions);
+    if (tasks.length === 0) return;
+    const storageKey = `${ASSIST_EXTRAS_KEY_PREFIX}${jobId}`;
+    let kept: Record<string, string> = {};
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const parsedKept: unknown = raw ? JSON.parse(raw) : {};
+      if (parsedKept && typeof parsedKept === 'object' && !Array.isArray(parsedKept)) {
+        kept = Object.fromEntries(
+          Object.entries(parsedKept).filter(([, value]) => typeof value === 'string'),
+        ) as Record<string, string>;
+      }
+    } catch {
+      kept = {};
+    }
+    assistCancelRef.current = false;
+    setExtrasRunning(true);
+    setExtrasFailure('');
+    const result = await runExtraTasks({
+      tasks,
+      sentences,
+      replies: kept,
+      run: (prompt) => runAssist(prompt, { isCancelled: () => assistCancelRef.current }),
+      onTaskDone: (taskId, reply) => {
+        kept[taskId] = reply;
+        localStorage.setItem(storageKey, JSON.stringify(kept));
+      },
+      onProgress: (p) =>
+        setExtrasProgress(
+          `${p.task.heading.toLowerCase()} ${p.task.from}–${p.task.to} (${p.position + 1} of ${p.total})${
+            p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
+          }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
+        ),
+      isCancelled: () => assistCancelRef.current,
+    });
+    setExtrasRunning(false);
+    setExtrasProgress('');
+    if (result.cancelled) return;
+    if (result.failure) {
+      const done = Object.keys(result.replies).length;
+      setExtrasFailure(
+        `Stopped at ${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${result.failure.error} ` +
+          `${done} of ${tasks.length} parts saved — press "Resume extras" to continue, or commit without the rest.`,
+      );
+      return;
+    }
+    localStorage.removeItem(storageKey);
+    setExtras(mergeExtraReplies(tasks, result.replies));
   }
 
   function applyReply(reply: string, options: Required<CombinedPromptOptions> = promptOptions) {
@@ -1115,8 +1181,8 @@ export function QuickMinePage() {
             </div>
             <div className="muted">
               Runs Codex (Claude as backup) on the server in small parts, segmenting and
-              translating only — the extras above still need the manual prompt for now. A part
-              is retried once; after that it stops and keeps what's done.
+              translating only; the ticked extras are generated afterwards, on the review step. A
+              part is retried once; after that it stops and keeps what's done.
             </div>
             {assistFailure ? <div className="error">{assistFailure}</div> : null}
           </div>
@@ -1188,6 +1254,49 @@ export function QuickMinePage() {
                 ← Back to prompt
               </button>
             </div>
+          </section>
+          <section className="panel stack" style={{ gap: '0.5rem' }}>
+            <strong>Extras with the assistant</strong>
+            <div className="muted">
+              Skim and remove any bad sentences first, then generate the ticked extras here
+              (small parts, Codex with Claude as backup; each part is tried twice, then it
+              stops and keeps what&rsquo;s done). They&rsquo;re saved when you commit.
+            </div>
+            <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+              {EXTRA_OPTION_LABELS.map(({ key, label }) => (
+                <label key={key} className="row" style={{ gap: '0.3rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={promptOptions[key]}
+                    disabled={extrasRunning}
+                    onChange={(event) =>
+                      setPromptOptions((current) => ({ ...current, [key]: event.target.checked }))
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="primary"
+                disabled={extrasRunning || busy || !Object.values(promptOptions).some(Boolean)}
+                onClick={() => void generateExtras()}
+              >
+                {extrasFailure ? 'Resume extras' : extras ? 'Regenerate extras' : 'Generate extras'}
+              </button>
+              {extrasRunning ? (
+                <button type="button" onClick={() => (assistCancelRef.current = true)}>
+                  Stop
+                </button>
+              ) : null}
+              {extrasProgress ? <span className="muted">{extrasProgress}</span> : null}
+            </div>
+            {extrasFailure ? <div className="error">{extrasFailure}</div> : null}
+            {extras && !extrasRunning && !extrasFailure ? (
+              <div className="muted">Extras are ready and will be saved with the commit.</div>
+            ) : null}
           </section>
           {rows.map((row, index) => (
             <section className="panel stack" key={index}>
