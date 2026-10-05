@@ -103,6 +103,12 @@ function transcriptFromJob(job: MiningJobStatus): WizardTranscriptSeg[] {
   }));
 }
 
+interface QueuedEpisode {
+  episode: PodcastEpisode;
+  /** Set once the next episode's download/ASR job has been started in the background. */
+  jobId?: string;
+}
+
 type Stage = 'idle' | 'starting' | 'combine' | 'review' | 'commit';
 
 const EXTRA_OPTION_LABELS: { key: keyof CombinedPromptOptions; label: string }[] = [
@@ -186,6 +192,13 @@ export function QuickMinePage() {
   const [podcastFeedError, setPodcastFeedError] = useState('');
   const [podcastEpisodeDate, setPodcastEpisodeDate] = useState<string | null>(null);
   const [podcastEpisodeSourceUrl, setPodcastEpisodeSourceUrl] = useState('');
+
+  const [podcastSelected, setPodcastSelected] = useState<Set<string>>(new Set());
+  const [queue, setQueue] = useState<QueuedEpisode[]>([]);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const queueRef = useRef<QueuedEpisode[]>([]);
+  queueRef.current = queue;
+  const prefetchingRef = useRef<string | null>(null);
 
   const progressStartedAtRef = useRef<number>(Date.now());
   const [, forceTick] = useState(0);
@@ -324,8 +337,7 @@ export function QuickMinePage() {
           progressStartedAtRef.current = Date.now() - (job.elapsedSeconds ?? 0) * 1000;
           setProgress(job.message);
           if (job.status === 'error') {
-            setError(job.error ?? 'Mining failed');
-            setStage('idle');
+            failCurrent(job.error ?? 'Mining failed');
           } else if (job.status === 'ready') {
             setSource(job.source ?? null);
             setTranscriptSource(job.transcriptSource ?? null);
@@ -335,8 +347,7 @@ export function QuickMinePage() {
         },
         (err: unknown) => {
           if (cancelled) return;
-          setError(err instanceof Error ? err.message : 'Failed to check job status');
-          setStage('idle');
+          failCurrent(err instanceof Error ? err.message : 'Failed to check job status');
         },
       );
     }, POLL_INTERVAL_MS);
@@ -348,6 +359,14 @@ export function QuickMinePage() {
 
   function reset() {
     if (jobId) void deleteMiningJob(jobId);
+    for (const queued of queueRef.current) {
+      if (queued.jobId) void deleteMiningJob(queued.jobId);
+    }
+    queueRef.current = [];
+    prefetchingRef.current = null;
+    setQueue([]);
+    setQueueTotal(0);
+    setPodcastSelected(new Set());
     clearActiveJob();
     setStage('idle');
     setUrl('');
@@ -395,6 +414,7 @@ export function QuickMinePage() {
   }
 
   async function handleLoadPodcastFeed() {
+    setPodcastSelected(new Set());
     setPodcastFeedError('');
     setPodcastFeed(null);
     setPodcastFeedPage(0);
@@ -416,6 +436,98 @@ export function QuickMinePage() {
     setPodcastEpisodeSourceUrl(episode.url);
     await startJob(episode.url, { title: episode.title, sourceType: 'podcast' });
   }
+
+  async function handleStartSelectedEpisodes() {
+    const picked = sortedPodcastEpisodes.filter((episode) => podcastSelected.has(episode.url));
+    const [first, ...rest] = picked;
+    if (!first) return;
+    prefetchingRef.current = null;
+    queueRef.current = rest.map((episode) => ({ episode }));
+    setQueue(queueRef.current);
+    setQueueTotal(picked.length);
+    setPodcastSelected(new Set());
+    await handleStartPodcastEpisode(first);
+  }
+
+  function toggleEpisodeSelected(url: string) {
+    setPodcastSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(url)) next.add(url);
+      return next;
+    });
+  }
+
+  /** Move on to the next queued episode, resuming its background job if one was prefetched. */
+  async function advanceQueue(notice?: string): Promise<void> {
+    const [head, ...rest] = queueRef.current;
+    if (!head) return;
+    queueRef.current = rest;
+    setQueue(rest);
+    prefetchingRef.current = null;
+    setRows([]);
+    setExtras(null);
+    setSentenceIdByHandle(new Map());
+    setPreview(null);
+    setPasted('');
+    setPasteStatus('');
+    setSource(null);
+    setTranscript([]);
+    setTranscriptSource(null);
+    setBusy(false);
+    setBusyNote('');
+    setPodcastEpisodeDate(head.episode.publishedAt ?? null);
+    setPodcastEpisodeSourceUrl(head.episode.url);
+    if (head.jobId) {
+      try {
+        const job = await getMiningJob(head.jobId);
+        if (job.status !== 'error') {
+          applyResumedJob(head.jobId, job);
+          setError(notice ?? '');
+          return;
+        }
+      } catch {
+        // fall through and start it fresh
+      }
+    }
+    const started = startJob(head.episode.url, { title: head.episode.title, sourceType: 'podcast' });
+    if (notice) setError(notice);
+    await started;
+  }
+
+  function failCurrent(message: string): void {
+    if (queueRef.current.length > 0) {
+      void advanceQueue(`${message} — skipped to the next episode.`);
+    } else {
+      setError(message);
+      setStage('idle');
+    }
+  }
+
+  useEffect(() => {
+    if (stage !== 'combine' && stage !== 'review') return;
+    const head = queue[0];
+    if (!head || head.jobId || prefetchingRef.current === head.episode.url) return;
+    prefetchingRef.current = head.episode.url;
+    void createMiningJob(head.episode.url, {
+      title: head.episode.title,
+      sourceType: 'podcast',
+    }).then(
+      (id) => {
+        if (!queueRef.current.some((item) => item.episode.url === head.episode.url)) {
+          void deleteMiningJob(id);
+          return;
+        }
+        const withJob = queueRef.current.map((item) =>
+          item.episode.url === head.episode.url ? { ...item, jobId: id } : item,
+        );
+        queueRef.current = withJob;
+        setQueue(withJob);
+      },
+      () => {
+        // Prefetch is best-effort; advanceQueue starts the job itself if this failed.
+      },
+    );
+  }, [stage, queue]);
 
   async function copyPrompt() {
     try {
@@ -752,16 +864,53 @@ export function QuickMinePage() {
                       {searchedPodcastEpisodes.length === 1 ? '' : 'es'}
                     </div>
                   )}
+                  <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPodcastSelected((current) => {
+                          const next = new Set(current);
+                          for (const episode of visiblePodcastEpisodes) {
+                            if (!importedPodcastSourceIds?.has(episode.url)) next.add(episode.url);
+                          }
+                          return next;
+                        })
+                      }
+                    >
+                      Select page
+                    </button>
+                    <button
+                      type="button"
+                      disabled={podcastSelected.size === 0}
+                      onClick={() => setPodcastSelected(new Set())}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={podcastSelected.size === 0}
+                      onClick={() => void handleStartSelectedEpisodes()}
+                    >
+                      Import {podcastSelected.size || ''} selected →
+                    </button>
+                  </div>
                   <div className="stack" style={{ gap: '0.25rem', maxHeight: '16rem', overflowY: 'auto' }}>
                     {visiblePodcastEpisodes.map((episode) => {
                       const imported = importedPodcastSourceIds?.has(episode.url);
                       const publishedDate = episode.publishedAt ? new Date(episode.publishedAt) : null;
                       return (
+                        <div key={episode.url} className="row" style={{ gap: '0.5rem' }}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${episode.title}`}
+                          checked={podcastSelected.has(episode.url)}
+                          onChange={() => toggleEpisodeSelected(episode.url)}
+                        />
                         <button
-                          key={episode.url}
                           type="button"
                           className="row"
-                          style={{ justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
+                          style={{ flex: 1, justifyContent: 'space-between', textAlign: 'left', gap: '1rem' }}
                           onClick={() => void handleStartPodcastEpisode(episode)}
                         >
                           <span>
@@ -779,6 +928,7 @@ export function QuickMinePage() {
                             {episode.durationSeconds ? ` · ${formatElapsed(episode.durationSeconds)}` : ''}
                           </span>
                         </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -804,6 +954,12 @@ export function QuickMinePage() {
                 <span className="muted">{job.status === 'ready' ? 'ready to review' : job.message}</span>
               </button>
             ))}
+          </div>
+        ) : null}
+        {queueTotal > 1 && stage !== 'idle' ? (
+          <div className="muted" style={{ fontSize: '0.85rem' }}>
+            Episode {queueTotal - queue.length} of {queueTotal}
+            {queue.length > 0 ? ` — "${queue[0]!.episode.title}" is next` : ' — last one'}
           </div>
         ) : null}
         {stage === 'starting' ? (
@@ -1024,6 +1180,10 @@ export function QuickMinePage() {
                 }
               }
               if (jobId) void deleteMiningJob(jobId);
+              if (queueRef.current.length > 0) {
+                await advanceQueue();
+                return;
+              }
               clearActiveJob();
               navigate(
                 result.chapterId
