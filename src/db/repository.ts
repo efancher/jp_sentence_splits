@@ -28,6 +28,7 @@ import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
+  ContextWalkthrough,
   EffectiveGameSignal,
   GameRound,
   SentenceLearningEvent,
@@ -9308,6 +9309,27 @@ export async function saveStructureDraftsByChapter(
     chapters: book.chapters.map((chapter) => {
       const drafts = byChapter.get(chapter.id);
       return drafts ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...drafts } } : chapter;
+    }),
+    updatedAt: nowIso(),
+  };
+  await db.books.put(updated);
+  notifySync('books', updated.id, updated);
+}
+
+/** Merges contextual walkthrough drafts into their chapters (book-wide import); entries for other sentences are kept. */
+export async function saveContextWalkthroughsByChapter(
+  bookId: string,
+  byChapter: ReadonlyMap<string, Record<string, ContextWalkthrough>>,
+): Promise<void> {
+  if (byChapter.size === 0) return;
+  const db = getDb();
+  const book = await db.books.get(bookId);
+  if (!book) throw new Error('Book not found');
+  const updated: Book = {
+    ...book,
+    chapters: book.chapters.map((chapter) => {
+      const drafts = byChapter.get(chapter.id);
+      return drafts ? { ...chapter, contextWalkthroughs: { ...chapter.contextWalkthroughs, ...drafts } } : chapter;
     }),
     updatedAt: nowIso(),
   };

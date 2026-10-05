@@ -24,6 +24,7 @@ import { BookSharingPanel } from '../components/BookSharingPanel';
 import { SequentialStudyPanel } from '../components/SequentialStudyPanel';
 import { BookComprehensionCheckBatch } from '../components/BookComprehensionCheckBatch';
 import { BookChunkingBatch } from '../components/BookChunkingBatch';
+import { BookWalkthroughBatch } from '../components/BookWalkthroughBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
 import {
   assignBookSentencesToChapter,
@@ -581,6 +582,7 @@ export function BookDetailPage() {
         </section>
         <BookComprehensionCheckBatch bookId={bookId} />
         <BookChunkingBatch bookId={bookId} />
+        <BookWalkthroughBatch bookId={bookId} />
         <BookParticleCheckBatch bookId={bookId} />
         {data.book.suspendedAt ? (
           <p className="muted" style={{ margin: 0 }}>
