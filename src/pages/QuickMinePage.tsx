@@ -619,12 +619,17 @@ export function QuickMinePage() {
       return;
     }
     localStorage.removeItem(storageKey);
-    applyReply(mergeChunkReplies(result.replies.filter((r): r is string => r !== null)), NO_EXTRAS);
+    const applied = applyReply(
+      mergeChunkReplies(result.replies.filter((r): r is string => r !== null)),
+      NO_EXTRAS,
+    );
+    if (applied && Object.values(promptOptions).some(Boolean)) await generateExtras(applied);
   }
 
-  async function generateExtras() {
-    if (!jobId || extrasRunning || rows.length === 0) return;
-    const sentences = rows.map((row) => ({
+  async function generateExtras(given?: QuickRow[]) {
+    const source = given ?? rows;
+    if (!jobId || extrasRunning || source.length === 0) return;
+    const sentences = source.map((row) => ({
       handle: row.handle,
       japanese: row.japanese,
       translation: row.translation,
@@ -679,7 +684,10 @@ export function QuickMinePage() {
     setExtras(mergeExtraReplies(tasks, result.replies));
   }
 
-  function applyReply(reply: string, options: Required<CombinedPromptOptions> = promptOptions) {
+  function applyReply(
+    reply: string,
+    options: Required<CombinedPromptOptions> = promptOptions,
+  ): QuickRow[] | null {
     const fallbackEndMs = transcript.at(-1)?.endMs ?? 0;
     const sections = splitCombinedReply(reply);
     const parsed = parseAiCombinedReply(sections.sentences, fallbackEndMs);
@@ -687,16 +695,18 @@ export function QuickMinePage() {
       setPasteStatus(
         "Couldn't read any \"[m:ss] japanese || english\" lines from that — use the assistant's reply (or its file) as-is.",
       );
-      return;
+      return null;
     }
     setReplyWarnings(
       checkCombinedReply({ reply, sections, rows: parsed, transcript, options }),
     );
-    setRows(parsed.map((row, index) => ({ ...row, handle: index + 1 })));
+    const numbered = parsed.map((row, index) => ({ ...row, handle: index + 1 }));
+    setRows(numbered);
     setExtras(hasQuickImportExtras(sections) ? sections : null);
     setPasteStatus('');
     setPasted('');
     setStage('review');
+    return numbered;
   }
 
   function applyPasted() {
@@ -1181,8 +1191,8 @@ export function QuickMinePage() {
             </div>
             <div className="muted">
               Runs Codex (Claude as backup) on the server in small parts, segmenting and
-              translating only; the ticked extras are generated afterwards, on the review step. A
-              part is retried once; after that it stops and keeps what's done.
+              translating, then generates the ticked extras above too (progress continues on the
+              review step). A part is retried once; after that it stops and keeps what's done.
             </div>
             {assistFailure ? <div className="error">{assistFailure}</div> : null}
           </div>
@@ -1258,9 +1268,9 @@ export function QuickMinePage() {
           <section className="panel stack" style={{ gap: '0.5rem' }}>
             <strong>Extras with the assistant</strong>
             <div className="muted">
-              Skim and remove any bad sentences first, then generate the ticked extras here
-              (small parts, Codex with Claude as backup; each part is tried twice, then it
-              stops and keeps what&rsquo;s done). They&rsquo;re saved when you commit.
+              &ldquo;Send to assistant&rdquo; runs these automatically after the sentences. Use
+              this to resume a stopped run, or to regenerate after you&rsquo;ve removed or edited
+              sentences. They&rsquo;re saved when you commit.
             </div>
             <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
               {EXTRA_OPTION_LABELS.map(({ key, label }) => (
