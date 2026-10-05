@@ -108,6 +108,11 @@ export async function runSyncCycle(options: { throttlePull?: boolean } = {}): Pr
         enterStage('pull');
         await pullChanges();
         lastPullAt = Date.now();
+        await repairMissingBookMemberships().catch((error) => {
+          syncLog('warn', 'Book-membership repair failed', 'MEMBERSHIP_REPAIR', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
       }
       enterStage('sweep');
       const swept = await sweepNoopConflicts();
@@ -1054,6 +1059,65 @@ async function handlePushConflict(
     recordId: item.recordId,
     userId,
   });
+}
+
+const MEMBERSHIP_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
+let lastMembershipRepairAt = 0;
+
+/**
+ * Self-heal for a sentence that has no book membership locally though the cloud
+ * has one (a skipped/lost sync event). Without it the suspended-book/chapter
+ * filter can't see the sentence's book and its cards leak into the global
+ * review queue. Refetches memberships for such sentences; throttled because
+ * genuinely book-less sentences would otherwise be re-queried every pull.
+ */
+export async function repairMissingBookMemberships(force = false): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  if (!force && Date.now() - lastMembershipRepairAt < MEMBERSHIP_REPAIR_INTERVAL_MS) return 0;
+  lastMembershipRepairAt = Date.now();
+  const db = getDb();
+  const [sentenceIds, memberSentenceIds] = await Promise.all([
+    db.sentences.toCollection().primaryKeys() as Promise<string[]>,
+    db.bookSentences.orderBy('sentenceId').uniqueKeys() as Promise<string[]>,
+  ]);
+  const haveMembership = new Set(memberSentenceIds);
+  const missing = sentenceIds.filter((id) => !haveMembership.has(id));
+  if (missing.length === 0) return 0;
+
+  const pending = await listPendingMutations();
+  const pendingIds = new Set(
+    pending.filter((item) => item.entity === 'book_sentences').map((item) => item.recordId),
+  );
+  let repaired = 0;
+  for (let i = 0; i < missing.length; i += 100) {
+    const { data, error } = await supabase
+      .from('book_sentences')
+      .select('*')
+      .in('sentence_id', missing.slice(i, i + 100))
+      .is('deleted_at', null);
+    if (error) throw new Error(error.message);
+    const rows = ((data ?? []) as Record<string, unknown>[]).filter(
+      (row) => !pendingIds.has(String(row.id)),
+    );
+    if (rows.length === 0) continue;
+    await db.bookSentences.bulkPut(rows.map((row) => remoteToBookSentence(row)));
+    for (const row of rows) {
+      const version = Number(row.version ?? 1);
+      await putRecordMeta({
+        entity: 'book_sentences',
+        recordId: String(row.id),
+        version,
+        syncedVersion: version,
+        updatedAt: String(row.updated_at ?? new Date().toISOString()),
+      });
+    }
+    repaired += rows.length;
+  }
+  if (repaired > 0) {
+    syncLog('info', `Restored ${repaired} missing book membership(s)`, 'MEMBERSHIP_REPAIR');
+  }
+  return repaired;
 }
 
 async function pullChanges(): Promise<void> {
