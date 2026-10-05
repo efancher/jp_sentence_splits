@@ -702,3 +702,48 @@ export async function deleteMiningJob(jobId: string): Promise<void> {
     // best-effort only
   }
 }
+
+const ASSIST_POLL_MS = 2000;
+const ASSIST_MAX_WAIT_MS = 15 * 60 * 1000;
+
+const assistStatusSchema = z.object({
+  status: z.enum(['queued', 'running', 'done', 'error']),
+  backend: z.string().nullable().optional(),
+  reply: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+/**
+ * Run `prompt` through the server's local LLM CLIs (`POST /assist`: Codex,
+ * then Claude) and resolve with the reply text. Single attempt — retry policy
+ * belongs to the caller. Throws with the server's reason on failure.
+ */
+export async function runAssist(
+  prompt: string,
+  options: { isCancelled?: () => boolean } = {},
+): Promise<{ reply: string; backend: string | null }> {
+  const created = await fetch(`${API_BASE}/assist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!created.ok) {
+    throw new Error(`Failed to start assistant: ${await readErrorDetail(created)}`);
+  }
+  const { assistId } = z.object({ assistId: z.string() }).parse(await created.json());
+  const startedAt = Date.now();
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, ASSIST_POLL_MS));
+    if (options.isCancelled?.()) throw new Error('Cancelled');
+    if (Date.now() - startedAt > ASSIST_MAX_WAIT_MS) throw new Error('Assistant timed out');
+    const response = await fetch(`${API_BASE}/assist/${assistId}`);
+    if (!response.ok) {
+      throw new Error(`Assistant status check failed: ${await readErrorDetail(response)}`);
+    }
+    const status = assistStatusSchema.parse(await response.json());
+    if (status.status === 'error') throw new Error(status.error ?? 'Assistant failed');
+    if (status.status === 'done') {
+      return { reply: status.reply ?? '', backend: status.backend ?? null };
+    }
+  }
+}

@@ -167,6 +167,8 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
 export function formatCombinedPromptForAI(
   segs: WizardTranscriptSeg[],
   options: CombinedPromptOptions = {},
+  /** `inline`: the reply is read from the assistant's message by a program, so don't ask for an attachment; `note` is shown just above the transcript. */
+  mode: { inline?: boolean; note?: string } = {},
 ): string {
   const blocks = extraBlocks(withDefaults(options));
   const headings = ['SENTENCES', ...blocks.map((block) => block.heading)];
@@ -183,9 +185,17 @@ export function formatCombinedPromptForAI(
     'each on its own line, in this order:',
     ...headings.map((heading) => `=== ${heading} ===`),
     `and finish the file with a last line reading exactly: ${END_MARKER}`,
-    `If you can create files, generate that file as a downloadable attachment named ${COMBINED_REPLY_FILENAME} and give me the`,
-    'download link — do not paste its contents into the chat. If you cannot create files, reply with the whole thing in one',
-    'plain code block instead. No commentary before, between or after the parts.',
+    ...(mode.inline
+      ? [
+          'Reply with the whole file as plain text in your message — no attachment, no code fence, no files written, and no',
+          'commentary before, between or after the parts.',
+        ]
+      : [
+          `If you can create files, generate that file as a downloadable attachment named ${COMBINED_REPLY_FILENAME} and give me the`,
+          'download link — do not paste its contents into the chat. If you cannot create files, reply with the whole thing in one',
+          'plain code block instead. No commentary before, between or after the parts.',
+        ]),
+    ...(mode.note ? ['', mode.note] : []),
     '',
     '--- transcript ---',
     body,

@@ -27,6 +27,7 @@ import {
   type MiningTranscriptSource,
   type PodcastEpisode,
   type PodcastFeed,
+  runAssist,
 } from '../lib/miningApi';
 import {
   COMBINED_PROMPT_FILENAME,
@@ -36,6 +37,13 @@ import {
   type CombinedPromptOptions,
   type CombinedReplySections,
 } from '../lib/combinedImportPrompt';
+import {
+  MAX_ATTEMPTS_PER_CHUNK,
+  NO_EXTRAS,
+  chunkTranscript,
+  mergeChunkReplies,
+  runSegmentChunks,
+} from '../lib/assistChunks';
 import { parseAiCombinedReply } from '../lib/miningQuickImport';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import { downloadTextFile } from '../lib/particleChecks';
@@ -56,6 +64,7 @@ const PODCAST_PAGE_SIZE = 30;
  * page's in-flight job on both, since commit doesn't care which page (or
  * which wizard stage) a job has reached. */
 const ACTIVE_JOB_KEY = 'quickmine.activeJob';
+const ASSIST_REPLIES_KEY_PREFIX = 'quickmine.assistReplies.';
 const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 function storeActiveJob(jobId: string): void {
@@ -182,6 +191,10 @@ export function QuickMinePage() {
   });
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
   const [replyWarnings, setReplyWarnings] = useState<string[]>([]);
+  const [assistRunning, setAssistRunning] = useState(false);
+  const [assistProgress, setAssistProgress] = useState('');
+  const [assistFailure, setAssistFailure] = useState('');
+  const assistCancelRef = useRef(false);
   const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
@@ -384,6 +397,8 @@ export function QuickMinePage() {
     setRows([]);
     setExtras(null);
     setReplyWarnings([]);
+    setAssistFailure('');
+    setAssistProgress('');
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPodcastFeedUrl('');
@@ -470,6 +485,8 @@ export function QuickMinePage() {
     setRows([]);
     setExtras(null);
     setReplyWarnings([]);
+    setAssistFailure('');
+    setAssistProgress('');
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPasted('');
@@ -547,7 +564,56 @@ export function QuickMinePage() {
     downloadTextFile(COMBINED_PROMPT_FILENAME, formatCombinedPromptForAI(transcript, promptOptions));
   }
 
-  function applyReply(reply: string) {
+  async function sendToAssistant() {
+    if (!jobId || assistRunning) return;
+    const chunks = chunkTranscript(transcript);
+    const storageKey = `${ASSIST_REPLIES_KEY_PREFIX}${jobId}`;
+    let kept: (string | null)[] = [];
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const parsedKept: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsedKept)) {
+        kept = parsedKept.map((item) => (typeof item === 'string' ? item : null));
+      }
+    } catch {
+      kept = [];
+    }
+    if (kept.length !== chunks.length) kept = [];
+    assistCancelRef.current = false;
+    setAssistRunning(true);
+    setAssistFailure('');
+    const result = await runSegmentChunks({
+      chunks,
+      replies: kept,
+      run: (prompt) => runAssist(prompt, { isCancelled: () => assistCancelRef.current }),
+      onChunkDone: (index, reply) => {
+        kept[index] = reply;
+        localStorage.setItem(storageKey, JSON.stringify(chunks.map((_, i) => kept[i] ?? null)));
+      },
+      onProgress: (p) =>
+        setAssistProgress(
+          `Part ${p.index + 1} of ${p.total}${p.attempt > 1 ? ` (retry ${p.attempt - 1})` : ''}${
+            p.backend ? ` — ${p.backend}` : ' — asking the assistant…'
+          }`,
+        ),
+      isCancelled: () => assistCancelRef.current,
+    });
+    setAssistRunning(false);
+    setAssistProgress('');
+    if (result.cancelled) return;
+    if (result.failure) {
+      const done = result.replies.filter(Boolean).length;
+      setAssistFailure(
+        `Stopped at part ${result.failure.index + 1} of ${chunks.length} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${result.failure.error} ` +
+          `${done} part${done === 1 ? '' : 's'} saved — press "Send to assistant" to continue from there, or use the prompt manually.`,
+      );
+      return;
+    }
+    localStorage.removeItem(storageKey);
+    applyReply(mergeChunkReplies(result.replies.filter((r): r is string => r !== null)), NO_EXTRAS);
+  }
+
+  function applyReply(reply: string, options: Required<CombinedPromptOptions> = promptOptions) {
     const fallbackEndMs = transcript.at(-1)?.endMs ?? 0;
     const sections = splitCombinedReply(reply);
     const parsed = parseAiCombinedReply(sections.sentences, fallbackEndMs);
@@ -558,7 +624,7 @@ export function QuickMinePage() {
       return;
     }
     setReplyWarnings(
-      checkCombinedReply({ reply, sections, rows: parsed, transcript, options: promptOptions }),
+      checkCombinedReply({ reply, sections, rows: parsed, transcript, options }),
     );
     setRows(parsed.map((row, index) => ({ ...row, handle: index + 1 })));
     setExtras(hasQuickImportExtras(sections) ? sections : null);
@@ -1030,6 +1096,30 @@ export function QuickMinePage() {
               off. Untick some extras (the book page can ask for them later) if that happens.
             </div>
           ) : null}
+          <div className="stack" style={{ gap: '0.35rem' }}>
+            <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="primary"
+                disabled={assistRunning || !jobId}
+                onClick={() => void sendToAssistant()}
+              >
+                {assistFailure ? 'Resume with assistant' : 'Send to assistant'}
+              </button>
+              {assistRunning ? (
+                <button type="button" onClick={() => (assistCancelRef.current = true)}>
+                  Stop
+                </button>
+              ) : null}
+              {assistProgress ? <span className="muted">{assistProgress}</span> : null}
+            </div>
+            <div className="muted">
+              Runs Codex (Claude as backup) on the server in small parts, segmenting and
+              translating only — the extras above still need the manual prompt for now. A part
+              is retried once; after that it stops and keeps what's done.
+            </div>
+            {assistFailure ? <div className="error">{assistFailure}</div> : null}
+          </div>
           <textarea
             readOnly
             className="jp"
