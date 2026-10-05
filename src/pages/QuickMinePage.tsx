@@ -30,6 +30,7 @@ import {
 } from '../lib/miningApi';
 import {
   COMBINED_PROMPT_FILENAME,
+  checkCombinedReply,
   formatCombinedPromptForAI,
   splitCombinedReply,
   type CombinedPromptOptions,
@@ -180,6 +181,7 @@ export function QuickMinePage() {
     particles: true,
   });
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
+  const [replyWarnings, setReplyWarnings] = useState<string[]>([]);
   const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
@@ -381,6 +383,7 @@ export function QuickMinePage() {
     setPasteStatus('');
     setRows([]);
     setExtras(null);
+    setReplyWarnings([]);
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPodcastFeedUrl('');
@@ -466,6 +469,7 @@ export function QuickMinePage() {
     prefetchingRef.current = null;
     setRows([]);
     setExtras(null);
+    setReplyWarnings([]);
     setSentenceIdByHandle(new Map());
     setPreview(null);
     setPasted('');
@@ -553,6 +557,9 @@ export function QuickMinePage() {
       );
       return;
     }
+    setReplyWarnings(
+      checkCombinedReply({ reply, sections, rows: parsed, transcript, options: promptOptions }),
+    );
     setRows(parsed.map((row, index) => ({ ...row, handle: index + 1 })));
     setExtras(hasQuickImportExtras(sections) ? sections : null);
     setPasteStatus('');
@@ -1065,6 +1072,20 @@ export function QuickMinePage() {
             </button>
           </div>
           {pasteStatus ? <div className="muted">{pasteStatus}</div> : null}
+        </section>
+      ) : null}
+
+      {stage === 'review' && replyWarnings.length > 0 ? (
+        <section className="panel stack" style={{ borderColor: 'var(--warning)', gap: '0.35rem' }}>
+          <strong style={{ color: 'var(--warning)' }}>⚠ This reply may be incomplete</strong>
+          {replyWarnings.map((warning) => (
+            <span key={warning} className="muted" style={{ fontSize: '0.9em' }}>
+              {warning}
+            </span>
+          ))}
+          <span className="muted" style={{ fontSize: '0.9em' }}>
+            You can still import it as-is, or go back and ask the assistant to continue.
+          </span>
         </section>
       ) : null}
 

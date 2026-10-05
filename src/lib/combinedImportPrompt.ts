@@ -23,6 +23,7 @@ export interface CombinedPromptOptions {
   particles?: boolean;
 }
 
+export const END_MARKER = '=== END ===';
 export const COMBINED_REPLY_FILENAME = 'quick-import-reply.txt';
 export const COMBINED_PROMPT_FILENAME = 'quick-import-prompt.txt';
 
@@ -181,6 +182,7 @@ export function formatCombinedPromptForAI(
     'OUTPUT FORMAT. Put everything in ONE plain-text file and nothing else. Separate the parts with these exact header lines,',
     'each on its own line, in this order:',
     ...headings.map((heading) => `=== ${heading} ===`),
+    `and finish the file with a last line reading exactly: ${END_MARKER}`,
     `If you can create files, generate that file as a downloadable attachment named ${COMBINED_REPLY_FILENAME} and give me the`,
     'download link — do not paste its contents into the chat. If you cannot create files, reply with the whole thing in one',
     'plain code block instead. No commentary before, between or after the parts.',
@@ -200,7 +202,8 @@ export interface CombinedReplySections {
   particles: string;
 }
 
-const SECTION_HEADER_RE = /^={2,}\s*(SENTENCES|EPISODE PACK|STRUCTURE|COMPREHENSION|PARTICLES)\s*={2,}$/i;
+const SECTION_HEADER_RE =
+  /^={2,}\s*(SENTENCES|EPISODE PACK|STRUCTURE|COMPREHENSION|PARTICLES|END)\s*={2,}$/i;
 const SECTION_KEYS: Record<string, keyof CombinedReplySections> = {
   SENTENCES: 'sentences',
   'EPISODE PACK': 'pack',
@@ -228,7 +231,7 @@ export function splitCombinedReply(reply: string): CombinedReplySections {
     const trimmed = rawLine.trim();
     const match = SECTION_HEADER_RE.exec(trimmed);
     if (match) {
-      current = SECTION_KEYS[match[1]!.toUpperCase()]!;
+      current = SECTION_KEYS[match[1]!.toUpperCase()] ?? null;
       sawHeader = true;
       continue;
     }
@@ -250,4 +253,83 @@ export function splitCombinedReply(reply: string): CombinedReplySections {
 /** Rewrite every `S<n>` handle through `map`; unmapped numbers become `S0`, which the downstream parsers reject. */
 export function remapSentenceHandles(text: string, map: ReadonlyMap<number, number>): string {
   return text.replace(/\bS(\d+)\b/g, (_whole, digits: string) => `S${map.get(Number(digits)) ?? 0}`);
+}
+
+const EXTRA_SECTION_KEYS: Record<string, keyof CombinedReplySections> = {
+  'EPISODE PACK': 'pack',
+  STRUCTURE: 'structure',
+  COMPREHENSION: 'comprehension',
+  PARTICLES: 'particles',
+};
+
+function formatMinSec(ms: number): string {
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** The extra section headings a prompt built with `options` asks the assistant for (SENTENCES excluded). */
+export function requestedExtraHeadings(options: CombinedPromptOptions = {}): string[] {
+  return extraBlocks(withDefaults(options)).map((block) => block.heading);
+}
+
+/**
+ * Signs a pasted reply was cut off or is incomplete: it stops well before the
+ * transcript ends, skips a stretch of it, ends on an implausibly long final
+ * clip, lacks a ticked extra's section, or lacks the closing END marker.
+ * Warnings only — a partial reply is still importable.
+ */
+export function checkCombinedReply(input: {
+  reply: string;
+  sections: CombinedReplySections;
+  rows: { startMs: number; endMs: number; japanese: string }[];
+  transcript: { startMs: number; endMs: number }[];
+  options?: CombinedPromptOptions;
+}): string[] {
+  const { reply, sections, rows, transcript } = input;
+  const warnings: string[] = [];
+  const lastSeg = transcript.at(-1);
+  const lastRow = rows.at(-1);
+  let coverageGap = false;
+  if (lastSeg && lastRow) {
+    const total = lastSeg.endMs - (transcript[0]?.startMs ?? 0);
+    const missingMs = lastSeg.startMs - lastRow.startMs;
+    if (missingMs > Math.max(20_000, total * 0.05)) {
+      coverageGap = true;
+      warnings.push(
+        `The reply stops at ${formatMinSec(lastRow.startMs)} but the transcript runs to ${formatMinSec(lastSeg.startMs)} — it was probably cut off. The last sentence's clip stretches over the missing audio.`,
+      );
+    }
+  }
+  for (let i = 1; i < rows.length; i++) {
+    const a = rows[i - 1]!;
+    const b = rows[i]!;
+    if (b.startMs - a.startMs <= 45_000) continue;
+    if (transcript.some((seg) => seg.startMs > a.startMs + 15_000 && seg.startMs < b.startMs - 15_000)) {
+      warnings.push(
+        `No sentences between ${formatMinSec(a.startMs)} and ${formatMinSec(b.startMs)}, though the transcript has speech there — part of the reply may be missing.`,
+      );
+      break;
+    }
+  }
+  if (lastRow && !coverageGap) {
+    const seconds = (lastRow.endMs - lastRow.startMs) / 1000;
+    if (seconds > 20 && lastRow.japanese.length / seconds < 2) {
+      warnings.push(
+        `The last sentence's clip is ${Math.round(seconds)}s long for ${lastRow.japanese.length} characters — check its end time.`,
+      );
+    }
+  }
+  const missing = requestedExtraHeadings(input.options).filter((heading) => {
+    const key = EXTRA_SECTION_KEYS[heading];
+    return key ? !sections[key].trim() : false;
+  });
+  if (missing.length > 0) {
+    warnings.push(
+      `Missing ${missing.join(', ')} from the reply (you ticked ${missing.length === 1 ? 'it' : 'them'}) — ${missing.length === 1 ? 'it' : 'they'} won't be saved. Untick some extras and re-run if the reply was cut off.`,
+    );
+  }
+  if (!reply.split(/\r?\n/).some((line) => /^={2,}\s*END\s*={2,}$/i.test(line.trim()))) {
+    warnings.push(`The reply doesn't end with the ${END_MARKER} marker the prompt asks for — it may have been cut off.`);
+  }
+  return warnings;
 }
