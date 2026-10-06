@@ -50,6 +50,7 @@ import {
   surfaceJapaneseParts,
 } from '../lib/analysisHelpers';
 import { isEngineRole } from '../lib/clauseBands';
+import { validWalkthroughFor } from '../lib/contextWalkthrough';
 import {
   applySuggestion,
   lintAnalysis,
@@ -253,6 +254,23 @@ export function AnalyzePage() {
     [chunks],
   );
   const wizardChunk = wizardActive ? wizardOrder[wizardStep] : undefined;
+  // Contextual explanation steps that overlap the chunk being edited (offsets only valid when the chunks rebuild the sentence).
+  const wizardContextSteps = useMemo(() => {
+    const japanese = data?.sentence?.japanese;
+    if (!wizardChunk || !japanese || chunks.map((item) => item.japanese).join('') !== japanese) return [];
+    const book = data?.book;
+    const saved = book?.chapters?.map((item) => item.contextWalkthroughs?.[sentenceId]).find(Boolean);
+    const walkthrough = validWalkthroughFor(japanese, saved);
+    if (!walkthrough) return [];
+    let at = 0;
+    let span = { start: 0, end: 0 };
+    for (const item of chunks) {
+      const next = { start: at, end: at + item.japanese.length };
+      at = next.end;
+      if (item.id === wizardChunk.id) span = next;
+    }
+    return walkthrough.steps.filter((step) => step.start < span.end && span.start < step.end);
+  }, [chunks, data?.book, data?.sentence?.japanese, sentenceId, wizardChunk]);
   const wizardRevealedIds = useMemo(
     () => new Set(wizardOrder.slice(0, wizardStep + 1).map((chunk) => chunk.id)),
     [wizardOrder, wizardStep],
@@ -990,12 +1008,35 @@ export function AnalyzePage() {
                   .join(' · ')}
               </p>
             ) : null}
-            <p style={{ margin: 0 }}>
-              {roleGuideBlurb(wizardChunk.role) ??
+            {wizardContextSteps.map((step, index) => (
+              <div key={index} className="stack" style={{ gap: '0.2rem' }} aria-label="Explanation in this sentence">
+                <div>
+                  <strong className="jp">{step.text}</strong> — “{step.gloss}”
+                </div>
+                <div>{step.explanation}</div>
+                {step.connects ? (
+                  <div>
+                    <strong>Connects to </strong>
+                    <span className="jp">{step.connects.text}</span>: {step.connects.how}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {(() => {
+              const generic =
+                roleGuideBlurb(wizardChunk.role) ??
                 (wizardChunk.role.trim()
                   ? wizardChunk.role
-                  : 'What role does this play — is it the engine, or is it marked by a particle as one of its cars?')}
-            </p>
+                  : 'What role does this play — is it the engine, or is it marked by a particle as one of its cars?');
+              return wizardContextSteps.length > 0 ? (
+                <details>
+                  <summary className="muted">Generic role help (not specific to this sentence)</summary>
+                  <p style={{ margin: 0 }}>{generic}</p>
+                </details>
+              ) : (
+                <p style={{ margin: 0 }}>{generic}</p>
+              );
+            })()}
             <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
               Set (or correct) its role and literal English below, then
               confirm to move on.
