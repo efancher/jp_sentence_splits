@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { saveContextWalkthroughsByChapter } from '../db/repository';
 import {
   formatBookWalkthroughPrompt,
+  nextWalkthroughBatch,
   parseBookWalkthroughReply,
   planBookWalkthroughs,
   type BookWalkthroughPlan,
@@ -24,10 +25,10 @@ export function BookWalkthroughBatch({ bookId }: { bookId: string }) {
 
   function download() {
     if (!plan) return;
-    const handles = plan.pending;
+    const handles = nextWalkthroughBatch(plan);
     setAsked(plan);
-    downloadTextFile(`walkthroughs-${bookId}.txt`, formatBookWalkthroughPrompt(plan, handles));
-    setStatus(`Downloaded a prompt for ${handles.length} sentences. Upload the assistant's reply below.`);
+    downloadTextFile(`walkthroughs-${bookId}-${handles[0]}-${handles[handles.length - 1]}.txt`, formatBookWalkthroughPrompt(plan, handles));
+    setStatus(`Downloaded a prompt for ${handles.length} sentences (${handles[0]}–${handles[handles.length - 1]}). Upload the assistant's reply below; ${plan.pending.length - handles.length} more will remain.`);
   }
 
   async function loadFile(file: File | undefined) {
@@ -43,19 +44,21 @@ export function BookWalkthroughBatch({ bookId }: { bookId: string }) {
     }
     await saveContextWalkthroughsByChapter(bookId, parsed.byChapter);
     const note = parsed.rejected[0] ? ` ${parsed.rejected.length} had problems, e.g. ${parsed.rejected[0].handle}: ${parsed.rejected[0].reason}` : '';
-    setStatus(`Saved explanations for ${parsed.saved} sentences.${note}`);
+    const left = (await planBookWalkthroughs(bookId)).pending.length;
+    setStatus(`Saved explanations for ${parsed.saved} sentences.${note} ${left === 0 ? 'Nothing left to do.' : `${left} still pending; download the next batch (a failed or cut-off batch is simply requested again).`}`);
     setPasted('');
     setAsked(null);
   }
 
   return (
     <details className="panel">
-      <summary>Walkthrough explanations: how the parts make the meaning ({plan.pending.length} sentences without)</summary>
+      <summary>Walkthrough explanations: how the parts make the meaning ({plan.missing.length} without, {plan.outdated.length} to enrich, {plan.current} done)</summary>
       <div className="stack" style={{ marginTop: '0.75rem' }}>
         <p className="muted" style={{ margin: 0 }}>
-          Sentences prepared before contextual explanations existed only show generic role help in the walkthrough.
+          Sentences prepared before contextual explanations existed only show generic role help in the walkthrough, and
+          earlier explanations lack the nested structure, who-does-what and check questions. Existing ones keep showing until a richer reply replaces them.
           An assistant can explain, from the surrounding sentences, what each part means here and how it connects.
-          The prompt file covers every sentence without one. Each reply is merged in, and your saved analyses and
+          The prompt file covers the next batch (sentences with none first, then older ones). Each reply is merged in, and your saved analyses and
           other drafts are never changed; if the assistant's reply is cut off, apply it anyway and download again for what's left. Explanations are shown as unverified drafts.
         </p>
         {plan.pending.length === 0 ? (
@@ -63,7 +66,7 @@ export function BookWalkthroughBatch({ bookId }: { bookId: string }) {
         ) : (
           <div className="row">
             <button type="button" onClick={download}>
-              Download prompt file (all {plan.pending.length})
+              Download next batch ({Math.min(plan.pending.length, nextWalkthroughBatch(plan).length)} of {plan.pending.length})
             </button>
           </div>
         )}

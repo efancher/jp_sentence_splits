@@ -360,9 +360,33 @@ export interface ContextWalkthroughStep extends WalkthroughSpan {
   inferred?: string;
   /** Optional longer detail, collapsed by default. */
   detail?: string;
+  /** What this span is to the span it connects to (so the learner sees which predicate owns it). */
+  relation?: WalkthroughRelation;
+  /** Components of a compound or fixed expression, shown only on demand; the step's own gloss is the primary meaning. */
+  parts?: { text: string; gloss: string }[];
+}
+
+export type WalkthroughRelation = 'subject' | 'object' | 'topic' | 'modifier' | 'quotation' | 'listing' | 'predicate' | 'adverbial' | 'link' | 'other';
+
+/** Who does or experiences something in one clause; `inferred` when it rests on surrounding sentences. */
+export interface WalkthroughParticipant {
+  /** The clause or predicate the participant belongs to (exact substring). */
+  clause: string;
+  who: string;
+  role: string;
+  basis: 'stated' | 'inferred';
+}
+
+export interface WalkthroughCheck {
+  question: string;
+  answer: string;
 }
 
 export interface ContextWalkthrough {
+  /** Format version; absent means the original (pre-structure) format. */
+  version?: number;
+  participants?: WalkthroughParticipant[];
+  check?: WalkthroughCheck;
   /** Natural whole-sentence English. */
   natural: string;
   /** When the reading depends on context (e.g. what "the other one" refers to), or is ambiguous. */

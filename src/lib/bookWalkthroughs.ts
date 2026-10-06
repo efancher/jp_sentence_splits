@@ -4,6 +4,7 @@ import {
   WALKTHROUGH_SHAPE,
   buildWalkthroughInstructions,
   parseWalkthroughs,
+  sentencesNeedingUpgrade,
   sentencesNeedingWalkthrough,
   walkthroughContextLines,
 } from './contextWalkthrough';
@@ -17,8 +18,21 @@ export interface BookWalkthroughPlan {
   title: string;
   /** Every distinct book sentence in order; the handle of index i is `S${i + 1}`. */
   sentences: { id: string; japanese: string; translation?: string; chapterId: string }[];
-  /** Handles still lacking a usable walkthrough, in book order. */
+  /** Handles still needing work, in book order: first those with none, then older-format ones to enrich. */
   pending: string[];
+  /** Subset of `pending` that have no walkthrough at all. */
+  missing: string[];
+  /** Subset of `pending` that have an older-format walkthrough (kept and shown until a richer reply replaces it). */
+  outdated: string[];
+  /** Sentences already on the current format. */
+  current: number;
+}
+
+export const BOOK_WALKTHROUGH_BATCH_SIZE = 12;
+
+/** The next batch to request. Stateless: whatever is still pending after a partial or failed reply is simply requested again. */
+export function nextWalkthroughBatch(plan: Pick<BookWalkthroughPlan, 'pending'>, size = BOOK_WALKTHROUGH_BATCH_SIZE): string[] {
+  return plan.pending.slice(0, size);
 }
 
 export async function planBookWalkthroughs(bookId: string): Promise<BookWalkthroughPlan> {
@@ -34,11 +48,16 @@ export async function planBookWalkthroughs(bookId: string): Promise<BookWalkthro
   });
   const drafts: Record<string, ContextWalkthrough> = {};
   for (const chapter of book?.chapters ?? []) Object.assign(drafts, chapter.contextWalkthroughs);
-  const needing = new Set(sentencesNeedingWalkthrough(sentences, drafts));
+  const handleOf = new Map(sentences.map((s, i) => [s.id, `S${i + 1}`]));
+  const missing = sentencesNeedingWalkthrough(sentences, drafts).map((id) => handleOf.get(id)!);
+  const outdated = sentencesNeedingUpgrade(sentences, drafts).map((id) => handleOf.get(id)!);
   return {
     title: book?.title ?? '',
     sentences,
-    pending: sentences.flatMap((s, i) => (needing.has(s.id) ? [`S${i + 1}`] : [])),
+    pending: [...missing, ...outdated],
+    missing,
+    outdated,
+    current: sentences.length - missing.length - outdated.length,
   };
 }
 

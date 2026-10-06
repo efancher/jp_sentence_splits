@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { getEpisodePreparationContext, saveEpisodePackReply } from '../db/repository';
-import type { ContextWalkthroughStep } from '../domain/types';
+import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation } from '../domain/types';
 import { highlightSegments } from '../lib/contextWalkthrough';
 import { buildEpisodePackPrompts } from '../lib/episodePack';
 
@@ -36,6 +36,49 @@ export function HighlightedSentence({
           </mark>
         ),
       )}
+    </div>
+  );
+}
+
+const RELATION_LABEL: Record<WalkthroughRelation, string> = {
+  subject: 'who does it',
+  object: 'what it acts on',
+  topic: 'topic',
+  modifier: 'describes',
+  quotation: 'what is thought / said',
+  listing: 'joined with',
+  predicate: 'the action or state',
+  adverbial: 'how / when / where',
+  link: 'link',
+  other: 'connects to',
+};
+
+/** Who does or experiences each clause, with anything resting on surrounding sentences marked as inferred. */
+export function ParticipantList({ participants }: { participants: WalkthroughParticipant[] }) {
+  return (
+    <div className="stack" style={{ gap: '0.15rem' }} aria-label="Who does what">
+      <strong>Who does what</strong>
+      <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+        {participants.map((item, index) => (
+          <li key={index}>
+            <span className="jp">{item.clause}</span>: {item.who}
+            {item.role ? ` (${item.role})` : ''}
+            {item.basis === 'inferred' ? <span className="muted"> — inferred from context, not stated</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** A sentence-specific question; the answer stays hidden until asked for. */
+export function WalkthroughCheckView({ check }: { check: WalkthroughCheck }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="stack" style={{ gap: '0.2rem' }} aria-label="Quick check">
+      <strong>Quick check</strong>
+      <div>{check.question}</div>
+      {shown ? <div>{check.answer}</div> : <button type="button" onClick={() => setShown(true)}>Show answer</button>}
     </div>
   );
 }
@@ -78,13 +121,23 @@ export function ContextStepCard({
           {step.connects ? (
             <div>
               <strong>Connects to </strong>
-              <span className="jp">{step.connects.text}</span>: {step.connects.how}
+              <span className="jp">{step.connects.text}</span>{step.relation ? <span className="muted"> ({RELATION_LABEL[step.relation]})</span> : null}: {step.connects.how}
             </div>
           ) : null}
           {step.mechanics ? <div><strong>How the pieces work: </strong>{step.mechanics}</div> : null}
           {step.implicit ? <div><strong>Left unsaid in Japanese: </strong>{step.implicit}</div> : null}
           {step.nuance ? <div><strong>Tone: </strong>{step.nuance}</div> : null}
           {step.inferred ? <div className="muted"><strong>From context (inferred, not stated in this sentence): </strong>{step.inferred}</div> : null}
+          {step.parts?.length ? (
+            <details>
+              <summary className="muted">Parts of this unit</summary>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                {step.parts.map((part, index) => (
+                  <li key={index}><span className="jp">{part.text}</span> — {part.gloss}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           {step.detail ? (
             <details>
               <summary>More detail</summary>
@@ -97,7 +150,7 @@ export function ContextStepCard({
       )}
       {showWhy && roleHelp.length > 0 ? (
         <details>
-          <summary className="muted">Generic role help for the chunks here</summary>
+          <summary className="muted">Generic role help for the chunks here (not specific to this sentence)</summary>
           <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
             {roleHelp.map((item, index) => (
               <li key={index} className="muted">

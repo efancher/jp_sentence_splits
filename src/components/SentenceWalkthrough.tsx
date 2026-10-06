@@ -15,7 +15,7 @@ import { layersOverlapping, validLayersFor, type LayerWithSentence } from '../li
 import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '../lib/sentenceLearning';
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
-import { ContextStepCard, HighlightedSentence, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
+import { ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -395,6 +395,8 @@ export function SentenceWalkthrough({
               <strong>Putting it together</strong>
               <div>{contextual.natural}</div>
               {contextual.caveat ? <div className="muted"><strong>Depends on context: </strong>{contextual.caveat}</div> : null}
+              {contextual.participants?.length ? <ParticipantList participants={contextual.participants} /> : null}
+              {contextual.check ? <WalkthroughCheckView check={contextual.check} /> : null}
             </div>
           ) : null}
           {gist === 'closed' && !showTranslation && sentence.translation?.trim() ? (
@@ -477,10 +479,12 @@ export function SentenceWalkthrough({
         <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
           Explanations were drafted by an AI from a pasted reply, using the sentences around this one; they are not verified by you.
           Anything marked &ldquo;From context&rdquo; is inferred rather than stated.
+          {(contextual.version ?? 1) < 2 ? ' This is an older-format explanation without nested structure or who-does-what; it can be enriched from the book page.' : ''}
         </p>
       ) : (
         <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-          No contextual explanation is saved for this sentence, so this walkthrough shows generic role guidance only.
+          No contextual explanation is saved for this sentence, so this basic fallback shows generic role guidance only. Roles such as &ldquo;engine&rdquo; and
+          &ldquo;car&rdquo; are generic and do not say which predicate a phrase belongs to; word-list glosses may split compounds and names.
         </p>
       )}
       {!contextual && importTarget ? <WalkthroughContentImport bookId={importTarget.bookId} chapterId={importTarget.chapterId} sentenceId={sentence.id} /> : null}
