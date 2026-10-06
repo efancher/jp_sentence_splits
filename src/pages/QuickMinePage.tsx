@@ -14,13 +14,18 @@ import {
 import { canonicalSourceId, hashString } from '../lib/ids';
 import { displayJapanese, normalizeSentenceKey } from '../lib/normalize';
 import {
+  cancelAssistRun,
   commitMiningJob,
   createMiningJob,
+  deleteAssistRun,
   deleteMiningJob,
   fetchJobAudioRange,
   fetchPodcastFeed,
+  getAssistRun,
   getMiningJob,
   listMiningJobs,
+  startAssistRun,
+  type AssistRunStatus,
   type MiningJobStatus,
   type MiningJobSummary,
   type MiningSourceInfo,
@@ -38,13 +43,7 @@ import {
   type CombinedReplySections,
 } from '../lib/combinedImportPrompt';
 import { mergeExtraReplies, planExtraTasks, runExtraTasks } from '../lib/assistExtras';
-import {
-  MAX_ATTEMPTS_PER_CHUNK,
-  NO_EXTRAS,
-  chunkTranscript,
-  mergeChunkReplies,
-  runSegmentChunks,
-} from '../lib/assistChunks';
+import { MAX_ATTEMPTS_PER_CHUNK, NO_EXTRAS } from '../lib/assistChunks';
 import { parseAiCombinedReply } from '../lib/miningQuickImport';
 import type { WizardTranscriptSeg } from '../lib/miningTranscript';
 import { downloadTextFile } from '../lib/particleChecks';
@@ -65,7 +64,7 @@ const PODCAST_PAGE_SIZE = 30;
  * page's in-flight job on both, since commit doesn't care which page (or
  * which wizard stage) a job has reached. */
 const ACTIVE_JOB_KEY = 'quickmine.activeJob';
-const ASSIST_REPLIES_KEY_PREFIX = 'quickmine.assistReplies.';
+const ASSIST_RUN_POLL_MS = 3000;
 const ASSIST_EXTRAS_KEY_PREFIX = 'quickmine.assistExtras.';
 const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
@@ -196,10 +195,14 @@ export function QuickMinePage() {
   const [assistRunning, setAssistRunning] = useState(false);
   const [assistProgress, setAssistProgress] = useState('');
   const [assistFailure, setAssistFailure] = useState('');
+  const [partialRun, setPartialRun] = useState<AssistRunStatus | null>(null);
   const [extrasRunning, setExtrasRunning] = useState(false);
   const [extrasProgress, setExtrasProgress] = useState('');
   const [extrasFailure, setExtrasFailure] = useState('');
   const assistCancelRef = useRef(false);
+  const assistRunningRef = useRef(false);
+  assistRunningRef.current = assistRunning;
+  const attachedRunRef = useRef(new Set<string>());
   const [sentenceIdByHandle, setSentenceIdByHandle] = useState<Map<number, string>>(new Map());
   const [preview, setPreview] = useState<ShadowingImportPreview | null>(null);
 
@@ -378,7 +381,10 @@ export function QuickMinePage() {
   }, [stage, jobId]);
 
   function reset() {
-    if (jobId) void deleteMiningJob(jobId);
+    if (jobId) {
+      void deleteAssistRun(jobId);
+      void deleteMiningJob(jobId);
+    }
     for (const queued of queueRef.current) {
       if (queued.jobId) void deleteMiningJob(queued.jobId);
     }
@@ -575,56 +581,78 @@ export function QuickMinePage() {
 
   async function sendToAssistant() {
     if (!jobId || assistRunning) return;
-    const chunks = chunkTranscript(transcript);
-    const storageKey = `${ASSIST_REPLIES_KEY_PREFIX}${jobId}`;
-    let kept: (string | null)[] = [];
-    try {
-      const raw = localStorage.getItem(storageKey);
-      const parsedKept: unknown = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsedKept)) {
-        kept = parsedKept.map((item) => (typeof item === 'string' ? item : null));
-      }
-    } catch {
-      kept = [];
-    }
-    if (kept.length !== chunks.length) kept = [];
-    assistCancelRef.current = false;
-    setAssistRunning(true);
     setAssistFailure('');
-    const result = await runSegmentChunks({
-      chunks,
-      replies: kept,
-      run: (prompt) => runAssist(prompt, { isCancelled: () => assistCancelRef.current }),
-      onChunkDone: (index, reply) => {
-        kept[index] = reply;
-        localStorage.setItem(storageKey, JSON.stringify(chunks.map((_, i) => kept[i] ?? null)));
-      },
-      onProgress: (p) =>
-        setAssistProgress(
-          `Part ${p.index + 1} of ${p.total}${p.attempt > 1 ? ` (retry ${p.attempt - 1})` : ''}${
-            p.backend ? ` — ${p.backend}` : ' — asking the assistant…'
-          }`,
-        ),
-      isCancelled: () => assistCancelRef.current,
-    });
+    setPartialRun(null);
+    setAssistProgress('Starting…');
+    setAssistRunning(true);
+    try {
+      const run = await startAssistRun({ runId: jobId, transcript, options: promptOptions });
+      if (run.status !== 'running') finishAssistRun(run);
+    } catch (err) {
+      setAssistRunning(false);
+      setAssistProgress('');
+      setAssistFailure(err instanceof Error ? err.message : 'Could not start the assistant.');
+    }
+  }
+
+  function stopAssistant() {
+    if (jobId) void cancelAssistRun(jobId);
+  }
+
+  /** Review what the box produced so far: the sentences, plus whichever extras finished. */
+  function reviewAssistRun(run: AssistRunStatus) {
+    if (!run.sentencesReply) return;
+    const applied = applyReply(run.sentencesReply, NO_EXTRAS);
+    if (applied && run.extras && hasQuickImportExtras(run.extras)) setExtras(run.extras);
+  }
+
+  function finishAssistRun(run: AssistRunStatus) {
     setAssistRunning(false);
     setAssistProgress('');
-    if (result.cancelled) return;
-    if (result.failure) {
-      const done = result.replies.filter(Boolean).length;
-      setAssistFailure(
-        `Stopped at part ${result.failure.index + 1} of ${chunks.length} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${result.failure.error} ` +
-          `${done} part${done === 1 ? '' : 's'} saved — press "Send to assistant" to continue from there, or use the prompt manually.`,
-      );
+    if (run.status === 'done') {
+      reviewAssistRun(run);
       return;
     }
-    localStorage.removeItem(storageKey);
-    const applied = applyReply(
-      mergeChunkReplies(result.replies.filter((r): r is string => r !== null)),
-      NO_EXTRAS,
+    if (run.status === 'cancelled') return;
+    setPartialRun(run.sentencesReply ? run : null);
+    setAssistFailure(
+      `${run.failure ?? 'The assistant run stopped.'} Press "Resume with assistant" to continue from the saved parts, or use the prompt manually.`,
     );
-    if (applied && Object.values(promptOptions).some(Boolean)) await generateExtras(applied);
   }
+
+  useEffect(() => {
+    if (stage !== 'combine' || !jobId) return;
+    let cancelled = false;
+    const check = async (first: boolean) => {
+      try {
+        const run = await getAssistRun(jobId);
+        if (cancelled || !run) return;
+        if (run.status === 'running') {
+          setAssistRunning(true);
+          setAssistProgress(run.progress);
+          return;
+        }
+        // A run that finished while this page was closed is picked up once;
+        // after that, going back to this step must not re-apply it over edits.
+        if (first && !attachedRunRef.current.has(jobId)) {
+          attachedRunRef.current.add(jobId);
+          finishAssistRun(run);
+        } else if (assistRunningRef.current) {
+          finishAssistRun(run);
+        }
+      } catch {
+        // transient: the next poll retries
+      }
+    };
+    void check(true);
+    const timer = setInterval(() => void check(false), ASSIST_RUN_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, jobId]);
+
 
   async function generateExtras(given?: QuickRow[]) {
     const source = given ?? rows;
@@ -1183,7 +1211,7 @@ export function QuickMinePage() {
                 {assistFailure ? 'Resume with assistant' : 'Send to assistant'}
               </button>
               {assistRunning ? (
-                <button type="button" onClick={() => (assistCancelRef.current = true)}>
+                <button type="button" onClick={stopAssistant}>
                   Stop
                 </button>
               ) : null}
@@ -1191,10 +1219,18 @@ export function QuickMinePage() {
             </div>
             <div className="muted">
               Runs Codex (Claude as backup) on the server in small parts, segmenting and
-              translating, then generates the ticked extras above too (progress continues on the
-              review step). A part is retried once; after that it stops and keeps what's done.
+              translating, then generates the ticked extras above too. It keeps going if you close
+              this page — come back to this import and the result is picked up. A part is retried
+              once; after that it stops and keeps what's done.
             </div>
             {assistFailure ? <div className="error">{assistFailure}</div> : null}
+            {assistFailure && partialRun ? (
+              <div>
+                <button type="button" onClick={() => reviewAssistRun(partialRun)}>
+                  Review the sentences now (skip the rest)
+                </button>
+              </div>
+            ) : null}
           </div>
           <textarea
             readOnly
@@ -1409,7 +1445,10 @@ export function QuickMinePage() {
                   console.error('Quick import extras failed', err);
                 }
               }
-              if (jobId) void deleteMiningJob(jobId);
+              if (jobId) {
+                void deleteAssistRun(jobId);
+                void deleteMiningJob(jobId);
+              }
               if (queueRef.current.length > 0) {
                 await advanceQueue();
                 return;

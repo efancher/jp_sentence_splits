@@ -850,15 +850,22 @@ Targets are constants; no settings UI.
   `ImportPage` links both this and the full wizard for YouTube/podcast
   sources. Podcast episodes can be multi-selected and run as a queue (next
   episode's mining job prefetched one ahead). Instead of copy/paste, a
-  **"Send to assistant"** button runs the work on the mining box through
-  `POST /assist` (`server/youtube-mining/app/assist.py`: the `codex` CLI, then
-  `claude -p` as backup, one run at a time, tailnet-only): segment+translate in
-  40-fragment parts (`src/lib/assistChunks.ts`), then, on the review step, the
-  ticked extras in ~25-sentence ranges with 3 sentences of context before and 2
-  after, focus targets in one whole-episode call (`src/lib/assistExtras.ts`).
-  Every piece is validated (cut-off checks) and stored in localStorage as it
-  lands; a piece gets two attempts, then the run stops and the button becomes
-  "Resume", so a misbehaving assistant never loops unattended. Replies that are
+  **"Send to assistant"** button runs the whole job on the mining box as one
+  resumable run (`POST /assist-runs`, `server/youtube-mining/app/assist_run.py`
+  spawning `scripts/assist-run.ts`; run id = the mining job id), so the page can
+  close: segment+translate in 40-fragment parts (`src/lib/assistChunks.ts`),
+  then the ticked extras in ~25-sentence ranges with 3 sentences of context
+  before and 2 after, focus targets in one whole-episode call
+  (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
+  prompt goes to the box's `POST /assist` (the `codex` CLI, then `claude -p` as
+  backup, one at a time, tailnet-only). Every piece is validated (cut-off
+  checks) and saved to the run's `state.json` on the box as it lands; a piece
+  gets two attempts, then the run stops as `failed` and the button becomes
+  "Resume", so a misbehaving assistant never loops unattended. The page polls
+  `GET /assist-runs/{id}` and, when it reopens an import (the active job is
+  remembered), re-attaches to a running run or picks up a finished one. The
+  review step's "Extras with the assistant" panel is still the client-driven
+  per-piece path (localStorage) for regenerating after edits. Replies that are
   pasted manually are checked for truncation (`checkCombinedReply`, `=== END ===`
   marker) and shown as warnings.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route

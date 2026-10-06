@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { YOUTUBE_MINING_API_BASE } from '../appConfig';
+import type { CombinedPromptOptions } from './combinedImportPrompt';
+import type { WizardTranscriptSeg } from './miningTranscript';
 
 /**
  * Client for the tailnet-only YouTube-mining service
@@ -745,5 +747,68 @@ export async function runAssist(
     if (status.status === 'done') {
       return { reply: status.reply ?? '', backend: status.backend ?? null };
     }
+  }
+}
+
+const assistRunSchema = z.object({
+  status: z.enum(['running', 'done', 'failed', 'cancelled', 'interrupted']),
+  phase: z.enum(['sentences', 'extras']).nullable().optional(),
+  progress: z.string().default(''),
+  failure: z.string().nullable().optional(),
+  segmentsDone: z.number().default(0),
+  segmentsTotal: z.number().default(0),
+  sentencesReply: z.string().nullable().optional(),
+  extras: z
+    .object({
+      sentences: z.string(),
+      pack: z.string(),
+      structure: z.string(),
+      comprehension: z.string(),
+      particles: z.string(),
+    })
+    .nullable()
+    .optional(),
+  updatedAt: z.number().default(0),
+});
+
+export type AssistRunStatus = z.infer<typeof assistRunSchema>;
+
+/**
+ * Start (or resume) the whole segment+translate+extras assistant run for a
+ * mining job on the box (`POST /assist-runs`). It keeps going with the page
+ * closed; poll {@link getAssistRun}. `runId` is the mining job id.
+ */
+export async function startAssistRun(input: {
+  runId: string;
+  transcript: WizardTranscriptSeg[];
+  options: CombinedPromptOptions;
+}): Promise<AssistRunStatus> {
+  const response = await fetch(`${API_BASE}/assist-runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(`Failed to start assistant: ${await readErrorDetail(response)}`);
+  return assistRunSchema.parse(await response.json());
+}
+
+/** The run's current state, or null when this job has no run (404). */
+export async function getAssistRun(runId: string): Promise<AssistRunStatus | null> {
+  const response = await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Assistant status check failed: ${await readErrorDetail(response)}`);
+  return assistRunSchema.parse(await response.json());
+}
+
+export async function cancelAssistRun(runId: string): Promise<void> {
+  await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+}
+
+/** Forget a run's saved parts (best effort) — used once its result is imported or the user starts over. */
+export async function deleteAssistRun(runId: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/assist-runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+  } catch {
+    // best-effort only
   }
 }

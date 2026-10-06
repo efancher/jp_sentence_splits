@@ -461,6 +461,45 @@ class AssistStatusResponse(BaseModel):
     error: str | None = None
 
 
+class AssistRunSegment(BaseModel):
+    text: str
+    startMs: int
+    endMs: int
+    isAuto: bool = False
+    lowConfidence: bool = False
+
+
+class AssistRunOptions(BaseModel):
+    targets: bool = False
+    structure: bool = False
+    constructions: bool = False
+    walkthroughs: bool = False
+    comprehension: bool = False
+    particles: bool = False
+
+
+class AssistRunRequest(BaseModel):
+    """Start or resume the server-side Quick import assistant run for a mining
+    job (see app/assist_run.py). `runId` is the mining job id."""
+
+    runId: str
+    transcript: list[AssistRunSegment] = Field(min_length=1)
+    options: AssistRunOptions = Field(default_factory=AssistRunOptions)
+
+
+class AssistRunStatusResponse(BaseModel):
+    status: Literal["running", "done", "failed", "cancelled", "interrupted"]
+    phase: Literal["sentences", "extras"] | None = None
+    progress: str = ""
+    failure: str | None = None
+    segmentsDone: int = 0
+    segmentsTotal: int = 0
+    sentencesReply: str | None = None
+    # Merged extras so far: {sentences, pack, structure, comprehension, particles}.
+    extras: dict[str, str] | None = None
+    updatedAt: int = 0
+
+
 AlignmentBackfillStatus = Literal["running", "done", "error"]
 
 

@@ -18,6 +18,7 @@ from app import (
     align_client,
     alignment_backfill,
     assist,
+    assist_run,
     clip,
     config,
     difficulty,
@@ -41,6 +42,8 @@ from app.models import (
     AlignmentBackfillStatusResponse,
     AssistCreateResponse,
     AssistRequest,
+    AssistRunRequest,
+    AssistRunStatusResponse,
     AssistStatusResponse,
     ClipRequest,
     ClipResponse,
@@ -134,6 +137,63 @@ async def get_assist(assist_id: str):
         raise HTTPException(status_code=404, detail="Unknown assist request.")
     return AssistStatusResponse(
         status=job.status, backend=job.backend, reply=job.reply, error=job.error
+    )
+
+
+@app.post("/assist-runs", response_model=AssistRunStatusResponse)
+async def start_assist_run(req: AssistRunRequest):
+    """Start (or resume) the whole segment+translate+extras assistant run for
+    a mining job on the box, so the browser can close — see app/assist_run.py.
+    Poll GET /assist-runs/{runId}."""
+    try:
+        assist_run.start(req.runId, req.model_dump(exclude={"runId"}))
+    except assist_run.InvalidRunIdError:
+        raise HTTPException(status_code=400, detail="Invalid run id.")
+    state = assist_run.get(req.runId)
+    if state is None:
+        raise HTTPException(status_code=500, detail="Run did not start.")
+    return _assist_run_response(state)
+
+
+@app.get("/assist-runs/{run_id}", response_model=AssistRunStatusResponse)
+async def get_assist_run(run_id: str):
+    try:
+        state = assist_run.get(run_id)
+    except assist_run.InvalidRunIdError:
+        raise HTTPException(status_code=400, detail="Invalid run id.")
+    if state is None:
+        raise HTTPException(status_code=404, detail="No assistant run for this job.")
+    return _assist_run_response(state)
+
+
+@app.post("/assist-runs/{run_id}/cancel", status_code=204)
+async def cancel_assist_run(run_id: str):
+    try:
+        assist_run.cancel(run_id)
+    except assist_run.InvalidRunIdError:
+        raise HTTPException(status_code=400, detail="Invalid run id.")
+
+
+@app.delete("/assist-runs/{run_id}", status_code=204)
+async def delete_assist_run(run_id: str):
+    try:
+        assist_run.discard(run_id)
+    except assist_run.InvalidRunIdError:
+        raise HTTPException(status_code=400, detail="Invalid run id.")
+
+
+def _assist_run_response(state: dict) -> AssistRunStatusResponse:
+    parts = state.get("segmentReplies") or []
+    return AssistRunStatusResponse(
+        status=state.get("status", "failed"),
+        phase=state.get("phase"),
+        progress=state.get("progress") or "",
+        failure=state.get("failure"),
+        segmentsDone=sum(1 for part in parts if part),
+        segmentsTotal=len(parts),
+        sentencesReply=state.get("sentencesReply"),
+        extras=state.get("extras"),
+        updatedAt=int(state.get("updatedAt") or 0),
     )
 
 
