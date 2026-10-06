@@ -21,6 +21,7 @@
     "build:name-readings": "tsx scripts/build-name-readings.ts",
     "import:anki-sentences": "tsx scripts/import-anki-sentences.ts",
     "backfill:vocabulary-suggestions": "tsx scripts/backfill-vocabulary-suggestions.ts",
+    "backfill:context-walkthroughs": "tsx scripts/backfill-context-walkthroughs.ts",
     "backfill:vocabulary-meanings": "tsx scripts/backfill-vocabulary-meanings.ts",
     "backfill:vocabulary-jmdict-pos": "tsx scripts/backfill-vocabulary-jmdict-pos.ts",
     "backfill:vocabulary-suggestion-glosses": "tsx scripts/backfill-vocabulary-suggestion-glosses.ts",
