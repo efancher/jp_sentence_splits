@@ -1111,6 +1111,29 @@ export function AnalyzePage() {
                     compact
                   />
                 ) : null}
+<button
+              type="button"
+              className="icon-button"
+              aria-label="Suggest sticky English"
+              title="Suggest sticky English"
+              onClick={() => {
+                const suggested = suggestStickyEnglish(chunk.japanese, {
+                  role: chunk.role,
+                  englishHint: sentence.translation,
+                  vocabulary: sentence.targetVocabulary,
+                });
+                if (!suggested) return;
+                setChunks((current) =>
+                  current.map((item) =>
+                    item.id === chunk.id
+                      ? { ...item, literalEnglish: suggested }
+                      : item,
+                  ),
+                );
+              }}
+            >
+              ✨
+            </button>
                 <span className="muted">#{chunkIndex + 1}</span>
               </span>
             </div>
@@ -1200,26 +1223,6 @@ export function AnalyzePage() {
                 onBlur={() => void saveNow()}
               />
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                const suggested = suggestStickyEnglish(chunk.japanese, {
-                  role: chunk.role,
-                  englishHint: sentence.translation,
-                  vocabulary: sentence.targetVocabulary,
-                });
-                if (!suggested) return;
-                setChunks((current) =>
-                  current.map((item) =>
-                    item.id === chunk.id
-                      ? { ...item, literalEnglish: suggested }
-                      : item,
-                  ),
-                );
-              }}
-            >
-              Suggest sticky English
-            </button>
             <label>
               Why this role here?
               <textarea
