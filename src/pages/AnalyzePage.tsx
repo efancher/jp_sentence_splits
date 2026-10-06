@@ -1184,6 +1184,8 @@ export function AnalyzePage() {
             <label>
               Literal sticky English
               <textarea
+                rows={1}
+                style={{ minHeight: 'var(--touch)' }}
                 value={chunk.literalEnglish}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -1221,6 +1223,8 @@ export function AnalyzePage() {
             <label>
               Why this role here?
               <textarea
+                rows={6}
+                style={{ minHeight: '10rem' }}
                 value={chunk.notes ?? ''}
                 onChange={(event) => {
                   const value = event.target.value;
