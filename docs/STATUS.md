@@ -7516,3 +7516,9 @@ iOS Safari but ⚠️ unconfirmed on Firefox — see the log):
 - **Not regenerated:** no existing saved sentence has been re-explained — that needs an external AI reply per batch (no credentials in this session). Existing data shows as before until batches are applied.
 - Tests: `src/lib/contextWalkthrough.test.ts` (regression sentence: attachments, nesting, participants, repeats, upgrade queue); `npm run check` green.
 - `npm run backfill:context-walkthroughs -- <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M]` drives `codex exec` over the pending batches (same prompt/parser as the Book page), dry-run by default, re-reads chapters before each write (version-checked), skips failed batches for the run and resumes on re-run. Needs the repo `.env` Supabase credentials (worktrees don't have one). Not yet run against real data.
+
+## 2026-10-07 — Suspended chapters now respected by Explore, Grammar noticing and Shadowing finders
+
+- `findExploreCandidates`, `findGrammarNoticingCandidates` and `activeSentenceIdsForShadowing` (`src/db/repository.ts`) only checked book-level suspension, so a suspended episode (chapter) still produced shadowing/explore/noticing steps. They now drop memberships via `membershipIsShelved` (per membership, so a sentence also in an active chapter stays eligible).
+- Tests: `tests/chapterSuspensionFinders.test.ts` (explore, grammar noticing; shadowing relies on the same helper, untested directly). `npm run check`-equivalent (typecheck + targeted vitest) green.
+- Test plan: suspend an episode on the book page, create a new session: no Shadow/Explore step names its sentences. Corruption spot-check: resume the chapter and its sentences return as candidates.

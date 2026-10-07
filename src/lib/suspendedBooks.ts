@@ -5,8 +5,10 @@ import type { Book, StudyItem } from '../domain/types';
  * too hard right now, to be resumed later. A single **chapter** within a book
  * can be suspended the same way (`BookChapter.suspendedAt`) — useful when
  * only part of a book is the problem (e.g. one noisy episode). Either form:
- *   - produces no session-planner work (the candidate finders filter it out,
- *     same as `archived`), and
+ *   - produces no session-planner work (a suspended book is dropped by
+ *     `isBookInStudyRotation`; a suspended chapter's memberships are dropped
+ *     per-membership via `membershipIsShelved` in the explore, grammar-noticing
+ *     and shadowing finders), and
  *   - has its **exclusive** review cards held back from the global `/review`
  *     queue: a word or sentence is only held back when *every* membership it
  *     has (book, or specific chapter within a book) is shelved. A word that

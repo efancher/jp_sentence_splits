@@ -9966,10 +9966,13 @@ async function findExploreCandidates(
   sequential = false,
 ): Promise<ExploreCandidate[]> {
   const db = getDb();
-  const [allBooks, coverageByBookId] = await Promise.all([
+  const [allBooks, coverageByBookId, suspendedIndex] = await Promise.all([
     db.books.toArray(),
     getBookVocabularyCoverage(),
+    loadSuspendedBookIndex(),
   ]);
+  const notShelved = (item: { bookId: string; chapterId?: string }) =>
+    !(suspendedIndex && membershipIsShelved(item, suspendedIndex));
   const books = allBooks
     .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
@@ -10008,13 +10011,13 @@ async function findExploreCandidates(
       .filter((item) =>
         (walked
           ? item.status !== 'complete' && !walked.has(item.sentenceId)
-          : item.status === 'unstarted') && (!unlocked || unlocked.has(item.sentenceId)),
+          : item.status === 'unstarted') && (!unlocked || unlocked.has(item.sentenceId)) && notShelved(item),
       )
       .sort((a, b) => a.position - b.position)
       .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
     const seenRevisit = new Set<string>();
     const revisitMemberships = memberships.filter((item) => {
-      if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId)) return false;
+      if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId) || !notShelved(item)) return false;
       seenRevisit.add(item.sentenceId);
       return true;
     });
@@ -10131,6 +10134,7 @@ async function findUnderstandCandidates(limit: number): Promise<UnderstandCandid
  */
 export async function findGrammarNoticingCandidates(limit: number): Promise<GrammarNoticingCandidate[]> {
   const db = getDb();
+  const suspendedIndex = await loadSuspendedBookIndex();
   const books = (await db.books.toArray())
     .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
@@ -10141,7 +10145,11 @@ export async function findGrammarNoticingCandidates(limit: number): Promise<Gram
   for (let bookRank = 0; bookRank < books.length; bookRank += 1) {
     const book = books[bookRank]!;
     const worked = (await db.bookSentences.where('bookId').equals(book.id).toArray())
-      .filter((membership) => membership.status === 'complete')
+      .filter(
+        (membership) =>
+          membership.status === 'complete' &&
+          !(suspendedIndex && membershipIsShelved(membership, suspendedIndex)),
+      )
       .sort((a, b) => a.position - b.position)
       .slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
     for (const membership of worked) {
@@ -10197,6 +10205,7 @@ export async function findGrammarNoticingCandidates(limit: number): Promise<Gram
 /** Sentences from the learner's most-recently-opened, non-archived books that have actually been started — the pool shadowing candidates are drawn from, so a fresh import doesn't immediately dominate the shadow queue. */
 async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<string>> {
   const db = getDb();
+  const suspendedIndex = await loadSuspendedBookIndex();
   const books = (await db.books.toArray())
     .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
@@ -10205,7 +10214,9 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
     for (const membership of memberships) {
-      if (membership.status !== 'unstarted') ids.add(membership.sentenceId);
+      if (membership.status === 'unstarted') continue;
+      if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
+      ids.add(membership.sentenceId);
     }
   }
   return ids;
