@@ -63,6 +63,19 @@ const isNominal = (pos: string) => pos.startsWith('名詞') || pos.startsWith('�
 export function chunkSentenceIntoTiles(
   sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
 ): string[] | null {
+  return chunkSentenceIntoTileDetails(sentence)?.map((chunk) => chunk.text) ?? null;
+}
+
+interface TileDetail {
+  text: string;
+  /** POS and surface of the tile's final token, which decides what can be swapped for a distractor. */
+  lastPos: string;
+  lastSurface: string;
+}
+
+function chunkSentenceIntoTileDetails(
+  sentence: Pick<Sentence, 'japanese' | 'vocabularySuggestions'>,
+): TileDetail[] | null {
   const tokens: TileToken[] = (sentence.vocabularySuggestions ?? [])
     .filter((token) => typeof token.pos === 'string' && token.pos !== '')
     .map((token) => ({
@@ -89,7 +102,7 @@ export function chunkSentenceIntoTiles(
     return null;
   }
 
-  const chunks: { text: string; lastPos: string; lastSurface: string }[] = [];
+  const chunks: TileDetail[] = [];
   let prefixPending = '';
   // Punctuation is a phrase boundary even though it isn't a tile: 揺れた。だけど
   // must not glue into 揺れただけど.
@@ -130,7 +143,7 @@ export function chunkSentenceIntoTiles(
     afterBoundary = false;
   }
   if (prefixPending !== '') return null;
-  return chunks.map((chunk) => chunk.text);
+  return chunks;
 }
 
 /** Why a sentence can't be a round, or null when it can. Exposed so the feasibility script can bucket the rejects. */
@@ -148,31 +161,164 @@ export function earTilesRejection(
   return null;
 }
 
+/** A tile that was never said: a real tile with one particle or polite/negative ending swapped. */
+export interface EarTilesDistractor {
+  kind: 'particle' | 'ending';
+  /** The real tile it was made from. */
+  from: string;
+  /** The particle that was swapped out (particle kind only), e.g. は. */
+  particle?: string;
+}
 export interface EarTilesTile {
   id: string;
   text: string;
+  distractor?: EarTilesDistractor;
 }
 export interface EarTilesPuzzle {
   sentenceId: string;
   /** The tile texts in spoken order. */
   answer: string[];
-  /** The same tiles, shuffled so the bank never starts in spoken order. */
+  /** The tiles (plus any distractors), shuffled so the bank never starts in spoken order. */
   bank: EarTilesTile[];
+}
+
+/** Particles easily confused by ear or by habit; each maps to the swaps that make a plausible-looking wrong tile. */
+const PARTICLE_SWAPS: Record<string, readonly string[]> = {
+  は: ['が', 'も'],
+  が: ['は', 'を'],
+  を: ['が', 'に'],
+  に: ['で', 'へ'],
+  で: ['に', 'を'],
+  へ: ['に'],
+  も: ['は', 'が'],
+  と: ['に', 'も'],
+};
+const SWAPPABLE_PARTICLE_POS = ['助詞/格助詞', '助詞/係助詞', '助詞/副助詞'];
+
+/**
+ * Endings that swap cleanly onto any stem because they attach to the same stem form
+ * (食べ+ます / 食べ+ました, 行か+ない / 行か+なかった). た→ない is deliberately absent:
+ * 行った→行っない is not Japanese, and a distractor must look plausible.
+ * Longest suffix first so ませんでした is not read as でした.
+ */
+const ENDING_SWAPS: readonly (readonly [suffix: string, swaps: readonly string[]])[] = [
+  ['ませんでした', ['ません']],
+  ['なかった', ['ない']],
+  ['ました', ['ます']],
+  ['ません', ['ます']],
+  ['でした', ['です']],
+  ['ない', ['なかった']],
+  ['ます', ['ました']],
+  ['です', ['でした']],
+];
+
+function distractorCandidates(detail: TileDetail): { text: string; distractor: EarTilesDistractor }[] {
+  const out: { text: string; distractor: EarTilesDistractor }[] = [];
+  const { text, lastPos, lastSurface } = detail;
+  if (
+    startsWithAny(lastPos, SWAPPABLE_PARTICLE_POS) &&
+    text.length > lastSurface.length &&
+    text.endsWith(lastSurface)
+  ) {
+    const stem = text.slice(0, -lastSurface.length);
+    for (const swap of PARTICLE_SWAPS[lastSurface] ?? []) {
+      out.push({ text: stem + swap, distractor: { kind: 'particle', from: text, particle: lastSurface } });
+    }
+  }
+  if (lastPos.startsWith('助動詞')) {
+    const rule = ENDING_SWAPS.find(([suffix]) => text.endsWith(suffix) && text.length > suffix.length);
+    if (rule) {
+      const stem = text.slice(0, -rule[0].length);
+      for (const swap of rule[1]) out.push({ text: stem + swap, distractor: { kind: 'ending', from: text } });
+    }
+  }
+  return out;
 }
 
 export function buildEarTilesPuzzle(
   sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
-  options: { seed: string },
+  options: { seed: string; distractors?: number },
 ): EarTilesPuzzle | null {
-  const tiles = chunkSentenceIntoTiles(sentence);
-  if (!tiles) return null;
-  const tagged = tiles.map((text, index) => ({ id: `tile-${index}`, text }));
-  let bank = seededShuffle(tagged, (tile) => tile.id, options.seed);
-  // A bank already in spoken order would hand the answer over; rotate it once if the shuffle landed there.
-  if (bank.length > 1 && bank.every((tile, index) => tile.text === tiles[index])) {
-    bank = [...bank.slice(1), bank[0]!];
+  const details = chunkSentenceIntoTileDetails(sentence);
+  if (!details) return null;
+  const tiles = details.map((detail) => detail.text);
+  const tagged: EarTilesTile[] = tiles.map((text, index) => ({ id: `tile-${index}`, text }));
+
+  // At most one fake per source tile; particle and ending swaps alternate so a round isn't two of a kind.
+  const wanted = options.distractors ?? 0;
+  const taken = new Set(tiles);
+  const usedSources = new Set<number>();
+  const fakes: EarTilesTile[] = [];
+  if (wanted > 0) {
+    const pool = seededShuffle(
+      details.flatMap((detail, index) =>
+        distractorCandidates(detail).map((candidate, variant) => ({
+          ...candidate,
+          id: `fake-${index}-${variant}`,
+          source: index,
+        })),
+      ),
+      (candidate) => candidate.id,
+      `${options.seed}:fakes`,
+    );
+    const take = (candidate: (typeof pool)[number]) => {
+      usedSources.add(candidate.source);
+      taken.add(candidate.text);
+      fakes.push({ id: candidate.id, text: candidate.text, distractor: candidate.distractor });
+    };
+    const available = (candidate: (typeof pool)[number]) =>
+      !usedSources.has(candidate.source) && !taken.has(candidate.text);
+    for (const wantKind of ['particle', 'ending', 'particle', 'ending'] as const) {
+      if (fakes.length >= wanted) break;
+      const next = pool.find((candidate) => candidate.distractor.kind === wantKind && available(candidate));
+      if (next) take(next);
+    }
+    for (const candidate of pool) {
+      if (fakes.length >= wanted) break;
+      if (available(candidate)) take(candidate);
+    }
+  }
+
+  let bank = seededShuffle([...tagged, ...fakes], (tile) => tile.id, options.seed);
+  // A bank whose real tiles already read in spoken order would hand the answer over; swap the first two real tiles if the shuffle landed there.
+  const realAt = bank.flatMap((tile, index) => (tile.distractor ? [] : [index]));
+  if (realAt.length > 1 && realAt.every((at, index) => bank[at]!.text === tiles[index])) {
+    bank = [...bank];
+    [bank[realAt[0]!], bank[realAt[1]!]] = [bank[realAt[1]!]!, bank[realAt[0]!]!];
   }
   return { sentenceId: sentence.id, answer: tiles, bank };
+}
+
+/** The pre-walkthrough check takes shorter and longer sentences than the game: it is one warm-up, not a round. */
+export const CHECK_MIN_TILES = 3;
+export const CHECK_MAX_TILES = 8;
+export const CHECK_DISTRACTORS = 2;
+
+/** The tile check shown before a sentence's walkthrough, or null when the sentence doesn't split cleanly into 3–8 tiles. */
+export function buildCheckPuzzle(
+  sentence: Pick<Sentence, 'id' | 'japanese' | 'vocabularySuggestions'>,
+  seed: string,
+): EarTilesPuzzle | null {
+  const puzzle = buildEarTilesPuzzle(sentence, { seed, distractors: CHECK_DISTRACTORS });
+  if (!puzzle) return null;
+  return puzzle.answer.length >= CHECK_MIN_TILES && puzzle.answer.length <= CHECK_MAX_TILES ? puzzle : null;
+}
+
+export interface ParticleOutcome {
+  /** The real tile the particle distractor was made from. */
+  tile: string;
+  particle: string;
+  /** The learner tapped the fake before settling on the real tile. */
+  fellFor: boolean;
+}
+
+/** One outcome per particle distractor in the bank; `wrongTaps` is every wrong tile text tapped, in any slot. */
+export function particleOutcomes(puzzle: Pick<EarTilesPuzzle, 'bank'>, wrongTaps: readonly string[]): ParticleOutcome[] {
+  return puzzle.bank.flatMap((tile) =>
+    tile.distractor?.kind === 'particle' && tile.distractor.particle
+      ? [{ tile: tile.distractor.from, particle: tile.distractor.particle, fellFor: wrongTaps.includes(tile.text) }]
+      : [],
+  );
 }
 
 /**

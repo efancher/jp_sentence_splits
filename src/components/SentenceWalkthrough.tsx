@@ -16,6 +16,10 @@ import { locateTargetSpan, selectSentenceTargets, type CompareSentence } from '.
 
 import { ChunkPuzzleStrip } from './ChunkPuzzleStrip';
 import { ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheckView, WalkthroughContentImport, type RoleHelp } from './ContextWalkthroughView';
+import { buildCheckPuzzle } from '../lib/earTiles';
+import { parkedDecisionKeys } from '../lib/glossSkill';
+
+import { EarTilesCheck } from './EarTilesCheck';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -183,8 +187,19 @@ export function SentenceWalkthrough({
     });
   }, [chunks, sentence.japanese]);
   const [step, setStep] = useState(0);
+  const visitId = useMemo(() => createId('visit'), []);
+  // Sentences with audio open on the ear-tiles check, unless earlier checks on it are parked for a retry.
+  const tilePuzzle = useMemo(
+    () =>
+      !skipCheck && audio && onGlossDecision != null && glossRecords != null && !parkedDecisionKeys(glossRecords).has(sentence.id)
+        ? buildCheckPuzzle(sentence, visitId)
+        : null,
+    // Chosen once per opening so the bank doesn't reshuffle under the learner.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visitId, sentence.id],
+  );
   const [tryFirst, setTryFirst] = useState(() =>
-    !skipCheck && onGlossDecision != null && glossRecords != null && planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0);
+    !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null || planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
   const [showTranslation, setShowTranslation] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
   const wordGlosses = useMemo(
@@ -223,7 +238,6 @@ export function SentenceWalkthrough({
   // Chosen once per opening so practising a card doesn't reshuffle or hide it under the learner.
   const [{ shown: shownTargets, hidden: hiddenTargets }] = useState(() => selectSentenceTargets(here, events));
   const blurb = chunk ? roleGuideBlurb(chunk.role) : undefined;
-  const visitId = useMemo(() => createId('visit'), []);
   const constructions = useMemo(() => {
     const sentenceLayers = validLayersFor(sentence.japanese, constructionDrafts?.[sentence.id]);
     const allLayers: LayerWithSentence[] = [];
@@ -351,7 +365,17 @@ export function SentenceWalkthrough({
           {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
         </select>
       </label>
-      {tryFirst && onGlossDecision ? (
+      {tryFirst && onGlossDecision && tilePuzzle && audio ? (
+        <EarTilesCheck
+          sentenceId={sentence.id}
+          visitId={visitId}
+          puzzle={tilePuzzle}
+          audio={audio}
+          onRecord={onGlossDecision}
+          onFinish={() => setTryFirst(false)}
+        />
+      ) : null}
+      {tryFirst && onGlossDecision && !tilePuzzle ? (
         <GlossDecisionPanel
           sentenceId={sentence.id}
           visitId={visitId}
