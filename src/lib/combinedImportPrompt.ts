@@ -133,6 +133,11 @@ function extraBlocks(opts: Required<CombinedPromptOptions>): { heading: string; 
         '3. Some incorrect option',
         '4. Some incorrect option',
         'READING: このまえ、えきにいった。',
+        '- Another wrong meaning',
+        '- Another wrong meaning',
+        'After the READING line add 5-6 MORE wrong meanings (a bank the app rotates through), one per line starting with "- ": further',
+        'plausible near-misses of the same kind, each clearly different from the correct meaning and from each other, similar in',
+        'length to it. Fewer is fine if you cannot think of good ones; never pad with obvious nonsense.',
       ],
     });
   }

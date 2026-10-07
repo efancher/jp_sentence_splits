@@ -191,20 +191,32 @@ export function parseBatchComprehensionCheckReply(
   return results;
 }
 
-/** One entry per `1..expectedCount`: the section's `READING:` line (whole-sentence hiragana), if any. */
-export function parseBatchReadings(reply: string, expectedCount: number): Array<string | undefined> {
-  const out: Array<string | undefined> = Array.from({ length: expectedCount }, () => undefined);
+function batchSectionLines(reply: string, expectedCount: number): string[][] {
+  const out: string[][] = Array.from({ length: expectedCount }, () => []);
   let current: number | null = null;
   for (const rawLine of reply.split('\n')) {
     const header = BATCH_SECTION_HEADER_RE.exec(rawLine.trim());
-    if (header) {
-      current = Number(header[1]);
-      continue;
-    }
-    const reading = /^\s*READING\s*:\s*(.+?)\s*$/i.exec(rawLine);
-    if (reading && current !== null && current >= 1 && current <= expectedCount) out[current - 1] ??= reading[1];
+    if (header) current = Number(header[1]);
+    else if (current !== null && current >= 1 && current <= expectedCount) out[current - 1]!.push(rawLine);
   }
   return out;
+}
+
+/** One entry per `1..expectedCount`: the section's `READING:` line (whole-sentence hiragana), if any. */
+export function parseBatchReadings(reply: string, expectedCount: number): Array<string | undefined> {
+  return batchSectionLines(reply, expectedCount).map(
+    (lines) => lines.map((line) => /^\s*READING\s*:\s*(.+?)\s*$/i.exec(line)).find(Boolean)?.[1],
+  );
+}
+
+/** One list per `1..expectedCount` of the section's extra wrong meanings (`- ` bullet lines; numbered option lines are ignored). */
+export function parseBatchExtraWrong(reply: string, expectedCount: number): string[][] {
+  return batchSectionLines(reply, expectedCount).map((lines) =>
+    lines.flatMap((line) => {
+      const match = /^\s*-\s+(.+?)\s*$/.exec(line);
+      return match ? [match[1]!.replace(/^["“]|["”]$/g, '').trim()] : [];
+    }),
+  );
 }
 
 export function buildComprehensionCheck(

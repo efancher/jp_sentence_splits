@@ -4,6 +4,7 @@ import {
   formatBatchComprehensionPromptForAI,
   formatComprehensionPromptForAI,
   parseBatchComprehensionCheckReply,
+  parseBatchExtraWrong,
   parseBatchReadings,
   parseComprehensionCheckReply,
 } from '../src/lib/comprehensionCheck';
@@ -120,6 +121,13 @@ describe('formatBatchComprehensionPromptForAI', () => {
 });
 
 const GOOD_SECTION = ['1. wrong a', '*2. correct', '3. wrong b', '4. wrong c'].join('\n');
+
+describe('parseBatchExtraWrong', () => {
+  it('collects only "- " bullets per section, ignoring numbered options and READING', () => {
+    const reply = ['=== Sentence 1 ===', GOOD_SECTION, 'READING: あ', '- extra one', '- "extra two"', '=== Sentence 2 ===', GOOD_SECTION].join('\n');
+    expect(parseBatchExtraWrong(reply, 2)).toEqual([['extra one', 'extra two'], []]);
+  });
+});
 
 describe('parseBatchReadings', () => {
   it('reads each section\'s READING line and leaves the options parse untouched', () => {

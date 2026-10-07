@@ -15,8 +15,9 @@ import {
   reportChunkIssues,
   setSentenceParticleChecks,
 } from '../db/repository';
-import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchReadings } from './comprehensionCheck';
-import { autoGenerateMeaningChecks, checkSentenceReading } from './meaningCheckAutogen';
+import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchExtraWrong, parseBatchReadings } from './comprehensionCheck';
+import { checkSentenceReading } from './meaningCheckAutogen';
+import { mergeDistractors } from './meaningChoices';
 import { remapSentenceHandles, type CombinedReplySections } from './combinedImportPrompt';
 import { parseBookParticleReply } from './particleChecks';
 
@@ -53,28 +54,30 @@ export async function applyQuickImportExtras(
     problems: [],
   };
 
-  const comprehension = parseBatchComprehensionCheckReply(sections.comprehension, sentenceIdByNumber.length);
   if (sections.comprehension) {
-    for (const [index, parsed] of comprehension.entries()) {
-      const sentenceId = sentenceIdByNumber[index];
-      if (!parsed || !sentenceId) continue;
-      await setSentenceComprehensionCheck(sentenceId, buildComprehensionCheck(parsed, 'ai_suggested'));
-      result.comprehension += 1;
-    }
+    const comprehension = parseBatchComprehensionCheckReply(sections.comprehension, sentenceIdByNumber.length);
+    const extraWrong = parseBatchExtraWrong(sections.comprehension, sentenceIdByNumber.length);
     const readings = parseBatchReadings(sections.comprehension, sentenceIdByNumber.length);
     const flags: { sentenceId: string; chunks: string[]; note: string }[] = [];
-    for (const [index, reading] of readings.entries()) {
+    for (const [index, parsed] of comprehension.entries()) {
       const sentenceId = sentenceIdByNumber[index];
-      if (!reading || !sentenceId) continue;
+      if (!sentenceId) continue;
+      // A check that already exists (the background worker can win the race right after commit) is a full bank; keep it.
+      const hasCheck = Boolean((await getDb().analyses.get(sentenceId))?.comprehensionCheck);
+      if (parsed && !hasCheck) {
+        let check = buildComprehensionCheck(parsed, 'ai_suggested');
+        const wrong = extraWrong[index] ?? [];
+        if (wrong.length > 0) check = mergeDistractors(check, wrong).check;
+        await setSentenceComprehensionCheck(sentenceId, check);
+        result.comprehension += 1;
+      }
+      const reading = readings[index];
+      if (!reading) continue;
       const outcome = await checkSentenceReading(sentenceId, reading);
       result.readingsFixed += outcome.fixed;
       for (const flag of outcome.flagged) flags.push({ sentenceId, chunks: [], note: `Reading check — ${flag}` });
     }
     if (flags.length > 0) await reportChunkIssues('meaning_checks', flags);
-    // Import gives each check only 3 wrong options; grow it to a full bank (background, best effort; backs off when AI is unavailable).
-    autoGenerateMeaningChecks({ mode: 'topup', bookId, limit: 200 }).catch((err) => {
-      console.error('Meaning bank top-up after import failed', err);
-    });
   }
 
   if (sections.particles) {
