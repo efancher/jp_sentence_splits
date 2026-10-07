@@ -13,12 +13,14 @@ import {
   getProgressReport,
   getSelfRatingCalibration,
   getOpenContentReports,
+  getEpisodeProgress,
   getSentenceLessonReport,
   resolveContentReport,
   getSentenceMasteryOverview,
   getSkillCoverage,
   getStepUsefulness,
 } from '../db/repository';
+import { EPISODE_STAGE_LABELS, EPISODE_STAGE_ORDER } from '../lib/episodeProgress';
 import type { ErrorCategory } from '../lib/errorMix';
 import type { TrendDirection } from '../lib/pronunciationProfile';
 import type { WeekBucket } from '../lib/progressReport';
@@ -179,7 +181,8 @@ export function ProgressPage() {
   const stepUsefulness = useLiveQuery(() => getStepUsefulness(), []);
   const gateFunnel = useLiveQuery(() => getGateFunnelSnapshot(), []);
   const lessonReport = useLiveQuery(() => getSentenceLessonReport(), []);
-  const openReports = useLiveQuery(() => getOpenContentReports(), []);
+  const episodeProgress = useLiveQuery(() => getEpisodeProgress(), []);
+  const openReports =useLiveQuery(() => getOpenContentReports(), []);
   const newCardBacklog = useLiveQuery(() => countNewVocabularyCardBacklog(), []);
   const leechList = useLiveQuery(() => getLeechList(), []);
   const masteryOverview = useLiveQuery(() => getSentenceMasteryOverview(), []);
@@ -201,7 +204,8 @@ export function ProgressPage() {
           </p>
         ) : (
           <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-            Recomputed from your review history and shadowing analyses — nothing here is stored or
+            Sentence and episode progress comes first; word and card statistics below are supporting
+            evidence. Everything is recomputed from your activity — nothing here is stored or
             editable.
           </p>
         )}
@@ -286,6 +290,38 @@ export function ProgressPage() {
               ))}
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {episodeProgress && episodeProgress.some((row) => row.reached.walked > 0) ? (
+        <section className="panel stack" aria-label="Episodes">
+          <h3 style={{ margin: 0 }}>Episodes</h3>
+          <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+            How far each chapter's sentences have come: walked through, gist checked, re-checked on
+            another day, then said in your own Japanese. Derived from lesson activity; self-judged.
+          </p>
+          {episodeProgress
+            .filter((row) => row.reached.walked > 0)
+            .map((row) => (
+              <div key={`${row.bookId}:${row.chapterId}`} className="stack" style={{ gap: '0.2rem' }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Link to={`/books/${row.bookId}`}>
+                    {row.bookTitle} · {row.chapterTitle}
+                  </Link>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>
+                    {row.reached.walked} of {row.total} started
+                  </span>
+                </div>
+                <div className="progress-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round((row.reached.walked / row.total) * 100)}%` }} />
+                </div>
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  {EPISODE_STAGE_ORDER.filter((stage) => stage !== 'unseen' && stage !== 'walked')
+                    .map((stage) => `${EPISODE_STAGE_LABELS[stage]}: ${row.reached[stage]}`)
+                    .join(' · ')}
+                </span>
+              </div>
+            ))}
         </section>
       ) : null}
 
@@ -765,7 +801,7 @@ export function ProgressPage() {
       </section>
 
       <section className="panel stack">
-        <h3 style={{ margin: 0 }}>Sentence mastery</h3>
+        <h3 style={{ margin: 0 }}>Sentence mastery (card-based rungs)</h3>
         {masteryOverview === undefined ? (
           <p className="muted">Loading…</p>
         ) : masteryOverview.confirmedCount === 0 ? (

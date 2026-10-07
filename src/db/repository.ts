@@ -14,6 +14,7 @@ import {
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
 import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
+import { buildEpisodeProgress, type EpisodeProgressRow } from '../lib/episodeProgress';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
@@ -9181,6 +9182,16 @@ export async function getSentenceLessonReport(): Promise<SentenceLessonReport> {
     db.plannerSessions.toArray(),
   ]);
   return buildSentenceLessonReport(events, sessions);
+}
+
+export async function getEpisodeProgress(): Promise<EpisodeProgressRow[]> {
+  const db = getDb();
+  const [books, memberships, events] = await Promise.all([
+    db.books.toArray(),
+    db.bookSentences.toArray(),
+    db.sentenceLearningEvents.toArray(),
+  ]);
+  return buildEpisodeProgress(books, memberships, events);
 }
 
 export async function listSentenceLearningEvents(bookId: string): Promise<SentenceLearningEvent[]> {

@@ -1879,6 +1879,18 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-10-07 — `/progress` leads with sentences and episodes.** New "Episodes"
+  panel (`src/lib/episodeProgress.ts`, `getEpisodeProgress`): per chapter of
+  non-archived, non-suspended books, how many sentences have reached each stage
+  (walked through → gist checked → gist re-checked on a later day, twice → said
+  with help → said without cues on a later day), derived from
+  `sentenceLearningEvents` only (same day/independence rules as
+  `buildSentenceJourney`; no vocabulary/structure inventory needed). Sits under
+  "Sentence lessons", above the word/card panels; the intro line says the
+  word/FSRS panels are supporting evidence, and "Sentence mastery" is relabelled
+  "(card-based rungs)" to distinguish it from the lesson journey. No schema or
+  scheduling change. Tests: `tests/episodeProgress.test.ts`.
+
 - **2026-10-03 — Furigana confidence: contextual-reading cross-check.**
   Review cards show furigana after reveal and an "Adjust clip" button; the
   tokenizer's 前 misread (ぜん) is fixed at the root (`mae_override` in

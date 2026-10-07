@@ -552,7 +552,11 @@ recently), an FSRS recall-success rate (rating ≠ Again over scheduled
 reviews, 30d + all-time), grammar tracked/recognized, the shadowing
 timing/pitch trend, and an 8-week reviews-per-week + cumulative-words-learned
 trend on the same `.progress-bar` meter. Read-only, recomputed on load,
-nothing stored. Two further panels (2026-09-08) answer "what next" rather
+nothing stored. The page leads with sentence-first panels: "Sentence lessons"
+(14-day supply/outcome/quality report) and "Episodes" (`buildEpisodeProgress`:
+per chapter, sentences reached at each lesson-event stage — walked, gist
+checked, re-checked on another day, said with help, said without cues); the
+word/FSRS panels are supporting evidence. Two further panels (2026-09-08) answer "what next" rather
 than "how am I doing": **Blind spots** (`src/lib/blindSpots.ts` /
 `getBlindSpots`) — vocabulary (tokenizer + Satori suggestions +
 `targetVocabulary`) and grammar (the `worth_learning_now` bucket, ranked by
