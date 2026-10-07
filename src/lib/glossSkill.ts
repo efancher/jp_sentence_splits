@@ -75,7 +75,7 @@ export interface GlossDecisionSpec {
   confidence: GlossDecision['referenceConfidence'];
 }
 
-const bare = (text: string) => text.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
+export const bare = (text: string) => text.replace(/[。．！？!?、，,」』）)「『（(\s]/g, '');
 const SENTENCE_FINAL = new Set(['ね', 'よ', 'な', 'ぞ', 'わ', 'さ', 'か', 'ぜ']);
 
 /** The authored check for a chunk, tolerating a chunk boundary that differs a little from the AI's. */

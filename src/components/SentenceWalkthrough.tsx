@@ -19,7 +19,10 @@ import { ContextStepCard, HighlightedSentence, ParticipantList, WalkthroughCheck
 import { buildCheckPuzzle } from '../lib/earTiles';
 import { parkedDecisionKeys } from '../lib/glossSkill';
 
+import { buildStructureChecks } from '../lib/structureChecks';
+
 import { EarTilesCheck } from './EarTilesCheck';
+import { StructureChecks } from './StructureChecks';
 import { GlossDecisionPanel, planGlossDecisions, type GlossDecisionInput } from './GlossDecisionPanel';
 import { SentenceExpressionCard, meaningUnits } from './SentenceExpressionCard';
 import { NativeAudioButton } from './NativeAudioButton';
@@ -198,6 +201,12 @@ export function SentenceWalkthrough({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visitId, sentence.id],
   );
+  const structureChecks = useMemo(
+    () => buildStructureChecks(chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, literalEnglish })), visitId),
+    [chunks, visitId],
+  );
+  const hasStructureChecks = structureChecks.cutDown != null || structureChecks.attachment != null;
+  const [tilesDone, setTilesDone] = useState(false);
   const [tryFirst, setTryFirst] = useState(() =>
     !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null || planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
   const [showTranslation, setShowTranslation] = useState(false);
@@ -365,12 +374,21 @@ export function SentenceWalkthrough({
           {(Object.keys(PRESET_LABELS) as SupportPreset[]).map((key) => <option key={key} value={key}>{PRESET_LABELS[key]}</option>)}
         </select>
       </label>
-      {tryFirst && onGlossDecision && tilePuzzle && audio ? (
+      {tryFirst && onGlossDecision && tilePuzzle && audio && !tilesDone ? (
         <EarTilesCheck
           sentenceId={sentence.id}
           visitId={visitId}
           puzzle={tilePuzzle}
           audio={audio}
+          onRecord={onGlossDecision}
+          onFinish={() => (hasStructureChecks ? setTilesDone(true) : setTryFirst(false))}
+        />
+      ) : null}
+      {tryFirst && onGlossDecision && tilePuzzle && tilesDone ? (
+        <StructureChecks
+          sentenceId={sentence.id}
+          visitId={visitId}
+          checks={structureChecks}
           onRecord={onGlossDecision}
           onFinish={() => setTryFirst(false)}
         />
