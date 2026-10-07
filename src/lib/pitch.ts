@@ -30,7 +30,7 @@ export interface PitchAnalysisPayload {
 }
 
 /** Bump when `extractPitch`'s DSP would meaningfully change its output. */
-export const PITCH_TRACK_VERSION = 1;
+export const PITCH_TRACK_VERSION = 2;
 
 /**
  * Cached YIN pitch track of a sentence's reference clip — the *measured*
@@ -51,6 +51,7 @@ export interface ReferencePitchTrack {
 function yinPitch(
   frame: Float32Array,
   sampleRate: number,
+  fallbackThreshold = 0,
 ): { hz: number | null; confidence: number } {
   const threshold = 0.15;
   const yinBuffer = new Float32Array(Math.floor(frame.length / 2));
@@ -76,6 +77,18 @@ function yinPitch(
       while (tau + 1 <= maxPeriod && (yinBuffer[tau + 1] ?? 1) < (yinBuffer[tau] ?? 1)) tau += 1;
       tauEstimate = tau;
       break;
+    }
+  }
+  if (tauEstimate < 0 && fallbackThreshold > 0) {
+    // No clean dip: take the deepest one in range if it's still convincing —
+    // recovers weakly voiced stretches (soft vowels after consonants) that the strict first-dip rule drops.
+    let best = fallbackThreshold;
+    for (let tau = minPeriod; tau <= maxPeriod; tau += 1) {
+      const value = yinBuffer[tau] ?? 1;
+      if (value < best) {
+        best = value;
+        tauEstimate = tau;
+      }
     }
   }
   if (tauEstimate < 0) return { hz: null, confidence: 0 };
@@ -134,15 +147,21 @@ export function medianHz(values: number[]): number | null {
 export function extractPitch(audio: CanonicalAudio): PitchAnalysisPayload {
   const frames: PitchFrame[] = [];
   const voicedHz: number[] = [];
+  let peakRms = 0;
+  for (let start = 0; start + FRAME_SIZE <= audio.samples.length; start += HOP_SIZE) {
+    peakRms = Math.max(peakRms, frameRms(audio.samples.subarray(start, start + FRAME_SIZE)));
+  }
+  // Relative to the clip's loudest frame so quiet recordings aren't dropped wholesale.
+  const rmsGate = Math.min(RMS_THRESHOLD, Math.max(0.002, peakRms * 0.04));
   for (let start = 0; start + FRAME_SIZE <= audio.samples.length; start += HOP_SIZE) {
     const frame = audio.samples.subarray(start, start + FRAME_SIZE);
     const timeSeconds = start / audio.sampleRate;
     const rms = frameRms(frame);
-    if (rms < RMS_THRESHOLD) {
+    if (rms < rmsGate) {
       frames.push({ timeSeconds, hz: null, voiced: false, confidence: 0, relativeSemitones: null });
       continue;
     }
-    const { hz, confidence } = yinPitch(frame, audio.sampleRate);
+    const { hz, confidence } = yinPitch(frame, audio.sampleRate, 0.35);
     const voiced = hz !== null && confidence >= 0.4;
     if (voiced && hz !== null) voicedHz.push(hz);
     frames.push({

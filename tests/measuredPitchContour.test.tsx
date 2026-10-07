@@ -43,9 +43,16 @@ describe('MeasuredPitchContour', () => {
 
   it('breaks the line into separate runs across an unvoiced gap', () => {
     const { container } = render(
-      <MeasuredPitchContour payload={payload(frames([0, 1, null, null, 2, 1]))} />,
+      <MeasuredPitchContour payload={payload(frames([0, 1, null, null, null, null, null, 2, 1]))} />,
     );
     expect(container.querySelectorAll('polyline')).toHaveLength(2);
+  });
+
+  it('draws through a very short unvoiced dropout', () => {
+    const { container } = render(
+      <MeasuredPitchContour payload={payload(frames([0, 1, null, null, 2, 1]))} />,
+    );
+    expect(container.querySelectorAll('polyline')).toHaveLength(1);
   });
 
   it('crops the x-axis to the voiced span so leading/trailing silence does not squash the line', () => {

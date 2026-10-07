@@ -8,6 +8,8 @@ const WIDTH = 320;
 const PAD_Y = 5;
 /** Half-width of the highlight band around the playhead, in viewBox units. */
 const BAND_HALF = 3;
+/** Unvoiced dropouts shorter than this are drawn through rather than breaking the line. */
+const BRIDGE_SECONDS = 0.08;
 
 /**
  * The *measured* sentence-level pitch of a clip — a real YIN track (via
@@ -103,14 +105,16 @@ export function MeasuredPitchContour({
 
     const runs: string[] = [];
     let current: string[] = [];
+    let lastVoicedTime = -Infinity;
     frames.forEach((frame) => {
       const inWindow =
         frame.timeSeconds >= window.start && frame.timeSeconds <= window.end;
-      if (!frame.voiced || frame.relativeSemitones === null || !inWindow) {
+      if (!frame.voiced || frame.relativeSemitones === null || !inWindow) return;
+      if (current.length > 0 && frame.timeSeconds - lastVoicedTime > BRIDGE_SECONDS) {
         if (current.length >= 2) runs.push(current.join(' '));
         current = [];
-        return;
       }
+      lastVoicedTime = frame.timeSeconds;
       const x = ((frame.timeSeconds - window.start) / windowSpan) * WIDTH;
       const y =
         height - PAD_Y - ((frame.relativeSemitones - min) / span) * (height - 2 * PAD_Y);
