@@ -1879,6 +1879,12 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-10-07 — Explore candidates dedupe by sentence.** A sentence with
+  several `book_sentences` rows (several chapters) appeared once per row in the
+  revisit list, so one sentence filled ~5 "Fresh try" steps and crowded out
+  "Learn this sentence" steps (bypassing `EXPLORE_REVISITS_PER_BOOK`).
+  `findExploreCandidates` now dedupes revisit and unstarted memberships by
+  sentenceId.
 - **2026-10-07 — Spaced "Fresh try" + per-episode sequential gating.** (1) The
   planner no longer re-offers a walked-through sentence daily: `sentencesDueForFreshTry`
   waits 1, 3, 7, 14, then 30 calendar days (by how many separate days you've

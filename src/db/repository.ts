@@ -10010,8 +10010,14 @@ async function findExploreCandidates(
           ? item.status !== 'complete' && !walked.has(item.sentenceId)
           : item.status === 'unstarted') && (!unlocked || unlocked.has(item.sentenceId)),
       )
-      .sort((a, b) => a.position - b.position);
-    const revisitMemberships = memberships.filter((item) => revisitIds.includes(item.sentenceId));
+      .sort((a, b) => a.position - b.position)
+      .filter((item, index, all) => all.findIndex((other) => other.sentenceId === item.sentenceId) === index);
+    const seenRevisit = new Set<string>();
+    const revisitMemberships = memberships.filter((item) => {
+      if (!revisitIds.includes(item.sentenceId) || seenRevisit.has(item.sentenceId)) return false;
+      seenRevisit.add(item.sentenceId);
+      return true;
+    });
     if (unstarted.length === 0 && revisitMemberships.length === 0) continue;
     const revisitSet = new Set(revisitMemberships.map((item) => item.sentenceId));
     const preview = [...revisitMemberships, ...unstarted].slice(0, EXPLORE_SENTENCE_PREVIEW_LIMIT);
