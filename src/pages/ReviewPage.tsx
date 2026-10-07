@@ -3623,7 +3623,7 @@ function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
 
   return (
     <div className="stack" style={{ gap: '0.2rem' }}>
-      <MeasuredPitchContour payload={payload} progress={progress} />
+      <MeasuredPitchContour payload={payload} progress={progress} height={64} />
       <button
         type="button"
         className={`speak-button${looping ? ' speaking' : ''}`}
