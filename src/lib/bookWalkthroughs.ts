@@ -3,6 +3,7 @@ import type { ContextWalkthrough } from '../domain/types';
 import {
   WALKTHROUGH_SHAPE,
   buildWalkthroughInstructions,
+  mergeChapterWalkthroughs,
   parseWalkthroughs,
   sentencesNeedingUpgrade,
   sentencesNeedingWalkthrough,
@@ -46,8 +47,7 @@ export async function planBookWalkthroughs(bookId: string): Promise<BookWalkthro
     const row = rows[i];
     if (row) sentences.push({ id: row.id, japanese: row.japanese, translation: row.translation?.trim() || undefined, chapterId: m.chapterId! });
   });
-  const drafts: Record<string, ContextWalkthrough> = {};
-  for (const chapter of book?.chapters ?? []) Object.assign(drafts, chapter.contextWalkthroughs);
+  const drafts = mergeChapterWalkthroughs(book?.chapters ?? []);
   const handleOf = new Map(sentences.map((s, i) => [s.id, `S${i + 1}`]));
   const missing = sentencesNeedingWalkthrough(sentences, drafts).map((id) => handleOf.get(id)!);
   const outdated = sentencesNeedingUpgrade(sentences, drafts).map((id) => handleOf.get(id)!);

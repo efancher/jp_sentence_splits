@@ -368,3 +368,17 @@ export function walkthroughContextLines(context: Pick<PreparationContext, 'sente
   });
   return lines;
 }
+
+/** Merges per-chapter drafts; a sentence in several chapters keeps its newest-format entry. */
+export function mergeChapterWalkthroughs(
+  chapters: { contextWalkthroughs?: Record<string, ContextWalkthrough> }[],
+): Record<string, ContextWalkthrough> {
+  const merged: Record<string, ContextWalkthrough> = {};
+  for (const chapter of chapters) {
+    for (const [id, draft] of Object.entries(chapter.contextWalkthroughs ?? {})) {
+      const existing = merged[id];
+      if (!existing || (draft.version ?? 1) >= (existing.version ?? 1)) merged[id] = draft;
+    }
+  }
+  return merged;
+}

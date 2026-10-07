@@ -1,5 +1,5 @@
 /**
- * Backfills contextual walkthroughs (Chapter.contextWalkthroughs) for a book by driving `codex exec`
+ * Backfills contextual walkthroughs (Chapter.contextWalkthroughs) for a book by driving `codex exec` or `claude -p`
  * batch by batch: build the same prompt the Book page downloads, run Codex on it, validate the reply
  * with the app's own parser, and merge only the accepted walkthroughs into the book's chapters.
  *
@@ -9,7 +9,7 @@
  * book (analyses, drafts, learning history) is touched. Fresh chapters are re-read just before each write.
  *
  * Dry-run by default (runs Codex and validates, writes nothing); --apply required to write.
- * Usage: npm run backfill:context-walkthroughs -- <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M]
+ * Usage: npm run backfill:context-walkthroughs -- <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M] [--engine codex|claude]
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -23,7 +23,7 @@ import {
   parseBookWalkthroughReply,
   type BookWalkthroughPlan,
 } from '../src/lib/bookWalkthroughs';
-import { sentencesNeedingUpgrade, sentencesNeedingWalkthrough } from '../src/lib/contextWalkthrough';
+import { mergeChapterWalkthroughs, sentencesNeedingUpgrade, sentencesNeedingWalkthrough } from '../src/lib/contextWalkthrough';
 import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
@@ -72,8 +72,7 @@ async function loadPlan(supabase: Supabase, ownerId: string, bookId: string) {
     if (row) sentences.push({ id: String(m.sentence_id), japanese: row.japanese, translation: row.translation.trim() || undefined, chapterId: String(m.chapter_id) });
   }
   const chapters = (book.chapters ?? []) as ChapterRow[];
-  const drafts: Record<string, ContextWalkthrough> = {};
-  for (const chapter of chapters) Object.assign(drafts, chapter.contextWalkthroughs);
+  const drafts = mergeChapterWalkthroughs(chapters);
   const handleOf = new Map(sentences.map((s, i) => [s.id, `S${i + 1}`]));
   const missing = sentencesNeedingWalkthrough(sentences, drafts).map((id) => handleOf.get(id)!);
   const outdated = sentencesNeedingUpgrade(sentences, drafts).map((id) => handleOf.get(id)!);
@@ -91,11 +90,13 @@ async function loadPlan(supabase: Supabase, ownerId: string, bookId: string) {
 async function main() {
   const argv = process.argv.slice(2);
   const apply = parseApplyFlag(argv);
-  const bookId = argv.find((arg, i) => !arg.startsWith('--') && !['--batch-size', '--max-batches', '--model'].includes(argv[i - 1] ?? ''));
-  if (!bookId) throw new Error('Usage: tsx scripts/backfill-context-walkthroughs.ts <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M]');
+  const bookId = argv.find((arg, i) => !arg.startsWith('--') && !['--batch-size', '--max-batches', '--model', '--engine'].includes(argv[i - 1] ?? ''));
+  if (!bookId) throw new Error('Usage: tsx scripts/backfill-context-walkthroughs.ts <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M] [--engine codex|claude]');
   const batchSize = Number(flag(argv, '--batch-size') ?? BOOK_WALKTHROUGH_BATCH_SIZE);
   const maxBatches = Number(flag(argv, '--max-batches') ?? Infinity);
   const model = flag(argv, '--model');
+  const engine = flag(argv, '--engine') ?? 'codex';
+  if (engine !== 'codex' && engine !== 'claude') throw new Error('--engine must be codex or claude');
 
   const supabase = await createScriptSupabaseClient();
   const user = await requireAuthedUser(supabase);
@@ -113,12 +114,22 @@ async function main() {
     const promptFile = join(dir, `batch-${batch}-prompt.txt`);
     const replyFile = join(dir, `batch-${batch}-reply.txt`);
     writeFileSync(promptFile, prompt);
-    console.log(`  Asking Codex about ${handles[0]}–${handles[handles.length - 1]} (${handles.length} sentences)...`);
-    const run = spawnSync(
-      'codex',
-      ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', replyFile, ...(model ? ['-m', model] : []), '-'],
-      { input: prompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20 * 60 * 1000 },
-    );
+    console.log(`  Asking ${engine} about ${handles[0]}–${handles[handles.length - 1]} (${handles.length} sentences)...`);
+    const run =
+      engine === 'claude'
+        ? spawnSync('claude', ['-p', '--tools', '', '--no-session-persistence', ...(model ? ['--model', model] : [])], {
+            cwd: dir,
+            input: prompt,
+            encoding: 'utf8',
+            maxBuffer: 64 * 1024 * 1024,
+            timeout: 20 * 60 * 1000,
+          })
+        : spawnSync(
+            'codex',
+            ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', replyFile, ...(model ? ['-m', model] : []), '-'],
+            { input: prompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20 * 60 * 1000 },
+          );
+    if (engine === 'claude' && run.status === 0) writeFileSync(replyFile, run.stdout ?? '');
     let reply = '';
     try {
       reply = readFileSync(replyFile, 'utf8');
@@ -126,7 +137,7 @@ async function main() {
       /* no reply file */
     }
     if (run.status !== 0 || !reply.trim()) {
-      console.log(`  Codex failed (status ${run.status}); will not retry these this run.`);
+      console.log(`  ${engine} failed (status ${run.status}); will not retry these this run.`);
       for (const handle of handles) failed.add(handle);
       continue;
     }

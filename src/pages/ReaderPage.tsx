@@ -7,10 +7,11 @@ import { EpisodePreparationPanel } from '../components/EpisodePreparationPanel';
 import { KaraokeSentenceText } from '../components/KaraokeSentenceText';
 import { SentenceWalkthrough, walkthroughChunks } from '../components/SentenceWalkthrough';
 import { glossesFromWords } from '../lib/chunkGlosses';
+import { mergeChapterWalkthroughs } from '../lib/contextWalkthrough';
 import { WordGlossList, type CompareAids } from '../components/TargetLessonCard';
 import { ensureDefaultBookChapter, getDb, getEpisodeFocus, getSavedWordStatus, listGlossDecisions, listSentenceLearningEvents, logGlossDecision, logSentenceLearningEvent, readSettings, updateSettings } from '../db/repository';
 import { registerReportContext } from '../lib/reportContext';
-import type { BookSentence, ContextWalkthrough, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
+import type { BookSentence, Sentence, SentenceAudio, StructureDraftChunk, TextDisplayMode } from '../domain/types';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import { FuriganaText } from '../lib/furigana';
 import { newWordSegments } from '../lib/newWordFurigana';
@@ -149,7 +150,7 @@ export function ReaderPage() {
     const { savedMeanings, knownExpressions } = await getSavedWordStatus(contentExpressions);
     // Drafts are keyed by sentence id, so reading the whole book (no ?chapter=) still finds them.
     const structureDrafts = Object.assign({}, ...book.chapters.map((item) => item.structureDrafts ?? {})) as Record<string, StructureDraftChunk[]>;
-    const contextWalkthroughs = Object.assign({}, ...book.chapters.map((item) => item.contextWalkthroughs ?? {})) as Record<string, ContextWalkthrough>;
+    const contextWalkthroughs = mergeChapterWalkthroughs(book.chapters);
     return { book, chapter, rows, audioRows, chunksBySentence, particleChecksBySentence, structureDrafts, contextWalkthroughs, savedMeanings, knownExpressions };
   }, [bookId, chapterId]);
 
