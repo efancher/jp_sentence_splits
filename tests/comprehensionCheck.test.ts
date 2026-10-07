@@ -4,6 +4,7 @@ import {
   formatBatchComprehensionPromptForAI,
   formatComprehensionPromptForAI,
   parseBatchComprehensionCheckReply,
+  parseBatchReadings,
   parseComprehensionCheckReply,
 } from '../src/lib/comprehensionCheck';
 import type { Sentence } from '../src/domain/types';
@@ -119,6 +120,24 @@ describe('formatBatchComprehensionPromptForAI', () => {
 });
 
 const GOOD_SECTION = ['1. wrong a', '*2. correct', '3. wrong b', '4. wrong c'].join('\n');
+
+describe('parseBatchReadings', () => {
+  it('reads each section\'s READING line and leaves the options parse untouched', () => {
+    const reply = [
+      '=== Sentence 1 ===',
+      GOOD_SECTION,
+      'READING: このまえ、えきにいった。',
+      '=== Sentence 3 ===',
+      GOOD_SECTION,
+      'reading: きょうはあめ',
+    ].join('\n');
+    expect(parseBatchReadings(reply, 3)).toEqual(['このまえ、えきにいった。', undefined, 'きょうはあめ']);
+    expect(parseBatchComprehensionCheckReply(reply, 1)[0]).toEqual({
+      options: ['wrong a', 'correct', 'wrong b', 'wrong c'],
+      correctIndex: 1,
+    });
+  });
+});
 
 describe('parseBatchComprehensionCheckReply', () => {
   it('parses each section independently, in order', () => {

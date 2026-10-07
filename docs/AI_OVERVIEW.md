@@ -832,7 +832,10 @@ Targets are constants; no settings UI.
   fold in the book prompts — focus targets, constructions, chunk structure,
   comprehension checks, particle questions — as `=== PART ===` sections of one
   reply file the user uploads; extras are saved after commit by
-  `src/lib/quickImportExtras.ts`) asks the assistant to punctuate/segment
+  `src/lib/quickImportExtras.ts`; the comprehension part also carries a
+  contextual `READING:` line per sentence, cross-checked against furigana/audio
+  after commit, and a background top-up grows each 3-option check into a full
+  wrong-meaning bank) asks the assistant to punctuate/segment
   *and* translate in a single reply — `[m:ss] 日本語文。 || English
   translation` per line. The parser reuses the same shared-timestamp
   proportional-time-split logic as `parseAiSegmentedTranscript` (a fragment

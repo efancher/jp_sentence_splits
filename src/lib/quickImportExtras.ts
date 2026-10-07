@@ -12,9 +12,11 @@ import {
   getEpisodePreparationContext,
   saveEpisodePackReply,
   setSentenceComprehensionCheck,
+  reportChunkIssues,
   setSentenceParticleChecks,
 } from '../db/repository';
-import { buildComprehensionCheck, parseBatchComprehensionCheckReply } from './comprehensionCheck';
+import { buildComprehensionCheck, parseBatchComprehensionCheckReply, parseBatchReadings } from './comprehensionCheck';
+import { autoGenerateMeaningChecks, checkSentenceReading } from './meaningCheckAutogen';
 import { remapSentenceHandles, type CombinedReplySections } from './combinedImportPrompt';
 import { parseBookParticleReply } from './particleChecks';
 
@@ -24,6 +26,7 @@ export interface QuickImportExtrasResult {
   constructions: number;
   walkthroughs: number;
   comprehension: number;
+  readingsFixed: number;
   particles: number;
   problems: string[];
 }
@@ -45,6 +48,7 @@ export async function applyQuickImportExtras(
     constructions: 0,
     walkthroughs: 0,
     comprehension: 0,
+    readingsFixed: 0,
     particles: 0,
     problems: [],
   };
@@ -57,6 +61,20 @@ export async function applyQuickImportExtras(
       await setSentenceComprehensionCheck(sentenceId, buildComprehensionCheck(parsed, 'ai_suggested'));
       result.comprehension += 1;
     }
+    const readings = parseBatchReadings(sections.comprehension, sentenceIdByNumber.length);
+    const flags: { sentenceId: string; chunks: string[]; note: string }[] = [];
+    for (const [index, reading] of readings.entries()) {
+      const sentenceId = sentenceIdByNumber[index];
+      if (!reading || !sentenceId) continue;
+      const outcome = await checkSentenceReading(sentenceId, reading);
+      result.readingsFixed += outcome.fixed;
+      for (const flag of outcome.flagged) flags.push({ sentenceId, chunks: [], note: `Reading check — ${flag}` });
+    }
+    if (flags.length > 0) await reportChunkIssues('meaning_checks', flags);
+    // Import gives each check only 3 wrong options; grow it to a full bank (background, best effort; backs off when AI is unavailable).
+    autoGenerateMeaningChecks({ mode: 'topup', bookId, limit: 200 }).catch((err) => {
+      console.error('Meaning bank top-up after import failed', err);
+    });
   }
 
   if (sections.particles) {

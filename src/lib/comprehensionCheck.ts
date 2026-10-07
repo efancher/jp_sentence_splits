@@ -191,6 +191,22 @@ export function parseBatchComprehensionCheckReply(
   return results;
 }
 
+/** One entry per `1..expectedCount`: the section's `READING:` line (whole-sentence hiragana), if any. */
+export function parseBatchReadings(reply: string, expectedCount: number): Array<string | undefined> {
+  const out: Array<string | undefined> = Array.from({ length: expectedCount }, () => undefined);
+  let current: number | null = null;
+  for (const rawLine of reply.split('\n')) {
+    const header = BATCH_SECTION_HEADER_RE.exec(rawLine.trim());
+    if (header) {
+      current = Number(header[1]);
+      continue;
+    }
+    const reading = /^\s*READING\s*:\s*(.+?)\s*$/i.exec(rawLine);
+    if (reading && current !== null && current >= 1 && current <= expectedCount) out[current - 1] ??= reading[1];
+  }
+  return out;
+}
+
 export function buildComprehensionCheck(
   parsed: { options: string[]; correctIndex: number },
   provenance: ComprehensionCheck['provenance'],
