@@ -678,13 +678,16 @@ export function QuickMinePage() {
       kept = {};
     }
     assistCancelRef.current = false;
+    const startedJobId = jobId;
+    const movedOn = () => jobIdRef.current !== startedJobId;
     setExtrasRunning(true);
     setExtrasFailure('');
     const result = await runExtraTasks({
       tasks,
       sentences,
       replies: kept,
-      run: (prompt) => runAssist(prompt, { isCancelled: () => assistCancelRef.current }),
+      run: (prompt) =>
+        runAssist(prompt, { isCancelled: () => assistCancelRef.current || movedOn() }),
       onTaskDone: (taskId, reply) => {
         kept[taskId] = reply;
         localStorage.setItem(storageKey, JSON.stringify(kept));
@@ -695,11 +698,12 @@ export function QuickMinePage() {
             p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
           }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
         ),
-      isCancelled: () => assistCancelRef.current,
+      isCancelled: () => assistCancelRef.current || movedOn(),
     });
     setExtrasRunning(false);
     setExtrasProgress('');
-    if (result.cancelled) return;
+    // The queue may have advanced to another episode mid-run; its S-numbers must not receive these replies.
+    if (result.cancelled || movedOn()) return;
     if (result.failure) {
       const done = Object.keys(result.replies).length;
       setExtrasFailure(
