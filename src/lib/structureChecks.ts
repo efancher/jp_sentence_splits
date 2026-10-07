@@ -1,119 +1,137 @@
 /**
- * Pre-walkthrough structure checks that replace the fixed multiple-choice predicate /
- * attachment questions on sentences that open on the Ear Tiles check. Both are done on the
- * sentence's own chunks, so the target changes every sentence instead of repeating a menu.
+ * Pre-walkthrough structure checks that follow the Ear Tiles check, built from the
+ * sentence's own chunks so the target changes every sentence:
  *
- *   - Cut it down: drop every chunk that isn't needed for "who/what did what".
- *   - Tap what it describes: tap the chunk an Aの chunk belongs to (or, reversed, the chunk
- *     that describes a given noun).
+ *   - Roles: "tap who does it / what it is done to / where it happens" — answered by reading
+ *     the particle, not by position.
+ *   - Describes: "tap everything that describes this noun" — only asked when the description
+ *     is more than a lone adjacent Aの (an の chain, or a verb describing a noun).
  *
  * Grading is deliberately lenient: only chunks the heuristics are sure about count.
  * Pure — chunks come from the walkthrough.
  */
 
 import { splitTrailingParticle } from './chunking';
-import { assignClauseIndices } from './clauseBands';
+import { assignClauseIndices, isEngineRole } from './clauseBands';
 import { bare, buildDecisions, type GlossChunk } from './glossSkill';
 import { hashString } from './ids';
 
 const hash = (text: string) => Number.parseInt(hashString(text), 16);
 
-/** Particles whose chunk is part of "who/what did what". */
-const CORE_PARTICLES = new Set(['が', 'は', 'を']);
-/** Particles whose chunk is always an extra (where/how/from/until/than), safe to cut. */
-const EXTRA_PARTICLES = new Set(['で', 'から', 'まで', 'より']);
+export type RoleKind = 'doer' | 'receiver' | 'place' | 'start' | 'end';
 
-export interface CutDownCheck {
+const ROLE_BY_PARTICLE: Record<string, RoleKind> = {
+  が: 'doer',
+  を: 'receiver',
+  で: 'place',
+  から: 'start',
+  まで: 'end',
+};
+
+export const ROLE_QUESTION: Record<RoleKind, string> = {
+  doer: 'Tap who or what does it (or is it).',
+  receiver: 'Tap what the action is done to.',
+  place: 'Tap where it happens, or what it is done by.',
+  start: 'Tap the starting point.',
+  end: 'Tap the end point.',
+};
+
+export interface RolesCheck {
   chunks: GlossChunk[];
   predicateId: string;
-  /** Predicate plus the が / は / を chunks: cutting one is wrong. */
-  keepIds: string[];
-  /** Chunks that are clearly extras (で / から / まで / より): keeping one is wrong. */
-  extraIds: string[];
-  /** False = no clear extra or the predicate isn't trusted: the learner compares against the reference instead of being graded. */
-  graded: boolean;
-}
-
-export function buildCutDownCheck(chunks: GlossChunk[]): CutDownCheck | null {
-  if (chunks.length < 3) return null;
-  // One clause only: a cut-down of a multi-clause sentence is a parsing exercise, not this one.
-  if (new Set(assignClauseIndices(chunks)).size > 1) return null;
-  const predicate = buildDecisions(chunks).find((spec) => spec.skill === 'predicate');
-  if (!predicate) return null;
-
-  const keep = new Set([predicate.chunkId]);
-  const extras: string[] = [];
-  for (const chunk of chunks) {
-    if (chunk.id === predicate.chunkId) continue;
-    const [, particle] = splitTrailingParticle(bare(chunk.japanese));
-    if (CORE_PARTICLES.has(particle)) keep.add(chunk.id);
-    else if (EXTRA_PARTICLES.has(particle)) extras.push(chunk.id);
-  }
-  if (chunks.length - keep.size < 1) return null;
-  return {
-    chunks,
-    predicateId: predicate.chunkId,
-    keepIds: chunks.filter((c) => keep.has(c.id)).map((c) => c.id),
-    extraIds: extras,
-    graded: predicate.confidence === 'settled' && extras.length > 0,
-  };
-}
-
-export interface CutDownResult {
-  /** Core chunks the learner cut. */
-  droppedCore: string[];
-  /** Clear extras the learner kept. */
-  keptExtras: string[];
-  /** null when the check isn't gradable. */
-  correct: boolean | null;
-}
-
-export function gradeCutDown(check: CutDownCheck, keptIds: ReadonlySet<string>): CutDownResult {
-  const droppedCore = check.keepIds.filter((id) => !keptIds.has(id));
-  const keptExtras = check.extraIds.filter((id) => keptIds.has(id));
-  return {
-    droppedCore,
-    keptExtras,
-    correct: check.graded ? droppedCore.length === 0 && keptExtras.length === 0 : null,
-  };
-}
-
-export interface AttachmentCheck {
-  chunks: GlossChunk[];
-  /** 'forward': which chunk does the Aの chunk describe? 'reverse': which chunk describes this one? */
-  direction: 'forward' | 'reverse';
-  /** The Aの chunk. */
-  modifierId: string;
-  /** The chunk Aの describes. */
-  headId: string;
-  /** The chunk the question is about (highlighted, not tappable). */
-  askedId: string;
-  /** The chunk the learner should tap. */
+  role: RoleKind;
   answerId: string;
 }
 
-export function buildAttachmentCheck(chunks: GlossChunk[], seed: string): AttachmentCheck | null {
-  const specs = buildDecisions(chunks).filter((spec) => spec.skill === 'attachment');
-  if (specs.length === 0) return null;
-  const spec = specs[hash(`${seed}:pick`) % specs.length]!;
-  const direction = hash(`${seed}:direction`) % 2 === 0 ? 'forward' : 'reverse';
-  const modifierId = spec.chunkId;
-  const headId = spec.referenceValue;
-  return {
-    chunks,
-    direction,
-    modifierId,
-    headId,
-    askedId: direction === 'forward' ? modifierId : headId,
-    answerId: direction === 'forward' ? headId : modifierId,
-  };
+export function buildRolesCheck(chunks: GlossChunk[], seed: string): RolesCheck | null {
+  if (chunks.length < 4) return null;
+  if (new Set(assignClauseIndices(chunks)).size > 1) return null;
+  const predicate = buildDecisions(chunks).find((spec) => spec.skill === 'predicate');
+  if (predicate?.confidence !== 'settled') return null;
+  // Enough non-predicate chunks that tapping is a real choice, not a coin flip.
+  if (chunks.length - 1 < 3) return null;
+
+  const byRole = new Map<RoleKind, string[]>();
+  for (const chunk of chunks) {
+    if (chunk.id === predicate.chunkId) continue;
+    const [stem, particle] = splitTrailingParticle(bare(chunk.japanese));
+    const role = ROLE_BY_PARTICLE[particle];
+    // 〜ますが is the clause-linking "but", not a subject marker.
+    if (!role || (particle === 'が' && /(?:ます|ません|ました|です|でした)$/.test(stem))) continue;
+    byRole.set(role, [...(byRole.get(role) ?? []), chunk.id]);
+  }
+  // Only roles marked by exactly one chunk have a single right answer.
+  const candidates = [...byRole.entries()].filter(([, ids]) => ids.length === 1);
+  if (candidates.length === 0) return null;
+  const [role, ids] = candidates[hash(`${seed}:role`) % candidates.length]!;
+  return { chunks, predicateId: predicate.chunkId, role, answerId: ids[0]! };
+}
+
+export interface DescribesCheck {
+  chunks: GlossChunk[];
+  kind: 'chain' | 'clause';
+  /** The noun chunk being described (highlighted, not tappable). */
+  headId: string;
+  /** Chunks that must be tapped. */
+  requiredIds: string[];
+  /** Chunks that may be tapped or left (optional detail inside a verb description). */
+  freeIds: string[];
+}
+
+const PLAIN_ENDING = /(?:た|だった|ない|なかった|る|う|く|ぐ|す|つ|ぬ|ぶ|む)$/;
+
+export function buildDescribesCheck(chunks: GlossChunk[], seed: string): DescribesCheck | null {
+  const options: DescribesCheck[] = [];
+  const isNo = (chunk: GlossChunk) => splitTrailingParticle(bare(chunk.japanese))[1] === 'の' && chunk.role === 'の-car';
+
+  // の chain: two or more consecutive Aの chunks, then the noun they all build up.
+  for (let i = 0; i < chunks.length; i += 1) {
+    if (!isNo(chunks[i]!) || (i > 0 && isNo(chunks[i - 1]!))) continue;
+    let end = i;
+    while (end < chunks.length && isNo(chunks[end]!)) end += 1;
+    const head = chunks[end];
+    if (end - i < 2 || !head || isEngineRole(head.role) || head.role === 'chunk') continue;
+    options.push({ chunks, kind: 'chain', headId: head.id, requiredIds: chunks.slice(i, end).map((c) => c.id), freeIds: [] });
+  }
+
+  // Verb + noun: a plain-form verb chunk directly before a noun chunk describes it.
+  chunks.forEach((verb, index) => {
+    const head = chunks[index + 1];
+    if (!head || index === chunks.length - 1) return;
+    const text = bare(verb.japanese);
+    if (!isEngineRole(verb.role) || splitTrailingParticle(text)[1] || !PLAIN_ENDING.test(text)) return;
+    if (/(?:ます|ません|ました|です|でした)$/.test(text)) return;
+    if (isEngineRole(head.role) || head.role === 'chunk' || head.role === 'modifier/content') return;
+    // Optional detail: chunks before the verb back to the previous engine chunk (the verb's own
+    // where/when/who). Nothing after the head belongs to the description.
+    const free: string[] = [];
+    for (let j = index - 1; j >= 0 && !isEngineRole(chunks[j]!.role); j -= 1) free.push(chunks[j]!.id);
+    options.push({ chunks, kind: 'clause', headId: head.id, requiredIds: [verb.id], freeIds: free });
+  });
+
+  if (options.length === 0) return null;
+  return options[hash(`${seed}:describes`) % options.length]!;
+}
+
+export interface DescribesResult {
+  missed: string[];
+  wrong: string[];
+  correct: boolean;
+}
+
+export function gradeDescribes(check: DescribesCheck, tapped: ReadonlySet<string>): DescribesResult {
+  const free = new Set(check.freeIds);
+  const required = new Set(check.requiredIds);
+  const missed = check.requiredIds.filter((id) => !tapped.has(id));
+  const wrong = [...tapped].filter((id) => !required.has(id) && !free.has(id));
+  return { missed, wrong, correct: missed.length === 0 && wrong.length === 0 };
 }
 
 export interface StructureChecks {
-  cutDown: CutDownCheck | null;
-  attachment: AttachmentCheck | null;
+  roles: RolesCheck | null;
+  describes: DescribesCheck | null;
 }
 
 export function buildStructureChecks(chunks: GlossChunk[], seed: string): StructureChecks {
-  return { cutDown: buildCutDownCheck(chunks), attachment: buildAttachmentCheck(chunks, seed) };
+  return { roles: buildRolesCheck(chunks, seed), describes: buildDescribesCheck(chunks, seed) };
 }

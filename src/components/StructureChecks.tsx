@@ -1,9 +1,10 @@
 import { useState } from 'react';
 
 import {
-  gradeCutDown,
-  type AttachmentCheck,
-  type CutDownCheck,
+  gradeDescribes,
+  ROLE_QUESTION,
+  type DescribesCheck,
+  type RolesCheck,
   type StructureChecks as StructureCheckSet,
 } from '../lib/structureChecks';
 
@@ -13,113 +14,29 @@ type Base = Pick<GlossDecisionInput, 'visitId' | 'sentenceId'>;
 
 const chunkStyle = { fontSize: '1.15rem', borderStyle: 'solid', borderWidth: 2 } as const;
 
-function CutDownCard({ check, base, onRecord, onNext }: { check: CutDownCheck; base: Base; onRecord: (d: GlossDecisionInput) => void; onNext: () => void }) {
-  const [kept, setKept] = useState<Set<string>>(() => new Set(check.chunks.map((c) => c.id)));
-  const [result, setResult] = useState<ReturnType<typeof gradeCutDown> | null>(null);
-  const textOf = (id: string) => check.chunks.find((c) => c.id === id)?.japanese ?? '';
+const RULE_PARTICLE = { doer: 'が', receiver: 'を', place: 'で', start: 'から', end: 'まで' } as const;
 
-  function submit() {
-    const graded = gradeCutDown(check, kept);
-    setResult(graded);
-    onRecord({
-      ...base,
-      skill: 'predicate',
-      subskill: 'predicate',
-      ruleKey: 'predicate:cut-down',
-      targetText: textOf(check.predicateId),
-      levelShown: 4,
-      firstResponse: check.chunks.filter((c) => kept.has(c.id)).map((c) => c.japanese).join('・'),
-      firstCorrect: graded.correct,
-      referenceValue: check.keepIds.map(textOf).join('・'),
-      referenceConfidence: check.graded ? 'settled' : 'compare',
-      hintMaxStep: 0,
-      explanationOpened: false,
-      vocabHelped: false,
-      translationLevel: 0,
-      outcome: graded.correct === null ? 'ungraded' : graded.correct ? 'independent_correct' : 'assisted_correct',
-    });
-  }
-
-  return (
-    <div className="stack" style={{ gap: '0.5rem' }} aria-label="Cut it down">
-      <div>
-        <strong>Cut it down.</strong> Tap the chunks you can drop and still say who or what did what (the sentence in its simplest form).
-      </div>
-      <div className="row" style={{ flexWrap: 'wrap' }}>
-        {check.chunks.map((chunk) => {
-          const isKept = kept.has(chunk.id);
-          const wrong = result !== null && (result.droppedCore.includes(chunk.id) || result.keptExtras.includes(chunk.id));
-          return (
-            <button
-              key={chunk.id}
-              type="button"
-              className="ghost"
-              disabled={result !== null}
-              aria-pressed={!isKept}
-              aria-label={isKept ? chunk.japanese : `${chunk.japanese}, cut`}
-              onClick={() => setKept((current) => {
-                const next = new Set(current);
-                if (!next.delete(chunk.id)) next.add(chunk.id);
-                return next;
-              })}
-              style={{
-                ...chunkStyle,
-                opacity: isKept ? 1 : 0.35,
-                textDecoration: isKept ? undefined : 'line-through',
-                borderColor: wrong ? 'var(--danger)' : undefined,
-              }}
-            >
-              <span className="jp">{chunk.japanese}</span>
-            </button>
-          );
-        })}
-      </div>
-      {result === null ? (
-        <div><button type="button" className="primary" onClick={submit}>Check my cut</button></div>
-      ) : (
-        <div className="stack" style={{ gap: '0.3rem' }} role="status">
-          {result.correct === null ? (
-            <div><strong>Compare:</strong> the usual bare skeleton is below. Your cut is noted, not graded.</div>
-          ) : (
-            <div><strong>{result.correct ? '✓ Clean cut' : 'Not quite'}</strong></div>
-          )}
-          {result.droppedCore.map((id) => (
-            <div key={id}>✗ <span className="jp">{textOf(id)}</span> {id === check.predicateId ? 'closes the sentence — it has to stay.' : 'is the one doing it or being done to — it stays.'}</div>
-          ))}
-          {result.keptExtras.map((id) => (
-            <div key={id}>✗ <span className="jp">{textOf(id)}</span> only adds where, how or from when — an extra you can cut.</div>
-          ))}
-          <div>Bare skeleton: <span className="jp jp-lg">{check.keepIds.map(textOf).join(' ')}</span></div>
-          <div><button type="button" className="primary" onClick={onNext}>Next</button></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AttachmentCard({ check, base, onRecord, onNext }: { check: AttachmentCheck; base: Base; onRecord: (d: GlossDecisionInput) => void; onNext: () => void }) {
+function RolesCard({ check, base, onRecord, onNext }: { check: RolesCheck; base: Base; onRecord: (d: GlossDecisionInput) => void; onNext: () => void }) {
   const [wrongTaps, setWrongTaps] = useState<string[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
   const [solved, setSolved] = useState(false);
   const textOf = (id: string) => check.chunks.find((c) => c.id === id)?.japanese ?? '';
-  const modifier = textOf(check.modifierId);
-  const head = textOf(check.headId);
 
   function tap(id: string) {
-    if (solved || id === check.askedId) return;
+    if (solved || id === check.predicateId) return;
     if (id === check.answerId) {
       setSolved(true);
       setFlash(null);
       onRecord({
         ...base,
-        skill: 'attachment',
-        subskill: 'noun_modifier',
-        ruleKey: 'attachment:の:tap',
-        targetText: modifier,
+        skill: 'particle',
+        subskill: 'case',
+        ruleKey: `particle:${RULE_PARTICLE[check.role]}:tap`,
+        targetText: textOf(check.answerId),
         levelShown: 4,
-        firstResponse: wrongTaps[0] ? textOf(wrongTaps[0]) : textOf(id),
+        firstResponse: textOf(wrongTaps[0] ?? id),
         firstCorrect: wrongTaps.length === 0,
-        referenceValue: head,
+        referenceValue: textOf(check.answerId),
         referenceConfidence: 'settled',
         hintMaxStep: 0,
         explanationOpened: false,
@@ -134,14 +51,13 @@ function AttachmentCard({ check, base, onRecord, onNext }: { check: AttachmentCh
   }
 
   return (
-    <div className="stack" style={{ gap: '0.5rem' }} aria-label="What it describes">
+    <div className="stack" style={{ gap: '0.5rem' }} aria-label="Who does what">
       <div>
-        <strong>{check.direction === 'forward' ? <>What does <span className="jp">{modifier}</span> describe?</> : <>Which chunk describes <span className="jp">{head}</span>?</>}</strong>{' '}
-        <span className="muted">Tap it in the sentence. (Aの B: A tells you which B, or whose.)</span>
+        <strong>{ROLE_QUESTION[check.role]}</strong> <span className="muted">Read the little word after each chunk.</span>
       </div>
       <div className="row" style={{ flexWrap: 'wrap' }}>
         {check.chunks.map((chunk) => {
-          const asked = chunk.id === check.askedId;
+          const isPredicate = chunk.id === check.predicateId;
           const right = solved && chunk.id === check.answerId;
           const flashed = flash === chunk.id;
           return (
@@ -149,14 +65,14 @@ function AttachmentCard({ check, base, onRecord, onNext }: { check: AttachmentCh
               key={chunk.id}
               type="button"
               className="ghost"
-              disabled={asked || solved}
+              disabled={isPredicate || solved}
               onClick={() => tap(chunk.id)}
               aria-label={flashed ? `${chunk.japanese}, not that one` : chunk.japanese}
               style={{
                 ...chunkStyle,
-                borderColor: right ? 'var(--success)' : flashed ? 'var(--danger)' : asked ? 'var(--accent)' : undefined,
+                borderColor: right ? 'var(--success)' : flashed ? 'var(--danger)' : undefined,
                 color: right ? 'var(--success)' : flashed ? 'var(--danger)' : undefined,
-                opacity: solved && !right && !asked ? 0.5 : 1,
+                opacity: isPredicate || (solved && !right) ? 0.5 : 1,
               }}
             >
               <span className="jp">{chunk.japanese}</span>
@@ -166,19 +82,104 @@ function AttachmentCard({ check, base, onRecord, onNext }: { check: AttachmentCh
       </div>
       {solved ? (
         <div className="stack" style={{ gap: '0.3rem' }} role="status">
-          <div><strong>{wrongTaps.length === 0 ? '✓ ' : ''}<span className="jp">{modifier}</span> describes <span className="jp">{head}</span>.</strong></div>
+          <div><strong>{wrongTaps.length === 0 ? '✓ ' : ''}<span className="jp">{textOf(check.answerId)}</span> — {RULE_PARTICLE[check.role]} marks it.</strong></div>
           <div><button type="button" className="primary" onClick={onNext}>Next</button></div>
         </div>
       ) : (
         <div className="muted" role="status" style={{ fontSize: '0.85rem' }}>
-          {flash ? `Not ${textOf(flash)} — try another chunk.` : ' '}
+          {flash ? `Not ${textOf(flash)} — check its particle.` : ' '}
         </div>
       )}
     </div>
   );
 }
 
-/** Cut-down then attachment, whichever the sentence supports; calls onFinish after the last one. */
+function DescribesCard({ check, base, onRecord, onNext }: { check: DescribesCheck; base: Base; onRecord: (d: GlossDecisionInput) => void; onNext: () => void }) {
+  const [tapped, setTapped] = useState<Set<string>>(() => new Set());
+  const [result, setResult] = useState<ReturnType<typeof gradeDescribes> | null>(null);
+  const textOf = (id: string) => check.chunks.find((c) => c.id === id)?.japanese ?? '';
+  const head = textOf(check.headId);
+
+  function submit() {
+    const graded = gradeDescribes(check, tapped);
+    setResult(graded);
+    onRecord({
+      ...base,
+      skill: 'attachment',
+      subskill: 'noun_modifier',
+      ruleKey: `attachment:${check.kind}:describes`,
+      targetText: head,
+      levelShown: 4,
+      firstResponse: check.chunks.filter((c) => tapped.has(c.id)).map((c) => c.japanese).join('・'),
+      firstCorrect: graded.correct,
+      referenceValue: check.requiredIds.map(textOf).join('・'),
+      referenceConfidence: 'settled',
+      hintMaxStep: 0,
+      explanationOpened: false,
+      vocabHelped: false,
+      translationLevel: 0,
+      outcome: graded.correct ? 'independent_correct' : 'assisted_correct',
+    });
+  }
+
+  return (
+    <div className="stack" style={{ gap: '0.5rem' }} aria-label="What describes it">
+      <div>
+        <strong>Tap everything that describes <span className="jp">{head}</span>.</strong>{' '}
+        <span className="muted">
+          {check.kind === 'chain'
+            ? '(Aの B: A tells you which B, or whose.)'
+            : '(A plain verb right before a noun describes it: "the book I bought".)'}
+        </span>
+      </div>
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        {check.chunks.map((chunk) => {
+          const isHead = chunk.id === check.headId;
+          const isOn = tapped.has(chunk.id);
+          const bad = result !== null && (result.missed.includes(chunk.id) || result.wrong.includes(chunk.id));
+          return (
+            <button
+              key={chunk.id}
+              type="button"
+              className="ghost"
+              disabled={isHead || result !== null}
+              aria-pressed={isOn}
+              onClick={() => setTapped((current) => {
+                const next = new Set(current);
+                if (!next.delete(chunk.id)) next.add(chunk.id);
+                return next;
+              })}
+              style={{
+                ...chunkStyle,
+                borderColor: bad ? 'var(--danger)' : isHead ? 'var(--accent)' : isOn ? 'var(--success)' : undefined,
+                opacity: isHead ? 1 : undefined,
+              }}
+            >
+              <span className="jp">{chunk.japanese}</span>
+            </button>
+          );
+        })}
+      </div>
+      {result === null ? (
+        <div><button type="button" className="primary" onClick={submit}>Check</button></div>
+      ) : (
+        <div className="stack" style={{ gap: '0.3rem' }} role="status">
+          <div><strong>{result.correct ? '✓ That is the whole description' : 'Not quite'}</strong></div>
+          {result.missed.map((id) => (
+            <div key={id}>✗ <span className="jp">{textOf(id)}</span> belongs to the description of <span className="jp">{head}</span>.</div>
+          ))}
+          {result.wrong.map((id) => (
+            <div key={id}>✗ <span className="jp">{textOf(id)}</span> is not part of that description.</div>
+          ))}
+          <div>Answer: <span className="jp jp-lg">{check.requiredIds.map(textOf).join(' ')} {head}</span></div>
+          <div><button type="button" className="primary" onClick={onNext}>Next</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Roles then describes, whichever the sentence supports; calls onFinish after the last one. */
 export function StructureChecks({
   sentenceId,
   visitId,
@@ -194,13 +195,13 @@ export function StructureChecks({
 }) {
   const [index, setIndex] = useState(0);
   const base: Base = { sentenceId, visitId };
-  const order: ('cutDown' | 'attachment')[] = [];
-  if (checks.cutDown) order.push('cutDown');
-  if (checks.attachment) order.push('attachment');
+  const order: ('roles' | 'describes')[] = [];
+  if (checks.roles) order.push('roles');
+  if (checks.describes) order.push('describes');
   const current = order[index];
   if (!current) return null;
   const next = () => (index + 1 >= order.length ? onFinish() : setIndex(index + 1));
-  return current === 'cutDown'
-    ? <CutDownCard key="cut" check={checks.cutDown!} base={base} onRecord={onRecord} onNext={next} />
-    : <AttachmentCard key="attach" check={checks.attachment!} base={base} onRecord={onRecord} onNext={next} />;
+  return current === 'roles'
+    ? <RolesCard key="roles" check={checks.roles!} base={base} onRecord={onRecord} onNext={next} />
+    : <DescribesCard key="describes" check={checks.describes!} base={base} onRecord={onRecord} onNext={next} />;
 }

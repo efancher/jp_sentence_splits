@@ -205,7 +205,7 @@ export function SentenceWalkthrough({
     () => buildStructureChecks(chunks.map(({ id, japanese, role, literalEnglish }) => ({ id, japanese, role, literalEnglish })), visitId),
     [chunks, visitId],
   );
-  const hasStructureChecks = structureChecks.cutDown != null || structureChecks.attachment != null;
+  const hasStructureChecks = structureChecks.roles != null || structureChecks.describes != null;
   const [tilesDone, setTilesDone] = useState(false);
   const [tryFirst, setTryFirst] = useState(() =>
     !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null || planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
