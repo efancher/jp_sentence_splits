@@ -115,6 +115,12 @@ export interface SequentialInputSentence {
   reviews: readonly Review[];
   /** Already studied before / outside this mode (analysis walkthrough done, reviews exist, …). */
   introduced: boolean;
+  /**
+   * Sentences sharing a group gate each other in order; the first sentence of
+   * every group is open. Omit for one book-wide sequence (novels, series).
+   * Independent episodes (a podcast's dated chapters) each get their own group.
+   */
+  groupId?: string;
 }
 
 export interface SequentialBookStatus {
@@ -138,23 +144,26 @@ export function computeSequentialStatus(
   const ordered = [...input].sort((a, b) => a.position - b.position);
   const statuses: SequentialSentenceStatus[] = [];
   const newlyLatched: string[] = [];
+  const previousInGroup = new Map<string, { status: SequentialSentenceStatus; input: SequentialInputSentence }>();
   for (let i = 0; i < ordered.length; i += 1) {
     const s = ordered[i]!;
     const progress = unlockProgress(qualifyingAttempts(s.reviews));
     const waived = !s.hasUsableCheck;
-    const prev = statuses[i - 1];
+    const groupKey = s.groupId ?? '';
+    const before = previousInGroup.get(groupKey);
+    const prev = before?.status;
     let reason: UnlockReason | undefined;
     if (latched.has(s.sentenceId)) reason = 'latched';
     else if (s.introduced || progress.attempts > 0) reason = 'introduced';
-    else if (i === 0) reason = 'first';
+    else if (!before) reason = 'first';
     else if (prev?.accessible) {
       if (prev.progress.cleared) reason = 'previous_cleared';
-      else if (prev.waived && ordered[i - 1]!.introduced) reason = 'previous_waived';
+      else if (prev.waived && before.input.introduced) reason = 'previous_waived';
     }
     const accessible = reason !== undefined;
     // A waiver unlock is derived, not earned: leave it unlatched so it follows the rule.
     if (accessible && reason !== 'previous_waived' && !latched.has(s.sentenceId)) newlyLatched.push(s.sentenceId);
-    statuses.push({
+    const status: SequentialSentenceStatus = {
       sentenceId: s.sentenceId,
       position: s.position,
       accessible,
@@ -162,8 +171,17 @@ export function computeSequentialStatus(
       waived,
       progress,
       isFrontier: false,
-    });
+    };
+    statuses.push(status);
+    previousInGroup.set(groupKey, { status, input: s });
   }
+  const gatingFor = (index: number): SequentialSentenceStatus | undefined => {
+    const group = ordered[index]!.groupId ?? '';
+    for (let j = index - 1; j >= 0; j -= 1) {
+      if ((ordered[j]!.groupId ?? '') === group) return statuses[j];
+    }
+    return undefined;
+  };
   const frontierIndex = statuses.findIndex((s) => !s.accessible);
   const frontier = frontierIndex === -1 ? undefined : statuses[frontierIndex];
   if (frontier) frontier.isFrontier = true;
@@ -171,6 +189,6 @@ export function computeSequentialStatus(
     sentences: statuses,
     newlyLatched,
     frontier,
-    gatingSentence: frontierIndex > 0 ? statuses[frontierIndex - 1] : undefined,
+    gatingSentence: frontierIndex > 0 ? gatingFor(frontierIndex) : undefined,
   };
 }

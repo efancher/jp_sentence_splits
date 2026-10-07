@@ -318,7 +318,9 @@ export function SettingsPage() {
           spaced first-try answers are needed; retries after feedback and
           answers after a hint don&rsquo;t count). Once unlocked it stays
           unlocked, sentences you&rsquo;ve already started stay open, and
-          reading, playback and context are never locked.
+          reading, playback and context are never locked. Chapters with an
+          episode date (podcast and news imports) are independent: the first
+          sentence of every episode is open.
         </p>
         <div className="row">
           <button

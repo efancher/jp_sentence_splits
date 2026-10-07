@@ -1879,6 +1879,20 @@ what's left is one deferred durability item (below).
 
 ## Recent changes
 
+- **2026-10-07 — Spaced "Fresh try" + per-episode sequential gating.** (1) The
+  planner no longer re-offers a walked-through sentence daily: `sentencesDueForFreshTry`
+  waits 1, 3, 7, 14, then 30 calendar days (by how many separate days you've
+  already attempted saying it), measured from the last attempt or the first
+  walkthrough. Planning only; the Reader's "Ready for a fresh try" list and the
+  report's "Waiting for a fresh try" count still use `sentencesReadyToRevisit`.
+  (2) Episode-order gating (`sequentialStudyMode`, off by default) treated a whole
+  book as one sequence, so episode 2's first sentence waited on episode 1's last.
+  Chapters with `sourceDate` (podcast / NHK imports) are now independent groups
+  (`SequentialInputSentence.groupId`): each episode's first sentence is open and
+  sentences still gate within an episode. Undated chapters (novels, series) keep
+  the book-wide sequence. Tests: `tests/freshTrySpacingAndEpisodeGroups.test.ts`.
+  Limit: no per-book override for undated podcast chapters.
+
 - **2026-10-07 — `/progress` leads with sentences and episodes.** New "Episodes"
   panel (`src/lib/episodeProgress.ts`, `getEpisodeProgress`): per chapter of
   non-archived, non-suspended books, how many sentences have reached each stage

@@ -13,7 +13,7 @@ import {
   effectiveSentenceFirstPlanning,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
-import { sentencesReadyToRevisit } from '../lib/sentenceJourney';
+import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { buildEpisodeProgress, type EpisodeProgressRow } from '../lib/episodeProgress';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -5996,6 +5996,10 @@ export async function getSequentialBookStatus(
   const walked = new Set(
     events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
   );
+  // Dated chapters are independent episodes (podcast / news imports): each is its own sequence.
+  const datedChapterIds = new Set(
+    ((await db.books.get(bookId))?.chapters ?? []).filter((chapter) => chapter.sourceDate).map((chapter) => chapter.id),
+  );
   return computeSequentialStatus(
     memberships.map((membership, index) => {
       const item = itemBySentence.get(membership.sentenceId);
@@ -6007,6 +6011,7 @@ export async function getSequentialBookStatus(
         reviews: item ? (reviewsByItem.get(item.id) ?? []) : [],
         // Sentences already worked on before the mode was enabled stay open.
         introduced: membership.status !== 'unstarted' || walked.has(membership.sentenceId),
+        ...(membership.chapterId && datedChapterIds.has(membership.chapterId) ? { groupId: membership.chapterId } : {}),
       };
     }),
     new Set(settings.sequentialUnlockOverrides ?? []),
@@ -9987,7 +9992,7 @@ async function findExploreCandidates(
       ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
       : [];
     const revisitIds = sentenceFirst
-      ? [...new Set([...parkedGlossIds, ...sentencesReadyToRevisit(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      ? [...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is

@@ -142,3 +142,44 @@ export function sentencesReadyToRevisit(events: SentenceLearningEvent[], now: Da
     .sort((a, b) => a[1].localeCompare(b[1]))
     .map(([id]) => id);
 }
+
+/** Calendar days to wait before re-offering a sentence, by how many separate days it has already had a fresh try. */
+export const FRESH_TRY_GAP_DAYS = [1, 3, 7, 14, 30];
+
+function daysBetween(fromIso: string, now: Date): number {
+  const from = new Date(fromIso);
+  const a = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * `sentencesReadyToRevisit` narrowed to sentences whose spacing has elapsed: the
+ * wait grows with each day you've already attempted saying it (1, 3, 7, 14, 30
+ * days), measured from the last attempt (or the first walkthrough if none).
+ * Used for planning only; the Reader's list still shows every candidate.
+ */
+export function sentencesDueForFreshTry(events: SentenceLearningEvent[], now: Date = new Date()): string[] {
+  const attemptDays = new Map<string, Set<string>>();
+  const lastAttempt = new Map<string, string>();
+  const firstWalk = new Map<string, string>();
+  for (const event of events) {
+    if (event.action === 'expression_attempt') {
+      const days = attemptDays.get(event.sentenceId) ?? new Set<string>();
+      days.add(day(event.timestamp));
+      attemptDays.set(event.sentenceId, days);
+      const last = lastAttempt.get(event.sentenceId);
+      if (last === undefined || event.timestamp > last) lastAttempt.set(event.sentenceId, event.timestamp);
+    } else if (event.action === 'walkthrough_completed') {
+      const seen = firstWalk.get(event.sentenceId);
+      if (seen === undefined || event.timestamp < seen) firstWalk.set(event.sentenceId, event.timestamp);
+    }
+  }
+  return sentencesReadyToRevisit(events, now).filter((id) => {
+    const since = lastAttempt.get(id) ?? firstWalk.get(id);
+    if (since === undefined) return false;
+    const tries = attemptDays.get(id)?.size ?? 0;
+    const gap = FRESH_TRY_GAP_DAYS[Math.min(tries, FRESH_TRY_GAP_DAYS.length - 1)]!;
+    return daysBetween(since, now) >= gap;
+  });
+}
