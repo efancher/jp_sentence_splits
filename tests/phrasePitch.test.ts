@@ -54,6 +54,16 @@ describe('groupIntoPhrases', () => {
     expect(groupIntoPhrases(tokens.slice(0, 3))).toEqual([[0, 1], [2]]);
   });
 
+  it('keeps compound particles split by the aligner (に|ついて) with the word before', () => {
+    const t = [
+      { text: '家族', start: 0, end: 0.5 },
+      { text: 'に', start: 0.5, end: 0.7 },
+      { text: 'ついて', start: 0.7, end: 1.2 },
+      { text: '話します', start: 1.2, end: 1.8 },
+    ];
+    expect(groupIntoPhrases(t)).toEqual([[0, 1, 2], [3]]);
+  });
+
   it('starts a new phrase at a pause, even for a particle', () => {
     expect(groupIntoPhrases(tokens)).toEqual([[0, 1], [2], [3]]);
   });

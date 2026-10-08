@@ -46,6 +46,9 @@ const FUNCTION_TOKENS = new Set([
   'です', 'でした', 'ます', 'ました', 'ません', 'ましょう', 'だ', 'だった', 'じゃ', 'では',
 ]);
 
+/** Second halves of compound particles the aligner splits after に (に|ついて), kept with the phrase. */
+const NI_COMPOUND_TAILS = new Set(['ついて', 'とって', 'よって', 'たいして', 'かんして', 'おいて', 'つき', 'よる']);
+
 /** A learner contour below this contrast (semitones) is called flat. */
 export const FLAT_CONTRAST_SEMITONES = 1;
 
@@ -66,7 +69,7 @@ export function groupIntoPhrases(tokens: readonly PhraseToken[], pauseSeconds = 
     const previous = tokens[index - 1];
     const attaches =
       previous !== undefined &&
-      FUNCTION_TOKENS.has(token.text) &&
+      (FUNCTION_TOKENS.has(token.text) || (previous.text === 'に' && NI_COMPOUND_TAILS.has(token.text))) &&
       token.start - previous.end < pauseSeconds &&
       phrases.length > 0;
     if (attaches) phrases[phrases.length - 1]!.push(index);
