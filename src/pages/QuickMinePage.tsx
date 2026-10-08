@@ -84,6 +84,48 @@ function clearActiveJob(): void {
   }
 }
 
+const QUEUE_KEY = 'quickmine.podcastQueue';
+
+interface PersistedQueue {
+  queue: QueuedEpisode[];
+  queueTotal: number;
+  episodeDate: string | null;
+  episodeSourceUrl: string;
+}
+
+function writePersistedQueue(state: PersistedQueue | null): void {
+  try {
+    if (!state) localStorage.removeItem(QUEUE_KEY);
+    else localStorage.setItem(QUEUE_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
+  } catch {
+    // Private mode / storage disabled — the queue just won't survive a reload.
+  }
+}
+
+function readPersistedQueue(): PersistedQueue | null {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedQueue> & { savedAt?: unknown };
+    if (typeof parsed.savedAt === 'number' && Date.now() - parsed.savedAt > ACTIVE_JOB_MAX_AGE_MS) {
+      return null;
+    }
+    if (!Array.isArray(parsed.queue)) return null;
+    const queue = parsed.queue.filter(
+      (item): item is QueuedEpisode =>
+        typeof item?.episode?.url === 'string' && typeof item.episode.title === 'string',
+    );
+    return {
+      queue,
+      queueTotal: typeof parsed.queueTotal === 'number' ? parsed.queueTotal : queue.length,
+      episodeDate: typeof parsed.episodeDate === 'string' ? parsed.episodeDate : null,
+      episodeSourceUrl: typeof parsed.episodeSourceUrl === 'string' ? parsed.episodeSourceUrl : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 function readActiveJob(): string | null {
   try {
     const raw = localStorage.getItem(ACTIVE_JOB_KEY);
@@ -213,12 +255,17 @@ export function QuickMinePage() {
   const [podcastFeedSearch, setPodcastFeedSearch] = useState('');
   const [podcastFeedLoading, setPodcastFeedLoading] = useState(false);
   const [podcastFeedError, setPodcastFeedError] = useState('');
-  const [podcastEpisodeDate, setPodcastEpisodeDate] = useState<string | null>(null);
-  const [podcastEpisodeSourceUrl, setPodcastEpisodeSourceUrl] = useState('');
+  const [restoredQueue] = useState(readPersistedQueue);
+  const [podcastEpisodeDate, setPodcastEpisodeDate] = useState<string | null>(
+    restoredQueue?.episodeDate ?? null,
+  );
+  const [podcastEpisodeSourceUrl, setPodcastEpisodeSourceUrl] = useState(
+    restoredQueue?.episodeSourceUrl ?? '',
+  );
 
   const [podcastSelected, setPodcastSelected] = useState<Set<string>>(new Set());
-  const [queue, setQueue] = useState<QueuedEpisode[]>([]);
-  const [queueTotal, setQueueTotal] = useState(0);
+  const [queue, setQueue] = useState<QueuedEpisode[]>(() => readPersistedQueue()?.queue ?? []);
+  const [queueTotal, setQueueTotal] = useState(() => readPersistedQueue()?.queueTotal ?? 0);
   const queueRef = useRef<QueuedEpisode[]>([]);
   queueRef.current = queue;
   const prefetchingRef = useRef<string | null>(null);
@@ -233,9 +280,29 @@ export function QuickMinePage() {
   }, [jobId]);
 
   useEffect(() => {
+    writePersistedQueue(
+      queue.length > 0 || (queueTotal > 1 && podcastEpisodeSourceUrl)
+        ? {
+            queue,
+            queueTotal,
+            episodeDate: podcastEpisodeDate,
+            episodeSourceUrl: podcastEpisodeSourceUrl,
+          }
+        : null,
+    );
+  }, [queue, queueTotal, podcastEpisodeDate, podcastEpisodeSourceUrl]);
+
+  useEffect(() => {
     const savedJobId = readActiveJob();
     if (!savedJobId) {
       setResuming(false);
+      if (queueRef.current.length > 0) {
+        void advanceQueue('Resumed your episode queue.');
+      } else {
+        setPodcastEpisodeDate(null);
+        setPodcastEpisodeSourceUrl('');
+        setQueueTotal(0);
+      }
       return;
     }
     let cancelled = false;
@@ -243,8 +310,12 @@ export function QuickMinePage() {
       (job) => {
         if (cancelled) return;
         if (job.status === 'error') {
-          setError(job.error ?? 'The previous mining job failed.');
           clearActiveJob();
+          if (queueRef.current.length > 0) {
+            void advanceQueue(`${job.error ?? 'The previous mining job failed.'} — skipped to the next episode.`);
+          } else {
+            setError(job.error ?? 'The previous mining job failed.');
+          }
         } else {
           applyResumedJob(savedJobId, job);
         }
@@ -253,11 +324,11 @@ export function QuickMinePage() {
       (err: unknown) => {
         if (cancelled) return;
         clearActiveJob();
-        setError(
-          `Could not reconnect to your last mining job: ${
-            err instanceof Error ? err.message : 'unknown error'
-          }`,
-        );
+        const message = `Could not reconnect to your last mining job: ${
+          err instanceof Error ? err.message : 'unknown error'
+        }`;
+        if (queueRef.current.length > 0) void advanceQueue(`${message} — skipped to the next episode.`);
+        else setError(message);
         setResuming(false);
       },
     );
@@ -1458,6 +1529,7 @@ export function QuickMinePage() {
                 return;
               }
               clearActiveJob();
+              writePersistedQueue(null);
               navigate(
                 result.chapterId
                   ? `/books/${result.bookId}/read?chapter=${encodeURIComponent(result.chapterId)}&pack=1&imported=1`
