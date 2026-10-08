@@ -4,6 +4,7 @@ import { phonesToMoraIntervals, phonesToSoundedMorae } from './moraTiming';
 import type { PitchAnalysisPayload } from './pitch';
 import type { MoraPitchClass } from './pitchAccentShape';
 import { fitAccentShape } from './pitchShapeFit';
+import { SET_EXPRESSIONS } from './setExpressions';
 
 /**
  * Phrase-level pitch: the native contour of each *phrase* (a content word plus
@@ -46,8 +47,7 @@ const FUNCTION_TOKENS = new Set([
   'です', 'でした', 'ます', 'ました', 'ません', 'ましょう', 'だ', 'だった', 'じゃ', 'では',
 ]);
 
-/** Second halves of compound particles the aligner splits after に (に|ついて), kept with the phrase. */
-const NI_COMPOUND_TAILS = new Set(['ついて', 'とって', 'よって', 'たいして', 'かんして', 'おいて', 'つき', 'よる']);
+const SET_EXPRESSION_MAX_TOKENS = 6;
 
 /** A learner contour below this contrast (semitones) is called flat. */
 export const FLAT_CONTRAST_SEMITONES = 1;
@@ -65,11 +65,26 @@ export interface PhraseToken {
  */
 export function groupIntoPhrases(tokens: readonly PhraseToken[], pauseSeconds = PHRASE_PAUSE_SECONDS): number[][] {
   const phrases: number[][] = [];
+  // Set expressions (について, にとって, …) the aligner splits into pieces ride on the preceding word whole.
+  const inExpression = new Set<number>();
+  for (let i = 0; i < tokens.length; i += 1) {
+    let text = '';
+    let last = -1;
+    for (let j = i; j < Math.min(tokens.length, i + SET_EXPRESSION_MAX_TOKENS); j += 1) {
+      if (j > i && tokens[j]!.start - tokens[j - 1]!.end >= pauseSeconds) break;
+      text += tokens[j]!.text;
+      if (SET_EXPRESSIONS.has(text)) last = j;
+    }
+    if (last > i) {
+      for (let j = i; j <= last; j += 1) inExpression.add(j);
+      i = last;
+    }
+  }
   tokens.forEach((token, index) => {
     const previous = tokens[index - 1];
     const attaches =
       previous !== undefined &&
-      (FUNCTION_TOKENS.has(token.text) || (previous.text === 'に' && NI_COMPOUND_TAILS.has(token.text))) &&
+      (FUNCTION_TOKENS.has(token.text) || inExpression.has(index)) &&
       token.start - previous.end < pauseSeconds &&
       phrases.length > 0;
     if (attaches) phrases[phrases.length - 1]!.push(index);
