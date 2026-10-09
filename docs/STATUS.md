@@ -10,6 +10,20 @@ Last updated: 2026-10-01.
 
 ## Where things stand
 
+- **2026-10-09 — Sync issue triage: `books` conflicts are now resolved chapter
+  by chapter.** The one open sync report ("that's a really big difference") was
+  a `books` conflict on a 32-chapter, ~2.8MB row: `chapters` (with
+  `structureDrafts`/`contextWalkthroughs`) lives in one JSON column under a
+  single row-level version check, so edits to different chapters on two devices
+  conflicted and the panel showed a whole-blob line diff. `ConflictPanel` now
+  lists only the differing chapters (edited on both / only here / only in the
+  cloud) with a This-device/Cloud choice each, plus one choice for book-level
+  fields; "Apply chapter choices" (`applyBookMergeResolution`, resolution
+  `merge`) writes the merged book and pushes it over the remote version.
+  Nothing is merged automatically; keep-local/remote/duplicate remain. Code:
+  `src/sync/bookChapterConflict.ts` (+ test). The underlying row-size/contention
+  design is unchanged.
+
 - **2026-10-01 — Reader: "How this phrase works".** A collapsed-by-default
   section in the sentence walkthrough (under the matching focus target, or at
   sentence level when no target overlaps a layer) explains a phrase one layer

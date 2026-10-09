@@ -81,7 +81,7 @@ export interface SyncConflict {
   remoteVersion: number;
   createdAt: string;
   resolvedAt?: string;
-  resolution?: 'keep_local' | 'keep_remote' | 'duplicate' | 'auto_noop';
+  resolution?: 'keep_local' | 'keep_remote' | 'duplicate' | 'merge' | 'auto_noop';
 }
 
 export interface SyncMetaState {

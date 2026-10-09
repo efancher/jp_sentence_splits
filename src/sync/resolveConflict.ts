@@ -13,6 +13,7 @@ import {
   remoteToInbox,
   remoteToSentence,
 } from './mappers';
+import { mergeBookByChoices, type ChapterSide } from './bookChapterConflict';
 import type { SyncConflict, SyncEntity } from './types';
 
 export type ConflictResolution = 'keep_local' | 'keep_remote' | 'duplicate';
@@ -111,6 +112,37 @@ export async function applyConflictResolution(
     });
   }
   await resolveConflictLocally(conflict.id, resolution);
+}
+
+/** Resolve a books conflict chapter by chapter (see bookChapterConflict.ts). */
+export async function applyBookMergeResolution(
+  conflict: SyncConflict,
+  choices: Record<string, ChapterSide>,
+  fields: ChapterSide,
+): Promise<void> {
+  const merged = mergeBookByChoices(
+    conflict.localPayload,
+    conflict.remotePayload,
+    choices,
+    fields,
+  );
+  await applyPayload('books', merged, false);
+  await putRecordMeta({
+    entity: 'books',
+    recordId: conflict.recordId,
+    version: conflict.remoteVersion,
+    syncedVersion: conflict.remoteVersion,
+    updatedAt: new Date().toISOString(),
+  });
+  await enqueueMutation({
+    entity: 'books',
+    recordId: conflict.recordId,
+    operation: 'upsert',
+    expectedVersion: conflict.remoteVersion,
+    payload: merged,
+    replaceExpectedVersion: true,
+  });
+  await resolveConflictLocally(conflict.id, 'merge');
 }
 
 /** Resolve every open conflict the same way (keep_local or keep_remote only). */

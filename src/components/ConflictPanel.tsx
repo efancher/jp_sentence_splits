@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { reportSyncIssue } from '../db/repository';
 import { listOpenConflicts } from '../sync/queue';
 import {
+  summarizeBookConflict,
+  type ChapterSide,
+} from '../sync/bookChapterConflict';
+import {
+  applyBookMergeResolution,
   applyBulkConflictResolution,
   applyConflictResolution,
   type ConflictResolution,
@@ -49,6 +54,111 @@ function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
           </div>
         ))}
       </pre>
+    </div>
+  );
+}
+
+const KIND_LABEL = {
+  differs: 'edited on both',
+  local_only: 'only on this device',
+  remote_only: 'only in the cloud',
+} as const;
+
+function SideChoice({
+  name,
+  value,
+  onChange,
+  disabled,
+}: {
+  name: string;
+  value: ChapterSide;
+  onChange: (side: ChapterSide) => void;
+  disabled: boolean;
+}) {
+  return (
+    <span className="row" style={{ gap: '0.75rem' }}>
+      {(['local', 'remote'] as const).map((side) => (
+        <label key={side} style={{ display: 'inline-flex', gap: '0.25rem' }}>
+          <input
+            type="radio"
+            name={name}
+            checked={value === side}
+            disabled={disabled}
+            onChange={() => onChange(side)}
+          />
+          {side === 'local' ? 'This device' : 'Cloud'}
+        </label>
+      ))}
+    </span>
+  );
+}
+
+function BookChapterChoices({
+  conflict,
+  disabled,
+  onApply,
+}: {
+  conflict: SyncConflict;
+  disabled: boolean;
+  onApply: (choices: Record<string, ChapterSide>, fields: ChapterSide) => void;
+}) {
+  const summary = summarizeBookConflict(conflict.localPayload, conflict.remotePayload);
+  const [choices, setChoices] = useState<Record<string, ChapterSide>>({});
+  const [fields, setFields] = useState<ChapterSide>('remote');
+  const choiceFor = (id: string): ChapterSide => choices[id] ?? 'remote';
+
+  return (
+    <div className="stack" style={{ gap: '0.5rem' }}>
+      <div className="muted" style={{ fontSize: '0.85rem' }}>
+        {summary.chapters.length} chapter(s) differ
+        {summary.fieldChanges.length
+          ? `; book details differ (${summary.fieldChanges.join(', ')})`
+          : '; book details match'}
+        . Pick a side for each, everything else is kept as is.
+      </div>
+      {summary.chapters.map((chapter) => (
+        <div key={chapter.id} className="stack" style={{ gap: '0.15rem' }}>
+          <strong>{chapter.title}</strong>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>
+            {KIND_LABEL[chapter.kind]}
+            {chapter.kind !== 'differs' ? ' (choosing the other side removes it)' : ''}
+          </span>
+          <SideChoice
+            name={`${conflict.id}-${chapter.id}`}
+            value={choiceFor(chapter.id)}
+            disabled={disabled}
+            onChange={(side) => setChoices((prev) => ({ ...prev, [chapter.id]: side }))}
+          />
+        </div>
+      ))}
+      {summary.fieldChanges.length > 0 && (
+        <div className="stack" style={{ gap: '0.15rem' }}>
+          <strong>Book details</strong>
+          <SideChoice
+            name={`${conflict.id}-fields`}
+            value={fields}
+            disabled={disabled}
+            onChange={setFields}
+          />
+        </div>
+      )}
+      <div className="row">
+        <button
+          type="button"
+          className="primary"
+          disabled={disabled}
+          onClick={() =>
+            onApply(
+              Object.fromEntries(
+                summary.chapters.map((c) => [c.id, choiceFor(c.id)]),
+              ),
+              fields,
+            )
+          }
+        >
+          Apply chapter choices
+        </button>
+      </div>
     </div>
   );
 }
@@ -101,6 +211,20 @@ export function ConflictPanel() {
     }
     // Sync in the background: a full push/pull/audio cycle can take a while (or
     // stall offline) and must not keep every other conflict's buttons disabled.
+    void sync.syncNow();
+  }
+
+  async function resolveBookMerge(
+    conflict: SyncConflict,
+    choices: Record<string, ChapterSide>,
+    fields: ChapterSide,
+  ): Promise<void> {
+    setBusyId(conflict.id);
+    try {
+      await applyBookMergeResolution(conflict, choices, fields);
+    } finally {
+      setBusyId(null);
+    }
     void sync.syncNow();
   }
 
@@ -163,7 +287,16 @@ export function ConflictPanel() {
               local v{conflict.localVersion} vs remote v{conflict.remoteVersion}
             </div>
           </div>
-          <details open>
+          {conflict.entity === 'books' && (
+            <BookChapterChoices
+              conflict={conflict}
+              disabled={busy}
+              onApply={(choices, fields) =>
+                void resolveBookMerge(conflict, choices, fields)
+              }
+            />
+          )}
+          <details open={conflict.entity !== 'books'}>
             <summary>Differences</summary>
             <ConflictDiff conflict={conflict} />
           </details>
