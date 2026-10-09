@@ -658,6 +658,31 @@ describe('recutSentenceAudioFromSource', () => {
     expect(row?.importedAt).not.toBe('');
   });
 
+  it('drops the cached pitch track and alignment of the old cut', async () => {
+    await seedAudio();
+    const db = getDb();
+    await db.referencePitchTracks.put({
+      id: 'ra-1',
+      pitchVersion: 0,
+      payload: { frames: [], durationSeconds: 1 } as never,
+      computedAt: new Date().toISOString(),
+    });
+    await db.referenceAlignments.put({
+      id: 'ra-1',
+      alignmentVersion: 0,
+      result: { words: [] } as never,
+      computedAt: new Date().toISOString(),
+    });
+    const clipFromSource = vi.fn(async () => [
+      { blob: new Blob(['recut'], { type: 'audio/mp4' }), durationMs: 1000 },
+    ]);
+
+    await recutSentenceAudioFromSource('ra-1', { startMs: 5800, endMs: 6800 }, { clipFromSource });
+
+    expect(await db.referencePitchTracks.get('ra-1')).toBeUndefined();
+    expect(await db.referenceAlignments.get('ra-1')).toBeUndefined();
+  });
+
   it('rejects an empty span, a missing row, and a source with no URL', async () => {
     await seedAudio(false);
     const clipFromSource = vi.fn();

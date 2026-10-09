@@ -1647,7 +1647,19 @@ export async function recutSentenceAudioFromSource(
     trimStartMs: undefined,
     trimEndMs: undefined,
   };
-  await db.sentenceAudio.put(updated);
+  await db.transaction(
+    'rw',
+    db.sentenceAudio,
+    db.referenceAlignments,
+    db.referencePitchTracks,
+    async () => {
+      await db.sentenceAudio.put(updated);
+      // Derived caches are keyed by audio id, so they'd otherwise keep
+      // describing the old cut (stale pitch chart + kana ruler).
+      await db.referenceAlignments.delete(sentenceAudioId);
+      await db.referencePitchTracks.delete(sentenceAudioId);
+    },
+  );
   void pushReferenceAudioUpdate(updated);
 
   return { durationMs: clip.durationMs };
