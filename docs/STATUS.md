@@ -6,9 +6,17 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-10-01.
+Last updated: 2026-10-09.
 
 ## Where things stand
+
+- **2026-10-09 — Sentence-stage progress bars (book + per chapter).** The
+  book detail Progress panel and each chapter / Unassigned row now show a
+  stacked bar splitting sentences into New → Vocab confirmed → Studying
+  (in_progress/needs_review) → Complete → Graduated (furthest stage wins, so
+  segments sum to the total). Code: `src/lib/sentenceStages.ts` (+ test),
+  `src/components/StageProgressBar.tsx`, wiring in `BookDetailPage`. The old
+  complete/total bar is unchanged.
 
 - **2026-10-09 — Sync issue triage: `books` conflicts are now resolved chapter
   by chapter.** The one open sync report ("that's a really big difference") was

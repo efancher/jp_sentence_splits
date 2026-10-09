@@ -63,6 +63,8 @@ import {
   type AlignmentBackfillStatus,
 } from '../lib/alignmentBackfillApi';
 import { coveragePercent } from '../lib/bookCoverage';
+import { StageProgressBar } from '../components/StageProgressBar';
+import { countStages, type SentenceStageInput } from '../lib/sentenceStages';
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
@@ -442,6 +444,27 @@ export function BookDetailPage() {
     };
   }, [data, graduatedSentenceIds]);
 
+  const stagesByChapter = useMemo(() => {
+    const groups = new Map<string, SentenceStageInput[]>();
+    const all: SentenceStageInput[] = [];
+    for (const row of data?.rows ?? []) {
+      const input: SentenceStageInput = {
+        membershipStatus: row.membership.status,
+        vocabConfirmed: row.analysis?.vocabularyReviewStatus === 'confirmed',
+        graduated: Boolean(row.sentence && graduatedSentenceIds.has(row.sentence.id)),
+      };
+      all.push(input);
+      const key = row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
+      const list = groups.get(key) ?? [];
+      list.push(input);
+      groups.set(key, list);
+    }
+    return {
+      book: countStages(all),
+      byChapter: (key: string) => countStages(groups.get(key) ?? []),
+    };
+  }, [data, graduatedSentenceIds]);
+
   const collapsedChapters = useMemo(
     () => new Set(data?.book?.collapsedChapterIds ?? []),
     [data?.book?.collapsedChapterIds],
@@ -522,6 +545,7 @@ export function BookDetailPage() {
               <div className="progress-bar" aria-hidden="true">
                 <span style={{ width: `${progressSummary.percent}%` }} />
               </div>
+              <StageProgressBar {...stagesByChapter.book} showLegend />
               <div className="row">
                 <span className="status-pill unstarted">
                   {progressSummary.byStatus.unstarted} unstarted
@@ -1255,6 +1279,7 @@ export function BookDetailPage() {
                         {collapsed ? ' · hidden' : ''}
                         {chapter.suspendedAt ? ' · suspended' : ''}
                       </div>
+                      <StageProgressBar {...stagesByChapter.byChapter(chapter.id)} />
                     </div>
                     <div className="row">
                       <Link to={`/books/${bookId}/read?chapter=${chapter.id}`}>
@@ -1372,6 +1397,7 @@ export function BookDetailPage() {
                   {unassignedCount} sentence{unassignedCount === 1 ? '' : 's'}
                   {collapsed ? ' · hidden' : ''}
                 </div>
+                <StageProgressBar {...stagesByChapter.byChapter(UNASSIGNED_CHAPTER_KEY)} />
               </div>
               <div className="row">
                 <button

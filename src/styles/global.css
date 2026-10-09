@@ -1526,3 +1526,19 @@ button.sync-retry {
   background: var(--bg-muted);
   opacity: 1;
 }
+
+.stage-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+.stage-seg { display: block; height: 100%; }
+.stage-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; font-size: 0.8rem; margin-top: 0.25rem; }
+.stage-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.3rem; }
+.stage-new { background: var(--border); }
+.stage-vocab_confirmed { background: #8fb8de; }
+.stage-studying { background: #e0b04a; }
+.stage-complete { background: var(--accent); }
+.stage-graduated { background: #3f9b6a; }
