@@ -9971,6 +9971,20 @@ async function buildReviewPriorityInputs(
   });
 }
 
+/** Days a missed review card keeps its sentence boosted for a fresh try. */
+const STRUGGLE_FRESH_TRY_WINDOW_DAYS = 7;
+
+/** Sentences with an `again` review (any card type that records its context sentence) in the last week. */
+async function getRecentlyStruggledSentenceIds(now: Date = new Date()): Promise<Set<string>> {
+  const cutoff = new Date(now.getTime() - STRUGGLE_FRESH_TRY_WINDOW_DAYS * 86_400_000).toISOString();
+  const reviews = await getDb().reviews.where('timestamp').aboveOrEqual(cutoff).toArray();
+  const ids = new Set<string>();
+  for (const review of reviews) {
+    if (review.rating === 'again' && review.contextSentenceId) ids.add(review.contextSentenceId);
+  }
+  return ids;
+}
+
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
 async function findExploreCandidates(
   limit: number,
@@ -9990,6 +10004,7 @@ async function findExploreCandidates(
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
+  const struggledSentenceIds = sentenceFirst ? await getRecentlyStruggledSentenceIds() : new Set<string>();
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
@@ -10006,8 +10021,11 @@ async function findExploreCandidates(
     const parkedGlossIds = sentenceFirst
       ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
       : [];
+    // A sentence whose review cards were just missed jumps the fresh-try
+    // spacing queue (walked-through sentences only, so it never doubles as "new").
+    const struggledIds = walked ? [...struggledSentenceIds].filter((id) => walked.has(id)) : [];
     const revisitIds = sentenceFirst
-      ? [...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      ? [...new Set([...struggledIds, ...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
