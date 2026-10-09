@@ -930,7 +930,6 @@ export function AnalyzePage() {
                     : null
               }
               revealRoles
-              showLegend
               revealedIds={wizardActive ? wizardRevealedIds : undefined}
             />
             <div className="row">

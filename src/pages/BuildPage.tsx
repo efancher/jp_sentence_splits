@@ -485,7 +485,7 @@ export function BuildPage() {
         ) : null}
 
         {revealedAnswer || checkResult?.perfect ? (
-          <ChunkPuzzleStrip chunks={chunks} revealRoles showLegend={false} />
+          <ChunkPuzzleStrip chunks={chunks} revealRoles />
         ) : null}
 
         <div className="row">
