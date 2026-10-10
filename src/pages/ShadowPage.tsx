@@ -97,6 +97,9 @@ export function ShadowPage() {
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const attemptAudioRef = useRef<HTMLAudioElement | null>(null);
   const ephemeralAudioRef = useRef<HTMLAudioElement | null>(null);
+  const compareAudioARef = useRef<HTMLAudioElement | null>(null);
+  const compareAudioBRef = useRef<HTMLAudioElement | null>(null);
+  const [comparingAttempts, setComparingAttempts] = useState(false);
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
   // Scroll target for "Practice this part" (AnalysisPanel, down in the
   // Past-attempts list) — it only sets targetRange, which renders the
@@ -320,6 +323,33 @@ export function ShadowPage() {
     } finally {
       URL.revokeObjectURL(attemptUrl);
       setActiveAttemptId(null);
+    }
+  }
+
+  async function handleCompareAttempts(firstId: string, secondId: string) {
+    const first = attempts.find((a) => a.id === firstId);
+    const second = attempts.find((a) => a.id === secondId);
+    const elA = compareAudioARef.current;
+    const elB = compareAudioBRef.current;
+    if (!first || !second || !elA || !elB) return;
+    targetLoopCoordinator.current.cancel();
+    const urlA = URL.createObjectURL(first.blob);
+    const urlB = URL.createObjectURL(second.blob);
+    elA.src = urlA;
+    elB.src = urlB;
+    setComparingAttempts(true);
+    try {
+      // iOS only lets an element play from a timer after it has played inside the tap, so unlock B silently now.
+      elB.muted = true;
+      await elB.play().catch(() => undefined);
+      elB.pause();
+      elB.currentTime = 0;
+      elB.muted = false;
+      await shadowing.playAlternate(elA, elB, `${firstId}:${secondId}`, speed);
+    } finally {
+      URL.revokeObjectURL(urlA);
+      URL.revokeObjectURL(urlB);
+      setComparingAttempts(false);
     }
   }
 
@@ -824,6 +854,9 @@ export function ShadowPage() {
               labelFor={(_id, createdAt) =>
                 new Date(createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
               }
+              playing={comparingAttempts}
+              onCompare={(a, b) => void handleCompareAttempts(a, b)}
+              onStop={() => shadowing.stopComparison()}
             />
             <ul className="stack" style={{ listStyle: 'none', padding: 0 }}>
               {attempts.map((attempt) => (
@@ -942,6 +975,10 @@ export function ShadowPage() {
             visible player above. */}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio ref={attemptAudioRef} aria-label="Attempt audio" hidden />
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <audio ref={compareAudioARef} aria-label="Earlier attempt audio" hidden />
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <audio ref={compareAudioBRef} aria-label="Later attempt audio" hidden />
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio
           ref={ephemeralAudioRef}

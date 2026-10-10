@@ -23,6 +23,12 @@ function Shape({ shape, against }: { shape: string; against?: string }) {
   );
 }
 
+/** The two selected attempts in chronological order (grid rows are oldest-first). */
+function orderedPair(rows: readonly { id: string }[], selected: readonly string[]): [string, string] {
+  const ordered = rows.map((r) => r.id).filter((id) => selected.includes(id));
+  return [ordered[0]!, ordered[1]!];
+}
+
 /**
  * Attempts × phrases: the native H/L as the header, one row per attempt, so a column that
  * stays red is a phrase you keep missing and one that turns green is fixed. Reads the
@@ -31,9 +37,15 @@ function Shape({ shape, against }: { shape: string; against?: string }) {
 export function AttemptPitchGrid({
   summaries,
   labelFor,
+  playing,
+  onCompare,
+  onStop,
 }: {
   summaries: readonly AttemptAnalysisSummary[];
   labelFor: (attemptId: string, createdAt: string) => string;
+  playing: boolean;
+  onCompare: (firstId: string, secondId: string) => void;
+  onStop: () => void;
 }) {
   const grid = useMemo(
     () =>
@@ -101,6 +113,19 @@ export function AttemptPitchGrid({
           );
         })}
       </div>
+      {selected.length === 2 ? (
+        <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => (playing ? onStop() : onCompare(...orderedPair(grid.rows, selected)))}
+          >
+            {playing ? 'Stop' : 'Hear them back to back'}
+          </button>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>
+            Earlier first, then later, at your current speed.
+          </span>
+        </div>
+      ) : null}
       <div className="row" style={{ flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-start' }}>
         {grid.columns.map((column, index) => (
           <figure key={index} className="apg-fig">

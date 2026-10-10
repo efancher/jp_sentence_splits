@@ -75,8 +75,13 @@ Last updated: 2026-10-10.
   attempt list instead of the severity improving/worse label (still the
   fallback for attempts without a snapshot; Timing label unchanged). Fall
   error = mean |your drop mora − native drop mora| over phrases where both
-  fall (`attemptPitchMetrics`). Not built: speaking-rate ratio, contour
-  correlation, A/B playback of two chosen attempts.
+  fall (`attemptPitchMetrics`). A/B playback (same day): when exactly two
+  attempts are ticked in the overlay picker, "Hear them back to back" plays
+  the earlier then the later via `playAlternate` on two hidden audio elements
+  (second one unlocked silently inside the tap for iOS). Not built: speaking-rate
+  ratio, contour correlation, a synced playback cursor on the overlay.
+  **Manual test:** tick two attempts, tap the button, hear earlier then later;
+  tap again (Stop) mid-play to cancel.
   **Manual test:** open /shadow on a sentence, Analyze two or more attempts
   (re-open Analyze on older ones); the grid appears above the attempt list.
 - **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**
