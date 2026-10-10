@@ -19,7 +19,12 @@ import { PITCH_TRACK_VERSION } from '../src/lib/pitch';
 import { createId } from '../src/lib/ids';
 import { segmentIntoMorae } from '../src/lib/mora';
 import { nativeAudioController } from '../src/lib/nativeAudio';
-import { pickStructureCheckChunk, ReviewPage, spaceOutSiblingCards } from '../src/pages/ReviewPage';
+import {
+  pickMissedReadingTarget,
+  pickStructureCheckChunk,
+  ReviewPage,
+  spaceOutSiblingCards,
+} from '../src/pages/ReviewPage';
 import type { AnalysisChunk } from '../src/domain/types';
 import { withAppProviders } from '../src/test/providers';
 
@@ -3902,6 +3907,24 @@ describe('spaceOutSiblingCards', () => {
     const readingIndex = subjectIds.indexOf('zettai-item');
     const listeningIndex = subjectIds.indexOf('zettai-link');
     expect(Math.abs(readingIndex - listeningIndex)).toBeGreaterThan(1);
+  });
+});
+
+describe('pickMissedReadingTarget', () => {
+  const japanese = '私は猫が好きです。';
+  const inlineReading = '私[わたし]は猫[ねこ]が好[す]きです。';
+
+  it('returns the first flagged word with a derivable reading', () => {
+    expect(pickMissedReadingTarget(['猫', '好き'], japanese, inlineReading)).toEqual({
+      japanese: '猫',
+      expectedReading: 'ねこ',
+    });
+  });
+
+  it('skips words no longer in the sentence and falls through to undefined', () => {
+    expect(pickMissedReadingTarget(['犬'], japanese, inlineReading)).toBeUndefined();
+    expect(pickMissedReadingTarget(undefined, japanese, inlineReading)).toBeUndefined();
+    expect(pickMissedReadingTarget([], japanese, inlineReading)).toBeUndefined();
   });
 });
 

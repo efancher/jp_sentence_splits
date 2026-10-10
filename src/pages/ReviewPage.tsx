@@ -19,6 +19,7 @@ import { SentenceAudioAdjuster } from '../components/SentenceAudioAdjuster';
 import { SentencePitchAccentRow } from '../components/SentencePitchAccentRow';
 import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { SpeedControl } from '../components/SpeedControl';
+import { ReadingHelpPanel } from '../components/ReadingHelpPanel';
 import { VocabChips } from '../components/VocabChips';
 import { FuriganaText } from '../lib/furigana';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
@@ -36,6 +37,7 @@ import {
   getDb,
   countVocabularyWordsSeededSince,
   getDueStudyItems,
+  getLatestMissedReadings,
   getMeaningChoiceRecords,
   getPitchAccentDrillSentences,
   getReferencePitchTrack,
@@ -660,6 +662,8 @@ interface QueueCard {
   analysisChunks?: AnalysisChunk[];
   /** Earlier meaning-choice attempts on this sentence, so the sampled distractors rotate. */
   meaningHistory?: MeaningChoiceRecord[];
+  /** Surface forms flagged "Missed reading" on this sentence's latest review; the next `reading_in_context` asks for the first one's typed reading. */
+  missedReadings?: string[];
 }
 
 /** `${subjectType}:${subjectId}` — same key the sibling-bury filter uses. */
@@ -840,6 +844,7 @@ interface ReviewScope {
   chunksBySentenceId: Map<string, AnalysisChunk[]>;
   /** Stored meaning-choice records per sentence (oldest first). */
   meaningHistoryBySentenceId: Map<string, MeaningChoiceRecord[]>;
+  missedReadingsBySentenceId: Map<string, string[]>;
   /**
    * Sentence-led flow only: sentences the learner has been introduced to
    * (gloss walkthrough done, started/completed in a book, or already carrying a
@@ -883,6 +888,7 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
         comprehensionCheck: scope.comprehensionCheckBySentenceId.get(sentence.id),
         analysisChunks: scope.chunksBySentenceId.get(sentence.id),
         meaningHistory: scope.meaningHistoryBySentenceId.get(sentence.id),
+        missedReadings: scope.missedReadingsBySentenceId.get(sentence.id),
       }),
       ensure: (sentence, activityType) => ensureStudyItem('sentence', sentence.id, activityType),
       gateSentenceId: (sentence) => sentence.id,
@@ -1207,6 +1213,8 @@ export function ReviewPage() {
   const [comprehensionCheckAnswer, setComprehensionCheckAnswer] = useState<
     { correct: boolean; chosenIndex: number; meaningChoice?: MeaningChoiceRecord } | null
   >(null);
+  /** `reading_in_context`'s "Missed reading" taps for this card; recorded on rate, never affects the rating. */
+  const [missedReadings, setMissedReadings] = useState<string[]>([]);
   /** `pitch_accent_production`'s completed take, once scored; recorded as supplementary Review evidence on rate. */
   const [pitchProductionEvidence, setPitchProductionEvidence] = useState<
     { measuredCount: number; mismatchCount: number } | null
@@ -1511,6 +1519,7 @@ export function ReviewPage() {
 
     const ledFlow = isSentenceLedFlow(settings);
     const meaningHistoryBySentenceId = await getMeaningChoiceRecords(sentenceIds);
+    const missedReadingsBySentenceId = await getLatestMissedReadings(sentenceIds);
     let introducedSentenceIds: Set<string> | undefined;
     if (ledFlow) {
       const walked = (await db.sentenceLearningEvents.toArray())
@@ -1537,6 +1546,7 @@ export function ReviewPage() {
       comprehensionCheckBySentenceId,
       chunksBySentenceId,
       meaningHistoryBySentenceId,
+      missedReadingsBySentenceId,
       introducedSentenceIds,
       ledFlow,
       vocabularyTargetCandidates: paused ? [] : vocabularyTargetCandidates,
@@ -1873,6 +1883,7 @@ export function ReviewPage() {
     setTypedResponse('');
     setTypedResponseExpected(null);
     setComprehensionCheckAnswer(null);
+    setMissedReadings([]);
     setPitchProductionEvidence(null);
     setReportingIssue(false);
     setIssueNote('');
@@ -1924,6 +1935,8 @@ export function ReviewPage() {
         comprehensionCheckCorrect: comprehensionCheckAnswer?.correct,
         comprehensionCheckChosenIndex: comprehensionCheckAnswer?.chosenIndex,
         meaningChoice: comprehensionCheckAnswer?.meaningChoice,
+        missedReadings:
+          current.studyItem.activityType === 'reading_in_context' ? missedReadings : undefined,
         pitchProductionMeasuredCount: pitchProductionEvidence?.measuredCount,
         pitchProductionMismatchCount: pitchProductionEvidence?.mismatchCount,
         // The sentence this card actually displayed — every QueueCard has
@@ -2307,14 +2320,23 @@ export function ReviewPage() {
                 context={current.readingContext}
                 check={current.comprehensionCheck}
                 structureCheck={
-                  // Only from the sentence's second review onward — the
-                  // first pass stays exactly as it always has, this is
+                  // A word flagged "Missed reading" last time wins: ask for
+                  // its reading before anything else.
+                  pickMissedReadingTarget(
+                    current.missedReadings,
+                    current.sentence.japanese,
+                    current.sentence.inlineReading,
+                  ) ??
+                  // Otherwise only from the sentence's second review onward —
+                  // the first pass stays exactly as it always has, this is
                   // specifically the "repeat with less passive scaffolding"
                   // pass (docs/ROADMAP.md repetition brainstorm, 2026-09-29).
-                  current.studyItem.fsrsState.reps >= 1
+                  (current.studyItem.fsrsState.reps >= 1
                     ? pickStructureCheckChunk(current.analysisChunks, current.sentence.inlineReading)
-                    : undefined
+                    : undefined)
                 }
+                analysisChunks={current.analysisChunks}
+                onMissedReadingsChange={setMissedReadings}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
                 history={current.meaningHistory ?? []}
@@ -2427,6 +2449,24 @@ export function pickStructureCheckChunk(
 }
 
 /**
+ * First flagged word that's still in the sentence and has a derivable
+ * reading, as a typed-reading check target. Undefined falls back to the
+ * ordinary structure check.
+ */
+export function pickMissedReadingTarget(
+  missed: string[] | undefined,
+  japanese: string,
+  inlineReading: string,
+): StructureCheckTarget | undefined {
+  for (const surface of missed ?? []) {
+    if (!japanese.includes(surface)) continue;
+    const expectedReading = surfaceReadingFromInline(inlineReading, surface);
+    if (expectedReading) return { japanese: surface, expectedReading };
+  }
+  return undefined;
+}
+
+/**
  * `reading_in_context` card body — the sole sentence-subject card. Reveal
  * flow: see JP, optionally answer a structure check, optionally answer a
  * comprehension check, reveal EN + vocab, self-rate. The sentence under
@@ -2461,17 +2501,20 @@ function ReadingInContextCard({
   context,
   check,
   structureCheck,
+  analysisChunks,
   revealed,
   onReveal,
   history,
   bookId,
   onComprehensionAnswered,
   onStructureCheckAnswered,
+  onMissedReadingsChange,
 }: {
   sentence: Sentence;
   context: ReadingContext | undefined;
   check: ComprehensionCheck | undefined;
   structureCheck: StructureCheckTarget | undefined;
+  analysisChunks: AnalysisChunk[] | undefined;
   revealed: boolean;
   onReveal: () => void;
   history: MeaningChoiceRecord[];
@@ -2482,6 +2525,7 @@ function ReadingInContextCard({
     meaningChoice: MeaningChoiceRecord,
   ) => void;
   onStructureCheckAnswered: (typed: string, expected: string) => void;
+  onMissedReadingsChange: (surfaces: string[]) => void;
 }) {
   const before = context?.before ?? [];
   const after = context?.after ?? [];
@@ -2645,6 +2689,11 @@ function ReadingInContextCard({
         <>
           <div>{sentence.translation || '(no translation)'}</div>
           <VocabChips items={sentence.targetVocabulary} />
+          <ReadingHelpPanel
+            sentence={sentence}
+            chunks={analysisChunks}
+            onMissedChange={onMissedReadingsChange}
+          />
           {after.length ? (
             <div className="reading-context">
               {after.map((item) => (

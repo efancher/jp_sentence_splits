@@ -1481,6 +1481,13 @@ Activity types currently wired, grouped by subject/eligibility:
   `classifyReviewError` → `incorrect_meaning` on a miss) — self-rating still
   decides the schedule, same as every other "objectively graded" card in
   this app. No authored check → unchanged plain reveal-and-rate.
+  **Missed-reading tap + loop (2026-10-10)**: after reveal, `ReadingHelpPanel`
+  lists the sentence's words and analysis chunks; tapping one opens a drawer
+  with a native-clip loop (`SegmentLoopPlayer`) and, for words, "I missed this
+  reading" (`Review.missedReadings`, never a rating input). The sentence's
+  next review asks for the first flagged word's typed reading before reveal
+  (`pickMissedReadingTarget`, ahead of the structure check below); a review
+  that flags nothing clears it.
   **Structure check (2026-09-29)**: from the sentence's second
   `reading_in_context` review onward (`fsrsState.reps >= 1` — the first
   review stays exactly as above), if the sentence's saved structural

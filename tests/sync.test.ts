@@ -909,6 +909,16 @@ describe('sync mappers', () => {
     expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).meaningChoice).toBeUndefined();
   });
 
+  it('round-trips missed readings and leaves them null for other reviews', async () => {
+    const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
+    const base: Review = { id: 'review_mr', studyItemId: 'study_1', timestamp: '2026-10-10T00:00:00.000Z', rating: 'good' };
+    const remote = reviewToRemote({ ...base, missedReadings: ['行って'] }, 'user-1', 1);
+    expect(remote.missed_readings).toEqual(['行って']);
+    expect(remoteToReview(remote).missedReadings).toEqual(['行って']);
+    expect(reviewToRemote(base, 'user-1', 1).missed_readings).toBeNull();
+    expect(remoteToReview(reviewToRemote(base, 'user-1', 1)).missedReadings).toBeUndefined();
+  });
+
   it('round-trips comprehension-check and pitch-production evidence through remote shape', async () => {
     const { reviewToRemote, remoteToReview } = await import('../src/sync/mappers');
     const review: Review = {

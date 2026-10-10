@@ -443,6 +443,7 @@ export function reviewToRemote(review: Review, ownerId: string, version: number)
     pitch_production_mismatch_count: review.pitchProductionMismatchCount ?? null,
     presentation: review.presentation ?? null,
     meaning_choice: review.meaningChoice ?? null,
+    missed_readings: review.missedReadings ?? null,
     created_at: review.timestamp,
     updated_at: review.timestamp,
     deleted_at: null,
@@ -481,6 +482,7 @@ export function remoteToReview(row: Record<string, unknown>): Review {
       (row.pitch_production_mismatch_count as number | null) ?? undefined,
     presentation: (row.presentation as Review['presentation'] | null) ?? undefined,
     meaningChoice: (row.meaning_choice as Review['meaningChoice'] | null) ?? undefined,
+    missedReadings: (row.missed_readings as string[] | null) ?? undefined,
   };
 }
 

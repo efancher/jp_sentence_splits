@@ -374,6 +374,7 @@ export const reviewSchema = z.object({
     .optional(),
   pitchProductionMeasuredCount: z.number().int().nonnegative().optional(),
   pitchProductionMismatchCount: z.number().int().nonnegative().optional(),
+  missedReadings: z.array(z.string()).optional(),
   presentation: reviewPresentationSchema.optional(),
 });
 

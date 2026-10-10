@@ -5442,6 +5442,8 @@ export async function recordReview(input: {
   comprehensionCheckChosenIndex?: number;
   /** `reading_in_context` card only — the choices as displayed plus the picked one, see `Review.meaningChoice`. */
   meaningChoice?: MeaningChoiceRecord;
+  /** `reading_in_context` card only — see `Review.missedReadings`. */
+  missedReadings?: string[];
   /** `pitch_accent_production` card only — see `Review.pitchProductionMeasuredCount`/`pitchProductionMismatchCount`. */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
@@ -5489,6 +5491,7 @@ export async function recordReview(input: {
     comprehensionCheckCorrect: input.comprehensionCheckCorrect,
     comprehensionCheckChosenIndex: input.comprehensionCheckChosenIndex,
     meaningChoice: input.meaningChoice,
+    missedReadings: input.missedReadings?.length ? input.missedReadings : undefined,
     pitchProductionMeasuredCount: input.pitchProductionMeasuredCount,
     pitchProductionMismatchCount: input.pitchProductionMismatchCount,
     presentation: input.presentation,
@@ -5983,6 +5986,32 @@ export async function getMeaningChoiceRecords(
     const list = out.get(sentenceId);
     if (list) list.push(review.meaningChoice);
     else out.set(sentenceId, [review.meaningChoice]);
+  }
+  return out;
+}
+
+/**
+ * Surface forms the learner flagged "Missed reading" on each sentence's most
+ * recent `reading_in_context` review (empty/absent once a later review
+ * flags nothing). Read-only.
+ */
+export async function getLatestMissedReadings(
+  sentenceIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const db = getDb();
+  const wanted = new Set(sentenceIds);
+  const items = await db.studyItems
+    .where('activityType')
+    .equals('reading_in_context')
+    .filter((item) => item.subjectType === 'sentence' && wanted.has(item.subjectId))
+    .toArray();
+  const out = new Map<string, string[]>();
+  if (items.length === 0) return out;
+  const sentenceByItem = new Map(items.map((item) => [item.id, item.subjectId]));
+  const reviews = await db.reviews.where('studyItemId').anyOf([...sentenceByItem.keys()]).toArray();
+  reviews.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  for (const review of reviews) {
+    out.set(sentenceByItem.get(review.studyItemId)!, review.missedReadings ?? []);
   }
   return out;
 }

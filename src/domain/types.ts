@@ -1141,6 +1141,13 @@ export interface Review {
    */
   pitchProductionMeasuredCount?: number;
   pitchProductionMismatchCount?: number;
+  /**
+   * `reading_in_context` card only: surface forms (as they appear in the
+   * sentence) the learner tapped "Missed reading" on after reveal. Never
+   * touches the rating; the sentence's next review reads the latest list
+   * and asks for the first word's typed reading before reveal.
+   */
+  missedReadings?: string[];
   presentation?: ReviewPresentation;
 }
 
