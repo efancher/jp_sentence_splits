@@ -436,12 +436,17 @@ export function ReaderPage() {
             aria-label={loopSentence ? 'Loop on' : 'Loop off'} title={loopSentence ? 'Loop: on' : 'Loop: off'}
             onClick={toggleLoop}>🔁</button>
           <button type="button" className="icon-button" aria-pressed={barMenuOpen} aria-expanded={barMenuOpen}
-            aria-label="More playback options" title="Context, adjust clip"
+            aria-label="More playback options" title="Sentences of context"
             onClick={() => setBarMenuOpen((open) => !open)}>⋯</button>
           {contextBefore > 0 || contextAfter > 0 ? (
             <span className="muted" style={{ fontSize: '0.8em' }}>−{contextBefore} / +{contextAfter}</span>
           ) : null}
         </div>
+        {sourceUrl ? (
+          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} />
+          </div>
+        ) : null}
         {barMenuOpen ? (
           <div className="stack" style={{ gap: '0.4rem' }}>
             <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -458,7 +463,6 @@ export function ReaderPage() {
                 </select>
               </label>
             </div>
-            {sourceUrl ? <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} /> : <span className="muted">No source video to re-cut from.</span>}
           </div>
         ) : null}
       </div>
