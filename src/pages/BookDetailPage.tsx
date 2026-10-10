@@ -64,7 +64,7 @@ import {
 } from '../lib/alignmentBackfillApi';
 import { coveragePercent } from '../lib/bookCoverage';
 import { StageProgressBar } from '../components/StageProgressBar';
-import { countStages, type SentenceStageInput } from '../lib/sentenceStages';
+import { emptyStageCounts, sentenceStage, type StageCounts } from '../lib/sentenceStages';
 import { curatedVocabForSourceKey } from '../lib/curatedVocabulary';
 import { downloadText, formatWorksheetCollection } from '../lib/worksheet';
 import { downloadBlob } from '../lib/miningExport';
@@ -445,25 +445,34 @@ export function BookDetailPage() {
   }, [data, graduatedSentenceIds]);
 
   const stagesByChapter = useMemo(() => {
-    const groups = new Map<string, SentenceStageInput[]>();
-    const all: SentenceStageInput[] = [];
+    const itemsBySentence = new Map<string, NonNullable<typeof sentenceStudyItems>>();
+    for (const item of sentenceStudyItems ?? []) {
+      const list = itemsBySentence.get(item.subjectId) ?? [];
+      list.push(item);
+      itemsBySentence.set(item.subjectId, list);
+    }
+    const graduationDays = settings?.graduationMinScheduledDays ?? 180;
+    const book = { total: 0, counts: emptyStageCounts() };
+    const chapters = new Map<string, { total: number; counts: StageCounts }>();
     for (const row of data?.rows ?? []) {
-      const input: SentenceStageInput = {
-        membershipStatus: row.membership.status,
-        vocabConfirmed: row.analysis?.vocabularyReviewStatus === 'confirmed',
-        graduated: Boolean(row.sentence && graduatedSentenceIds.has(row.sentence.id)),
-      };
-      all.push(input);
+      const stage = sentenceStage(
+        itemsBySentence.get(row.membership.sentenceId) ?? [],
+        graduationDays,
+      );
       const key = row.membership.chapterId ?? UNASSIGNED_CHAPTER_KEY;
-      const list = groups.get(key) ?? [];
-      list.push(input);
-      groups.set(key, list);
+      const chapter = chapters.get(key) ?? { total: 0, counts: emptyStageCounts() };
+      chapters.set(key, chapter);
+      for (const target of [book, chapter]) {
+        target.total += 1;
+        target.counts[stage] += 1;
+      }
     }
     return {
-      book: countStages(all),
-      byChapter: (key: string) => countStages(groups.get(key) ?? []),
+      book,
+      byChapter: (key: string) =>
+        chapters.get(key) ?? { total: 0, counts: emptyStageCounts() },
     };
-  }, [data, graduatedSentenceIds]);
+  }, [data, sentenceStudyItems, settings]);
 
   const collapsedChapters = useMemo(
     () => new Set(data?.book?.collapsedChapterIds ?? []),

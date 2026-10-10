@@ -1,36 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { countStages, sentenceStage } from './sentenceStages';
+import type { FsrsState } from '../domain/types';
+import { sentenceStage } from './sentenceStages';
+
+function item(state: FsrsState['state'], scheduledDays = 0) {
+  return { fsrsState: { state, scheduledDays } as FsrsState };
+}
 
 describe('sentenceStage', () => {
-  it('prefers the furthest stage reached', () => {
-    expect(
-      sentenceStage({ membershipStatus: 'complete', vocabConfirmed: true, graduated: true }),
-    ).toBe('graduated');
-    expect(
-      sentenceStage({ membershipStatus: 'complete', vocabConfirmed: false, graduated: false }),
-    ).toBe('complete');
-    expect(
-      sentenceStage({ membershipStatus: 'needs_review', vocabConfirmed: true, graduated: false }),
-    ).toBe('studying');
-    expect(
-      sentenceStage({ membershipStatus: 'unstarted', vocabConfirmed: true, graduated: false }),
-    ).toBe('vocab_confirmed');
-    expect(
-      sentenceStage({ membershipStatus: 'unstarted', vocabConfirmed: false, graduated: false }),
-    ).toBe('new');
+  it('is new with no study items or only new ones', () => {
+    expect(sentenceStage([], 180)).toBe('new');
+    expect(sentenceStage([item('new')], 180)).toBe('new');
   });
-});
 
-describe('countStages', () => {
-  it('sums segments to the total', () => {
-    const { total, counts } = countStages([
-      { membershipStatus: 'unstarted', vocabConfirmed: false, graduated: false },
-      { membershipStatus: 'unstarted', vocabConfirmed: true, graduated: false },
-      { membershipStatus: 'in_progress', vocabConfirmed: true, graduated: false },
-      { membershipStatus: 'complete', vocabConfirmed: true, graduated: true },
-    ]);
-    expect(total).toBe(4);
-    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(4);
-    expect(counts.graduated).toBe(1);
+  it('maps a single item by state and interval', () => {
+    expect(sentenceStage([item('learning')], 180)).toBe('learning');
+    expect(sentenceStage([item('relearning', 30)], 180)).toBe('learning');
+    expect(sentenceStage([item('review', 5)], 180)).toBe('young');
+    expect(sentenceStage([item('review', 40)], 180)).toBe('mature');
+    expect(sentenceStage([item('review', 200)], 180)).toBe('graduated');
+  });
+
+  it('uses the weakest item', () => {
+    expect(sentenceStage([item('review', 200), item('review', 5)], 180)).toBe('young');
+    expect(sentenceStage([item('review', 200), item('new')], 180)).toBe('new');
+  });
+
+  it('never graduates when graduation is off', () => {
+    expect(sentenceStage([item('review', 400)], 0)).toBe('mature');
   });
 });
