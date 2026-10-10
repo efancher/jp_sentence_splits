@@ -1214,19 +1214,24 @@ export async function shouldApplyRemoteEvent(
   version: number,
   pending?: SyncQueueItem[],
 ): Promise<boolean> {
+  return (await classifyRemoteEvent(entity, recordId, op, version, pending)) === 'apply';
+}
+
+/** 'defer' = transient skip worth retrying later (local pending write / open
+ *  conflict); 'have' = already applied locally, nothing to retry. */
+async function classifyRemoteEvent(
+  entity: SyncEntity,
+  recordId: string,
+  op: string,
+  version: number,
+  pending?: SyncQueueItem[],
+): Promise<'apply' | 'defer' | 'have'> {
   const pendingItems = pending ?? (await listPendingMutations());
   const hasLocalPending = pendingItems.some(
     (p) => p.entity === entity && p.recordId === recordId,
   );
-  if (hasLocalPending) {
-    // Leave for push/conflict handling.
-    return false;
-  }
-
-  if (await hasOpenConflict(entity, recordId)) {
-    // Keep local data until the user resolves Keep local / Keep remote.
-    return false;
-  }
+  if (hasLocalPending) return 'defer';
+  if (await hasOpenConflict(entity, recordId)) return 'defer';
 
   const localMeta = await getRecordMeta(entity, recordId);
   if (localMeta && localMeta.version >= version && op !== 'delete') {
@@ -1234,10 +1239,9 @@ export async function shouldApplyRemoteEvent(
     // Stale record-meta (row dropped locally by a partial clear / failed
     // write, meta kept) otherwise makes every future event for it skip
     // forever — the permanent-missing-row bug this guards against.
-    if (await localRecordExists(entity, recordId)) return false;
+    if (await localRecordExists(entity, recordId)) return 'have';
   }
-
-  return true;
+  return 'apply';
 }
 
 /** Whether the Dexie row for a synced record is present locally. Mirrors
@@ -1376,11 +1380,9 @@ async function applyRemoteEventsBatch(
     const recordId = String(event.record_id);
     const op = String(event.op);
     const version = Number(event.version);
-    if (await shouldApplyRemoteEvent(entity, recordId, op, version, pending)) {
-      toFetch.push({ entity, recordId, version });
-    } else {
-      skipped.push(Number(event.id));
-    }
+    const verdict = await classifyRemoteEvent(entity, recordId, op, version, pending);
+    if (verdict === 'apply') toFetch.push({ entity, recordId, version });
+    else if (verdict === 'defer') skipped.push(Number(event.id));
   }
   if (!toFetch.length) return { skipped };
 
