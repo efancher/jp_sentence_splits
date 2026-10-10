@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { getDb } from '../db/database';
 import type { AnalysisChunk, Sentence } from '../domain/types';
+import { surfaceReadingFromInline } from '../lib/readingAnswer';
 
 import { SegmentLoopPlayer } from './SegmentLoopPlayer';
 
@@ -13,9 +14,9 @@ interface HelpTarget {
 }
 
 /**
- * Revealed-sentence helper on the `reading_in_context` card: tap a word or
- * analysis chunk to loop just that span of the native clip, and flag a
- * word "Missed reading" (reported up, recorded on the review, and asked
+ * Revealed-sentence helper on the `reading_in_context` card: tap an analysis
+ * chunk (falling back to the sentence's words when it has no saved analysis)
+ * to loop just that span of the native clip, and flag it "Missed reading" (reported up, recorded on the review, and asked
  * back as a typed reading on the sentence's next review). Never touches
  * the rating.
  */
@@ -35,24 +36,29 @@ export function ReadingHelpPanel({
   );
 
   const targets = useMemo<HelpTarget[]>(() => {
+    const seen = new Set<string>();
+    const out: HelpTarget[] = [];
+    for (const chunk of chunks ?? []) {
+      if (chunk.kind === 'zero_ga' || !chunk.japanese) continue;
+      if (seen.has(chunk.japanese) || !japanese.includes(chunk.japanese)) continue;
+      seen.add(chunk.japanese);
+      out.push({
+        surface: chunk.japanese,
+        reading: surfaceReadingFromInline(inlineReading, chunk.japanese) ?? undefined,
+        kind: 'chunk',
+      });
+    }
+    if (out.length > 0) return out;
     const words = vocabularySuggestions.some((s) => s.selectedByDefault)
       ? vocabularySuggestions.filter((s) => s.selectedByDefault)
       : vocabularySuggestions;
-    const seen = new Set<string>();
-    const out: HelpTarget[] = [];
     for (const word of words) {
       if (!word.surface || seen.has(word.surface) || !japanese.includes(word.surface)) continue;
       seen.add(word.surface);
       out.push({ surface: word.surface, reading: word.reading, kind: 'word' });
     }
-    for (const chunk of chunks ?? []) {
-      if (chunk.kind === 'zero_ga' || !chunk.japanese) continue;
-      if (seen.has(chunk.japanese) || !japanese.includes(chunk.japanese)) continue;
-      seen.add(chunk.japanese);
-      out.push({ surface: chunk.japanese, kind: 'chunk' });
-    }
     return out;
-  }, [vocabularySuggestions, chunks, japanese]);
+  }, [vocabularySuggestions, chunks, japanese, inlineReading]);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [missed, setMissed] = useState<string[]>([]);
@@ -69,7 +75,7 @@ export function ReadingHelpPanel({
   return (
     <div className="stack" style={{ gap: '0.45rem' }}>
       <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
-        Tap a word or chunk to {audio ? 'hear it again or ' : ''}mark a reading you missed.
+        Tap a chunk to {audio ? 'hear it again or ' : ''}mark a reading you missed.
       </p>
       <div className="row">
         {targets.map((target) => (
@@ -91,7 +97,7 @@ export function ReadingHelpPanel({
             {active.surface}
           </div>
           {active.reading ? <div className="muted">{active.reading}</div> : null}
-          {active.kind === 'word' ? (
+          {active.reading ? (
             <button
               type="button"
               aria-pressed={isMissed(active.surface)}

@@ -1482,8 +1482,9 @@ Activity types currently wired, grouped by subject/eligibility:
   decides the schedule, same as every other "objectively graded" card in
   this app. No authored check → unchanged plain reveal-and-rate.
   **Missed-reading tap + loop (2026-10-10)**: after reveal, `ReadingHelpPanel`
-  lists the sentence's words and analysis chunks; tapping one opens a drawer
-  with a native-clip loop (`SegmentLoopPlayer`) and, for words, "I missed this
+  lists the sentence's analysis chunks (words only as a fallback when there is
+  no saved analysis); tapping one opens a drawer with a native-clip loop
+  (`SegmentLoopPlayer`) and "I missed this
   reading" (`Review.missedReadings`, never a rating input). The sentence's
   next review asks for the first flagged word's typed reading before reveal
   (`pickMissedReadingTarget`, ahead of the structure check below); a review
