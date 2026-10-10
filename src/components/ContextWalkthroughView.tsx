@@ -1,25 +1,58 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { getEpisodePreparationContext, saveEpisodePackReply } from '../db/repository';
 import type { ContextWalkthroughStep, WalkthroughCheck, WalkthroughParticipant, WalkthroughRelation } from '../domain/types';
 import { highlightSegments } from '../lib/contextWalkthrough';
+import { parseInlineReadings } from '../lib/parseInlineReadings';
 import { buildEpisodePackPrompts } from '../lib/episodePack';
 
 /** The whole sentence, always visible, with the explained span highlighted and the span it connects to underlined. */
+/** Renders japanese[from, from+text.length) with ruby where inlineReading's base lies wholly inside the slice. */
+function rubySlice(japanese: string, inlineReading: string | undefined, from: number, text: string): ReactNode {
+  if (!inlineReading) return text;
+  const segments = parseInlineReadings(inlineReading);
+  if (segments.map((segment) => segment.base).join('') !== japanese) return text;
+  const to = from + text.length;
+  const out: ReactNode[] = [];
+  let pos = 0;
+  segments.forEach((segment, index) => {
+    const start = pos;
+    const end = pos + segment.base.length;
+    pos = end;
+    const a = Math.max(start, from);
+    const b = Math.min(end, to);
+    if (a >= b) return;
+    const piece = japanese.slice(a, b);
+    if (segment.kind === 'ruby' && segment.reading && a === start && b === end) {
+      out.push(<ruby key={index}>{piece}<rp>(</rp><rt>{segment.reading}</rt><rp>)</rp></ruby>);
+    } else {
+      out.push(piece);
+    }
+  });
+  return out;
+}
+
 export function HighlightedSentence({
   japanese,
   main,
   connect,
+  inlineReading,
 }: {
   japanese: string;
   main?: { start: number; end: number };
   connect?: { start: number; end: number };
+  /** When set, furigana is drawn from this "漢字[かんじ]" string. */
+  inlineReading?: string;
 }) {
+  let offset = 0;
   return (
     <div className="jp jp-lg" aria-label="Sentence with the explained part highlighted">
-      {highlightSegments(japanese, main, connect).map((segment, index) =>
-        segment.kind === 'plain' ? (
-          <span key={index}>{segment.text}</span>
+      {highlightSegments(japanese, main, connect).map((segment, index) => {
+        const from = offset;
+        offset += segment.text.length;
+        const content = rubySlice(japanese, inlineReading, from, segment.text);
+        return segment.kind === 'plain' ? (
+          <span key={index}>{content}</span>
         ) : (
           <mark
             key={index}
@@ -32,10 +65,10 @@ export function HighlightedSentence({
               borderRadius: '0.2em',
             }}
           >
-            {segment.text}
+            {content}
           </mark>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

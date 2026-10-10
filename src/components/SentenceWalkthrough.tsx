@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { FuriganaText } from '../lib/furigana';
 import { glossesFromWords } from '../lib/chunkGlosses';
 import { registerReportContext } from '../lib/reportContext';
 
@@ -210,6 +211,7 @@ export function SentenceWalkthrough({
   const [tryFirst, setTryFirst] = useState(() =>
     !skipCheck && onGlossDecision != null && glossRecords != null && (tilePuzzle != null || planGlossDecisions(walkthroughChunks(sentence, savedChunks, structureDraft).chunks, glossRecords, new Date(), sentence.id, particleChecks).length > 0));
   const [showTranslation, setShowTranslation] = useState(false);
+  const [showFurigana, setShowFurigana] = useState(false);
   const [stickyEnglish, setStickyEnglish] = useState(false);
   const wordGlosses = useMemo(
     () => glossesFromWords(chunks, compareAids?.get(sentence.id)?.words ?? []),
@@ -409,10 +411,16 @@ export function SentenceWalkthrough({
       ) : null}
       {tryFirst ? null : contextual ? (
         <>
+          {sentence.inlineReading ? (
+            <button type="button" aria-pressed={showFurigana} onClick={() => setShowFurigana((value) => !value)} style={{ alignSelf: 'flex-start' }}>
+              {showFurigana ? 'Hide furigana' : 'Show furigana'}
+            </button>
+          ) : null}
           <HighlightedSentence
             japanese={sentence.japanese}
             main={contextStep}
             connect={contextStep?.connects}
+            inlineReading={showFurigana ? sentence.inlineReading : undefined}
           />
           <details>
             <summary className="muted">Chunk view (generic roles)</summary>
@@ -431,7 +439,7 @@ export function SentenceWalkthrough({
       />}
       {tryFirst ? <button type="button" onClick={() => setTryFirst(false)}>Skip the check, just walk through</button> : done ? (
         <div className="stack" style={{ gap: '0.35rem' }}>
-          {contextual ? null : <div className="jp jp-lg">{sentence.japanese}</div>}
+          {contextual ? null : showFurigana && sentence.inlineReading ? <FuriganaText className="jp jp-lg" text={sentence.inlineReading} /> : <div className="jp jp-lg">{sentence.japanese}</div>}
           {contextual && gist !== 'asking' ? (
             <div className="stack" style={{ gap: '0.2rem' }} aria-label="Putting it together">
               <strong>Putting it together</strong>
