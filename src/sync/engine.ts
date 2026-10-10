@@ -1123,6 +1123,7 @@ export async function repairMissingBookMemberships(force = false): Promise<numbe
 async function pullChanges(): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
+  const t0 = Date.now();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -1131,6 +1132,7 @@ async function pullChanges(): Promise<void> {
 
   const meta = await ensureSyncMeta();
   const deferred = new Set<number>(meta.deferredPullEventIds ?? []);
+  syncLog('debug', `Pull start: session+meta ${Date.now() - t0}ms, ${deferred.size} deferred, cursor ${meta.lastPullEventId}`, 'PULL_TIMING');
 
   // 1. Re-attempt events an earlier pull declined for a transient reason
   //    (local pending write / open conflict / meta that looked newer). The
@@ -1140,6 +1142,7 @@ async function pullChanges(): Promise<void> {
     const ids = [...deferred].sort((a, b) => a - b);
     for (let i = 0; i < ids.length; i += DEFERRED_FETCH_CHUNK) {
       const chunk = ids.slice(i, i + DEFERRED_FETCH_CHUNK);
+      const tChunk = Date.now();
       const { data: events, error } = await supabase
         .from('sync_events')
         .select('*')
@@ -1147,6 +1150,7 @@ async function pullChanges(): Promise<void> {
         .in('id', chunk)
         .order('id', { ascending: true });
       if (error) throw new Error(error.message);
+      const tFetched = Date.now() - tChunk;
       const seen = new Set((events ?? []).map((event) => Number(event.id)));
       // An id we can no longer see shouldn't happen (events are never
       // deleted) — but don't spin on it forever if it does.
@@ -1155,6 +1159,7 @@ async function pullChanges(): Promise<void> {
         const { skipped } = await applyRemoteEventsBatch(events);
         for (const id of seen) if (!skipped.includes(id)) deferred.delete(id);
       }
+      syncLog('debug', `Deferred chunk ${i / DEFERRED_FETCH_CHUNK + 1}: fetch ${tFetched}ms, total ${Date.now() - tChunk}ms`, 'PULL_TIMING');
     }
     await updateSyncMeta({ deferredPullEventIds: [...deferred] });
   }
@@ -1163,6 +1168,7 @@ async function pullChanges(): Promise<void> {
   let cursor = meta.lastPullEventId;
   let keepGoing = true;
   while (keepGoing) {
+    const tPage = Date.now();
     const { data: events, error } = await supabase
       .from('sync_events')
       .select('*')
@@ -1171,9 +1177,14 @@ async function pullChanges(): Promise<void> {
       .order('id', { ascending: true })
       .limit(PULL_PAGE_SIZE);
     if (error) throw new Error(error.message);
-    if (!events?.length) break;
+    const tQuery = Date.now() - tPage;
+    if (!events?.length) {
+      syncLog('debug', `Pull page query: ${tQuery}ms, empty`, 'PULL_TIMING');
+      break;
+    }
 
     const { skipped } = await applyRemoteEventsBatch(events);
+    syncLog('debug', `Pull page: ${events.length} events, query ${tQuery}ms, apply ${Date.now() - tPage - tQuery}ms`, 'PULL_TIMING');
     notePullPage(events.length, skipped.length);
     for (const id of skipped) deferred.add(id);
     cursor = Number(events[events.length - 1]!.id);
