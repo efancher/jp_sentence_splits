@@ -2032,7 +2032,9 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   `AttemptPitchGrid` shows attempts × phrases with the native H/L as header and
   mismatches in red, plus a per-phrase overlay of chosen attempts' contour
   shapes on the native's (`lib/attemptPitchGrid.ts`). Older attempts appear
-  once re-analysed.
+  once re-analysed. The attempt list shows a pitch line from the same snapshot
+  (phrases matching, change vs the previous attempt, mean accent-drop error in
+  morae) in place of the severity trend label.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point

@@ -70,7 +70,13 @@ Last updated: 2026-10-10.
   phrase, the native's per-mora height line (thick) with checked attempts drawn
   over it (default first + latest); mora-indexed so timing is already aligned,
   each phrase scaled lowest→highest so shapes compare, not absolute pitch.
-  Next: real metrics (match %, fall-timing error) replacing the severity trend.
+  Per-attempt pitch line (same day): attempts with a snapshot now show "Pitch:
+  3/4 phrases match the native (+50% vs last) · drop 1.0 morae off" in the
+  attempt list instead of the severity improving/worse label (still the
+  fallback for attempts without a snapshot; Timing label unchanged). Fall
+  error = mean |your drop mora − native drop mora| over phrases where both
+  fall (`attemptPitchMetrics`). Not built: speaking-rate ratio, contour
+  correlation, A/B playback of two chosen attempts.
   **Manual test:** open /shadow on a sentence, Analyze two or more attempts
   (re-open Analyze on older ones); the grid appears above the attempt list.
 - **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**

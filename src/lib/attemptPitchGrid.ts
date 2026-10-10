@@ -88,3 +88,46 @@ export function levelsToRuns(levels: readonly (number | null)[], width: number, 
   if (current.length > 0) runs.push(current.join(' '));
   return runs;
 }
+
+/** Index of the last high mora when the shape falls afterwards (the accent drop); null for flat/no-fall shapes. */
+export function fallIndex(shape: string): number | null {
+  const lastHigh = shape.lastIndexOf('h');
+  return lastHigh >= 0 && lastHigh < shape.length - 1 ? lastHigh : null;
+}
+
+export interface AttemptPitchMetrics {
+  matched: number;
+  judged: number;
+  /** Mean |your fall position − native fall position| in morae over phrases where both fall; null if none. */
+  fallErrorMorae: number | null;
+}
+
+export function attemptPitchMetrics(phrases: readonly PhraseSnapshotRow[]): AttemptPitchMetrics {
+  const judged = phrases.filter((p) => p.status !== 'weak-native' && p.status !== 'no-learner');
+  const errors: number[] = [];
+  for (const phrase of phrases) {
+    if (!phrase.learner) continue;
+    const native = fallIndex(phrase.native);
+    const learner = fallIndex(phrase.learner);
+    if (native !== null && learner !== null) errors.push(Math.abs(learner - native));
+  }
+  return {
+    matched: judged.filter((p) => p.status === 'match').length,
+    judged: judged.length,
+    fallErrorMorae: errors.length > 0 ? errors.reduce((a, b) => a + b, 0) / errors.length : null,
+  };
+}
+
+/** One plain line, with the change against the previous snapshotted attempt when there is one. */
+export function describePitchMetrics(current: AttemptPitchMetrics, previous?: AttemptPitchMetrics): string {
+  if (current.judged === 0) return 'Pitch: nothing measurable';
+  let line = `Pitch: ${current.matched}/${current.judged} phrases match the native`;
+  if (previous && previous.judged > 0) {
+    const delta = Math.round((current.matched / current.judged - previous.matched / previous.judged) * 100);
+    line += delta === 0 ? ' (same as last)' : ` (${delta > 0 ? '+' : ''}${delta}% vs last)`;
+  }
+  if (current.fallErrorMorae !== null) {
+    line += ` · drop ${current.fallErrorMorae === 0 ? 'on the native’s mora' : `${current.fallErrorMorae.toFixed(1)} morae off`}`;
+  }
+  return line;
+}

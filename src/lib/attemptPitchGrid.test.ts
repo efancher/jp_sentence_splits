@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhraseSnapshotRow } from '../domain/types';
 
-import { buildPitchGrid, levelsToRuns } from './attemptPitchGrid';
+import { attemptPitchMetrics, buildPitchGrid, describePitchMetrics, fallIndex, levelsToRuns } from './attemptPitchGrid';
 
 const row = (text: string, status: PhraseSnapshotRow['status']): PhraseSnapshotRow => ({
   text,
@@ -45,5 +45,38 @@ describe('levelsToRuns', () => {
 
   it('centres a single mora', () => {
     expect(levelsToRuns([1], 100, 40, 0)).toEqual(['50.0,0.0']);
+  });
+});
+
+describe('pitch metrics', () => {
+  const p = (native: string, learner: string | null, status: PhraseSnapshotRow['status']): PhraseSnapshotRow => ({
+    ...row('x', status),
+    native,
+    learner,
+  });
+
+  it('finds the drop position', () => {
+    expect(fallIndex('lhhl')).toBe(2);
+    expect(fallIndex('lhhh')).toBeNull();
+    expect(fallIndex('hhll')).toBe(1);
+  });
+
+  it('counts matches and averages fall error over phrases that both fall', () => {
+    const m = attemptPitchMetrics([
+      p('lhll', 'lhll', 'match'),
+      p('lhhl', 'lhll', 'different'),
+      p('lhhh', 'lhhh', 'match'),
+      p('lhl', null, 'no-learner'),
+      p('lh', 'll', 'weak-native'),
+    ]);
+    expect(m).toEqual({ matched: 2, judged: 3, fallErrorMorae: 0.5 });
+  });
+
+  it('describes change against the previous attempt', () => {
+    const line = describePitchMetrics(
+      { matched: 3, judged: 4, fallErrorMorae: 1 },
+      { matched: 1, judged: 4, fallErrorMorae: null },
+    );
+    expect(line).toBe('Pitch: 3/4 phrases match the native (+50% vs last) · drop 1.0 morae off');
   });
 });

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
+import { attemptPitchMetrics, describePitchMetrics, type AttemptPitchMetrics } from '../lib/attemptPitchGrid';
 import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { SpeedControl } from '../components/SpeedControl';
@@ -274,6 +275,14 @@ export function ShadowPage() {
   const historyByAttemptId = new Map(
     buildHistoryDisplay(analysisSummaries).map((entry) => [entry.summary.id, entry]),
   );
+  const pitchLineByAttemptId = new Map<string, string>();
+  let previousMetrics: AttemptPitchMetrics | undefined;
+  for (const summary of [...analysisSummaries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    if (!summary.phraseSnapshot) continue;
+    const metrics = attemptPitchMetrics(summary.phraseSnapshot);
+    pitchLineByAttemptId.set(summary.id, describePitchMetrics(metrics, previousMetrics));
+    if (metrics.judged > 0) previousMetrics = metrics;
+  }
 
   async function handleSave() {
     if (!pendingAttempt) return;
@@ -835,8 +844,10 @@ export function ShadowPage() {
                       {attempt.notes ? <p className="muted">{attempt.notes}</p> : null}
                       {historyByAttemptId.has(attempt.id) ? (
                         <div className="muted">
-                          Timing: {historyByAttemptId.get(attempt.id)!.timingLabel} · Pitch:{' '}
-                          {historyByAttemptId.get(attempt.id)!.pitchLabel}
+                          Timing: {historyByAttemptId.get(attempt.id)!.timingLabel}
+                          {pitchLineByAttemptId.has(attempt.id)
+                            ? ` · ${pitchLineByAttemptId.get(attempt.id)}`
+                            : ` · Pitch: ${historyByAttemptId.get(attempt.id)!.pitchLabel}`}
                         </div>
                       ) : null}
                     </div>
