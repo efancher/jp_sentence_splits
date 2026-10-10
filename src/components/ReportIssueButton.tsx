@@ -4,44 +4,30 @@ import { matchPath, useLocation } from 'react-router-dom';
 import { APP_VERSION } from '../appConfig';
 import { getDb } from '../db/database';
 import { reportSyncIssue } from '../db/repository';
+import { summarizeSentenceAudio } from '../lib/cardReportDiagnostics';
+import { getRecentErrors, installErrorCapture } from '../lib/recentErrors';
 import { collectReportContext } from '../lib/reportContext';
 
-const MAX_ERRORS = 10;
 const MAX_PAGE_TEXT = 4000;
-const recentErrors: { at: string; message: string }[] = [];
-let errorCaptureInstalled = false;
-
-function installErrorCapture() {
-  if (errorCaptureInstalled || typeof window === 'undefined') return;
-  errorCaptureInstalled = true;
-  const push = (message: string) => {
-    recentErrors.push({ at: new Date().toISOString(), message: message.slice(0, 300) });
-    if (recentErrors.length > MAX_ERRORS) recentErrors.shift();
-  };
-  window.addEventListener('error', (event) => push(event.message));
-  window.addEventListener('unhandledrejection', (event) =>
-    push(`unhandledrejection: ${String(event.reason)}`),
-  );
-}
-
-export function getRecentErrors() {
-  return [...recentErrors];
-}
 
 const SENTENCE_ROUTES = [
   '/books/:bookId/analyze/:sentenceId',
   '/books/:bookId/vocabulary/:sentenceId',
   '/books/:bookId/practice/:sentenceId',
+  '/books/:bookId/learn/:sentenceId',
+  '/books/:bookId/shadow/:sentenceId',
   '/sentences/:sentenceId/deep-dive',
 ];
 
 async function buildPageSnapshot(pathname: string, search: string, selection: string): Promise<string> {
   let sentence: { id: string; japanese: string; translation: string } | undefined;
+  let sentenceAudio: unknown;
   for (const pattern of SENTENCE_ROUTES) {
     const sentenceId = matchPath(pattern, pathname)?.params.sentenceId;
     if (!sentenceId) continue;
     const row = await getDb().sentences.get(sentenceId);
     if (row) sentence = { id: row.id, japanese: row.japanese, translation: row.translation };
+    if (row) sentenceAudio = await summarizeSentenceAudio(row.id);
     break;
   }
   const main = document.querySelector('main');
@@ -54,11 +40,12 @@ async function buildPageSnapshot(pathname: string, search: string, selection: st
       route: pathname + search,
       title: main?.querySelector('h1, h2')?.textContent?.trim() ?? null,
       sentence,
+      sentenceAudio,
       selectedText: selection || undefined,
       pageText: pageText.length > MAX_PAGE_TEXT ? `${pageText.slice(0, MAX_PAGE_TEXT)}…` : pageText,
       viewport: `${window.innerWidth}x${window.innerHeight}`,
       userAgent: navigator.userAgent,
-      recentErrors,
+      recentErrors: getRecentErrors(),
       context: collectReportContext(),
       capturedAt: new Date().toISOString(),
     },

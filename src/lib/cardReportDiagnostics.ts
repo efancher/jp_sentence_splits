@@ -1,9 +1,10 @@
 import { APP_VERSION } from '../appConfig';
-import { getRecentErrors } from '../components/ReportIssueButton';
 import { getDb } from '../db/database';
 import type { SentenceAudio, StudyItem } from '../domain/types';
 
+import { getRecentErrors } from './recentErrors';
 import { collectReportContext } from './reportContext';
+import { decodeAudioBuffer } from './waveform';
 
 const METADATA_TIMEOUT_MS = 1500;
 
@@ -26,6 +27,15 @@ function probeBlobDuration(blob: Blob): Promise<number | string> {
   });
 }
 
+/** Decoded length via the same decodeAudioData path the Adjust editor uses — its end handle can't go past this. */
+async function probeDecodedDuration(blob: Blob): Promise<number | string> {
+  try {
+    return Math.round((await decodeAudioBuffer(blob)).duration * 1000);
+  } catch (error) {
+    return `error:${error instanceof Error ? error.name : String(error)}`;
+  }
+}
+
 async function summarizeAudio(audio: SentenceAudio) {
   const blobSize = audio.blob?.size ?? 0;
   return {
@@ -35,6 +45,7 @@ async function summarizeAudio(audio: SentenceAudio) {
     blobSizeBytes: blobSize,
     storedDurationMs: audio.durationMs,
     probedBlobDurationMs: blobSize > 0 ? await probeBlobDuration(audio.blob) : 'no-blob',
+    decodedDurationMs: blobSize > 0 ? await probeDecodedDuration(audio.blob) : 'no-blob',
     sourceStartMs: audio.startMs,
     sourceEndMs: audio.endMs,
     trimStartMs: audio.trimStartMs ?? null,
@@ -44,9 +55,13 @@ async function summarizeAudio(audio: SentenceAudio) {
   };
 }
 
+export async function summarizeSentenceAudio(sentenceId: string) {
+  const rows = await getDb().sentenceAudio.where('sentenceId').equals(sentenceId).toArray();
+  return Promise.all(rows.map(summarizeAudio));
+}
+
 /** JSON snapshot attached to a card issue report so audio/playback complaints can be triaged without the reporter's device. */
 export async function buildCardReportDiagnostics(studyItem: StudyItem, sentenceId: string): Promise<string> {
-  const audioRows = await getDb().sentenceAudio.where('sentenceId').equals(sentenceId).toArray();
   return JSON.stringify(
     {
       kind: 'card_report',
@@ -59,7 +74,7 @@ export async function buildCardReportDiagnostics(studyItem: StudyItem, sentenceI
         activityType: studyItem.activityType,
       },
       sentenceId,
-      sentenceAudio: await Promise.all(audioRows.map(summarizeAudio)),
+      sentenceAudio: await summarizeSentenceAudio(sentenceId),
       online: navigator.onLine,
       viewport: `${window.innerWidth}x${window.innerHeight}`,
       userAgent: navigator.userAgent,
