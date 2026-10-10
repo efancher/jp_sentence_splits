@@ -1283,6 +1283,8 @@ export interface CardIssueReport {
   sentenceId?: string;
   activityType: StudyActivityType;
   note: string;
+  /** JSON snapshot of device state at report time (audio blob vs. stored duration, trim, recent errors…). */
+  diagnostics?: string;
   status: CardIssueStatus;
   createdAt: string;
   updatedAt: string;

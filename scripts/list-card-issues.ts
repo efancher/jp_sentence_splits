@@ -16,7 +16,7 @@ async function main() {
 
   const { data: reports, error } = await supabase
     .from('card_issue_reports')
-    .select('id, study_item_id, sentence_id, activity_type, note, created_at')
+    .select('id, study_item_id, sentence_id, activity_type, note, diagnostics, created_at')
     .eq('owner_id', user.id)
     .eq('status', 'open')
     .is('deleted_at', null)
@@ -55,7 +55,9 @@ async function main() {
       : '(no sentence recorded)';
     console.log(`- [${report.id}] (${report.activity_type}) ${sentence}`);
     console.log(`  ${report.note}`);
-    console.log(`  reported ${report.created_at} · study_item ${report.study_item_id}\n`);
+    console.log(`  reported ${report.created_at} · study_item ${report.study_item_id}`);
+    if (report.diagnostics) console.log(`  diagnostics: ${report.diagnostics}`);
+    console.log('');
   }
 }
 

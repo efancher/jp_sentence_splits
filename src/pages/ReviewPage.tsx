@@ -21,6 +21,7 @@ import { SentencePitchAccentText } from '../components/SentencePitchAccentText';
 import { SpeedControl } from '../components/SpeedControl';
 import { ReadingHelpPanel } from '../components/ReadingHelpPanel';
 import { VocabChips } from '../components/VocabChips';
+import { buildCardReportDiagnostics } from '../lib/cardReportDiagnostics';
 import { FuriganaText } from '../lib/furigana';
 import { parseInlineReadings } from '../lib/parseInlineReadings';
 import {
@@ -1994,6 +1995,7 @@ export function ReviewPage() {
         sentenceId: current.sentence.id,
         activityType: current.studyItem.activityType,
         note: issueNote.trim(),
+        diagnostics: await buildCardReportDiagnostics(current.studyItem, current.sentence.id),
       });
       setReportingIssue(false);
       setIssueNote('');

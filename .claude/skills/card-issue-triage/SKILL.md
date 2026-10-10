@@ -20,6 +20,12 @@ npm run issues:list
 Runs `scripts/list-card-issues.ts` (read-only). Prints each open report's id,
 activity type, sentence text, note, and the `study_item_id` it's attached to.
 
+Since 2026-10-10 each report also prints a `diagnostics` JSON snapshot taken on
+the reporting device: for audio complaints compare `sentenceAudio[].probedBlobDurationMs`
+and `blobSizeBytes` against `storedDurationMs` (a shorter local copy than the
+cloud row means a partial download), and check `trimStartMs`/`trimEndMs`.
+Older reports have none.
+
 ## 2. Investigate each report's actual data
 
 Don't take the reporter's note at face value — check the underlying row. The

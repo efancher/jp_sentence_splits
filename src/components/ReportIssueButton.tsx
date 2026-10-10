@@ -24,6 +24,10 @@ function installErrorCapture() {
   );
 }
 
+export function getRecentErrors() {
+  return [...recentErrors];
+}
+
 const SENTENCE_ROUTES = [
   '/books/:bookId/analyze/:sentenceId',
   '/books/:bookId/vocabulary/:sentenceId',

@@ -221,6 +221,12 @@ export function CardIssuesPage() {
                   {report.activityType} · {new Date(report.createdAt).toLocaleString()}
                 </div>
                 <div>{report.note}</div>
+                {report.diagnostics ? (
+                  <details>
+                    <summary className="muted">Captured diagnostics</summary>
+                    <pre className="conflict-pre">{report.diagnostics}</pre>
+                  </details>
+                ) : null}
                 <div
                   className="row"
                   style={{ gap: '0.75rem', flexWrap: 'wrap' }}

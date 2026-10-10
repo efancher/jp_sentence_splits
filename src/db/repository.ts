@@ -8194,6 +8194,7 @@ export async function reportCardIssue(input: {
   sentenceId?: string;
   activityType: StudyActivityType;
   note: string;
+  diagnostics?: string;
 }): Promise<CardIssueReport> {
   const db = getDb();
   const timestamp = nowIso();
@@ -8203,6 +8204,7 @@ export async function reportCardIssue(input: {
     sentenceId: input.sentenceId,
     activityType: input.activityType,
     note: input.note,
+    diagnostics: input.diagnostics,
     status: 'open',
     createdAt: timestamp,
     updatedAt: timestamp,
