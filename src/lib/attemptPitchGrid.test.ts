@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PhraseSnapshotRow } from '../domain/types';
 
-import { buildPitchGrid } from './attemptPitchGrid';
+import { buildPitchGrid, levelsToRuns } from './attemptPitchGrid';
 
 const row = (text: string, status: PhraseSnapshotRow['status']): PhraseSnapshotRow => ({
   text,
@@ -34,5 +34,16 @@ describe('buildPitchGrid', () => {
   it('excludes weak-native phrases from the judged count', () => {
     const grid = buildPitchGrid([{ id: 'a', createdAt: '1', phrases: [row('ab', 'weak-native'), row('cd', 'match')] }])!;
     expect(grid.rows[0]).toMatchObject({ matched: 1, judged: 1 });
+  });
+});
+
+describe('levelsToRuns', () => {
+  it('splits runs at unvoiced morae and maps high levels upward', () => {
+    const runs = levelsToRuns([0, 1, null, 0.5], 100, 40, 0);
+    expect(runs).toEqual(['0.0,40.0 33.3,0.0', '100.0,20.0']);
+  });
+
+  it('centres a single mora', () => {
+    expect(levelsToRuns([1], 100, 40, 0)).toEqual(['50.0,0.0']);
   });
 });

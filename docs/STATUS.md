@@ -66,8 +66,11 @@ Last updated: 2026-10-10.
   columns are phrases with the native H/L as header, rows are attempts
   oldest-first, red = differs from native, plus a matched/judged count. Older
   attempts appear once re-analysed. Logic + tests: `lib/attemptPitchGrid.ts`.
-  Next: contour overlay of chosen attempts on the native F0 (uses the stored
-  levels or a downsampled contour), then real metrics replacing severity trend.
+  Same panel also has an "Overlay on the native" view (added same day): per
+  phrase, the native's per-mora height line (thick) with checked attempts drawn
+  over it (default first + latest); mora-indexed so timing is already aligned,
+  each phrase scaled lowest→highest so shapes compare, not absolute pitch.
+  Next: real metrics (match %, fall-timing error) replacing the severity trend.
   **Manual test:** open /shadow on a sentence, Analyze two or more attempts
   (re-open Analyze on older ones); the grid appears above the attempt list.
 - **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**

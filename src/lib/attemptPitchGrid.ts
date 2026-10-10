@@ -66,3 +66,25 @@ export function buildPitchGrid(attempts: readonly PitchGridAttempt[]): PitchGrid
   });
   return { columns, rows };
 }
+
+/**
+ * Polyline point strings for a phrase's per-mora levels (0..1, high = up), one per run of voiced
+ * morae — an unvoiced mora breaks the line rather than being interpolated across. A lone voiced
+ * mora yields a one-point run (drawn as a dot).
+ */
+export function levelsToRuns(levels: readonly (number | null)[], width: number, height: number, pad = 4): string[] {
+  const runs: string[] = [];
+  let current: string[] = [];
+  const x = (i: number) => (levels.length <= 1 ? width / 2 : pad + (i * (width - 2 * pad)) / (levels.length - 1));
+  const y = (level: number) => pad + (1 - level) * (height - 2 * pad);
+  levels.forEach((level, i) => {
+    if (level === null) {
+      if (current.length > 0) runs.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(`${x(i).toFixed(1)},${y(level).toFixed(1)}`);
+    }
+  });
+  if (current.length > 0) runs.push(current.join(' '));
+  return runs;
+}

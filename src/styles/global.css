@@ -1555,3 +1555,15 @@ button.sync-retry {
 .apg-mora[data-c='h'] { color: var(--accent); }
 .apg-mora[data-c='l'] { color: var(--text-muted); }
 .apg-mora[data-diff] { color: var(--danger); font-weight: 800; }
+.apg-pick { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+.apg-swatch { width: 0.8rem; height: 0.25rem; border-radius: 2px; background: var(--border); }
+.apg-fig { margin: 0; text-align: center; }
+.apg-fig figcaption { font-size: 0.8rem; }
+.apg-fig svg { border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 6px; }
+.apg-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.apg-line-native { stroke: var(--text-muted); stroke-width: 4; opacity: 0.55; }
+.apg-line-attempt { stroke-width: 1.8; }
+.apg-line-attempt[data-rank='0'], .apg-swatch[data-rank='0'] { stroke: #e0b04a; background: #e0b04a; }
+.apg-line-attempt[data-rank='1'], .apg-swatch[data-rank='1'] { stroke: var(--accent); background: var(--accent); }
+.apg-line-attempt[data-rank='2'], .apg-swatch[data-rank='2'] { stroke: #8fb8de; background: #8fb8de; }
+.apg-line-attempt[data-rank='3'], .apg-swatch[data-rank='3'] { stroke: var(--danger); background: var(--danger); }
