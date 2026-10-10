@@ -141,6 +141,7 @@ export function buildWordTimingObservations({
         confidence: 'medium',
         severity: Math.min(1, Math.abs(ratio - 1)),
         segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
+        timing: { pairIndex, refMs: refDuration * 1000, learnerMs: learnerDuration * 1000 },
         message:
           ratio > 1
             ? `You were slower than the reference during 「${displayWordText(refWord.text)}」.`
@@ -183,6 +184,12 @@ export function buildWordTimingObservations({
             // differently even though both are equally notable.
             severity: Math.min(1, Math.abs(Math.log2(phoneRatio)) / 2),
             segment: { startMs: refWord.start * 1000, endMs: refWord.end * 1000 },
+            timing: {
+              pairIndex,
+              refMs: refPhoneDuration * 1000,
+              learnerMs: learnerPhoneDuration * 1000,
+              phoneKind: kind,
+            },
             message:
               kind === 'consonant'
                 ? `Your 「っ」 in 「${displayWordText(refWord.text)}」 is ${degree} than the reference.`
@@ -195,4 +202,55 @@ export function buildWordTimingObservations({
   });
 
   return observations;
+}
+
+export interface TimingChartPhone {
+  /** 「っ」 for a held consonant, 「ー」 for a long vowel. */
+  label: string;
+  refMs: number;
+  learnerMs: number;
+  confidence: TimingObservation['confidence'];
+}
+
+export interface TimingChartRow {
+  text: string;
+  refMs: number;
+  learnerMs: number;
+  /** Set when the word's overall duration was called out (slower/faster). */
+  flagged: boolean;
+  phones: TimingChartPhone[];
+}
+
+/**
+ * Every paired word with both durations — flagged or not, so the chart shows where you were
+ * fine as well as where you were off — plus the held-consonant / long-vowel calls attached to
+ * the word they belong to. Pairs and calls come from `buildWordTimingObservations`, so the chart
+ * can never disagree with the text.
+ */
+export function buildTimingChartRows({
+  reference,
+  learner,
+  observations,
+}: {
+  reference: AlignmentResult;
+  learner: AlignmentResult;
+  observations: readonly TimingObservation[];
+}): TimingChartRow[] {
+  return pairWords(reference.words, learner.words).map(([refWord, learnerWord], pairIndex) => {
+    const mine = observations.filter((o) => o.timing?.pairIndex === pairIndex);
+    return {
+      text: displayWordText(refWord.text),
+      refMs: wordDuration(refWord) * 1000,
+      learnerMs: wordDuration(learnerWord) * 1000,
+      flagged: mine.some((o) => o.kind === 'word-duration'),
+      phones: mine
+        .filter((o) => o.timing?.phoneKind)
+        .map((o) => ({
+          label: o.timing!.phoneKind === 'consonant' ? 'っ' : 'ー',
+          refMs: o.timing!.refMs,
+          learnerMs: o.timing!.learnerMs,
+          confidence: o.confidence,
+        })),
+    };
+  });
 }

@@ -1555,6 +1555,24 @@ button.sync-retry {
 .apg-mora[data-c='h'] { color: var(--accent); }
 .apg-mora[data-c='l'] { color: var(--text-muted); }
 .apg-mora[data-diff] { color: var(--danger); font-weight: 800; }
+/* SegmentTimingChart — paired reference/you duration bars per word (AnalysisPanel). */
+.stc { display: grid; gap: 0.35rem; }
+.stc-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 0.75rem; }
+.stc-key { display: inline-block; width: 0.8rem; height: 0.4rem; border-radius: 2px; margin-right: 0.25rem; vertical-align: middle; }
+.stc-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; align-items: start; padding: 0.15rem 0.3rem; border-radius: 6px; }
+.stc-row[data-flagged] { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.stc-word { font-size: 0.95rem; overflow-wrap: anywhere; }
+.stc-main { display: grid; gap: 0.15rem; }
+.stc-bars { display: grid; gap: 2px; }
+.stc-bar { height: 0.45rem; border-radius: 3px; }
+.stc-bars[data-compact] .stc-bar { height: 0.3rem; }
+.stc-bar-ref { background: var(--text-muted); opacity: 0.55; }
+.stc-bar-you[data-v='same'] { background: #3f9b6a; }
+.stc-bar-you[data-v='slower'] { background: #e0b04a; }
+.stc-bar-you[data-v='faster'] { background: #8fb8de; }
+.stc-ms { font-size: 0.75rem; }
+.stc-phone { display: grid; grid-template-columns: 1.2rem 1fr auto; gap: 0.4rem; align-items: center; padding-left: 0.3rem; }
+.stc-phone[data-confidence='high'] .stc-phone-label { color: var(--danger); font-weight: 800; }
 .apg-pick { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
 .apg-swatch { width: 0.8rem; height: 0.25rem; border-radius: 2px; background: var(--border); }
 .apg-fig { margin: 0; text-align: center; }

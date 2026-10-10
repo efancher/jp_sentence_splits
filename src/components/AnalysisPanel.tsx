@@ -39,6 +39,7 @@ import { compareObservations, rankObservations, selectPrimaryObservation } from 
 import { categorizeObservations } from '../lib/pronunciationHistory';
 import { computeSpectrogram, type Spectrogram } from '../lib/spectrogram';
 import { KanaTimelineRow } from './KanaTimelineRow';
+import { SegmentTimingChart } from './SegmentTimingChart';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import { PhrasePitchView } from './PhrasePitchView';
 import { buildPhrasePitch } from '../lib/phrasePitch';
@@ -936,12 +937,22 @@ export function AnalysisPanel({
       {segmentObservations.length > 0 ? (
         <div className="stack">
           <strong>Segment timing</strong>
-          {segmentObservations.map((item) => (
-            <article key={item.id} className="stack" style={{ gap: 0 }}>
-              <strong>{item.confidence} confidence:</strong> {item.message}
-              {item.detail ? <p className="muted">{item.detail}</p> : null}
-            </article>
-          ))}
+          {serverAlignment?.reference && serverAlignment.learner ? (
+            <SegmentTimingChart
+              reference={serverAlignment.reference}
+              learner={serverAlignment.learner}
+              observations={segmentObservations}
+            />
+          ) : null}
+          <details>
+            <summary className="muted">Details in words</summary>
+            {segmentObservations.map((item) => (
+              <article key={item.id} className="stack" style={{ gap: 0 }}>
+                <strong>{item.confidence} confidence:</strong> {item.message}
+                {item.detail ? <p className="muted">{item.detail}</p> : null}
+              </article>
+            ))}
+          </details>
         </div>
       ) : null}
       {pitchTimingObservations.length > 0 ? (

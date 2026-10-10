@@ -36,6 +36,8 @@ export interface TimingObservation {
   hint?: string;
   /** Reference-clip time range (full-clip time base), for auto-proposing a practice loop. */
   segment?: { startMs: number; endMs: number };
+  /** Measured durations behind a per-word timing call, for drawing it (`SegmentTimingChart`); set by `buildWordTimingObservations`. */
+  timing?: { pairIndex: number; refMs: number; learnerMs: number; phoneKind?: 'consonant' | 'vowel' };
   /**
    * The sub-sentence unit this observation is about, when it has one — the
    * `SentenceVocabulary.surfaceForm` for a per-word observation. Used to

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AlignmentResult, PhoneAlignment, WordAlignment } from '../src/domain/types';
 import {
+  buildTimingChartRows,
   buildWordTimingObservations,
   displayWordText,
   findLongPhones,
@@ -199,5 +200,27 @@ describe('displayWordText', () => {
 
   it('replaces the aligner OOV token with a flagged placeholder', () => {
     expect(displayWordText('<unk>')).toBe('?');
+  });
+});
+
+describe('buildTimingChartRows', () => {
+  it('lists every pair, marks only the called-out word, and attaches phone calls', () => {
+    const reference = { words: [word(0, 0.3, 'あ', []), word(0.3, 0.6, 'い', [])] } as unknown as AlignmentResult;
+    const learner = { words: [word(0, 0.3, 'あ', []), word(0.3, 1.0, 'い', [])] } as unknown as AlignmentResult;
+    const observations = buildWordTimingObservations({ reference, learner });
+    const rows = buildTimingChartRows({ reference, learner, observations });
+    expect(rows.map((r) => [r.text, r.flagged])).toEqual([
+      ['あ', false],
+      ['い', true],
+    ]);
+    expect(rows[1]!.learnerMs).toBeCloseTo(700);
+  });
+
+  it('attaches a sokuon call to its word', () => {
+    const reference = { words: [chottoWord(150)] } as unknown as AlignmentResult;
+    const learner = { words: [chottoWord(30)] } as unknown as AlignmentResult;
+    const observations = buildWordTimingObservations({ reference, learner });
+    const rows = buildTimingChartRows({ reference, learner, observations });
+    expect(rows[0]!.phones.map((p) => p.label)).toEqual(['っ']);
   });
 });

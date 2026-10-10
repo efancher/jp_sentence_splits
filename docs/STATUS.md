@@ -58,6 +58,17 @@ Last updated: 2026-10-10.
   reads the JSON and the trailing structure lines from the one paste; JSON
   `structure` and a lines-only reply still parse. Only episodes with more than
   60 sentences to structure get extra separate parts.
+- **2026-10-10 — Shadowing: Segment timing is now a chart.** `AnalysisPanel`'s
+  "Segment timing" section draws `SegmentTimingChart`: every paired word as
+  two bars on one shared scale (grey reference; yours orange = slower, blue =
+  faster, green = about the same, ±20%), flagged words tinted with "ref → you
+  ms", and a called-out 「っ」/long vowel as its own small pair under its word.
+  The written calls are kept under a "Details in words" disclosure. Pairs and
+  calls come from `buildWordTimingObservations` (new optional
+  `TimingObservation.timing`, `buildTimingChartRows`), so chart and text agree.
+  Raw durations, not speed-normalised — a generally slower take shows mostly
+  orange. **Manual test:** Analyze an attempt with server alignment; Segment
+  timing shows bars, "Details in words" expands to the old text.
 - **2026-10-10 — Shadowing: pitch across attempts.** `AnalysisPanel` now saves a
   compact `phraseSnapshot` (per phrase: native and your fitted H/L, status,
   per-mora levels) on each `AttemptAnalysisSummary` once analysis settles
