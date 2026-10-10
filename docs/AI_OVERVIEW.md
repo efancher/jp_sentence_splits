@@ -2027,6 +2027,11 @@ a self-hosted pronunciation-analysis backend. Capabilities:
   A "Report a problem with this" button saves a sync-issue report
   (`conflictEntity: 'phrase_pitch'`) carrying a diagnostics snapshot
   (`lib/phrasePitchSnapshot.ts`) so a bad phrase can be triaged later.
+- **Pitch across attempts (2026-10-10)** — each analysed attempt stores a
+  compact `phraseSnapshot` on its `AttemptAnalysisSummary`; `ShadowPage`'s
+  `AttemptPitchGrid` shows attempts × phrases with the native H/L as header and
+  mismatches in red (`lib/attemptPitchGrid.ts`). Older attempts appear once
+  re-analysed.
 - Playback-speed control, Alternate (A/B) and Dual-ear (binaural)
   reference-vs-attempt comparison.
 - **Practice-target isolation**: manual "mark start"/"mark end" loop-point

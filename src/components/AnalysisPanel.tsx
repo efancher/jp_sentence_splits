@@ -42,6 +42,7 @@ import { KanaTimelineRow } from './KanaTimelineRow';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import { PhrasePitchView } from './PhrasePitchView';
 import { buildPhrasePitch } from '../lib/phrasePitch';
+import { toPhraseSnapshot } from '../lib/attemptPitchGrid';
 import { buildPhrasePitchSnapshot } from '../lib/phrasePitchSnapshot';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import {
@@ -701,6 +702,7 @@ export function AnalysisPanel({
       primaryIssueMessage: primary?.message,
       primaryIssueSeverity: primary?.severity,
       wordIssues: wordIssues.length > 0 ? wordIssues : undefined,
+      phraseSnapshot: phrasePitch && !phrasePitch.learnerUnavailable ? toPhraseSnapshot(phrasePitch) : undefined,
     });
 
     // Bridge to the SRS: when the analysis actually produced signal (server

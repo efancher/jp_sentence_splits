@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
+import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
 import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
 import { SpeedControl } from '../components/SpeedControl';
@@ -808,6 +809,13 @@ export function ShadowPage() {
           {attempts.length === 0 ? (
             <p className="muted">No shadowing attempts recorded yet.</p>
           ) : (
+            <>
+            <AttemptPitchGrid
+              summaries={analysisSummaries}
+              labelFor={(_id, createdAt) =>
+                new Date(createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              }
+            />
             <ul className="stack" style={{ listStyle: 'none', padding: 0 }}>
               {attempts.map((attempt) => (
                 <li key={attempt.id} className="stack">
@@ -913,6 +921,7 @@ export function ShadowPage() {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
 

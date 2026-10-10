@@ -1542,3 +1542,16 @@ button.sync-retry {
 .stage-young { background: #8fb8de; }
 .stage-mature { background: var(--accent); }
 .stage-graduated { background: #3f9b6a; }
+
+/* AttemptPitchGrid — attempts × phrases native-referenced H/L (ShadowPage). */
+.apg-scroll { overflow-x: auto; }
+.apg-table { border-collapse: collapse; font-size: 0.85rem; }
+.apg-table th, .apg-table td { padding: 0.25rem 0.4rem; text-align: center; white-space: nowrap; font-weight: 400; }
+.apg-table thead th { vertical-align: bottom; }
+.apg-table tbody th { text-align: left; }
+.apg-table td[data-status='match'] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.apg-table td[data-status='different'], .apg-table td[data-status='flat'] { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.apg-shape { display: inline-flex; gap: 1px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; }
+.apg-mora[data-c='h'] { color: var(--accent); }
+.apg-mora[data-c='l'] { color: var(--text-muted); }
+.apg-mora[data-diff] { color: var(--danger); font-weight: 800; }

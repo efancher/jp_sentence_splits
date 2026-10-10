@@ -58,6 +58,18 @@ Last updated: 2026-10-10.
   reads the JSON and the trailing structure lines from the one paste; JSON
   `structure` and a lines-only reply still parse. Only episodes with more than
   60 sentences to structure get extra separate parts.
+- **2026-10-10 — Shadowing: pitch across attempts.** `AnalysisPanel` now saves a
+  compact `phraseSnapshot` (per phrase: native and your fitted H/L, status,
+  per-mora levels) on each `AttemptAnalysisSummary` once analysis settles
+  (only when your recording lined up mora by mora). `ShadowPage` shows
+  `AttemptPitchGrid` above the attempt list (needs 2+ snapshotted attempts):
+  columns are phrases with the native H/L as header, rows are attempts
+  oldest-first, red = differs from native, plus a matched/judged count. Older
+  attempts appear once re-analysed. Logic + tests: `lib/attemptPitchGrid.ts`.
+  Next: contour overlay of chosen attempts on the native F0 (uses the stored
+  levels or a downsampled contour), then real metrics replacing severity trend.
+  **Manual test:** open /shadow on a sentence, Analyze two or more attempts
+  (re-open Analyze on older ones); the grid appears above the attempt list.
 - **2026-10-01 — Preparation reply: wrong-list refs no longer reject a target.**
   An AI reply that put a vocabulary handle on a grammar target (`V31` on
   `～方が好き`) rejected the whole target as an unknown grammar ref. A ref from

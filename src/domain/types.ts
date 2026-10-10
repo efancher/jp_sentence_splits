@@ -258,6 +258,26 @@ export interface AttemptAnalysisSummary {
    * same free-optional-field precedent as `Attempt.practiceStage`.
    */
   wordIssues?: { surfaceForm: string; kind: string; severity: number }[];
+  /**
+   * Compact copy of this attempt's phrase-pitch result (native-referenced H/L
+   * per phrase) so attempts can be compared without re-running analysis. Only
+   * present for attempts analysed after it was introduced. Local-only, no Dexie bump.
+   */
+  phraseSnapshot?: PhraseSnapshotRow[];
+}
+
+export interface PhraseSnapshotRow {
+  text: string;
+  /** Kana of the phrase's morae, concatenated. */
+  kana: string;
+  /** Native fitted shape, one 'h'/'l' per mora. */
+  native: string;
+  /** Your fitted shape; null when it could not be measured. */
+  learner: string | null;
+  status: 'match' | 'different' | 'flat' | 'weak-native' | 'no-learner';
+  /** Per-mora height 0..1 within the phrase (2 dp); null = unvoiced. */
+  nativeLevels: (number | null)[];
+  learnerLevels: (number | null)[] | null;
 }
 
 export interface Book {
