@@ -1,5 +1,7 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 
+import { getDb } from '../db/database';
 import { recutSentenceAudioFromSource } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { fetchSourceAudioRange } from '../lib/miningApi';
@@ -8,6 +10,20 @@ import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
 /** Source audio fetched either side of the clip so the edges can be moved outward. */
 const EDIT_PAD_MS = 4000;
+
+/** The clip's own source URL, else its book's — what a re-cut from the original needs. Undefined until resolved or when none exists. */
+export function useClipSourceUrl(audio: SentenceAudio): string | undefined {
+  return useLiveQuery(async () => {
+    if (audio.sourceUrl) return audio.sourceUrl;
+    const db = getDb();
+    const links = await db.bookSentences.where('sentenceId').equals(audio.sentenceId).toArray();
+    for (const link of links) {
+      const url = (await db.books.get(link.bookId))?.sourceUrl;
+      if (url) return url;
+    }
+    return undefined;
+  }, [audio.sourceUrl, audio.sentenceId]);
+}
 
 /**
  * Nudge one sentence's reference-clip boundaries and re-cut it from the

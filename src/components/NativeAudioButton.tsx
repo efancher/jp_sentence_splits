@@ -6,6 +6,7 @@ import { useJapaneseSpeech } from '../hooks/useJapaneseSpeech';
 import { useNativeAudio } from '../hooks/useNativeAudio';
 import type { TimeRangeMs } from '../lib/recording';
 
+import { SentenceAudioAdjuster, useClipSourceUrl } from './SentenceAudioAdjuster';
 import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
 interface NativeAudioButtonProps {
@@ -32,6 +33,7 @@ export function NativeAudioButton({
   const speech = useJapaneseSpeech();
   const active = native.isPlaying && native.activeItemId === audio.id;
   const [editing, setEditing] = useState(false);
+  const sourceUrl = useClipSourceUrl(audio);
 
   const hasOverride = audio.trimStartMs != null && audio.trimEndMs != null;
   const editRange: TimeRangeMs = hasOverride
@@ -64,13 +66,15 @@ export function NativeAudioButton({
         >
           {iconOnly ? '🎧' : active ? '🎧 Playing…' : `🎧 ${displayLabel}`}
         </button>
-        {canAdjust ? (
+        {canAdjust && sourceUrl ? (
+          <SentenceAudioAdjuster audio={audio} sourceUrl={sourceUrl} label="Adjust" />
+        ) : canAdjust ? (
           <button type="button" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>
             {editing ? 'Close' : hasOverride ? 'Adjusted' : 'Adjust'}
           </button>
         ) : null}
       </div>
-      {canAdjust && editing ? (
+      {canAdjust && !sourceUrl && editing ? (
         <ZoomedRangeEditor
           blob={audio.blob}
           audioId={audio.id}
