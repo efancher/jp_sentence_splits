@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { AttemptPitchGrid } from '../components/AttemptPitchGrid';
+import { attemptsNeedingPhraseSnapshot, backfillPhraseSnapshots } from '../lib/backfillPhraseSnapshots';
 import { attemptPitchMetrics, describePitchMetrics, type AttemptPitchMetrics } from '../lib/attemptPitchGrid';
 import { ChapterReader } from '../components/ChapterReader';
 import { LiveShadowWaveform } from '../components/LiveShadowWaveform';
@@ -100,6 +101,9 @@ export function ShadowPage() {
   const compareAudioARef = useRef<HTMLAudioElement | null>(null);
   const compareAudioBRef = useRef<HTMLAudioElement | null>(null);
   const [comparingAttempts, setComparingAttempts] = useState(false);
+  const [snapshotBackfill, setSnapshotBackfill] = useState<
+    { running: true; done: number; total: number } | { running: false; message: string } | null
+  >(null);
   const targetLoopCoordinator = useRef(new PlaybackCoordinator());
   // Scroll target for "Practice this part" (AnalysisPanel, down in the
   // Past-attempts list) — it only sets targetRange, which renders the
@@ -278,6 +282,7 @@ export function ShadowPage() {
   const historyByAttemptId = new Map(
     buildHistoryDisplay(analysisSummaries).map((entry) => [entry.summary.id, entry]),
   );
+  const pendingSnapshots = attemptsNeedingPhraseSnapshot(attempts, analysisSummaries);
   const pitchLineByAttemptId = new Map<string, string>();
   let previousMetrics: AttemptPitchMetrics | undefined;
   for (const summary of [...analysisSummaries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
@@ -323,6 +328,29 @@ export function ShadowPage() {
     } finally {
       URL.revokeObjectURL(attemptUrl);
       setActiveAttemptId(null);
+    }
+  }
+
+  async function handleBackfillSnapshots(pending: Attempt[]) {
+    if (!referenceAudio) return;
+    setSnapshotBackfill({ running: true, done: 0, total: pending.length });
+    try {
+      const outcome = await backfillPhraseSnapshots({
+        transcript: sentence.japanese,
+        referenceAudioId: referenceAudio.id,
+        referenceBlob: referenceAudio.blob,
+        attempts: pending,
+        onProgress: (done, total) => setSnapshotBackfill({ running: true, done, total }),
+      });
+      setSnapshotBackfill({
+        running: false,
+        message:
+          outcome.skipped > 0
+            ? `Added ${outcome.saved}; ${outcome.skipped} could not be compared (alignment service unreachable, or the recording didn’t line up with the native).`
+            : `Added ${outcome.saved}.`,
+      });
+    } catch (error) {
+      setSnapshotBackfill({ running: false, message: error instanceof Error ? error.message : 'Backfill failed.' });
     }
   }
 
@@ -849,6 +877,25 @@ export function ShadowPage() {
             <p className="muted">No shadowing attempts recorded yet.</p>
           ) : (
             <>
+            {pendingSnapshots.length > 0 && referenceAudio ? (
+              <div className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={snapshotBackfill?.running === true}
+                  onClick={() => void handleBackfillSnapshots(pendingSnapshots)}
+                >
+                  {snapshotBackfill?.running
+                    ? `Comparing… ${snapshotBackfill.done}/${snapshotBackfill.total}`
+                    : `Add pitch comparison for ${pendingSnapshots.length} earlier attempt${pendingSnapshots.length === 1 ? '' : 's'}`}
+                </button>
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  Needed for the grid, overlay and pitch line. May take a minute.
+                </span>
+              </div>
+            ) : null}
+            {snapshotBackfill && !snapshotBackfill.running ? (
+              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>{snapshotBackfill.message}</p>
+            ) : null}
             <AttemptPitchGrid
               summaries={analysisSummaries}
               labelFor={(_id, createdAt) =>

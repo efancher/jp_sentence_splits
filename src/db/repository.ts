@@ -42,6 +42,7 @@ import type {
   AttemptAnalysisSummary,
   AttemptRating,
   AttemptTranscription,
+  PhraseSnapshotRow,
   Book,
   BookChapter,
   BookSentence,
@@ -3892,6 +3893,18 @@ export async function saveAttemptAnalysisSummary(
   const db = getDb();
   const row: AttemptAnalysisSummary = { ...summary, analysisSummaryVersion: ANALYSIS_SUMMARY_VERSION };
   await db.attemptAnalysisSummaries.put(row);
+}
+
+/** Adds a phrase snapshot to an already-saved summary without touching its other fields; false if the summary is gone or stale. */
+export async function setAttemptPhraseSnapshot(
+  attemptId: string,
+  phraseSnapshot: PhraseSnapshotRow[],
+): Promise<boolean> {
+  const db = getDb();
+  const row = await db.attemptAnalysisSummaries.get(attemptId);
+  if (!row || row.analysisSummaryVersion !== ANALYSIS_SUMMARY_VERSION) return false;
+  await db.attemptAnalysisSummaries.update(attemptId, { phraseSnapshot });
+  return true;
 }
 
 export async function listAttemptAnalysisSummariesForSentence(

@@ -58,6 +58,17 @@ Last updated: 2026-10-10.
   reads the JSON and the trailing structure lines from the one paste; JSON
   `structure` and a lines-only reply still parse. Only episodes with more than
   60 sentences to structure get extra separate parts.
+- **2026-10-10 — Shadowing: backfill pitch snapshots for older attempts.**
+  `/shadow` shows "Add pitch comparison for N earlier attempts" when analysed
+  attempts lack a `phraseSnapshot`. `backfillPhraseSnapshots` re-derives each
+  one headlessly (decode both clips → pitch → cached/fetched alignment →
+  `buildPhrasePitch`) and writes only the snapshot onto the existing summary
+  (`setAttemptPhraseSnapshot`), one attempt at a time with progress. Uses the
+  whole reference clip — an attempt recorded against a narrower practice
+  target may not line up and is skipped. Never-analysed attempts (no summary)
+  are left alone. **Manual test:** on a sentence with older analysed attempts,
+  tap the button; the grid/overlay/pitch lines fill in; the result line counts
+  any that couldn't be compared.
 - **2026-10-10 — Shadowing: Segment timing is now a chart.** `AnalysisPanel`'s
   "Segment timing" section draws `SegmentTimingChart`: every paired word as
   two bars on one shared scale (grey reference; yours orange = slower, blue =
