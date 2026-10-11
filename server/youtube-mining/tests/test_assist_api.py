@@ -63,3 +63,14 @@ def test_explicit_backend_and_unknown_id(client: TestClient, monkeypatch: pytest
     body = _wait(client, client.post("/assist", json={"prompt": "x", "backend": "claude"}).json()["assistId"])
     assert body["backend"] == "claude"
     assert client.get("/assist/nope").status_code == 404
+
+
+def test_explicit_backend_goes_first_other_is_backup(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def bad(prompt: str) -> str:
+        raise assist.AssistError("down")
+
+    monkeypatch.setitem(assist.RUNNERS, "claude", bad)
+    monkeypatch.setitem(assist.RUNNERS, "codex", lambda prompt: "from codex")
+    assert assist.backend_order("claude") == ["claude", "codex"]
+    body = _wait(client, client.post("/assist", json={"prompt": "x", "backend": "claude"}).json()["assistId"])
+    assert body["status"] == "done" and body["backend"] == "codex"

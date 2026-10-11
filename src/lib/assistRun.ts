@@ -20,9 +20,13 @@ import type { WizardTranscriptSeg } from './miningTranscript';
 
 export type AssistRunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
 
+export type AssistBackend = 'auto' | 'codex' | 'claude';
+
 export interface AssistRunSpec {
   transcript: WizardTranscriptSeg[];
   options: CombinedPromptOptions;
+  /** Which CLI to try first on the box; the other stays as backup. Absent = "auto" (box default order). */
+  backend?: AssistBackend;
 }
 
 export interface AssistRunState {

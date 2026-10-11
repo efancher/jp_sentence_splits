@@ -34,6 +34,7 @@ import {
   type PodcastFeed,
   runAssist,
 } from '../lib/miningApi';
+import type { AssistBackend } from '../lib/assistRun';
 import {
   COMBINED_PROMPT_FILENAME,
   checkCombinedReply,
@@ -64,6 +65,7 @@ const PODCAST_PAGE_SIZE = 30;
  * page's in-flight job on both, since commit doesn't care which page (or
  * which wizard stage) a job has reached. */
 const ACTIVE_JOB_KEY = 'quickmine.activeJob';
+const ASSIST_BACKEND_KEY = 'quickmine.assistBackend';
 const ASSIST_RUN_POLL_MS = 3000;
 const ASSIST_EXTRAS_KEY_PREFIX = 'quickmine.assistExtras.';
 const ACTIVE_JOB_MAX_AGE_MS = 48 * 60 * 60 * 1000;
@@ -235,6 +237,10 @@ export function QuickMinePage() {
   const [extras, setExtras] = useState<CombinedReplySections | null>(null);
   const [replyWarnings, setReplyWarnings] = useState<string[]>([]);
   const [assistRunning, setAssistRunning] = useState(false);
+  const [assistBackend, setAssistBackend] = useState<AssistBackend>(() => {
+    const saved = localStorage.getItem(ASSIST_BACKEND_KEY);
+    return saved === 'codex' || saved === 'claude' ? saved : 'auto';
+  });
   const [assistProgress, setAssistProgress] = useState('');
   const [assistFailure, setAssistFailure] = useState('');
   const [partialRun, setPartialRun] = useState<AssistRunStatus | null>(null);
@@ -657,7 +663,7 @@ export function QuickMinePage() {
     setAssistProgress('Starting…');
     setAssistRunning(true);
     try {
-      const run = await startAssistRun({ runId: jobId, transcript, options: promptOptions });
+      const run = await startAssistRun({ runId: jobId, transcript, options: promptOptions, backend: assistBackend });
       if (run.status !== 'running') finishAssistRun(run);
     } catch (err) {
       setAssistRunning(false);
@@ -1285,6 +1291,22 @@ export function QuickMinePage() {
               >
                 {assistFailure ? 'Resume with assistant' : 'Send to assistant'}
               </button>
+              <label className="row" style={{ gap: '0.35rem' }}>
+                <span className="muted">Primary</span>
+                <select
+                  value={assistBackend}
+                  disabled={assistRunning}
+                  onChange={(e) => {
+                    const next = e.target.value as AssistBackend;
+                    setAssistBackend(next);
+                    localStorage.setItem(ASSIST_BACKEND_KEY, next);
+                  }}
+                >
+                  <option value="auto">Auto (Codex first)</option>
+                  <option value="codex">Codex</option>
+                  <option value="claude">Claude</option>
+                </select>
+              </label>
               {assistRunning ? (
                 <button type="button" onClick={stopAssistant}>
                   Stop
@@ -1293,7 +1315,7 @@ export function QuickMinePage() {
               {assistProgress ? <span className="muted">{assistProgress}</span> : null}
             </div>
             <div className="muted">
-              Runs Codex (Claude as backup) on the server in small parts, segmenting and
+              Runs the primary assistant (the other as backup) on the server in small parts, segmenting and
               translating, then generates the ticked extras above too. It keeps going if you close
               this page — come back to this import and the result is picked up. A part is retried
               once; after that it stops and keeps what's done.

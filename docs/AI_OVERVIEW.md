@@ -865,7 +865,9 @@ Targets are constants; no settings UI.
   before and 2 after, focus targets in one whole-episode call
   (`src/lib/assistExtras.ts`), orchestrated by `src/lib/assistRun.ts`. Each
   prompt goes to the box's `POST /assist` (the `codex` CLI, then `claude -p` as
-  backup, one at a time, tailnet-only). Every piece is validated (cut-off
+  backup, one at a time, tailnet-only; a "Primary" selector next to the button
+  — Auto/Codex/Claude, remembered in localStorage — puts the chosen CLI first and
+  keeps the other as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
   checks) and saved to the run's `state.json` on the box as it lands; a piece
   gets two attempts, then the run stops as `failed` and the button becomes
   "Resume", so a misbehaving assistant never loops unattended. The page polls

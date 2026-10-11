@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { YOUTUBE_MINING_API_BASE } from '../appConfig';
+import type { AssistBackend } from './assistRun';
 import type { CombinedPromptOptions } from './combinedImportPrompt';
 import type { WizardTranscriptSeg } from './miningTranscript';
 
@@ -782,6 +783,7 @@ export async function startAssistRun(input: {
   runId: string;
   transcript: WizardTranscriptSeg[];
   options: CombinedPromptOptions;
+  backend?: AssistBackend;
 }): Promise<AssistRunStatus> {
   const response = await fetch(`${API_BASE}/assist-runs`, {
     method: 'POST',

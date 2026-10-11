@@ -485,6 +485,7 @@ class AssistRunRequest(BaseModel):
     runId: str
     transcript: list[AssistRunSegment] = Field(min_length=1)
     options: AssistRunOptions = Field(default_factory=AssistRunOptions)
+    backend: AssistBackend = "auto"
 
 
 class AssistRunStatusResponse(BaseModel):

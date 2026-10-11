@@ -138,9 +138,10 @@ RUNNERS = {"codex": run_codex, "claude": run_claude}
 
 
 def backend_order(requested: str) -> list[str]:
-    if requested != "auto":
-        return [requested]
-    return [name for name in config.ASSIST_BACKENDS if name in RUNNERS]
+    order = [name for name in config.ASSIST_BACKENDS if name in RUNNERS]
+    if requested in RUNNERS:
+        order = [requested] + [name for name in RUNNERS if name != requested]
+    return order
 
 
 def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:

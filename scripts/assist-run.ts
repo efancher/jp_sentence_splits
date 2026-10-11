@@ -53,11 +53,11 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
-async function runAssist(prompt: string): Promise<{ reply: string; backend: string | null }> {
+async function runAssist(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
   const created = await fetch(`${API_BASE}/assist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, backend }),
   });
   if (!created.ok) throw new Error(`Failed to start assistant: ${await readError(created)}`);
   const { assistId } = (await created.json()) as { assistId: string };
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     // first run: no state yet
   }
   try {
-    await runAssistPipeline({ spec, state, run: runAssist, save: saveState, isCancelled: () => cancelled });
+    await runAssistPipeline({ spec, state, run: (prompt) => runAssist(prompt, spec.backend ?? 'auto'), save: saveState, isCancelled: () => cancelled });
   } catch (err) {
     state.status = 'failed';
     state.progress = '';
