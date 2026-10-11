@@ -187,6 +187,30 @@ export async function removeQueueItem(id: string): Promise<void> {
   await getDb().syncQueue.delete(id);
 }
 
+/**
+ * Drops a queue row after its push was acknowledged — unless the record was
+ * edited again while the push was in flight (the row was coalesced to a newer
+ * payload). That row must survive, rebased onto the version this push just
+ * wrote; deleting it loses the edit, and leaving its old lock base makes the
+ * next push conflict against our own write.
+ */
+export async function settlePushedItem(item: SyncQueueItem): Promise<void> {
+  const db = getDb();
+  await db.transaction('rw', db.syncQueue, db.syncRecordMeta, async () => {
+    const row = await db.syncQueue.get(item.id);
+    if (!row) return;
+    if (row.localTimestamp === item.localTimestamp) {
+      await db.syncQueue.delete(item.id);
+      return;
+    }
+    const meta = await getRecordMeta(row.entity, row.recordId);
+    await db.syncQueue.put({
+      ...row,
+      expectedVersion: syncedVersionOf(meta),
+    });
+  });
+}
+
 export async function bumpQueueRetry(
   id: string,
   error: string,

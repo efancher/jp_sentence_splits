@@ -6,7 +6,9 @@ import {
   enqueueMutation,
   listOpenConflicts,
   listPendingMutations,
+  putRecordMeta,
   resolveConflictLocally,
+  settlePushedItem,
   sweepNoopConflicts,
 } from './queue';
 
@@ -255,5 +257,39 @@ describe('enqueueMutation ordering', () => {
     expect(pending.map((p) => p.recordId)).toEqual(ids);
     const stamps = pending.map((p) => p.localTimestamp);
     expect(new Set(stamps).size).toBe(ids.length);
+  });
+});
+
+describe('settlePushedItem', () => {
+  it('keeps a row re-edited mid-push, rebased onto the version just written', async () => {
+    const first = await enqueueMutation({
+      entity: 'books',
+      recordId: 'book_race',
+      operation: 'upsert',
+      expectedVersion: 257,
+      payload: { v: 'a' },
+    });
+    await enqueueMutation({
+      entity: 'books',
+      recordId: 'book_race',
+      operation: 'upsert',
+      expectedVersion: 257,
+      payload: { v: 'b' },
+    });
+    await putRecordMeta({
+      entity: 'books',
+      recordId: 'book_race',
+      version: 258,
+      syncedVersion: 258,
+      updatedAt: new Date().toISOString(),
+    });
+    await settlePushedItem(first);
+    const rows = (await listPendingMutations()).filter((r) => r.recordId === 'book_race');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.payload).toEqual({ v: 'b' });
+    expect(rows[0]!.expectedVersion).toBe(258);
+
+    await settlePushedItem(rows[0]!);
+    expect((await listPendingMutations()).some((r) => r.recordId === 'book_race')).toBe(false);
   });
 });

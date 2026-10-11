@@ -9,6 +9,7 @@ import {
   putRecordMeta,
   recordMetaKey,
   removeQueueItem,
+  settlePushedItem,
   addConflict,
   updateSyncMeta,
   getRecordMeta,
@@ -282,14 +283,14 @@ async function pushSingle(item: SyncQueueItem, ctx: PushCtx): Promise<void> {
   if (ctx.aborted) return;
   try {
     await pushOne(item, ctx.userId);
-    await removeQueueItem(item.id);
+    await settlePushedItem(item);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === 'version_conflict') {
       if (LAST_WRITE_WINS_ENTITIES.has(item.entity)) {
         await forcePushOverwrite(item, ctx.userId);
       } else {
-        await handlePushConflict(item, ctx.userId);
+        if (await handlePushConflict(item, ctx.userId)) return;
       }
       await removeQueueItem(item.id);
       return;
@@ -388,7 +389,7 @@ async function insertBisecting(items: SyncQueueItem[], ctx: PushCtx): Promise<vo
     const item = items[k]!;
     const written = Number((rows[k] as { version?: number }).version ?? versions[k]);
     await acknowledgeSyncedVersion(item.entity, item.recordId, written);
-    await removeQueueItem(item.id);
+    await settlePushedItem(item);
   }
 }
 
@@ -1008,21 +1009,41 @@ async function forcePushOverwrite(
   });
 }
 
+/** Returns true when the queue row was kept for a rebased retry (not a real conflict). */
 async function handlePushConflict(
   item: SyncQueueItem,
   userId: string,
-): Promise<void> {
+): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return false;
   const idCol = idColumnForEntity(item.entity);
   const { data: remote } = await supabase
     .from(item.entity)
     .select('*')
     .eq(idCol, item.recordId)
     .maybeSingle();
-  if (!remote) return;
+  if (!remote) return false;
   const remoteVersion = Number(remote.version ?? 0);
   const localMeta = await getRecordMeta(item.entity, item.recordId);
+  // The cloud row is a version this device itself acknowledged (e.g. its own
+  // previous push), and the queued edit was just locked against an older base:
+  // a quick follow-up edit racing its own earlier push, not a divergence.
+  // Rebase the lock and retry rather than raising a conflict card.
+  if (
+    localMeta?.syncedVersion === remoteVersion &&
+    item.expectedVersion !== remoteVersion
+  ) {
+    const db = getDb();
+    const row = await db.syncQueue.get(item.id);
+    if (row) {
+      await db.syncQueue.put({ ...row, expectedVersion: remoteVersion });
+      syncLog('debug', 'Conflict rebased: own earlier push', 'CONFLICT_REBASE', {
+        entity: item.entity,
+        recordId: item.recordId,
+      });
+      return true;
+    }
+  }
   // Align optimistic-lock base to cloud so Keep local / later edits can push.
   await putRecordMeta({
     entity: item.entity,
@@ -1044,7 +1065,7 @@ async function handlePushConflict(
       entity: item.entity,
       recordId: item.recordId,
     });
-    return;
+    return false;
   }
   await addConflict({
     entity: item.entity,
@@ -1059,6 +1080,7 @@ async function handlePushConflict(
     recordId: item.recordId,
     userId,
   });
+  return false;
 }
 
 const MEMBERSHIP_REPAIR_INTERVAL_MS = 30 * 60 * 1000;

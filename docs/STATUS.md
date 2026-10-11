@@ -6,9 +6,22 @@ test counts, code-review findings, production-run logs) see
 reference see `docs/AI_OVERVIEW.md`; for the at-a-glance phase list see
 `docs/ROADMAP.md`.
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-11.
 
 ## Where things stand
+
+- **2026-10-11 — Sync: quick repeat edits no longer conflict with themselves.**
+  A sync report (a `books` conflict, local v257 vs remote v258, after several
+  fast episode re-orders) was a race against the device's own earlier push:
+  an edit made while a push was in flight (a) was coalesced onto the queue row
+  and then deleted when that push finished (lost edit), or (b) was locked
+  against the pre-ack `syncedVersion`, so its push hit `version_conflict`
+  against our own write. Fixes: `settlePushedItem` (queue.ts) keeps a row
+  re-edited mid-push and rebases its lock to the just-acked version;
+  `trackLocalMutation` reads/writes record meta in one transaction so it can't
+  clobber an ack; `handlePushConflict` rebases and retries instead of raising a
+  card when the cloud version is one this device already acknowledged.
+  Real cross-device conflicts are unchanged.
 
 - **2026-10-10 — Sentence-proficiency progress bars (book + per chapter).** The
   book detail Progress panel and each chapter / Unassigned row show a stacked

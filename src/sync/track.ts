@@ -42,19 +42,27 @@ export async function trackLocalMutation(input: {
   operation: SyncOperationType;
   payload: unknown;
 }): Promise<void> {
-  const existing = await getRecordMeta(input.entity, input.recordId);
-  const syncedVersion = syncedVersionOf(existing);
-  const nextVersion = (existing?.version ?? 0) + 1;
   const now = new Date().toISOString();
-  await putRecordMeta({
-    entity: input.entity,
-    recordId: input.recordId,
-    version: nextVersion,
-    // Keep the last acknowledged cloud version for optimistic locks.
-    syncedVersion: syncedVersion ?? 0,
-    updatedAt: now,
-    deletedAt: input.operation === 'delete' ? now : undefined,
-  });
+  // Read-modify-write in one transaction so an in-flight push's version ack
+  // can't be overwritten with the stale syncedVersion read here.
+  const syncedVersion = await getDb().transaction(
+    'rw',
+    getDb().syncRecordMeta,
+    async () => {
+      const existing = await getRecordMeta(input.entity, input.recordId);
+      const synced = syncedVersionOf(existing);
+      await putRecordMeta({
+        entity: input.entity,
+        recordId: input.recordId,
+        version: (existing?.version ?? 0) + 1,
+        // Keep the last acknowledged cloud version for optimistic locks.
+        syncedVersion: synced ?? 0,
+        updatedAt: now,
+        deletedAt: input.operation === 'delete' ? now : undefined,
+      });
+      return synced;
+    },
+  );
 
   const meta = await ensureSyncMeta();
   const supabase = getSupabase();
