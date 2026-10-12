@@ -63,6 +63,7 @@ export const RETAIN_ACTIVITY_TYPES: StudyActivityType[] = [
 export const PRACTICE_ACTIVITY_TYPES: StudyActivityType[] = [
   'cloze',
   'reading_production',
+  'dictation',
   'sentence_transformation',
   'contrastive',
   'grammar_completion',

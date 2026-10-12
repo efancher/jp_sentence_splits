@@ -123,6 +123,7 @@ import {
   analyzePitchAccentDrillRecording,
   type PitchAccentDrillAnalysisState,
 } from '../lib/pitchAccentDrillAnalysis';
+import { gradeDictation, type DictationGrade } from '../lib/dictationAnswer';
 import { isReadingAnswerCorrect, surfaceReadingFromInline } from '../lib/readingAnswer';
 import { MAX_RECORDING_DURATION_MS, PLAYBACK_SPEEDS, type TimeRangeMs } from '../lib/recording';
 import { splitOnSurfaceForm } from '../lib/surfaceForm';
@@ -181,9 +182,12 @@ const VOCABULARY_ACTIVITY_TYPES: StudyActivityType[] = [
  * Audio comprehension (Phase 7.4, docs/STATUS.md) — sentence-subject, like
  * `comprehension`/`reading_in_context`, but only eligible for sentences
  * that have at least one `SentenceAudio` row; the Japanese text stays
- * hidden until reveal, audio plays first.
+ * hidden until reveal, audio plays first. `dictation` rides on the same
+ * candidates: type what you hear, then compare to the native text. It only
+ * seeds once the sentence's `listening` card has been reviewed at least once
+ * (the learner has already seen this sentence's text).
  */
-const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening'];
+const AUDIO_ACTIVITY_TYPES: StudyActivityType[] = ['listening', 'dictation'];
 
 /**
  * Word-in-context listening (user request): subjectType `sentenceVocabulary`,
@@ -308,6 +312,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   cloze: 'Cloze',
   reading_production: 'Reading production',
   listening: 'Listening',
+  dictation: 'Dictation',
   word_listening: 'Word listening',
   contrastive: 'Contrastive pair',
   sentence_transformation: 'Conjugation in context',
@@ -962,6 +967,14 @@ function buildActivityDescriptors(scope: ReviewScope): ActivityDescriptor[] {
       gateSentenceId: (candidate) => candidate.sentence.id,
       isReady: (candidate, ctx) =>
         ctx.listeningReadiness.get(candidate.sentence.id) !== false,
+      activityIsReady: (candidate, activityType) =>
+        activityType !== 'dictation' ||
+        scope.existingAudioItems.some(
+          (item) =>
+            item.subjectId === candidate.sentence.id &&
+            item.activityType === 'listening' &&
+            item.fsrsState.reps >= 1,
+        ),
     }),
     defineActivityDescriptor<WordListeningCandidate>({
       key: 'wordListening',
@@ -2242,6 +2255,21 @@ export function ReviewPage() {
                 context={current.readingContext}
                 revealed={revealed}
                 onReveal={() => setRevealed(true)}
+              />
+            ) : current.audio && current.studyItem.activityType === 'dictation' ? (
+              <DictationCard
+                key={current.studyItem.id}
+                sentence={current.sentence}
+                audio={current.audio}
+                revealed={revealed}
+                onReplay={() => markAssistance('audio_replayed')}
+                playbackRate={audioSpeed}
+                onPlaybackRateChange={setAudioSpeed}
+                onCheck={(value, gradedAgainst) => {
+                  setTypedResponse(value);
+                  setTypedResponseExpected(gradedAgainst);
+                  setRevealed(true);
+                }}
               />
             ) : current.audio ? (
               <AudioComprehensionCard
@@ -3728,6 +3756,119 @@ function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
   );
   if (!audio) return null;
   return <ReviewPitchContour audio={audio} />;
+}
+
+/**
+ * `dictation` card body: play the native clip (text hidden), type what you
+ * hear, "Check" — then the written sentence is shown with the missed runs
+ * marked against your answer, plus the translation. Either the written
+ * sentence or its kana reading counts as correct (see gradeDictation). The
+ * ✓/✗ is supplementary evidence only; the 4-point self-rate after Check is
+ * still the scheduling signal. `onCheck`'s second argument is whichever
+ * target the answer was graded against, recorded as `Review.expectedAnswer`.
+ */
+function DictationCard({
+  sentence,
+  audio,
+  revealed,
+  onReplay,
+  playbackRate,
+  onPlaybackRateChange,
+  onCheck,
+}: {
+  sentence: Sentence;
+  audio: SentenceAudio;
+  revealed: boolean;
+  /** Called on every play *after* the first — the first play is the exercise itself, not assistance. */
+  onReplay: () => void;
+  playbackRate: number;
+  onPlaybackRateChange: (value: number) => void;
+  onCheck: (typed: string, gradedAgainst: string) => void;
+}) {
+  const playCountRef = useRef(0);
+  const [value, setValue] = useState('');
+  const [grade, setGrade] = useState<DictationGrade | null>(null);
+
+  const renderSegments = (segments: DictationGrade['typedSegments']) =>
+    segments.map((segment, index) =>
+      segment.matched ? (
+        <span key={index}>{segment.text}</span>
+      ) : (
+        <mark key={index}>{segment.text}</mark>
+      ),
+    );
+
+  return (
+    <>
+      <div className="row" style={{ alignItems: 'center' }}>
+        <NativeAudioButton
+          audio={audio}
+          displayLabel="Play audio"
+          playbackRate={playbackRate}
+          onPlay={() => {
+            playCountRef.current += 1;
+            if (playCountRef.current > 1) onReplay();
+          }}
+        />
+        <label>
+          Speed
+          <select
+            value={playbackRate}
+            onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
+          >
+            {PLAYBACK_SPEEDS.map((item) => (
+              <option key={item} value={item}>
+                {item === 1 ? '1× (normal)' : `${item}×`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {!revealed ? (
+        <form
+          className="stack"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const result = gradeDictation(value, sentence.japanese, sentence.readingOnly);
+            setGrade(result);
+            onCheck(value, result.gradedAgainst);
+          }}
+        >
+          <label>
+            Type what you hear (kanji or kana)
+            <textarea
+              rows={2}
+              lang="ja"
+              value={value}
+              autoComplete="off"
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </label>
+          <button type="submit">Check</button>
+        </form>
+      ) : (
+        <>
+          <div className="muted">{grade?.correct ? '✓ Correct' : '✗ Not quite'}</div>
+          {grade && !grade.correct ? (
+            <div className="muted">
+              You typed:{' '}
+              <span className="jp">
+                {value.trim() ? renderSegments(grade.typedSegments) : '(blank)'}
+              </span>
+            </div>
+          ) : null}
+          <div className="jp jp-lg">
+            {grade ? renderSegments(grade.expectedSegments) : sentence.japanese}
+          </div>
+          {grade && grade.gradedAgainst !== sentence.japanese ? (
+            <div className="jp">{sentence.japanese}</div>
+          ) : null}
+          <div>{sentence.translation || '(no translation)'}</div>
+          <VocabChips items={sentence.targetVocabulary} />
+        </>
+      )}
+    </>
+  );
 }
 
 /**

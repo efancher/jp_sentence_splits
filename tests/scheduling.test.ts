@@ -187,6 +187,21 @@ describe('classifyReviewError (evidence-based only)', () => {
     ).toBe('incorrect_reading');
   });
 
+  it('classifies a wrong dictation answer as listening_failure, and a matching one as nothing', () => {
+    const base = {
+      subjectType: 'sentence' as const,
+      activityType: 'dictation',
+      rating: 'again' as const,
+      expectedAnswer: '昨日、友達と映画を見に行きました。',
+    };
+    expect(classifyReviewError({ ...base, responseRaw: '昨日友達と映画を見に来ました' })).toBe(
+      'listening_failure',
+    );
+    expect(
+      classifyReviewError({ ...base, responseRaw: '昨日 友達と映画を見に行きました' }),
+    ).toBeUndefined();
+  });
+
   it('classifies a wrong sentence_transformation answer as grammar_misunderstanding', () => {
     expect(
       classifyReviewError({
