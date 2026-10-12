@@ -8,7 +8,7 @@
  * from different ranges merge without remapping.
  */
 import { describeStop } from './assistChunks';
-import { EXTRA_RANGE_SENTENCES, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
+import { mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import type { AssistBackend, AssistRunState } from './assistRun';
 
@@ -25,6 +25,7 @@ export interface BookAssistRunSpec {
   backend?: AssistBackend;
 }
 
+export const BOOK_EXTRA_RANGE_SENTENCES = 100;
 const CONTEXT_BEFORE = 3;
 const CONTEXT_AFTER = 2;
 
@@ -32,7 +33,7 @@ const CONTEXT_AFTER = 2;
 export function planBookExtraTasks(
   sentences: ExtrasSentence[],
   selection: BookExtraSelection,
-  rangeSize = EXTRA_RANGE_SENTENCES,
+  rangeSize = BOOK_EXTRA_RANGE_SENTENCES,
 ): ExtraTask[] {
   const tasks: ExtraTask[] = [];
   for (const kind of BOOK_EXTRA_KINDS) {
