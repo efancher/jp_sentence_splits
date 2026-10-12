@@ -27,7 +27,7 @@ describe('HomePage', () => {
 
   it('shows the "Customize split" inputs without needing a click (2026-08-27 follow-up)', async () => {
     renderHomePage();
-    expect(await screen.findByLabelText('New sentences (glossing)')).toBeInTheDocument();
+    expect(await screen.findByLabelText('New sentences, fresh tries & vocabulary')).toBeInTheDocument();
   });
 
   it('clears today\'s session via an inline confirm, with no native dialog', async () => {

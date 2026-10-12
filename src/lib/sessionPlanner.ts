@@ -669,6 +669,7 @@ function exploreStepFor(entry: ExploreSentenceEntry): PlannerStepDraft {
         ? `You walked through this in ${candidate.label} on an earlier day — try saying it without cues`
         : `Next sentence in ${candidate.label} — walk through it, practise a target, then try saying it`,
       status: 'pending',
+      ...(sentence.revisit ? { revisit: true } : {}),
     };
   }
   if (entry.kind === 'vocabulary') {

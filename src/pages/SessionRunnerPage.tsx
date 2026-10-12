@@ -9,9 +9,10 @@ import {
   getSessionRecap,
   updatePlannerSessionStep,
 } from '../db/repository';
-import type { PlannerSessionStep, SessionBucket } from '../domain/types';
+import type { PlannerSessionStep } from '../domain/types';
 import { sessionStepTargetPath, shadowAttemptSummary } from '../lib/sessionPlanner';
 import type { SessionRecap } from '../lib/sessionRecap';
+import { SESSION_STEP_CATEGORY_LABELS, sessionStepCategory } from '../lib/sessionStepCategory';
 
 /**
  * Executes a recommended session (design brief §8): each step deep-links
@@ -37,13 +38,6 @@ const STATUS_LABELS: Record<PlannerSessionStep['status'], string> = {
   replaced: 'Replaced',
 };
 
-const RECAP_BUCKET_LABELS: Record<SessionBucket, string> = {
-  glossing: 'New sentences',
-  grammar: 'Grammar',
-  shadowing: 'Shadowing',
-  review: 'Review',
-};
-
 /** Post-session summary — what today's work actually moved (`getSessionRecap`). */
 function SessionRecapPanel({ recap }: { recap: SessionRecap }) {
   if (recap.isEmpty) return null;
@@ -52,9 +46,9 @@ function SessionRecapPanel({ recap }: { recap: SessionRecap }) {
     <div className="stack" style={{ gap: '0.35rem' }}>
       <strong>Today you</strong>
       <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
-        {recap.byBucket.map((line) => (
-          <li key={line.bucket}>
-            {RECAP_BUCKET_LABELS[line.bucket]}: {line.completed}/{line.total} done
+        {recap.byCategory.map((line) => (
+          <li key={line.category}>
+            {SESSION_STEP_CATEGORY_LABELS[line.category]}: {line.completed}/{line.total} done
           </li>
         ))}
         {recap.games.completed > 0 ? (
@@ -177,6 +171,9 @@ export function SessionRunnerPage() {
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{step.label}</strong>
                 <span className="status-pill">{STATUS_LABELS[step.status]}</span>
+              </div>
+              <div className="muted" style={{ fontSize: '0.8rem' }}>
+                {SESSION_STEP_CATEGORY_LABELS[sessionStepCategory(step)]}
               </div>
               <div className="muted" style={{ fontSize: '0.85rem' }}>
                 {stepReason(step)} · {Math.round(step.estimatedMinutes)} min

@@ -1550,6 +1550,8 @@ export interface PlannerSessionStep {
   feedback?: 'too_easy' | 'difficult';
   /** Item count this step targets, currently only set for `review` steps (batched "do N due reviews") — lets ReviewPage track live progress toward it rather than parsing the label. */
   targetCount?: number;
+  /** `sentence_learning` only: a "Fresh try" revisit of an already walked-through sentence, not a first lesson. */
+  revisit?: boolean;
 }
 
 /**

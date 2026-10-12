@@ -9,11 +9,13 @@ import {
   computeLearningBalance,
   deleteTodayPlannerSession,
   getTodayPlannerSession,
+  pickSentenceForFreshTry,
   updateSettings,
 } from '../db/repository';
 import type { PlannerStepStatus, SessionBucket } from '../domain/types';
 import { loadGameBreakCandidates } from '../games/gameBreaks';
 import { ALL_SESSION_BUCKETS } from '../lib/sessionPlanner';
+import { SESSION_STEP_CATEGORY_LABELS, sessionStepCategory } from '../lib/sessionStepCategory';
 import {
   BASELINE_SESSION_ALLOCATION,
   DEFAULT_DAILY_BUDGET_MINUTES,
@@ -42,7 +44,7 @@ import {
  */
 
 const SESSION_BUCKET_LABELS: Record<SessionBucket, string> = {
-  glossing: 'New sentences (glossing)',
+  glossing: 'New sentences, fresh tries & vocabulary',
   grammar: 'Grammar',
   shadowing: 'Shadowing',
   review: 'Review',
@@ -83,6 +85,7 @@ export function HomePage() {
   const [confirmingClear, setConfirmingClear] = useState(false);
   // Open by default (2026-08-27 follow-up) — hiding it behind a click meant
   // the split was easy to forget to adjust before starting/topping up.
+  const [freshTryState, setFreshTryState] = useState<'idle' | 'looking' | 'none'>('idle');
   const [splitOpen, setSplitOpen] = useState(true);
   // null = follow the saved default (settings.sessionAllocation); set once the
   // learner edits a value here, and persisted back as the new default on add.
@@ -113,6 +116,17 @@ export function HomePage() {
     } finally {
       setAddingMinutes(null);
     }
+  }
+
+  async function handleFreshTry() {
+    setFreshTryState('looking');
+    const pick = await pickSentenceForFreshTry();
+    if (!pick) {
+      setFreshTryState('none');
+      return;
+    }
+    setFreshTryState('idle');
+    navigate(`/books/${pick.bookId}/learn/${pick.sentenceId}`);
   }
 
   async function handleClear() {
@@ -150,6 +164,9 @@ export function HomePage() {
               <ol className="stack" style={{ margin: 0, paddingLeft: '1.25rem' }}>
                 {session.steps.map((step) => (
                   <li key={step.id}>
+                    <span className="muted" style={{ fontSize: '0.8rem' }}>
+                      {SESSION_STEP_CATEGORY_LABELS[sessionStepCategory(step)]}:{' '}
+                    </span>
                     <strong>{step.label}</strong> — {Math.round(step.estimatedMinutes)} min
                     <span className="status-pill" style={{ marginLeft: '0.5rem' }}>
                       {STEP_STATUS_LABELS[step.status]}
@@ -303,7 +320,20 @@ export function HomePage() {
               {addingMinutes === minutes ? 'Adding…' : `+${minutes} min`}
             </button>
           ))}
+          <button
+            type="button"
+            className="ghost"
+            disabled={freshTryState === 'looking'}
+            onClick={() => void handleFreshTry()}
+          >
+            {freshTryState === 'looking' ? 'Finding one…' : 'Do a fresh try'}
+          </button>
         </div>
+        {freshTryState === 'none' ? (
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            No sentences are ready: fresh tries come from sentences you walked through on an earlier day and haven&rsquo;t yet said without cues.
+          </p>
+        ) : null}
       </section>
 
       <DailyPracticePanel />

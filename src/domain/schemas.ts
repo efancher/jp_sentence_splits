@@ -570,6 +570,8 @@ export const plannerSessionStepSchema = z.object({
   feedback: z.enum(['too_easy', 'difficult']).optional(),
   // Additive (2026-08-26): absent in older backups.
   targetCount: z.number().int().nonnegative().optional(),
+  // Additive (2026-10-12): only set on `sentence_learning` fresh-try steps.
+  revisit: z.boolean().optional(),
 });
 
 export const plannerSessionSchema = z.object({

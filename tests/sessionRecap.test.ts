@@ -59,7 +59,7 @@ describe('buildSessionRecap', () => {
       baseInput({ steps: [step('review', 'completed'), game('completed'), game('skipped')] }),
     );
     expect(recap.games).toEqual({ completed: 1, total: 2 });
-    expect(recap.byBucket).toEqual([{ bucket: 'review', completed: 1, total: 1 }]);
+    expect(recap.byCategory).toEqual([{ category: 'review', completed: 1, total: 1 }]);
     expect(recap.activitiesTotal).toBe(1);
     // A game alone is still something worth showing.
     expect(buildSessionRecap(baseInput({ steps: [game('completed')] })).isEmpty).toBe(false);
@@ -79,10 +79,27 @@ describe('buildSessionRecap', () => {
     );
     expect(recap.activitiesCompleted).toBe(2);
     expect(recap.activitiesTotal).toBe(4);
-    expect(recap.byBucket).toEqual([
-      { bucket: 'glossing', completed: 1, total: 1 },
-      { bucket: 'shadowing', completed: 0, total: 1 },
-      { bucket: 'review', completed: 1, total: 2 },
+    expect(recap.byCategory).toEqual([
+      { category: 'learn_sentence', completed: 1, total: 1 },
+      { category: 'review', completed: 1, total: 2 },
+      { category: 'shadowing', completed: 0, total: 1 },
+    ]);
+  });
+
+  it('splits fresh tries and vocabulary out of the glossing bucket when steps carry a category', () => {
+    const recap = buildSessionRecap(
+      baseInput({
+        steps: [
+          { bucket: 'glossing', status: 'completed', category: 'learn_sentence' },
+          { bucket: 'glossing', status: 'completed', category: 'fresh_try' },
+          { bucket: 'glossing', status: 'pending', category: 'vocabulary' },
+        ],
+      }),
+    );
+    expect(recap.byCategory).toEqual([
+      { category: 'learn_sentence', completed: 1, total: 1 },
+      { category: 'fresh_try', completed: 1, total: 1 },
+      { category: 'vocabulary', completed: 0, total: 1 },
     ]);
   });
 

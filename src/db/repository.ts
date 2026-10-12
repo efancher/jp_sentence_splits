@@ -13,7 +13,8 @@ import {
   effectiveSentenceFirstPlanning,
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
-import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
+import { sessionStepCategory } from '../lib/sessionStepCategory';
+import { sentencesDueForFreshTry, sentencesReadyToRevisit } from '../lib/sentenceJourney';
 import { buildEpisodeProgress, type EpisodeProgressRow } from '../lib/episodeProgress';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -10015,18 +10016,36 @@ async function buildReviewPriorityInputs(
   });
 }
 
-/** Days a missed review card keeps its sentence boosted for a fresh try. */
-const STRUGGLE_FRESH_TRY_WINDOW_DAYS = 7;
-
-/** Sentences with an `again` review (any card type that records its context sentence) in the last week. */
-async function getRecentlyStruggledSentenceIds(now: Date = new Date()): Promise<Set<string>> {
-  const cutoff = new Date(now.getTime() - STRUGGLE_FRESH_TRY_WINDOW_DAYS * 86_400_000).toISOString();
-  const reviews = await getDb().reviews.where('timestamp').aboveOrEqual(cutoff).toArray();
-  const ids = new Set<string>();
-  for (const review of reviews) {
-    if (review.rating === 'again' && review.contextSentenceId) ids.add(review.contextSentenceId);
+/**
+ * On-demand "Do a fresh try": the walked-through, not-yet-independent sentence
+ * you've gone longest without trying, ignoring the spacing schedule. Books out
+ * of rotation and shelved chapters are skipped.
+ */
+export async function pickSentenceForFreshTry(
+  now: Date = new Date(),
+): Promise<{ bookId: string; sentenceId: string } | undefined> {
+  const db = getDb();
+  const [allBooks, suspendedIndex] = await Promise.all([db.books.toArray(), loadSuspendedBookIndex()]);
+  let best: { bookId: string; sentenceId: string; since: string } | undefined;
+  for (const book of allBooks.filter(isBookInStudyRotation)) {
+    const events = await listSentenceLearningEvents(book.id);
+    const ready = sentencesReadyToRevisit(events, now);
+    if (ready.length === 0) continue;
+    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
+    const lastTouch = new Map<string, string>();
+    for (const event of events) {
+      if (event.action !== 'walkthrough_completed' && event.action !== 'expression_attempt') continue;
+      const seen = lastTouch.get(event.sentenceId);
+      if (seen === undefined || event.timestamp > seen) lastTouch.set(event.sentenceId, event.timestamp);
+    }
+    for (const id of ready) {
+      const membership = memberships.find((item) => item.sentenceId === id);
+      if (!membership || (suspendedIndex && membershipIsShelved(membership, suspendedIndex))) continue;
+      const since = lastTouch.get(id) ?? '';
+      if (!best || since < best.since) best = { bookId: book.id, sentenceId: id, since };
+    }
   }
-  return ids;
+  return best ? { bookId: best.bookId, sentenceId: best.sentenceId } : undefined;
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
@@ -10048,7 +10067,6 @@ async function findExploreCandidates(
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
-  const struggledSentenceIds = sentenceFirst ? await getRecentlyStruggledSentenceIds() : new Set<string>();
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
@@ -10065,11 +10083,8 @@ async function findExploreCandidates(
     const parkedGlossIds = sentenceFirst
       ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
       : [];
-    // A sentence whose review cards were just missed jumps the fresh-try
-    // spacing queue (walked-through sentences only, so it never doubles as "new").
-    const struggledIds = walked ? [...struggledSentenceIds].filter((id) => walked.has(id)) : [];
     const revisitIds = sentenceFirst
-      ? [...new Set([...struggledIds, ...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      ? [...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
@@ -10821,6 +10836,7 @@ export async function getSessionRecap(
       bucket: step.bucket,
       status: step.status,
       targetKind: step.targetKind,
+      category: sessionStepCategory(step),
     })),
     reviews: reviews.map((review) => ({
       studyItemId: review.studyItemId,

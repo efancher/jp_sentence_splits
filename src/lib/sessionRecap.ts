@@ -1,4 +1,5 @@
 import type { PlannerStepStatus, SessionBucket } from '../domain/types';
+import { SESSION_STEP_CATEGORY_ORDER, type SessionStepCategory } from './sessionStepCategory';
 
 /**
  * "What today's session actually moved" — a short honest recap shown in the
@@ -34,6 +35,8 @@ export interface SessionRecapStudyItemInput {
 export interface SessionRecapStepInput {
   bucket: SessionBucket;
   status: PlannerStepStatus;
+  /** Learner-facing kind (`sessionStepCategory`); absent → derived from `bucket`. */
+  category?: SessionStepCategory;
   /** `'game'` steps are counted on their own line, not under their (nominal) bucket. */
   targetKind?: string;
 }
@@ -51,8 +54,8 @@ export interface SessionRecapInput {
   grammarNoticed: number;
 }
 
-export interface SessionRecapBucketLine {
-  bucket: SessionBucket;
+export interface SessionRecapCategoryLine {
+  category: SessionStepCategory;
   completed: number;
   total: number;
 }
@@ -60,8 +63,8 @@ export interface SessionRecapBucketLine {
 export interface SessionRecap {
   activitiesCompleted: number;
   activitiesTotal: number;
-  byBucket: SessionRecapBucketLine[];
-  /** Game-break steps (`targetKind: 'game'`) — kept out of `byBucket` and the activity totals. */
+  byCategory: SessionRecapCategoryLine[];
+  /** Game-break steps (`targetKind: 'game'`) — kept out of `byCategory` and the activity totals. */
   games: { completed: number; total: number };
   reviews: {
     /** Scheduled reviews graded within the window (natural encounters excluded). */
@@ -78,26 +81,31 @@ export interface SessionRecap {
   isEmpty: boolean;
 }
 
-const BUCKET_ORDER: SessionBucket[] = ['glossing', 'grammar', 'shadowing', 'review'];
+const BUCKET_CATEGORY: Record<SessionBucket, SessionStepCategory> = {
+  glossing: 'learn_sentence',
+  grammar: 'grammar',
+  shadowing: 'shadowing',
+  review: 'review',
+};
 
 export function buildSessionRecap(input: SessionRecapInput): SessionRecap {
   const { windowStart, windowEnd, steps, reviews, vocabularyStudyItems, grammarNoticed } = input;
 
   const inWindow = (timestamp: string) => timestamp >= windowStart && timestamp <= windowEnd;
 
-  // --- Activities by bucket -------------------------------------------------
-  const byBucket: SessionRecapBucketLine[] = [];
+  // --- Activities by category -------------------------------------------------
+  const byCategory: SessionRecapCategoryLine[] = [];
   let activitiesCompleted = 0;
   let activitiesTotal = 0;
   const gameSteps = steps.filter((step) => step.targetKind === 'game');
   const workSteps = steps.filter((step) => step.targetKind !== 'game');
-  for (const bucket of BUCKET_ORDER) {
-    const bucketSteps = workSteps.filter((step) => step.bucket === bucket);
-    if (bucketSteps.length === 0) continue;
-    const completed = bucketSteps.filter((step) => step.status === 'completed').length;
-    byBucket.push({ bucket, completed, total: bucketSteps.length });
+  for (const category of SESSION_STEP_CATEGORY_ORDER) {
+    const categorySteps = workSteps.filter((step) => (step.category ?? BUCKET_CATEGORY[step.bucket]) === category);
+    if (categorySteps.length === 0) continue;
+    const completed = categorySteps.filter((step) => step.status === 'completed').length;
+    byCategory.push({ category, completed, total: categorySteps.length });
     activitiesCompleted += completed;
-    activitiesTotal += bucketSteps.length;
+    activitiesTotal += categorySteps.length;
   }
 
   // --- Reviews graded this session ---------------------------------------
@@ -124,7 +132,7 @@ export function buildSessionRecap(input: SessionRecapInput): SessionRecap {
   return {
     activitiesCompleted,
     activitiesTotal,
-    byBucket,
+    byCategory,
     games: {
       completed: gameSteps.filter((step) => step.status === 'completed').length,
       total: gameSteps.length,
