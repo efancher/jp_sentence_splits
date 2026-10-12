@@ -1507,6 +1507,17 @@ Activity types currently wired, grouped by subject/eligibility:
   `Review` field — and `classifyReviewError` now classifies a miss here as
   `grammar_misunderstanding`. No flagged/readable chunk → the card is
   unchanged from before this feature.
+- **Sentence subject, audio-gated**: `dictation` (2026-10-12) — same
+  candidates and descriptor as `listening`, but the learner types what they
+  hear (kanji or kana) before anything is revealed. `gradeDictation`
+  (`src/lib/dictationAnswer.ts`) accepts either `sentence.japanese` or
+  `readingOnly`, ignoring punctuation/whitespace and hiragana/katakana, and
+  returns an LCS diff used to mark missed runs in both the typed answer and
+  the target. The ✓/✗ is supplementary evidence only (typed text +
+  graded-against target land in `Review.responseRaw`/`expectedAnswer`; a
+  miss classifies as `listening_failure`); the 4-point self-rate still sets
+  the schedule. Seeds only for a sentence whose `listening` item has
+  `reps >= 1`, and is costed as a `practice` activity.
 - **Sentence subject, audio-gated**: `listening` — only eligible for
   sentences with a `SentenceAudio` row; audio plays first, Japanese text
   stays hidden until reveal. A playback-speed `<select>` (same
