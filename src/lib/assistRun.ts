@@ -7,7 +7,7 @@
  * finished piece, so a stopped/failed/interrupted run resumes without
  * repeating work.
  */
-import { MAX_ATTEMPTS_PER_CHUNK, chunkTranscript, mergeChunkReplies, runSegmentChunks } from './assistChunks';
+import { chunkTranscript, describeStop, mergeChunkReplies, runSegmentChunks } from './assistChunks';
 import {
   mergeExtraReplies,
   planExtraTasks,
@@ -108,9 +108,11 @@ export async function runAssistPipeline(input: {
       update({
         status: 'failed',
         progress: '',
-        failure:
-          `Stopped at part ${result.failure.index + 1} of ${chunks.length} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ` +
-          `${result.failure.error} ${done} part${done === 1 ? '' : 's'} saved — resume to continue from there.`,
+        failure: describeStop(
+          `part ${result.failure.index + 1} of ${chunks.length}`,
+          result.failure.error,
+          `${done} part${done === 1 ? '' : 's'} saved`,
+        ),
       });
       return state;
     }
@@ -160,10 +162,11 @@ export async function runAssistPipeline(input: {
     update({
       status: 'failed',
       progress: '',
-      failure:
-        `Stopped at ${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to} ` +
-        `after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${result.failure.error} ${done} of ${tasks.length} extra parts saved — ` +
-        'resume to continue, or commit without the rest.',
+      failure: describeStop(
+        `${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to}`,
+        result.failure.error,
+        `${done} of ${tasks.length} extra parts saved`,
+      ),
     });
     return state;
   }

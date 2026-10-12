@@ -21,6 +21,26 @@ export const CHUNK_FRAGMENTS = 40;
 /** One try plus one automatic retry. */
 export const MAX_ATTEMPTS_PER_CHUNK = 2;
 
+const OUT_OF_CREDITS_PATTERN =
+  /usage limit|hit your limit|limit reached|quota|out of (?:extra )?(?:usage|credits?)|credit balance|insufficient (?:credits?|funds|quota)|billing/i;
+
+/**
+ * True when every backend named in the box's combined error ("codex: …; claude: …")
+ * failed for lack of credits/usage, so retrying cannot help until the limit resets.
+ */
+export function isOutOfCreditsError(error: string): boolean {
+  const parts = error.split(/;\s+(?=[a-z]+: )/).filter(Boolean);
+  return parts.length > 0 && parts.every((part) => OUT_OF_CREDITS_PATTERN.test(part));
+}
+
+/** Failure text for a stopped run; an out-of-credits stop says so instead of reporting spent retries. */
+export function describeStop(where: string, error: string, saved: string): string {
+  if (isOutOfCreditsError(error)) {
+    return `Stopped at ${where}: the assistants are out of credits or usage (${error}). ${saved} — resume once credits are back.`;
+  }
+  return `Stopped at ${where} after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${error} ${saved} — resume to continue.`;
+}
+
 export const NO_EXTRAS: Required<CombinedPromptOptions> = {
   targets: false,
   constructions: false,
@@ -106,6 +126,7 @@ export async function runSegmentChunks(input: {
       } catch (err) {
         if (input.isCancelled()) return { replies, failure: null, cancelled: true };
         lastError = err instanceof Error ? err.message : 'Assistant failed';
+        if (isOutOfCreditsError(lastError)) break;
       }
     }
     if (!replies[index]) return { replies, failure: { index, error: lastError }, cancelled: false };

@@ -8,7 +8,7 @@
  * they land so a stopped run resumes where it left off; a piece gets
  * {@link MAX_ATTEMPTS_PER_CHUNK} tries and then the run stops for the user.
  */
-import { MAX_ATTEMPTS_PER_CHUNK } from './assistChunks';
+import { MAX_ATTEMPTS_PER_CHUNK, isOutOfCreditsError } from './assistChunks';
 import {
   singleExtraBlock,
   type CombinedPromptOptions,
@@ -238,6 +238,7 @@ export async function runExtraTasks(input: {
       } catch (err) {
         if (input.isCancelled()) return { replies, failure: null, cancelled: true };
         lastError = err instanceof Error ? err.message : 'Assistant failed';
+        if (isOutOfCreditsError(lastError)) break;
       }
     }
     if (!replies[task.id]) return { replies, failure: { task, error: lastError }, cancelled: false };

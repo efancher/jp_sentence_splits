@@ -7,7 +7,7 @@
  * Handles are book-wide S-numbers (position in the whole book + 1), so pieces
  * from different ranges merge without remapping.
  */
-import { MAX_ATTEMPTS_PER_CHUNK } from './assistChunks';
+import { describeStop } from './assistChunks';
 import { EXTRA_RANGE_SENTENCES, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import type { AssistBackend, AssistRunState } from './assistRun';
@@ -119,10 +119,11 @@ export async function runBookExtrasPipeline(input: {
     update({
       status: 'failed',
       progress: '',
-      failure:
-        `Stopped at ${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to} ` +
-        `after ${MAX_ATTEMPTS_PER_CHUNK} tries: ${result.failure.error} ${done} of ${tasks.length} parts saved — ` +
-        'resume to continue, or save what finished.',
+      failure: describeStop(
+        `${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to}`,
+        result.failure.error,
+        `${done} of ${tasks.length} parts saved`,
+      ),
     });
     return state;
   }
