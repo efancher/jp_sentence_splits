@@ -208,7 +208,6 @@ describe('ReaderPage (always-available chapter read-along)', () => {
     const panel = await screen.findByRole('region', { name: 'Sentence walkthrough' });
     expect(panel).toHaveTextContent('Automatic draft');
     expect(panel).toHaveTextContent('Step 1 of');
-    expect(panel).toHaveTextContent('not assessed yet');
     // Adjust itself needs a real Blob size, which fake-indexeddb drops; the walkthrough mounts the same NativeAudioButton.
     expect(within(panel).getByRole('button', { name: /Play native sentence recording/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue' }));

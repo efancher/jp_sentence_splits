@@ -118,8 +118,6 @@ export function walkthroughClauseNumbers<T extends { role: string }>(chunks: T[]
   return new Map(chunks.map((chunk, index) => [chunk, clauseOf[index]! + 1]));
 }
 
-const STAGES = ['Understand', 'Recognise', 'Recall', 'Use', 'Say it', 'Express it your way'];
-
 export function SentenceWalkthrough({
   sentence,
   savedChunks,
@@ -363,13 +361,6 @@ export function SentenceWalkthrough({
           ));
         })() : null}
       </div>
-      <ol className="muted" aria-label="Learning stages" style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
-        {STAGES.map((stage, index) => (
-          <li key={stage} aria-current={index === 0 ? 'step' : undefined}>
-            {stage}{index === 0 ? ' — guided here' : ' — not assessed yet'}
-          </li>
-        ))}
-      </ol>
       <label className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
         <span className="muted">Help level</span>
         <select aria-label="Help level" value={preset} onChange={(event) => setPreset(event.target.value as SupportPreset)}>
