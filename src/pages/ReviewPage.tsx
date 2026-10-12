@@ -63,6 +63,7 @@ import {
   type TrackedGrammarSpan,
   type VocabularyOccurrenceCandidate,
   type VocabularyTargetCandidate,
+  requestFreshTry,
 } from '../db/repository';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { distractorHistoryFromRecords, sampleMeaningQuestion } from '../lib/meaningChoices';
@@ -1225,6 +1226,7 @@ export function ReviewPage() {
   const [issueNote, setIssueNote] = useState('');
   const [submittingIssue, setSubmittingIssue] = useState(false);
   const [issueReported, setIssueReported] = useState(false);
+  const [freshTryStatus, setFreshTryStatus] = useState<'queued' | 'not_walked' | null>(null);
   /** "Delete sentence" — one confirm step, no window.prompt (see reportingIssue above). */
   const [confirmDeleteSentence, setConfirmDeleteSentence] = useState(false);
   const [deletingSentence, setDeletingSentence] = useState(false);
@@ -1889,6 +1891,7 @@ export function ReviewPage() {
     setReportingIssue(false);
     setIssueNote('');
     setIssueReported(false);
+    setFreshTryStatus(null);
     setConfirmDeleteSentence(false);
   }, [current?.studyItem.id]);
 
@@ -2186,6 +2189,19 @@ export function ReviewPage() {
                   Report issue
                 </button>
                 {issueReported ? <span className="muted">✓ Reported</span> : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void requestFreshTry(current.sentence.id).then(setFreshTryStatus);
+                  }}
+                >
+                  Fresh try this sentence
+                </button>
+                {freshTryStatus === 'queued' ? (
+                  <span className="muted">✓ Queued: it'll lead your next plan</span>
+                ) : freshTryStatus === 'not_walked' ? (
+                  <span className="muted">Not walked through yet</span>
+                ) : null}
               </div>
             )}
             {CHAPTER_LAYOUT_ACTIVITIES.includes(current.studyItem.activityType) ? (

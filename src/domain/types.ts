@@ -740,6 +740,12 @@ export interface AppSettings {
    */
   pitchAccentPaused?: boolean;
   /**
+   * Sentences the learner asked (review-card button) to get a "Fresh try" next,
+   * sentenceId → request time. Honoured by the sentence-first planner ahead of
+   * the spaced schedule until an expression attempt is logged after the request.
+   */
+  freshTryRequests?: Record<string, string>;
+  /**
    * Sentence-first planning (Phase 5): the daily plan's glossing bucket drafts
    * `sentence_learning` lesson steps (eligible with zero confirmed vocabulary)
    * instead of vocabulary_review/continue_book. Existing in-progress sessions

@@ -23,6 +23,7 @@ import {
   setBookSentenceStatus,
   setSentenceGrammarReviewStatus,
   updatePlannerSessionStep,
+  requestFreshTry,
   updateSettings,
 } from '../src/db/repository';
 import { shadowAttemptSummary } from '../src/lib/sessionPlanner';
@@ -341,6 +342,44 @@ describe('Learning Orchestrator repository layer', () => {
     const lessons = session.steps.filter((step) => step.targetKind === 'sentence_learning');
     expect(lessons.map((step) => step.sentenceId)).toEqual([walked.id, fresh.id]);
     expect(lessons[0]!.label).toMatch(/^Fresh try/);
+  });
+
+  it('sentence-first: a review-card fresh-try request jumps the spacing wait until an attempt is logged', async () => {
+    await updateSettings({ sentenceFirstPlanning: true });
+    const book = await createBook({ title: 'Request Book' });
+    const db = getDb();
+    const walked = makeSentence();
+    await db.sentences.put(walked);
+    await addSentencesToBook(book.id, [walked.id]);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const base = { sentenceId: walked.id, bookId: book.id, timestamp: yesterday } as never;
+    await db.sentenceLearningEvents.bulkPut([
+      { ...(base as object), id: createId('sle'), action: 'walkthrough_completed' },
+      { ...(base as object), id: createId('sle'), action: 'expression_attempt', outcome: 'needed_help' },
+    ] as never);
+
+    expect(await requestFreshTry(makeSentence().id)).toBe('not_walked');
+    const before = await addMinutesToTodaySession(30);
+    expect(before.steps.filter((step) => step.targetKind === 'sentence_learning')).toEqual([]);
+    await deleteTodayPlannerSession();
+
+    expect(await requestFreshTry(walked.id)).toBe('queued');
+    const after = await addMinutesToTodaySession(30);
+    const lesson = after.steps.find((step) => step.targetKind === 'sentence_learning');
+    expect(lesson?.sentenceId).toBe(walked.id);
+    expect(lesson?.revisit).toBe(true);
+    await deleteTodayPlannerSession();
+
+    await db.sentenceLearningEvents.put({
+      id: createId('sle'),
+      sentenceId: walked.id,
+      bookId: book.id,
+      action: 'expression_attempt',
+      outcome: 'needed_help',
+      timestamp: new Date(Date.now() + 1000).toISOString(),
+    } as never);
+    const done = await addMinutesToTodaySession(30);
+    expect(done.steps.some((step) => step.targetKind === 'sentence_learning')).toBe(false);
   });
 
   it('ending a session early marks remaining steps skipped, never completed', async () => {

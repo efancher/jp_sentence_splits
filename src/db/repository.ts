@@ -14,7 +14,7 @@ import {
   isSequentialStudyMode,
 } from '../lib/sentenceLed';
 import { sessionStepCategory } from '../lib/sessionStepCategory';
-import { sentencesDueForFreshTry, sentencesReadyToRevisit } from '../lib/sentenceJourney';
+import { sentencesDueForFreshTry } from '../lib/sentenceJourney';
 import { buildEpisodeProgress, type EpisodeProgressRow } from '../lib/episodeProgress';
 import { ANALYSIS_FORMAT_VERSION } from '../appConfig';
 import { chunksMatchSource } from '../lib/chunking';
@@ -10017,35 +10017,27 @@ async function buildReviewPriorityInputs(
 }
 
 /**
- * On-demand "Do a fresh try": the walked-through, not-yet-independent sentence
- * you've gone longest without trying, ignoring the spacing schedule. Books out
- * of rotation and shelved chapters are skipped.
+ * Review-card "Fresh try this sentence": queue the card's sentence to be drafted
+ * as a Fresh try next, ahead of the spacing schedule. Only walked-through
+ * sentences qualify; anything else would just come up as a first lesson anyway.
  */
-export async function pickSentenceForFreshTry(
-  now: Date = new Date(),
-): Promise<{ bookId: string; sentenceId: string } | undefined> {
-  const db = getDb();
-  const [allBooks, suspendedIndex] = await Promise.all([db.books.toArray(), loadSuspendedBookIndex()]);
-  let best: { bookId: string; sentenceId: string; since: string } | undefined;
-  for (const book of allBooks.filter(isBookInStudyRotation)) {
-    const events = await listSentenceLearningEvents(book.id);
-    const ready = sentencesReadyToRevisit(events, now);
-    if (ready.length === 0) continue;
-    const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
-    const lastTouch = new Map<string, string>();
-    for (const event of events) {
-      if (event.action !== 'walkthrough_completed' && event.action !== 'expression_attempt') continue;
-      const seen = lastTouch.get(event.sentenceId);
-      if (seen === undefined || event.timestamp > seen) lastTouch.set(event.sentenceId, event.timestamp);
-    }
-    for (const id of ready) {
-      const membership = memberships.find((item) => item.sentenceId === id);
-      if (!membership || (suspendedIndex && membershipIsShelved(membership, suspendedIndex))) continue;
-      const since = lastTouch.get(id) ?? '';
-      if (!best || since < best.since) best = { bookId: book.id, sentenceId: id, since };
-    }
-  }
-  return best ? { bookId: best.bookId, sentenceId: best.sentenceId } : undefined;
+export async function requestFreshTry(sentenceId: string, now: Date = new Date()): Promise<'queued' | 'not_walked'> {
+  const events = await getDb().sentenceLearningEvents.where('sentenceId').equals(sentenceId).toArray();
+  if (!events.some((event) => event.action === 'walkthrough_completed')) return 'not_walked';
+  const settings = await ensureSettings(getDb());
+  await updateSettings({ freshTryRequests: { ...settings.freshTryRequests, [sentenceId]: now.toISOString() } });
+  return 'queued';
+}
+
+/** Requested sentences still waiting: no expression attempt since the request. */
+function pendingFreshTryRequestIds(
+  requests: Record<string, string> | undefined,
+  events: SentenceLearningEvent[],
+): string[] {
+  if (!requests) return [];
+  return Object.entries(requests)
+    .filter(([id, at]) => !events.some((e) => e.sentenceId === id && e.action === 'expression_attempt' && e.timestamp > at))
+    .map(([id]) => id);
 }
 
 /** Explore candidates: books with sentences not yet started, most-recently-opened first ("continue where you left off" reusing Book.lastOpenedAt, the same signal BookDetailPage's touchBookOpened already maintains). */
@@ -10067,6 +10059,7 @@ async function findExploreCandidates(
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, 30);
 
+  const freshTryRequests = sentenceFirst ? (await ensureSettings(db)).freshTryRequests : undefined;
   const candidates: ExploreCandidate[] = [];
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
@@ -10083,8 +10076,10 @@ async function findExploreCandidates(
     const parkedGlossIds = sentenceFirst
       ? parkedSentenceIds(await db.glossDecisions.where('bookId').equals(book.id).toArray())
       : [];
+    // Review-card requests jump the spacing queue (walked-through sentences only).
+    const requestedIds = walked ? pendingFreshTryRequestIds(freshTryRequests, bookEvents).filter((id) => walked.has(id)) : [];
     const revisitIds = sentenceFirst
-      ? [...new Set([...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
+      ? [...new Set([...requestedIds, ...parkedGlossIds, ...sentencesDueForFreshTry(bookEvents)])].slice(0, EXPLORE_REVISITS_PER_BOOK)
       : [];
     const parkedGlossSet = new Set(parkedGlossIds);
     // Sequential study mode gates *introduction* only: a locked sentence is
