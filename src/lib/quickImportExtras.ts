@@ -42,6 +42,7 @@ export async function applyQuickImportExtras(
   chapterId: string | undefined,
   sections: CombinedReplySections,
   sentenceIdByNumber: ReadonlyArray<string | undefined>,
+  options: { replaceCheckSentenceIds?: ReadonlySet<string> } = {},
 ): Promise<QuickImportExtrasResult> {
   const result: QuickImportExtrasResult = {
     targets: 0,
@@ -63,7 +64,8 @@ export async function applyQuickImportExtras(
       const sentenceId = sentenceIdByNumber[index];
       if (!sentenceId) continue;
       // A check that already exists (the background worker can win the race right after commit) is a full bank; keep it.
-      const hasCheck = Boolean((await getDb().analyses.get(sentenceId))?.comprehensionCheck);
+      const hasCheck =
+        !options.replaceCheckSentenceIds?.has(sentenceId) && Boolean((await getDb().analyses.get(sentenceId))?.comprehensionCheck);
       if (parsed && !hasCheck) {
         let check = buildComprehensionCheck(parsed, 'ai_suggested');
         const wrong = extraWrong[index] ?? [];

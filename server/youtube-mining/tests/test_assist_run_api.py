@@ -125,3 +125,26 @@ def test_cancel_terminates_and_delete_discards(client: TestClient) -> None:
     assert proc.terminated
     assert client.delete("/assist-runs/job_1").status_code == 204
     assert client.get("/assist-runs/job_1").status_code == 404
+
+
+BOOK_BODY = {
+    "runId": "book-extras-b1",
+    "sentences": [{"handle": 1, "japanese": "猫が好き。", "translation": "I like cats."}],
+    "selection": {"walkthroughs": [1]},
+}
+
+
+def test_book_extras_run_stores_spec_and_returns_pieces(client: TestClient, tmp_path: Path) -> None:
+    assert client.post("/assist-runs", json=BOOK_BODY).json()["status"] == "running"
+    run_dir = tmp_path / "assist-runs" / "book-extras-b1"
+    spec = json.loads((run_dir / "spec.json").read_text())
+    assert spec["selection"] == {"walkthroughs": [1]} and spec["sentences"][0]["handle"] == 1
+    state = json.loads((run_dir / "state.json").read_text())
+    state["extraReplies"] = {"walkthroughs:1-1": "{}"}
+    (run_dir / "state.json").write_text(json.dumps(state))
+    assert client.get("/assist-runs/book-extras-b1").json()["extraReplies"] == {"walkthroughs:1-1": "{}"}
+
+
+def test_run_needs_a_transcript_or_book_sentences(client: TestClient) -> None:
+    assert client.post("/assist-runs", json={"runId": "x"}).status_code == 422
+    assert client.post("/assist-runs", json={**BOOK_BODY, "selection": {}}).status_code == 422

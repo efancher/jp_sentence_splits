@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 TranscriptStatus = Literal[
     "unverified", "auto-caption", "manually-corrected", "verified"
@@ -478,14 +478,33 @@ class AssistRunOptions(BaseModel):
     particles: bool = False
 
 
+class AssistRunBookSentence(BaseModel):
+    handle: int
+    japanese: str
+    translation: str = ""
+
+
 class AssistRunRequest(BaseModel):
     """Start or resume the server-side Quick import assistant run for a mining
     job (see app/assist_run.py). `runId` is the mining job id."""
 
     runId: str
-    transcript: list[AssistRunSegment] = Field(min_length=1)
+    transcript: list[AssistRunSegment] = Field(default_factory=list)
     options: AssistRunOptions = Field(default_factory=AssistRunOptions)
     backend: AssistBackend = "auto"
+    # Book-extras mode (existing book): the whole book's sentences plus, per
+    # extra kind, the 1-based handles to generate it for. Replaces `transcript`.
+    sentences: list[AssistRunBookSentence] | None = None
+    selection: dict[str, list[int]] | None = None
+
+    @model_validator(mode="after")
+    def _needs_input(self):
+        if self.sentences is not None:
+            if not self.selection:
+                raise ValueError("selection is required with sentences")
+        elif not self.transcript:
+            raise ValueError("transcript must not be empty")
+        return self
 
 
 class AssistRunStatusResponse(BaseModel):
@@ -498,6 +517,8 @@ class AssistRunStatusResponse(BaseModel):
     sentencesReply: str | None = None
     # Merged extras so far: {sentences, pack, structure, comprehension, particles}.
     extras: dict[str, str] | None = None
+    # Finished pieces by task id (book-extras mode merges these client-side).
+    extraReplies: dict[str, str] | None = None
     updatedAt: int = 0
 
 

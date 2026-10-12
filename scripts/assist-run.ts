@@ -15,6 +15,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { runBookExtrasPipeline, type BookAssistRunSpec } from '../src/lib/bookAssistRun';
 import {
   emptyAssistRunState,
   runAssistPipeline,
@@ -80,7 +81,7 @@ async function runAssist(prompt: string, backend: string): Promise<{ reply: stri
 }
 
 async function main(): Promise<void> {
-  const spec = JSON.parse(readFileSync(join(dir!, 'spec.json'), 'utf8')) as AssistRunSpec;
+  const spec = JSON.parse(readFileSync(join(dir!, 'spec.json'), 'utf8')) as AssistRunSpec & Partial<BookAssistRunSpec>;
   let state = emptyAssistRunState();
   try {
     state = { ...state, ...(JSON.parse(readFileSync(join(dir!, 'state.json'), 'utf8')) as AssistRunState) };
@@ -88,7 +89,12 @@ async function main(): Promise<void> {
     // first run: no state yet
   }
   try {
-    await runAssistPipeline({ spec, state, run: (prompt) => runAssist(prompt, spec.backend ?? 'auto'), save: saveState, isCancelled: () => cancelled });
+    const run = (prompt: string) => runAssist(prompt, spec.backend ?? 'auto');
+    if (spec.sentences && spec.selection) {
+      await runBookExtrasPipeline({ spec: { sentences: spec.sentences, selection: spec.selection }, state, run, save: saveState, isCancelled: () => cancelled });
+    } else {
+      await runAssistPipeline({ spec, state, run, save: saveState, isCancelled: () => cancelled });
+    }
   } catch (err) {
     state.status = 'failed';
     state.progress = '';

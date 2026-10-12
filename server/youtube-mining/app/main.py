@@ -193,6 +193,7 @@ def _assist_run_response(state: dict) -> AssistRunStatusResponse:
         segmentsTotal=len(parts),
         sentencesReply=state.get("sentencesReply"),
         extras=state.get("extras"),
+        extraReplies=state.get("extraReplies"),
         updatedAt=int(state.get("updatedAt") or 0),
     )
 

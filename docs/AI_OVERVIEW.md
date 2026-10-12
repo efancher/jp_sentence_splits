@@ -877,6 +877,22 @@ Targets are constants; no settings UI.
   per-piece path (localStorage) for regenerating after edits. Replies that are
   pasted manually are checked for truncation (`checkCombinedReply`, `=== END ===`
   marker) and shown as warnings.
+- **Book-page "Generate extras with the assistant"** (`BookAssistExtras.tsx`,
+  `bookAssistExtras.ts`, `bookAssistRun.ts`) — the same box-side runner for an
+  EXISTING book: walkthroughs, meaning checks (+ contextual reading check),
+  particle questions, structure and construction layers (not focus targets).
+  The panel counts per extra the sentences without one and those that already
+  have one; by default only the missing ones are sent, and existing ones are
+  replaced only if the learner ticks "Replace the N existing too" or picks
+  individual sentences in the "Review the N existing" list. The run is
+  `POST /assist-runs` in book mode (`sentences` = whole book as context,
+  `selection` = book-wide S-handles per kind; run id `book-extras-<bookId>`),
+  runs `runBookExtrasPipeline`, and returns finished pieces as `extraReplies`.
+  Nothing is written until the learner presses "Save results" (or "Save what
+  finished"); saving re-reads the book and keeps any sentence that gained the
+  extra during the run unless it was approved for replacement. The snapshot of
+  what was sent lives in localStorage (`bookextras.snapshot.<bookId>`), so
+  saving works from the device that started the run.
 - **Re-segment captions** (`ResegmentSourcePage.tsx`, route
   `/books/:bookId/resegment`, button on `BookDetailPage` for
   `sourceKey` starting `shadowing:`) — rebuilds a source's sentences on

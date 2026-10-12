@@ -26,6 +26,7 @@ import { BookComprehensionCheckBatch } from '../components/BookComprehensionChec
 import { BookChunkingBatch } from '../components/BookChunkingBatch';
 import { BookWalkthroughBatch } from '../components/BookWalkthroughBatch';
 import { BookParticleCheckBatch } from '../components/BookParticleCheckBatch';
+import { BookAssistExtras } from '../components/BookAssistExtras';
 import {
   assignBookSentencesToChapter,
   createBookChapter,
@@ -613,6 +614,7 @@ export function BookDetailPage() {
         <section className="panel stack">
           <BookSharingPanel bookId={bookId} />
         </section>
+        <BookAssistExtras bookId={bookId} />
         <BookComprehensionCheckBatch bookId={bookId} />
         <BookChunkingBatch bookId={bookId} />
         <BookWalkthroughBatch bookId={bookId} />

@@ -769,6 +769,7 @@ const assistRunSchema = z.object({
     })
     .nullable()
     .optional(),
+  extraReplies: z.record(z.string(), z.string()).nullable().optional(),
   updatedAt: z.number().default(0),
 });
 
@@ -783,6 +784,22 @@ export async function startAssistRun(input: {
   runId: string;
   transcript: WizardTranscriptSeg[];
   options: CombinedPromptOptions;
+  backend?: AssistBackend;
+}): Promise<AssistRunStatus> {
+  const response = await fetch(`${API_BASE}/assist-runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(`Failed to start assistant: ${await readErrorDetail(response)}`);
+  return assistRunSchema.parse(await response.json());
+}
+
+/** Start (or resume) an extras run over an existing book's sentences (`POST /assist-runs`, book mode). */
+export async function startBookExtrasRun(input: {
+  runId: string;
+  sentences: { handle: number; japanese: string; translation: string }[];
+  selection: Record<string, number[]>;
   backend?: AssistBackend;
 }): Promise<AssistRunStatus> {
   const response = await fetch(`${API_BASE}/assist-runs`, {
