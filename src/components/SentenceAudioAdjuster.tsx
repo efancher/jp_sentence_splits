@@ -61,7 +61,8 @@ export function SentenceAudioAdjuster({
       })
       .catch((error) => {
         if (cancelled) return;
-        setErrorMsg(error instanceof Error ? error.message : 'Could not load the source audio.');
+        const message = error instanceof Error ? error.message : 'Could not load the source audio.';
+        setErrorMsg(error instanceof TypeError ? `${message} — this needs Tailscale (connection to the mining box).` : message);
         setState('error');
       });
     return () => {
@@ -81,7 +82,8 @@ export function SentenceAudioAdjuster({
       });
       setOpen(false);
     } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : 'Re-cut failed.');
+      const message = error instanceof Error ? error.message : 'Re-cut failed.';
+      setErrorMsg(error instanceof TypeError ? `${message} — this needs Tailscale (connection to the mining box).` : message);
       setState('error');
     }
   }
