@@ -3755,7 +3755,12 @@ function SentenceNativePitchContour({ sentenceId }: { sentenceId: string }) {
     [sentenceId],
   );
   if (!audio) return null;
-  return <ReviewPitchContour audio={audio} />;
+  return (
+    <>
+      <ReviewPitchContour audio={audio} />
+      <ReviewClipAdjuster audioId={audio.id} />
+    </>
+  );
 }
 
 /**
