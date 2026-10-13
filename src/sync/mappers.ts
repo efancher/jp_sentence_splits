@@ -8,6 +8,7 @@ import type {
   InboxMembership,
   Kanji,
   NamedPodcastFeed,
+  SentenceExtras,
   PitchDrillAttempt,
   SentenceLearningEvent,
   GlossDecision,
@@ -52,7 +53,8 @@ export type LocalSyncPayload =
   | PitchDrillAttempt
   | SentenceLearningEvent
   | GlossDecision
-  | NamedPodcastFeed;
+  | NamedPodcastFeed
+  | SentenceExtras;
 
 /** Local reference-audio row without the Blob (for sync payloads). */
 export interface ReferenceAudioLocal {
@@ -982,6 +984,35 @@ export function remoteToNamedPodcastFeed(
   };
 }
 
+export function sentenceExtrasToRemote(extras: SentenceExtras, ownerId: string, version: number) {
+  return {
+    id: extras.id,
+    owner_id: ownerId,
+    book_id: extras.bookId ?? null,
+    chapter_id: extras.chapterId ?? null,
+    structure_draft: extras.structureDraft ?? null,
+    construction_draft: extras.constructionDraft ?? null,
+    context_walkthrough: extras.contextWalkthrough ?? null,
+    created_at: extras.createdAt,
+    updated_at: extras.updatedAt,
+    deleted_at: null,
+    version,
+  };
+}
+
+export function remoteToSentenceExtras(row: Record<string, unknown>): SentenceExtras {
+  return {
+    id: String(row.id),
+    bookId: (row.book_id as string | null) ?? undefined,
+    chapterId: (row.chapter_id as string | null) ?? undefined,
+    structureDraft: (row.structure_draft as SentenceExtras['structureDraft'] | null) ?? undefined,
+    constructionDraft: (row.construction_draft as SentenceExtras['constructionDraft'] | null) ?? undefined,
+    contextWalkthrough: (row.context_walkthrough as SentenceExtras['contextWalkthrough'] | null) ?? undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function pitchDrillAttemptToRemote(
   attempt: PitchDrillAttempt,
   ownerId: string,
@@ -1232,6 +1263,8 @@ export function toRemoteRow(
       return glossDecisionToRemote(payload as GlossDecision, ownerId, version);
     case 'named_podcast_feeds':
       return namedPodcastFeedToRemote(payload as NamedPodcastFeed, ownerId, version);
+    case 'sentence_extras':
+      return sentenceExtrasToRemote(payload as SentenceExtras, ownerId, version);
   }
 }
 

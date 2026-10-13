@@ -24,7 +24,7 @@ const TABLES = new Set([
   'analyses', 'book_invites', 'book_members', 'books', 'book_sentences',
   'card_issue_reports', 'chunk_issue_reports', 'gloss_decisions', 'grammar_patterns',
   'grammar_relationships', 'import_batches', 'inbox', 'kanji',
-  'named_podcast_feeds', 'pitch_drill_attempts', 'pitch_drill_takes',
+  'named_podcast_feeds', 'sentence_extras', 'pitch_drill_attempts', 'pitch_drill_takes',
   'planner_sessions', 'profiles', 'reference_alignment', 'reference_audio',
   'reviews', 'sentence_grammar', 'sentence_learning_events', 'sentences',
   'sentence_vocabulary', 'sources', 'study_items', 'sync_events',

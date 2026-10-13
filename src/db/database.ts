@@ -26,6 +26,7 @@ import type {
   Review,
   Sentence,
   SentenceAudio,
+  SentenceExtras,
   SentenceAnalysis,
   SentenceGrammar,
   SentenceVocabulary,
@@ -150,6 +151,8 @@ export class GlossbookDatabase extends Dexie {
   // Learner-named podcast feed URLs (docs/STATUS.md), synced like planner
   // sessions — a small per-user preference list, not learning content.
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
+  // AI-drafted per-sentence extras (id = sentence id), synced as sentence_extras.
+  sentenceExtras!: EntityTable<SentenceExtras, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -708,6 +711,11 @@ export class GlossbookDatabase extends Dexie {
     // Chunk-boundary issues flagged during particle-check import — purely additive.
     this.version(24).stores({
       chunkIssueReports: 'id, sentenceId, status, createdAt',
+    });
+
+    // AI-drafted per-sentence extras split out of Book.chapters — purely additive.
+    this.version(25).stores({
+      sentenceExtras: 'id, bookId, chapterId',
     });
   }
 }

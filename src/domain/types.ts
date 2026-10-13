@@ -1313,6 +1313,23 @@ export interface NamedPodcastFeed {
   updatedAt: string;
 }
 
+/**
+ * AI-drafted per-sentence extras, split out of `Chapter.structureDrafts` /
+ * `constructionDrafts` / `contextWalkthroughs` so a book row stays small (those
+ * blobs made one book ~4 MB, and every edit re-synced all of it). `id` IS the
+ * sentence id. Drafts only — never instead of the learner's saved `analyses`.
+ */
+export interface SentenceExtras {
+  id: string;
+  bookId?: string;
+  chapterId?: string;
+  structureDraft?: StructureDraftChunk[];
+  constructionDraft?: ConstructionLayer[];
+  contextWalkthrough?: ContextWalkthrough;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ChunkIssueStatus = 'open' | 'resolved' | 'dismissed';
 
 /**

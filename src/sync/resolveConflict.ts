@@ -11,6 +11,7 @@ import {
   remoteToBookSentence,
   remoteToImportBatch,
   remoteToInbox,
+  remoteToSentenceExtras,
   remoteToSentence,
 } from './mappers';
 import { mergeBookByChoices, type ChapterSide } from './bookChapterConflict';
@@ -51,6 +52,11 @@ async function applyPayload(
       break;
     case 'inbox':
       await db.inbox.put(asRemoteRow ? remoteToInbox(row) : (payload as never));
+      break;
+    case 'sentence_extras':
+      await db.sentenceExtras.put(
+        asRemoteRow ? remoteToSentenceExtras(row) : (payload as never),
+      );
       break;
     default:
       break;

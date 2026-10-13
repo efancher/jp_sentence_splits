@@ -24,7 +24,8 @@ export type SyncEntity =
   | 'pitch_drill_attempts'
   | 'sentence_learning_events'
   | 'gloss_decisions'
-  | 'named_podcast_feeds';
+  | 'named_podcast_feeds'
+  | 'sentence_extras';
 
 export type SyncOperationType = 'upsert' | 'delete';
 

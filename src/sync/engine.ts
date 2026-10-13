@@ -28,6 +28,7 @@ import {
   remoteToInbox,
   remoteToKanji,
   remoteToNamedPodcastFeed,
+  remoteToSentenceExtras,
   remoteToPitchDrillAttempt,
   remoteToSentenceLearningEvent,
   remoteToGlossDecision,
@@ -1321,6 +1322,8 @@ async function localRecordExists(entity: SyncEntity, recordId: string): Promise<
       return (await db.glossDecisions.get(recordId)) != null;
     case 'named_podcast_feeds':
       return (await db.namedPodcastFeeds.get(recordId)) != null;
+    case 'sentence_extras':
+      return (await db.sentenceExtras.get(recordId)) != null;
     default:
       // Unknown entity — assume present so we don't loop re-fetching it.
       return true;
@@ -1538,6 +1541,9 @@ async function applyRemoteDelete(
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.delete(recordId);
       break;
+    case 'sentence_extras':
+      await db.sentenceExtras.delete(recordId);
+      break;
   }
   await putRecordMeta({
     entity,
@@ -1674,6 +1680,9 @@ export async function applyRemoteUpsert(
     case 'named_podcast_feeds':
       await db.namedPodcastFeeds.put(remoteToNamedPodcastFeed(remote));
       break;
+    case 'sentence_extras':
+      await db.sentenceExtras.put(remoteToSentenceExtras(remote));
+      break;
   }
   const recordId =
     entity === 'analyses' || entity === 'inbox'
@@ -1715,6 +1724,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   const sentenceLearningEvents = await db.sentenceLearningEvents.toArray();
   const glossDecisions = await db.glossDecisions.toArray();
   const namedPodcastFeeds = await db.namedPodcastFeeds.toArray();
+  const sentenceExtras = await db.sentenceExtras.toArray();
 
   for (const book of books) {
     await trackAndEnqueue('books', book.id, book);
@@ -1791,6 +1801,9 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   for (const feed of namedPodcastFeeds) {
     await trackAndEnqueue('named_podcast_feeds', feed.id, feed);
   }
+  for (const extras of sentenceExtras) {
+    await trackAndEnqueue('sentence_extras', extras.id, extras);
+  }
 
   await updateSyncMeta({ userId, migrationChoice: 'upload' });
   await runSyncCycle();
@@ -1851,6 +1864,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       db.sentenceLearningEvents,
       db.glossDecisions,
       db.namedPodcastFeeds,
+      db.sentenceExtras,
       db.syncQueue,
       db.syncRecordMeta,
       db.syncConflicts,
@@ -1880,6 +1894,7 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
       await db.sentenceLearningEvents.clear();
       await db.glossDecisions.clear();
       await db.namedPodcastFeeds.clear();
+      await db.sentenceExtras.clear();
       await db.syncQueue.clear();
       await db.syncRecordMeta.clear();
       await db.syncConflicts.clear();
@@ -1966,6 +1981,9 @@ export async function replaceLocalWithCloud(userId: string): Promise<void> {
   });
   await pullFullTable('named_podcast_feeds', userId, async (rows) => {
     await db.namedPodcastFeeds.bulkPut(rows.map((r) => remoteToNamedPodcastFeed(r)));
+  });
+  await pullFullTable('sentence_extras', userId, async (rows) => {
+    await db.sentenceExtras.bulkPut(rows.map((r) => remoteToSentenceExtras(r)));
   });
 
   // Reference audio: metadata only (blob-less placeholders), gated on the
