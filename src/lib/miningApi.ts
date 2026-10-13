@@ -714,6 +714,11 @@ const assistStatusSchema = z.object({
   backend: z.string().nullable().optional(),
   reply: z.string().nullable().optional(),
   error: z.string().nullable().optional(),
+  startedAt: z.number().nullable().optional(),
+  timeoutSeconds: z.number().nullable().optional(),
+  attempts: z
+    .array(z.object({ backend: z.string(), outcome: z.string(), detail: z.string().nullable().optional(), seconds: z.number() }))
+    .default([]),
 });
 
 /**
@@ -770,6 +775,11 @@ const assistRunSchema = z.object({
     .nullable()
     .optional(),
   extraReplies: z.record(z.string(), z.string()).nullable().optional(),
+  live: z
+    .object({ backend: z.string().nullable(), startedAt: z.number().nullable(), timeoutSeconds: z.number().nullable() })
+    .nullable()
+    .optional(),
+  log: z.array(z.object({ at: z.number(), text: z.string() })).default([]),
   updatedAt: z.number().default(0),
 });
 

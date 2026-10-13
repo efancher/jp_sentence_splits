@@ -459,6 +459,10 @@ class AssistStatusResponse(BaseModel):
     backend: str | None = None
     reply: str | None = None
     error: str | None = None
+    # Epoch seconds the attempt now running began, the per-attempt timeout, and what each finished attempt did.
+    startedAt: float | None = None
+    timeoutSeconds: int | None = None
+    attempts: list[dict] = Field(default_factory=list)
 
 
 class AssistRunSegment(BaseModel):
@@ -519,6 +523,9 @@ class AssistRunStatusResponse(BaseModel):
     extras: dict[str, str] | None = None
     # Finished pieces by task id (book-extras mode merges these client-side).
     extraReplies: dict[str, str] | None = None
+    # What the assistant call in flight is doing, and a short newest-last activity log (see src/lib/assistRun.ts).
+    live: dict | None = None
+    log: list[dict] = Field(default_factory=list)
     updatedAt: int = 0
 
 

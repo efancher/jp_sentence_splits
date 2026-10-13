@@ -10,7 +10,7 @@
 import { describeStop } from './assistChunks';
 import { EXTRA_RANGE_SENTENCES, describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
-import type { AssistBackend, AssistRunState } from './assistRun';
+import { logPatch, type AssistBackend, type AssistRunState } from './assistRun';
 
 export const BOOK_EXTRA_KINDS = ['structure', 'constructions', 'walkthroughs', 'comprehension', 'particles'] as const;
 export type BookExtraKind = (typeof BOOK_EXTRA_KINDS)[number];
@@ -120,6 +120,7 @@ export async function runBookExtrasPipeline(input: {
           p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
         }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
       }),
+    onNote: (text) => update(logPatch(state, text)),
     isCancelled: input.isCancelled,
   });
   if (result.cancelled) {

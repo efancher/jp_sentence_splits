@@ -30,7 +30,8 @@ def test_codex_reply(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setitem(assist.RUNNERS, "codex", lambda prompt: f"echo:{prompt}")
     assist_id = client.post("/assist", json={"prompt": "hi"}).json()["assistId"]
     body = _wait(client, assist_id)
-    assert body == {"status": "done", "backend": "codex", "reply": "echo:hi", "error": None}
+    assert body["status"] == "done" and body["backend"] == "codex" and body["reply"] == "echo:hi"
+    assert [a["outcome"] for a in body["attempts"]] == ["ok"]
 
 
 def test_falls_back_to_claude_once_each(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -74,3 +75,32 @@ def test_explicit_backend_goes_first_other_is_backup(client: TestClient, monkeyp
     assert assist.backend_order("claude") == ["claude", "codex"]
     body = _wait(client, client.post("/assist", json={"prompt": "x", "backend": "claude"}).json()["assistId"])
     assert body["status"] == "done" and body["backend"] == "codex"
+
+
+def test_hung_backend_is_failed_over_after_a_failed_probe(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    monkeypatch.setattr(assist, "PROBE_AFTER_SECONDS", 0.05)
+    monkeypatch.setattr(assist, "_down_until", {})
+    release = threading.Event()
+
+    def codex(prompt: str) -> str:
+        if prompt == assist.PROBE_PROMPT:
+            raise assist.AssistError("timed out after 30s")
+        release.wait(5)
+        raise assist.AssistError("stopped: the backend stopped responding")
+
+    monkeypatch.setitem(assist.RUNNERS, "codex", codex)
+    monkeypatch.setitem(assist.RUNNERS, "claude", lambda prompt: "from claude")
+    # the probe marks codex down; in production that aborts the subprocess, here release the stub when it does
+    original = assist._probe
+
+    def probe_then_release(name, abort, finished):
+        original(name, abort, finished)
+        release.set()
+
+    monkeypatch.setattr(assist, "_probe", probe_then_release)
+    body = _wait(client, client.post("/assist", json={"prompt": "hi"}).json()["assistId"])
+    assert body["status"] == "done" and body["backend"] == "claude"
+    assert [a["backend"] for a in body["attempts"]] == ["codex", "claude"]
+    assert assist.backend_order("auto")[-1] == "codex"

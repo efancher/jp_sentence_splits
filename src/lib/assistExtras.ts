@@ -238,6 +238,8 @@ export async function runExtraTasks(input: {
   run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
   onTaskDone: (taskId: string, reply: string) => void;
   onProgress: (progress: ExtraProgress) => void;
+  /** Optional activity-log line (rejected reply, failed call, saved part). */
+  onNote?: (text: string) => void;
   isCancelled: () => boolean;
 }): Promise<ExtraRunResult> {
   const replies: Record<string, string> = {};
@@ -248,6 +250,7 @@ export async function runExtraTasks(input: {
   for (const [position, task] of input.tasks.entries()) {
     if (replies[task.id]) continue;
     let lastError = '';
+    const label = `${task.heading.toLowerCase()} ${describeTaskRange(task)}`;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK; attempt++) {
       if (input.isCancelled()) return { replies, failure: null, cancelled: true };
       input.onProgress({ task, position, total: input.tasks.length, attempt, backend: null });
@@ -257,14 +260,17 @@ export async function runExtraTasks(input: {
         const problem = validateExtraReply(task, reply);
         if (problem) {
           lastError = problem;
+          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
           continue;
         }
         replies[task.id] = reply;
         input.onTaskDone(task.id, reply);
+        input.onNote?.(`${label}: saved (${backend ?? 'assistant'})`);
         break;
       } catch (err) {
         if (input.isCancelled()) return { replies, failure: null, cancelled: true };
         lastError = err instanceof Error ? err.message : 'Assistant failed';
+        input.onNote?.(`${label}: call failed (${lastError}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
         if (isOutOfCreditsError(lastError)) break;
       }
     }

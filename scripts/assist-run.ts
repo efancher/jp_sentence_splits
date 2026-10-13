@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { runBookExtrasPipeline, type BookAssistRunSpec } from '../src/lib/bookAssistRun';
 import {
   emptyAssistRunState,
+  logPatch,
   runAssistPipeline,
   type AssistRunSpec,
   type AssistRunState,
@@ -54,7 +55,27 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
+let liveState: AssistRunState | null = null;
+
+/** Mirrors the server's view of the call in flight (backend, start time, finished attempts) into the run state. */
+function reportLive(info: { backend: string | null; startedAt: number | null; timeoutSeconds: number | null } | null): void {
+  if (!liveState) return;
+  const prev = liveState.live;
+  if (prev?.backend === info?.backend && prev?.startedAt === info?.startedAt) return;
+  liveState.live = info;
+  liveState.updatedAt = Date.now();
+  saveState(liveState);
+}
+
 async function runAssist(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
+  try {
+    return await runAssistCall(prompt, backend);
+  } finally {
+    reportLive(null);
+  }
+}
+
+async function runAssistCall(prompt: string, backend: string): Promise<{ reply: string; backend: string | null }> {
   const created = await fetch(`${API_BASE}/assist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -63,6 +84,7 @@ async function runAssist(prompt: string, backend: string): Promise<{ reply: stri
   if (!created.ok) throw new Error(`Failed to start assistant: ${await readError(created)}`);
   const { assistId } = (await created.json()) as { assistId: string };
   const startedAt = Date.now();
+  let loggedAttempts = 0;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     if (cancelled) throw new Error('Cancelled');
@@ -74,7 +96,30 @@ async function runAssist(prompt: string, backend: string): Promise<{ reply: stri
       reply?: string | null;
       backend?: string | null;
       error?: string | null;
+      startedAt?: number | null;
+      timeoutSeconds?: number | null;
+      attempts?: { backend: string; outcome: string; detail?: string | null; seconds: number }[];
     };
+    const attempts = status.attempts ?? [];
+    if (liveState && attempts.length > loggedAttempts) {
+      for (const a of attempts.slice(loggedAttempts)) {
+        const text =
+          a.outcome === 'ok'
+            ? `${a.backend} answered in ${a.seconds}s`
+            : `${a.backend} failed after ${a.seconds}s: ${a.detail ?? 'unknown error'}`;
+        Object.assign(liveState, logPatch(liveState, text));
+      }
+      loggedAttempts = attempts.length;
+      liveState.updatedAt = Date.now();
+      saveState(liveState);
+    }
+    if (status.status === 'running' && status.backend) {
+      reportLive({
+        backend: status.backend,
+        startedAt: status.startedAt ? Math.round(status.startedAt * 1000) : null,
+        timeoutSeconds: status.timeoutSeconds ?? null,
+      });
+    }
     if (status.status === 'error') throw new Error(status.error ?? 'Assistant failed');
     if (status.status === 'done') return { reply: status.reply ?? '', backend: status.backend ?? null };
   }
@@ -88,6 +133,7 @@ async function main(): Promise<void> {
   } catch {
     // first run: no state yet
   }
+  liveState = state;
   try {
     const run = (prompt: string) => runAssist(prompt, spec.backend ?? 'auto');
     if (spec.sentences && spec.selection) {

@@ -97,3 +97,29 @@ describe('runExtraTasks', () => {
     expect(second.failure).toBeNull();
   });
 });
+
+describe('runExtraTasks activity notes', () => {
+  it('reports rejected replies, failed calls and saved parts', async () => {
+    const sentences = Array.from({ length: 3 }, (_, i) => ({ handle: i + 1, japanese: `文${i + 1}`, translation: `S${i + 1}` }));
+    const [task] = planExtraTasks(sentences, { structure: true });
+    const replies = ['no structure lines here', 'S3 | 文3 | role | gloss'];
+    const run = vi.fn(async () => {
+      const next = replies.shift();
+      return { reply: next!, backend: 'claude' };
+    });
+    const notes: string[] = [];
+    const result = await runExtraTasks({
+      tasks: [task!],
+      sentences,
+      replies: {},
+      run,
+      onTaskDone: () => {},
+      onProgress: () => {},
+      onNote: (text) => notes.push(text),
+      isCancelled: () => false,
+    });
+    expect(result.failure).toBeNull();
+    expect(notes[0]).toMatch(/reply rejected/);
+    expect(notes[1]).toMatch(/saved \(claude\)/);
+  });
+});

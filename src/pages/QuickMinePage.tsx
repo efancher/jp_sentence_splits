@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { AssistRunActivity } from '../components/AssistRunActivity';
 import { NamedPodcastFeedPicker } from '../components/NamedPodcastFeedPicker';
 import { ShadowingPreviewCard } from '../components/ShadowingPreviewCard';
 import { SpanAudioButton } from '../components/SpanAudioButton';
@@ -242,6 +243,7 @@ export function QuickMinePage() {
     return saved === 'codex' || saved === 'claude' ? saved : 'auto';
   });
   const [assistProgress, setAssistProgress] = useState('');
+  const [assistActivity, setAssistActivity] = useState<Pick<AssistRunStatus, 'status' | 'live' | 'log'> | null>(null);
   const [assistFailure, setAssistFailure] = useState('');
   const [partialRun, setPartialRun] = useState<AssistRunStatus | null>(null);
   const [extrasRunning, setExtrasRunning] = useState(false);
@@ -686,6 +688,7 @@ export function QuickMinePage() {
   function finishAssistRun(run: AssistRunStatus) {
     setAssistRunning(false);
     setAssistProgress('');
+    setAssistActivity({ status: run.status, live: null, log: run.log });
     if (run.status === 'done') {
       reviewAssistRun(run);
       return;
@@ -707,6 +710,7 @@ export function QuickMinePage() {
         if (run.status === 'running') {
           setAssistRunning(true);
           setAssistProgress(run.progress);
+          setAssistActivity({ status: run.status, live: run.live, log: run.log });
           return;
         }
         // A run that finished while this page was closed is picked up once;
@@ -1314,6 +1318,7 @@ export function QuickMinePage() {
               ) : null}
               {assistProgress ? <span className="muted">{assistProgress}</span> : null}
             </div>
+            {assistActivity ? <AssistRunActivity run={assistActivity} /> : null}
             <div className="muted">
               Runs the primary assistant (the other as backup) on the server in small parts, segmenting and
               translating, then generates the ticked extras above too. It keeps going if you close

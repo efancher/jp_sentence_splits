@@ -101,6 +101,8 @@ export async function runSegmentChunks(input: {
   run: (prompt: string) => Promise<{ reply: string; backend: string | null }>;
   onChunkDone: (index: number, reply: string) => void;
   onProgress: (progress: ChunkProgress) => void;
+  /** Optional activity-log line (rejected reply, failed call, saved part). */
+  onNote?: (text: string) => void;
   isCancelled: () => boolean;
 }): Promise<ChunkRunResult> {
   const { chunks, run } = input;
@@ -109,6 +111,7 @@ export async function runSegmentChunks(input: {
     if (replies[index]) continue;
     const chunk = chunks[index]!;
     let lastError = '';
+    const label = `sentences part ${index + 1} of ${chunks.length}`;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK; attempt++) {
       if (input.isCancelled()) return { replies, failure: null, cancelled: true };
       input.onProgress({ index, total: chunks.length, attempt, backend: null });
@@ -118,14 +121,17 @@ export async function runSegmentChunks(input: {
         const problem = validateChunkReply(reply, chunk);
         if (problem) {
           lastError = problem;
+          input.onNote?.(`${label}: reply rejected (${problem}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
           continue;
         }
         replies[index] = reply;
         input.onChunkDone(index, reply);
+        input.onNote?.(`${label}: saved (${backend ?? 'assistant'})`);
         break;
       } catch (err) {
         if (input.isCancelled()) return { replies, failure: null, cancelled: true };
         lastError = err instanceof Error ? err.message : 'Assistant failed';
+        input.onNote?.(`${label}: call failed (${lastError}) — attempt ${attempt} of ${MAX_ATTEMPTS_PER_CHUNK}`);
         if (isOutOfCreditsError(lastError)) break;
       }
     }

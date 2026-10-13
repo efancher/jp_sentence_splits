@@ -136,7 +136,13 @@ async def get_assist(assist_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown assist request.")
     return AssistStatusResponse(
-        status=job.status, backend=job.backend, reply=job.reply, error=job.error
+        status=job.status,
+        backend=job.backend,
+        reply=job.reply,
+        error=job.error,
+        startedAt=job.attempt_started_at,
+        timeoutSeconds=config.ASSIST_TIMEOUT_SECONDS,
+        attempts=job.attempts,
     )
 
 
@@ -194,6 +200,8 @@ def _assist_run_response(state: dict) -> AssistRunStatusResponse:
         sentencesReply=state.get("sentencesReply"),
         extras=state.get("extras"),
         extraReplies=state.get("extraReplies"),
+        live=state.get("live"),
+        log=state.get("log") or [],
         updatedAt=int(state.get("updatedAt") or 0),
     )
 

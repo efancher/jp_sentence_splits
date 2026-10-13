@@ -8,6 +8,7 @@ import {
   type BookExtrasPlan,
   type BookExtrasRunSnapshot,
 } from '../lib/bookAssistExtras';
+import { AssistRunActivity } from './AssistRunActivity';
 import { BOOK_EXTRA_KINDS, type BookExtraKind } from '../lib/bookAssistRun';
 import type { AssistBackend } from '../lib/assistRun';
 import {
@@ -255,6 +256,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                   : `Stopped (${run.status}).`}{' '}
               <span className="muted">{finishedPieces} part{finishedPieces === 1 ? '' : 's'} done</span>
             </div>
+            <AssistRunActivity run={run} />
             {run.failure ? <div className="error">{run.failure}</div> : null}
             <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
               {run.status === 'running' ? (

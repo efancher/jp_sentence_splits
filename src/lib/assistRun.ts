@@ -43,7 +43,29 @@ export interface AssistRunState {
   sentencesReply: string | null;
   /** Merged extras so far (complete once status is `done`). */
   extras: CombinedReplySections | null;
+  /** The assistant call in flight; `startedAt` (ms) lets the UI tick an elapsed clock between polls. */
+  live?: AssistLive | null;
+  /** Newest-last activity log: finished calls, failovers, rejected replies. */
+  log?: AssistLogEntry[];
   updatedAt: number;
+}
+
+export interface AssistLive {
+  backend: string | null;
+  startedAt: number | null;
+  timeoutSeconds: number | null;
+}
+
+export interface AssistLogEntry {
+  at: number;
+  text: string;
+}
+
+const MAX_LOG_ENTRIES = 30;
+
+/** State patch that appends one line to the activity log. */
+export function logPatch(state: Pick<AssistRunState, 'log'>, text: string): Pick<AssistRunState, 'log'> {
+  return { log: [...(state.log ?? []), { at: Date.now(), text }].slice(-MAX_LOG_ENTRIES) };
 }
 
 export function emptyAssistRunState(): AssistRunState {
@@ -56,6 +78,8 @@ export function emptyAssistRunState(): AssistRunState {
     extraReplies: {},
     sentencesReply: null,
     extras: null,
+    live: null,
+    log: [],
     updatedAt: Date.now(),
   };
 }
@@ -97,6 +121,7 @@ export async function runAssistPipeline(input: {
             p.attempt > 1 ? ` (retry ${p.attempt - 1})` : ''
           }${via(p.backend)}`,
         }),
+      onNote: (text) => update(logPatch(state, text)),
       isCancelled: input.isCancelled,
     });
     if (result.cancelled) {
@@ -151,6 +176,7 @@ export async function runAssistPipeline(input: {
           p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
         }${via(p.backend)}`,
       }),
+    onNote: (text) => update(logPatch(state, text)),
     isCancelled: input.isCancelled,
   });
   if (result.cancelled) {

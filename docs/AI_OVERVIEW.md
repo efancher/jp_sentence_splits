@@ -870,7 +870,15 @@ Targets are constants; no settings UI.
   keeps the other as backup, sent as `backend` in the `/assist-runs` spec). Every piece is validated (cut-off
   checks) and saved to the run's `state.json` on the box as it lands; a piece
   gets two attempts, then the run stops as `failed` and the button becomes
-  "Resume", so a misbehaving assistant never loops unattended. The page polls
+  "Resume", so a misbehaving assistant never loops unattended. While a call is
+  in flight the run state carries `live` (backend, start time, timeout) and a
+  short `log` (finished calls, rejected replies, failovers), shown by
+  `AssistRunActivity` as a ticking "codex is working 4:12 of 10:00" line plus an
+  Activity list. The server also probes a backend with a one-word prompt 90s
+  into a call; if the probe hangs (out of credits / wedged) the call is killed,
+  the backend is deprioritised for 15 minutes and the other CLI takes over
+  immediately. Book extras send walkthroughs 25 sentences per call and other
+  kinds 100. The page polls
   `GET /assist-runs/{id}` and, when it reopens an import (the active job is
   remembered), re-attaches to a running run or picks up a finished one. The
   review step's "Extras with the assistant" panel is still the client-driven

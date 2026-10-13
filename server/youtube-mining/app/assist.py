@@ -25,6 +25,12 @@ logger = logging.getLogger("youtube_mining_api.assist")
 
 JOB_RETENTION_SECONDS = 60 * 60
 _ERROR_TAIL_CHARS = 400
+# A healthy backend answers a one-word probe in seconds even while it is busy with a long reply; one that is out
+# of credits (or wedged) hangs on it. Output is silent during a long reply, so a quiet process alone proves nothing.
+PROBE_PROMPT = "Reply with the single word: ok"
+PROBE_AFTER_SECONDS = 90
+PROBE_TIMEOUT_SECONDS = 30
+BACKEND_DOWN_SECONDS = 15 * 60
 
 
 class AssistError(Exception):
@@ -39,8 +45,13 @@ class AssistJob:
     reply: str | None = None
     error: str | None = None
     created_at: float = field(default_factory=time.time)
+    # Start (epoch seconds) of the attempt now running, and what each finished attempt did.
+    attempt_started_at: float | None = None
+    attempts: list[dict] = field(default_factory=list)
 
 
+_ctx = threading.local()
+_down_until: dict[str, float] = {}
 _jobs: dict[str, AssistJob] = {}
 _jobs_lock = threading.Lock()
 _run_lock = threading.Lock()
@@ -65,21 +76,41 @@ def _tail(text: str) -> str:
 
 
 def _run(cmd: list[str], prompt: str, binary: str, cwd: str) -> subprocess.CompletedProcess[str]:
+    timeout = getattr(_ctx, "timeout", None) or config.ASSIST_TIMEOUT_SECONDS
+    abort: threading.Event | None = getattr(_ctx, "abort", None)
     try:
-        return subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            input=prompt,
-            capture_output=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=cwd,
             env=_env_for(binary),
-            timeout=config.ASSIST_TIMEOUT_SECONDS,
-            check=False,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise AssistError(f"timed out after {config.ASSIST_TIMEOUT_SECONDS}s") from exc
     except OSError as exc:
         raise AssistError(str(exc)) from exc
+    result: list[tuple[str, str]] = []
+    worker = threading.Thread(target=lambda: result.append(proc.communicate(prompt)), daemon=True)
+    worker.start()
+    deadline = time.monotonic() + timeout
+    while worker.is_alive():
+        worker.join(0.5)
+        if not worker.is_alive():
+            break
+        stop = (
+            f"timed out after {timeout}s"
+            if time.monotonic() > deadline
+            else "stopped: the backend stopped responding"
+            if abort is not None and abort.is_set()
+            else None
+        )
+        if stop:
+            proc.kill()
+            worker.join(5)
+            raise AssistError(stop)
+    stdout, stderr = result[0] if result else ("", "")
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
 def run_codex(prompt: str) -> str:
@@ -141,7 +172,26 @@ def backend_order(requested: str) -> list[str]:
     order = [name for name in config.ASSIST_BACKENDS if name in RUNNERS]
     if requested in RUNNERS:
         order = [requested] + [name for name in RUNNERS if name != requested]
-    return order
+    now = time.time()
+    # A backend that just failed its probe goes last, so the rest of a long run is not spent waiting on it.
+    return sorted(order, key=lambda name: _down_until.get(name, 0) > now)
+
+
+def _probe(name: str, abort: threading.Event, finished: threading.Event) -> None:
+    if finished.wait(PROBE_AFTER_SECONDS):
+        return
+    _ctx.timeout = PROBE_TIMEOUT_SECONDS
+    _ctx.abort = None
+    try:
+        reply = RUNNERS[name](PROBE_PROMPT)
+        healthy = bool(reply.strip())
+    except AssistError as exc:
+        logger.warning("assist backend %s failed its health probe: %s", name, exc)
+        healthy = False
+    if healthy or finished.is_set():
+        return
+    _down_until[name] = time.time() + BACKEND_DOWN_SECONDS
+    abort.set()
 
 
 def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:
@@ -150,15 +200,30 @@ def _execute(job: AssistJob, backends: list[str], prompt: str) -> None:
         errors: list[str] = []
         for name in backends:
             job.backend = name
+            job.attempt_started_at = time.time()
+            abort, finished = threading.Event(), threading.Event()
+            _ctx.abort, _ctx.timeout = abort, None
+            threading.Thread(target=_probe, args=(name, abort, finished), daemon=True).start()
             try:
                 job.reply = RUNNERS[name](prompt)
                 job.status = "done"
+                _record(job, name, "ok", None)
                 return
             except AssistError as exc:
                 logger.warning("assist backend %s failed: %s", name, exc)
                 errors.append(f"{name}: {exc}")
+                _record(job, name, "failed", str(exc))
+            finally:
+                finished.set()
         job.error = "; ".join(errors) or "no assist backend configured"
         job.status = "error"
+
+
+def _record(job: AssistJob, name: str, outcome: str, detail: str | None) -> None:
+    started = job.attempt_started_at or time.time()
+    job.attempts.append(
+        {"backend": name, "outcome": outcome, "detail": detail, "seconds": round(time.time() - started)}
+    )
 
 
 def _sweep() -> None:
