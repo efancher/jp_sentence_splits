@@ -33,6 +33,10 @@ Environment=MINING_JOBS_ROOT=%h/.cache/youtube-mining/jobs
 # binary's own dir on PATH for the node shebang).
 Environment=MINING_CODEX_PATH=%h/.nvm/versions/node/v24.19.0/bin/codex
 Environment=MINING_CLAUDE_PATH=%h/.local/bin/claude
+# Per-backend limit for one assistant call. 25 book walkthroughs take Codex
+# 6-11 min, so the 600s default cut some off; a hung backend is caught earlier
+# by the 90s health probe, not by this.
+Environment=MINING_ASSIST_TIMEOUT_SECONDS=1200
 ExecStart=%h/projects/jp_sentence_splits/server/youtube-mining/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
 Restart=on-failure
 RestartSec=5

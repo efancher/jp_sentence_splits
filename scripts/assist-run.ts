@@ -26,7 +26,8 @@ import {
 
 const API_BASE = (process.env.MINING_API_SELF_BASE ?? 'http://127.0.0.1:8003').replace(/\/$/, '');
 const POLL_MS = 2000;
-const MAX_WAIT_MS = 15 * 60 * 1000;
+// Fallback until the server reports its per-backend limit; the real cap is two backends' worth plus slack.
+let maxWaitMs = 15 * 60 * 1000;
 
 const dirIndex = process.argv.indexOf('--dir');
 const dir = dirIndex >= 0 ? process.argv[dirIndex + 1] : undefined;
@@ -88,7 +89,7 @@ async function runAssistCall(prompt: string, backend: string): Promise<{ reply: 
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     if (cancelled) throw new Error('Cancelled');
-    if (Date.now() - startedAt > MAX_WAIT_MS) throw new Error('Assistant timed out');
+    if (Date.now() - startedAt > maxWaitMs) throw new Error('Assistant timed out');
     const response = await fetch(`${API_BASE}/assist/${assistId}`);
     if (!response.ok) throw new Error(`Assistant status check failed: ${await readError(response)}`);
     const status = (await response.json()) as {
@@ -100,6 +101,7 @@ async function runAssistCall(prompt: string, backend: string): Promise<{ reply: 
       timeoutSeconds?: number | null;
       attempts?: { backend: string; outcome: string; detail?: string | null; seconds: number }[];
     };
+    if (status.timeoutSeconds) maxWaitMs = status.timeoutSeconds * 2000 + 2 * 60 * 1000;
     const attempts = status.attempts ?? [];
     if (liveState && attempts.length > loggedAttempts) {
       for (const a of attempts.slice(loggedAttempts)) {
