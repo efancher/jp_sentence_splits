@@ -8,7 +8,7 @@
  * from different ranges merge without remapping.
  */
 import { describeStop } from './assistChunks';
-import { mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
+import { describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import type { AssistBackend, AssistRunState } from './assistRun';
 
@@ -29,7 +29,17 @@ export const BOOK_EXTRA_RANGE_SENTENCES = 100;
 const CONTEXT_BEFORE = 3;
 const CONTEXT_AFTER = 2;
 
-/** One task per run of consecutive selected sentences (at most `rangeSize` long). */
+/** Short stable fingerprint so a piece's id changes if its set of sentences does. */
+function handleFingerprint(handles: number[]): string {
+  let hash = 0;
+  for (const handle of handles) hash = (Math.imul(hash, 31) + handle) >>> 0;
+  return hash.toString(36);
+}
+
+/**
+ * Selected sentences are grouped `rangeSize` at a time in book order, gaps included, so scattered
+ * sentences share one assistant call (each shown with its neighbours as context) instead of costing a call per gap.
+ */
 export function planBookExtraTasks(
   sentences: ExtrasSentence[],
   selection: BookExtraSelection,
@@ -41,15 +51,15 @@ export function planBookExtraTasks(
       .filter((handle) => handle >= 1 && handle <= sentences.length)
       .sort((a, b) => a - b);
     const heading = singleExtraBlock(kind).heading;
-    let run: number[] = [];
-    const flush = () => {
-      if (run.length === 0) return;
-      const from = run[0]!;
-      const to = run[run.length - 1]!;
+    for (let at = 0; at < handles.length; at += rangeSize) {
+      const group = handles.slice(at, at + rangeSize);
+      const from = group[0]!;
+      const to = group[group.length - 1]!;
+      const contiguous = to - from + 1 === group.length;
       const start = from - 1;
       const end = to - 1;
       tasks.push({
-        id: `${kind}:${from}-${to}`,
+        id: contiguous ? `${kind}:${from}-${to}` : `${kind}:${from}-${to}~${handleFingerprint(group)}`,
         kind,
         heading,
         from,
@@ -58,15 +68,9 @@ export function planBookExtraTasks(
         coveredTo: end,
         shownFrom: Math.max(0, start - CONTEXT_BEFORE),
         shownTo: Math.min(sentences.length - 1, end + CONTEXT_AFTER),
+        ...(contiguous ? {} : { handles: group }),
       });
-      run = [];
-    };
-    for (const handle of handles) {
-      const last = run[run.length - 1];
-      if (last !== undefined && (handle !== last + 1 || run.length >= rangeSize)) flush();
-      run.push(handle);
     }
-    flush();
   }
   return tasks;
 }
@@ -105,7 +109,7 @@ export async function runBookExtrasPipeline(input: {
     onTaskDone: (taskId, reply) => update({ extraReplies: { ...state.extraReplies, [taskId]: reply } }),
     onProgress: (p) =>
       update({
-        progress: `${p.task.heading.toLowerCase()} S${p.task.from}–S${p.task.to} (${p.position + 1} of ${p.total})${
+        progress: `${p.task.heading.toLowerCase()} ${describeTaskRange(p.task)} (${p.position + 1} of ${p.total})${
           p.attempt > 1 ? `, retry ${p.attempt - 1}` : ''
         }${p.backend ? ` — ${p.backend}` : ' — asking the assistant…'}`,
       }),
@@ -121,7 +125,7 @@ export async function runBookExtrasPipeline(input: {
       status: 'failed',
       progress: '',
       failure: describeStop(
-        `${result.failure.task.heading.toLowerCase()} S${result.failure.task.from}–S${result.failure.task.to}`,
+        `${result.failure.task.heading.toLowerCase()} ${describeTaskRange(result.failure.task)}`,
         result.failure.error,
         `${done} of ${tasks.length} parts saved`,
       ),

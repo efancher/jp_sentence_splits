@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import { commitSeriesEpisodeImport, getDb, setSentenceComprehensionCheck } from '../src/db/repository';
 import { planBookAssistExtras, saveBookAssistExtras, type BookExtrasRunSnapshot } from '../src/lib/bookAssistExtras';
+import { buildExtraPrompt } from '../src/lib/assistExtras';
 import { planBookExtraTasks } from '../src/lib/bookAssistRun';
 import { buildShadowingPreview } from '../src/lib/shadowingImport';
 
@@ -14,16 +15,26 @@ const section = (n: number, correct: string) =>
   [`=== Sentence ${n} ===`, '1. wrong a', `*2. ${correct}`, '3. wrong b', '4. wrong c'].join('\n');
 
 describe('planBookExtraTasks', () => {
-  it('makes one task per run of consecutive selected sentences, capped by range size', () => {
-    const tasks = planBookExtraTasks(sentences(10), { walkthroughs: [1, 2, 3, 7, 9, 10], particles: [4, 5, 6] }, 2);
-    expect(tasks.map((t) => t.id)).toEqual([
-      'walkthroughs:1-2',
-      'walkthroughs:3-3',
-      'walkthroughs:7-7',
-      'walkthroughs:9-10',
-      'particles:4-5',
-      'particles:6-6',
+  it('batches selected sentences in book order, gaps included, capped by range size', () => {
+    const tasks = planBookExtraTasks(sentences(10), { walkthroughs: [1, 2, 3, 7, 9, 10], particles: [4, 5, 6] }, 4);
+    expect(tasks.map((t) => [t.kind, t.from, t.to, t.handles])).toEqual([
+      ['walkthroughs', 1, 7, [1, 2, 3, 7]],
+      ['walkthroughs', 9, 10, undefined],
+      ['particles', 4, 6, undefined],
     ]);
+    expect(tasks[0]!.id).toMatch(/^walkthroughs:1-7~/);
+    expect(tasks[1]!.id).toBe('walkthroughs:9-10');
+  });
+
+  it('prompts only for the chosen sentences, each with neighbours as context', () => {
+    const [task] = planBookExtraTasks(sentences(30), { structure: [5, 20] });
+    const prompt = buildExtraPrompt(task!, sentences(30));
+    expect(prompt).toContain('S5, S20');
+    expect(prompt).toContain('\nS5 文5');
+    expect(prompt).toContain('(context) S2 文2');
+    expect(prompt).toContain('(context) S7 文7');
+    expect(prompt).not.toContain('S10 文10');
+    expect(prompt).toContain('\n...\n');
   });
 
   it('ignores handles outside the book and keeps neighbours as context', () => {

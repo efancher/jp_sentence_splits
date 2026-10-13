@@ -39,6 +39,15 @@ export interface ExtraTask {
   shownTo: number;
   coveredFrom: number;
   coveredTo: number;
+  /** Set when the piece covers scattered handles (ascending) rather than the whole from..to range. */
+  handles?: number[];
+}
+
+/** Short human label for the sentences a piece covers, e.g. "S10–S20" or "40 sentences, S10–S900". */
+export function describeTaskRange(task: Pick<ExtraTask, 'from' | 'to' | 'handles'>): string {
+  return task.handles && task.handles.length > 1 && task.handles.length !== task.to - task.from + 1
+    ? `${task.handles.length} sentences, S${task.from}–S${task.to}`
+    : `S${task.from}–S${task.to}`;
 }
 
 const KIND_ORDER: ExtraKind[] = ['structure', 'comprehension', 'particles', 'constructions', 'walkthroughs', 'targets'];
@@ -83,17 +92,35 @@ export function buildExtraPrompt(task: ExtraTask, sentences: ExtrasSentence[]): 
       .replace('You have the whole transcript above', 'You have the neighbouring sentences below')
       .replace(/PART 1/g, 'the numbered sentences'),
   );
+  const wanted = task.handles ? new Set(task.handles) : null;
   const range =
     task.kind === 'targets'
       ? 'Work across ALL the sentences below.'
-      : `Work on ONLY S${task.from} to S${task.to}. Sentences marked (context) are shown for reference — do not produce any output for them.`;
-  const shown = sentences
-    .slice(task.shownFrom, task.shownTo + 1)
-    .map((sentence, offset) => {
+      : wanted
+        ? `Work on ONLY these ${wanted.size} sentences: ${task.handles!.map((handle) => `S${handle}`).join(', ')}. They are scattered through the text, so groups are separated by a line reading "...". Sentences marked (context) are shown for reference — do not produce any output for them.`
+        : `Work on ONLY S${task.from} to S${task.to}. Sentences marked (context) are shown for reference — do not produce any output for them.`;
+  let shown: string[];
+  if (wanted) {
+    const positions = new Set<number>();
+    sentences.forEach((sentence, index) => {
+      if (!wanted.has(sentence.handle)) return;
+      for (let at = Math.max(0, index - CONTEXT_BEFORE); at <= Math.min(sentences.length - 1, index + CONTEXT_AFTER); at++) positions.add(at);
+    });
+    shown = [];
+    let previous = -2;
+    for (const position of [...positions].sort((a, b) => a - b)) {
+      if (previous >= 0 && position !== previous + 1) shown.push('...');
+      const sentence = sentences[position]!;
+      shown.push(`${wanted.has(sentence.handle) ? '' : '(context) '}S${sentence.handle} ${sentence.japanese} || ${sentence.translation}`);
+      previous = position;
+    }
+  } else {
+    shown = sentences.slice(task.shownFrom, task.shownTo + 1).map((sentence, offset) => {
       const position = task.shownFrom + offset;
       const covered = position >= task.coveredFrom && position <= task.coveredTo;
       return `${covered ? '' : '(context) '}S${sentence.handle} ${sentence.japanese} || ${sentence.translation}`;
     });
+  }
   return [
     'You are helping prepare a Japanese episode for study. The episode\'s sentences are listed below, each numbered S<n>.',
     '',
