@@ -8,7 +8,7 @@
  * from different ranges merge without remapping.
  */
 import { describeStop } from './assistChunks';
-import { describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
+import { EXTRA_RANGE_SENTENCES, describeTaskRange, mergeExtraReplies, runExtraTasks, type ExtraTask, type ExtrasSentence } from './assistExtras';
 import { singleExtraBlock, type CombinedReplySections, type ExtraKind } from './combinedImportPrompt';
 import type { AssistBackend, AssistRunState } from './assistRun';
 
@@ -26,6 +26,12 @@ export interface BookAssistRunSpec {
 }
 
 export const BOOK_EXTRA_RANGE_SENTENCES = 100;
+/** Walkthroughs are far more output per sentence; 100 per call outran the assistant timeout. */
+const WALKTHROUGH_RANGE_SENTENCES = EXTRA_RANGE_SENTENCES;
+
+function rangeSizeFor(kind: BookExtraKind, fallback: number): number {
+  return kind === 'walkthroughs' ? Math.min(fallback, WALKTHROUGH_RANGE_SENTENCES) : fallback;
+}
 const CONTEXT_BEFORE = 3;
 const CONTEXT_AFTER = 2;
 
@@ -51,8 +57,9 @@ export function planBookExtraTasks(
       .filter((handle) => handle >= 1 && handle <= sentences.length)
       .sort((a, b) => a - b);
     const heading = singleExtraBlock(kind).heading;
-    for (let at = 0; at < handles.length; at += rangeSize) {
-      const group = handles.slice(at, at + rangeSize);
+    const size = rangeSizeFor(kind, rangeSize);
+    for (let at = 0; at < handles.length; at += size) {
+      const group = handles.slice(at, at + size);
       const from = group[0]!;
       const to = group[group.length - 1]!;
       const contiguous = to - from + 1 === group.length;

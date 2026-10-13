@@ -360,7 +360,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
               </label>
             </div>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
-              Needs the mining box (tailnet). It handles about 100 sentences per assistant call, one call at a time, so a long
+              Needs the mining box (tailnet). It handles about 100 sentences per assistant call (25 for walkthroughs), one call at a time, so a long
               book takes a while and waits behind any Quick import in progress. Each finished part is saved onto the book
               as soon as this page sees it (open it again later to catch up); focus targets are not part of this.
             </div>
