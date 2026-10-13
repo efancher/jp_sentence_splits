@@ -360,7 +360,17 @@ export function BookDetailPage() {
     );
   }, [searchParams, setSearchParams, bookId]);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   const data = useLiveQuery(async () => {
+    try {
+      return await loadBookDetail();
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }, [bookId]);
+
+  async function loadBookDetail() {
     const db = getDb();
     const book = await db.books.get(bookId);
     if (!book) return null;
@@ -386,7 +396,7 @@ export function BookDetailPage() {
         analysis: analyses[index],
       })),
     };
-  }, [bookId]);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -480,6 +490,10 @@ export function BookDetailPage() {
     [data?.book?.collapsedChapterIds],
   );
 
+  if (loadError && data === undefined) {
+    return <p className="muted">Couldn't load this book: {loadError}</p>;
+  }
+  if (data === null) return <p className="muted">Book not found on this device.</p>;
   if (!data) return <p className="muted">Loading book…</p>;
   if (!data.book) return <p>Book not found.</p>;
 
