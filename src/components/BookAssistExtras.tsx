@@ -20,7 +20,17 @@ import {
 
 const ASSIST_BACKEND_KEY = 'quickmine.assistBackend';
 const snapshotKey = (bookId: string) => `bookextras.snapshot.${bookId}`;
+const savedKey = (bookId: string) => `bookextras.saved.${bookId}`;
 const runIdFor = (bookId: string) => `book-extras-${bookId}`;
+
+function loadSavedTaskIds(bookId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(savedKey(bookId));
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
 
 function loadSnapshot(bookId: string): BookExtrasRunSnapshot | null {
   try {
@@ -60,8 +70,37 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   const [busy, setBusy] = useState(false);
   const runRef = useRef<AssistRunStatus | null>(null);
   runRef.current = run;
+  const savingRef = useRef(false);
 
   const refreshPlan = useCallback(async () => setPlan(await planBookAssistExtras(bookId)), [bookId]);
+
+  // Each finished piece is written onto the book as soon as the box reports it, so a run that stops partway
+  // (credits, a crash, a discard) never loses work. Only pieces not yet saved are sent.
+  const savePending = useCallback(
+    async (replies: Readonly<Record<string, string>>): Promise<string | null> => {
+      const snap = loadSnapshot(bookId);
+      if (!snap || savingRef.current) return null;
+      const saved = loadSavedTaskIds(bookId);
+      const fresh = Object.fromEntries(Object.entries(replies).filter(([id]) => !saved.has(id)));
+      if (Object.keys(fresh).length === 0) return null;
+      savingRef.current = true;
+      try {
+        const result = await saveBookAssistExtras(snap, fresh);
+        for (const id of Object.keys(fresh)) saved.add(id);
+        localStorage.setItem(savedKey(bookId), JSON.stringify([...saved]));
+        const text = formatSaved(result);
+        setMessage(text);
+        await refreshPlan();
+        return text;
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : 'Could not save the results.');
+        return null;
+      } finally {
+        savingRef.current = false;
+      }
+    },
+    [bookId, refreshPlan],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -70,7 +109,9 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
     const poll = async () => {
       try {
         const next = await getAssistRun(runIdFor(bookId));
-        if (!stopped) setRun(next);
+        if (stopped || !next) return;
+        setRun(next);
+        if (next.extraReplies) await savePending(next.extraReplies);
       } catch {
         // box unreachable (off the tailnet): leave the last known state
       }
@@ -83,7 +124,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
       stopped = true;
       clearInterval(timer);
     };
-  }, [open, bookId, refreshPlan]);
+  }, [open, bookId, refreshPlan, savePending]);
 
   const snapshot = loadSnapshot(bookId);
   const active = run && snapshot;
@@ -139,6 +180,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
         }),
       );
       localStorage.setItem(snapshotKey(bookId), JSON.stringify(next));
+      localStorage.removeItem(savedKey(bookId));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not start the assistant.');
     } finally {
@@ -172,6 +214,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   async function discard() {
     await deleteAssistRun(runIdFor(bookId));
     localStorage.removeItem(snapshotKey(bookId));
+    localStorage.removeItem(savedKey(bookId));
     setRun(null);
     setMessage(null);
   }
@@ -180,8 +223,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
     if (!run || !snapshot) return;
     setBusy(true);
     try {
-      const result = await saveBookAssistExtras(snapshot, run.extraReplies ?? {});
-      setMessage(formatSaved(result));
+      await savePending(run.extraReplies ?? {});
       await discard();
       await refreshPlan();
     } catch (err) {
@@ -223,7 +265,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                     <button type="button" disabled={busy || !plan} onClick={() => void resume()}>Resume</button>
                   ) : null}
                   <button type="button" className="primary" disabled={busy || finishedPieces === 0} onClick={() => void saveResults()}>
-                    {run.status === 'done' ? 'Save results' : 'Save what finished'}
+                    {run.status === 'done' ? 'Save and clear' : 'Save what finished and clear'}
                   </button>
                   <button type="button" disabled={busy} onClick={() => void discard()}>Discard</button>
                 </>
@@ -319,8 +361,8 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
             </div>
             <div className="muted" style={{ fontSize: '0.85rem' }}>
               Needs the mining box (tailnet). It handles about 100 sentences per assistant call, one call at a time, so a long
-              book takes a while and waits behind any Quick import in progress. Results are saved by you pressing
-              &ldquo;Save results&rdquo; when it finishes; focus targets are not part of this.
+              book takes a while and waits behind any Quick import in progress. Each finished part is saved onto the book
+              as soon as this page sees it (open it again later to catch up); focus targets are not part of this.
             </div>
           </>
         ) : null}
