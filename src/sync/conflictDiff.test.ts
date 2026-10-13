@@ -219,3 +219,22 @@ describe('conflictContentsMatch', () => {
     expect(conflictContentsMatch(local, remote, 'books')).toBe(false);
   });
 });
+
+describe('diffLines on large payloads', () => {
+  it('trims shared prefix/suffix so one change in a huge payload stays a one-line diff', () => {
+    const a = Array.from({ length: 20000 }, (_, i) => `line ${i}`);
+    const b = [...a];
+    b[10000] = 'changed';
+    const rows = diffLines(a, b);
+    expect(countChanges(rows)).toBe(2);
+    expect(rows.filter((r) => r.type === 'context')).toHaveLength(19999);
+  });
+
+  it('falls back to remove/add when the differing middle is too large for LCS', () => {
+    const a = Array.from({ length: 3000 }, (_, i) => `a${i}`);
+    const b = Array.from({ length: 3000 }, (_, i) => `b${i}`);
+    const rows = diffLines(a, b);
+    expect(rows).toHaveLength(6000);
+    expect(countChanges(rows)).toBe(6000);
+  });
+});

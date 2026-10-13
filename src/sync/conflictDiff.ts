@@ -190,50 +190,59 @@ export type DiffRow = {
   text: string;
 };
 
-/** Guard: skip the O(n·m) LCS table for pathologically large payloads. */
-const MAX_DIFF_LINES = 4000;
+/** Guard: skip the O(n·m) LCS table once the differing middle exceeds this many cells. */
+const MAX_LCS_CELLS = 250_000;
 
 /** Unified line diff (LCS backtrace). `a` = local, `b` = remote. */
 export function diffLines(a: string[], b: string[]): DiffRow[] {
-  const n = a.length;
-  const m = b.length;
-  if (n + m > MAX_DIFF_LINES) {
-    return [
-      ...a.map((text): DiffRow => ({ type: 'remove', text })),
-      ...b.map((text): DiffRow => ({ type: 'add', text })),
-    ];
-  }
-
-  const dp: number[][] = Array.from({ length: n + 1 }, () =>
-    new Array<number>(m + 1).fill(0),
-  );
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] =
-        a[i] === b[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
   }
 
   const rows: DiffRow[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      rows.push({ type: 'context', text: a[i] });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      rows.push({ type: 'remove', text: a[i] });
-      i++;
-    } else {
-      rows.push({ type: 'add', text: b[j] });
-      j++;
+  for (let k = 0; k < start; k++) rows.push({ type: 'context', text: a[k] });
+
+  const n = endA - start;
+  const m = endB - start;
+  if (n * m > MAX_LCS_CELLS) {
+    for (let k = start; k < endA; k++) rows.push({ type: 'remove', text: a[k] });
+    for (let k = start; k < endB; k++) rows.push({ type: 'add', text: b[k] });
+  } else {
+    const w = m + 1;
+    const dp = new Uint32Array((n + 1) * w);
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i * w + j] =
+          a[start + i] === b[start + j]
+            ? dp[(i + 1) * w + j + 1] + 1
+            : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+      }
     }
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (a[start + i] === b[start + j]) {
+        rows.push({ type: 'context', text: a[start + i] });
+        i++;
+        j++;
+      } else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) {
+        rows.push({ type: 'remove', text: a[start + i] });
+        i++;
+      } else {
+        rows.push({ type: 'add', text: b[start + j] });
+        j++;
+      }
+    }
+    while (i < n) rows.push({ type: 'remove', text: a[start + i++] });
+    while (j < m) rows.push({ type: 'add', text: b[start + j++] });
   }
-  while (i < n) rows.push({ type: 'remove', text: a[i++] });
-  while (j < m) rows.push({ type: 'add', text: b[j++] });
+
+  for (let k = endA; k < a.length; k++) rows.push({ type: 'context', text: a[k] });
   return rows;
 }
 

@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { reportSyncIssue } from '../db/repository';
 import { listOpenConflicts } from '../sync/queue';
@@ -29,11 +29,64 @@ const DIFF_PREFIX: Record<DiffRow['type'], string> = {
   remove: '- ',
 };
 
+const DIFF_CONTEXT_LINES = 3;
+const MAX_RENDERED_ROWS = 400;
+
+/** Keeps changed rows plus a few lines of context, collapsing long unchanged runs. */
+function windowRows(rows: DiffRow[]): { shown: (DiffRow | null)[]; truncated: boolean } {
+  const keep = new Array<boolean>(rows.length).fill(false);
+  rows.forEach((row, idx) => {
+    if (row.type === 'context') return;
+    const lo = Math.max(0, idx - DIFF_CONTEXT_LINES);
+    const hi = Math.min(rows.length - 1, idx + DIFF_CONTEXT_LINES);
+    for (let k = lo; k <= hi; k++) keep[k] = true;
+  });
+  const shown: (DiffRow | null)[] = [];
+  let skipping = false;
+  for (let idx = 0; idx < rows.length; idx++) {
+    if (keep[idx]) {
+      shown.push(rows[idx]);
+      skipping = false;
+    } else if (!skipping) {
+      shown.push(null);
+      skipping = true;
+    }
+  }
+  const truncated = shown.length > MAX_RENDERED_ROWS;
+  return { shown: truncated ? shown.slice(0, MAX_RENDERED_ROWS) : shown, truncated };
+}
+
+/** Renders children only while open, so collapsed sections cost nothing. */
+function LazyDetails({
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  summary: string;
+  defaultOpen?: boolean;
+  children: () => ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{summary}</summary>
+      {open ? children() : null}
+    </details>
+  );
+}
+
+function FullJson({ value }: { value: unknown }) {
+  const text = useMemo(() => prettyLines(value).join('\n'), [value]);
+  return <pre className="conflict-pre">{text}</pre>;
+}
+
 function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
-  const local = prettyLines(forDiff(conflict.localPayload, conflict.entity));
-  const remote = prettyLines(forDiff(conflict.remotePayload, conflict.entity));
-  const rows = diffLines(local, remote);
-  const changes = countChanges(rows);
+  const { rows, changes } = useMemo(() => {
+    const local = prettyLines(forDiff(conflict.localPayload, conflict.entity));
+    const remote = prettyLines(forDiff(conflict.remotePayload, conflict.entity));
+    const diff = diffLines(local, remote);
+    return { rows: windowRows(diff), changes: countChanges(diff) };
+  }, [conflict.localPayload, conflict.remotePayload, conflict.entity]);
 
   return (
     <div className="stack" style={{ gap: '0.5rem' }}>
@@ -47,13 +100,24 @@ function ConflictDiff({ conflict }: { conflict: SyncConflict }) {
         <span className="conflict-diff-legend conflict-diff-add">+ remote</span>
       </div>
       <pre className="conflict-pre conflict-diff">
-        {rows.map((row, idx) => (
-          <div key={idx} className={`conflict-diff-${row.type}`}>
-            {DIFF_PREFIX[row.type]}
-            {row.text}
-          </div>
-        ))}
+        {rows.shown.map((row, idx) =>
+          row ? (
+            <div key={idx} className={`conflict-diff-${row.type}`}>
+              {DIFF_PREFIX[row.type]}
+              {row.text}
+            </div>
+          ) : (
+            <div key={idx} className="muted">
+              {'  …'}
+            </div>
+          ),
+        )}
       </pre>
+      {rows.truncated ? (
+        <div className="muted" style={{ fontSize: '0.8rem' }}>
+          Showing the first {MAX_RENDERED_ROWS} rows; the full versions are below.
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -102,7 +166,10 @@ function BookChapterChoices({
   disabled: boolean;
   onApply: (choices: Record<string, ChapterSide>, fields: ChapterSide) => void;
 }) {
-  const summary = summarizeBookConflict(conflict.localPayload, conflict.remotePayload);
+  const summary = useMemo(
+    () => summarizeBookConflict(conflict.localPayload, conflict.remotePayload),
+    [conflict.localPayload, conflict.remotePayload],
+  );
   const [choices, setChoices] = useState<Record<string, ChapterSide>>({});
   const [fields, setFields] = useState<ChapterSide>('remote');
   const choiceFor = (id: string): ChapterSide => choices[id] ?? 'remote';
@@ -296,22 +363,15 @@ export function ConflictPanel() {
               }
             />
           )}
-          <details open={conflict.entity !== 'books'}>
-            <summary>Differences</summary>
-            <ConflictDiff conflict={conflict} />
-          </details>
-          <details>
-            <summary>Full local version</summary>
-            <pre className="conflict-pre">
-              {prettyLines(conflict.localPayload).join('\n')}
-            </pre>
-          </details>
-          <details>
-            <summary>Full remote version</summary>
-            <pre className="conflict-pre">
-              {prettyLines(conflict.remotePayload).join('\n')}
-            </pre>
-          </details>
+          <LazyDetails summary="Differences" defaultOpen={conflict.entity !== 'books'}>
+            {() => <ConflictDiff conflict={conflict} />}
+          </LazyDetails>
+          <LazyDetails summary="Full local version">
+            {() => <FullJson value={conflict.localPayload} />}
+          </LazyDetails>
+          <LazyDetails summary="Full remote version">
+            {() => <FullJson value={conflict.remotePayload} />}
+          </LazyDetails>
           <div className="row">
             <button
               type="button"
