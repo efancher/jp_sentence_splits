@@ -1440,8 +1440,15 @@ async function applyRemoteEventsBatch(
         row as Record<string, unknown>,
       ]),
     );
+    // The fetched row is always the latest state, so several events for one
+    // record in a page collapse to a single write (rows like a book with many
+    // chapters can be megabytes; re-writing per event stalls the pull).
+    const latestVersion = new Map<string, number>();
     for (const item of items) {
-      await applyFetchedRemote(item.entity, item.recordId, item.version, byRecordId.get(item.recordId));
+      latestVersion.set(item.recordId, Math.max(latestVersion.get(item.recordId) ?? 0, item.version));
+    }
+    for (const [recordId, version] of latestVersion) {
+      await applyFetchedRemote(entity, recordId, version, byRecordId.get(recordId));
     }
   }
 
