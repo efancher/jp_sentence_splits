@@ -17,6 +17,7 @@ import { VocabChips } from '../components/VocabChips';
 import { readSettings } from '../db/database';
 import {
   deleteSentenceCascade,
+  getBookWithExtras,
   getDb,
   getRoleOccurrenceStats,
   saveAnalysis,
@@ -160,7 +161,7 @@ export function AnalyzePage() {
 
   const data = useLiveQuery(async () => {
     const db = getDb();
-    const book = await db.books.get(bookId);
+    const book = await getBookWithExtras(bookId);
     const memberships = await db.bookSentences
       .where('bookId')
       .equals(bookId)

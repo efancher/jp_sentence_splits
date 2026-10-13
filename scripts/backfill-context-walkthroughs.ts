@@ -1,12 +1,12 @@
 /**
- * Backfills contextual walkthroughs (Chapter.contextWalkthroughs) for a book by driving `codex exec` or `claude -p`
+ * Backfills contextual walkthroughs (sentence_extras.context_walkthrough) for a book by driving `codex exec` or `claude -p`
  * batch by batch: build the same prompt the Book page downloads, run Codex on it, validate the reply
- * with the app's own parser, and merge only the accepted walkthroughs into the book's chapters.
+ * with the app's own parser, and upsert only the accepted walkthroughs as sentence_extras rows.
  *
  * Resumable and idempotent: pending sentences (none, or older-format) are recomputed from the database
  * before every batch, so a failed/cut-off batch is simply requested again and finished sentences are
  * never revisited. Existing walkthroughs are replaced only by a valid v2 reply; nothing else on the
- * book (analyses, drafts, learning history) is touched. Fresh chapters are re-read just before each write.
+ * book (analyses, drafts, learning history) is touched.
  *
  * Dry-run by default (runs Codex and validates, writes nothing); --apply required to write.
  * Usage: npm run backfill:context-walkthroughs -- <bookId> [--apply] [--batch-size N] [--max-batches N] [--model M] [--engine codex|claude]
@@ -24,7 +24,7 @@ import {
   type BookWalkthroughPlan,
 } from '../src/lib/bookWalkthroughs';
 import { mergeChapterWalkthroughs, sentencesNeedingUpgrade, sentencesNeedingWalkthrough } from '../src/lib/contextWalkthrough';
-import { parseApplyFlag, requireAuthedUser } from './lib/scriptHelpers';
+import { parseApplyFlag, requireAuthedUser, withoutVersionAndTimestamps } from './lib/scriptHelpers';
 import { createScriptSupabaseClient } from './lib/scriptSupabaseClient';
 
 type Supabase = Awaited<ReturnType<typeof createScriptSupabaseClient>>;
@@ -72,7 +72,17 @@ async function loadPlan(supabase: Supabase, ownerId: string, bookId: string) {
     if (row) sentences.push({ id: String(m.sentence_id), japanese: row.japanese, translation: row.translation.trim() || undefined, chapterId: String(m.chapter_id) });
   }
   const chapters = (book.chapters ?? []) as ChapterRow[];
-  const drafts = mergeChapterWalkthroughs(chapters);
+  // Per-sentence sentence_extras win over any legacy inline chapter copy.
+  const { data: extrasRows, error: extrasError } = await supabase
+    .from('sentence_extras')
+    .select('id, context_walkthrough')
+    .eq('owner_id', ownerId)
+    .eq('book_id', bookId)
+    .is('deleted_at', null)
+    .not('context_walkthrough', 'is', null);
+  if (extrasError) throw new Error(`Failed to fetch sentence_extras: ${extrasError.message}`);
+  const drafts = { ...mergeChapterWalkthroughs(chapters) };
+  for (const row of extrasRows ?? []) drafts[String(row.id)] = row.context_walkthrough as ContextWalkthrough;
   const handleOf = new Map(sentences.map((s, i) => [s.id, `S${i + 1}`]));
   const missing = sentencesNeedingWalkthrough(sentences, drafts).map((id) => handleOf.get(id)!);
   const outdated = sentencesNeedingUpgrade(sentences, drafts).map((id) => handleOf.get(id)!);
@@ -84,7 +94,7 @@ async function loadPlan(supabase: Supabase, ownerId: string, bookId: string) {
     outdated,
     current: sentences.length - missing.length - outdated.length,
   };
-  return { plan, chapters, version: Number(book.version ?? 1) };
+  return { plan };
 }
 
 async function main() {
@@ -154,18 +164,21 @@ async function main() {
     console.log(`  ${parsed.saved} of ${handles.length} validated.`);
     if (!apply || parsed.saved === 0) continue;
 
-    // Re-read right before writing so concurrent chapter edits are not clobbered.
-    const fresh = await loadPlan(supabase, user.id, bookId);
-    const chapters = fresh.chapters.map((chapter) => {
-      const drafts = parsed.byChapter.get(chapter.id);
-      return drafts ? { ...chapter, contextWalkthroughs: { ...chapter.contextWalkthroughs, ...drafts } } : chapter;
-    });
-    const { error } = await supabase
-      .from('books')
-      .update({ chapters, updated_at: new Date().toISOString(), version: fresh.version + 1 })
-      .eq('id', bookId)
-      .eq('version', fresh.version);
-    if (error) throw new Error(`Failed to write chapters: ${error.message}`);
+    const rows = [...parsed.byChapter].flatMap(([chapterId, drafts]) =>
+      Object.entries(drafts).map(([id, contextWalkthrough]) =>
+        withoutVersionAndTimestamps({
+          id,
+          owner_id: user.id,
+          book_id: bookId,
+          chapter_id: chapterId,
+          context_walkthrough: contextWalkthrough,
+          deleted_at: null,
+        }),
+      ),
+    );
+    // Upsert sends only these columns, so a row's structure/construction drafts are left alone.
+    const { error } = await supabase.from('sentence_extras').upsert(rows, { onConflict: 'id' });
+    if (error) throw new Error(`Failed to write sentence_extras: ${error.message}`);
     totalSaved += parsed.saved;
     console.log('  Written.');
   }

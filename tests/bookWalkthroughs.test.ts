@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
-import { commitSeriesEpisodeImport, getDb, saveContextWalkthroughsByChapter } from '../src/db/repository';
+import { commitSeriesEpisodeImport, getBookWithExtras, getDb, saveContextWalkthroughsByChapter } from '../src/db/repository';
 import {
   formatBookWalkthroughPrompt,
   parseBookWalkthroughReply,
@@ -51,7 +51,7 @@ describe('book-wide walkthrough import', () => {
     expect(second.rejected.map((item) => item.handle)).toEqual(['S9']);
     await saveContextWalkthroughsByChapter(bookId, second.byChapter);
 
-    const chapter = (await getDb().books.get(bookId))!.chapters.find((c) => c.id === chapterId)!;
+    const chapter = (await getBookWithExtras(bookId))!.chapters.find((c) => c.id === chapterId)!;
     expect(Object.keys(chapter.contextWalkthroughs ?? {})).toHaveLength(2);
     expect((await planBookWalkthroughs(bookId)).pending).toEqual(['S1']);
   });

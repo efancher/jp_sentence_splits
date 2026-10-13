@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { SentenceWalkthrough } from '../src/components/SentenceWalkthrough';
 import { resetDbForTests } from '../src/db/database';
-import { commitSeriesEpisodeImport, getDb, getEpisodePreparationContext, saveEpisodePackReply } from '../src/db/repository';
+import { commitSeriesEpisodeImport, getBookWithExtras, getDb, getEpisodePreparationContext, saveEpisodePackReply } from '../src/db/repository';
 import type { ContextWalkthrough, Sentence } from '../src/domain/types';
 import {
   WALKTHROUGH_SHAPE,
@@ -234,13 +234,15 @@ describe('saveEpisodePackReply with walkthroughs', () => {
     expect(result.walkthroughsSaved).toBe(1);
     expect(result.rejectedWalkthroughs).toEqual([{ handle: 'S9', reason: 'Unknown sentence handle.' }]);
 
-    const saved = (await db.books.get(bookId))!.chapters.find((chapter) => chapter.id === chapterId)!;
+    expect((await db.books.get(bookId))!.chapters.every((chapter) => !chapter.contextWalkthroughs)).toBe(true);
+    const saved = (await getBookWithExtras(bookId))!.chapters.find((chapter) => chapter.id === chapterId)!;
     expect(saved.contextWalkthroughs?.[rows[1]!.sentenceId]?.steps).toHaveLength(5);
     expect(saved.structureDrafts?.[rows[1]!.sentenceId]).toEqual(existingDraft);
     const after = await getEpisodePreparationContext(bookId, chapterId);
     expect(after.needsWalkthroughIds).toEqual([rows[0]!.sentenceId]);
 
     // A chapter saved before this feature existed has no field at all and still loads.
+    await db.sentenceExtras.clear();
     const legacy = (await db.books.get(bookId))!;
     await db.books.put({ ...legacy, chapters: legacy.chapters.map(({ contextWalkthroughs: _drop, ...chapter }) => chapter) });
     expect((await getEpisodePreparationContext(bookId, chapterId)).needsWalkthroughIds).toHaveLength(2);

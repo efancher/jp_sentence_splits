@@ -1,5 +1,6 @@
 import { getDb } from '../db/database';
 import type { ContextWalkthrough } from '../domain/types';
+import { getBookWithExtras } from '../db/sentenceExtras';
 import {
   WALKTHROUGH_SHAPE,
   buildWalkthroughInstructions,
@@ -38,7 +39,7 @@ export function nextWalkthroughBatch(plan: Pick<BookWalkthroughPlan, 'pending'>,
 
 export async function planBookWalkthroughs(bookId: string): Promise<BookWalkthroughPlan> {
   const db = getDb();
-  const [book, memberships] = await Promise.all([db.books.get(bookId), db.bookSentences.where('bookId').equals(bookId).sortBy('position')]);
+  const [book, memberships] = await Promise.all([getBookWithExtras(bookId), db.bookSentences.where('bookId').equals(bookId).sortBy('position')]);
   const seen = new Set<string>();
   const unique = memberships.filter((m) => m.chapterId && !seen.has(m.sentenceId) && seen.add(m.sentenceId));
   const rows = await db.sentences.bulkGet(unique.map((m) => m.sentenceId));

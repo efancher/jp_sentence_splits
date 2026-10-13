@@ -1,4 +1,5 @@
 import { getDb } from '../db/database';
+import { getBookWithExtras } from '../db/sentenceExtras';
 import type { StructureDraftChunk } from '../domain/types';
 import { chunksMatchSource } from './chunking';
 import { buildStructureInstructions, parseStructureLines, STRUCTURE_LINE_EXAMPLE } from './episodeStructure';
@@ -21,7 +22,7 @@ export async function findChunkingCandidates(bookId: string): Promise<ChunkingCa
   const db = getDb();
   const memberships = await db.bookSentences.where('bookId').equals(bookId).sortBy('position');
   const ids = memberships.map((m) => m.sentenceId);
-  const [sentences, analyses, book] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids), db.books.get(bookId)]);
+  const [sentences, analyses, book] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids), getBookWithExtras(bookId)]);
   const seen = new Set<string>();
   const out: ChunkingCandidate[] = [];
   ids.forEach((id, index) => {

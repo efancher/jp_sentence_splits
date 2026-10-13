@@ -7,6 +7,7 @@
  * unless the learner explicitly approved replacing that sentence.
  */
 import { getDb } from '../db/database';
+import { getBookWithExtras } from '../db/sentenceExtras';
 import { mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
 import { validLayersFor } from './phraseConstruction';
@@ -48,7 +49,7 @@ function truncate(text: string, max = 70): string {
 export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPlan> {
   const db = getDb();
   const [book, memberships] = await Promise.all([
-    db.books.get(bookId),
+    getBookWithExtras(bookId),
     db.bookSentences.where('bookId').equals(bookId).sortBy('position'),
   ]);
   const seen = new Set<string>();

@@ -58,6 +58,17 @@ review cards) and `CardIssueReport` (a learner-flagged "this card looks
 wrong" report on any study item, triaged out-of-band via
 `scripts/list-card-issues.ts`).
 
+AI-drafted per-sentence extras (`structureDraft`, `constructionDraft`,
+`contextWalkthrough`) live in `SentenceExtras` / `sentence_extras` (id = sentence
+id, synced), NOT inside `Book.chapters`. They used to be embedded as
+`BookChapter.structureDrafts/constructionDrafts/contextWalkthroughs`, which made
+one book row ~4 MB and re-synced all of it on every rename/reorder/open.
+Writers go through `saveSentenceExtras`; readers load books via
+`getBookWithExtras` / `withChapterExtras` (`src/db/sentenceExtras.ts`), a
+read-only overlay where extras win over any legacy inline copy. Never `put` an
+overlaid book back. `npm run migrate:sentence-extras` copies legacy inline data
+(then `--strip` removes it once all devices run the new build).
+
 **Grammar-learning system** (additive, Phases 1-5 of its own plan, see
 `docs/STATUS.md`): a second layer on top of the existing Cure-Dolly
 structural analysis (`SentenceAnalysis.chunks`, unchanged) — Layer 1

@@ -30,6 +30,7 @@ import type { ReviewDocument } from '../lib/reviewDocument';
 import type { BackupPayload } from '../domain/schemas';
 import type {
   AlignmentResult,
+  ConstructionLayer,
   ContextWalkthrough,
   EffectiveGameSignal,
   GameRound,
@@ -75,6 +76,7 @@ import type {
   ReviewSource,
   Sentence,
   SentenceAudio,
+  SentenceExtras,
   SentenceAnalysis,
   SentenceGrammar,
   SentenceVocabulary,
@@ -316,6 +318,9 @@ import {
 } from '../lib/curatedVocabulary';
 import { ensureSettings, getDb, localDateKey, readSettings } from './database';
 import { notifySync, notifySyncMany } from './syncNotify';
+import { getBookWithExtras, withChapterExtras } from './sentenceExtras';
+
+export { getBookWithExtras, withChapterExtras };
 import type { SyncEntity } from '../sync/types';
 
 function sortSentences(
@@ -3211,7 +3216,7 @@ export async function exportFullBackup(): Promise<BackupPayload> {
   const db = getDb();
   const settings = await ensureSettings(db);
   const bundle: BackupBundle = {
-    books: await db.books.toArray(),
+    books: await Promise.all((await db.books.toArray()).map(withChapterExtras)),
     sentences: await db.sentences.toArray(),
     bookSentences: await db.bookSentences.toArray(),
     analyses: await db.analyses.toArray(),
@@ -9265,7 +9270,8 @@ export async function getEpisodePreparationContext(
   chapterId: string,
 ): Promise<{ context: PreparationContext; preparation?: EpisodePreparation; needsStructureIds: string[]; needsConstructionIds: string[]; needsWalkthroughIds: string[] }> {
   const db = getDb();
-  const book = await db.books.get(bookId);
+  const rawBook = await db.books.get(bookId);
+  const book = rawBook ? await withChapterExtras(rawBook) : undefined;
   const chapter = book?.chapters.find((item) => item.id === chapterId);
   if (!book || !chapter) throw new Error('Chapter not found');
   const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'))
@@ -9372,46 +9378,68 @@ export interface EpisodePackSaveResult {
   rejectedWalkthroughs: { handle: string; reason: string }[];
 }
 
-/** Merges AI chunk drafts into their chapters' `structureDrafts` (book-wide chunking batch). */
+export interface SentenceExtrasPatch {
+  structureDraft?: StructureDraftChunk[];
+  constructionDraft?: ConstructionLayer[];
+  contextWalkthrough?: ContextWalkthrough;
+}
+
+/** Merges AI drafts into per-sentence `sentence_extras` rows (one small synced row per sentence, not the book row). */
+export async function saveSentenceExtras(
+  bookId: string,
+  chapterId: string,
+  patches: ReadonlyArray<readonly [sentenceId: string, patch: SentenceExtrasPatch]>,
+): Promise<void> {
+  if (patches.length === 0) return;
+  const db = getDb();
+  if ((await db.books.where(':id').equals(bookId).count()) === 0) throw new Error('Book not found');
+  const timestamp = nowIso();
+  const written: SentenceExtras[] = [];
+  await db.transaction('rw', db.sentenceExtras, async () => {
+    const existing = await db.sentenceExtras.bulkGet(patches.map(([id]) => id));
+    patches.forEach(([id, patch], index) => {
+      const previous = existing[index];
+      written.push({
+        ...previous,
+        id,
+        bookId,
+        chapterId,
+        ...patch,
+        createdAt: previous?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      });
+    });
+    await db.sentenceExtras.bulkPut(written);
+  });
+  for (const row of written) notifySync('sentence_extras', row.id, row);
+}
+
+/** Merges AI chunk drafts into `sentence_extras` (book-wide chunking batch). */
 export async function saveStructureDraftsByChapter(
   bookId: string,
   byChapter: ReadonlyMap<string, Record<string, StructureDraftChunk[]>>,
 ): Promise<void> {
-  if (byChapter.size === 0) return;
-  const db = getDb();
-  const book = await db.books.get(bookId);
-  if (!book) throw new Error('Book not found');
-  const updated: Book = {
-    ...book,
-    chapters: book.chapters.map((chapter) => {
-      const drafts = byChapter.get(chapter.id);
-      return drafts ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...drafts } } : chapter;
-    }),
-    updatedAt: nowIso(),
-  };
-  await db.books.put(updated);
-  notifySync('books', updated.id, updated);
+  for (const [chapterId, drafts] of byChapter) {
+    await saveSentenceExtras(
+      bookId,
+      chapterId,
+      Object.entries(drafts).map(([id, structureDraft]) => [id, { structureDraft }] as const),
+    );
+  }
 }
 
-/** Merges contextual walkthrough drafts into their chapters (book-wide import); entries for other sentences are kept. */
+/** Merges contextual walkthrough drafts into `sentence_extras` (book-wide import); other sentences are untouched. */
 export async function saveContextWalkthroughsByChapter(
   bookId: string,
   byChapter: ReadonlyMap<string, Record<string, ContextWalkthrough>>,
 ): Promise<void> {
-  if (byChapter.size === 0) return;
-  const db = getDb();
-  const book = await db.books.get(bookId);
-  if (!book) throw new Error('Book not found');
-  const updated: Book = {
-    ...book,
-    chapters: book.chapters.map((chapter) => {
-      const drafts = byChapter.get(chapter.id);
-      return drafts ? { ...chapter, contextWalkthroughs: { ...chapter.contextWalkthroughs, ...drafts } } : chapter;
-    }),
-    updatedAt: nowIso(),
-  };
-  await db.books.put(updated);
-  notifySync('books', updated.id, updated);
+  for (const [chapterId, drafts] of byChapter) {
+    await saveSentenceExtras(
+      bookId,
+      chapterId,
+      Object.entries(drafts).map(([id, contextWalkthrough]) => [id, { contextWalkthrough }] as const),
+    );
+  }
 }
 
 /**
@@ -9447,60 +9475,30 @@ export async function saveEpisodePackReply(
     : undefined;
   let structureSaved = 0;
   if (parsed.structure && parsed.structure.drafts.size > 0) {
-    const drafts = parsed.structure.drafts;
-    const book = await db.books.get(bookId);
-    if (book) {
-      const updated: Book = {
-        ...book,
-        chapters: book.chapters.map((chapter) =>
-          chapter.id === chapterId
-            ? { ...chapter, structureDrafts: { ...chapter.structureDrafts, ...Object.fromEntries(drafts) } }
-            : chapter,
-        ),
-        updatedAt: nowIso(),
-      };
-      await db.books.put(updated);
-      notifySync('books', updated.id, updated);
-      structureSaved = drafts.size;
-    }
+    await saveSentenceExtras(
+      bookId,
+      chapterId,
+      [...parsed.structure.drafts].map(([id, structureDraft]) => [id, { structureDraft }] as const),
+    );
+    structureSaved = parsed.structure.drafts.size;
   }
   let constructionsSaved = 0;
   if (parsed.constructions && parsed.constructions.drafts.size > 0) {
-    const drafts = parsed.constructions.drafts;
-    const book = await db.books.get(bookId);
-    if (book) {
-      const updated: Book = {
-        ...book,
-        chapters: book.chapters.map((chapter) =>
-          chapter.id === chapterId
-            ? { ...chapter, constructionDrafts: { ...chapter.constructionDrafts, ...Object.fromEntries(drafts) } }
-            : chapter,
-        ),
-        updatedAt: nowIso(),
-      };
-      await db.books.put(updated);
-      notifySync('books', updated.id, updated);
-      constructionsSaved = drafts.size;
-    }
+    await saveSentenceExtras(
+      bookId,
+      chapterId,
+      [...parsed.constructions.drafts].map(([id, constructionDraft]) => [id, { constructionDraft }] as const),
+    );
+    constructionsSaved = parsed.constructions.drafts.size;
   }
   let walkthroughsSaved = 0;
   if (parsed.walkthroughs && parsed.walkthroughs.drafts.size > 0) {
-    const drafts = parsed.walkthroughs.drafts;
-    const book = await db.books.get(bookId);
-    if (book) {
-      const updated: Book = {
-        ...book,
-        chapters: book.chapters.map((chapter) =>
-          chapter.id === chapterId
-            ? { ...chapter, contextWalkthroughs: { ...chapter.contextWalkthroughs, ...Object.fromEntries(drafts) } }
-            : chapter,
-        ),
-        updatedAt: nowIso(),
-      };
-      await db.books.put(updated);
-      notifySync('books', updated.id, updated);
-      walkthroughsSaved = drafts.size;
-    }
+    await saveSentenceExtras(
+      bookId,
+      chapterId,
+      [...parsed.walkthroughs.drafts].map(([id, contextWalkthrough]) => [id, { contextWalkthrough }] as const),
+    );
+    walkthroughsSaved = parsed.walkthroughs.drafts.size;
   }
   return {
     preparation,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDbForTests } from '../src/db/database';
 import {
   commitSeriesEpisodeImport,
+  getBookWithExtras,
   getDb,
   getEpisodePreparationContext,
   saveEpisodePackReply,
@@ -186,8 +187,10 @@ describe('saveEpisodePackReply', () => {
     const result = await saveEpisodePackReply(bookId, chapterId, JSON.stringify({ structure: { S1: chunks, S2: [{ text: 'x', role: 'engine' }] } }));
     expect(result.structureSaved).toBe(1);
     expect(result.rejectedStructure.map((item) => item.handle)).toEqual(['S2']);
-    const book = await getDb().books.get(bookId);
+    expect((await getDb().sentenceExtras.get(sentenceIds[0]!))!.structureDraft![0]!.role).toBe('object');
+    const book = await getBookWithExtras(bookId);
     expect(book!.chapters.find((chapter) => chapter.id === chapterId)!.structureDrafts![sentenceIds[0]!]![0]!.role).toBe('object');
+    expect((await getDb().books.get(bookId))!.chapters.every((chapter) => !chapter.structureDrafts)).toBe(true);
     expect((await getEpisodePreparationContext(bookId, chapterId)).needsStructureIds).toEqual([sentenceIds[1]]);
     expect(await getDb().analyses.count()).toBe(0);
     expect(await getDb().studyItems.count()).toBe(0);
@@ -205,7 +208,7 @@ describe('saveEpisodePackReply', () => {
     expect(result.error).toBeUndefined();
     expect(result.constructionsSaved).toBe(1);
     expect(result.rejectedConstructions.length).toBe(2);
-    const book = await getDb().books.get(bookId);
+    const book = await getBookWithExtras(bookId);
     expect(book!.chapters.find((chapter) => chapter.id === chapterId)!.constructionDrafts![sentenceIds[1]!]).toHaveLength(1);
     expect((await getEpisodePreparationContext(bookId, chapterId)).needsConstructionIds).toEqual([sentenceIds[0]]);
     expect(await getDb().studyItems.count()).toBe(0);

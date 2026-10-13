@@ -1,6 +1,7 @@
 import type { AnalysisChunk, ParticleCheck } from '../domain/types';
 import { getDb } from '../db/database';
 import { setSentenceParticleChecks } from '../db/repository';
+import { getBookWithExtras } from '../db/sentenceExtras';
 import { previewHeuristicChunks } from './analysisHelpers';
 import { getMeaningBank } from './meaningChoices';
 
@@ -42,7 +43,7 @@ export async function findParticleCheckCandidates(
   const db = getDb();
   const memberships = (await db.bookSentences.where('bookId').equals(bookId).sortBy('position'));
   const ids = memberships.map((m) => m.sentenceId);
-  const [sentences, analyses, book] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids), db.books.get(bookId)]);
+  const [sentences, analyses, book] = await Promise.all([db.sentences.bulkGet(ids), db.analyses.bulkGet(ids), getBookWithExtras(bookId)]);
   const seen = new Set<string>();
   const out: ParticleCheckCandidate[] = [];
   ids.forEach((id, index) => {
