@@ -39,6 +39,8 @@ import { compareObservations, rankObservations, selectPrimaryObservation } from 
 import { categorizeObservations } from '../lib/pronunciationHistory';
 import { computeSpectrogram, type Spectrogram } from '../lib/spectrogram';
 import { KanaTimelineRow } from './KanaTimelineRow';
+import { TimingLane } from './TimingLane';
+import { buildTimingLane } from '../lib/timingLane';
 import { SegmentTimingChart } from './SegmentTimingChart';
 import { SentencePitchAccentRow } from './SentencePitchAccentRow';
 import { PhrasePitchView } from './PhrasePitchView';
@@ -575,6 +577,24 @@ export function AnalysisPanel({
     });
   }, [serverAlignment, learnerPitch, learnerPitchWindow, moraUnits]);
 
+  const [matchLaneSpeed, setMatchLaneSpeed] = useState(false);
+  const timingLane = useMemo(() => {
+    if (!serverAlignment?.reference || !serverAlignment.learner) return undefined;
+    const build = (alignment: AlignmentResult, offset: number) =>
+      buildKanaTimeline({
+        words: alignment.words,
+        moraUnits,
+        durationSeconds: alignment.durationSeconds,
+        timeOffsetSeconds: offset,
+      });
+    return buildTimingLane({
+      reference: build(serverAlignment.reference, targetRange ? targetRange.startMs / 1000 : 0),
+      learner: build(serverAlignment.learner, 0),
+      matchSpeed: matchLaneSpeed,
+      referenceRate: referencePlaybackRate,
+    });
+  }, [serverAlignment, moraUnits, targetRange, matchLaneSpeed, referencePlaybackRate]);
+
   const phrasePitch = useMemo(() => {
     if (!serverAlignment?.reference || !referencePitch) return undefined;
     return buildPhrasePitch({
@@ -1054,6 +1074,9 @@ export function AnalysisPanel({
         timeWindow={learnerPitchWindow}
         valueRange={sharedPitchRange}
       />
+      {timingLane ? (
+        <TimingLane lane={timingLane} matchSpeed={matchLaneSpeed} onMatchSpeedChange={setMatchLaneSpeed} />
+      ) : null}
       {(referenceKanaTimeline?.length ?? 0) > 0 || (learnerKanaTimeline?.length ?? 0) > 0 ? (
         <p className="muted" style={{ fontSize: '0.8em', margin: 0 }}>
           Kana under each contour are placed from the server word alignment, so
