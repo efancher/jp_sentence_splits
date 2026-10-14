@@ -291,6 +291,7 @@ import {
 } from '../lib/sessionPlanner';
 import {
   CONTINUE_BOOK_MIN_INTRODUCED_RATIO,
+  SHADOWING_MIN_INTRODUCED_RATIO,
   EXPLORE_CANDIDATE_LIMIT,
   EXPLORE_REVISITS_PER_BOOK,
   isPausedLegacyDrillSubject,
@@ -4701,7 +4702,8 @@ export async function getSentenceReadingIntroducedReadiness(
 
 /**
  * Shadowing readiness (user request, 2026-08-27). A sentence's vocabulary
- * must be confirmed and every linked word must have been seen at least once
+ * must be confirmed and at least SHADOWING_MIN_INTRODUCED_RATIO (0.5, was
+ * every word until 2026-10-14) of its linked words must have been seen once
  * in a reading/meaning rep (`getIntroducedReadingVocabularyItemIds` — left
  * FSRS's `new` state, not full proficiency) — shadowing a sentence full of
  * words the learner has never even looked at splits attention between
@@ -4743,10 +4745,12 @@ export async function getSentenceShadowingReadiness(
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
     const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
+    const introducedCount = vocabularyItemIds.filter((id) => readingIntroducedIds.has(id)).length;
     readiness.set(
       sentenceId,
       vocabularyReviewStatus === 'confirmed' &&
-        vocabularyItemIds.every((id) => readingIntroducedIds.has(id)),
+        (vocabularyItemIds.length === 0 ||
+          introducedCount / vocabularyItemIds.length >= SHADOWING_MIN_INTRODUCED_RATIO),
     );
   }
   return readiness;
@@ -10351,7 +10355,7 @@ async function getRecentlyMissedClozeSentenceIds(): Promise<Set<string>> {
  * Practice(shadowing) candidates: sentences with reference audio and the
  * fewest existing attempts, scoped to sentences actually in progress and
  * ready per getSentenceShadowingReadiness (user request, 2026-08-27) —
- * vocabulary confirmed and every linked word's reading/meaning introduced
+ * vocabulary confirmed and at least half of linked words' reading/meaning introduced
  * (seen once, not full proficiency; no pitch requirement since 2026-09-28),
  * so shadowing doesn't split attention between recalling words and
  * imitating pronunciation. A sentence with a just-

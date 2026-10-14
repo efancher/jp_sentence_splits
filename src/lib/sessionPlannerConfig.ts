@@ -175,6 +175,15 @@ export const VOCAB_CONFIRM_MIN_GLOSSING_SHARE = 0.6;
 export const CONTINUE_BOOK_MIN_INTRODUCED_RATIO = 0.5;
 
 /**
+ * Fraction of a sentence's reviewable vocabulary that must be introduced
+ * (left FSRS's `new` state on a reading/meaning card) before the sentence is
+ * a shadowing candidate. Was all-or-nothing until 2026-10-14: one
+ * never-reviewed word kept a whole sentence out of shadowing, though
+ * shadowing is meant to be how pronunciation is learned. 1.0 restores that.
+ */
+export const SHADOWING_MIN_INTRODUCED_RATIO = 0.5;
+
+/**
  * Ceiling on how far redistribution (minutes freed by a bucket that hit its
  * own candidate ceiling) can push any single bucket past its own
  * weight-based fair share of the requested time. Without this, a session
