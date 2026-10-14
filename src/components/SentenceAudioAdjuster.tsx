@@ -5,7 +5,7 @@ import { getDb } from '../db/database';
 import { recutSentenceAudioFromSource } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { fetchSourceAudioRange } from '../lib/miningApi';
-import { canAdjustWithoutBox, clipFromEpisode, episodeRangeWav } from '../lib/sourceEpisodeCache';
+import { canAdjustWithoutBox, clipFromEpisode, deviceUnavailableReason, episodeRangeWav } from '../lib/sourceEpisodeCache';
 
 import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
@@ -60,15 +60,23 @@ export function SentenceAudioAdjuster({
       // Prefer this device's copy of the episode (downloaded from cloud storage,
       // no mining box needed); the box covers non-YouTube sources and browsers
       // that cannot decode Opus.
+      let deviceNote = '';
       if (canAdjustWithoutBox(sourceUrl)) {
         try {
           const { blob } = await episodeRangeWav(sourceUrl, fromMs, toMs);
           return { blob, via: 'device' as const };
-        } catch {
-          // fall through to the box
+        } catch (error) {
+          deviceNote = `On-device load failed: ${error instanceof Error ? error.message : String(error)}.`;
         }
+      } else {
+        deviceNote = `On-device load unavailable (${deviceUnavailableReason(sourceUrl)}).`;
       }
-      return { blob: await fetchSourceAudioRange(sourceUrl, fromMs, toMs), via: 'box' as const };
+      try {
+        return { blob: await fetchSourceAudioRange(sourceUrl, fromMs, toMs), via: 'box' as const };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not load the source audio.';
+        throw new Error(`${deviceNote} ${message}${error instanceof TypeError ? ' — the mining box needs Tailscale.' : ''}`.trim());
+      }
     })()
       .then(({ blob, via }) => {
         if (cancelled) return;

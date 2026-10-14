@@ -20,6 +20,13 @@ export function canAdjustWithoutBox(url: string): boolean {
   return Boolean(youtubeVideoId(url)) && isOpusRangeDecodingSupported() && getSupabase() !== null;
 }
 
+export function deviceUnavailableReason(url: string): string {
+  if (!youtubeVideoId(url)) return 'not a YouTube source';
+  if (!isOpusRangeDecodingSupported()) return 'this browser has no WebCodecs audio decoder';
+  if (getSupabase() === null) return 'cloud storage not configured';
+  return 'unknown';
+}
+
 export async function hasCachedEpisode(videoId: string): Promise<boolean> {
   return (await getDb().sourceEpisodes.get(videoId)) !== undefined;
 }
