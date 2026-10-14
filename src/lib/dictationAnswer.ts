@@ -1,4 +1,4 @@
-import { toHiragana } from 'wanakana';
+import { isHiragana, toHiragana } from 'wanakana';
 
 import { normalizeSentenceKey } from './normalize';
 
@@ -21,6 +21,18 @@ function comparable(text: string): string {
   return toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
     convertLongVowelMark: false,
   });
+}
+
+/**
+ * Converts a romaji answer to kana, but only when everything left after
+ * dropping spaces and punctuation becomes kana, so a stray latin typo can't
+ * partially mutate into a match. Anything else is returned untouched.
+ */
+function romajiToKana(typed: string): string {
+  if (!/[A-Za-z]/.test(typed)) return typed;
+  const converted = toHiragana(typed.trim());
+  const core = converted.replace(/[\p{P}\p{S}\s]/gu, '');
+  return core && isHiragana(core) ? converted : typed;
 }
 
 /** Longest-common-subsequence membership flags for each side. */
@@ -70,14 +82,16 @@ function toSegments(chars: string[], flags: boolean[]): DictationSegment[] {
  * Grades a typed dictation against the sentence. The answer is accepted if
  * it matches either the written sentence or its kana reading (a learner
  * without the kanji can still show they heard it), ignoring whitespace,
- * punctuation and hiragana/katakana. The diff is drawn against whichever of
+ * punctuation and hiragana/katakana. A fully-romaji answer is converted to
+ * kana first (は/を must be typed ha/wo). The diff is drawn against whichever of
  * the two the answer is closer to.
  */
 export function gradeDictation(
-  typed: string,
+  rawTyped: string,
   japanese: string,
   readingOnly?: string,
 ): DictationGrade {
+  const typed = romajiToKana(rawTyped);
   const targets = [japanese, ...(readingOnly && readingOnly.trim() ? [readingOnly] : [])];
   const typedChars = [...typed.trim()];
   const typedKey = comparable(typed);

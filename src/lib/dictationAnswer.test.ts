@@ -35,4 +35,20 @@ describe('gradeDictation', () => {
   it('works without a reading', () => {
     expect(gradeDictation('こんにちは', 'こんにちは。').correct).toBe(true);
   });
+
+  it('accepts a romaji answer against the kana reading', () => {
+    const grade = gradeDictation('kinou, tomodachi to eiga wo mini ikimashita.', JP, KANA);
+    expect(grade.correct).toBe(true);
+    expect(grade.gradedAgainst).toBe(KANA);
+  });
+
+  it('diffs a wrong romaji answer as kana', () => {
+    const grade = gradeDictation('kinou tomodachi to eiga wo mi ni kimashita', JP, KANA);
+    expect(grade.correct).toBe(false);
+    expect(grade.typedSegments.map((s) => s.text).join('')).toContain('きました');
+  });
+
+  it('does not convert mixed latin/kana garbage', () => {
+    expect(gradeDictation('kinou q とも', JP, KANA).correct).toBe(false);
+  });
 });

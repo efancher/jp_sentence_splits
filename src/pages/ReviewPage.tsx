@@ -3840,7 +3840,7 @@ function DictationCard({
           }}
         >
           <label>
-            Type what you hear (kanji or kana)
+            Type what you hear (kanji, kana or romaji)
             <textarea
               rows={2}
               lang="ja"
