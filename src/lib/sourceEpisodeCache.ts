@@ -15,13 +15,33 @@ export function youtubeVideoId(url: string): string | undefined {
   return YOUTUBE_URL_ID.exec(value)?.[1];
 }
 
-/** True when this device could serve the source range itself (YouTube id + Opus decoding + cloud client). */
+/**
+ * The key the mining box caches this source under: the YouTube id, else
+ * yt-dlp's generic-extractor id for direct media / podcast URLs (the last URL
+ * segment minus its extension).
+ */
+export function sourceEpisodeId(url: string): string | undefined {
+  const youtube = youtubeVideoId(url);
+  if (youtube) return youtube;
+  const value = url.trim();
+  if (!/^https?:\/\//i.test(value)) return undefined;
+  const last = value.replace(/\/+$/, '').split('/').pop() ?? '';
+  const dot = last.lastIndexOf('.');
+  const stem = dot > 0 ? last.slice(0, dot) : last;
+  try {
+    return decodeURIComponent(stem || value);
+  } catch {
+    return stem || value;
+  }
+}
+
+/** True when this device could serve the source range itself (episode id + Opus decoding + cloud client). */
 export function canAdjustWithoutBox(url: string): boolean {
-  return Boolean(youtubeVideoId(url)) && isOpusRangeDecodingSupported() && getSupabase() !== null;
+  return Boolean(sourceEpisodeId(url)) && isOpusRangeDecodingSupported() && getSupabase() !== null;
 }
 
 export function deviceUnavailableReason(url: string): string {
-  if (!youtubeVideoId(url)) return 'not a YouTube source';
+  if (!sourceEpisodeId(url)) return 'not a recognised source URL';
   if (!isOpusRangeDecodingSupported()) return 'this browser has no WebCodecs audio decoder';
   if (getSupabase() === null) return 'cloud storage not configured';
   return 'unknown';
@@ -62,8 +82,8 @@ export async function episodeRangeWav(
   startMs: number,
   endMs: number,
 ): Promise<{ blob: Blob; durationMs: number }> {
-  const videoId = youtubeVideoId(url);
-  if (!videoId) throw new Error('This source is not a YouTube video, so it is only available from the mining box.');
+  const videoId = sourceEpisodeId(url);
+  if (!videoId) throw new Error('This source has no recognisable episode id, so it is only available from the mining box.');
   const episode = await getEpisodeBlob(videoId);
   const samples = await decodeOpusRange(episode, startMs, endMs);
   return {

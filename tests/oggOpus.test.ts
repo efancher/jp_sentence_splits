@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { opusPacketSamples, packetIndexAtSample, parseOggOpus } from '../src/lib/oggOpus';
 import { encodeWav } from '../src/lib/opusRange';
-import { youtubeVideoId } from '../src/lib/sourceEpisodeCache';
+import { sourceEpisodeId, youtubeVideoId } from '../src/lib/sourceEpisodeCache';
 
 /** One Ogg page holding the given packets (each < 255 bytes, so one lacing value apiece). */
 function page(packets: Uint8Array[], sequence: number): Uint8Array {
@@ -101,5 +101,14 @@ describe('youtubeVideoId', () => {
     expect(youtubeVideoId('https://youtu.be/abcdefghijk')).toBe('abcdefghijk');
     expect(youtubeVideoId('abcdefghijk')).toBe('abcdefghijk');
     expect(youtubeVideoId('https://example.com/feed/ep1.mp3')).toBeUndefined();
+  });
+});
+
+describe('sourceEpisodeId', () => {
+  it('matches yt-dlp generic ids for podcast URLs and keeps YouTube ids', () => {
+    expect(sourceEpisodeId('http://nihongoconteppei.com/wp-content/uploads/2026/08/Beginners-con-Teppei1557.mp3')).toBe('Beginners-con-Teppei1557');
+    expect(sourceEpisodeId('https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-5-21/7bbcce1e-c415-af70-4fe7-c87116665e61.mp3')).toBe('7bbcce1e-c415-af70-4fe7-c87116665e61');
+    expect(sourceEpisodeId('https://youtu.be/abcdefghijk')).toBe('abcdefghijk');
+    expect(sourceEpisodeId('not a url')).toBeUndefined();
   });
 });
