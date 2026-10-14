@@ -942,6 +942,14 @@ Targets are constants; no settings UI.
   `recutSentenceAudioFromSource` → re-clips **only** that `sentenceAudio`
   row from the pristine source (`clipFromSource`) and re-uploads it.
   Sentence text, study progress, chunk/grammar analysis all untouched.
+  For YouTube sources it works **without the mining box**: the box mirrors
+  each source's Opus audio to the private Supabase `source-audio` bucket;
+  the device downloads the episode once (cached in Dexie `sourceEpisodes`,
+  local-only), `src/lib/oggOpus.ts` demuxes it and `opusRange.ts` decodes
+  just the needed range with WebCodecs `AudioDecoder` (never a whole-file
+  `decodeAudioData`), and the re-cut clip is stored as 16-bit mono WAV
+  (`audio/wav`, 24 kHz). The box path remains the fallback (non-YouTube
+  sources, browsers without WebCodecs Opus).
 - **Books/Chapters** (`BooksPage.tsx`, `BookDetailPage.tsx`) — sentences
   organize into named books with ordered chapters; drag-and-drop reorder
   (`@dnd-kit`), "Order from paste" (reorders a book to match pasted Satori

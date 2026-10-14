@@ -1126,7 +1126,7 @@ type ReclipFn = (
 type SourceClipFn = (
   url: string,
   cuts: { startMs: number; endMs: number }[],
-) => Promise<{ blob: Blob; durationMs: number }[]>;
+) => Promise<{ blob: Blob; durationMs: number; mimeType?: string }[]>;
 
 export async function applyResegmentation(
   bookId: string,
@@ -1648,7 +1648,7 @@ export async function recutSentenceAudioFromSource(
     endMs: Math.round(span.endMs),
     durationMs: clip.durationMs,
     blob: clip.blob,
-    mimeType: 'audio/mp4',
+    mimeType: clip.mimeType ?? 'audio/mp4',
     importedAt: nowIso(),
     // A trim override was measured against the old blob's own timeline —
     // carrying it over would clip the wrong part of the freshly re-cut audio.

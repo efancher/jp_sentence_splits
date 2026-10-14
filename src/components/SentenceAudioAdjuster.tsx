@@ -5,6 +5,7 @@ import { getDb } from '../db/database';
 import { recutSentenceAudioFromSource } from '../db/repository';
 import type { SentenceAudio } from '../domain/types';
 import { fetchSourceAudioRange } from '../lib/miningApi';
+import { canAdjustWithoutBox, clipFromEpisode, episodeRangeWav } from '../lib/sourceEpisodeCache';
 
 import { ZoomedRangeEditor } from './ZoomedRangeEditor';
 
@@ -45,7 +46,7 @@ export function SentenceAudioAdjuster({
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
-  const [padded, setPadded] = useState<{ blob: Blob; padStartMs: number } | null>(null);
+  const [padded, setPadded] = useState<{ blob: Blob; padStartMs: number; via: 'device' | 'box' } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -53,10 +54,25 @@ export function SentenceAudioAdjuster({
     setState('loading');
     setPadded(null);
     const padStartMs = Math.min(audio.startMs, EDIT_PAD_MS);
-    void fetchSourceAudioRange(sourceUrl, audio.startMs - padStartMs, audio.endMs + EDIT_PAD_MS)
-      .then((blob) => {
+    const fromMs = audio.startMs - padStartMs;
+    const toMs = audio.endMs + EDIT_PAD_MS;
+    void (async () => {
+      // Prefer this device's copy of the episode (downloaded from cloud storage,
+      // no mining box needed); the box covers non-YouTube sources and browsers
+      // that cannot decode Opus.
+      if (canAdjustWithoutBox(sourceUrl)) {
+        try {
+          const { blob } = await episodeRangeWav(sourceUrl, fromMs, toMs);
+          return { blob, via: 'device' as const };
+        } catch {
+          // fall through to the box
+        }
+      }
+      return { blob: await fetchSourceAudioRange(sourceUrl, fromMs, toMs), via: 'box' as const };
+    })()
+      .then(({ blob, via }) => {
         if (cancelled) return;
-        setPadded({ blob, padStartMs });
+        setPadded({ blob, padStartMs, via });
         setState('ready');
       })
       .catch((error) => {
@@ -76,10 +92,15 @@ export function SentenceAudioAdjuster({
     setState('saving');
     setErrorMsg('');
     try {
-      await recutSentenceAudioFromSource(audio.id, {
+      const span = {
         startMs: Math.round(base + range.startMs),
         endMs: Math.round(base + range.endMs),
-      });
+      };
+      if (padded.via === 'device') {
+        await recutSentenceAudioFromSource(audio.id, span, { clipFromSource: clipFromEpisode });
+      } else {
+        await recutSentenceAudioFromSource(audio.id, span);
+      }
       setOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Re-cut failed.';

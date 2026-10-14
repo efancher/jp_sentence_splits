@@ -27,6 +27,7 @@ import type {
   Sentence,
   SentenceAudio,
   SentenceExtras,
+  SourceEpisode,
   SentenceAnalysis,
   SentenceGrammar,
   SentenceVocabulary,
@@ -153,6 +154,8 @@ export class GlossbookDatabase extends Dexie {
   namedPodcastFeeds!: EntityTable<NamedPodcastFeed, 'id'>;
   // AI-drafted per-sentence extras (id = sentence id), synced as sentence_extras.
   sentenceExtras!: EntityTable<SentenceExtras, 'id'>;
+  // Whole-episode Opus audio cached on this device for offline clip adjusting (local only, never synced).
+  sourceEpisodes!: EntityTable<SourceEpisode, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -716,6 +719,11 @@ export class GlossbookDatabase extends Dexie {
     // AI-drafted per-sentence extras split out of Book.chapters — purely additive.
     this.version(25).stores({
       sentenceExtras: 'id, bookId, chapterId',
+    });
+
+    // Local-only whole-episode audio cache — purely additive.
+    this.version(26).stores({
+      sourceEpisodes: 'id, cachedAt',
     });
   }
 }

@@ -18,6 +18,7 @@ const ALLOWED_MIME = new Set([
   'audio/mp4',
   'audio/aac',
   'audio/webm',
+  'audio/wav',
 ]);
 
 function isWifiConnection(): boolean {
@@ -59,7 +60,9 @@ export async function uploadReferenceAudio(input: {
       ? 'opus'
       : input.audio.mimeType.includes('mpeg')
         ? 'mp3'
-        : 'm4a';
+        : input.audio.mimeType.includes('wav')
+          ? 'wav'
+          : 'm4a';
   const bookPart = input.bookId ?? 'unassigned';
   const path = `${input.ownerId}/${bookPart}/${input.audio.id}.${ext}`;
 

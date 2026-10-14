@@ -1319,6 +1319,14 @@ export interface NamedPodcastFeed {
  * blobs made one book ~4 MB, and every edit re-synced all of it). `id` IS the
  * sentence id. Drafts only — never instead of the learner's saved `analyses`.
  */
+export interface SourceEpisode {
+  /** YouTube video id. */
+  id: string;
+  /** Ogg-Opus episode audio, as stored in the `source-audio` bucket. */
+  blob: Blob;
+  cachedAt: string;
+}
+
 export interface SentenceExtras {
   id: string;
   bookId?: string;
