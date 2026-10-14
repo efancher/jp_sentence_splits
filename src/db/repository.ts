@@ -6739,11 +6739,10 @@ export interface PitchAccentMinimalPairOccurrence extends MinimalPairOccurrence 
  * surface. Deliberately perception-only, same stance as Odd Ear
  * Out/Speaker Match: this is a listening-discrimination task with the
  * answer shown right after, not a recall/production check, so it doesn't
- * need `getProficientVocabularyItemIds`'s FSRS-reviewed bar — requiring
- * that would starve a freshly-imported, still-suspended book (like a
- * homophone-focused podcast) of any candidates, since a suspended book's
- * study items never surface in the due queue to earn the review rep that
- * bar requires. `bookId` doubles as a "same speaker" proxy: a book is
+ * need `getProficientVocabularyItemIds`'s FSRS-reviewed bar. Sentences that
+ * live only in suspended books/chapters are skipped (and `bookId` is taken
+ * from a non-shelved membership), same as every other `/play` game.
+ * `bookId` doubles as a "same speaker" proxy: a book is
  * normally one show/narrator or one consistent cast, so two occurrences
  * sharing a `bookId` are treated as same-speaker and two differing ones as
  * cross-speaker (`STATUS.md`) — an approximation, not a verified per-clip
@@ -6753,7 +6752,15 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
   PitchAccentMinimalPairOccurrence[]
 > {
   const db = getDb();
-  const links = (await db.sentenceVocabulary.toArray()).filter((link) => !!link.surfaceForm);
+  const [allLinks, suspendedIndex] = await Promise.all([
+    db.sentenceVocabulary.toArray(),
+    loadSuspendedBookIndex(),
+  ]);
+  const links = allLinks.filter(
+    (link) =>
+      !!link.surfaceForm &&
+      !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
+  );
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -6780,6 +6787,7 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
 
   const bookIdBySentenceId = new Map<string, string>();
   for (const membership of bookSentences) {
+    if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
     if (!bookIdBySentenceId.has(membership.sentenceId)) {
       bookIdBySentenceId.set(membership.sentenceId, membership.bookId);
     }
