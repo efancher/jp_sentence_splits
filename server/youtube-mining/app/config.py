@@ -129,6 +129,12 @@ SOURCE_CACHE_MAX_BYTES = int(
 )
 SOURCE_CACHE_OPUS_KBPS = int(os.environ.get("MINING_SOURCE_CACHE_OPUS_KBPS", "32"))
 
+# Durable Supabase Storage mirror of the source cache (app/source_backup.py).
+# Off unless both are set; the key comes from an EnvironmentFile the user owns.
+SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/") or None
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or None
+SOURCE_BACKUP_BUCKET = os.environ.get("MINING_SOURCE_BACKUP_BUCKET", "source-audio")
+
 # Route yt-dlp + subtitle/info fetches through a Tailscale exit node for the
 # duration of each download. YouTube bot-blocks this datacenter IP (see the
 # cookies note above); a personal device on a home connection, already on

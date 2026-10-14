@@ -11,6 +11,10 @@ Environment=MINING_YTDLP_COOKIES_FILE=%h/projects/jp_sentence_splits/server/yout
 # phone (used when the laptop is asleep). Needs `sudo tailscale set
 # --operator=<user>` run once by an admin. See app/exit_node.py + the
 # deploy README. Clear these to fall back to cookie-only auth.
+# Durable source-audio mirror in Supabase Storage. The file (chmod 600, owned
+# by the user, never read by tooling) holds SUPABASE_URL=... and
+# SUPABASE_SERVICE_ROLE_KEY=...; absent file = backup disabled.
+EnvironmentFile=-%h/.config/youtube-mining/supabase.env
 Environment=MINING_EXIT_NODE=eds-macbook-pro
 Environment=MINING_EXIT_NODE_FALLBACK=iphone174
 # yt-dlp's JS challenge solver needs a node >= 22 binary; the systemd

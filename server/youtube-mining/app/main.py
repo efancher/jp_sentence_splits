@@ -30,6 +30,7 @@ from app import (
     readings,
     reclip,
     resegment,
+    source_backup,
     source_cache,
     status_page,
     validate,
@@ -589,6 +590,11 @@ async def ensure_source_audio(req: SourceAudioRequest):
     return SourceAudioInfo(
         videoId=video_id, durationMs=duration_ms, sizeBytes=size_bytes
     )
+
+
+@app.get("/source-audio-backup/status")
+async def source_backup_status():
+    return await asyncio.to_thread(source_backup.status)
 
 
 @app.get("/source-audio/{video_id}")

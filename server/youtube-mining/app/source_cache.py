@@ -24,7 +24,7 @@ import tempfile
 from contextlib import nullcontext
 from pathlib import Path
 
-from app import clip, config, exit_node, youtube
+from app import clip, config, exit_node, source_backup, youtube
 
 logger = logging.getLogger("youtube_mining_api.source_cache")
 
@@ -98,6 +98,7 @@ def store(video_id: str, source_audio_path: Path) -> Path:
     dest = path_for(video_id)
     _transcode_to_opus(source_audio_path, dest)
     _evict_lru(protect=dest)
+    source_backup.upload(video_id, dest)
     return dest
 
 
@@ -120,6 +121,10 @@ def ensure(url: str) -> Path:
     cached = get(video_id)
     if cached is not None:
         return cached
+    restored = path_for(video_id)
+    if source_backup.restore(video_id, restored):
+        _evict_lru(protect=restored)
+        return restored
     with tempfile.TemporaryDirectory(prefix="source-fetch-") as tmp:
         try:
             # Only YouTube needs the exit-node detour (see jobs._fetch_transcript).

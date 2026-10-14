@@ -184,3 +184,37 @@ def test_source_audio_waveform_returns_peaks_and_silences(client: TestClient):
         json={"url": URL, "startMs": 5000, "endMs": 1000},
     )
     assert bad.status_code == 422
+
+
+def test_store_uploads_backup_and_miss_restores_it(tmp_path, monkeypatch):
+    uploads: list[str] = []
+    monkeypatch.setattr(
+        source_cache.source_backup, "upload", lambda vid, path: uploads.append(vid) or True
+    )
+    src = tmp_path / "src.m4a"
+    _make_m4a(src, 2.0)
+    stored = source_cache.store("vidbackup01", src)
+    assert uploads == ["vidbackup01"]
+
+    stored.unlink()
+
+    def fake_restore(video_id, dest):
+        dest.write_bytes(b"restored")
+        return True
+
+    monkeypatch.setattr(source_cache.source_backup, "restore", fake_restore)
+    monkeypatch.setattr(
+        source_cache.youtube, "fetch_audio", lambda *a, **k: pytest.fail("hit YouTube")
+    )
+    monkeypatch.setattr(source_cache.youtube, "extract_video_id", lambda url: "vidbackup01")
+    assert source_cache.ensure("https://youtu.be/vidbackup01").read_bytes() == b"restored"
+
+
+def test_backup_disabled_without_credentials(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SUPABASE_URL", None)
+    monkeypatch.setattr(config, "SUPABASE_SERVICE_ROLE_KEY", None)
+    f = tmp_path / "a.opus"
+    f.write_bytes(b"x")
+    assert source_cache.source_backup.upload("v", f) is False
+    assert source_cache.source_backup.restore("v", tmp_path / "b.opus") is False
+    assert source_cache.source_backup.status() == {"enabled": False}
