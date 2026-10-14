@@ -335,7 +335,9 @@ toggle).
 The **shadowing bucket** has its own readiness gate
 (`getSentenceShadowingReadiness`, `repository.ts`, replacing
 `findShadowCandidates`'s old reuse of `getSentenceFullReviewReadiness`):
-vocabulary confirmed and at least half (`SHADOWING_MIN_INTRODUCED_RATIO` =
+under the sentence-led flow (default; vocab cards aren't shown or seeded) vocabulary
+confirmed and the sentence introduced (walkthrough done, book started, or already has a card)
+— the word check below applies only with the flow off: vocabulary confirmed and at least half (`SHADOWING_MIN_INTRODUCED_RATIO` =
 0.5; was every word until 2026-10-14, when one unreviewed word was blocking
 whole sentences) of the linked words seen at least once
 (`getIntroducedReadingVocabularyItemIds` — left FSRS's `new` state, not full

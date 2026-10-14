@@ -14,8 +14,10 @@ import {
   ensureStudyItem,
   getDb,
   getPlannerSession,
+  getSentenceShadowingReadiness,
   getSessionPlannerInput,
   getTodayPlannerSession,
+  logSentenceLearningEvent,
   planRecommendedSession,
   setBookSuspended,
   recordReview,
@@ -809,6 +811,32 @@ describe('Learning Orchestrator repository layer', () => {
     expect(counts.get(s2.id)).toBe(1);
     expect(shadowAttemptSummary(counts.get(s1.id) ?? 0)).toBe('Shadowed 2x so far');
     expect(shadowAttemptSummary(0)).toBe('Not shadowed yet');
+  });
+
+  it('under the sentence-led flow, shadowing readiness needs confirmed vocabulary plus the sentence being introduced — no vocabulary-card reviews required', async () => {
+    await updateSettings({ sentenceLedFlow: true });
+    const book = await createBook({ title: 'Led Shadow' });
+    const db = getDb();
+    const sentence = makeSentence();
+    await db.sentences.put(sentence);
+    await addSentencesToBook(book.id, [sentence.id]);
+    await confirmSentenceVocabulary(sentence.id, [makeSelection()]);
+
+    // Confirmed, never reviewed on a word card, but not introduced (unstarted, no walkthrough, no card).
+    expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(false);
+
+    // A completed walkthrough introduces it.
+    await logSentenceLearningEvent({
+      visitId: 'visit-1',
+      action: 'walkthrough_completed',
+      bookId: book.id,
+      sentenceId: sentence.id,
+    });
+    expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(true);
+
+    // Flow off: the word-introduced ratio applies again, and no word has been reviewed.
+    await updateSettings({ sentenceLedFlow: false });
+    expect((await getSentenceShadowingReadiness([sentence.id])).get(sentence.id)).toBe(false);
   });
 
   it('floats a sentence to the front of shadow candidates once its cloze card is missed twice in a row (cross-activity error routing)', async () => {

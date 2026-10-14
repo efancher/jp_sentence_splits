@@ -4724,6 +4724,13 @@ export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Prom
  * pitch_accent reps was passing as "known" for gates that meant reading
  * recall).
  *
+ * **Sentence-led flow (default, 2026-10-14):** vocabulary cards aren't shown
+ * or seeded, so words from new sentences can never be introduced on a card.
+ * Under the flow the word check is replaced by the review queue's own rule
+ * (ReviewPage's `introducedSentenceIds`): the sentence was walked through,
+ * started in a book, or already has a card. The ratio above applies only with
+ * the flow off.
+ *
  * **No pitch-accent requirement.** A pitch-proficiency requirement was added
  * 2026-09-16 and removed 2026-09-28 (user reflection: shadowing should be
  * the primary vehicle for learning pitch accent, not something gated behind
@@ -4742,11 +4749,13 @@ export async function getSentenceShadowingReadiness(
   const readiness = new Map<string, boolean>();
   if (sentenceIds.length === 0) return readiness;
   const db = getDb();
+  const ledFlow = isSentenceLedFlow(await readSettings(db));
   const vocabularyItemIdsBySentence = await getReviewableVocabularyItemIdsBySentence(sentenceIds);
   const allVocabularyItemIds = [...new Set([...vocabularyItemIdsBySentence.values()].flat())];
-  const [readingIntroducedIds, analyses] = await Promise.all([
-    getIntroducedReadingVocabularyItemIds(allVocabularyItemIds),
+  const [readingIntroducedIds, analyses, introducedSentenceIds] = await Promise.all([
+    ledFlow ? Promise.resolve(new Set<string>()) : getIntroducedReadingVocabularyItemIds(allVocabularyItemIds),
     db.analyses.bulkGet(sentenceIds),
+    ledFlow ? getIntroducedSentenceIds(sentenceIds) : Promise.resolve(new Set<string>()),
   ]);
   const analysesBySentenceId = new Map(
     analyses
@@ -4756,15 +4765,29 @@ export async function getSentenceShadowingReadiness(
   for (const sentenceId of sentenceIds) {
     const vocabularyItemIds = vocabularyItemIdsBySentence.get(sentenceId) ?? [];
     const vocabularyReviewStatus = analysesBySentenceId.get(sentenceId)?.vocabularyReviewStatus;
-    const introducedCount = vocabularyItemIds.filter((id) => readingIntroducedIds.has(id)).length;
-    readiness.set(
-      sentenceId,
-      vocabularyReviewStatus === 'confirmed' &&
-        (vocabularyItemIds.length === 0 ||
-          introducedCount / vocabularyItemIds.length >= SHADOWING_MIN_INTRODUCED_RATIO),
-    );
+    const wordsReady = ledFlow
+      ? introducedSentenceIds.has(sentenceId)
+      : vocabularyItemIds.length === 0 ||
+        vocabularyItemIds.filter((id) => readingIntroducedIds.has(id)).length / vocabularyItemIds.length >=
+          SHADOWING_MIN_INTRODUCED_RATIO;
+    readiness.set(sentenceId, vocabularyReviewStatus === 'confirmed' && wordsReady);
   }
   return readiness;
+}
+
+async function getIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
+  const db = getDb();
+  const wanted = new Set(sentenceIds);
+  const [events, memberships, items] = await Promise.all([
+    db.sentenceLearningEvents.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.bookSentences.where('sentenceId').anyOf(sentenceIds).toArray(),
+    db.studyItems.where('subjectType').equals('sentence').toArray(),
+  ]);
+  return new Set([
+    ...events.filter((event) => event.action === 'walkthrough_completed').map((event) => event.sentenceId),
+    ...memberships.filter((membership) => membership.status !== 'unstarted').map((membership) => membership.sentenceId),
+    ...items.filter((item) => wanted.has(item.subjectId)).map((item) => item.subjectId),
+  ]);
 }
 
 /**
