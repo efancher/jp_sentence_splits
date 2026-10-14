@@ -69,6 +69,7 @@ import { useActiveSession } from '../hooks/useActiveSession';
 import { distractorHistoryFromRecords, sampleMeaningQuestion } from '../lib/meaningChoices';
 import { effectiveLegacyDrillsPaused, isSentenceLedFlow } from '../lib/sentenceLed';
 import { useNativeAudio } from '../hooks/useNativeAudio';
+import { nativeAudioController } from '../lib/nativeAudio';
 import { useRangeLoop } from '../hooks/useRangeLoop';
 import { useSentenceAudioBlob } from '../hooks/useSentenceAudioBlob';
 import { useShadowing } from '../hooks/useShadowing';
@@ -3697,6 +3698,15 @@ function ReviewPitchContour({ audio }: { audio: SentenceAudio }) {
   const active = native.isPlaying && native.activeItemId === audio.id;
   const looping = active && loopRequestedRef.current;
   const duration = payload?.durationSeconds ?? 0;
+
+  // The loop plays through the global singleton, so it would otherwise keep
+  // going after the card advances; stop it only if it is still our clip.
+  useEffect(
+    () => () => {
+      if (loopRequestedRef.current) nativeAudioController.stop();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!active) {
