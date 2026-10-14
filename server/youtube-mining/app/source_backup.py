@@ -95,7 +95,14 @@ def status() -> dict[str, object]:
             headers=_headers(),
             timeout=15.0,
         )
-        return {"enabled": True, "ok": response.status_code == 200, "httpStatus": response.status_code}
+        result: dict[str, object] = {
+            "enabled": True,
+            "ok": response.status_code == 200,
+            "httpStatus": response.status_code,
+        }
+        if response.status_code != 200:
+            result["detail"] = response.text[:200]
+        return result
     except Exception as exc:  # noqa: BLE001
         return {"enabled": True, "ok": False, "error": type(exc).__name__}
 
