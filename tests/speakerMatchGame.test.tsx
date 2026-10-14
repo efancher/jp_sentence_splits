@@ -7,6 +7,7 @@ import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { withAppProviders } from '../src/test/providers';
+import { introduceWords } from './introduceWords';
 
 const T = '2026-09-27T00:00:00Z';
 
@@ -72,6 +73,7 @@ async function addSpeakerClip(
       updatedAt: T,
     });
   }
+  await introduceWords([vocabularyItemId]);
   if (!(await db.books.get(bookId))) {
     await db.books.add({ id: bookId, title: bookTitle, createdAt: T, updatedAt: T });
   }
@@ -112,6 +114,7 @@ describe('SpeakerMatchGame', () => {
 
   it('plays a full round — guess, reveal, score, log — without touching FSRS', async () => {
     await seedTwoCrossBookWords();
+    const seededStudyItems = await getDb().studyItems.count();
     render(
       withAppProviders(
         <MemoryRouter>
@@ -140,7 +143,7 @@ describe('SpeakerMatchGame', () => {
     expect(round!.gameId).toBe('speaker-match');
     expect(round!.items).toHaveLength(2);
     expect(await getDb().reviews.count()).toBe(0);
-    expect(await getDb().studyItems.count()).toBe(0);
+    expect(await getDb().studyItems.count()).toBe(seededStudyItems);
   });
 
   it('explains what it needs when no word has clips from 2+ books', async () => {

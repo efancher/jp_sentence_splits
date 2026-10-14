@@ -7,6 +7,7 @@ import { ensureSettings, resetDbForTests } from '../src/db/database';
 import { getDb } from '../src/db/repository';
 import { createId } from '../src/lib/ids';
 import { withAppProviders } from '../src/test/providers';
+import { introduceWords } from './introduceWords';
 
 const T = '2026-09-27T00:00:00Z';
 
@@ -87,6 +88,7 @@ async function seedHomophonePair() {
   const db = getDb();
   await addVocabWithPitchAccent('voc-chopsticks', '箸', 'はし', 1);
   await addVocabWithPitchAccent('voc-bridge', '橋', 'はし', 0);
+  await introduceWords(['voc-chopsticks', 'voc-bridge']);
 
   await addSentence('sent-a', '箸');
   await addAudioAndAlignment('audio-a', 'sent-a', '箸');
@@ -133,6 +135,7 @@ describe('HomophoneHuntGame', () => {
 
   it('plays a full round — guess, reveal, score, log — without touching FSRS', async () => {
     await seedHomophonePair();
+    const seededStudyItems = await getDb().studyItems.count();
     render(
       withAppProviders(
         <MemoryRouter>
@@ -164,8 +167,8 @@ describe('HomophoneHuntGame', () => {
     expect(round!.gameId).toBe('homophone-hunt');
     expect(round!.items).toHaveLength(2);
     expect(await getDb().reviews.count()).toBe(0);
-    // The game is proficiency-agnostic and never writes a study item.
-    expect(await getDb().studyItems.count()).toBe(0);
+    // The game never writes a study item (only the seeded "seen" ones exist).
+    expect(await getDb().studyItems.count()).toBe(seededStudyItems);
   });
 
   it('explains what it needs when there is no true homophone pair yet', async () => {

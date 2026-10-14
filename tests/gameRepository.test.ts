@@ -21,6 +21,7 @@ import {
 } from '../src/db/repository';
 import type { GrammarPattern, Sentence, SentenceGrammar, SentenceVocabulary } from '../src/domain/types';
 import { createId } from '../src/lib/ids';
+import { introduceWords } from './introduceWords';
 
 const T = '2026-09-19T00:00:00Z';
 
@@ -81,10 +82,23 @@ describe('game repository', () => {
     await addLink('s1', 'vi-two', '猫');
     await addLink('s2', 'vi-two', '猫');
     await addLink('s3', 'vi-one', '犬');
+    await introduceWords(['vi-two', 'vi-one']);
 
     const candidates = await getWordDetectiveCandidates();
     expect(candidates.map((c) => c.id)).toEqual(['vi-two']);
-    expect(candidates[0]!.stats.hasCard).toBe(false);
+    expect(candidates[0]!.stats.hasCard).toBe(true);
+  });
+
+  it('drops sentences whose words have never been reviewed', async () => {
+    await addWord('vi-two', '猫', 'ねこ');
+    await addSentence('s1', '猫が寝る。');
+    await addSentence('s2', '黒い猫だ。');
+    await addLink('s1', 'vi-two', '猫');
+    await addLink('s2', 'vi-two', '猫');
+
+    expect(await getWordDetectiveCandidates()).toEqual([]);
+    await introduceWords(['vi-two']);
+    expect((await getWordDetectiveCandidates()).map((c) => c.id)).toEqual(['vi-two']);
   });
 
   it('reflects a real lapse in the stats without writing anything', async () => {
@@ -413,6 +427,7 @@ describe('odd ear out repository', () => {
       createdAt: T,
       updatedAt: T,
     } as never);
+    await introduceWords([id]);
     const sid = `s-${id}`;
     await addSentence(sid, `${lead}語${id}です。`);
     await db.sentenceVocabulary.put({
@@ -566,6 +581,7 @@ describe('speaker match repository', () => {
         updatedAt: T,
       } as never);
     }
+    await introduceWords([itemId]);
     const sid = `s-${itemId}-${bookId}`;
     await addSentence(sid, 'これは桜です。');
     await db.sentenceVocabulary.put({

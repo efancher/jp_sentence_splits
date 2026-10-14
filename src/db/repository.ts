@@ -4701,6 +4701,17 @@ export async function getSentenceReadingIntroducedReadiness(
 }
 
 /**
+ * The subset of `sentenceIds` the learner has actually met: every reviewable
+ * word has been reviewed at least once (`getSentenceReadingIntroducedReadiness`
+ * at ratio 1 — Particle Puzzle's bar). The `/play` games share it so a round
+ * never serves a sentence whose words were only triaged, never seen.
+ */
+export async function filterToIntroducedSentenceIds(sentenceIds: string[]): Promise<Set<string>> {
+  const readiness = await getSentenceReadingIntroducedReadiness([...new Set(sentenceIds)], 1);
+  return new Set([...readiness].filter(([, ready]) => ready).map(([id]) => id));
+}
+
+/**
  * Shadowing readiness (user request, 2026-08-27). A sentence's vocabulary
  * must be confirmed and at least SHADOWING_MIN_INTRODUCED_RATIO (0.5, was
  * every word until 2026-10-14) of its linked words must have been seen once
@@ -6760,11 +6771,15 @@ export async function getPitchAccentMinimalPairOccurrences(): Promise<
     db.sentenceVocabulary.toArray(),
     loadSuspendedBookIndex(),
   ]);
-  const links = allLinks.filter(
+  let links = allLinks.filter(
     (link) =>
       !!link.surfaceForm &&
       !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
+  if (links.length > 0) {
+    const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
+    links = links.filter((link) => introduced.has(link.sentenceId));
+  }
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -7014,10 +7029,12 @@ export async function getWordDetectiveCandidates(
     db.sentenceVocabulary.toArray(),
     loadSuspendedBookIndex(),
   ]);
-  const links = allLinks.filter(
+  let links = allLinks.filter(
     (link) =>
       !!link.surfaceForm && !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
+  const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
+  links = links.filter((link) => introduced.has(link.sentenceId));
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -7325,7 +7342,7 @@ export async function getEarTilesCandidates(
     if (!audioBySentenceId.has(audio.sentenceId)) audioBySentenceId.set(audio.sentenceId, audio);
   }
 
-  const playable = sentences.filter((sentence) => {
+  const preFiltered = sentences.filter((sentence) => {
     const audio = audioBySentenceId.get(sentence.id);
     return (
       confirmed.has(sentence.id) &&
@@ -7334,6 +7351,8 @@ export async function getEarTilesCandidates(
       !(suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex))
     );
   });
+  const seenIds = await filterToIntroducedSentenceIds(preFiltered.map((sentence) => sentence.id));
+  const playable = preFiltered.filter((sentence) => seenIds.has(sentence.id));
   if (playable.length === 0) return [];
 
   const playableIds = new Set(playable.map((sentence) => sentence.id));
@@ -7484,11 +7503,15 @@ export async function getOddEarOutData(): Promise<{
     loadSuspendedBookIndex(),
   ]);
   const history = buildOddEarHistory(rounds);
-  const links = allLinks.filter(
+  let links = allLinks.filter(
     (link) =>
       !!link.surfaceForm &&
       !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
+  if (links.length > 0) {
+    const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
+    links = links.filter((link) => introduced.has(link.sentenceId));
+  }
   if (links.length === 0) return { clips: [], history };
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -7615,11 +7638,15 @@ export async function getPitchAccentSpeakerComparisons(): Promise<PitchAccentSpe
     loadSuspendedBookIndex(),
     db.books.toArray(),
   ]);
-  const links = allLinks.filter(
+  let links = allLinks.filter(
     (link) =>
       !!link.surfaceForm &&
       !(suspendedIndex && sentenceIsSuspendedOnly(link.sentenceId, suspendedIndex)),
   );
+  if (links.length > 0) {
+    const introduced = await filterToIntroducedSentenceIds(links.map((link) => link.sentenceId));
+    links = links.filter((link) => introduced.has(link.sentenceId));
+  }
   if (links.length === 0) return [];
 
   const sentenceIds = [...new Set(links.map((link) => link.sentenceId))];
@@ -7871,8 +7898,12 @@ export async function getVerbLegoData(): Promise<{
   const history = buildVerbLegoHistory(rounds);
 
   const chains: VerbChain[] = [];
+  const introducedSentenceIds = await filterToIntroducedSentenceIds(
+    sentences.filter((sentence) => confirmed.has(sentence.id) && isVerbLegoEligible(sentence)).map((sentence) => sentence.id),
+  );
   for (const sentence of sentences) {
     if (!confirmed.has(sentence.id) || !isVerbLegoEligible(sentence)) continue;
+    if (!introducedSentenceIds.has(sentence.id)) continue;
     if (suspendedIndex && sentenceIsSuspendedOnly(sentence.id, suspendedIndex)) continue;
     chains.push(...findVerbChains(sentence));
   }
