@@ -10358,11 +10358,16 @@ async function activeSentenceIdsForShadowing(bookLimit: number): Promise<Set<str
     .filter(isBookInStudyRotation)
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt).localeCompare(a.lastOpenedAt ?? a.updatedAt))
     .slice(0, bookLimit);
+  const walkedThrough = new Set(
+    (await db.sentenceLearningEvents.toArray())
+      .filter((event) => event.action === 'walkthrough_completed')
+      .map((event) => event.sentenceId),
+  );
   const ids = new Set<string>();
   for (const book of books) {
     const memberships = await db.bookSentences.where('bookId').equals(book.id).toArray();
     for (const membership of memberships) {
-      if (membership.status === 'unstarted') continue;
+      if (membership.status === 'unstarted' && !walkedThrough.has(membership.sentenceId)) continue;
       if (suspendedIndex && membershipIsShelved(membership, suspendedIndex)) continue;
       ids.add(membership.sentenceId);
     }
