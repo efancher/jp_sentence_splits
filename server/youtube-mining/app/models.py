@@ -523,6 +523,9 @@ class AssistRunStatusResponse(BaseModel):
     extras: dict[str, str] | None = None
     # Finished pieces by task id (book-extras mode merges these client-side).
     extraReplies: dict[str, str] | None = None
+    # Book-extras runs: the handles each kind was started for and the book's sentence count, so another device can re-attach.
+    selection: dict[str, list[int]] | None = None
+    sentenceCount: int | None = None
     # What the assistant call in flight is doing, and a short newest-last activity log (see src/lib/assistRun.ts).
     live: dict | None = None
     log: list[dict] = Field(default_factory=list)

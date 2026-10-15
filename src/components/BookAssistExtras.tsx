@@ -111,6 +111,20 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
       try {
         const next = await getAssistRun(runIdFor(bookId));
         if (stopped || !next) return;
+        if (!loadSnapshot(bookId) && next.selection) {
+          // The run was started on another device or browser (a Safari tab and the home-screen app keep separate storage): re-attach to it.
+          const current = await planBookAssistExtras(bookId);
+          if (next.sentenceCount === current.sentences.length) {
+            const kinds: BookExtrasRunSnapshot['kinds'] = {};
+            for (const kind of BOOK_EXTRA_KINDS) {
+              const handles = next.selection[kind];
+              if (handles?.length) kinds[kind] = { handles, replaceHandles: [] };
+            }
+            localStorage.setItem(snapshotKey(bookId), JSON.stringify({ bookId, sentenceIds: current.sentences.map((s) => s.id), kinds }));
+          } else {
+            setMessage('A finished run exists on the server, but the book has changed since it started, so it cannot be saved safely.');
+          }
+        }
         setRun(next);
         if (next.extraReplies) await savePending(next.extraReplies);
       } catch {

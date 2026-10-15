@@ -142,7 +142,9 @@ def test_book_extras_run_stores_spec_and_returns_pieces(client: TestClient, tmp_
     state = json.loads((run_dir / "state.json").read_text())
     state["extraReplies"] = {"walkthroughs:1-1": "{}"}
     (run_dir / "state.json").write_text(json.dumps(state))
-    assert client.get("/assist-runs/book-extras-b1").json()["extraReplies"] == {"walkthroughs:1-1": "{}"}
+    body = client.get("/assist-runs/book-extras-b1").json()
+    assert body["extraReplies"] == {"walkthroughs:1-1": "{}"}
+    assert body["selection"] == {"walkthroughs": [1]} and body["sentenceCount"] == len(spec["sentences"])
 
 
 def test_run_needs_a_transcript_or_book_sentences(client: TestClient) -> None:

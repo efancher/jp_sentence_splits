@@ -201,6 +201,8 @@ def _assist_run_response(state: dict) -> AssistRunStatusResponse:
         sentencesReply=state.get("sentencesReply"),
         extras=state.get("extras"),
         extraReplies=state.get("extraReplies"),
+        selection=state.get("selection"),
+        sentenceCount=state.get("sentenceCount"),
         live=state.get("live"),
         log=state.get("log") or [],
         updatedAt=int(state.get("updatedAt") or 0),

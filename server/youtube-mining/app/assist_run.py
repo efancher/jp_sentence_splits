@@ -161,7 +161,19 @@ def get(run_id: str) -> dict[str, Any] | None:
         # Service restarted (or the process vanished) mid-run.
         _mark(run_dir, "interrupted", "The run was interrupted — resume to continue.")
         state = _read_state(run_dir) or state
-    return state
+    return {**state, **_spec_summary(run_dir)}
+
+
+def _spec_summary(run_dir: Path) -> dict[str, Any]:
+    """What a book-extras run was started for, so another device can re-attach to it."""
+    try:
+        spec = json.loads((run_dir / "spec.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    selection = spec.get("selection")
+    if not isinstance(selection, dict) or not selection:
+        return {}
+    return {"selection": selection, "sentenceCount": len(spec.get("sentences") or [])}
 
 
 def cancel(run_id: str) -> bool:
