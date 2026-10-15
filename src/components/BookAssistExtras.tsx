@@ -8,6 +8,7 @@ import {
   type BookExtrasPlan,
   type BookExtrasRunSnapshot,
 } from '../lib/bookAssistExtras';
+import { describeRejections } from '../lib/quickImportExtras';
 import { AssistRunActivity } from './AssistRunActivity';
 import { BOOK_EXTRA_KINDS, type BookExtraKind } from '../lib/bookAssistRun';
 import type { AssistBackend } from '../lib/assistRun';
@@ -52,7 +53,8 @@ function formatSaved(result: Awaited<ReturnType<typeof saveBookAssistExtras>>): 
     return [`${BOOK_EXTRA_LABELS[kind].label}: ${bits.join(', ')}`];
   });
   const text = parts.length > 0 ? parts.join('; ') : 'Nothing new to save.';
-  return result.problems.length > 0 ? `${text} Notes: ${result.problems.join(' ')}` : text;
+  const notes = [...(result.rejections.length > 0 ? [`Skipped or partly kept: ${describeRejections(result.rejections)}.`] : []), ...result.problems];
+  return notes.length > 0 ? `${text} Notes: ${notes.join(' ')}` : text;
 }
 
 /**

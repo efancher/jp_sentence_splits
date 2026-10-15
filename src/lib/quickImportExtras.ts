@@ -30,6 +30,30 @@ export interface QuickImportExtrasResult {
   readingsFixed: number;
   particles: number;
   problems: string[];
+  /** Entries the parsers skipped, one per sentence, so callers can group them by reason. */
+  rejections: Rejection[];
+}
+
+export interface Rejection {
+  kind: 'structure' | 'constructions' | 'walkthroughs';
+  /** Reason with the quoted text and numbers removed, so equal causes group together. */
+  reason: string;
+}
+
+const REJECTION_LABELS: Record<Rejection['kind'], string> = { structure: 'Structure', constructions: 'Construction', walkthroughs: 'Walkthrough' };
+
+function normalizeReason(reason: string): string {
+  return reason.replace(/“[^”]*”/g, '“…”').replace(/\d+/g, 'N').trim();
+}
+
+/** "Structure: 40 × The chunks do not rebuild the sentence exactly (cut off?). Construction: 3 × “…” is not in the sentence." */
+export function describeRejections(rejections: readonly Rejection[]): string {
+  const counts = new Map<string, number>();
+  for (const { kind, reason } of rejections) {
+    const key = `${REJECTION_LABELS[kind]}: ${reason}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([key, count]) => `${count} × ${key}`).join('; ');
 }
 
 export function hasQuickImportExtras(sections: CombinedReplySections): boolean {
@@ -53,6 +77,7 @@ export async function applyQuickImportExtras(
     readingsFixed: 0,
     particles: 0,
     problems: [],
+    rejections: [],
   };
 
   if (sections.comprehension) {
@@ -118,8 +143,12 @@ export async function applyQuickImportExtras(
       result.structure = saved.structureSaved;
       result.constructions = saved.constructionsSaved;
       result.walkthroughs = saved.walkthroughsSaved;
-      const rejected = saved.rejectedStructure.length + saved.rejectedConstructions.length + saved.rejectedWalkthroughs.length;
-      if (rejected > 0) result.problems.push(`${rejected} structure/construction/walkthrough entries did not match their sentence (or were only partly kept) and were skipped.`);
+      const collect = (kind: Rejection['kind'], items: { reason: string }[]) =>
+        result.rejections.push(...items.map((item) => ({ kind, reason: normalizeReason(item.reason) })));
+      collect('structure', saved.rejectedStructure);
+      collect('constructions', saved.rejectedConstructions);
+      collect('walkthroughs', saved.rejectedWalkthroughs);
+      if (result.rejections.length > 0) result.problems.push(`Skipped or partly kept: ${describeRejections(result.rejections)}.`);
     }
   }
   return result;
