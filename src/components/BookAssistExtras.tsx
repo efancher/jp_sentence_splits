@@ -234,6 +234,18 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
     }
   }
 
+  async function saveOnly() {
+    if (!run) return;
+    setBusy(true);
+    try {
+      // Forget which pieces were saved, so a save that failed or was lost is attempted again; saving only fills sentences still missing.
+      localStorage.removeItem(savedKey(bookId));
+      await savePending(run.extraReplies ?? {});
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const finishedPieces = Object.keys(run?.extraReplies ?? {}).length;
 
   return (
@@ -266,7 +278,10 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
                   {run.status !== 'done' ? (
                     <button type="button" disabled={busy || !plan} onClick={() => void resume()}>Resume</button>
                   ) : null}
-                  <button type="button" className="primary" disabled={busy || finishedPieces === 0} onClick={() => void saveResults()}>
+                  <button type="button" className="primary" disabled={busy || finishedPieces === 0} onClick={() => void saveOnly()}>
+                    Save
+                  </button>
+                  <button type="button" disabled={busy || finishedPieces === 0} onClick={() => void saveResults()}>
                     {run.status === 'done' ? 'Save and clear' : 'Save what finished and clear'}
                   </button>
                   <button type="button" disabled={busy} onClick={() => void discard()}>Discard</button>
