@@ -119,3 +119,15 @@ describe('book extras plan + save', () => {
     expect(plan.kinds.walkthroughs.missing).toEqual([1, 3]);
   });
 });
+
+describe('constructionChecked', () => {
+  it('counts an empty draft as looked at, but not a missing or all-invalid one', async () => {
+    const { constructionChecked } = await import('../src/lib/phraseConstruction');
+    const layer = { text: '好きです', start: 0, end: 4 } as never;
+    const stale = { text: '嫌いです', start: 0, end: 4 } as never;
+    expect(constructionChecked('好きです', undefined)).toBe(false);
+    expect(constructionChecked('好きです', [])).toBe(true);
+    expect(constructionChecked('好きです', [layer])).toBe(true);
+    expect(constructionChecked('好きです', [stale])).toBe(false);
+  });
+});

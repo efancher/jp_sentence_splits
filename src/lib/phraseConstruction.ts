@@ -378,6 +378,12 @@ export function validLayersFor(japanese: string, layers: ConstructionLayer[] | u
   );
 }
 
+/** True when construction was already looked at: usable layers, or an empty draft recording "nothing to explain". */
+export function constructionChecked(japanese: string, layers: ConstructionLayer[] | undefined): boolean {
+  if (!layers) return false;
+  return layers.length === 0 || validLayersFor(japanese, layers).length > 0;
+}
+
 /** Inner layers first (shorter span, then earlier), which is the order a construction is built in. */
 export function orderLayers(layers: ConstructionLayer[]): ConstructionLayer[] {
   return [...layers].sort((a, b) => a.end - a.start - (b.end - b.start) || a.start - b.start);

@@ -7,12 +7,13 @@
  * unless the learner explicitly approved replacing that sentence.
  */
 import { getDb } from '../db/database';
+import { saveSentenceExtras } from '../db/repository';
 import { getBookWithExtras } from '../db/sentenceExtras';
 import { mergeChapterWalkthroughs, sentencesNeedingWalkthrough, validWalkthroughFor } from './contextWalkthrough';
 import { chunksMatchSource } from './chunking';
-import { validLayersFor } from './phraseConstruction';
+import { constructionChecked, validLayersFor } from './phraseConstruction';
 import { applyQuickImportExtras } from './quickImportExtras';
-import { BOOK_EXTRA_KINDS, mergeBookExtraReplies, type BookExtraKind, type BookExtraSelection } from './bookAssistRun';
+import { BOOK_EXTRA_KINDS, mergeBookExtraReplies, planBookExtraTasks, type BookExtraKind, type BookExtraSelection } from './bookAssistRun';
 
 export interface BookExtraSentence {
   id: string;
@@ -108,8 +109,10 @@ export async function planBookAssistExtras(bookId: string): Promise<BookExtrasPl
       mark('structure', `draft: ${truncate(draft.map((c) => c.japanese).join(' / '))}`);
     } else mark('structure', null);
 
-    const layers = validLayersFor(sentence.japanese, chapter?.constructionDrafts?.[sentence.id]);
-    mark('constructions', layers.length > 0 ? `${layers.length} layer${layers.length === 1 ? '' : 's'}` : null);
+    const constructionDraft = chapter?.constructionDrafts?.[sentence.id];
+    const layers = validLayersFor(sentence.japanese, constructionDraft);
+    if (layers.length > 0) mark('constructions', `${layers.length} layer${layers.length === 1 ? '' : 's'}`);
+    else mark('constructions', constructionChecked(sentence.japanese, constructionDraft) ? 'checked, nothing to build' : null);
   });
   return { sentences, kinds };
 }
@@ -180,6 +183,42 @@ export async function saveBookAssistExtras(
       result.saved[kind] = (result.saved[kind] ?? 0) + applied[kind];
       result.problems.push(...applied.problems.filter((p) => chapterIds.length === 1 || !p.includes('did not match')));
     }
+    if (kind === 'constructions') await markCheckedWithoutLayers(snapshot, extraReplies, allowed, replace, currentHandleById);
   }
   return result;
+}
+
+/**
+ * The assistant omits sentences with nothing to build, so a finished construction call leaves those with no
+ * layers and they would count as "without" forever. Record an empty draft for every sentence a finished call
+ * covered that its reply did not mention (and that still has no draft), meaning "looked at, nothing to build".
+ */
+async function markCheckedWithoutLayers(
+  snapshot: BookExtrasRunSnapshot,
+  extraReplies: Readonly<Record<string, string>>,
+  allowed: ReadonlyMap<number, string>,
+  replace: ReadonlySet<number>,
+  currentById: ReadonlyMap<string, BookExtraSentence>,
+): Promise<void> {
+  const handles = snapshot.kinds.constructions?.handles ?? [];
+  const tasks = planBookExtraTasks(new Array(snapshot.sentenceIds.length), { constructions: handles });
+  const db = getDb();
+  for (const task of tasks) {
+    const reply = extraReplies[task.id];
+    if (task.kind !== 'constructions' || reply === undefined) continue;
+    const mentioned = new Set([...reply.matchAll(/"S(\d+)"\s*:/g)].map((m) => Number(m[1])));
+    const covered = task.handles ?? handles.filter((h) => h >= task.from && h <= task.to);
+    const byChapter = new Map<string, string[]>();
+    for (const handle of covered) {
+      const id = allowed.get(handle);
+      if (!id || replace.has(handle) || mentioned.has(handle)) continue;
+      const chapterId = currentById.get(id)?.chapterId;
+      if (!chapterId) continue;
+      if ((await db.sentenceExtras.get(id))?.constructionDraft !== undefined) continue;
+      byChapter.set(chapterId, [...(byChapter.get(chapterId) ?? []), id]);
+    }
+    for (const [chapterId, ids] of byChapter) {
+      await saveSentenceExtras(snapshot.bookId, chapterId, ids.map((id) => [id, { constructionDraft: [] }] as const));
+    }
+  }
 }

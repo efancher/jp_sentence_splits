@@ -21,7 +21,7 @@ import { chunksMatchSource } from '../lib/chunking';
 import { buildEpisodeFocus, type EpisodeFocus } from '../lib/episodeFocus';
 import { parseEpisodePackReply, type PackReplyResult } from '../lib/episodePack';
 import { sentencesNeedingWalkthrough } from '../lib/contextWalkthrough';
-import { validLayersFor } from '../lib/phraseConstruction';
+import { constructionChecked } from '../lib/phraseConstruction';
 import {
   type PreparationContext,
   parsePreparationReply,
@@ -9362,7 +9362,7 @@ export async function getEpisodePreparationContext(
     },
     preparation: chapter.preparation,
     // Sentences with no usable construction draft yet (one that no longer matches the text does not count).
-    needsConstructionIds: sentences.filter((sentence) => validLayersFor(sentence.japanese, chapter.constructionDrafts?.[sentence.id]).length === 0).map((sentence) => sentence.id),
+    needsConstructionIds: sentences.filter((sentence) => !constructionChecked(sentence.japanese, chapter.constructionDrafts?.[sentence.id])).map((sentence) => sentence.id),
     needsWalkthroughIds: sentencesNeedingWalkthrough(sentences, chapter.contextWalkthroughs),
     // Sentences with neither a saved analysis nor an AI draft that still rebuilds the text.
     needsStructureIds: await (async () => {
