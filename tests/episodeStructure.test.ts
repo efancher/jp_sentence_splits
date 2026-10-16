@@ -163,3 +163,23 @@ describe('fixed-expression import guard', () => {
     }
   });
 });
+
+
+it('rejects split について in both formats while accepting an intact expression', () => {
+  const ctx: PreparationContext = { title: 'compound', sentences: [{ id: 's', japanese: '家族について話します。' }], vocabulary: [], grammar: [] };
+  for (const parts of [['家族に', 'ついて', '話します。'], ['家族', 'について', '話します。']]) {
+    const parsed = [
+      parseStructure({ S1: parts.map((text) => ({ text, role: 'chunk' })) }, ctx),
+      parseStructureLines(parts.map((text) => `S1 | ${text} | chunk`).join('\n'), ctx),
+    ];
+    for (const result of parsed) {
+      if (parts[0] === '家族に') {
+        expect(result.drafts.size).toBe(0);
+        expect(result.rejected[0]?.reason).toContain('について');
+      } else {
+        expect(result.drafts.get('s')).toHaveLength(3);
+        expect(result.rejected).toEqual([]);
+      }
+    }
+  }
+});

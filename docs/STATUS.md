@@ -11,7 +11,7 @@ Last updated: 2026-10-16.
 ## Where things stand
 
 - **2026-10-16 — Ungraded clause preview and fixed-expression chunk safeguards.**
-  On `feat/gloss-clause-preview` (not deployed): eight curated questions in a
+  Eight curated questions in a
   collapsed “Try a clause question (preview)” section of the sentence walkthrough.
   Exact-source matching and unique text spans protect against stale/ambiguous
   highlights; no dependency on chunk boundaries. Choice → reveal → helpful/disputed
@@ -32,7 +32,16 @@ Last updated: 2026-10-16.
   but exposed an unrelated ear-tile test provider cleanup race; the unit test now
   stubs its unused audio child rather than starting an unrelated database provider.
   The rerun reported 240 passing files / 2,656 passing tests, 12 skipped, with
-  no unhandled test errors; GitHub CI will verify the submitted branch.
+  no unhandled test errors; the initial PR also passed GitHub CI.
+  Follow-up for reported について splits: compound particles share longest-first
+  handling across generation, role detection and import validation, including
+  については／も and にとっては／も. Imports reject internal cuts in について,
+  にとって, によると and によれば; standalone compound chunks retain their role.
+  Four saved examples were repaired with exact-source matching, backups and
+  version checks: sent_3991efcc v22, sent_5afc37e6 v12, sent_89943494 v19,
+  sent_abf79c54 v45. Noun / compound boundaries preserve all chunk IDs and notes
+  elsewhere. Exact rereads matched all proposals; all 64 saved and generated
+  analyses pass the expanded guard. Follow-up typecheck and 75 focused tests pass.
 
 - **2026-10-16 — Clause/attachment pilot and backend deployment check.**
   Drafted a 12-sentence purposive sample from 64 chunked analyses: 8 promising

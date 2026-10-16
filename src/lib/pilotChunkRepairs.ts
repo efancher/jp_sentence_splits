@@ -15,6 +15,30 @@ export const PILOT_CHUNK_REPAIRS = [
       { japanese: 'なんとか', role: 'adverb', literalEnglish: 'somehow' },
       { japanese: '飛ぶことが', role: 'nominalizer + Aが', literalEnglish: 'the act of flying (subject)' },
     ] },
+  { sentenceId: 'sent_3991efcc', source: 'ジャパニーズ！今日は、紙について。',
+    before: ['紙に', 'ついて。'],
+    after: [
+      { japanese: '紙', role: 'modifier/content', literalEnglish: 'paper' },
+      { japanese: 'について。', role: 'について-car', literalEnglish: 'about' },
+    ] },
+  { sentenceId: 'sent_5afc37e6', source: '今日はそっちについて。髪の毛じゃなくて、紙です。',
+    before: ['そっちに', 'ついて。'],
+    after: [
+      { japanese: 'そっち', role: 'modifier/content', literalEnglish: 'that one' },
+      { japanese: 'について。', role: 'について-car', literalEnglish: 'about' },
+    ] },
+  { sentenceId: 'sent_89943494', source: '今日は家族について話します。',
+    before: ['家族に', 'ついて'],
+    after: [
+      { japanese: '家族', role: 'modifier/content', literalEnglish: 'family' },
+      { japanese: 'について', role: 'について-car', literalEnglish: 'about' },
+    ] },
+  { sentenceId: 'sent_abf79c54', source: 'このポッドキャストでは、いろいろなトピックについて、ゆっくりな日本語で話します。',
+    before: ['いろいろなトピックに', 'ついて、'],
+    after: [
+      { japanese: 'いろいろなトピック', role: 'modifier/content', literalEnglish: 'various topics' },
+      { japanese: 'について、', role: 'について-car', literalEnglish: 'about' },
+    ] },
 ] as const;
 
 export function repairPilotChunks(sentenceId: string, source: string, chunks: AnalysisChunk[]): AnalysisChunk[] | null {

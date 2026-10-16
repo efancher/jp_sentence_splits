@@ -29,6 +29,7 @@ export function buildStructureInstructions(): string[] {
     'EVERY chunk, including ones that are not vocabulary words: connectives, fixed expressions, counters and particles ("もう一つは" =',
     '"another one, as for"; "何かを" = "something (object)"). Keep the Japanese word order of the idea (e.g. "writing-or-so thing, right"),',
     'show what a particle contributes, and prefer a short fragment over a full sentence.',
+    'Keep compound particles intact, including について, については, についても, にとって, にとっては, にとっても, によると and によれば.',
     'Keep fixed expressions intact: なんとか, とっても, もちろん, とりあえず, どうやって. Their internal kana are not separate particles.',
     'Keep quoted connectives such as 「でもね」と together; do not attach their beginning to the preceding clause or invent a でも-car.',
     'A relative clause and its head noun may stay in one natural chunk; do not split merely to make a question answer selectable.',
