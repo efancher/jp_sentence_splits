@@ -144,6 +144,7 @@ def test_book_extras_run_stores_spec_and_returns_pieces(client: TestClient, tmp_
     (run_dir / "state.json").write_text(json.dumps(state))
     body = client.get("/assist-runs/book-extras-b1").json()
     assert body["extraReplies"] == {"walkthroughs:1-1": "{}"}
+    assert body["bookSentences"] == BOOK_BODY["sentences"]
     assert body["selection"] == {"walkthroughs": [1]} and body["sentenceCount"] == len(spec["sentences"])
 
 

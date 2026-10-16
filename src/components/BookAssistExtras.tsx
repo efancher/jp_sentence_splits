@@ -78,24 +78,28 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   // Each finished piece is written onto the book as soon as the box reports it, so a run that stops partway
   // (credits, a crash, a discard) never loses work. Only pieces not yet saved are sent.
   const savePending = useCallback(
-    async (replies: Readonly<Record<string, string>>): Promise<string | null> => {
+    async (replies: Readonly<Record<string, string>>): Promise<boolean> => {
       const snap = loadSnapshot(bookId);
-      if (!snap || savingRef.current) return null;
+      if (!snap || savingRef.current) return false;
       const saved = loadSavedTaskIds(bookId);
       const fresh = Object.fromEntries(Object.entries(replies).filter(([id]) => !saved.has(id)));
-      if (Object.keys(fresh).length === 0) return null;
+      if (Object.keys(fresh).length === 0) return true;
       savingRef.current = true;
       try {
         const result = await saveBookAssistExtras(snap, fresh);
+        if (result.problems.length > 0) {
+          setMessage(formatSaved(result));
+          return false;
+        }
         for (const id of Object.keys(fresh)) saved.add(id);
         localStorage.setItem(savedKey(bookId), JSON.stringify([...saved]));
         const text = formatSaved(result);
         setMessage(text);
         await refreshPlan();
-        return text;
+        return true;
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'Could not save the results.');
-        return null;
+        return false;
       } finally {
         savingRef.current = false;
       }
@@ -105,7 +109,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
 
   useEffect(() => {
     if (!open) return;
-    void refreshPlan();
+    void refreshPlan().catch((err) => setMessage(err instanceof Error ? err.message : 'Could not load the book.'));
     let stopped = false;
     const poll = async () => {
       try {
@@ -114,7 +118,10 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
         if (!loadSnapshot(bookId) && next.selection) {
           // The run was started on another device or browser (a Safari tab and the home-screen app keep separate storage): re-attach to it.
           const current = await planBookAssistExtras(bookId);
-          if (next.sentenceCount === current.sentences.length) {
+          if (next.bookSentences?.length === current.sentences.length && next.bookSentences.every((sentence, index) => {
+            const here = current.sentences[index]!;
+            return sentence.handle === here.handle && sentence.japanese === here.japanese && sentence.translation === here.translation;
+          })) {
             const kinds: BookExtrasRunSnapshot['kinds'] = {};
             for (const kind of BOOK_EXTRA_KINDS) {
               const handles = next.selection[kind];
@@ -122,7 +129,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
             }
             localStorage.setItem(snapshotKey(bookId), JSON.stringify({ bookId, sentenceIds: current.sentences.map((s) => s.id), kinds }));
           } else {
-            setMessage('A finished run exists on the server, but the book has changed since it started, so it cannot be saved safely.');
+            setMessage('A run exists on the server, but its original sentences could not be verified against this book. Open it on the device that started it, or update the server and try again.');
           }
         }
         setRun(next);
@@ -238,7 +245,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
     if (!run || !snapshot) return;
     setBusy(true);
     try {
-      await savePending(run.extraReplies ?? {});
+      if (!(await savePending(run.extraReplies ?? {}))) return;
       await discard();
       await refreshPlan();
     } catch (err) {
@@ -249,7 +256,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
   }
 
   async function saveOnly() {
-    if (!run) return;
+    if (!run || savingRef.current) return;
     setBusy(true);
     try {
       // Forget which pieces were saved, so a save that failed or was lost is attempted again; saving only fills sentences still missing.
@@ -371,7 +378,7 @@ export function BookAssistExtras({ bookId }: { bookId: string }) {
               );
             })}
             <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-              <button type="button" className="primary" disabled={busy || totalPieces === 0} onClick={() => void start()}>
+              <button type="button" className="primary" disabled={busy || Boolean(run) || totalPieces === 0} onClick={() => void start()}>
                 Generate ({totalPieces} sentence-extras)
               </button>
               <label className="row" style={{ gap: '0.35rem' }}>

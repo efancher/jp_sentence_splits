@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetDbForTests } from '../src/db/database';
 import { createBook, createBookChapter, getBookWithExtras, getDb, saveSentenceExtras } from '../src/db/repository';
@@ -6,6 +6,7 @@ import { createBook, createBookChapter, getBookWithExtras, getDb, saveSentenceEx
 const draft = (japanese: string) => [{ japanese, role: 'engine' }];
 
 describe('sentence_extras', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(async () => {
     await resetDbForTests();
   });
@@ -36,6 +37,23 @@ describe('sentence_extras', () => {
     const view = (await getBookWithExtras(book.id))!.chapters[0]!;
     expect(view.structureDrafts).toEqual({ legacy: draft('old'), both: draft('extras'), new: draft('n') });
     expect((await getDb().books.get(book.id))!.chapters[0]!.structureDrafts).toEqual({ legacy: draft('old'), both: draft('inline') });
+  });
+
+  it('falls back to bounded point reads after two cursor failures', async () => {
+    const book = await createBook({ title: 'Large book' });
+    const chapter = await createBookChapter(book.id, 'C');
+    const db = getDb();
+    const ids = Array.from({ length: 205 }, (_, i) => `s${i}`);
+    await db.bookSentences.bulkPut(ids.map((sentenceId, position) => ({ id: `bs${position}`, bookId: book.id,
+      sentenceId, position, chapterId: chapter.id, status: 'unstarted' as const, addedAt: '2026-10-15' })));
+    await saveSentenceExtras(book.id, chapter.id, ids.map((id) => [id, { constructionDraft: [] }] as const));
+    const read = vi.fn().mockRejectedValue(new Error("Attempt to iterate a cursor that doesn't exist"));
+    vi.spyOn(db.sentenceExtras, 'where').mockReturnValue({ equals: () => ({ toArray: read }) } as never);
+    const bulk = vi.spyOn(db.sentenceExtras, 'bulkGet');
+    const view = await getBookWithExtras(book.id);
+    expect(Object.keys(view!.chapters[0]!.constructionDrafts!)).toHaveLength(205);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(bulk.mock.calls.map(([keys]) => keys.length)).toEqual([100, 100, 5]);
   });
 
   it('rejects saving for a missing book', async () => {

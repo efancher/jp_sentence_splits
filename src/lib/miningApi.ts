@@ -777,6 +777,7 @@ const assistRunSchema = z.object({
   extraReplies: z.record(z.string(), z.string()).nullable().optional(),
   selection: z.record(z.string(), z.array(z.number())).nullable().optional(),
   sentenceCount: z.number().nullable().optional(),
+  bookSentences: z.array(z.object({ handle: z.number(), japanese: z.string(), translation: z.string().default('') })).nullable().optional(),
   live: z
     .object({ backend: z.string().nullable(), startedAt: z.number().nullable(), timeoutSeconds: z.number().nullable() })
     .nullable()

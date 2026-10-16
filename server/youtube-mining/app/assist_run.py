@@ -173,7 +173,7 @@ def _spec_summary(run_dir: Path) -> dict[str, Any]:
     selection = spec.get("selection")
     if not isinstance(selection, dict) or not selection:
         return {}
-    return {"selection": selection, "sentenceCount": len(spec.get("sentences") or [])}
+    return {"selection": selection, "sentenceCount": len(spec.get("sentences") or []), "bookSentences": spec.get("sentences")}
 
 
 def cancel(run_id: str) -> bool:

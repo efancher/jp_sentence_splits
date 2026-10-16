@@ -376,7 +376,7 @@ Original phases match `docs/UNIFIED_APP_ARCHITECTURE.md` §15.
     service; recommendation on file is box-level backups of the cache dir
     instead).
 
-- [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills; run `diagnose:gloss-reference` to size them.
+- [~] **Progressive glossing.** Slices 1-2 shipped 2026-10-01 (STATUS), including feasibility script, try-unaided, partial translation, self-report, park-and-prepare, readiness tiers, progress panel, heuristic の attachment skill, planner revisit. Left: AI-verified dependency reference and clause skills. Diagnostic refreshed 2026-10-15: 50/64 analysed sentences have a settled heuristic decision; attachment coverage is 25 の decisions. Next: a small reviewed dependency/clause pilot (these counts do not validate AI references).
 
 ## Planned
 

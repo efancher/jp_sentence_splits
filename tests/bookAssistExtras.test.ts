@@ -67,6 +67,18 @@ describe('book extras plan + save', () => {
     ids = (await planBookAssistExtras(bookId)).sentences.map((s) => s.id);
   });
 
+  it('marks omitted constructions checked and survives a repeated save', async () => {
+    const snapshot: BookExtrasRunSnapshot = { bookId, sentenceIds: ids,
+      kinds: { constructions: { handles: [1, 2, 3], replaceHandles: [] } } };
+    const replies = { 'constructions:1-3': JSON.stringify({ version: 2, constructions: {} }) };
+    await saveBookAssistExtras(snapshot, replies);
+    await saveBookAssistExtras(snapshot, replies);
+    const plan = await planBookAssistExtras(bookId);
+    expect(plan.kinds.constructions.missing).toEqual([]);
+    expect(plan.kinds.constructions.existing.map((entry) => entry.summary)).toEqual(Array(3).fill('checked, nothing to build'));
+    expect(await getDb().sentenceExtras.count()).toBe(3);
+  });
+
   it('reports which sentences already have a meaning check', async () => {
     await setSentenceComprehensionCheck(ids[1]!, { options: ['a', 'keep me', 'b', 'c'], correctIndex: 1, provenance: 'manual', createdAt: NOW });
     const plan = await planBookAssistExtras(bookId);
