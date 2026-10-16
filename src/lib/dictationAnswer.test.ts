@@ -51,4 +51,21 @@ describe('gradeDictation', () => {
   it('does not convert mixed latin/kana garbage', () => {
     expect(gradeDictation('kinou q とも', JP, KANA).correct).toBe(false);
   });
+
+  describe('digits in the stored reading', () => {
+    const JP2 = '1月の気温は札幌はマイナス5度くらいです。';
+    const KANA2 = '1がつのきおんはさっぽろはマイナス5どくらいです。';
+
+    it('accepts the spelled-out reading and katakana loanwords', () => {
+      expect(
+        gradeDictation('いちがつのきおんはさっぽろはまいなすごどくらいです', JP2, KANA2).correct,
+      ).toBe(true);
+    });
+
+    it('only flags the real typos in the diff', () => {
+      const grade = gradeDictation('いちがつのきょんはさっぱろはまいなすごどくらいです', JP2, KANA2);
+      expect(grade.correct).toBe(false);
+      expect(grade.typedSegments.filter((s) => !s.matched).map((s) => s.text)).toEqual(['ょ', 'ぱ']);
+    });
+  });
 });

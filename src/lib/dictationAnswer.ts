@@ -1,5 +1,7 @@
 import { isHiragana, toHiragana } from 'wanakana';
 
+import { fixNumeralsInReadingOnly } from './fixNumeralReadings';
+import { readNumber, toAsciiDigits } from './japaneseNumberReading';
 import { normalizeSentenceKey } from './normalize';
 
 export interface DictationSegment {
@@ -20,6 +22,22 @@ export interface DictationGrade {
 function comparable(text: string): string {
   return toHiragana(normalizeSentenceKey(text).replace(/[\p{P}\p{S}]/gu, ''), {
     convertLongVowelMark: false,
+  });
+}
+
+/** Per-character key for the diff: same folding as `comparable` (width, kana script, case). */
+function diffKey(char: string): string {
+  return toHiragana(char.normalize('NFKC').toLowerCase(), { convertLongVowelMark: false });
+}
+
+/**
+ * A stored kana reading can still carry bare digits ("1がつ", "マイナス5ど").
+ * Spell them out so a learner who typed the reading (いちがつ, ご) matches.
+ */
+function spellOutDigits(reading: string): string {
+  if (!/[0-9０-９]/.test(reading)) return reading;
+  return fixNumeralsInReadingOnly(reading).replace(/[0-9０-９]+/g, (digits) => {
+    return readNumber(Number(toAsciiDigits(digits))) ?? digits;
   });
 }
 
@@ -92,14 +110,17 @@ export function gradeDictation(
   readingOnly?: string,
 ): DictationGrade {
   const typed = romajiToKana(rawTyped);
-  const targets = [japanese, ...(readingOnly && readingOnly.trim() ? [readingOnly] : [])];
+  const targets = [
+    japanese,
+    ...(readingOnly && readingOnly.trim() ? [spellOutDigits(readingOnly)] : []),
+  ];
   const typedChars = [...typed.trim()];
   const typedKey = comparable(typed);
 
   let best: { target: string; score: number; flags: { a: boolean[]; b: boolean[] } } | null = null;
   for (const target of targets) {
     const targetChars = [...target];
-    const flags = lcsFlags(targetChars, typedChars);
+    const flags = lcsFlags(targetChars.map(diffKey), typedChars.map(diffKey));
     const score = flags.a.filter(Boolean).length / Math.max(targetChars.length, 1);
     if (!best || score > best.score) best = { target, score, flags };
   }
